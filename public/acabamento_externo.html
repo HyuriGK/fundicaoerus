@@ -588,38 +588,45 @@ async function carregarRegistrosERecebidos() {
         }
 
         async function excluirRegistro(id) {
-    if (!confirm('Tem certeza que deseja excluir este registro permanentemente?')) return;
+    // 1. Validação básica
+    if (!id) {
+        alert("Erro: Este item não possui um ID válido para exclusão no banco.");
+        return;
+    }
+
+    if (!confirm('Tem certeza que deseja excluir este registro permanentemente do banco de dados?')) return;
     
     showSpinner();
     try {
-        // Enviamos o ID e aguardamos a confirmação real do backend
+        // 2. Faz a chamada ao backend e ESPERA a resposta
+        console.log("Solicitando exclusão do ID:", id);
         const response = await apiRequest('delete', 'POST', { id: id });
         
         if (response.success) {
-            // Só buscamos os dados novos após o banco confirmar a exclusão
+            // 3. SE E SOMENTE SE o banco confirmou, recarregamos os dados do servidor
             await carregarRegistrosERecebidos();
             
-            // Se estivermos dentro do modal de carga, atualizamos ele também
+            // Atualiza o modal caso esteja aberto
             const modal = document.getElementById('cargaModal');
             if (modal.style.display === 'flex') {
                 const cargaAtual = modal.getAttribute('data-current-carga');
-                if (cargaAtual) {
-                    const aindaTemItens = registros.some(r => r.carga === cargaAtual);
-                    if (aindaTemItens) {
-                        showCargaDetails(cargaAtual);
-                    } else {
-                        hideCargaDetails();
-                    }
+                const aindaTemItens = registros.some(r => r.carga === cargaAtual);
+                if (aindaTemItens) {
+                    showCargaDetails(cargaAtual);
+                } else {
+                    hideCargaDetails();
                 }
             }
+            
             renderTable();
             updateDashboardAndCharts();
+            console.log("Exclusão confirmada e tela atualizada.");
         } else {
-            alert('Erro ao excluir: O servidor não confirmou a operação.');
+            alert('Erro: O banco de dados não encontrou esse registro.');
         }
     } catch (err) {
-        alert('Erro de conexão ao tentar excluir o registro.');
-        console.error(err);
+        console.error("Falha na comunicação com a API:", err);
+        alert('Erro ao tentar excluir: ' + err.message);
     } finally {
         hideSpinner();
     }

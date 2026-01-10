@@ -56,25 +56,35 @@ export default async function handler(req, res) {
                 return res.status(200).json({ success: true });
             }
 
-            // Deletar um registro específico
             if (action === 'delete-registro') {
     const registroId = parseInt(data.id);
+    
     if (isNaN(registroId)) {
+        console.error("ID recebido é inválido:", data.id);
         return res.status(400).json({ error: 'ID inválido' });
     }
-    
+
     await client.query('BEGIN');
     try {
-        // Remove primeiro da tabela de recebidos (garantia extra)
+        // 1. Remove dependências na tabela de recebidos
         await client.query('DELETE FROM acabamento_externo_recebidos WHERE registro_id = $1', [registroId]);
-        // Remove da tabela principal
+        
+        // 2. Remove o registro principal
         const result = await client.query('DELETE FROM acabamento_externo_registros WHERE id = $1', [registroId]);
         
         await client.query('COMMIT');
-        return res.status(200).json({ success: true, rowCount: result.rowCount });
+
+        if (result.rowCount === 0) {
+            console.warn(`Tentativa de excluir ID ${registroId}, mas ele não foi encontrado no banco.`);
+            return res.status(404).json({ success: false, error: 'Registro não encontrado no banco de dados.' });
+        }
+
+        console.log(`ID ${registroId} excluído com sucesso.`);
+        return res.status(200).json({ success: true });
     } catch (err) {
         await client.query('ROLLBACK');
-        throw err;
+        console.error("Erro ao deletar no banco:", err);
+        return res.status(500).json({ error: err.message });
     }
 }
 
