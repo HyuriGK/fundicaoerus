@@ -1,22 +1,17 @@
 import pool from './db.js';
 
 // Função auxiliar para forçar conversão para número
-// Se receber "BS 30", "R$ 10,00" ou texto, converte para número ou 0
+// Evita erro se vier texto ou formato moeda (ex: "R$ 1.000,00")
 function parseNumeric(value) {
     if (typeof value === 'number') return value;
     if (!value) return 0;
     
-    // Converte para string, remove tudo que não for número, ponto ou vírgula
-    // Ex: "R$ 1.200,50" vira "1200.50"
     let cleanStr = String(value).trim();
     
-    // Se a string contiver letras (como "BS 30"), retorna 0 para evitar erro no banco
+    // Se tiver letras (ex: "BS 30" caindo em campo errado), retorna 0 para não travar
     if (/[a-zA-Z]/.test(cleanStr)) return 0;
 
-    // Troca vírgula por ponto para o padrão americano/banco
     cleanStr = cleanStr.replace(',', '.');
-    
-    // Tenta converter
     const num = parseFloat(cleanStr);
     return isNaN(num) ? 0 : num;
 }
@@ -35,6 +30,7 @@ export default async function handler(req, res) {
                 ORDER BY data_faturamento DESC
             `);
 
+            // Mapeia do Banco para o HTML
             const formattedData = result.rows.map(row => [
                 row.id,
                 row.data,
@@ -59,7 +55,7 @@ export default async function handler(req, res) {
         } 
         
         else if (req.method === 'POST') {
-            const data = req.body;
+            const data = req.body; // Dados do Excel
             
             if (!data || data.length <= 1) {
                 await client.query('TRUNCATE TABLE faturamento_detalhado RESTART IDENTITY');
@@ -78,32 +74,49 @@ export default async function handler(req, res) {
             for (let i = 1; i < data.length; i++) {
                 const row = data[i];
                 
-                // Tratamento de Data
+                // Mapeamento baseado na SUA ordem (0 a 12)
+                // 0: Data
+                // 1: Pedido
+                // 2: OC
+                // 3: Cod Cli
+                // 4: Cliente
+                // 5: Cod Prod
+                // 6: Produto
+                // 7: Quantidade
+                // 8: Valor Un
+                // 9: Material
+                // 10: Peso Un
+                // 11: Peso Total
+                // 12: Valor Total
+
+                // Tratamento da Data (Coluna 0)
                 let dateVal = null;
-                if (typeof row[1] === 'number') {
-                    dateVal = new Date((row[1] - (25567 + 2)) * 86400 * 1000).toISOString().split('T')[0];
-                } else if (typeof row[1] === 'string') {
-                    const parts = row[1].split('/');
+                const rawDate = row[0]; // Agora pega a primeira coluna corretamente
+                
+                if (typeof rawDate === 'number') {
+                    // Excel Serial Date
+                    dateVal = new Date((rawDate - (25567 + 2)) * 86400 * 1000).toISOString().split('T')[0];
+                } else if (typeof rawDate === 'string') {
+                    // String DD/MM/YYYY
+                    const parts = rawDate.split('/');
                     if (parts.length === 3) dateVal = `${parts[2]}-${parts[1]}-${parts[0]}`;
-                    else dateVal = row[1];
+                    else dateVal = rawDate; // Tenta ISO direto se falhar
                 }
 
-                // AQUI ESTA A CORREÇÃO: Usamos parseNumeric() em todos os campos numéricos
-                // Se row[11] for "BS 30", a função devolve 0 e o banco aceita.
                 await client.query(insertQuery, [
-                    dateVal,                // $1  - Data
-                    row[2],                 // $2  - Pedido
-                    row[3],                 // $3  - OC
-                    row[4],                 // $4  - Cod Cli
-                    row[5],                 // $5  - Cliente
-                    row[6],                 // $6  - Codigo
-                    row[7],                 // $7  - Descricao
-                    parseNumeric(row[8]),   // $8  - Quantidade
-                    parseNumeric(row[9]),   // $9  - Preco Un
-                    row[10],                // $10 - Material (Esse é TEXTO, aceita "BS 30")
-                    parseNumeric(row[11]),  // $11 - Peso Un
-                    parseNumeric(row[12]),  // $12 - Peso Total
-                    parseNumeric(row[13]),  // $13 - Valor Total
+                    dateVal,                // $1  - Data (Excel Col 0)
+                    row[1],                 // $2  - Pedido (Excel Col 1)
+                    row[2],                 // $3  - OC (Excel Col 2)
+                    row[3],                 // $4  - Cod Cli (Excel Col 3)
+                    row[4],                 // $5  - Cliente (Excel Col 4)
+                    row[5],                 // $6  - Cod Produto (Excel Col 5)
+                    row[6],                 // $7  - Descrição Produto (Excel Col 6)
+                    parseNumeric(row[7]),   // $8  - Quantidade (Excel Col 7)
+                    parseNumeric(row[8]),   // $9  - Valor Un (Excel Col 8)
+                    row[9],                 // $10 - Material (Excel Col 9 - TEXTO)
+                    parseNumeric(row[10]),  // $11 - Peso Un (Excel Col 10)
+                    parseNumeric(row[11]),  // $12 - Peso Total (Excel Col 11)
+                    parseNumeric(row[12]),  // $13 - Valor Total (Excel Col 12)
                     false                   // $14 - Excluido
                 ]);
             }
