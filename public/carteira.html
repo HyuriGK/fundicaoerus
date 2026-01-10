@@ -363,11 +363,46 @@
 <body>
 
     <script>
-    // Proteção de Rota: Se não houver a marca de autenticação, volta para o login
-    if (localStorage.getItem('erus_auth') !== 'true') {
-        window.location.href = 'login.html';
-    }
-    </script>
+    (function() {
+        const trintaMinutos = 30 * 60 * 1000; // 30 minutos em milissegundos
+
+        function verificarSessao() {
+            const logado = localStorage.getItem('erus_auth');
+            const ultimaAtividade = localStorage.getItem('erus_last_activity');
+            const agora = new Date().getTime();
+
+            // Se não estiver logado ou se o tempo expirou
+            if (!logado || !ultimaAtividade || (agora - ultimaAtividade > trintaMinutos)) {
+                logout();
+            }
+        }
+
+        function atualizarAtividade() {
+            // Atualiza o timestamp no localStorage para "agora"
+            localStorage.setItem('erus_last_activity', new Date().getTime());
+        }
+
+        function logout() {
+            localStorage.removeItem('erus_auth');
+            localStorage.removeItem('erus_last_activity');
+            window.location.href = 'login.html';
+        }
+
+        // Verifica a sessão assim que a página carrega
+        verificarSessao();
+
+        // Monitora interações do usuário para resetar o tempo de inatividade
+        // Se o usuário mexer o mouse, clicar ou digitar, o contador volta para 0
+        window.onload = atualizarAtividade;
+        window.onmousemove = atualizarAtividade;
+        window.onmousedown = atualizarAtividade; // cliques
+        window.ontouchstart = atualizarAtividade; // toque em telas mobile
+        window.onkeypress = atualizarAtividade; // digitação
+
+        // Verifica a cada 1 minuto se a sessão expirou (caso o usuário deixe a aba aberta)
+        setInterval(verificarSessao, 60000);
+    })();
+</script>
 
     <div id="loading-screen">
         <div class="spinner"></div>
