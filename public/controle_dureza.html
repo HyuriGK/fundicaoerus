@@ -255,6 +255,60 @@
 </head>
 <body>
 
+    <script>
+    (function() {
+        // Configure aqui o tempo (30 minutos)
+        const tempoLimite = 30 * 60 * 1000; 
+        
+        function verificarSessao() {
+            // Se já estiver na página de login, não faz nada para evitar loop
+            if (window.location.pathname.includes('login.html')) return;
+
+            const logado = localStorage.getItem('erus_auth');
+            const ultimaAtividade = localStorage.getItem('erus_last_activity');
+            const agora = Date.now();
+
+            // 1. Verificação: Se não houver marca de login ou horário de atividade
+            if (logado !== 'true' || !ultimaAtividade) {
+                redirecionarLogin();
+                return;
+            }
+
+            // 2. Verificação de Tempo: Se o tempo de inatividade passou do limite
+            if (agora - parseInt(ultimaAtividade) > tempoLimite) {
+                alert("Sua sessão expirou por inatividade.");
+                redirecionarLogin();
+                return;
+            }
+        }
+
+        function atualizarAtividade() {
+            // Só atualiza se o usuário ainda estiver marcado como logado
+            if (localStorage.getItem('erus_auth') === 'true') {
+                localStorage.setItem('erus_last_activity', Date.now().toString());
+            }
+        }
+
+        function redirecionarLogin() {
+            localStorage.clear();
+            // Usamos replace para o usuário não conseguir "voltar" para a página protegida
+            window.location.replace('login.html');
+        }
+
+        // Executa a verificação IMEDIATAMENTE
+        verificarSessao();
+
+        // Monitora interações para resetar o cronômetro
+        const eventos = ['mousedown', 'mousemove', 'keypress', 'touchstart', 'scroll'];
+        eventos.forEach(evento => {
+            window.addEventListener(evento, atualizarAtividade, { passive: true });
+        });
+
+        // Verifica a cada 30 segundos se o tempo expirou
+        setInterval(verificarSessao, 60000);
+    })();
+</script>
+
     <!-- LOADING SCREEN -->
     <div id="loading-screen">
         <div class="spinner"></div>
