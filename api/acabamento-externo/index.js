@@ -22,15 +22,30 @@ export default async function handler(req, res) {
         if (req.method === 'POST') {
             const data = req.body;
 
-            // Adicionar novo registro
             if (action === 'add-registro') {
-                const query = `INSERT INTO acabamento_externo_registros 
-                    (carga, data, terceiro, codigo, descricao, cliente, peso, quant, quant_escariar, quant_rebarba, valor, observacoes) 
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id`;
-                const values = [data.carga, data.data, data.terceiro, data.codigo, data.descricao, data.cliente, data.peso, data.quant, data.quant_escariar, data.quant_rebarba, data.valor, data.observacoes];
-                const result = await client.query(query, values);
-                return res.status(200).json({ success: true, id: result.rows[0].id });
-            }
+    const query = `INSERT INTO acabamento_externo_registros 
+        (carga, data, terceiro, codigo, descricao, cliente, peso, quant, quant_escariar, quant_rebarba, valor, observacoes) 
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id`;
+    
+    // Note que usamos data.data, data.terceiro, etc...
+    const values = [
+        data.carga, 
+        data.data, 
+        data.terceiro, 
+        data.codigo, 
+        data.descricao, 
+        data.cliente, 
+        data.peso, 
+        data.quant, 
+        data.quant_escariar, 
+        data.quant_rebarba, 
+        data.valor, 
+        data.observacoes
+    ];
+    
+    const result = await client.query(query, values);
+    return res.status(200).json({ success: true, id: result.rows[0].id });
+}
 
             // Marcar/Desmarcar recebido
             if (action === 'toggle-recebido') {
