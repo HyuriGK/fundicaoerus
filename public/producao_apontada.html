@@ -1,0 +1,2048 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Produção Apontada - Fundição Erus</title>
+    
+    <!-- Bibliotecas de Estilo e Ícones -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    
+    <!-- Bibliotecas Funcionais -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+
+    <style>
+        /* --- 1. ROOT VARIABLES --- */
+        :root {
+            /* Typography */
+            --font-main: 'Inter', sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+            
+            /* Palette */
+            --color-primary: #fbbf24;       /* Amber 400 */
+            --color-primary-dim: #d97706;   /* Amber 600 */
+            
+            --bg-body: #09090b;             /* Zinc 950 */
+            --bg-card: rgba(24, 24, 27, 0.7); /* Zinc 900 Glass */
+            
+            --text-main: #f4f4f5;           /* Zinc 100 */
+            --text-muted: #a1a1aa;          /* Zinc 400 */
+            
+            --border-subtle: rgba(255, 255, 255, 0.08);
+            --border-highlight: rgba(255, 255, 255, 0.15);
+            --border-separator: rgba(255, 255, 255, 0.06);
+            
+            --status-success: #10b981;
+            --status-danger: #ef4444;
+            --status-info: #06b6d4; 
+            --status-purple: #a855f7; 
+            --status-warning: #f59e0b; 
+            --status-teal: #14b8a6; /* Nova cor para o KPI de Peso Médio */
+
+            /* Dimensions */
+            --radius-md: 12px;
+            --shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+            --shadow-glow: 0 0 15px rgba(251, 191, 36, 0.2);
+        }
+
+        /* --- 2. RESET & GLOBAL --- */
+        *, *::before, *::after { box-sizing: border-box; }
+        
+        body {
+            margin: 0;
+            font-family: var(--font-main);
+            background-color: var(--bg-body);
+            color: var(--text-main);
+            background-image: 
+                radial-gradient(circle at 15% 50%, rgba(251, 191, 36, 0.03), transparent 25%), 
+                radial-gradient(circle at 85% 30%, rgba(63, 63, 70, 0.05), transparent 25%);
+            overflow-x: hidden; 
+        }
+        
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #52525b; }
+
+        .app-layout { display: flex; flex-direction: column; min-height: 100vh; }
+
+        /* --- 3. HEADER --- */
+        .top-header {
+            height: auto; min-height: 60px; margin: 10px 32px 0 32px; 
+            display: flex; align-items: center; justify-content: space-between; 
+            background: transparent; padding: 10px 0; z-index: 100;
+        }
+        .header-brand { display: flex; align-items: center; gap: 16px; }
+        .brand-icon {
+            width: 45px; height: 45px;
+            background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dim));
+            border-radius: 8px; display: flex; align-items: center; justify-content: center;
+            color: #000; font-size: 1.3rem; box-shadow: var(--shadow-glow);
+        }
+        .header-text { display: flex; flex-direction: column; justify-content: center; }
+        .page-title { font-size: 1.4rem; font-weight: 700; color: #fff; margin: 0; line-height: 1.2; }
+        .page-subtitle { font-size: 0.85rem; color: var(--text-muted); margin: 2px 0 0 0; font-weight: 400; }
+        .header-actions { display: flex; align-items: center; gap: 12px; }
+        .separator-vertical { width: 1px; height: 32px; background: var(--border-subtle); margin: 0 8px; }
+
+        /* Buttons & Inputs */
+        .btn-glass {
+            background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-subtle);
+            color: var(--text-main); padding: 8px 16px; border-radius: 6px; cursor: pointer;
+            font-weight: 500; font-size: 0.9rem; display: flex; align-items: center; gap: 8px;
+            transition: all 0.2s; position: relative;
+        }
+        .btn-glass:hover { background: rgba(255, 255, 255, 0.1); border-color: var(--border-highlight); color: #fff; }
+        
+        .btn-back {
+            background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2);
+            padding: 8px 20px; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.9rem;
+            display: flex; align-items: center; gap: 8px; transition: all 0.2s;
+        }
+        .btn-back:hover { background: #ef4444; color: #fff; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3); }
+
+        .btn-modern {
+            padding: 8px 16px; border-radius: 6px; border: none; font-weight: 600; font-size: 0.9rem; cursor: pointer;
+            display: inline-flex; align-items: center; gap: 8px; transition: all 0.2s; color: #000;
+        }
+        .btn-export { background: var(--status-info); color: #000; }
+        .btn-export:hover { background: #0891b2; color: #fff; }
+
+        /* INPUTS & SELECTS */
+        input[type="date"], input[type="text"], input[type="month"], select {
+            background: rgba(0, 0, 0, 0.3); border: 1px solid var(--border-subtle);
+            color: #fff; padding: 6px 10px; border-radius: 6px;
+            font-family: var(--font-main); font-size: 0.85rem;
+        }
+        input:focus, select:focus { outline: none; border-color: var(--color-primary); }
+
+        /* Custom Select Arrow */
+        select {
+             appearance: none; -webkit-appearance: none;
+             background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23fbbf24%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E');
+             background-repeat: no-repeat;
+             background-position: right 12px top 50%;
+             background-size: 8px auto; 
+             padding-right: 30px;
+        }
+        option { background-color: #18181b; color: #fff; }
+        
+        /* Dropdown */
+        .dropdown { position: relative; display: inline-block; height: 100%; }
+        .dropdown-content {
+            display: none; position: absolute; right: 0; top: 100%; margin-top: 10px;
+            background-color: #18181b; min-width: 250px; border: 1px solid var(--border-subtle);
+            border-radius: 6px; box-shadow: var(--shadow-card); z-index: 200;
+        }
+        .dropdown-content::before { content: ''; position: absolute; top: -20px; left: 0; width: 100%; height: 20px; background: transparent; }
+        .dropdown-content .dropdown-item {
+            color: var(--text-main); padding: 12px 16px; display: block; font-size: 0.85rem;
+            cursor: pointer; transition: background 0.2s; font-family: var(--font-main);
+            border: none; background: transparent; width: 100%; text-align: left;
+        }
+        .dropdown-content .dropdown-item:hover { background-color: rgba(251, 191, 36, 0.1); color: var(--color-primary); }
+        .dropdown:hover .dropdown-content { display: block; }
+        .dropdown-divider { height: 1px; background: var(--border-separator); margin: 4px 0; }
+        .dropdown-item.danger { color: var(--status-danger); }
+        .dropdown-item.danger:hover { background: rgba(239, 68, 68, 0.1); }
+
+        /* --- 4. CONTENT --- */
+        .dashboard-content { flex-grow: 1; padding: 10px 32px 32px 32px; }
+
+        .status-bar-container {
+            background: var(--bg-card); border-left: 4px solid var(--color-primary);
+            padding: 10px 16px; margin-bottom: 20px; border-radius: 4px;
+            display: flex; justify-content: space-between; align-items: center;
+            font-family: var(--font-mono); font-size: 0.8rem;
+        }
+        .status-text.success { color: var(--status-success); }
+        .status-text.error { color: var(--status-danger); }
+        .status-text.normal { color: var(--text-muted); }
+
+        /* --- TOOLBAR WITH FILTER TOGGLE --- */
+        .compact-toolbar {
+            background: var(--bg-card); border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-md); padding: 10px 20px; margin-bottom: 20px;
+            display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap;
+        }
+
+        .filters-left-group {
+            display: flex; gap: 20px; align-items: center; flex-wrap: wrap;
+        }
+
+        .input-group-compact {
+            display: flex; align-items: center; gap: 8px; transition: opacity 0.3s ease;
+        }
+        .input-group-compact label {
+            color: var(--text-muted); font-size: 0.8rem; white-space: nowrap;
+        }
+        .input-group-compact select {
+            min-width: 140px; max-width: 200px;
+        }
+        
+        /* New Filter Section Styles */
+        .filter-section-wrapper {
+            display: flex; align-items: center; gap: 15px; border-left: 1px solid var(--border-subtle); padding-left: 15px;
+        }
+
+        /* Obsolete State (Visual only, still clickable) */
+        .filter-obsolete {
+            opacity: 0.3;
+            transition: opacity 0.3s;
+        }
+        .filter-obsolete:hover {
+            opacity: 0.7; /* Hint that it's clickable */
+        }
+
+        /* Month Buttons Filter */
+        .month-filter-group {
+            display: flex; align-items: center; gap: 10px; flex-wrap: nowrap; overflow-x: auto;
+            transition: opacity 0.3s ease;
+        }
+        .month-buttons-container {
+            display: flex; gap: 4px; background: rgba(0,0,0,0.2); 
+            padding: 3px; border-radius: 6px; border: 1px solid var(--border-subtle);
+        }
+        .btn-month {
+            background: transparent; border: 1px solid transparent;
+            color: var(--text-muted); padding: 5px 10px; border-radius: 5px;
+            cursor: pointer; font-size: 0.7rem; font-weight: 600;
+            font-family: var(--font-main); transition: all 0.2s;
+            text-transform: uppercase; white-space: nowrap;
+        }
+        .btn-month:hover { background: rgba(255,255,255,0.05); color: #fff; }
+        .btn-month.active { 
+            background: var(--color-primary); color: #000; 
+            box-shadow: 0 0 8px rgba(251, 191, 36, 0.3);
+        }
+
+        /* KPIs Row */
+        .kpi-row { display: flex; gap: 20px; margin-bottom: 24px; flex-wrap: wrap; }
+        .kpi-card {
+            flex: 1; min-width: 150px; background: var(--bg-card);
+            border: 1px solid var(--border-subtle); border-radius: var(--radius-md);
+            padding: 16px 20px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+            position: relative; overflow: hidden; box-shadow: var(--shadow-card); backdrop-filter: blur(5px);
+        }
+        .kpi-card::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--border-highlight); }
+        .kpi-card.kpi-default::before { background: var(--color-primary); }
+        .kpi-card.kpi-info::before { background: var(--status-info); }
+        .kpi-card.kpi-purple::before { background: var(--status-purple); }
+        /* Adicionando estilo para o novo KPI */
+        .kpi-card.kpi-teal::before { background: var(--status-teal); }
+
+        .kpi-title { font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; margin-bottom: 6px; text-align: center; }
+        .kpi-value { font-size: 1.5rem; font-weight: 700; color: #fff; font-family: var(--font-mono); line-height: 1.1; }
+
+        /* Chart Panel */
+        .chart-panel {
+            background: var(--bg-card); border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-md); padding: 20px; margin-bottom: 24px; height: 470px;
+            position: relative; display: flex; flex-direction: column;
+        }
+
+        /* Accordions */
+        .accordion-item { margin-bottom: 12px; }
+        .accordion-button {
+            background: var(--bg-card); border: 1px solid var(--border-subtle);
+            color: var(--text-main); padding: 15px 20px; border-radius: var(--radius-md);
+            width: 100%; text-align: left; cursor: pointer; font-size: 1rem; font-weight: 600;
+            display: flex; justify-content: space-between; align-items: center; transition: all 0.2s;
+        }
+        .accordion-button:hover { border-color: var(--color-primary); color: var(--color-primary); }
+        .accordion-button.active { border-color: var(--color-primary); color: var(--color-primary); background: rgba(251, 191, 36, 0.05); }
+        .accordion-content { display: none; padding-top: 15px; }
+
+        /* Tables */
+        .table-container {
+            background: var(--bg-card); border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-md); overflow-x: auto; width: 100%;
+        }
+        table { width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: 0.8rem; }
+        th, td { 
+            padding: 10px 12px; border-bottom: 1px solid var(--border-subtle); 
+            border-right: 1px solid var(--border-separator); white-space: nowrap;
+        }
+        th { background: rgba(0,0,0,0.4); color: var(--text-muted); font-weight: 600; text-transform: uppercase; }
+        td.editable-cell { cursor: pointer; background: rgba(251, 191, 36, 0.05); border: 1px dashed rgba(251, 191, 36, 0.3); color: #fbbf24; }
+        .filter-input-table {
+            width: 100%; background: transparent; border: none; border-bottom: 1px solid var(--border-subtle);
+            color: var(--color-primary); padding: 2px; font-family: var(--font-mono); font-size: 0.75rem;
+        }
+        .filter-input-table:focus { border-color: var(--color-primary); outline: none; }
+        
+        /* Modals & Dashboard Fullscreen */
+        .modal-overlay {
+            display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 2000;
+            align-items: center; justify-content: center; backdrop-filter: blur(5px);
+        }
+        
+        .modal-card {
+            background: #18181b; border: 1px solid var(--border-highlight);
+            border-radius: var(--radius-md); padding: 24px; width: 95%; max-width: 400px;
+            box-shadow: var(--shadow-glow); display: flex; flex-direction: column; gap: 20px;
+        }
+
+        .modal-card.fullscreen {
+            max-width: none; max-height: none; width: 100vw; height: 100vh;
+            border-radius: 0; border: none; margin: 0; padding: 30px 40px;
+            background: #09090b; overflow-y: auto;
+        }
+        
+        .modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-subtle); padding-bottom: 15px; margin-bottom: 20px; }
+        .modal-title { font-size: 1.8rem; color: var(--color-primary); font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
+        .modal-close { color: var(--status-danger); cursor: pointer; font-size: 2rem; transition: transform 0.2s; }
+        .modal-close:hover { transform: scale(1.1); color: #ff0000; }
+        
+        /* Loading */
+        #loading-screen {
+            position: fixed; inset: 0; background: #09090b; z-index: 9999;
+            display: flex; flex-direction: column; align-items: center; justify-content: center; transition: opacity 0.5s;
+        }
+        .spinner {
+            width: 40px; height: 40px; border: 3px solid rgba(251, 191, 36, 0.3); border-top-color: var(--color-primary);
+            border-radius: 50%; animation: spin 1s infinite linear; margin-bottom: 15px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* PDF Styles (Hidden) */
+        .pdf-light-theme {
+            background-color: #ffffff !important; color: #1a1a1a !important; padding: 30px; 
+            font-family: 'Helvetica', Arial, sans-serif; width: 1100px; box-sizing: border-box;
+        }
+        .pdf-content-wrapper { width: 100%; margin-bottom: 30px; page-break-after: always; }
+        .pdf-header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 3px solid #2c3e50; padding-bottom: 15px; margin-bottom: 25px; }
+        .pdf-header h3 { font-size: 32px; color: #2c3e50; margin: 0; text-transform: uppercase; }
+        .pdf-header p { margin: 0; font-size: 16px; color: #7f8c8d; font-style: italic; text-align: right; }
+        .pdf-summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 25px; margin-bottom: 35px; }
+        .pdf-summary-grid.with-moldagem { grid-template-columns: repeat(5, 1fr); }
+        .pdf-card { border: 1px solid #dcdcdc; border-radius: 8px; padding: 18px; background-color: #f9f9f9; text-align: center; }
+        .pdf-card-label { font-size: 14px; color: #555; text-transform: uppercase; font-weight: 600; display: block; margin-bottom: 5px; }
+        .pdf-card-value { font-size: 26px; font-weight: bold; color: #333; }
+        .pdf-section-title { font-size: 22px; color: #2c3e50; margin-bottom: 15px; font-weight: 700; border-left: 6px solid #03dac6; padding-left: 12px; margin-top: 30px; }
+        .pdf-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 16px; }
+        .pdf-table th { background-color: #34495e; color: #ffffff; padding: 12px; text-align: left; border: 1px solid #2c3e50; }
+        .pdf-table td { padding: 12px; border: 1px solid #dcdcdc; color: #333; background-color: #fff; }
+        .pdf-table tr:nth-child(even) td { background-color: #f4f6f7; }
+        .pdf-progress-container { width: 100%; height: 14px; background-color: #e0e0e0; border-radius: 7px; overflow: hidden; margin-top: 8px; }
+        .pdf-progress-bar { height: 100%; }
+        .pdf-flex-tables { display: flex; gap: 20px; flex-wrap: wrap; }
+    </style>
+</head>
+<body>
+
+    <!-- LOADING SCREEN -->
+    <div id="loading-screen" style="display: none;">
+        <div class="spinner"></div>
+        <div style="color: var(--text-muted); font-family: var(--font-main);">Processando dados...</div>
+    </div>
+
+    <!-- MAIN LAYOUT -->
+    <div class="app-layout">
+        
+        <!-- HEADER -->
+        <header class="top-header">
+            <div class="header-brand">
+                <div class="brand-icon"><i class="fa-solid fa-industry"></i></div>
+                <div class="header-text">
+                    <h1 class="page-title">Produção Apontada</h1>
+                    <p class="page-subtitle">Análise de Desempenho & Produtividade</p>
+                </div>
+            </div>
+            <div class="header-actions">
+                <button class="btn-glass" id="generate-complete-report-button" title="Gerar Relatório PDF" style="border-color: var(--status-info); color: var(--status-info);">
+                    <i class="fa-solid fa-file-pdf"></i> <span style="margin-left:5px;">Relatório</span>
+                </button>
+                
+                <div class="separator-vertical"></div>
+                
+                <div class="dropdown" id="functionsDropdown">
+                    <button class="btn-glass" onclick="toggleDropdown()">
+                        <i class="fa-solid fa-gear" style="color: #fff;"></i> Funções <i class="fa-solid fa-chevron-down" style="font-size: 0.7rem; margin-left: 5px;"></i>
+                    </button>
+                    <div class="dropdown-content">
+                        <button class="dropdown-item" onclick="openDashboardModal()"><i class="fa-solid fa-chart-pie"></i> Dashboard (Full)</button>
+                        <button class="dropdown-item" onclick="handleAuthAction(saveLocalDataToDatabase, 'Salvar Alterações')"><i class="fa-solid fa-save"></i> Salvar no BD</button>
+                        <button class="dropdown-item" onclick="handleAuthAction(confirmAndSaveWeightsToLocalStorage, 'Salvar Pesos Produto (Local)')"><i class="fa-solid fa-weight-hanging"></i> Salvar Pesos (Local)</button>
+                        <div class="dropdown-divider"></div>
+                        <label for="excelFileInput" class="dropdown-item" style="cursor: pointer;"><i class="fa-solid fa-file-excel"></i> Importar Excel</label>
+                        <input type="file" id="excelFileInput" accept=".xls,.xlsx" style="display:none" multiple>
+                        <div class="dropdown-divider"></div>
+                        <button class="dropdown-item danger" onclick="handleAuthAction(() => handleClearDatabase('current_month'), 'Limpar Mês Vigente')"><i class="fa-solid fa-trash"></i> Limpar Mês Vigente</button>
+                        <button class="dropdown-item danger" onclick="openClearSpecificMonthModal()"><i class="fa-regular fa-calendar-xmark"></i> Limpar Mês Específico</button>
+                        <button class="dropdown-item danger" onclick="handleAuthAction(() => handleClearDatabase('full'), 'Limpar DB Completo')"><i class="fa-solid fa-bomb"></i> Limpar TUDO</button>
+                    </div>
+                </div>
+                <div class="separator-vertical"></div>
+                <button class="btn-back" onclick="window.location.href='processos.html'" title="Voltar">
+                    <i class="fa-solid fa-arrow-right-from-bracket"></i> Voltar
+                </button>
+            </div>
+        </header>
+
+        <!-- DASHBOARD CONTENT -->
+        <main class="dashboard-content">
+            
+            <!-- STATUS BAR -->
+            <div class="status-bar-container">
+                <span id="status-message" class="status-text normal">Carregando sistema...</span>
+                <span id="error-message" class="status-text error"></span>
+            </div>
+
+            <!-- UNIFIED COMPACT TOOLBAR -->
+            <div class="compact-toolbar">
+                <div class="filters-left-group">
+                    <!-- Setor -->
+                    <div class="input-group-compact">
+                        <label>Setor:</label>
+                        <select id="sector-chart-select"></select>
+                    </div>
+                    
+                    <!-- Grupo -->
+                    <div class="input-group-compact">
+                        <label>Grupo:</label>
+                        <select id="group-filter-select">
+                            <option value="TODOS">Todos</option>
+                        </select>
+                    </div>
+
+                    <!-- Material -->
+                    <div class="input-group-compact">
+                        <label>Material:</label>
+                        <select id="material-filter-select">
+                            <option value="TODOS">Todas</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- DATE RANGE & MONTH FILTER WRAPPER -->
+                <div class="filter-section-wrapper">
+                    
+                    <!-- Ano (MOVIDO PARA CÁ) -->
+                    <div class="input-group-compact">
+                        <label>Ano:</label>
+                        <select id="year-filter-select">
+                            <option value="TODOS">Todos</option>
+                        </select>
+                    </div>
+
+                    <!-- Date Range Filter -->
+                    <div class="input-group-compact filter-obsolete" id="date-range-container">
+                        <label>Período:</label>
+                        <input type="date" id="filter-date-start" style="width: 130px;">
+                        <span style="color:var(--text-muted); font-size:0.8rem;">a</span>
+                        <input type="date" id="filter-date-end" style="width: 130px;">
+                    </div>
+
+                    <!-- Month Buttons Filter -->
+                    <div class="month-filter-group" id="month-filter-container">
+                        <label style="color: var(--text-muted); font-size: 0.8rem;">Mês:</label>
+                        <div class="month-buttons-container">
+                            <button class="btn-month active" data-month="0">Todos</button>
+                            <button class="btn-month" data-month="1">Jan</button>
+                            <button class="btn-month" data-month="2">Fev</button>
+                            <button class="btn-month" data-month="3">Mar</button>
+                            <button class="btn-month" data-month="4">Abr</button>
+                            <button class="btn-month" data-month="5">Mai</button>
+                            <button class="btn-month" data-month="6">Jun</button>
+                            <button class="btn-month" data-month="7">Jul</button>
+                            <button class="btn-month" data-month="8">Ago</button>
+                            <button class="btn-month" data-month="9">Set</button>
+                            <button class="btn-month" data-month="10">Out</button>
+                            <button class="btn-month" data-month="11">Nov</button>
+                            <button class="btn-month" data-month="12">Dez</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+             <!-- KPIS ROW (Stats for Selected Sector) -->
+             <div class="kpi-row">
+                 <div class="kpi-card kpi-default">
+                     <div class="kpi-title">Total Produzido (Filtro)</div>
+                     <div id="sector-total-display" class="kpi-value">0,00 Kg</div>
+                 </div>
+                 
+                 <!-- MÉDIA MENSAL (Agora à esquerda) -->
+                 <div class="kpi-card kpi-info" id="kpi-monthly-avg-card" style="display:none; border-color: var(--status-info);">
+                     <div class="kpi-title">Média Mensal</div>
+                     <div id="sector-monthly-average-display" class="kpi-value">0,00 Kg</div>
+                 </div>
+
+                 <!-- MÉDIA DIÁRIA (Agora à direita) -->
+                 <div class="kpi-card kpi-info">
+                     <div class="kpi-title">Média Diária</div>
+                     <div id="sector-average-display" class="kpi-value">0,00 Kg</div>
+                 </div>
+
+                 <div class="kpi-card kpi-purple">
+                     <div class="kpi-title">Meta (Editável)</div>
+                     <div id="sector-goal-display" class="kpi-value" contenteditable="true" style="border-bottom: 1px dashed rgba(255,255,255,0.3); cursor: pointer;">0</div>
+                 </div>
+
+                 <!-- NOVO KPI: PESO MÉDIO / PEÇA -->
+                 <div class="kpi-card kpi-teal">
+                    <div class="kpi-title">Peso Médio / Peça</div>
+                    <div id="sector-avg-piece-weight-display" class="kpi-value">0,00 Kg</div>
+                </div>
+             </div>
+
+            <!-- MAIN        -->
+            <div class="chart-panel">
+                <canvas id="dailyProductionChart"></canvas>
+            </div>
+
+            <!-- ACCORDION: REGISTROS FILTRADOS (DINAMICO) -->
+            <div class="accordion-item">
+                <button class="accordion-button">
+                    <span><i class="fa-solid fa-list-check" style="margin-right: 10px;"></i> Detalhamento (Registros Filtrados)</span>
+                    <span class="accordion-icon"><i class="fa-solid fa-chevron-down"></i></span>
+                </button>
+                <div class="accordion-content">
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Data</th><th>Setor</th><th>Produto</th><th>Liga</th>
+                                    <th>Peso (Un)</th>
+                                    <th>Quant.</th><th>Peso Total</th>
+                                </tr>
+                                <tr id="monthColumnFilters">
+                                    <th><input class="filter-input-table month-column-filter" data-column="0" placeholder="Filtro..."></th>
+                                    <th><input class="filter-input-table month-column-filter" data-column="1" placeholder="Filtro..."></th>
+                                    <th><input class="filter-input-table month-column-filter" data-column="2" placeholder="Filtro..."></th>
+                                    <th><input class="filter-input-table month-column-filter" data-column="3" placeholder="Filtro..."></th>
+                                    <th><input class="filter-input-table month-column-filter" data-column="4" placeholder="Peso Exato..."></th>
+                                    <th><input class="filter-input-table month-column-filter" data-column="5" placeholder="Filtro..."></th>
+                                    <th><input class="filter-input-table month-column-filter" data-column="6" placeholder="Filtro..."></th>
+                                </tr>
+                            </thead>
+                            <tbody id="producaoMonthTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ACCORDION: BASE COMPLETA -->
+            <div class="accordion-item">
+                <button class="accordion-button">
+                    <span><i class="fa-solid fa-database" style="margin-right: 10px;"></i> Base de Dados Completa (Sem filtro de período)</span>
+                    <span class="accordion-icon"><i class="fa-solid fa-chevron-down"></i></span>
+                </button>
+                <div class="accordion-content">
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Data</th><th>Setor</th><th>Produto</th><th>Liga</th>
+                                    <th>Peso (Un)</th>
+                                    <th>Quant.</th><th>Peso Total</th>
+                                </tr>
+                                <tr id="columnFilters">
+                                    <th><input class="filter-input-table column-filter" data-column="0" placeholder="Filtro..."></th>
+                                    <th><input class="filter-input-table column-filter" data-column="1" placeholder="Filtro..."></th>
+                                    <th><input class="filter-input-table column-filter" data-column="2" placeholder="Filtro..."></th>
+                                    <th><input class="filter-input-table column-filter" data-column="3" placeholder="Filtro..."></th>
+                                    <th><input class="filter-input-table column-filter" data-column="4" placeholder="Peso Exato..."></th>
+                                    <th><input class="filter-input-table column-filter" data-column="5" placeholder="Filtro..."></th>
+                                    <th><input class="filter-input-table column-filter" data-column="6" placeholder="Filtro..."></th>
+                                </tr>
+                            </thead>
+                            <tbody id="producaoTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- MODAL DASHBOARD FULLSCREEN -->
+    <div id="dashboard-modal" class="modal-overlay">
+        <div class="modal-card fullscreen">
+            <div class="modal-header">
+                <div>
+                    <h2 class="modal-title" style="margin: 0;">Dashboard de Produção</h2>
+                    <div id="dashboard-subtitle" style="font-size: 1rem; color: var(--text-muted); margin-top: 5px;"></div>
+                </div>
+                
+                <div style="display: flex; gap: 30px; align-items: center;">
+                    <div style="text-align: right;">
+                        <div id="dashboard-sector-title" style="color: var(--color-primary); font-weight: bold; font-size: 1.5rem;"></div>
+                        <div id="dashboard-timer-display" style="color: var(--text-muted); font-family: var(--font-mono); font-size: 0.9rem;"></div>
+                    </div>
+                    <span class="modal-close" onclick="closeDashboardModal()" title="Fechar (ESC)">&times;</span>
+                </div>
+            </div>
+            
+            <div class="kpi-row" style="margin-bottom: 40px;">
+                <div class="kpi-card kpi-default">
+                    <div class="kpi-title">Total Acumulado</div>
+                    <div id="dashboard-total-produced" class="kpi-value" style="font-size: 2.5rem;">0</div>
+                </div>
+                <div class="kpi-card kpi-info">
+                    <div class="kpi-title">Média Diária</div>
+                    <div id="dashboard-daily-average" class="kpi-value" style="font-size: 2.5rem;">0</div>
+                </div>
+                <div class="kpi-card kpi-purple">
+                    <div class="kpi-title">Meta Mensal</div>
+                    <div id="dashboard-monthly-goal" class="kpi-value" style="font-size: 2.5rem;">0</div>
+                </div>
+                 <div class="kpi-card" style="border-left: 4px solid var(--status-warning);">
+                    <div class="kpi-title">Saldo Meta</div>
+                    <div id="dashboard-goal-balance" class="kpi-value" style="font-size: 2.5rem;">0</div>
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 30px; flex: 1; min-height: 0;">
+                <div class="chart-panel" style="flex: 2; height: auto;">
+                    <div class="kpi-title" style="font-size: 1rem;">Evolução Diária (Kg)</div>
+                    <div style="position: relative; flex: 1; width: 100%;">
+                        <canvas id="dashboardDailyChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-panel" style="flex: 1; height: auto;">
+                    <div class="kpi-title" style="font-size: 1rem;">Eficiência vs Meta</div>
+                    <div style="position: relative; flex: 1; width: 100%;">
+                        <canvas id="dashboardEfficiencyChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="text-align: center; color: var(--text-muted); margin-top: 20px; font-size: 0.8rem;">
+                Pressione ESC para fechar
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL CLEAR SPECIFIC MONTH -->
+    <div id="month-selector-modal" class="modal-overlay">
+        <div class="modal-card">
+            <h3 class="modal-title" style="font-size: 1.2rem;">Limpar Mês Específico</h3>
+            <p style="color: var(--text-muted);">Selecione o mês e ano para apagar permanentemente.</p>
+            <input type="month" id="month-to-clear-input" style="width: 100%; font-size: 1.2rem; padding: 10px;">
+            <div style="display: flex; gap: 10px; margin-top: 20px;">
+                <button class="btn-modern" style="background: #333; color: #fff; flex: 1;" onclick="closeClearSpecificMonthModal()">Cancelar</button>
+                <button class="btn-modern" style="background: var(--status-danger); color: #fff; flex: 1;" onclick="executeClearSpecificMonth()">Apagar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden Container for PDF Rendering -->
+    <div id="pdf-temp-container" class="pdf-light-theme" style="position: absolute; left: -9999px;"></div>
+
+    <!-- Container temporário para cálculo semanal (invisível) -->
+    <div id="weekly-table-container-hidden" style="display: none;">
+        <table id="weekly-table">
+            <thead><tr><th>Semana</th><th>Total Semanal</th></tr></thead>
+            <tbody id="weeklyTableBody"></tbody>
+        </table>
+    </div>
+
+    <script>
+        // =========================================================
+        // CONFIGURAÇÕES GERAIS E CONSTANTES
+        // =========================================================
+        Chart.defaults.color = '#a1a1aa';
+        Chart.defaults.borderColor = 'rgba(255,255,255,0.05)';
+        Chart.defaults.font.family = "'JetBrains Mono', monospace";
+        Chart.register(ChartDataLabels);
+
+        // --- MAPA DE MATERIAIS ---
+        const MATERIAL_GROUP_MAP = {
+            "ASTM A743 CA6NM": "ACO INOX",
+            "BS 20": "ACO BAIXA LIGA",
+            "BS 30": "ACO BAIXA LIGA",
+            "ES 20": "ACO MANGANES",
+            "GS 30": "FERRO FUNDIDO ALTO CROMO",
+            "ASTM A536 80-55-06": "FERRO FUNDIDO NODULAR",
+            "BS-20 STEEL WORK 2": "ACO BAIXA LIGA",
+            "AAR M201 GRC": "ACO BAIXA LIGA",
+            "FFB VJS": "FERRO FUNDIDO BRANCO",
+            "NBR 6589 FC-250": "FERRO FUNDIDO CINZENTO",
+            "NBR 6916 FE 60003": "FERRO FUNDIDO NODULAR",
+            "FE-21-C": "ACO BAIXA LIGA",
+            "SAE J405 304": "ACO INOX",
+            "GS-30 28%CR": "FERRO FUNDIDO ALTO CROMO",
+            "AAR M201 GRB": "ACO BAIXA LIGA",
+            "GS-30 23%CR": "FERRO FUNDIDO ALTO CROMO",
+            "FE-03-C": "ACO BAIXA LIGA",
+            "FE-04-C": "ACO BAIXA LIGA",
+            "SAE J403 1010": "ACO BAIXA LIGA",
+            "SAE J404 8640": "ACO BAIXA LIGA - FE-10-F",
+            "NBR 6589 FC-300": "FERRO FUNDIDO CINZENTO",
+            "ACO 20MNCR5": "ACO BAIXA LIGA",
+            "ASTM A36": "ACO BAIXA LIGA",
+            "FE-13-C": "FERRO FUNDIDO CINZENTO",
+            "ASTM A572 GR50": "ACO BAIXA LIGA",
+            "FFN 45012": "FERRO FUNDIDO NODULAR",
+            "ASTM A148 GR90-60 (BS 30)": "ACO BAIXA LIGA",
+            "BS-20 STEEL WORK 3": "ACO BAIXA LIGA",
+            "ASTM A532 GRANACO 1": "FERRO FUNDIDO ALTO CROMO",
+            "ASTM A 128 GRANACO 1": "ACO MANGANES",
+            "FFB": "FERRO FUNDIDO BRANCO",
+            "AARM201GRAU  C - ALL": "ACO BAIXA LIGA",
+            "AARM201GRAU  E - ALL": "ACO BAIXA LIGA",
+            "DIN EN 1563 1E0596A": "FERRO FUNDIDO NODULAR",
+            "AAR201 GR C RANDON": "ACO BAIXA LIGA",
+            "AAR 201 GRAU E": "ACO BAIXA LIGA",
+            "BS - 60 ARGOS": "ACO BAIXA LIGA",
+            "ACO-LIGA 41B17": "ACO BAIXA LIGA",
+            "AAR M201 GRA": "ACO BAIXA LIGA",
+            "CGS600": "ACO BAIXA LIGA",
+            "BS 30 - IMEPEL": "ACO BAIXA LIGA",
+            "SAE 15B41": "ACO BAIXA LIGA",
+            "ACO LIGADO EC - 0797": "ACO BAIXA LIGA",
+            "ASTM A 351 CF8M": "ACO INOX",
+            "ASTM A 351 CF8": "ACO INOX",
+            "ASTM A148 GR 160-145 ENCOPARTS": "ACO BAIXA LIGA",
+            "ASTM A 504 GR C": "ACO BAIXA LIGA",
+            "FE-14-C": "ACO BAIXA LIGA",
+            "G20MN5": "ACO BAIXA LIGA",
+            "ASTM A148 GR 105-85 IMEPEL": "ACO BAIXA LIGA",
+            "ASTM-A532 TIPO - D -GR F8": "FERRO FUNDIDO ALTO CROMO",
+            "NBR 6589 FC-200": "FERRO FUNDIDO CINZENTO",
+            "FE-15-C": "ACO BAIXA LIGA",
+            "SAE J405 302": "ACO INOX",
+            "SAE 1524 MOD GHT": "ACO BAIXA LIGA",
+            "SAE J 1249 1518": "ACO BAIXA LIGA",
+            "L20 - IMEPEL": "ACO BAIXA LIGA",
+            "S355 J2 G3 (EN 10025)": "ACO BAIXA LIGA",
+            "ACO LIGA - 0,29% C": "ACO BAIXA LIGA",
+            "FE-17-C": "ACO BAIXA LIGA",
+            "FE-18-C": "ACO BAIXA LIGA",
+            "FE-19-C": "ACO BAIXA LIGA",
+            "GGL-320-CR 2": "FERRO FUNDIDO CINZENTO",
+            "SAE J434 D4018": "FERRO FUNDIDO NODULAR",
+            "ASTM A 576 GR 1026": "ACO BAIXA LIGA",
+            "FE-10-C": "FERRO FUNDIDO CINZENTO",
+            "SAE J405 430": "ACO INOX",
+            "FE-10-E": "ACO MANGANES",
+            "SAE J405 316": "ACO INOX",
+            "ASTM A536 65-45-12": "FERRO FUNDIDO NODULAR",
+            "DIN EN 1563 GGG-40": "FERRO FUNDIDO NODULAR",
+            "ASTM A743 CA15M": "ACO INOX",
+            "ASTM A27 GR60-30": "ACO BAIXA LIGA",
+            "BS 60": "ACO BAIXA LIGA",
+            "DIN EN 1563 GGG-42": "FERRO FUNDIDO CINZENTO / NODULAR",
+            "ASTM A27 GR70-40": "ACO BAIXA LIGA",
+            "ASTM A48 CL 30": "FERRO FUNDIDO CINZENTO",
+            "ASTM A532 VJS": "FERRO FUNDIDO ALTO CROMO",
+            "ASTM A148 GR90-60": "ACO BAIXA LIGA",
+            "ES 10": "ACO MANGANES",
+            "DIN 1681 GS-52": "ACO BAIXA LIGA",
+            "DIN 1681 GS-60": "ACO BAIXA LIGA",
+            "DIN EN 1563 GGG-50": "FERRO FUNDIDO NODULAR",
+            "ASTM A532 GR IIIA": "FERRO FUNDIDO ALTO CROMO",
+            "DIN EN 1563 GGG-60": "FERRO FUNDIDO NODULAR",
+            "S355 J2 G3": "ACO BAIXA LIGA",
+            "DIN EN 1563 GGG-70": "FERRO FUNDIDO NODULAR",
+            "DIN EN 1561 GG-15": "FERRO FUNDIDO CINZENTO",
+            "DIN EN 1561 GG-20": "FERRO FUNDIDO CINZENTO",
+            "ASTM A148 GR80-50": "ACO BAIXA LIGA",
+            "SAE J404 4130": "ACO BAIXA LIGA - FE-10-F",
+            "SAE J404 4140": "ACO BAIXA LIGA - FE-10-F",
+            "ASTM A128 GRAU A": "ACO MANGANES",
+            "ASTM A128 B-1": "ACO MANGANES",
+            "ASTM A128 B-2": "ACO MANGANES",
+            "ASTM A128 GRAU C": "ACO MANGANES",
+            "ASTM A128 E-1": "ACO MANGANES",
+            "ASTM A128 E-2": "ACO MANGANES",
+            "SAE J404 4320": "ACO BAIXA LIGA",
+            "SAE J404 4340": "ACO BAIXA LIGA - FE-10-F",
+            "SAE J404 8620": "ACO BAIXA LIGA",
+            "SAE J404 8630": "ACO BAIXA LIGA - FE-10-F",
+            "SAE J435 GR 080": "ACO BAIXA LIGA",
+            "DIN EN 1561 GG-25": "FERRO FUNDIDO CINZENTO",
+            "ASTM A159 G1800": "FERRO FUNDIDO CINZENTO",
+            "ASTM A159 G3500": "FERRO FUNDIDO CINZENTO",
+            "ASTM A-216WCA": "ACO BAIXA LIGA",
+            "DIN EN 1561 GG-30": "FERRO FUNDIDO CINZENTO",
+            "ASTM A-216WCB": "ACO BAIXA LIGA",
+            "DIN EN 1561 GG-40": "FERRO FUNDIDO CINZENTO",
+            "ASTM A-216WCC": "ACO BAIXA LIGA",
+            "SAE J435 GR 0050 A": "ACO BAIXA LIGA - FE-10-F",
+            "ASTM A27 GR. 65-35": "ACO BAIXA LIGA",
+            "SAE 1524": "ACO BAIXA LIGA",
+            "DIN 1681 GS-38": "ACO BAIXA LIGA",
+            "SAE J435 GR 0030": "ACO BAIXA LIGA - FE-10-F",
+            "ASTM A 532 II D": "FERRO FUNDIDO ALTO CROMO",
+            "ASTM A 148 GR 165 - 150": "ACO BAIXA LIGA",
+            "SAE J403 1020": "ACO BAIXA LIGA",
+            "SAE J403 1025": "ACO BAIXA LIGA",
+            "SAE J403 1030": "ACO BAIXA LIGA",
+            "SAE J403 1035": "ACO BAIXA LIGA",
+            "SAE J403 1040": "ACO BAIXA LIGA",
+            "SAE J403 1045": "ACO BAIXA LIGA",
+            "SAE J403 1050": "ACO BAIXA LIGA",
+            "SAE J403 1060": "ACO BAIXA LIGA - FE-10-F",
+            "SAE J403 1070": "ACO BAIXA LIGA",
+            "SAE J405 410": "ACO INOX",
+            "SAE J405 420": "ACO INOX",
+            "SAE J435 GR 0050B": "ACO BAIXA LIGA - FE-10-F",
+            "ASTM A27 GR 70-36": "ACO BAIXA LIGA",
+            "ASTM A27 GRADE 60-30 (ABS)": "ACO BAIXA LIGA",
+            "ASTM A743 CA 40": "ACO INOX",
+            "ASTM A532 CLASSE II-A": "FERRO FUNDIDO ALTO CROMO",
+            "ASTM A128 GR A - MODIFICADO": "ACO MANGANES",
+            "ASTM A 148 - CATERPILLAR": "ACO BAIXA LIGA",
+            "ASTM A27 GRADE N-2": "ACO BAIXA LIGA",
+            "ASTM A532 I C": "FERRO FUNDIDO ALTO CROMO",
+            "ASTM A 148 GR 160-145": "ACO BAIXA LIGA",
+            "ASTM A27 GRADE N-1": "ACO BAIXA LIGA",
+            "ASTM A27 GRADE U-60-30": "ACO BAIXA LIGA",
+            "ASTM A743 CF8": "ACO INOX",
+            "ASTM A743 CF8M": "ACO INOX",
+            "DIN 1681 GS-45": "ACO BAIXA LIGA",
+            "ASTM A 128 GRANACO 2": "ACO MANGANES",
+            "ASTM A743 CA15": "ACO INOX",
+            "FE-16-C": "FERRO FUNDIDO CINZENTO",
+            "SAE 15B32 MODIFICADO": "ACO BAIXA LIGA",
+            "HC - 49.1": "ACO BAIXA LIGA - FE-10-F",
+            "HC - 49": "ACO BAIXA LIGA",
+            "SAE J404 1335": "ACO BAIXA LIGA",
+            "ASTM A 148 GR 115 - 95": "ACO BAIXA LIGA",
+            "CGS500": "ACO BAIXA LIGA",
+            "HC - 4": "ACO BAIXA LIGA - FE-10-F",
+            "SAC 350": "ACO BAIXA LIGA",
+            "ASTM A128 MOD 18-20% MN": "ACO MANGANES",
+            "ASTM A 148 NEW TRX": "ACO BAIXA LIGA",
+            "ASTM A532 CL II TIPO B": "FERRO FUNDIDO ALTO CROMO",
+            "FE-11-C": "FERRO FUNDIDO BRANCO",
+            "ASTM A 148 - FUNDICAO ERUS": "ACO BAIXA LIGA",
+            "FE-20-C": "FERRO FUNDIDO BRANCO",
+            "FE-06-C": "FERRO FUNDIDO BRANCO",
+            "FE-07-E": "ACO MANGANES",
+            "ASTM A128 B-3": "ACO MANGANES",
+            "ASTM SC4140 CL 90/60 - STRAUHS": "ACO BAIXA LIGA",
+            "SAE J404 4150": "ACO BAIXA LIGA",
+            "ASTM A743 CA 40.1": "ACO INOX",
+            "FE-08-C": "FERRO FUNDIDO BRANCO",
+            "FE-05-D": "",
+            "FE-06-D": "",
+            "FE-09-E": "ACO MANGANES",
+            "FE-07-C": "",
+            "FE-22-C": ""
+        };
+
+        // --- Variáveis e Constantes ---
+        const ADMIN_PASSWORD_HASH = 'ADMIN'; 
+        
+        const fileInput = document.getElementById('excelFileInput');
+        const tableBody = document.getElementById('producaoTableBody');
+        const filteredTableBody = document.getElementById('producaoMonthTableBody'); 
+        const statusMessage = document.getElementById('status-message');
+        const errorMessage = document.getElementById('error-message');
+        
+        // Filtros Tabela Geral (Base Completa)
+        const columnFilters = document.querySelectorAll('#columnFilters .column-filter');
+
+        // Filtros Tabela Filtrada (Dinâmica)
+        const monthColumnFilters = document.querySelectorAll('.month-column-filter');
+        
+        const functionsDropdown = document.getElementById('functionsDropdown');
+        
+        // Mantemos a referência ao corpo da tabela semanal (mesmo que oculto) para não quebrar a lógica de cálculo
+        const weeklyTableBody = document.getElementById('weeklyTableBody');
+        const weeklyTable = document.getElementById('weekly-table');
+        
+        // Chart Controls & Filters
+        const sectorChartSelect = document.getElementById('sector-chart-select');
+        const groupFilterSelect = document.getElementById('group-filter-select');
+        const materialFilterSelect = document.getElementById('material-filter-select');
+        const yearFilterSelect = document.getElementById('year-filter-select'); // NOVO
+        
+        // New Filter Date Controls
+        const filterDateStart = document.getElementById('filter-date-start');
+        const filterDateEnd = document.getElementById('filter-date-end');
+        const dateRangeContainer = document.getElementById('date-range-container');
+        const monthFilterContainer = document.getElementById('month-filter-container');
+
+        let currentFilterMode = 'month'; // 'month' or 'range'
+        // Inicializa com o mês vigente (1-12)
+        let currentMonthFilterIndex = new Date().getMonth() + 1;
+        
+        const monthButtons = document.querySelectorAll('.btn-month');
+
+        const dailyChartCanvas = document.getElementById('dailyProductionChart');
+        const sectorTotalDisplay = document.getElementById('sector-total-display');
+        const sectorAverageDisplay = document.getElementById('sector-average-display');
+        const sectorMonthlyAverageDisplay = document.getElementById('sector-monthly-average-display'); // NOVO
+        const kpiMonthlyAvgCard = document.getElementById('kpi-monthly-avg-card'); // NOVO
+        const sectorGoalDisplay = document.getElementById('sector-goal-display'); 
+        const sectorAvgPieceWeightDisplay = document.getElementById('sector-avg-piece-weight-display'); // Novo Elemento KPI
+        let dailyChart = null; 
+        
+        const COLUMN_MAP = { DATA: 0, SETOR: 1, PRODUTO: 2, LIGA: 3, PESO_UN: 4, QUANT: 5, PESO_TOTAL: 6 };
+        const WEEKLY_GOAL = 30000; 
+        const MOLDAGEM_SECTORS = ['moldagem leve', 'moldagem rollover', 'moldagem pesada'];
+        const TOTAL_MOLDAGEM_SECTOR_KEY = 'TOTAL MOLDAGEM';
+        const GENERAL_MOLDING_KEY = 'MOLDAGEM GERAL'; 
+        const PRIMARY_SECTORS = ['Acabamento', 'Expedição', 'Fusão'];
+        
+        let allData = [];
+        let filteredData = []; 
+        let sectorGoals = {}; 
+        let productWeights = {}; 
+        
+        const pdfTempContainer = document.getElementById('pdf-temp-container');
+        
+        // Dashboard Vars
+        const dashboardModal = document.getElementById('dashboard-modal');
+        const dashboardSectorTitle = document.getElementById('dashboard-sector-title');
+        const dashboardTimerDisplay = document.getElementById('dashboard-timer-display');
+        const dashboardTotalProduced = document.getElementById('dashboard-total-produced');
+        const dashboardDailyAverage = document.getElementById('dashboard-daily-average');
+        const dashboardMonthlyGoal = document.getElementById('dashboard-monthly-goal');
+        const dashboardGoalBalance = document.getElementById('dashboard-goal-balance');
+        const dashboardDailyChartCanvas = document.getElementById('dashboardDailyChart');
+        const dashboardEfficiencyChartCanvas = document.getElementById('dashboardEfficiencyChart');
+        let dashboardDailyChartInstance = null;
+        let dashboardEfficiencyChartInstance = null;
+        let dashboardSectors = [];
+        let dashboardTimer = null;
+        let currentDashboardSectorIndex = 0;
+        const CAROUSEL_INTERVAL = 10000;
+        
+        // Modal Limpeza Mês Vars
+        const monthSelectorModal = document.getElementById('month-selector-modal');
+        const monthToClearInput = document.getElementById('month-to-clear-input');
+
+        // --- UI Interactions ---
+        function showLoading() { document.getElementById('loading-screen').style.display = 'flex'; document.getElementById('loading-screen').style.opacity = '1'; }
+        function hideLoading() { 
+            const ls = document.getElementById('loading-screen');
+            ls.style.opacity = '0';
+            setTimeout(() => { ls.style.display = 'none'; }, 500); 
+        }
+
+        // Accordion Logic
+        document.querySelectorAll('.accordion-button').forEach(btn => {
+            btn.addEventListener('click', function() {
+                this.classList.toggle('active');
+                const content = this.nextElementSibling;
+                if (content.style.display === 'block') content.style.display = 'none';
+                else content.style.display = 'block';
+            });
+        });
+
+        // --- FILTER MODE LOGIC (NEW) ---
+        function setFilterMode(mode) {
+            currentFilterMode = mode;
+            if (mode === 'month') {
+                dateRangeContainer.classList.add('filter-obsolete');
+                monthFilterContainer.classList.remove('filter-obsolete');
+                filterDateStart.value = '';
+                filterDateEnd.value = '';
+            } else {
+                monthFilterContainer.classList.add('filter-obsolete');
+                dateRangeContainer.classList.remove('filter-obsolete');
+                monthButtons.forEach(b => b.classList.remove('active'));
+            }
+            updateDailyProductionChartFromSelection();
+        }
+
+        // Month Button Logic
+        monthButtons.forEach(btn => {
+            btn.addEventListener('click', function() {
+                monthButtons.forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                currentMonthFilterIndex = parseInt(this.getAttribute('data-month'));
+                setFilterMode('month');
+            });
+        });
+
+        // Date Inputs Logic
+        filterDateStart.addEventListener('input', () => { if(filterDateStart.value) setFilterMode('range'); });
+        filterDateEnd.addEventListener('input', () => { if(filterDateEnd.value) setFilterMode('range'); });
+        filterDateStart.addEventListener('focus', () => setFilterMode('range'));
+        filterDateEnd.addEventListener('focus', () => setFilterMode('range'));
+
+        // Toggle dropdown logic
+        function toggleDropdown() {
+             const content = document.querySelector('#functionsDropdown .dropdown-content');
+             if(content.style.display === 'block') content.style.display = 'none';
+             else content.style.display = 'block';
+        }
+        window.onclick = function(event) {
+            if (!event.target.matches('.btn-glass') && !event.target.closest('.dropdown')) {
+                const dropdowns = document.getElementsByClassName("dropdown-content");
+                for (let i = 0; i < dropdowns.length; i++) {
+                    const openDropdown = dropdowns[i];
+                    if (openDropdown.style.display === 'block') {
+                        openDropdown.style.display = 'none';
+                    }
+                }
+            }
+        }
+
+        // --- Helpers ---
+        function formatNumber(num, decimals = 2) {
+            if (isNaN(num) || num === null || num === '') return '';
+            const floatNum = parseFloat(num);
+            if (decimals === 0) return parseInt(floatNum).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+            return floatNum.toLocaleString('pt-BR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+        }
+
+        function parseDate(dateString) {
+            if (!dateString) return null;
+            let date = null;
+            let parts = String(dateString).split('/');
+            if (parts.length === 3) date = new Date(parts[2], parts[1] - 1, parts[0]); 
+            else date = new Date(dateString);
+            if (date && !isNaN(date.getTime())) { date.setHours(0, 0, 0, 0); return date; }
+            return null;
+        }
+
+        function getWeekInfo(d) {
+            d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+            d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+            const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+            const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+            return { sortKey: `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`, displayKey: `SEMANA ${String(weekNo).padStart(2, '0')}` };
+        }
+        
+        function isWorkDay(date) { const day = date.getDay(); return day !== 0 && day !== 6; }
+
+        async function handleAuthAction(action, actionName) {
+            const password = prompt(`Digite a senha de administrador:`);
+            if (password === null) { statusMessage.textContent = 'Operação cancelada.'; return; }
+            if (password.trim().toUpperCase() === ADMIN_PASSWORD_HASH) {
+                statusMessage.textContent = `Executando: ${actionName}...`;
+                statusMessage.className = 'status-text normal';
+                try { await action(); } catch (e) { 
+                    errorMessage.textContent = `Erro: ${e.message}`; 
+                    statusMessage.textContent = 'Erro.';
+                    statusMessage.className = 'status-text error';
+                }
+            } else { 
+                errorMessage.textContent = `Erro: Senha incorreta.`; 
+                statusMessage.className = 'status-text error';
+            }
+        }
+        window.handleAuthAction = handleAuthAction;
+
+        // --- Gestão de Dados ---
+        const LOCAL_STORAGE_KEY = 'producao_product_weights';
+        function loadWeightsFromLocalStorage() { try { return JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY)) || {}; } catch (e) { return {}; } }
+        
+        function saveWeightsToLocalStorage(weights) {
+            try { 
+                localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(weights)); productWeights = weights; 
+                statusMessage.textContent = `Pesos salvos localmente.`; 
+                statusMessage.className = 'status-text success';
+                setTimeout(() => { statusMessage.textContent = ''; statusMessage.className = 'status-text normal'; }, 3000); 
+            } 
+            catch (e) { errorMessage.textContent = 'Erro ao salvar pesos localmente.'; }
+        }
+        
+        function confirmAndSaveWeightsToLocalStorage() {
+            if (!confirm('Deseja salvar os pesos unitários atuais no armazenamento local?')) return;
+            const currentWeights = {};
+            allData.forEach(rowData => {
+                const product = rowData[COLUMN_MAP.PRODUTO];
+                const pesoUn = parseFloat(rowData[COLUMN_MAP.PESO_UN].replace(/\./g, '').replace(',', '.'));
+                if (product && pesoUn > 0) currentWeights[product] = pesoUn.toFixed(2);
+            });
+            saveWeightsToLocalStorage(currentWeights);
+        }
+        window.confirmAndSaveWeightsToLocalStorage = confirmAndSaveWeightsToLocalStorage;
+
+        async function loadGoals() {
+            try {
+                const response = await fetch('/api/producao-apontada/metas');
+                const rawGoals = await response.json();
+                sectorGoals = rawGoals.reduce((acc, goal) => { acc[goal.setor] = parseFloat(goal.meta_peso); return acc; }, {});
+            } catch (e) { sectorGoals = {}; }
+        }
+        
+        async function saveGoal(sector, goalContent) {
+            let val = parseFloat(String(goalContent).replace(/[^\d,.]/g, '').replace(',', '.')) || 0;
+            try {
+                const response = await fetch('/api/producao-apontada/metas', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ setor: sector, meta_peso: String(val.toFixed(2)) })
+                });
+                if (response.ok) { sectorGoals[sector] = val; return true; }
+            } catch (e) { alert(`Erro ao salvar meta: ${e.message}`); }
+            return false;
+        }
+        
+        sectorGoalDisplay.addEventListener('blur', async (e) => {
+            const goalKey = e.target.getAttribute('data-goal-key');
+            if (goalKey) { await saveGoal(goalKey, e.target.textContent); e.target.textContent = formatNumber(sectorGoals[goalKey] || 0, 0); }
+        });
+        sectorGoalDisplay.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); }});
+
+        // --- Filtros e Tabelas ---
+        function applyBaseFilters() {
+            const columnFilterValues = Array.from(columnFilters).map(input => input.value.trim().toLowerCase());
+
+            const baseFiltered = allData.filter(rowData => {
+                let columnMatch = true;
+                for (let i = 0; i < rowData.length; i++) {
+                    const filterValue = columnFilterValues[i];
+                    if (filterValue) {
+                        const cellText = String(rowData[i]).toLowerCase();
+                        // Ajuste para Peso Un (Coluna 4) ser busca exata automática
+                        if (i === COLUMN_MAP.PESO_UN) {
+                            if (cellText !== filterValue) { columnMatch = false; break; }
+                        } else if (!cellText.includes(filterValue)) { 
+                            columnMatch = false; break; 
+                        }
+                    }
+                }
+                return columnMatch;
+            });
+            
+            updateDetailTable(baseFiltered, tableBody);
+            
+            setTimeout(() => { 
+                calculateWeeklyProduction(baseFiltered); 
+                populateSectorChartSelect();
+                populateGroupFilter(); 
+                populateMaterialFilter();
+                // O populateYearFilter é chamado explicitamente no loadInitialData,
+                // mas mantemos aqui para atualizações dinâmicas se necessário.
+                if (yearFilterSelect.options.length <= 1) populateYearFilter();
+            }, 50); 
+        }
+
+        function applyFilteredTableFilters(dataSet) {
+            const columnFilterValues = Array.from(monthColumnFilters).map(input => input.value.trim().toLowerCase());
+
+            const finalData = dataSet.filter(rowData => {
+                if (columnFilterValues && columnFilterValues.length) {
+                    for (let i = 0; i < rowData.length; i++) {
+                        const filterValue = columnFilterValues[i];
+                        if (filterValue) {
+                            const cellText = String(rowData[i]).toLowerCase();
+                            // Ajuste para Peso Un (Coluna 4) ser busca exata automática
+                            if (i === COLUMN_MAP.PESO_UN) {
+                                if (cellText !== filterValue) return false;
+                            } else if (!cellText.includes(filterValue)) {
+                                return false;
+                            }
+                        }
+                    }
+                }
+                return true;
+            });
+            updateDetailTable(finalData, filteredTableBody);
+        }
+
+        columnFilters.forEach(input => input.addEventListener('input', applyBaseFilters));
+        monthColumnFilters.forEach(input => input.addEventListener('input', updateDailyProductionChartFromSelection)); 
+
+        function updateDetailTable(data, targetTbody) {
+            targetTbody.innerHTML = '';
+            data.forEach((rowData) => {
+                const newRow = targetTbody.insertRow();
+                newRow.setAttribute('data-original-index', allData.indexOf(rowData)); 
+                newRow.insertCell().textContent = rowData[COLUMN_MAP.DATA] || ''; 
+                newRow.insertCell().textContent = rowData[COLUMN_MAP.SETOR] || '';
+                newRow.insertCell().textContent = rowData[COLUMN_MAP.PRODUTO] || '';
+                newRow.setAttribute('data-product-code', rowData[COLUMN_MAP.PRODUTO]); 
+                newRow.insertCell().textContent = rowData[COLUMN_MAP.LIGA] || '';
+                
+                const pesoUnCell = newRow.insertCell();
+                pesoUnCell.textContent = rowData[COLUMN_MAP.PESO_UN]; 
+                pesoUnCell.classList.add('editable-cell');
+                pesoUnCell.setAttribute('contenteditable', 'true');
+                pesoUnCell.addEventListener('blur', (e) => recalculateAndReplicateTotal(e.target));
+                pesoUnCell.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); }});
+
+                newRow.insertCell().textContent = formatNumber(parseInt(rowData[COLUMN_MAP.QUANT]) || 0, 0); 
+                newRow.insertCell().textContent = rowData[COLUMN_MAP.PESO_TOTAL];
+            });
+        }
+
+        async function recalculateAndReplicateTotal(cell) {
+            const row = cell.closest('tr');
+            const code = row.getAttribute('data-product-code');
+            const idx = row.getAttribute('data-original-index');
+            let pu = parseFloat(cell.textContent.replace(/\./g, '').replace(',', '.')) || 0;
+            let q = parseFloat(row.cells[COLUMN_MAP.QUANT].textContent.replace(/\./g, '').replace(',', '.')) || 0;
+            
+            const newPuStr = formatNumber(pu, 2);
+            const newTotStr = formatNumber(pu*q, 2);
+            
+            cell.textContent = newPuStr;
+            row.cells[COLUMN_MAP.PESO_TOTAL].textContent = newTotStr;
+
+            allData[idx][COLUMN_MAP.PESO_UN] = newPuStr;
+            allData[idx][COLUMN_MAP.PESO_TOTAL] = newTotStr;
+
+            if (code && pu > 0) {
+                productWeights[code] = pu.toFixed(2);
+                allData.forEach(r => {
+                    if (r[COLUMN_MAP.PRODUTO] === code) {
+                        r[COLUMN_MAP.PESO_UN] = formatNumber(pu, 2);
+                        r[COLUMN_MAP.PESO_TOTAL] = formatNumber(pu * (parseFloat(r[COLUMN_MAP.QUANT])||0), 2);
+                    }
+                });
+            }
+            applyBaseFilters();
+            updateDailyProductionChartFromSelection();
+        }
+
+        // --- Gráficos ---
+        function linearRegression(data) {
+            const productionData = data.filter(y => y > 0);
+            if (productionData.length < 2) return { m: 0, b: 0 };
+            let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0, n = productionData.length;
+            for (let i = 0; i < n; i++) {
+                const x = i; const y = productionData[i];
+                sumX += x; sumY += y; sumXY += x * y; sumXX += x * x;
+            }
+            const m = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+            const b = (sumY - m * sumX) / n;
+            return { m, b };
+        }
+
+        function updateDailyProductionChartFromSelection() {
+            const selectedSector = sectorChartSelect.value;
+            const selectedGroup = groupFilterSelect.value;
+            const selectedMaterial = materialFilterSelect.value;
+            const selectedYear = yearFilterSelect.value; // NOVO
+            
+            let chartData;
+            let rawFilteredRows = [];
+
+            if (selectedSector) {
+                const result = getChartDataBasedOnSelection(selectedSector, selectedGroup, selectedMaterial, selectedYear);
+                chartData = result.chartInfo;
+                rawFilteredRows = result.filteredRows;
+                renderMainChart(selectedSector, chartData, currentMonthFilterIndex === 0 && currentFilterMode === 'month');
+            } else {
+                renderMainChart('Nenhum', { labels: [], data: [], total: 0, average: 0, averageMonthly: 0, totalQty: 0 }, false);
+            }
+
+            applyFilteredTableFilters(rawFilteredRows);
+        }
+
+        function getChartDataBasedOnSelection(sector, group, material, year) {
+            const sourceData = allData;
+            const isMonthMode = currentFilterMode === 'month';
+            const selectedMonthIndex = currentMonthFilterIndex;
+            const isAllMonths = isMonthMode && selectedMonthIndex === 0;
+            
+            let startDateObj = null;
+            let endDateObj = null;
+            
+            if (!isMonthMode && filterDateStart.value && filterDateEnd.value) {
+                const [sY, sM, sD] = filterDateStart.value.split('-').map(Number);
+                startDateObj = new Date(sY, sM - 1, sD);
+                startDateObj.setHours(0, 0, 0, 0);
+
+                const [eY, eM, eD] = filterDateEnd.value.split('-').map(Number);
+                endDateObj = new Date(eY, eM - 1, eD);
+                endDateObj.setHours(23, 59, 59, 999);
+            }
+
+            let minYear = new Date().getFullYear();
+            let maxYear = new Date().getFullYear();
+            const dates = sourceData.map(r => parseDate(r[COLUMN_MAP.DATA])).filter(d => d);
+            if (dates.length > 0) {
+                minYear = Math.min(...dates.map(d => d.getFullYear()));
+                maxYear = Math.max(...dates.map(d => d.getFullYear()));
+            }
+
+            // Ajuste dos anos baseados no filtro de ano
+            if (year !== 'TODOS') {
+                minYear = parseInt(year);
+                maxYear = parseInt(year);
+            }
+
+            const aggregated = {};
+            const uniqueDays = new Set();
+            const uniqueMonths = new Set();
+            
+            const filteredRows = sourceData.filter(rowData => {
+                const rowDate = parseDate(rowData[COLUMN_MAP.DATA]);
+                if (!rowDate) return false;
+
+                // Filtro de Ano
+                if (year !== 'TODOS') {
+                    if (rowDate.getFullYear() !== parseInt(year)) return false;
+                }
+
+                if (isMonthMode) {
+                    if (!isAllMonths) {
+                        if ((rowDate.getMonth() + 1) !== selectedMonthIndex) return false;
+                    }
+                } else {
+                    if (startDateObj && endDateObj) {
+                        if (rowDate < startDateObj || rowDate > endDateObj) return false;
+                    }
+                }
+
+                const rowSector = (rowData[COLUMN_MAP.SETOR] || 'Não Definido');
+                let sectorMatch = false;
+                if (sector === GENERAL_MOLDING_KEY) {
+                    sectorMatch = MOLDAGEM_SECTORS.includes(rowSector.toLowerCase());
+                } else {
+                    sectorMatch = rowSector === sector;
+                }
+                if (!sectorMatch) return false;
+
+                const rowLiga = rowData[COLUMN_MAP.LIGA] || '';
+                const rowGroup = MATERIAL_GROUP_MAP[rowLiga] || 'OUTROS';
+                if (group !== 'TODOS') {
+                    if (rowGroup !== group) return false;
+                }
+
+                if (material && material !== 'TODOS') {
+                    if (rowLiga !== material) return false;
+                }
+
+                return true;
+            });
+
+            let total = 0;
+            let totalQty = 0; // Nova variável para somar a quantidade
+
+            filteredRows.forEach(rowData => {
+                const date = parseDate(rowData[COLUMN_MAP.DATA]);
+                const pesoTotal = parseFloat(rowData[COLUMN_MAP.PESO_TOTAL].replace(/\./g, '').replace(',', '.')) || 0;
+                const quantity = parseFloat(rowData[COLUMN_MAP.QUANT]) || 0; // Quantidade da linha
+
+                total += pesoTotal;
+                totalQty += quantity;
+                
+                // Track unique active days/months for correct averaging
+                if (pesoTotal > 0) {
+                    uniqueDays.add(rowData[COLUMN_MAP.DATA]);
+                    uniqueMonths.add(`${date.getFullYear()}-${date.getMonth()}`);
+                }
+
+                let key;
+                if (isAllMonths && isMonthMode) {
+                    // Agregação para o GRÁFICO (Mensal)
+                    const m = String(date.getMonth() + 1).padStart(2, '0');
+                    key = `${date.getFullYear()}-${m}`;
+                } else {
+                    // Agregação para o GRÁFICO (Diário)
+                    key = rowData[COLUMN_MAP.DATA]; 
+                }
+                aggregated[key] = (aggregated[key] || 0) + pesoTotal;
+            });
+
+            let finalLabels = [];
+            let finalData = [];
+            
+            if (isAllMonths && isMonthMode) {
+                // Eixo X do gráfico mostra Meses
+                for (let y = minYear; y <= maxYear; y++) {
+                    for (let m = 1; m <= 12; m++) {
+                        const mm = String(m).padStart(2, '0');
+                        const key = `${y}-${mm}`;
+                        const monthName = new Date(y, m-1, 1).toLocaleString('pt-BR', { month: 'short' }).toUpperCase();
+                        const label = `${monthName}/${y}`;
+                        // Se for intervalo grande, talvez simplificar label, mas mantendo a lógica atual
+                        finalLabels.push(label);
+                        finalData.push(aggregated[key] || 0);
+                    }
+                }
+            } else {
+                // Eixo X do gráfico mostra Dias
+                if (isMonthMode) {
+                    const daysInMonth = new Date(maxYear, selectedMonthIndex, 0).getDate();
+                    for (let d = 1; d <= daysInMonth; d++) {
+                        const dd = String(d).padStart(2, '0');
+                        const mm = String(selectedMonthIndex).padStart(2, '0');
+                        const key = `${dd}/${mm}/${maxYear}`; 
+                        finalLabels.push(dd);
+                        finalData.push(aggregated[key] || 0);
+                    }
+                } else {
+                    const sortedKeys = Object.keys(aggregated).sort((a,b) => parseDate(a) - parseDate(b));
+                    if (sortedKeys.length > 0) {
+                         const first = parseDate(sortedKeys[0]);
+                         const last = parseDate(sortedKeys[sortedKeys.length-1]);
+                         const diffDays = (last - first) / (1000 * 60 * 60 * 24);
+                         
+                         if (diffDays < 60) {
+                             for (let d = new Date(first); d <= last; d.setDate(d.getDate() + 1)) {
+                                 const dayStr = `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+                                 finalLabels.push(`${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`);
+                                 finalData.push(aggregated[dayStr] || 0);
+                             }
+                         } else {
+                             sortedKeys.forEach(k => {
+                                 finalLabels.push(k.substring(0, 5));
+                                 finalData.push(aggregated[k]);
+                             });
+                         }
+                    }
+                }
+            }
+
+            // Calculos de Média Corrigidos
+            const activeDaysCount = uniqueDays.size;
+            const activeMonthsCount = uniqueMonths.size;
+            
+            const averageDaily = activeDaysCount > 0 ? total / activeDaysCount : 0;
+            const averageMonthly = activeMonthsCount > 0 ? total / activeMonthsCount : 0;
+
+            return { 
+                chartInfo: { labels: finalLabels, data: finalData, total, average: averageDaily, averageMonthly, totalQty },
+                filteredRows: filteredRows
+            };
+        }
+
+        function renderMainChart(sector, chartInfo, showMonthlyAvg = false) {
+            const { labels, data, total, average, averageMonthly, totalQty } = chartInfo;
+
+            sectorTotalDisplay.textContent = `${formatNumber(total, 2)} Kg`;
+            sectorAverageDisplay.textContent = `${formatNumber(average, 2)} Kg`;
+
+            // Controle do KPI Média Mensal
+            if (showMonthlyAvg) {
+                kpiMonthlyAvgCard.style.display = 'flex';
+                sectorMonthlyAverageDisplay.textContent = `${formatNumber(averageMonthly, 2)} Kg`;
+            } else {
+                kpiMonthlyAvgCard.style.display = 'none';
+            }
+
+            // Controle do KPI Peso Médio / Peça (Novo)
+            const avgWeightPerPiece = totalQty > 0 ? total / totalQty : 0;
+            sectorAvgPieceWeightDisplay.textContent = `${formatNumber(avgWeightPerPiece, 2)} Kg`;
+
+            let goalKey = (sector === GENERAL_MOLDING_KEY || MOLDAGEM_SECTORS.includes(sector.toLowerCase())) ? TOTAL_MOLDAGEM_SECTOR_KEY : sector;
+            const goal = sectorGoals[goalKey] || 0;
+            sectorGoalDisplay.textContent = formatNumber(goal, 0);
+            sectorGoalDisplay.setAttribute('data-goal-key', goalKey);
+
+            const regression = linearRegression(data);
+            const trendLineData = [];
+            let idx = 0;
+            data.forEach(val => {
+                let tVal = regression.m * idx + regression.b;
+                if (tVal < 0) tVal = 0; 
+                trendLineData.push(tVal); 
+                idx++; 
+            });
+
+            const maxDataValue = Math.max(...data, ...trendLineData.filter(v => v !== null), 0);
+            const suggestedMaxY = maxDataValue > 0 ? maxDataValue * 1.2 : 10; 
+
+            const barDataset = {
+                label: 'Produção (Kg)', data: data,
+                backgroundColor: 'rgba(251, 191, 36, 0.7)', borderColor: '#fbbf24', borderWidth: 1,
+                datalabels: {
+                    display: (ctx) => ctx.dataset.data[ctx.dataIndex] > 0, 
+                    color: '#fff', anchor: 'end', align: 'top', font: { weight: 'bold', size: 10 },
+                    formatter: (value) => formatNumber(value, 0)
+                }
+            };
+            const trendDataset = {
+                label: 'Tendência', data: trendLineData, type: 'line', fill: false,
+                borderColor: '#ef4444', borderWidth: 2, pointRadius: 0, tension: 0.1, datalabels: { display: false }
+            };
+
+            const config = {
+                type: 'bar',
+                data: { labels: labels, datasets: [barDataset, trendDataset] },
+                options: {
+                    responsive: true, maintainAspectRatio: false, 
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: { 
+                            beginAtZero: true, 
+                            min: 0,
+                            suggestedMax: suggestedMaxY,
+                            grid: { color: 'rgba(255,255,255,0.05)' } 
+                        },
+                        x: { grid: { display: false } }
+                    }
+                }
+            };
+
+            if (dailyChart) { dailyChart.data = config.data; dailyChart.options = config.options; dailyChart.update(); } 
+            else { dailyChart = new Chart(dailyChartCanvas, config); }
+        }
+        
+        function populateSectorChartSelect() {
+            const uniqueSectors = new Set();
+            allData.forEach(rowData => uniqueSectors.add(rowData[COLUMN_MAP.SETOR] || 'Não Definido'));
+            
+            sectorChartSelect.innerHTML = ''; 
+            const sortedSectors = Array.from(uniqueSectors).sort();
+            sectorChartSelect.insertAdjacentHTML('afterbegin', `<option value="${GENERAL_MOLDING_KEY}">${GENERAL_MOLDING_KEY}</option>`);
+
+            sortedSectors.forEach(sector => {
+                const option = document.createElement('option');
+                option.value = sector; option.textContent = sector;
+                sectorChartSelect.appendChild(option);
+            });
+            sectorChartSelect.value = GENERAL_MOLDING_KEY; 
+            updateDailyProductionChartFromSelection(); 
+            dashboardSectors = [GENERAL_MOLDING_KEY, ...sortedSectors];
+        }
+
+        function populateGroupFilter() {
+            const groups = new Set();
+            Object.values(MATERIAL_GROUP_MAP).forEach(g => { if(g) groups.add(g); });
+            allData.forEach(r => {
+                const liga = r[COLUMN_MAP.LIGA];
+                const g = MATERIAL_GROUP_MAP[liga];
+                if(g) groups.add(g);
+                else if (liga) groups.add("OUTROS");
+            });
+
+            const sortedGroups = Array.from(groups).sort();
+            const currentSelection = groupFilterSelect.value;
+            
+            groupFilterSelect.innerHTML = '<option value="TODOS">Todos</option>';
+            sortedGroups.forEach(g => {
+                const opt = document.createElement('option');
+                opt.value = g;
+                opt.textContent = g;
+                groupFilterSelect.appendChild(opt);
+            });
+
+            if(sortedGroups.includes(currentSelection)) groupFilterSelect.value = currentSelection;
+        }
+
+        function populateMaterialFilter() {
+            const selectedGroup = groupFilterSelect.value;
+            const materials = new Set();
+            
+            allData.forEach(r => {
+                const liga = r[COLUMN_MAP.LIGA];
+                if (!liga) return;
+
+                const groupOfLiga = MATERIAL_GROUP_MAP[liga] || 'OUTROS';
+                
+                if (selectedGroup === 'TODOS' || groupOfLiga === selectedGroup) {
+                    materials.add(liga);
+                }
+            });
+
+            const sortedMaterials = Array.from(materials).sort();
+            const currentMatSelection = materialFilterSelect.value;
+
+            materialFilterSelect.innerHTML = '<option value="TODOS">Todas</option>';
+            sortedMaterials.forEach(m => {
+                const opt = document.createElement('option');
+                opt.value = m;
+                opt.textContent = m;
+                materialFilterSelect.appendChild(opt);
+            });
+            
+            if(sortedMaterials.includes(currentMatSelection)) materialFilterSelect.value = currentMatSelection;
+            else materialFilterSelect.value = "TODOS";
+        }
+        
+        // NOVO: Função para popular o filtro de Anos
+        function populateYearFilter() {
+            const years = new Set();
+            allData.forEach(r => {
+                const d = parseDate(r[COLUMN_MAP.DATA]);
+                if (d) years.add(d.getFullYear());
+            });
+            
+            const sortedYears = Array.from(years).sort((a,b) => b - a); // Decrescente
+            const currentYearSelection = yearFilterSelect.value;
+            
+            yearFilterSelect.innerHTML = '<option value="TODOS">Todos</option>';
+            sortedYears.forEach(y => {
+                const opt = document.createElement('option');
+                opt.value = y;
+                opt.textContent = y;
+                yearFilterSelect.appendChild(opt);
+            });
+            
+            // Tenta manter a seleção, senão vai para TODOS
+            if(sortedYears.map(String).includes(currentYearSelection)) {
+                yearFilterSelect.value = currentYearSelection;
+            }
+        }
+
+        sectorChartSelect.addEventListener('change', updateDailyProductionChartFromSelection);
+        
+        groupFilterSelect.addEventListener('change', () => {
+            populateMaterialFilter(); 
+            updateDailyProductionChartFromSelection(); 
+        });
+        
+        materialFilterSelect.addEventListener('change', updateDailyProductionChartFromSelection);
+        yearFilterSelect.addEventListener('change', updateDailyProductionChartFromSelection); // Event Listener para Ano
+
+        function calculateWeeklyProduction(data) {
+            const weeklyData = {}; const uniqueSectors = new Set();
+            data.forEach(rowData => {
+                const date = parseDate(rowData[COLUMN_MAP.DATA]);
+                if (!date) return;
+                const sector = rowData[COLUMN_MAP.SETOR] || 'Não Definido';
+                const pesoTotal = parseFloat(rowData[COLUMN_MAP.PESO_TOTAL].replace(/\./g, '').replace(',', '.')) || 0; 
+                uniqueSectors.add(sector);
+                const { sortKey, displayKey } = getWeekInfo(date); 
+                if (!weeklyData[sortKey]) weeklyData[sortKey] = { totalSemanal: 0, setores: {}, displayKey: displayKey };
+                weeklyData[sortKey].setores[sector] = (weeklyData[sortKey].setores[sector] || 0) + pesoTotal;
+                weeklyData[sortKey].totalSemanal += pesoTotal;
+            });
+            
+            const sortedSectors = Array.from(uniqueSectors).sort((a, b) => {
+                const isA_Primary = PRIMARY_SECTORS.includes(a), isB_Primary = PRIMARY_SECTORS.includes(b);
+                if (isA_Primary && !isB_Primary) return -1; if (!isA_Primary && isB_Primary) return 1;
+                return a.localeCompare(b);
+            });
+            updateWeeklyTable(weeklyData, sortedSectors);
+        }
+
+        function updateWeeklyTable(weeklyData, sortedSectors) {
+            weeklyTableBody.innerHTML = '';
+            weeklyTable.querySelector('thead tr:first-child').innerHTML = '<th>Semana</th>' + sortedSectors.map(s => `<th>${s}</th>`).join('') + '<th>Total Semanal</th>';
+            if (Object.keys(weeklyData).length === 0) { weeklyTableBody.innerHTML = '<tr><td colspan="'+(sortedSectors.length + 2)+'" style="text-align: center;">Nenhum dado.</td></tr>'; return; }
+            
+            const grandTotals = {}; sortedSectors.forEach(s => grandTotals[s] = 0); let grandTotalGeral = 0;
+            Object.keys(weeklyData).sort().forEach(weekSortKey => {
+                const rowData = weeklyData[weekSortKey];
+                const row = weeklyTableBody.insertRow();
+                row.insertCell().textContent = rowData.displayKey; 
+                sortedSectors.forEach(sector => {
+                    const total = rowData.setores[sector] || 0;
+                    row.insertCell().textContent = formatNumber(total, 2);
+                    grandTotals[sector] += total;
+                });
+                const totalCell = row.insertCell();
+                totalCell.textContent = formatNumber(rowData.totalSemanal, 2);
+                totalCell.style.color = 'var(--status-info)'; totalCell.style.fontWeight = 'bold';
+                grandTotalGeral += rowData.totalSemanal;
+            });
+            const totalRow = weeklyTableBody.insertRow();
+            totalRow.style.background = 'rgba(255,255,255,0.05)'; totalRow.style.fontWeight = 'bold';
+            totalRow.insertCell().textContent = 'TOTAL GERAL';
+            sortedSectors.forEach(sector => totalRow.insertCell().textContent = formatNumber(grandTotals[sector], 2));
+            const grandTotalCell = totalRow.insertCell();
+            grandTotalCell.textContent = formatNumber(grandTotalGeral, 2);
+            grandTotalCell.style.color = 'var(--status-info)';
+        }
+
+        function calculateWorkDaysExcludingLast(uniqueDatesStrings) {
+            const sortedDates = Array.from(uniqueDatesStrings).map(parseDate).filter(d => d).sort((a, b) => a - b);
+            if (sortedDates.length <= 1) return 0;
+            let workDays = 0;
+            for(let i = 0; i < sortedDates.length - 1; i++) if (isWorkDay(sortedDates[i])) workDays++;
+            return workDays;
+        }
+
+        function aggregateSectorData(sector, sectorMeta, dataSource = filteredData) {
+            const dataByWeek = {}, dataByDay = {}, uniqueDates = new Set();
+            let totalProduced = 0, totalMoldagem = 0;
+            const isGeneralMoldagem = sector === GENERAL_MOLDING_KEY;
+            const isMoldagemSector = MOLDAGEM_SECTORS.includes(sector.toLowerCase());
+
+            if (isGeneralMoldagem || isMoldagemSector) {
+                dataSource.forEach(r => { 
+                    if (MOLDAGEM_SECTORS.includes((r[COLUMN_MAP.SETOR] || '').toLowerCase())) totalMoldagem += (parseFloat(r[COLUMN_MAP.PESO_TOTAL].replace(/\./g, '').replace(',', '.')) || 0);
+                });
+            }
+
+            const sectorData = dataSource.filter(r => isGeneralMoldagem ? MOLDAGEM_SECTORS.includes((r[COLUMN_MAP.SETOR] || '').toLowerCase()) : r[COLUMN_MAP.SETOR] === sector);
+            
+            sectorData.forEach(r => {
+                const date = parseDate(r[COLUMN_MAP.DATA]);
+                const peso = parseFloat(r[COLUMN_MAP.PESO_TOTAL].replace(/\./g, '').replace(',', '.')) || 0;
+                if (date && peso > 0) {
+                    const { sortKey, displayKey } = getWeekInfo(date);
+                    if (!dataByWeek[sortKey]) dataByWeek[sortKey] = { total: 0, displayKey };
+                    dataByWeek[sortKey].total += peso;
+                    dataByDay[r[COLUMN_MAP.DATA]] = (dataByDay[r[COLUMN_MAP.DATA]] || 0) + peso;
+                    totalProduced += peso;
+                    uniqueDates.add(r[COLUMN_MAP.DATA]);
+                }
+            });
+
+            const productionDays = Object.values(dataByDay).filter(v => v > 0).length;
+            const dailyAverage = productionDays > 0 ? (totalProduced / productionDays) : 0;
+            const workDaysToCalc = calculateWorkDaysExcludingLast(uniqueDates);
+            
+            let dailyTableHTML = '<div class="pdf-section-title">Detalhamento Diário</div><div class="pdf-flex-tables">';
+            const sortedDays = Object.keys(dataByDay).sort((a, b) => parseDate(a) - parseDate(b));
+            const chunkSize = Math.ceil(sortedDays.length / 3);
+            for (let i = 0; i < 3; i++) {
+                const chunk = sortedDays.slice(i * chunkSize, (i+1) * chunkSize);
+                if (chunk.length) {
+                    dailyTableHTML += '<div style="flex: 1;"><table class="pdf-table"><thead><tr><th>Data</th><th style="text-align:right;">Produção (Kg)</th></tr></thead><tbody>' + 
+                    chunk.map(d => `<tr><td>${d}</td><td style="text-align:right;">${formatNumber(dataByDay[d], 2)}</td></tr>`).join('') + '</tbody></table></div>';
+                }
+            }
+            dailyTableHTML += '</div>';
+
+            let weeklyTableHTML = '<div class="pdf-section-title">Desempenho Semanal</div><table class="pdf-table"><thead><tr><th>Semana</th><th style="text-align:right;">Produzido (Kg)</th><th style="text-align:right;">Meta Semanal</th><th style="text-align:right;">Saldo</th><th style="text-align:right;">Eficiência</th></tr></thead><tbody>';
+            Object.keys(dataByWeek).sort().forEach(k => {
+                const d = dataByWeek[k], bal = WEEKLY_GOAL - d.total, eff = (d.total/WEEKLY_GOAL)*100;
+                const effColor = eff >= 100 ? '#27ae60' : (eff >= 80 ? '#f39c12' : '#c0392b');
+                weeklyTableHTML += `<tr><td>${d.displayKey}</td><td style="text-align:right; font-weight:bold;">${formatNumber(d.total, 2)}</td><td style="text-align:right;">${formatNumber(WEEKLY_GOAL, 0)}</td><td style="text-align:right; color:${bal<0?'#c0392b':'#27ae60'}">${formatNumber(bal, 2)}</td><td style="text-align:right; color:${effColor}; font-weight:bold;">${eff.toFixed(1)}%</td></tr>`;
+            });
+            weeklyTableHTML += '</tbody></table>';
+
+            const allDates = sectorData.map(d => parseDate(d[COLUMN_MAP.DATA])).filter(d => d);
+            const dateRange = allDates.length ? `${allDates.reduce((a,b)=>a<b?a:b).toLocaleDateString()} a ${allDates.reduce((a,b)=>a>b?a:b).toLocaleDateString()}` : 'N/A';
+
+            return { sector, dateRange, totalProduced, workDaysToCalc, dailyTableHTML, weeklyTableHTML, totalMoldagem, dataByDay, dailyAverage };
+        }
+
+        function generateSectorReport(sector, meta, dataSource) {
+            const d = aggregateSectorData(sector, meta, dataSource);
+            const isMold = MOLDAGEM_SECTORS.includes(sector.toLowerCase()) || sector === GENERAL_MOLDING_KEY;
+            const total = isMold ? d.totalMoldagem : d.totalProduced;
+            const bal = meta - total, pct = meta > 0 ? (total/meta)*100 : 0;
+            const pctColor = pct >= 100 ? '#27ae60' : (pct >= 80 ? '#f39c12' : '#c0392b');
+            
+            const summaryHTML = `
+                <div class="pdf-summary-grid ${isMold ? 'with-moldagem' : ''}">
+                    ${isMold ? `<div class="pdf-card"><span class="pdf-card-label">Moldagem Total</span><span class="pdf-card-value" style="color:#c0392b;">${formatNumber(d.totalMoldagem, 0)} Kg</span></div>` : ''}
+                    <div class="pdf-card"><span class="pdf-card-label">Produzido no Período</span><span class="pdf-card-value">${formatNumber(d.totalProduced, 0)} Kg</span></div>
+                    <div class="pdf-card"><span class="pdf-card-label">Meta Mensal</span><span class="pdf-card-value" style="color:#e67e22;">${formatNumber(meta, 0)} Kg</span></div>
+                    <div class="pdf-card"><span class="pdf-card-label">Saldo Meta</span><span class="pdf-card-value" style="color:${bal<0?'#c0392b':'#27ae60'}">${formatNumber(bal, 0)} Kg</span></div>
+                    <div class="pdf-card"><span class="pdf-card-label">Eficiência Global</span><span class="pdf-card-value" style="color:${pctColor};">${pct.toFixed(1)}%</span>
+                        <div class="pdf-progress-container"><div class="pdf-progress-bar" style="width:${Math.min(pct, 100)}%; background-color:${pctColor};"></div></div>
+                    </div>
+                </div>`;
+
+            return `<div class="pdf-content-wrapper"><div class="pdf-header"><h3>Relatório: ${sector}</h3><p>Período de Análise:<br><strong>${d.dateRange}</strong></p></div>${summaryHTML}${d.weeklyTableHTML}${d.dailyTableHTML}</div>`;
+        }
+
+        async function generateCompleteReport() {
+            const now = new Date();
+            const currentMonth = now.getMonth(); 
+            const currentYear = now.getFullYear();
+            const reportData = allData.filter(r => {
+                const d = parseDate(r[COLUMN_MAP.DATA]);
+                return d && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+            });
+
+            if (reportData.length === 0) { alert('Sem dados no mês atual.'); return; }
+
+            const uniqueSectors = new Set();
+            reportData.forEach(rowData => uniqueSectors.add(rowData[COLUMN_MAP.SETOR] || 'Não Definido'));
+            const sectorArray = Array.from(uniqueSectors).sort().filter(s => s !== GENERAL_MOLDING_KEY);
+            statusMessage.textContent = `Gerando Relatório...`;
+            
+            let fullReportHTML = '';
+            sectorArray.forEach((sector) => {
+                const isMoldagemSector = MOLDAGEM_SECTORS.includes(sector.toLowerCase());
+                const metaKey = isMoldagemSector ? TOTAL_MOLDAGEM_SECTOR_KEY : sector;
+                const metaToUse = sectorGoals[metaKey] || 0; 
+                fullReportHTML += generateSectorReport(sector, metaToUse, reportData);
+            });
+            
+            pdfTempContainer.innerHTML = fullReportHTML;
+            try {
+                 const monthName = now.toLocaleString('pt-BR', { month: 'long' });
+                 await exportReportToPDF(`Completo_${monthName}_${currentYear}`, 'pdf-temp-container'); 
+                 statusMessage.textContent = `Relatório gerado com sucesso.`;
+                 statusMessage.className = 'status-text success';
+            } catch (error) {
+                 statusMessage.textContent = 'Erro ao gerar PDF.';
+                 errorMessage.textContent = error.message;
+            } finally {
+                setTimeout(() => { statusMessage.textContent = 'Pronto.'; statusMessage.className = 'status-text normal'; pdfTempContainer.innerHTML = ''; }, 5000);
+            }
+        }
+        document.getElementById('generate-complete-report-button').onclick = generateCompleteReport;
+
+        async function exportReportToPDF(name, contentId) {
+            const content = document.getElementById(contentId);
+            const pages = content.querySelectorAll('.pdf-content-wrapper');
+            if (!pages.length) throw new Error('Sem conteúdo.');
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF('p', 'mm', 'a4');
+            const margin = 10; const printWidth = 210 - (margin * 2);
+            
+            for (let i = 0; i < pages.length; i++) {
+                const canvas = await html2canvas(pages[i], { scale: 2, useCORS: true, backgroundColor: 'white' });
+                if (i > 0) doc.addPage();
+                const imgProps = doc.getImageProperties(canvas.toDataURL('image/png'));
+                const pdfHeight = (imgProps.height * printWidth) / imgProps.width;
+                doc.addImage(canvas.toDataURL('image/png'), 'PNG', margin, margin, printWidth, pdfHeight);
+            }
+            doc.save(`Producao_${name}.pdf`);
+        }
+
+        function formatExcelDate(excelDate) {
+            if (typeof excelDate === 'number' && excelDate > 0) {
+                const date = new Date(Math.round((excelDate - 25569) * 86400000)); 
+                return `${String(date.getUTCDate()).padStart(2, '0')}/${String(date.getUTCMonth() + 1).padStart(2, '0')}/${date.getUTCFullYear()}`;
+            }
+            return String(excelDate) || ''; 
+        }
+
+        function processFile(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const wb = XLSX.read(new Uint8Array(e.target.result), {type: 'array'});
+                    const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header: 1, defval: ''});
+                    const res = [];
+                    data.forEach(r => {
+                        if (r.every(c => c==='')) return;
+                        let pu = parseFloat(String(r[COLUMN_MAP.PESO_UN]).replace(',','.')) || 0;
+                        const code = String(r[COLUMN_MAP.PRODUTO]);
+                        if (pu === 0 && productWeights[code]) pu = parseFloat(productWeights[code]);
+                        const q = parseFloat(String(r[COLUMN_MAP.QUANT]).replace(',','.')) || 0;
+                        res.push([formatExcelDate(r[COLUMN_MAP.DATA]), String(r[COLUMN_MAP.SETOR]), code, String(r[COLUMN_MAP.LIGA]), pu.toFixed(2), Math.round(q), (pu*q).toFixed(2)]);
+                    });
+                    resolve(res);
+                };
+                reader.readAsArrayBuffer(file);
+            });
+        }
+        
+        fileInput.addEventListener('change', async (e) => {
+            if (!e.target.files.length) return;
+            showLoading(); 
+            try {
+                let importedRows = [];
+                for (const f of e.target.files) importedRows.push(...(await processFile(f)));
+                const mergedData = [...allData, ...importedRows];
+                await saveDataToDatabase(mergedData);
+            } catch (err) {
+                errorMessage.textContent = "Erro ao importar: " + err.message;
+            } finally {
+                hideLoading();
+                e.target.value = '';
+            }
+        });
+
+        async function saveDataToDatabase(dataToSave = []) {
+            let finalData = dataToSave.length ? dataToSave : allData.map(r => [r[0], r[1], r[2], r[3], r[4], parseInt(r[5]), r[6]]);
+            if (!finalData.length) return;
+            statusMessage.textContent = 'Salvando no banco...';
+            const res = await fetch('/api/producao-apontada', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(finalData) });
+            if (res.ok) { 
+                statusMessage.textContent = 'Dados salvos.'; 
+                statusMessage.className = 'status-text success';
+                await loadInitialData(); 
+            } else { 
+                errorMessage.textContent = 'Erro ao salvar.'; 
+            }
+        }
+        window.saveLocalDataToDatabase = () => saveDataToDatabase([]);
+
+        function openClearSpecificMonthModal() { monthSelectorModal.style.display = 'flex'; }
+        function closeClearSpecificMonthModal() { monthSelectorModal.style.display = 'none'; }
+        
+        function executeClearSpecificMonth() {
+            const selectedMonth = monthToClearInput.value; 
+            if (!selectedMonth) { alert('Selecione um mês.'); return; }
+            closeClearSpecificMonthModal(); 
+            handleAuthAction(() => runSpecificMonthDeletion(selectedMonth), 'Limpar Mês Selecionado');
+        }
+
+        async function runSpecificMonthDeletion(selectedMonthValue) {
+            const parts = selectedMonthValue.split('-');
+            const targetYear = parseInt(parts[0]);
+            const targetMonth = parseInt(parts[1]) - 1; 
+
+            if (!confirm(`Apagar TODOS os dados de ${parts[1]}/${parts[0]}?`)) return;
+
+            showLoading();
+            try {
+                const dataToKeep = allData.filter(row => {
+                    const d = parseDate(row[COLUMN_MAP.DATA]);
+                    if (!d) return true; 
+                    return d.getFullYear() !== targetYear || d.getMonth() !== targetMonth;
+                });
+                const resClear = await fetch('/api/producao-apontada/clear', { method: 'POST' });
+                if (!resClear.ok) throw new Error("Falha ao limpar banco.");
+
+                if (dataToKeep.length > 0) {
+                    const formattedDataToSave = dataToKeep.map(r => [r[0], r[1], r[2], r[3], r[4], parseInt(r[5]), r[6]]);
+                    await fetch('/api/producao-apontada', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(formattedDataToSave) });
+                }
+                statusMessage.textContent = `Dados de ${parts[1]}/${parts[0]} apagados.`;
+                await loadInitialData(); 
+            } catch (e) { errorMessage.textContent = e.message; } finally { hideLoading(); }
+        }
+
+        async function handleClearDatabase(mode) {
+            if (mode === 'current_month') {
+                if (!confirm('Apagar apenas o mês atual?')) return;
+                showLoading();
+                try {
+                    const now = new Date();
+                    const dataToKeep = allData.filter(row => {
+                        const d = parseDate(row[COLUMN_MAP.DATA]);
+                        if (!d) return true; 
+                        return d.getMonth() !== now.getMonth() || d.getFullYear() !== now.getFullYear();
+                    });
+                    await fetch('/api/producao-apontada/clear', { method: 'POST' });
+                    if (dataToKeep.length > 0) {
+                        const formatted = dataToKeep.map(r => [r[0], r[1], r[2], r[3], r[4], parseInt(r[5]), r[6]]);
+                        await fetch('/api/producao-apontada', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(formatted) });
+                    }
+                    statusMessage.textContent = 'Mês vigente limpo.';
+                    await loadInitialData(); 
+                } catch (e) { errorMessage.textContent = e.message; } finally { hideLoading(); }
+            } else if (mode === 'full') {
+                if (!confirm('PERIGO: Apagar TUDO?')) return;
+                showLoading();
+                try {
+                    const res = await fetch('/api/producao-apontada/clear', { method: 'POST' });
+                    if (res.ok) { allData = []; filteredData = []; applyBaseFilters(); statusMessage.textContent = 'Banco limpo.'; }
+                } catch(e) { errorMessage.textContent = 'Erro.'; } finally { hideLoading(); }
+            }
+        }
+        window.handleClearDatabase = handleClearDatabase;
+
+        async function loadInitialData() {
+            showLoading(); 
+            productWeights = loadWeightsFromLocalStorage();
+            await loadGoals();
+            try {
+                const res = await fetch('/api/producao-apontada');
+                const d = await res.json();
+                allData = d.slice(1).map(r => {
+                    let pu = parseFloat(r[4]);
+                    if (pu === 0 && productWeights[r[2]]) { pu = parseFloat(productWeights[r[2]]); r[4] = pu.toFixed(2); r[6] = (pu * r[5]).toFixed(2); }
+                    return [r[0], r[1], r[2], r[3], formatNumber(pu, 2), parseInt(r[5]), formatNumber(r[6], 2)];
+                });
+                
+                // 1. Popula o filtro de anos com os dados carregados
+                populateYearFilter();
+
+                // 2. Define o ano vigente no filtro (se existir nos dados)
+                const currentYear = new Date().getFullYear().toString();
+                if (Array.from(yearFilterSelect.options).some(opt => opt.value === currentYear)) {
+                    yearFilterSelect.value = currentYear;
+                }
+
+                // 3. Define o mês vigente no filtro
+                const currentMonth = new Date().getMonth() + 1;
+                currentMonthFilterIndex = currentMonth;
+                
+                // 4. Atualiza a interface visual dos botões de mês
+                monthButtons.forEach(btn => {
+                    btn.classList.remove('active');
+                    if (parseInt(btn.getAttribute('data-month')) === currentMonth) {
+                        btn.classList.add('active');
+                    }
+                });
+
+                setFilterMode('month'); 
+                applyBaseFilters();
+                statusMessage.textContent = 'Sistema pronto.';
+            } catch(e) { 
+                allData = []; errorMessage.textContent = 'Falha ao conectar ao servidor.'; 
+            } finally { hideLoading(); }
+        }
+
+        // --- Dashboard Logic ---
+        function openDashboardModal() { 
+            if (!dashboardSectors.length) { alert('Sem dados.'); return; }
+            dashboardModal.style.display = 'flex'; 
+            loadDashboard(); 
+        }
+        function closeDashboardModal() { clearInterval(dashboardTimer); dashboardModal.style.display = 'none'; }
+        window.closeDashboardModal = closeDashboardModal;
+        
+        document.addEventListener('keydown', function(event) {
+            if (event.key === "Escape") {
+                if (dashboardModal.style.display === 'flex') closeDashboardModal();
+            }
+        });
+
+        function loadDashboard() {
+            currentDashboardSectorIndex = 0;
+            updateDashboardView(dashboardSectors[0]);
+            if (dashboardTimer) clearInterval(dashboardTimer);
+            let timeLeft = CAROUSEL_INTERVAL/1000;
+            const tick = () => { timeLeft--; if (timeLeft<0) timeLeft=9; dashboardTimerDisplay.textContent = `Próximo: ${timeLeft}s`; };
+            dashboardTimer = setInterval(() => {
+                currentDashboardSectorIndex = (currentDashboardSectorIndex+1)%dashboardSectors.length;
+                updateDashboardView(dashboardSectors[currentDashboardSectorIndex]);
+                timeLeft = CAROUSEL_INTERVAL/1000;
+            }, CAROUSEL_INTERVAL);
+            setInterval(tick, 1000); tick();
+        }
+
+        function updateDashboardView(sector) {
+            dashboardSectorTitle.textContent = sector;
+            const now = new Date();
+            const monthName = now.toLocaleString('pt-BR', { month: 'long' }).toUpperCase();
+            document.getElementById('dashboard-subtitle').textContent = `(${monthName}/${now.getFullYear()})`;
+
+            const currentMonthData = allData.filter(r => {
+                const d = parseDate(r[COLUMN_MAP.DATA]);
+                return d && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+            });
+
+            let goal = sectorGoals[sector===GENERAL_MOLDING_KEY?TOTAL_MOLDAGEM_SECTOR_KEY:sector] || 0;
+            if (sector.toLowerCase().includes('moldagem') && goal===0) goal = 40000; 
+
+            const d = aggregateSectorData(sector, goal, currentMonthData);
+            const total = sector === GENERAL_MOLDING_KEY ? d.totalMoldagem : d.totalProduced;
+            const bal = goal - total;
+            
+            dashboardTotalProduced.textContent = formatNumber(total, 2);
+            dashboardDailyAverage.textContent = formatNumber(d.dailyAverage, 2);
+            dashboardMonthlyGoal.textContent = formatNumber(goal, 0);
+            dashboardGoalBalance.textContent = formatNumber(bal, 2);
+            dashboardGoalBalance.style.color = bal < 0 ? 'var(--status-danger)' : 'var(--status-success)';
+
+            renderDashboardDailyChart(sector, d.dataByDay);
+            renderDashboardEfficiencyChart(sector, goal>0?(total/goal)*100:0, total, goal);
+        }
+
+        function renderDashboardDailyChart(sector, dailyData) {
+            let labels = [], data = [];
+            Object.keys(dailyData).sort((a,b)=>parseDate(a)-parseDate(b)).forEach(k => { labels.push(k); data.push(dailyData[k]); });
+            
+            const maxDataValue = Math.max(...data, 0);
+            const suggestedMaxY = maxDataValue > 0 ? maxDataValue * 1.2 : 10;
+
+            const config = {
+                type: 'bar',
+                data: { labels, datasets: [{ data, backgroundColor: 'rgba(251, 191, 36, 0.7)', borderColor: '#fbbf24', borderWidth: 1 }] },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false }, datalabels: { display: false } },
+                    scales: { 
+                        y: { 
+                            beginAtZero: true, 
+                            min: 0,
+                            suggestedMax: suggestedMaxY,
+                            grid: { color: 'rgba(255,255,255,0.05)' } 
+                        }, 
+                        x: { grid: { display: false } } 
+                    }
+                }
+            };
+            if (dashboardDailyChartInstance) { dashboardDailyChartInstance.data = config.data; dashboardDailyChartInstance.options = config.options; dashboardDailyChartInstance.update(); }
+            else dashboardDailyChartInstance = new Chart(dashboardDailyChartCanvas, config);
+        }
+
+        function renderDashboardEfficiencyChart(sector, pct, prod, goal) {
+            const rem = Math.max(0, goal - prod);
+            const color = pct >= 100 ? '#fbbf24' : (pct >= 80 ? '#a855f7' : '#ef4444');
+            const config = {
+                type: 'doughnut',
+                data: { labels: ['Produzido', 'Restante'], datasets: [{ data: [prod, rem], backgroundColor: [color, '#27272a'], borderWidth: 0 }] },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { 
+                        legend: { position: 'bottom', labels: { color: '#e0e0e0' } },
+                        datalabels: { color: '#fff', formatter: (v, ctx) => ctx.dataIndex===0 ? pct.toFixed(1)+'%' : '', font: {size: 18, weight: 'bold'} }
+                    }
+                }
+            };
+            if (dashboardEfficiencyChartInstance) { dashboardEfficiencyChartInstance.data = config.data; dashboardEfficiencyChartInstance.update(); }
+            else dashboardEfficiencyChartInstance = new Chart(dashboardEfficiencyChartCanvas, config);
+        }
+
+        window.onload = loadInitialData;
+    </script>
+</body>
+</html>
