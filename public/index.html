@@ -242,7 +242,7 @@
 
         const ALL_LINKS = [
             { id: 'producaosetor', title: 'Produção (Fusão)', url: 'producao_apontada.html', icon: 'fa-industry', api: '/api/producao-apontada' },
-            { id: 'acabamentoexterno', title: 'Acab. Externo', url: 'acabamento_externo.html', icon: 'fa-truck-fast', api: '/api/registros' },
+            { id: 'acabamentoexterno', title: 'Acab. Externo', url: 'acabamento_externo.html', icon: 'fa-truck-fast', api: '/api/acabamento-externo' },
             { id: 'faturamento', title: 'Produção Faturada', url: 'faturamento_detalhado.html', icon: 'fa-sack-dollar', api: '/api/faturamento-clientes-detalhado' },
             { id: 'carteira', title: 'Carteira Total', url: 'carteira.html', icon: 'fa-briefcase', api: '/api/carteira' },
             { id: 'refugo', title: 'Refugo Total', url: 'refugo.html', icon: 'fa-trash-can', api: '/api/refugo' }
@@ -320,27 +320,36 @@
                     }
                 }
                 else if (link.id === 'acabamentoexterno') {
-                    const monthData = data.filter(r => {
-                        const d = r.data || "";
-                        // Verifica data em objeto JSON
-                        return r.tipo === 'terceiro' && (d.includes(`${curYear}-${curMonth}`) || d.includes(`/${curMonth}/${curYear}`));
-                    });
+    // O novo banco retorna um objeto { registros: [...], itens: [...], recebidos: [...] }
+    // Por isso usamos data.registros
+    const listaDeRegistros = data.registros || [];
 
-                    monthData.forEach(r => {
-                        let day = 0;
-                        if(r.data.includes('-')) day = parseInt(r.data.split('-')[2]);
-                        else if(r.data.includes('/')) day = parseInt(r.data.split('/')[0]);
+    const monthData = listaDeRegistros.filter(r => {
+        const d = r.data || ""; // O banco retorna YYYY-MM-DD
+        return d.includes(`${curYear}-${curMonth}`);
+    });
 
-                        if(day > 0 && day <= daysInMonth) {
-                            chartData.terceiro[day-1] += (parseFloat(r.quant) * parseFloat(r.peso || 0));
-                        }
-                    });
+    monthData.forEach(r => {
+        let day = 0;
+        // O banco Neon retorna a data como 2025-01-10
+        if(r.data && r.data.includes('-')) {
+            day = parseInt(r.data.split('-')[2]);
+        }
 
-                    const totalKg = monthData.reduce((acc, r) => acc + (parseFloat(r.quant) * parseFloat(r.peso || 0)), 0);
-                    const uniqueCargas = new Set(monthData.map(r => r.carga)).size;
-                    mainValue = (totalKg / 1000).toFixed(2) + " Ton";
-                    subLabel = `${uniqueCargas} Cargas no Mês`;
-                }
+        if(day > 0 && day <= daysInMonth) {
+            // Soma o peso total daquela linha no gráfico (em KG)
+            // r.quant e r.peso vêm como números do banco
+            const pesoLinha = parseFloat(r.quant || 0) * parseFloat(r.peso || 0);
+            chartData.terceiro[day-1] += pesoLinha;
+        }
+    });
+
+    const totalKg = monthData.reduce((acc, r) => acc + (parseFloat(r.quant || 0) * parseFloat(r.peso || 0)), 0);
+    const uniqueCargas = new Set(monthData.map(r => r.carga)).size;
+    
+    mainValue = (totalKg / 1000).toFixed(2) + " Ton";
+    subLabel = `${uniqueCargas} Cargas no Mês`;
+}
                 else if (link.id === 'faturamento') {
                     if (data.length > 1) {
                         const monthRows = data.slice(1).filter(r => {
