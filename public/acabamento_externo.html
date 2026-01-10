@@ -319,15 +319,40 @@
         let itensConhecidos = new Map();
         let barChartInstance = null;
 
-        async function apiRequest(endpoint, method = 'GET', data = null) {
-            const options = { method, headers: { 'Content-Type': 'application/json' } };
-            if (data) options.body = JSON.stringify(data);
-            try {
-                const response = await fetch(`/api/${endpoint}`, options);
-                if (!response.ok) throw new Error(`Erro: ${response.status}`);
-                return await response.json();
-            } catch (error) { console.error(error); throw error; }
-        }
+        async function apiRequest(actionOrEndpoint, method = 'GET', data = null) {
+    // Endereço único da sua nova API
+    let url = '/api/acabamento-externo';
+    
+    // Se for um método de escrita (POST), adicionamos a "action" na URL
+    if (method === 'POST') {
+        const actionMap = {
+            'registros': 'add-registro',
+            'recebidos': 'toggle-recebido',
+            'itens': 'save-item',
+            'itens-delete': 'delete-item',
+            'delete': 'delete-registro',
+            'delete-all-terceiro': 'clear-all',
+            'import': 'import'
+        };
+        const action = actionMap[actionOrEndpoint] || actionOrEndpoint;
+        url += `?action=${action}`;
+    }
+
+    const options = { 
+        method, 
+        headers: { 'Content-Type': 'application/json' } 
+    };
+    if (data) options.body = JSON.stringify(data);
+
+    try {
+        const response = await fetch(url, options);
+        if (!response.ok) throw new Error(`Erro: ${response.status}`);
+        return await response.json();
+    } catch (error) { 
+        console.error(error); 
+        throw error; 
+    }
+}
         
         const formatNumber = v => Number(v || 0).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
         const formatCurrency = v => Number(v || 0).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
@@ -352,9 +377,11 @@
             tIn.value = t; eIn.value = e; rIn.value = r;
         }
 
-        async function carregarItensConhecidos() {
-            try { const itens = await apiRequest('itens'); itensConhecidos.clear(); itens.forEach(item => itensConhecidos.set(item.codigo, item)); } catch (e) {}
-        }
+        // Substitua a carregarItensConhecidos antiga por esta (pode deixar vazia)
+async function carregarItensConhecidos() {
+    // Não precisa fazer nada aqui, pois já carregamos tudo na função acima
+    return Promise.resolve(); 
+}
         
         function verificarCodigoParaAutopreenchimento() {
             const cod = document.getElementById('inputCodigo').value.trim().toUpperCase();
@@ -437,27 +464,54 @@
             try { const res = await apiRequest('registros', 'POST', reg); if (res.success) { reg.id = res.id; registros.unshift(reg); renderTable(); updateDashboardAndCharts(); limparFormularioParcialmente(); } } catch (err) {}
         }
 
-        async function carregarDados() {
-            showSpinner();
-            try {
-                await Promise.all([carregarItensConhecidos(), carregarRegistrosERecebidos()]);
-                populateDateFilters();
-                const anoAtual = new Date().getFullYear().toString();
-                const selAno = document.getElementById('filterAno');
-                if([...selAno.options].some(o => o.value === anoAtual)) { selAno.value = anoAtual; }
-                renderTable();
-                updateDashboardAndCharts();
-            } catch (e) { console.error(e); } finally { hideSpinner(); }
-        }
+        // Substitua a carregarDados antiga por esta
+async function carregarDados() {
+    showSpinner();
+    try {
+        // Agora fazemos apenas UMA chamada ao banco que traz tudo
+        await carregarRegistrosERecebidos(); 
+        
+        populateDateFilters();
+        const anoAtual = new Date().getFullYear().toString();
+        const selAno = document.getElementById('filterAno');
+        if([...selAno.options].some(o => o.value === anoAtual)) { selAno.value = anoAtual; }
+        
+        renderTable();
+        updateDashboardAndCharts();
+    } catch (e) { 
+        console.error(e); 
+    } finally { 
+        hideSpinner(); 
+    }
+}
 
-        async function carregarRegistrosERecebidos() {
-            try {
-                const all = await apiRequest('registros');
-                registros = all.filter(r => r.tipo === 'terceiro' || (r.terceiro && !r.tipo)).sort((a, b) => new Date(b.data) - new Date(a.data));
-                const recData = await apiRequest('recebidos');
-                recebidos = {}; recData.forEach(i => { if (!recebidos[i.carga]) recebidos[i.carga] = []; recebidos[i.carga].push(i); });
-            } catch (e) { throw e; }
-        }
+        // Substitua a carregarRegistrosERecebidos antiga por esta
+async function carregarRegistrosERecebidos() {
+    try {
+        // Faz a chamada GET para a API unificada
+        const data = await apiRequest('acabamento-externo', 'GET'); 
+        
+        // 1. Organiza os Registros de Envio
+        registros = data.registros.sort((a, b) => new Date(b.data) - new Date(a.data));
+        
+        // 2. Organiza os Itens Conhecidos (Auto-preenchimento)
+        itensConhecidos.clear();
+        data.itens.forEach(item => {
+            // Garante que o peso seja um número para o gráfico não quebrar
+            item.peso = parseFloat(item.peso);
+            itensConhecidos.set(item.codigo, item);
+        });
+
+        // 3. Organiza os Itens Recebidos (Checks verdes na tabela)
+        recebidos = {}; 
+        data.recebidos.forEach(i => { 
+            if (!recebidos[i.carga]) recebidos[i.carga] = []; 
+            recebidos[i.carga].push(i); 
+        });
+    } catch (e) { 
+        throw e; 
+    }
+}
 
         function renderTable() {
             const tbody = document.querySelector('#terceiroTable tbody'); tbody.innerHTML = '';
