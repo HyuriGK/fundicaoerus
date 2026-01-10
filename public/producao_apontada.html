@@ -1898,46 +1898,64 @@
         window.handleClearDatabase = handleClearDatabase;
 
         async function loadInitialData() {
-            showLoading(); 
-            productWeights = loadWeightsFromLocalStorage();
-            await loadGoals();
-            try {
-                const res = await fetch('/api/producao-apontada');
-                const d = await res.json();
-                allData = d.slice(1).map(r => {
-                    let pu = parseFloat(r[4]);
-                    if (pu === 0 && productWeights[r[2]]) { pu = parseFloat(productWeights[r[2]]); r[4] = pu.toFixed(2); r[6] = (pu * r[5]).toFixed(2); }
-                    return [r[0], r[1], r[2], r[3], formatNumber(pu, 2), parseInt(r[5]), formatNumber(r[6], 2)];
-                });
-                
-                // 1. Popula o filtro de anos com os dados carregados
-                populateYearFilter();
+    showLoading(); 
+    productWeights = loadWeightsFromLocalStorage();
+    await loadGoals();
+    try {
+        const res = await fetch('/api/producao-apontada');
+        const d = await res.json();
+        
+        // d[0] é o cabeçalho, d.slice(1) são os dados
+        allData = d.slice(1).map(r => {
+            // r[4] é o peso_un, r[5] é a quantidade, r[6] é o peso_total
+            let pu = parseFloat(r[4]) || 0;
+            let q = parseFloat(r[5]) || 0;
+            let pt = parseFloat(r[6]) || 0;
 
-                // 2. Define o ano vigente no filtro (se existir nos dados)
-                const currentYear = new Date().getFullYear().toString();
-                if (Array.from(yearFilterSelect.options).some(opt => opt.value === currentYear)) {
-                    yearFilterSelect.value = currentYear;
-                }
+            // Se o peso unitário estiver zerado no banco, tenta pegar do cache local
+            if (pu === 0 && productWeights[r[2]]) { 
+                pu = parseFloat(productWeights[r[2]]); 
+                pt = pu * q; 
+            }
 
-                // 3. Define o mês vigente no filtro
-                const currentMonth = new Date().getMonth() + 1;
-                currentMonthFilterIndex = currentMonth;
-                
-                // 4. Atualiza a interface visual dos botões de mês
-                monthButtons.forEach(btn => {
-                    btn.classList.remove('active');
-                    if (parseInt(btn.getAttribute('data-month')) === currentMonth) {
-                        btn.classList.add('active');
-                    }
-                });
+            // Retorna o array formatado para a tabela (com vírgulas apenas para exibição)
+            return [
+                r[0], // Data
+                r[1], // Setor
+                r[2], // Produto
+                r[3], // Liga
+                formatNumber(pu, 2), // Peso Un (exibe com vírgula)
+                parseInt(q),         // Quant
+                formatNumber(pt, 2)  // Peso Total (exibe com vírgula)
+            ];
+        });
+        
+        populateYearFilter();
 
-                setFilterMode('month'); 
-                applyBaseFilters();
-                statusMessage.textContent = 'Sistema pronto.';
-            } catch(e) { 
-                allData = []; errorMessage.textContent = 'Falha ao conectar ao servidor.'; 
-            } finally { hideLoading(); }
+        const currentYear = new Date().getFullYear().toString();
+        if (Array.from(yearFilterSelect.options).some(opt => opt.value === currentYear)) {
+            yearFilterSelect.value = currentYear;
         }
+
+        const currentMonth = new Date().getMonth() + 1;
+        currentMonthFilterIndex = currentMonth;
+        
+        monthButtons.forEach(btn => {
+            btn.classList.remove('active');
+            if (parseInt(btn.getAttribute('data-month')) === currentMonth) {
+                btn.classList.add('active');
+            }
+        });
+
+        setFilterMode('month'); 
+        applyBaseFilters(); // Isso vai chamar o cálculo do gráfico
+        statusMessage.textContent = 'Sistema pronto.';
+    } catch(e) { 
+        console.error("Erro ao carregar:", e);
+        allData = []; 
+        errorMessage.textContent = 'Falha ao conectar ao servidor.'; 
+    } finally { hideLoading(); }
+}
 
         // --- Dashboard Logic ---
         function openDashboardModal() { 

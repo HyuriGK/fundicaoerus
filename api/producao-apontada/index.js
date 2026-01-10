@@ -34,13 +34,23 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true });
         }
 
-        // --- LÓGICA PADRÃO (SALVAR/LER PRODUÇÃO) ---
-        if (req.method === 'GET') {
-            const result = await client.query("SELECT to_char(data_producao, 'DD/MM/YYYY') as data, setor, produto, liga, peso_un, quantidade, peso_total FROM producao_apontada ORDER BY data_producao DESC");
-            const formattedData = result.rows.map(row => [row.data, row.setor, row.produto, row.liga, Number(row.peso_un).toFixed(2).replace('.', ','), row.quantidade, Number(row.peso_total).toFixed(2).replace('.', ',')]);
-            formattedData.unshift(["Data", "Setor", "Produto", "Liga", "Peso Un", "Quant.", "Peso Total"]);
-            return res.status(200).json(formattedData);
-        }
+        // --- LÓGICA PADRÃO (LER PRODUÇÃO) ---
+if (req.method === 'GET') {
+    const result = await client.query("SELECT to_char(data_producao, 'DD/MM/YYYY') as data, setor, produto, liga, peso_un, quantidade, peso_total FROM producao_apontada ORDER BY data_producao DESC");
+    
+    const formattedData = result.rows.map(row => [
+        row.data,
+        row.setor,
+        row.produto,
+        row.liga,
+        row.peso_un,    // ENVIAR O NÚMERO PURO
+        row.quantidade, // ENVIAR O NÚMERO PURO
+        row.peso_total  // ENVIAR O NÚMERO PURO
+    ]);
+
+    formattedData.unshift(["Data", "Setor", "Produto", "Liga", "Peso Un", "Quant.", "Peso Total"]);
+    return res.status(200).json(formattedData);
+}
 
         if (req.method === 'POST') {
             const data = req.body;
