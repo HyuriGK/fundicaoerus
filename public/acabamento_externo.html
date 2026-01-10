@@ -588,15 +588,42 @@ async function carregarRegistrosERecebidos() {
         }
 
         async function excluirRegistro(id) {
-            if (!confirm('Excluir?')) return;
-            try {
-                const reg = registros.find(r => r.id === id); const c = reg?.carga;
-                await apiRequest('delete', 'POST', { id });
-                await carregarRegistrosERecebidos();
-                renderTable();
-                if (c && registros.some(r => r.carga === c)) showCargaDetails(c); else hideCargaDetails();
-            } catch (e) {}
+    if (!confirm('Tem certeza que deseja excluir este registro permanentemente?')) return;
+    
+    showSpinner();
+    try {
+        // Enviamos o ID e aguardamos a confirmação real do backend
+        const response = await apiRequest('delete', 'POST', { id: id });
+        
+        if (response.success) {
+            // Só buscamos os dados novos após o banco confirmar a exclusão
+            await carregarRegistrosERecebidos();
+            
+            // Se estivermos dentro do modal de carga, atualizamos ele também
+            const modal = document.getElementById('cargaModal');
+            if (modal.style.display === 'flex') {
+                const cargaAtual = modal.getAttribute('data-current-carga');
+                if (cargaAtual) {
+                    const aindaTemItens = registros.some(r => r.carga === cargaAtual);
+                    if (aindaTemItens) {
+                        showCargaDetails(cargaAtual);
+                    } else {
+                        hideCargaDetails();
+                    }
+                }
+            }
+            renderTable();
+            updateDashboardAndCharts();
+        } else {
+            alert('Erro ao excluir: O servidor não confirmou a operação.');
         }
+    } catch (err) {
+        alert('Erro de conexão ao tentar excluir o registro.');
+        console.error(err);
+    } finally {
+        hideSpinner();
+    }
+}
 
         async function toggleRecebido(id, carga, checked) {
             try { await apiRequest('recebidos', 'POST', { id, carga, checked }); await carregarRegistrosERecebidos(); renderTable(); } catch (e) {}

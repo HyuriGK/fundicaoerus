@@ -58,9 +58,25 @@ export default async function handler(req, res) {
 
             // Deletar um registro específico
             if (action === 'delete-registro') {
-                await client.query('DELETE FROM acabamento_externo_registros WHERE id = $1', [data.id]);
-                return res.status(200).json({ success: true });
-            }
+    const registroId = parseInt(data.id);
+    if (isNaN(registroId)) {
+        return res.status(400).json({ error: 'ID inválido' });
+    }
+    
+    await client.query('BEGIN');
+    try {
+        // Remove primeiro da tabela de recebidos (garantia extra)
+        await client.query('DELETE FROM acabamento_externo_recebidos WHERE registro_id = $1', [registroId]);
+        // Remove da tabela principal
+        const result = await client.query('DELETE FROM acabamento_externo_registros WHERE id = $1', [registroId]);
+        
+        await client.query('COMMIT');
+        return res.status(200).json({ success: true, rowCount: result.rowCount });
+    } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+    }
+}
 
             // Limpar tudo
             if (action === 'clear-all') {
@@ -88,6 +104,9 @@ export default async function handler(req, res) {
                         await client.query('INSERT INTO acabamento_externo_recebidos (registro_id, carga) VALUES ($1, $2)', [rec.id, carga]);
                     }
                 }
+
+                await client.query("SELECT setval('acabamento_externo_registros_id_seq', (SELECT MAX(id) FROM acabamento_externo_registros))");
+                
                 await client.query('COMMIT');
                 return res.status(200).json({ success: true });
             }
