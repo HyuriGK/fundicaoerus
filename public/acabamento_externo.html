@@ -415,12 +415,17 @@
         const formatMonthYear = d => { if (!d) return ''; const p = d.split('T')[0].split('-'); return p.length < 3 ? '' : `${p[1]}/${p[0]}`; };
 
         function calcularValorItem(reg) {
-            const terc = reg.terceiro.toUpperCase(), peso = reg.peso || 0, qEsc = reg.quant_escariar || 0, qReb = reg.quant_rebarba || 0;
-            if (terc === 'BSP REBARBAÇÃO') return (qEsc * peso * 1.10) + (qReb * peso * 0.90);
-            if (terc === 'VG REBARBAÇÃO') return (qEsc + qReb) * peso * 1.00;
-            if (terc === 'JM REBARBAÇÃO') return (qEsc * peso * 1.10) + (qReb * peso * 1.00);
-            return 0;
-        }
+    const terc = String(reg.terceiro || '').toUpperCase();
+    const peso = parseFloat(reg.peso || 0);
+    const qEsc = parseInt(reg.quant_escariar || 0);
+    const qReb = parseInt(reg.quant_rebarba || 0);
+
+    if (terc === 'BSP REBARBAÇÃO') return (qEsc * peso * 1.10) + (qReb * peso * 0.90);
+    if (terc === 'VG REBARBAÇÃO') return (qEsc + qReb) * peso * 1.00;
+    if (terc === 'JM REBARBAÇÃO') return (qEsc * peso * 1.10) + (qReb * peso * 1.00);
+    
+    return 0;
+}
         
         function atualizarQuantidades(origem) {
             const tIn = document.getElementById('inputQuantidade'), eIn = document.getElementById('inputQtdEscariar'), rIn = document.getElementById('inputQtdRebarba');
@@ -691,20 +696,53 @@ async function carregarRegistrosERecebidos() {
         }
 
         function showCargaDetails(carga) {
-            const m = document.getElementById('cargaModal');
-            document.getElementById('modalTitle').innerHTML = `Detalhes: <span style="color:var(--color-primary);">${carga}</span>`;
-            m.setAttribute('data-current-carga', carga);
-            const its = registros.filter(r => r.carga === carga);
-            let h = `<table><thead><tr><th>DATA</th><th>CÓDIGO</th><th>DESCRIÇÃO</th><th>PESO UN.</th><th>QTD</th><th>R$ UNIT</th><th>TOTAL</th><th>OK</th><th>AÇÃO</th></tr></thead><tbody>`;
-            its.forEach(r => {
-                const isRec = recebidos[r.carga]?.some(i => i.id === r.id);
-                h += `<tr><td>${formatDate(r.data)}</td><td>${r.codigo}</td><td>${r.descricao}</td><td>${formatNumber(r.peso)}</td><td>${r.quant}</td><td>${formatCurrency(r.quant>0?r.valor/r.quant:0)}</td><td>${formatCurrency(r.valor)}</td><td><input type="checkbox" onchange="toggleRecebido(${r.id},'${r.carga}',this.checked)" ${isRec?'checked':''}></td><td><i class="fa-solid fa-trash action-icon icon-delete" onclick="excluirRegistro(${r.id})"></i></td></tr>`;
-            });
-            document.getElementById('modalTableContainer').innerHTML = h + `</tbody></table>`;
-            const tP = its.reduce((s,i)=>s+(i.quant*i.peso),0), tV = its.reduce((s,i)=>s+i.valor,0);
-            document.getElementById('modalFooter').innerHTML = `<div class="modal-stat">ITENS: <strong>${its.length}</strong></div><div class="modal-stat">PESO: <strong>${formatNumber(tP)} KG</strong></div><div class="modal-stat">VALOR: <strong>${formatCurrency(tV)}</strong></div>`;
-            m.style.display = 'flex'; setTimeout(() => m.classList.add('visible'), 10); document.body.classList.add('modal-open');
-        }
+    const m = document.getElementById('cargaModal');
+    document.getElementById('modalTitle').innerHTML = `Detalhes: <span style="color:var(--color-primary);">${carga}</span>`;
+    m.setAttribute('data-current-carga', carga);
+    
+    const its = registros.filter(r => r.carga === carga);
+    let h = `<table><thead><tr><th>DATA</th><th>CÓDIGO</th><th>DESCRIÇÃO</th><th>PESO UN.</th><th>QTD</th><th>R$ UNIT</th><th>TOTAL</th><th>OK</th><th>AÇÃO</th></tr></thead><tbody>`;
+    
+    its.forEach(r => {
+        const isRec = recebidos[r.carga]?.some(i => i.id === r.id);
+        
+        // Garantir que os valores são números para o cálculo
+        const vTotal = parseFloat(r.valor || 0);
+        const qtd = parseInt(r.quant || 0);
+        const pUn = parseFloat(r.peso || 0);
+        
+        // Calcular valor unitário com segurança
+        const vUnit = qtd > 0 ? vTotal / qtd : 0;
+
+        h += `<tr>
+            <td>${formatDate(r.data)}</td>
+            <td>${r.codigo}</td>
+            <td>${r.descricao}</td>
+            <td>${formatNumber(pUn)}</td>
+            <td>${qtd}</td>
+            <td>${formatCurrency(vUnit)}</td>
+            <td>${formatCurrency(vTotal)}</td>
+            <td><input type="checkbox" onchange="toggleRecebido(${r.id},'${r.carga}',this.checked)" ${isRec?'checked':''}></td>
+            <td><i class="fa-solid fa-trash action-icon icon-delete" onclick="excluirRegistro(${r.id})"></i></td>
+        </tr>`;
+    });
+    
+    document.getElementById('modalTableContainer').innerHTML = h + `</tbody></table>`;
+    
+    // Totais do Rodapé do Modal
+    const tP = its.reduce((s, i) => s + (parseFloat(i.quant || 0) * parseFloat(i.peso || 0)), 0);
+    const tV = its.reduce((s, i) => s + parseFloat(i.valor || 0), 0);
+    
+    document.getElementById('modalFooter').innerHTML = `
+        <div class="modal-stat">ITENS: <strong>${its.length}</strong></div>
+        <div class="modal-stat">PESO: <strong>${formatNumber(tP)} KG</strong></div>
+        <div class="modal-stat">VALOR: <strong>${formatCurrency(tV)}</strong></div>
+    `;
+    
+    m.style.display = 'flex'; 
+    setTimeout(() => m.classList.add('visible'), 10); 
+    document.body.classList.add('modal-open');
+}
 
         function hideCargaDetails() { 
             const m = document.getElementById('cargaModal'); 
