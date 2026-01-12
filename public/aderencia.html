@@ -307,143 +307,211 @@
     </div>
 
     <script>
-        // Banco de Dados Simulado em LocalStorage
-        let db = JSON.parse(localStorage.getItem('aderencia_fundicao_v4')) || [];
-        let currentSector = 'MOLDAGEM';
-        let lineChart = null;
-        let donutChart = null;
+    // Variáveis Globais
+    let db = [];
+    let currentSector = 'MOLDAGEM';
+    let lineChart = null;
+    let donutChart = null;
 
-        function openModal() { document.getElementById('modalEntry').style.display = 'flex'; }
-        function closeModal() { document.getElementById('modalEntry').style.display = 'none'; }
-
-        // Ajusta as unidades conforme o setor (Fusão usa kg)
-        function updateModalLabels() {
-            const s = document.getElementById('fSetor').value;
-            const u = s === 'FUSAO' ? '(kg)' : '(Un)';
-            document.getElementById('lblProg').innerText = `Prog. ${u}`;
-            document.getElementById('lblReal').innerText = `Real. ${u}`;
-        }
-
-        function saveEntry() {
-            const entry = {
-                id: Date.now(),
-                sector: document.getElementById('fSetor').value,
-                date: document.getElementById('fData').value,
-                op: document.getElementById('fOP').value,
-                code: document.getElementById('fCod').value,
-                heat: document.getElementById('fLiga').value,
-                prog: parseFloat(document.getElementById('fProg').value) || 0,
-                real: parseFloat(document.getElementById('fReal').value) || 0
-            };
-            if(!entry.date || !entry.op) return alert("Por favor, preencha a Data e a OP.");
-            db.push(entry);
-            save();
-            closeModal();
-        }
-
-        function setSector(s) {
-            currentSector = s;
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            document.querySelector(`[data-sector="${s}"]`).classList.add('active');
+    // --- FUNÇÕES DE COMUNICAÇÃO COM O BANCO ---
+    async function loadData() {
+        try {
+            const response = await fetch('/api/aderencia');
+            db = await response.json();
             render();
+        } catch (e) {
+            console.error("Erro ao carregar dados:", e);
         }
+    }
 
-        // Função de Edição Direta na Tabela
-        function makeEditable(el, id) {
-            if (el.querySelector('input')) return;
-            const val = el.innerText;
-            el.innerHTML = `<input type="number" class="input-inline-edit" value="${val}">`;
-            const input = el.querySelector('input');
-            input.focus();
-            input.onblur = () => finishEdit(input, id);
-            input.onkeydown = (e) => { if(e.key === 'Enter') finishEdit(input, id); };
-        }
+    async function saveEntry() {
+        const entry = {
+            sector: document.getElementById('fSetor').value,
+            date: document.getElementById('fData').value,
+            op: document.getElementById('fOP').value,
+            code: document.getElementById('fCod').value,
+            heat: document.getElementById('fLiga').value,
+            prog: parseFloat(document.getElementById('fProg').value) || 0,
+            real: parseFloat(document.getElementById('fReal').value) || 0
+        };
 
-        function finishEdit(input, id) {
-            const newVal = parseFloat(input.value) || 0;
-            const idx = db.findIndex(i => i.id === id);
-            if(idx !== -1) { db[idx].real = newVal; save(); }
-        }
+        if(!entry.date || !entry.op) return alert("Por favor, preencha a Data e a OP.");
 
-        function deleteEntry(id) { if(confirm('Excluir este registro?')) { db = db.filter(i => i.id !== id); save(); } }
-
-        function save() {
-            localStorage.setItem('aderencia_fundicao_v4', JSON.stringify(db));
-            render();
-        }
-
-        function render() {
-            const filtered = db.filter(i => i.sector === currentSector);
-            const tbody = document.querySelector('#mainTable tbody');
-            tbody.innerHTML = '';
-
-            const unit = currentSector === 'FUSAO' ? 'kg' : 'Un';
-            document.getElementById('th-prog').innerText = `Prog. (${unit})`;
-            document.getElementById('th-real').innerText = `Real. (${unit})`;
-            document.getElementById('lbl-kpi-prog').innerText = `Total Programado (${unit})`;
-            document.getElementById('lbl-kpi-real').innerText = `Total Realizado (${unit})`;
-
-            let tProg = 0, tReal = 0;
-
-            filtered.sort((a,b) => new Date(b.date) - new Date(a.date)).forEach(item => {
-                tProg += item.prog; tReal += item.real;
-                const adh = item.prog > 0 ? (item.real / item.prog) * 100 : 0;
-                const tr = document.createElement('tr');
-                tr.innerHTML = `
-                    <td style="color:var(--text-muted)">${item.date.split('-').reverse().join('/')}</td>
-                    <td><b>${item.op}</b></td>
-                    <td>${item.code}</td>
-                    <td><span class="badge-sector ${getBadge(item.sector)}">${item.heat}</span></td>
-                    <td style="color:#60a5fa; font-weight:600">${item.prog}</td>
-                    <td><span class="editable-cell" onclick="makeEditable(this, ${item.id})">${item.real}</span></td>
-                    <td style="font-weight:700; color:${adh >= 95 ? '#10b981' : (adh < 80 ? '#ef4444' : '#fbbf24')}">${adh.toFixed(1)}%</td>
-                    <td><button onclick="deleteEntry(${item.id})" style="background:none; border:none; color:rgba(239,68,68,0.3); cursor:pointer"><i class="fa-solid fa-trash"></i></button></td>
-                `;
-                tbody.appendChild(tr);
+        try {
+            const res = await fetch('/api/aderencia?action=save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(entry)
             });
-
-            updateKPIs(tProg, tReal);
-            updateCharts(filtered);
+            if (res.ok) {
+                closeModal();
+                loadData(); // Recarrega do banco
+            }
+        } catch (e) {
+            alert("Erro ao salvar no banco de dados.");
         }
+    }
 
-        function getBadge(s) { return s === 'MOLDAGEM' ? 'badge-m' : (s === 'FUSAO' ? 'badge-f' : 'badge-a'); }
-
-        function updateKPIs(p, r) {
-            const adh = p > 0 ? (r / p) * 100 : 0;
-            document.getElementById('kpi-adh').innerText = adh.toFixed(1) + '%';
-            document.getElementById('kpi-prog').innerText = p.toLocaleString();
-            document.getElementById('kpi-real').innerText = r.toLocaleString();
-            document.getElementById('kpi-diff').innerText = (r - p).toLocaleString();
-            document.getElementById('kpi-adh').style.color = adh >= 95 ? '#10b981' : (adh < 80 ? '#ef4444' : '#fbbf24');
-        }
-
-        function updateCharts(data) {
-            const ctxLine = document.getElementById('chartLine').getContext('2d');
-            const ctxDonut = document.getElementById('chartDonut').getContext('2d');
-            const grouped = {};
-            data.forEach(d => { grouped[d.date] = (grouped[d.date] || {p:0,r:0}); grouped[d.date].p+=d.prog; grouped[d.date].r+=d.real; });
-            const labels = Object.keys(grouped).sort();
-            const values = labels.map(l => grouped[l].p > 0 ? (grouped[l].r / grouped[l].p) * 100 : 0);
-
-            if(lineChart) lineChart.destroy();
-            if(donutChart) donutChart.destroy();
-
-            lineChart = new Chart(ctxLine, {
-                type: 'line',
-                data: { labels: labels.map(d=>d.split('-').reverse().slice(0,2).join('/')), datasets: [{ label: 'Aderência %', data: values, borderColor: '#fbbf24', tension: 0.3, fill: true, backgroundColor: 'rgba(251, 191, 36, 0.05)' }] },
-                options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, max: 120 } } }
+    async function finishEdit(input, id) {
+        const newVal = parseFloat(input.value) || 0;
+        try {
+            const res = await fetch('/api/aderencia?action=update-real', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id, real: newVal })
             });
-
-            donutChart = new Chart(ctxDonut, {
-                type: 'doughnut',
-                data: { labels: ['Realizado', 'Pendente'], datasets: [{ data: [data.reduce((a,b)=>a+b.real,0), Math.max(0, data.reduce((a,b)=>a+b.prog,0)-data.reduce((a,b)=>a+b.real,0))], backgroundColor: ['#10b981', '#1f2937'], borderWidth: 0 }] },
-                options: { plugins: { legend: { position: 'bottom', labels: { color: '#fff' } } } }
-            });
+            if (res.ok) loadData();
+        } catch (e) {
+            console.error(e);
         }
+    }
 
-        // Inicialização
-        document.getElementById('fData').valueAsDate = new Date();
+    async function deleteEntry(id) {
+        if(!confirm('Excluir este registro permanentemente?')) return;
+        try {
+            const res = await fetch('/api/aderencia?action=delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id })
+            });
+            if (res.ok) loadData();
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    // --- FUNÇÕES DE INTERFACE (IGUAIS ÀS ORIGINAIS) ---
+    function openModal() { document.getElementById('modalEntry').style.display = 'flex'; }
+    function closeModal() { document.getElementById('modalEntry').style.display = 'none'; }
+
+    function updateModalLabels() {
+        const s = document.getElementById('fSetor').value;
+        const u = s === 'FUSAO' ? '(kg)' : '(Un)';
+        document.getElementById('lblProg').innerText = `Prog. ${u}`;
+        document.getElementById('lblReal').innerText = `Real. ${u}`;
+    }
+
+    function setSector(s) {
+        currentSector = s;
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelector(`[data-sector="${s}"]`).classList.add('active');
         render();
-    </script>
+    }
+
+    function makeEditable(el, id) {
+        if (el.querySelector('input')) return;
+        const val = el.innerText;
+        el.innerHTML = `<input type="number" class="input-inline-edit" value="${val}">`;
+        const input = el.querySelector('input');
+        input.focus();
+        input.onblur = () => finishEdit(input, id);
+        input.onkeydown = (e) => { if(e.key === 'Enter') finishEdit(input, id); };
+    }
+
+    function render() {
+        // Agora usamos os dados que vieram do banco (variável db)
+        const filtered = db.filter(i => i.sector === currentSector);
+        const tbody = document.querySelector('#mainTable tbody');
+        tbody.innerHTML = '';
+
+        const unit = currentSector === 'FUSAO' ? 'kg' : 'Un';
+        document.getElementById('th-prog').innerText = `Prog. (${unit})`;
+        document.getElementById('th-real').innerText = `Real. (${unit})`;
+        document.getElementById('lbl-kpi-prog').innerText = `Total Programado (${unit})`;
+        document.getElementById('lbl-kpi-real').innerText = `Total Realizado (${unit})`;
+
+        let tProg = 0, tReal = 0;
+
+        filtered.sort((a,b) => new Date(b.date) - new Date(a.date)).forEach(item => {
+            const prog = parseFloat(item.prog);
+            const real = parseFloat(item.real);
+            tProg += prog; 
+            tReal += real;
+            
+            const adh = prog > 0 ? (real / prog) * 100 : 0;
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td style="color:var(--text-muted)">${item.date.split('-').reverse().join('/')}</td>
+                <td><b>${item.op}</b></td>
+                <td>${item.code}</td>
+                <td><span class="badge-sector ${getBadge(item.sector)}">${item.heat}</span></td>
+                <td style="color:#60a5fa; font-weight:600">${prog}</td>
+                <td><span class="editable-cell" onclick="makeEditable(this, ${item.id})">${real}</span></td>
+                <td style="font-weight:700; color:${adh >= 95 ? '#10b981' : (adh < 80 ? '#ef4444' : '#fbbf24')}">${adh.toFixed(1)}%</td>
+                <td><button onclick="deleteEntry(${item.id})" style="background:none; border:none; color:rgba(239,68,68,0.3); cursor:pointer"><i class="fa-solid fa-trash"></i></button></td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        updateKPIs(tProg, tReal);
+        updateCharts(filtered);
+    }
+
+    function getBadge(s) { return s === 'MOLDAGEM' ? 'badge-m' : (s === 'FUSAO' ? 'badge-f' : 'badge-a'); }
+
+    function updateKPIs(p, r) {
+        const adh = p > 0 ? (r / p) * 100 : 0;
+        document.getElementById('kpi-adh').innerText = adh.toFixed(1) + '%';
+        document.getElementById('kpi-prog').innerText = p.toLocaleString();
+        document.getElementById('kpi-real').innerText = r.toLocaleString();
+        document.getElementById('kpi-diff').innerText = (r - p).toLocaleString();
+        document.getElementById('kpi-adh').style.color = adh >= 95 ? '#10b981' : (adh < 80 ? '#ef4444' : '#fbbf24');
+    }
+
+    function updateCharts(data) {
+        const ctxLine = document.getElementById('chartLine').getContext('2d');
+        const ctxDonut = document.getElementById('chartDonut').getContext('2d');
+        const grouped = {};
+        
+        data.forEach(d => { 
+            grouped[d.date] = (grouped[d.date] || {p:0,r:0}); 
+            grouped[d.date].p += parseFloat(d.prog); 
+            grouped[d.date].r += parseFloat(d.real); 
+        });
+
+        const labels = Object.keys(grouped).sort();
+        const values = labels.map(l => grouped[l].p > 0 ? (grouped[l].r / grouped[l].p) * 100 : 0);
+
+        if(lineChart) lineChart.destroy();
+        if(donutChart) donutChart.destroy();
+
+        lineChart = new Chart(ctxLine, {
+            type: 'line',
+            data: { 
+                labels: labels.map(d=>d.split('-').reverse().slice(0,2).join('/')), 
+                datasets: [{ 
+                    label: 'Aderência %', 
+                    data: values, 
+                    borderColor: '#fbbf24', 
+                    tension: 0.3, 
+                    fill: true, 
+                    backgroundColor: 'rgba(251, 191, 36, 0.05)' 
+                }] 
+            },
+            options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, max: 120 } } }
+        });
+
+        const totalReal = data.reduce((a,b) => a + parseFloat(b.real), 0);
+        const totalProg = data.reduce((a,b) => a + parseFloat(b.prog), 0);
+        const pendente = Math.max(0, totalProg - totalReal);
+
+        donutChart = new Chart(ctxDonut, {
+            type: 'doughnut',
+            data: { 
+                labels: ['Realizado', 'Pendente'], 
+                datasets: [{ 
+                    data: [totalReal, pendente], 
+                    backgroundColor: ['#10b981', '#1f2937'], 
+                    borderWidth: 0 
+                }] 
+            },
+            options: { plugins: { legend: { position: 'bottom', labels: { color: '#fff' } } } }
+        });
+    }
+
+    // Inicialização
+    document.getElementById('fData').valueAsDate = new Date();
+    loadData(); // Carrega os dados do banco ao abrir
+</script>
 </body>
 </html>
