@@ -567,20 +567,51 @@ async function carregarRegistrosERecebidos() {
     }
 }
 
-        function renderTable() {
-            const tbody = document.querySelector('#terceiroTable tbody'); tbody.innerHTML = '';
-            const grouped = registros.reduce((acc, r) => { if (!acc[r.carga]) acc[r.carga] = []; acc[r.carga].push(r); return acc; }, {});
-            Object.keys(grouped).sort((a, b) => (parseInt(b) || 0) - (parseInt(a) || 0)).forEach(c => {
-                const its = grouped[c], p = its[0];
-                const tP = its.reduce((s, i) => s + (i.quant * (i.peso || 0)), 0), tV = its.reduce((s, i) => s + (i.valor || 0), 0);
-                const recC = (recebidos[c] || []).length, totC = its.length;
-                const tr = document.createElement('tr'); tr.className = 'group-row'; tr.onclick = () => showCargaDetails(c);
-                tr.innerHTML = `<td>${c}</td><td>${formatDate(p.data)}</td><td>${p.terceiro}</td><td>${formatNumber(tP)}</td><td>${its.reduce((s,i)=>s+i.quant,0)}</td><td>${formatCurrency(tV)}</td><td>${(totC > 0 && recC >= totC) ? '<span class="badge badge-success">Recebido</span>' : `<span class="badge badge-pending">${recC}/${totC} Pendente</span>`}</td>`;
-                tbody.appendChild(tr);
-            });
-            document.getElementById('totalRegistros').textContent = Object.keys(grouped).length;
-            applyColumnFilters();
-        }
+        function renderTable(dadosParaExibir = registros) {
+    const tbody = document.querySelector('#terceiroTable tbody'); 
+    tbody.innerHTML = '';
+
+    // Agrupa apenas os dados que devem ser exibidos (respeitando o filtro)
+    const grouped = dadosParaExibir.reduce((acc, r) => { 
+        if (!acc[r.carga]) acc[r.carga] = []; 
+        acc[r.carga].push(r); 
+        return acc; 
+    }, {});
+
+    Object.keys(grouped).sort((a, b) => (parseInt(b) || 0) - (parseInt(a) || 0)).forEach(c => {
+        const its = grouped[c];
+        const p = its[0];
+
+        // CORREÇÃO: Forçar parseFloat/parseInt para evitar concatenação de texto
+        const tP = its.reduce((s, i) => s + (parseFloat(i.quant || 0) * parseFloat(i.peso || 0)), 0);
+        const tV = its.reduce((s, i) => s + parseFloat(i.valor || 0), 0);
+        const tQ = its.reduce((s, i) => s + parseInt(i.quant || 0), 0);
+        
+        const recC = (recebidos[c] || []).length;
+        const totC = its.length;
+
+        const tr = document.createElement('tr'); 
+        tr.className = 'group-row'; 
+        tr.onclick = () => showCargaDetails(c);
+        
+        tr.innerHTML = `
+            <td>${c}</td>
+            <td>${formatDate(p.data)}</td>
+            <td>${p.terceiro}</td>
+            <td>${formatNumber(tP)}</td>
+            <td>${tQ}</td>
+            <td>${formatCurrency(tV)}</td>
+            <td>${(totC > 0 && recC >= totC) ? 
+                '<span class="badge badge-success">Recebido</span>' : 
+                `<span class="badge badge-pending">${recC}/${totC} Pendente</span>`}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+
+    // Atualiza o contador de cargas no footer baseado no que está na tela
+    document.getElementById('totalRegistros').textContent = Object.keys(grouped).length;
+    applyColumnFilters();
+}
 
         function populateDateFilters() {
             const sM = document.getElementById('filterMes'), sA = document.getElementById('filterAno');
@@ -593,21 +624,62 @@ async function carregarRegistrosERecebidos() {
         }
 
         function updateDashboardAndCharts() {
-            const fM = document.getElementById('filterMes').value, fA = document.getElementById('filterAno').value;
-            const filtrados = registros.filter(r => { if (!r.data) return false; const p = r.data.split('T')[0].split('-'); return (!fM || p[1] === fM) && (!fA || p[0] === fA); });
-            let tV = 0, tP = 0; filtrados.forEach(r => { tV += r.valor || 0; tP += r.quant * (r.peso || 0); });
-            document.getElementById('statsPanel').innerHTML = `
-                <div class="kpi-card kpi-purple"><div class="kpi-title">Valor Total</div><div class="kpi-value">${formatCurrency(tV)}</div></div>
-                <div class="kpi-card kpi-default"><div class="kpi-title">Peso Total (KG)</div><div class="kpi-value">${formatNumber(tP)}</div></div>
-                <div class="kpi-card kpi-info"><div class="kpi-title">Cargas Filtradas</div><div class="kpi-value">${new Set(filtrados.map(r=>r.carga)).size}</div></div>
-            `;
-            let cD = {};
-            if (fM === "") {
-                for(let i=1;i<=12;i++) cD[i.toString().padStart(2,'0')]=0;
-                filtrados.forEach(r => { const m = r.data.split('T')[0].split('-')[1]; cD[m]+=r.quant*(r.peso||0); });
-            } else { filtrados.forEach(r => { const d = r.data.split('T')[0]; cD[d] = (cD[d]||0)+(r.quant*(r.peso||0)); }); }
-            renderBarChart(cD, fM === "");
-        }
+    const fM = document.getElementById('filterMes').value;
+    const fA = document.getElementById('filterAno').value;
+
+    // 1. Filtra os registros com base no Mês e Ano selecionados
+    const filtrados = registros.filter(r => { 
+        if (!r.data) return false; 
+        const p = r.data.split('T')[0].split('-'); 
+        return (!fM || p[1] === fM) && (!fA || p[0] === fA); 
+    });
+
+    // 2. Calcula os Totais para os Cards de KPI
+    let tV = 0, tP = 0; 
+    filtrados.forEach(r => { 
+        tV += parseFloat(r.valor || 0); 
+        tP += (parseFloat(r.quant || 0) * parseFloat(r.peso || 0)); 
+    });
+
+    // 3. Atualiza os Cards Superiores (KPIs)
+    document.getElementById('statsPanel').innerHTML = `
+        <div class="kpi-card kpi-purple">
+            <div class="kpi-title">Valor Total</div>
+            <div class="kpi-value">${formatCurrency(tV)}</div>
+        </div>
+        <div class="kpi-card kpi-default">
+            <div class="kpi-title">Peso Total (KG)</div>
+            <div class="kpi-value">${formatNumber(tP)}</div>
+        </div>
+        <div class="kpi-card kpi-info">
+            <div class="kpi-title">Cargas Filtradas</div>
+            <div class="kpi-value">${new Set(filtrados.map(r => r.carga)).size}</div>
+        </div>
+    `;
+
+    // 4. ATUALIZA A TABELA (IMPORTANTE: Agora ela obedece ao filtro)
+    renderTable(filtrados);
+
+    // 5. Prepara os dados para o Gráfico de Barras
+    let cD = {};
+    if (fM === "") {
+        // Se nenhum mês selecionado, mostra o acumulado por meses do ano
+        for(let i = 1; i <= 12; i++) cD[i.toString().padStart(2, '0')] = 0;
+        filtrados.forEach(r => { 
+            const m = r.data.split('T')[0].split('-')[1]; 
+            cD[m] += (parseFloat(r.quant || 0) * parseFloat(r.peso || 0)); 
+        });
+    } else { 
+        // Se um mês está selecionado, mostra o peso por dia do mês
+        filtrados.forEach(r => { 
+            const d = r.data.split('T')[0]; 
+            cD[d] = (cD[d] || 0) + (parseFloat(r.quant || 0) * parseFloat(r.peso || 0)); 
+        }); 
+    }
+
+    // 6. Redesenha o Gráfico
+    renderBarChart(cD, fM === "");
+}
 
         function renderBarChart(data, isM) {
             let l, w;
