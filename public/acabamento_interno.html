@@ -1077,8 +1077,8 @@
             let prog = 0;
             prog = currentReportData.reduce((s, r) => s + (r[COL_MAP.PESO_TOTAL] || 0), 0);
             prog += manualRowsData.reduce((s, r) => s + (r[COL_MAP.PESO_TOTAL] || 0), 0);
-            document.getElementById('totalWeightValue').textContent = prog.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) + ' KG'; // Legacy
-            totalProgrammedWeightValue.textContent = prog.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) + ' KG';
+            document.getElementById('totalWeightValue').textContent = prog.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' KG'; // Legacy
+            totalProgrammedWeightValue.textContent = prog.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' KG';
         }
 
         function displayTable(data, containerId) {
@@ -1155,9 +1155,16 @@
                     let val = row[idx];
                     
                     // FORMATAÇÃO
-                    if (idx === COL_MAP.DATA) val = val instanceof Date ? `${val.getDate()}/${val.getMonth()+1}/${val.getFullYear()}` : formatDateToDisplay(val);
-                    else if ([COL_MAP.QTD, COL_MAP.PESO_TOTAL, COL_MAP.PESO_UN].includes(idx) && typeof val === 'number') {
-                        val = val.toLocaleString('pt-BR', { maximumFractionDigits: idx === COL_MAP.QTD ? 0 : (idx === COL_MAP.PESO_UN ? 4 : 2), minimumFractionDigits: idx === COL_MAP.QTD ? 0 : 2 });
+                    if (idx === COL_MAP.DATA) {
+                        val = val instanceof Date ? `${val.getDate()}/${val.getMonth()+1}/${val.getFullYear()}` : formatDateToDisplay(val);
+                    } else if ([COL_MAP.QTD, COL_MAP.PESO_TOTAL, COL_MAP.PESO_UN].includes(idx) && typeof val === 'number') {
+                        // Lógica de formatação exigida: PESO UN e PESO TOTAL com exatamente 2 casas.
+                        // QTD com 0 casas (inteiro).
+                        const minDec = (idx === COL_MAP.QTD) ? 0 : 2;
+                        const maxDec = (idx === COL_MAP.QTD) ? 0 : 2;
+                        
+                        val = val.toLocaleString('pt-BR', { minimumFractionDigits: minDec, maximumFractionDigits: maxDec });
+                        
                         // Se não for centralizado (veja abaixo), alinhar a direita
                         if (!isModal && [0,1,2,5,6,8].includes(idx)) {} else { td.classList.add('align-right'); }
                     }
@@ -1177,7 +1184,7 @@
                         td.onblur = (e) => {
                             const p = parsePtBrNumber(e.target.textContent);
                             allExcelData[i][COL_MAP.PESO_UN] = p; allExcelData[i][COL_MAP.PESO_TOTAL] = p * allExcelData[i][COL_MAP.QTD];
-                            e.target.parentElement.cells[8].textContent = allExcelData[i][COL_MAP.PESO_TOTAL].toLocaleString('pt-BR', {minimumFractionDigits:2});
+                            e.target.parentElement.cells[8].textContent = allExcelData[i][COL_MAP.PESO_TOTAL].toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits: 2});
                         };
                     }
                     if (isManual && isModal) {
@@ -1287,7 +1294,7 @@
                         r[COL_MAP.OP], d ? d.toLocaleDateString('pt-BR') : 'MANUAL',
                         r[COL_MAP.CODIGO], r[COL_MAP.DESCRICAO], r[COL_MAP.MATERIAL], r[COL_MAP.CLIENTE],
                         q.toLocaleString('pt-BR',{maximumFractionDigits:0}), r[COL_MAP.LOTE],
-                        parsePtBrNumber(r[COL_MAP.PESO_TOTAL]).toLocaleString('pt-BR',{minimumFractionDigits:2})
+                        parsePtBrNumber(r[COL_MAP.PESO_TOTAL]).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits: 2})
                     ]);
                 }
             });
