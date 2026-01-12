@@ -406,10 +406,20 @@
 }
                 else if (link.id === 'faturamento') {
                     if (data.length > 1) {
+                        // Lista de códigos de clientes que devem ser ignorados (mesma lógica do detalhado)
+                        const CLIENTES_EXCLUIDOS = ['2020', '257', '316'];
+
                         const monthRows = data.slice(1).filter(r => {
-                            const d = String(r[1]); 
-                            const excluded = r[14] === 1;
-                            return !excluded && (d.includes(`${curYear}-${curMonth}`) || d.includes(`/${curMonth}/${curYear}`));
+                            const d = String(r[1]); // Data
+                            const codCliente = String(r[4] || '').trim(); // Código do Cliente (Coluna 5)
+                            
+                            // Verifica se foi ignorado manualmente ou se é um cliente de serviço
+                            const isManualExcluded = r[14] === 1 || r[14] === true;
+                            const isClientExcluded = CLIENTES_EXCLUIDOS.includes(codCliente);
+                            
+                            // Só processa se NÃO for excluído manual E NÃO for cliente de serviço
+                            return !isManualExcluded && !isClientExcluded && 
+                                   (d.includes(`${curYear}-${curMonth}`) || d.includes(`/${curMonth}/${curYear}`));
                         });
 
                         monthRows.forEach(r => {
@@ -430,26 +440,6 @@
                         subLabel = `Produção Faturada no Mês`;
                     }
                 }
-                else if (link.id === 'carteira') {
-                    const totalKg = data.reduce((acc, r) => acc + parseFloat(r.peso_total || 0), 0);
-                    mainValue = (totalKg / 1000).toFixed(1) + " Ton";
-                    subLabel = "Total em Carteira";
-                }
-                else if (link.id === 'refugo') {
-                    const totalKg = data.reduce((acc, r) => acc + (parseFloat(r.quant || 0) * parseFloat(r.peso || 0)), 0);
-                    mainValue = (totalKg / 1000).toFixed(2) + " Ton";
-                    subLabel = "Produção Refugada no Mês";
-                }
-
-                container.querySelector('.live-value').innerText = mainValue;
-                container.querySelector('.live-label').innerText = subLabel;
-
-            } catch (e) {
-                console.error(e);
-                const el = document.getElementById(`live-${link.id}`);
-                if(el) el.querySelector('.live-label').innerText = "ERRO CONEXÃO";
-            }
-        }
 
         function initChart() {
             const ctx = document.getElementById('prodChart').getContext('2d');
