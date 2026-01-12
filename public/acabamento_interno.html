@@ -322,17 +322,27 @@
         }
         tr:hover td { background: rgba(255,255,255,0.02); color: var(--color-primary); }
         
-        /* Column Widths */
-        #tableContainer th:nth-child(1) { width: 9%; }  
-        #tableContainer th:nth-child(2) { width: 9%; }  
-        #tableContainer th:nth-child(3) { width: 9%; }  
-        #tableContainer th:nth-child(4) { width: 25%; } 
-        #tableContainer th:nth-child(5) { width: 10%; } 
-        #tableContainer th:nth-child(6) { width: 8%; }  
-        #tableContainer th:nth-child(7) { width: 7%; }  
-        #tableContainer th:nth-child(8) { width: 8%; }  
-        #tableContainer th:nth-child(9) { width: 9%; }  
-        #tableContainer th:nth-child(10) { width: 15%;} 
+        /* --- MAIN TABLE COLUMN WIDTHS (8 Columns) --- */
+        /* DATA, OP, CÓDIGO, DESCRIÇÃO, MATERIAL, PESO UN, QUANT., PESO */
+        #tableContainer th:nth-child(1) { width: 10%; } /* DATA */
+        #tableContainer th:nth-child(2) { width: 10%; } /* OP */
+        #tableContainer th:nth-child(3) { width: 10%; } /* CÓDIGO */
+        #tableContainer th:nth-child(4) { width: 30%; } /* DESCRIÇÃO */
+        #tableContainer th:nth-child(5) { width: 12%; } /* MATERIAL */
+        #tableContainer th:nth-child(6) { width: 10%; } /* PESO UN */
+        #tableContainer th:nth-child(7) { width: 8%; }  /* QUANT */
+        #tableContainer th:nth-child(8) { width: 10%; } /* PESO */
+
+        /* --- MODAL TABLE WIDTHS (Depends on view, approx 9 cols in Saved) --- */
+        #modalReportContainer th:nth-child(1) { width: 9%; }
+        #modalReportContainer th:nth-child(2) { width: 10%; }
+        #modalReportContainer th:nth-child(3) { width: 25%; }
+        #modalReportContainer th:nth-child(4) { width: 10%; }
+        #modalReportContainer th:nth-child(5) { width: 9%; }
+        #modalReportContainer th:nth-child(6) { width: 9%; }
+        #modalReportContainer th:nth-child(7) { width: 9%; }
+        #modalReportContainer th:nth-child(8) { width: 10%; }
+        #modalReportContainer th:nth-child(9) { width: 9%; }
 
         td.align-right { text-align: right; }
         
@@ -691,9 +701,10 @@
         let currentAdherenceStatus = []; 
         let lastUpdateTimestamp = null; 
         
+        // CABEÇALHO TELA PRINCIPAL - (LOTE e CLIENTE Ocultos)
         const colunasHeaders = [
             "DATA", "OP", "CÓDIGO", "DESCRIÇÃO", "MATERIAL", 
-            "PESO UN", "QUANT.", "LOTE", "PESO", "CLIENTE" 
+            "PESO UN", "QUANT.", "PESO" 
         ];
         
         const modalSavedHeaders = [
@@ -706,21 +717,12 @@
              "PESO UN", "QUANT.", "LOTE", "PESO"
         ];
         
+        // MAPEAMENTO DE DADOS (Não mudar, usado internamente)
         const COL_MAP = { 
             DATA: 0, OP: 1, CODIGO: 2, DESCRICAO: 3, MATERIAL: 4, 
             PESO_UN: 5, QTD: 6, LOTE: 7, PESO_TOTAL: 8, CLIENTE: 9, QUANT_FAT: 10
         };
         
-        const MODAL_COL_MAP = { 
-            OP: 0, CODIGO: 1, DESCRICAO: 2, MATERIAL: 3, PESO_UN: 4, 
-            LOTE: 5, QTD: 6, QUANT_FAT: 7, ADERIU: 8      
-        };
-        
-        const MODAL_GENERATE_COL_MAP = {
-            OP: 0, CODIGO: 1, DESCRICAO: 2, MATERIAL: 3, PESO_UN: 4,
-            QTD: 5, LOTE: 6, PESO_TOTAL: 7
-        };
-
         // DOM Elements
         const fileInput = document.getElementById('excelFile');
         const chooseFileButton = document.getElementById('chooseFileButton');
@@ -1486,7 +1488,7 @@
             headers.forEach(h => { const th = document.createElement('th'); th.textContent = h; tr.appendChild(th); });
             thead.appendChild(tr);
             
-            // Filter Row
+            // Filter Row (Only for main table)
             if (containerId === 'tableContainer') {
                 tr = document.createElement('tr'); tr.id = 'filterRow';
                 headers.forEach((h, i) => {
@@ -1515,9 +1517,21 @@
                 const isManual = isModal && i >= numAgg;
                 if (isManual) tr.classList.add('manual-row');
 
-                let cols = isModal 
-                    ? (isSaved ? [1,2,3,4,5,7,6] : [1,2,3,4,5,6,7,8]) // Indices mapped to visual cols
-                    : [0,1,2,3,4,5,6,7,8,9];
+                let cols;
+                if (isModal) {
+                    if (isSaved) {
+                        // Ordem na Modal Salva (Fixada): OP, COD, DESC, MAT, PUN, LOTE, QTD
+                        // Depois adiciona FAT e ADERIU manualmente
+                        cols = [1, 2, 3, 4, 5, 7, 6];
+                    } else {
+                        // Ordem na Modal Gerar: OP, COD, DESC, MAT, PUN, QTD, LOTE, PESO
+                        cols = [1, 2, 3, 4, 5, 6, 7, 8];
+                    }
+                } else {
+                    // Ordem Tabela Principal: DATA, OP, COD, DESC, MAT, PUN, QTD, PESO
+                    // (Pula 7-LOTE e 9-CLIENTE)
+                    cols = [0, 1, 2, 3, 4, 5, 6, 8];
+                }
 
                 cols.forEach(idx => {
                     const td = document.createElement('td');
@@ -1577,6 +1591,8 @@
             const rows = Array.from(table.querySelectorAll('tbody tr.manual-row'));
             const isSaved = currentModalMode === 'saved';
             // Mapping visual index to data index
+            // Saved: OP(1), COD(2), DESC(3), MAT(4), PUN(5), LOTE(7), QTD(6), FAT(10)
+            // Generate: OP(1), COD(2), DESC(3), MAT(4), PUN(5), QTD(6), LOTE(7), PESO(8)
             const map = isSaved ? [1,2,3,4,5,7,6,10] : [1,2,3,4,5,6,7,8]; 
 
             const newMan = [];
