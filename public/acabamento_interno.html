@@ -718,7 +718,7 @@
     <!-- SCRIPT ORIGINAL -->
     <script>
     // ==========================================================================
-    // 0. CONFIGURAÇÕES E VARIÁVEIS GLOBAIS
+    // 0. CONFIGURAÇÕES, VARIÁVEIS GLOBAIS E DOM
     // ==========================================================================
     let allExcelData = [];
     let currentReportData = [];
@@ -772,7 +772,7 @@
     const modalControls = document.querySelector('.modal-controls');
 
     // ==========================================================================
-    // 1. UTILITÁRIOS (DATA, NÚMERO, RELÓGIO)
+    // 1. UTILITÁRIOS E UI
     // ==========================================================================
     setInterval(() => {
         const now = new Date();
@@ -780,10 +780,8 @@
         document.getElementById('clock-date').innerText = now.toLocaleDateString('pt-BR', {weekday: 'short', day: 'numeric', month: 'short'}).toUpperCase();
     }, 1000);
 
-    function hideLoadingScreen() {
-        const screen = document.getElementById('loading-screen');
-        if(screen) { screen.style.opacity = '0'; setTimeout(() => screen.style.display = 'none', 500); }
-    }
+    function showSpinner() { document.getElementById('loading-screen').style.display = 'flex'; document.getElementById('loading-screen').style.opacity = '1'; }
+    function hideSpinner() { const s = document.getElementById('loading-screen'); s.style.opacity = '0'; setTimeout(() => s.style.display = 'none', 500); }
 
     function formatDateTime(date) {
         const d = new Date(date);
@@ -804,11 +802,11 @@
     }
 
     // ==========================================================================
-    // 2. COMUNICAÇÃO COM API (UNIFICADA)
+    // 2. FUNÇÃO MESTRE DE API
     // ==========================================================================
-    async function apiFetch(action, method = 'GET', body = null, params = {}) {
+    async function apiRequest(action, method = 'GET', body = null, params = {}) {
         let url = `/api/acabamento-interno?action=${action}`;
-        for (const key in params) url += `&${key}=${params[key]}`;
+        for (const key in params) url += `&${key}=${encodeURIComponent(params[key])}`;
 
         const options = {
             method,
@@ -822,115 +820,161 @@
     }
 
     // ==========================================================================
-    // 3. CARREGAMENTO INICIAL E CONFIGURAÇÕES
+    // 3. CARREGAMENTO DE DADOS E CONFIGURAÇÕES (BANCO)
     // ==========================================================================
-    async function loadLastUpdate() {
+    async function initSystem() {
+        showSpinner();
         try {
-            const data = await apiFetch('load-config', 'GET', null, { config_key: 'last_update' });
-            if (data.last_updated) lastUpdateDateTimeSpan.textContent = formatDateTime(data.last_updated);
-        } catch (e) { lastUpdateDateTimeSpan.textContent = '---'; }
+            await Promise.all([
+                loadLastUpdate(),
+                loadMaterialDaysCorrelation(),
+                loadPosteriorCorrelation(),
+                loadSavedPrograms(),
+                loadRawDataFromServer()
+            ]);
+        } catch (e) {
+            console.error("Erro no boot:", e);
+        } finally {
+            hideSpinner();
+        }
+    }
+
+    async function loadLastUpdate() {
+        const data = await apiRequest('load-config', 'GET', null, { config_key: 'last_update' });
+        if (data.last_updated) lastUpdateDateTimeSpan.textContent = formatDateTime(data.last_updated);
     }
 
     async function loadMaterialDaysCorrelation() {
-        try {
-            const data = await apiFetch('load-config', 'GET', null, { config_key: 'material_days' });
-            if (data.materialDays) materialDaysMap = new Map(data.materialDays);
-        } catch (e) {}
+        const data = await apiRequest('load-config', 'GET', null, { config_key: 'material_days' });
+        if (data.materialDays) {
+            materialDaysMap = new Map(data.materialDays);
+            saveMaterialDaysButton.disabled = false;
+        }
     }
 
     async function loadPosteriorCorrelation() {
-        try {
-            const data = await apiFetch('load-config', 'GET', null, { config_key: 'posterior_map' });
-            if (data.posteriorCorrelation) {
-                posteriorMap = new Map(data.posteriorCorrelation.map(([op, apps]) => [
-                    op, apps.map(a => ({ data: new Date(a.data), quant: a.quant }))
-                ]));
-            }
-        } catch (e) {}
+        const data = await apiRequest('load-config', 'GET', null, { config_key: 'posterior_map' });
+        if (data.posteriorCorrelation) {
+            posteriorMap = new Map(data.posteriorCorrelation.map(([op, apps]) => [
+                op, apps.map(a => ({ data: new Date(a.data), quant: a.quant }))
+            ]));
+            savePosteriorButton.disabled = false;
+        }
     }
 
     async function loadRawDataFromServer() {
-        initialMessage.textContent = "Buscando registros...";
         try {
-            const rawData = await apiFetch('load-raw', 'GET');
-            if (rawData && rawData.length > 0) {
-                allExcelData = rawData.map(r => [
+            const raw = await apiRequest('load-raw'); // Chamar o GET padrão do index.js
+            if (raw && raw.length > 0) {
+                allExcelData = raw.map(r => [
                     new Date(r.data + 'T00:00:00'), r.op, r.codigo, r.descricao, r.material, 
-                    r.peso_un, r.quant, r.lote, r.peso_total, r.cliente, r.quant_fat
+                    parseFloat(r.peso_un), parseFloat(r.quant), r.lote, parseFloat(r.peso_total), r.cliente, parseFloat(r.quant_fat)
                 ]);
                 displayTable(allExcelData, 'tableContainer');
-                openModalButton.disabled = false; saveRawDataButton.disabled = false; clearRawDataButton.disabled = false;
                 initialMessage.style.display = 'none';
-            } else {
-                initialMessage.textContent = "Nenhum dado bruto no servidor.";
+                openModalButton.disabled = false; correlateButton.disabled = false;
+                saveRawDataButton.disabled = false; clearRawDataButton.disabled = false;
             }
-        } catch (e) { initialMessage.textContent = "Erro ao conectar."; }
-        finally { hideLoadingScreen(); }
+        } catch (e) { initialMessage.textContent = "Sem dados no servidor."; }
     }
 
     // ==========================================================================
-    // 4. PROGRAMAÇÕES SALVAS (SIDEBAR)
+    // 4. IMPORTAÇÃO DE ARQUIVOS (EXCEL)
     // ==========================================================================
-    async function loadSavedPrograms() {
-        savedList.innerHTML = '<li class="empty-list-message">Carregando...</li>';
-        try {
-            const savedPrograms = await apiFetch('saved-list');
-            savedList.innerHTML = ''; 
-            if (savedPrograms.length === 0) {
-                savedList.innerHTML = '<li class="empty-list-message">Nenhuma prog. salva.</li>';
-                return;
-            }
-            savedPrograms.forEach(program => {
-                const li = document.createElement('li');
-                const contentDiv = document.createElement('div');
-                contentDiv.className = 'list-item-content';
-                contentDiv.innerHTML = `
-                    <div class="list-item-title">${formatDateToDisplay(program.data_referencia)}</div>
-                    <div class="list-item-details">Peso: ${parsePtBrNumber(program.peso_total_agregado).toLocaleString('pt-BR')} KG</div>
-                `;
-                contentDiv.onclick = () => loadSavedProgramToModal(program.data_referencia);
-                
-                const delBtn = document.createElement('button');
-                delBtn.className = 'delete-program-btn';
-                delBtn.innerHTML = '<i class="fas fa-times"></i>';
-                delBtn.onclick = (e) => { e.stopPropagation(); deleteSavedProgram(program.data_referencia); };
-                
-                li.appendChild(contentDiv); li.appendChild(delBtn);
-                savedList.appendChild(li);
+    
+    // Principal (Programação Bruta)
+    chooseFileButton.onclick = () => fileInput.click();
+    fileInput.onchange = (e) => {
+        const file = e.target.files[0];
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const wb = XLSX.read(new Uint8Array(event.target.result), {type:'array', cellDates: true});
+            const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1});
+            allExcelData = data.slice(1).map(row => {
+                const cod = String(row[2] || '').trim();
+                const p = parsePtBrNumber(row[4]);
+                const q = parsePtBrNumber(row[5]);
+                const newRow = [row[0], row[1], cod, "", row[3], p, q, row[6], p*q, "", 0];
+                if (descriptionMap.has(cod)) {
+                    newRow[COL_MAP.DESCRICAO] = descriptionMap.get(cod)[0];
+                    newRow[COL_MAP.CLIENTE] = descriptionMap.get(cod)[1];
+                }
+                return newRow;
+            }).filter(r => r[0] instanceof Date);
+            displayTable(allExcelData, 'tableContainer');
+            saveRawDataButton.disabled = false;
+            initialMessage.style.display = 'none';
+            openModalButton.disabled = false; correlateButton.disabled = false;
+        };
+        reader.readAsArrayBuffer(file);
+    };
+
+    // Correlação: Descrições/Clientes
+    correlateButton.onclick = () => correlationFile.click();
+    correlationFile.onchange = (e) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const data = XLSX.utils.sheet_to_json(XLSX.read(new Uint8Array(event.target.result), {type:'array'}).Sheets[0], {header:1});
+            descriptionMap.clear();
+            data.slice(1).forEach(r => {
+                const c = String(r[2]||'').trim();
+                if(c) descriptionMap.set(c, [String(r[3]||'').trim(), String(r[4]||'').trim()]);
             });
-        } catch (e) { savedList.innerHTML = '<li class="empty-list-message">Erro na lista.</li>'; }
-    }
+            if (allExcelData.length > 0) {
+                allExcelData.forEach(row => {
+                    if (descriptionMap.has(row[COL_MAP.CODIGO])) {
+                        row[COL_MAP.DESCRICAO] = descriptionMap.get(row[COL_MAP.CODIGO])[0];
+                        row[COL_MAP.CLIENTE] = descriptionMap.get(row[COL_MAP.CODIGO])[1];
+                    }
+                });
+                displayTable(allExcelData, 'tableContainer');
+            }
+            alert("Descrições vinculadas!");
+        };
+        reader.readAsArrayBuffer(e.target.files[0]);
+    };
 
-    async function loadSavedProgramToModal(dataRef) {
-        resetModalState('saved');
-        modalTitle.textContent = `Abrindo ${formatDateToDisplay(dataRef)}...`;
-        try {
-            const programacao = await apiFetch('programacao', 'GET', null, { data_referencia: dataRef });
-            const adherence = await apiFetch('adherence-status', 'GET', null, { data_referencia: dataRef });
-            const obsData = await apiFetch('load-config', 'GET', null, { config_key: `obs_${dataRef}` });
+    // Correlação: Materiais/Dias
+    correlateMaterialsButton.onclick = () => materialDaysFile.click();
+    materialDaysFile.onchange = (e) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const data = XLSX.utils.sheet_to_json(XLSX.read(new Uint8Array(event.target.result), {type:'array'}).Sheets[0], {header:1});
+            materialDaysMap.clear();
+            data.forEach(r => {
+                const m = String(r[0]||'').toUpperCase().trim();
+                const d = parseInt(r[1]);
+                if(m && !isNaN(d)) materialDaysMap.set(m, d);
+            });
+            saveMaterialDaysButton.disabled = false;
+            alert("Mapeamento de Dias carregado!");
+        };
+        reader.readAsArrayBuffer(e.target.files[0]);
+    };
 
-            currentReportData = programacao;
-            currentAdherenceStatus = new Array(programacao.length).fill(false);
-            programacao.forEach((row, i) => { if(adherence[i]) currentAdherenceStatus[i] = true; });
-
-            reportDateInput.value = dataRef;
-            targetDateForPDF = new Date(dataRef + 'T00:00:00');
-            observacoesTextarea.value = obsData.config_value || '';
-
-            displayTable(currentReportData, 'modalReportContainer', 'saved');
-            calculateModalAdherence();
-
-            modalTitle.innerHTML = `<i class="fas fa-save" style="color: #fbbf24;"></i> Prog: ${formatDateToDisplay(dataRef)}`;
-            generatePDFButton.style.display = 'inline-flex'; 
-            saveReportButton.style.display = 'inline-flex';
-            addManualRowButton.style.display = 'inline-flex';
-            observacoesContainer.style.display = 'block';
-            reportModal.classList.add('show');
-        } catch (e) { alert("Erro ao carregar programa."); }
-    }
+    // Correlação: Produções Posteriores
+    correlatePosteriorButton.onclick = () => posteriorFile.click();
+    posteriorFile.onchange = (e) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const data = XLSX.utils.sheet_to_json(XLSX.read(new Uint8Array(event.target.result), {type:'array', cellDates: true}).Sheets[0], {header:1});
+            posteriorMap.clear();
+            data.slice(1).forEach(r => {
+                const op = String(r[1]||'').trim();
+                const q = parsePtBrNumber(r[2]);
+                if(r[0] instanceof Date && op && q > 0) {
+                    if(!posteriorMap.has(op)) posteriorMap.set(op, []);
+                    posteriorMap.get(op).push({ data: r[0], quant: q });
+                }
+            });
+            savePosteriorButton.disabled = false;
+            alert("Posteriores carregados!");
+        };
+        reader.readAsArrayBuffer(e.target.files[0]);
+    };
 
     // ==========================================================================
-    // 5. LÓGICA DE GERAÇÃO E CÁLCULO
+    // 5. GERAÇÃO E AGREGAÇÃO DA PROGRAMAÇÃO
     // ==========================================================================
     function getBusinessDayOffset(startDate, days) {
         let date = new Date(startDate);
@@ -942,6 +986,24 @@
         return date;
     }
 
+    function applyPosteriorDeduction(dataArray) {
+        if (posteriorMap.size === 0) return dataArray;
+        return dataArray.map(row => {
+            const op = String(row[COL_MAP.OP] || '').trim();
+            const d = row[COL_MAP.DATA]; 
+            const q = row[COL_MAP.QTD];
+            let postQ = 0;
+            if (op && posteriorMap.has(op) && d instanceof Date) {
+                postQ = posteriorMap.get(op).reduce((sum, p) => (p.data.getTime() >= d.getTime() ? sum + p.quant : sum), 0);
+            }
+            const realQ = Math.max(0, q - postQ);
+            const newRow = [...row]; 
+            newRow[COL_MAP.QTD] = realQ; 
+            newRow[COL_MAP.PESO_TOTAL] = row[COL_MAP.PESO_UN] * realQ;
+            return newRow;
+        }).filter(r => r[COL_MAP.QTD] > 0 || r[COL_MAP.DATA] === null);
+    }
+
     generateReportButton.onclick = () => {
         const dateStr = reportDateInput.value;
         if (!dateStr) return alert("Selecione uma data.");
@@ -950,14 +1012,15 @@
 
         const filtered = allExcelData.filter(row => {
             const d = row[COL_MAP.DATA];
-            if (!(d instanceof Date)) return false;
-            const days = materialDaysMap.get(String(row[COL_MAP.MATERIAL]).trim().toUpperCase()) || 5;
+            const mat = String(row[COL_MAP.MATERIAL]).trim().toUpperCase();
+            const days = materialDaysMap.get(mat) || 5;
             return getBusinessDayOffset(d, days).getTime() === refDate.getTime();
         });
 
-        // Agregação por código
+        // Agregação
         const map = new Map();
         filtered.forEach(r => {
+            if (String(r[COL_MAP.DESCRICAO]).trim() === "") return;
             const key = r[COL_MAP.CODIGO];
             if (map.has(key)) {
                 map.get(key)[COL_MAP.QTD] += r[COL_MAP.QTD];
@@ -967,96 +1030,183 @@
             }
         });
 
-        currentReportData = Array.from(map.values());
+        currentReportData = applyPosteriorDeduction(Array.from(map.values()));
         currentAdherenceStatus = new Array(currentReportData.length).fill(false);
         displayTable(currentReportData, 'modalReportContainer', 'generate');
         
+        observacoesContainer.style.display = 'block';
         saveReportButton.style.display = 'inline-flex';
         generatePDFButton.style.display = 'inline-flex';
         addManualRowButton.style.display = 'inline-flex';
-        observacoesContainer.style.display = 'block';
     };
 
     // ==========================================================================
-    // 6. SALVAMENTO E EXCLUSÃO
+    // 6. BOTÕES DE SALVAMENTO (PARA O NEON)
     // ==========================================================================
+    
+    // Salvar Dados Brutos (Raw)
+    saveRawDataButton.onclick = async () => {
+        showSpinner();
+        const dataToSave = allExcelData.map(r => [
+            r[0].toISOString().split('T')[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9], r[10]
+        ]);
+        try {
+            await apiRequest('import-raw', 'POST', dataToSave);
+            alert("Dados Brutos salvos no servidor!");
+            loadRawDataFromServer();
+        } catch (e) { alert("Erro ao salvar Raw."); }
+        finally { hideSpinner(); }
+    };
+
+    // Salvar Programação Final
     saveReportButton.onclick = async () => {
         updateManualRowsData();
+        updateReportDataQuantFat();
         const fullData = [...currentReportData, ...manualRowsData];
         const dateRef = reportDateInput.value;
-        const btn = saveReportButton;
-
-        btn.disabled = true; btn.textContent = "Salvando...";
+        showSpinner();
         try {
-            await apiFetch('save-final', 'POST', {
+            await apiRequest('save-final', 'POST', {
                 data_referencia: dateRef,
                 programacao: fullData,
+                adherence_status: currentAdherenceStatus,
                 observacoes: observacoesTextarea.value
             });
             alert("Programação salva com sucesso!");
             loadSavedPrograms();
         } catch (e) { alert("Erro ao salvar."); }
-        finally { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save"></i> Salvar'; }
+        finally { hideSpinner(); }
     };
 
-    async function deleteSavedProgram(dataRef) {
-        if (!confirm(`Excluir programação de ${formatDateToDisplay(dataRef)}?`)) return;
-        try {
-            await apiFetch('delete-programacao', 'POST', { data_referencia: dataRef });
-            loadSavedPrograms();
-        } catch (e) { alert("Erro ao excluir."); }
+    // Salvar Materiais/Dias
+    saveMaterialDaysButton.onclick = async () => {
+        await apiRequest('save-config', 'POST', { 
+            config_key: 'material_days', 
+            config_value: { materialDays: Array.from(materialDaysMap.entries()) } 
+        });
+        alert("Configurações de Materiais salvas!");
+    };
+
+    // Salvar Posteriores
+    savePosteriorButton.onclick = async () => {
+        const data = Array.from(posteriorMap.entries()).map(([op, apps]) => [
+            op, apps.map(a => ({ data: a.data.toISOString(), quant: a.quant }))
+        ]);
+        await apiRequest('save-config', 'POST', { 
+            config_key: 'posterior_map', 
+            config_value: { posteriorCorrelation: data } 
+        });
+        alert("Configurações de Posteriores salvas!");
+    };
+
+    // Atualizar Data/Hora do Sistema
+    updateLastUpdateButton.onclick = async () => {
+        if (prompt("Senha:") !== "ATUALIZAR") return;
+        const now = new Date().toISOString();
+        await apiRequest('save-config', 'POST', { 
+            config_key: 'last_update', 
+            config_value: { last_updated: now } 
+        });
+        loadLastUpdate();
+    };
+
+    // Limpar Raw
+    clearRawDataButton.onclick = async () => {
+        if(!confirm("Apagar TUDO do servidor?")) return;
+        await apiRequest('clear-raw', 'POST');
+        location.reload();
+    };
+
+    // ==========================================================================
+    // 7. PROGRAMAÇÕES SALVAS (SIDEBAR)
+    // ==========================================================================
+    async function loadSavedPrograms() {
+        savedList.innerHTML = '<li>Carregando...</li>';
+        const data = await apiRequest('saved-list');
+        savedList.innerHTML = '';
+        if(data.length === 0) savedList.innerHTML = '<li class="empty-list-message">Vazio</li>';
+        data.forEach(p => {
+            const li = document.createElement('li');
+            li.innerHTML = `
+                <div class="list-item-content">
+                    <div class="list-item-title">${formatDateToDisplay(p.data_referencia)}</div>
+                    <div class="list-item-details">Peso: ${parsePtBrNumber(p.peso_total_agregado).toLocaleString('pt-BR')} KG</div>
+                </div>
+                <button class="delete-program-btn" onclick="event.stopPropagation(); deleteSavedProgram('${p.data_referencia}')"><i class="fas fa-times"></i></button>
+            `;
+            li.onclick = () => loadSavedProgramToModal(p.data_referencia);
+            savedList.appendChild(li);
+        });
     }
 
-    async function saveLineAdherenceStatus(dateRef, index, status) {
+    async function loadSavedProgramToModal(dateRef) {
+        resetModalState('saved');
+        showSpinner();
         try {
-            await apiFetch('update-adherence', 'POST', {
-                data_referencia: dateRef,
-                item_index: index,
-                new_status: status
-            });
-            currentAdherenceStatus[index] = status;
-            calculateModalAdherence();
-        } catch (e) { console.error("Erro aderência"); }
+            const prog = await apiRequest('programacao', 'GET', null, { data_referencia: dateRef });
+            const adh = await apiRequest('adherence-status', 'GET', null, { data_referencia: dateRef });
+            const obs = await apiRequest('load-config', 'GET', null, { config_key: `obs_${dateRef}` });
+
+            currentReportData = prog;
+            currentAdherenceStatus = new Array(prog.length).fill(false);
+            prog.forEach((_, i) => { if(adh[i]) currentAdherenceStatus[i] = true; });
+
+            reportDateInput.value = dateRef;
+            targetDateForPDF = new Date(dateRef + 'T00:00:00');
+            observacoesTextarea.value = obs.config_value || '';
+
+            displayTable(currentReportData, 'modalReportContainer', 'saved');
+            modalTitle.innerHTML = `<i class="fas fa-save" style="color: #fbbf24;"></i> ${formatDateToDisplay(dateRef)}`;
+            
+            observacoesContainer.style.display = 'block';
+            saveReportButton.style.display = 'inline-flex';
+            generatePDFButton.style.display = 'inline-flex';
+            addManualRowButton.style.display = 'inline-flex';
+            reportModal.classList.add('show');
+        } catch (e) { alert("Erro ao abrir."); }
+        finally { hideSpinner(); }
+    }
+
+    async function deleteSavedProgram(dateRef) {
+        if(!confirm("Excluir definitivamente?")) return;
+        await apiRequest('delete-programacao', 'POST', { data_referencia: dateRef });
+        loadSavedPrograms();
     }
 
     // ==========================================================================
-    // 7. TABELA E PDF
+    // 8. RENDERIZAÇÃO DE TABELAS E PDF
     // ==========================================================================
     function displayTable(data, containerId, mode = null) {
         const container = document.getElementById(containerId);
         container.innerHTML = "";
-        if (!data || data.length === 0) {
-            container.innerHTML = "<p style='padding:20px; text-align:center; color:#71717a;'>Nenhum dado para exibir.</p>";
-            return;
-        }
-
         const table = document.createElement('table');
         const isSaved = mode === 'saved';
+        const isModal = containerId === 'modalReportContainer';
+
         const headers = isSaved ? ["OP", "CÓDIGO", "DESCRIÇÃO", "MATERIAL", "PESO UN", "LOTE", "QTD", "FAT.", "OK"] : 
                                  ["DATA", "OP", "CÓDIGO", "DESCRIÇÃO", "MATERIAL", "PESO UN", "QTD", "LOTE", "PESO TOTAL", "CLIENTE"];
         
-        let headerRow = "<thead><tr>";
-        headers.forEach(h => headerRow += `<th>${h}</th>`);
-        headerRow += "</tr></thead>";
-        table.innerHTML = headerRow;
+        let headHtml = "<thead><tr>";
+        headers.forEach(h => headHtml += `<th>${h}</th>`);
+        headHtml += "</tr></thead>";
+        table.innerHTML = headHtml;
 
         const tbody = document.createElement('tbody');
         data.forEach((row, i) => {
             const tr = document.createElement('tr');
             if (row[COL_MAP.DATA] === null) tr.classList.add('manual-row');
 
-            // Lógica de colunas simplificada para o exemplo
             let html = "";
             if (isSaved) {
-                html += `<td>${row[1]}</td><td>${row[2]}</td><td>${row[3]}</td><td>${row[4]}</td><td>${parsePtBrNumber(row[5]).toFixed(2)}</td><td>${row[7]}</td><td>${row[6]}</td>`;
+                html += `<td>${row[1]}</td><td>${row[2]}</td><td>${row[3]}</td><td>${row[4]}</td><td>${row[5].toFixed(2)}</td><td>${row[7]}</td><td>${row[6]}</td>`;
                 html += `<td><input type="number" class="quant-fat-input" value="${row[10] || 0}" onchange="updateTotalWeightDisplay()"></td>`;
-                html += `<td><input type="checkbox" class="adherence-checkbox" ${currentAdherenceStatus[i] ? 'checked' : ''} onchange="saveLineAdherenceStatus(reportDateInput.value, ${i}, this.checked)"></td>`;
+                html += `<td><input type="checkbox" class="adherence-checkbox" ${currentAdherenceStatus[i] ? 'checked' : ''} onchange="updateAdherence(${i}, this.checked)"></td>`;
             } else {
                 row.slice(0, 10).forEach((val, idx) => {
                     let d = val;
                     if(idx === 0 && val instanceof Date) d = val.toLocaleDateString('pt-BR');
-                    if([5, 8].includes(idx)) d = parsePtBrNumber(val).toLocaleString('pt-BR', {minimumFractionDigits:2});
-                    html += `<td>${d || ''}</td>`;
+                    if([5, 8].includes(idx)) d = val.toLocaleString('pt-BR', {minimumFractionDigits:2});
+                    html += `<td ${idx === 5 && !isModal ? 'contenteditable="true" class="editable-peso"' : ''}>${d || ''}</td>`;
                 });
             }
             tr.innerHTML = html;
@@ -1067,118 +1217,96 @@
         updateTotalWeightDisplay();
     }
 
-    function updateTotalWeightDisplay() {
-        let prog = 0, real = 0;
-        const rows = document.querySelectorAll('#modalReportContainer tbody tr');
-        rows.forEach((tr, i) => {
-            const rowData = [...currentReportData, ...manualRowsData][i];
-            if (!rowData) return;
-            const pUn = parsePtBrNumber(rowData[COL_MAP.PESO_UN]);
-            const qProg = parsePtBrNumber(rowData[COL_MAP.QTD]);
-            prog += (pUn * qProg);
-
-            const inp = tr.querySelector('.quant-fat-input');
-            if (inp) real += (pUn * parsePtBrNumber(inp.value));
+    async function updateAdherence(index, status) {
+        currentAdherenceStatus[index] = status;
+        calculateModalAdherence();
+        await apiRequest('update-adherence', 'POST', {
+            data_referencia: reportDateInput.value,
+            item_index: index,
+            new_status: status
         });
-        totalProgrammedWeightValue.textContent = prog.toLocaleString('pt-BR', {minimumFractionDigits:2}) + " KG";
-        totalRealizedWeightValue.textContent = real.toLocaleString('pt-BR', {minimumFractionDigits:2}) + " KG";
     }
 
-    function updateManualRowsData() { /* Implementar se usar add linha manual */ }
     function calculateModalAdherence() {
         const total = currentAdherenceStatus.length;
         const count = currentAdherenceStatus.filter(v => v === true).length;
-        const pct = total > 0 ? (count / total) * 100 : 0;
-        modalAdherenceValue.textContent = pct.toFixed(2) + "%";
+        modalAdherenceValue.textContent = (total > 0 ? (count / total * 100).toFixed(2) : "0.00") + "%";
         modalAdherenceCount.textContent = `${count}/${total} Itens`;
+    }
+
+    function updateTotalWeightDisplay() {
+        let pWeight = 0, rWeight = 0;
+        const rows = [...currentReportData, ...manualRowsData];
+        const domRows = document.querySelectorAll('#modalReportContainer tbody tr');
+
+        rows.forEach((r, i) => {
+            pWeight += r[COL_MAP.PESO_TOTAL];
+            const inp = domRows[i]?.querySelector('.quant-fat-input');
+            if(inp) rWeight += (r[COL_MAP.PESO_UN] * parsePtBrNumber(inp.value));
+        });
+
+        totalProgrammedWeightValue.textContent = pWeight.toLocaleString('pt-BR') + " KG";
+        totalRealizedWeightValue.textContent = rWeight.toLocaleString('pt-BR') + " KG";
+    }
+
+    function updateManualRowsData() {
+        const domRows = document.querySelectorAll('#modalReportContainer tbody tr.manual-row');
+        manualRowsData = Array.from(domRows).map(tr => {
+            const cells = tr.cells;
+            return [null, cells[0].textContent, cells[1].textContent, cells[2].textContent, cells[3].textContent, parsePtBrNumber(cells[4].textContent), parsePtBrNumber(cells[6].textContent), cells[5].textContent, parsePtBrNumber(cells[4].textContent)*parsePtBrNumber(cells[6].textContent), "", 0];
+        });
+    }
+
+    function updateReportDataQuantFat() {
+        const domRows = document.querySelectorAll('#modalReportContainer tbody tr:not(.manual-row)');
+        domRows.forEach((tr, i) => {
+            const inp = tr.querySelector('.quant-fat-input');
+            if(inp) currentReportData[i][COL_MAP.QUANT_FAT] = parsePtBrNumber(inp.value);
+        });
     }
 
     function resetModalState(mode) {
         currentModalMode = mode;
         currentReportData = []; manualRowsData = []; currentAdherenceStatus = [];
         observacoesTextarea.value = "";
-        generatePDFButton.style.display = 'none';
-        saveReportButton.style.display = 'none';
-        addManualRowButton.style.display = 'none';
-        observacoesContainer.style.display = 'none';
         document.getElementById('modalReportContainer').innerHTML = "";
     }
 
-    // PDF GENERATION (Simplificado)
+    addManualRowButton.onclick = () => {
+        manualRowsData.push([null, "OP", "COD", "DESC", "MAT", 0, 0, "LOTE", 0, "", 0]);
+        displayTable(currentReportData, 'modalReportContainer', currentModalMode);
+    };
+
+    // PDF 
     generatePDFButton.onclick = () => {
+        updateManualRowsData(); updateReportDataQuantFat();
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF('l', 'mm', 'a4');
-        doc.setFontSize(16);
-        doc.text(`PROGRAMAÇÃO ACABAMENTO - DATA: ${formatDateToDisplay(reportDateInput.value)}`, 14, 15);
-        
-        const rows = [...currentReportData, ...manualRowsData].map(r => [
-            r[1], r[2], r[3], r[4], r[9], r[6], r[7], parsePtBrNumber(r[8]).toFixed(2)
+        doc.setFillColor(24, 24, 27); doc.rect(0, 0, 297, 25, 'F');
+        doc.setTextColor(255); doc.setFontSize(18); doc.text("PROGRAMAÇÃO ACABAMENTO INTERNO", 14, 15);
+        doc.setTextColor(251, 191, 36); doc.setFontSize(12); doc.text(`DATA: ${targetDateForPDF.toLocaleDateString('pt-BR')}`, 14, 22);
+
+        const body = [...currentReportData, ...manualRowsData].map(r => [
+            r[1], r[0] ? r[0].toLocaleDateString('pt-BR') : 'MANUAL', r[2], r[3], r[4], r[9], r[6], r[7], r[8].toLocaleString('pt-BR')
         ]);
 
         doc.autoTable({
-            head: [["OP", "CÓDIGO", "DESCRIÇÃO", "MATERIAL", "CLIENTE", "QTD", "LOTE", "PESO TOTAL"]],
-            body: rows,
-            startY: 25,
-            theme: 'grid',
-            headStyles: { fillColor: [24, 24, 27], textColor: [251, 191, 36] }
+            head: [["OP", "Apont.", "Cód.", "Descrição", "Material", "Cliente", "Qtd", "Lote", "Peso"]],
+            body, startY: 30, theme: 'grid', styles: { fontSize: 7 },
+            headStyles: { fillColor: [24,24,27], textColor: [251,191,36] }
         });
         
         if(observacoesTextarea.value) {
-            doc.text("Observações:", 14, doc.autoTable.previous.finalY + 10);
-            doc.setFontSize(10);
-            doc.text(observacoesTextarea.value, 14, doc.autoTable.previous.finalY + 15);
+            doc.setTextColor(0); doc.text("Observações:", 14, doc.autoTable.previous.finalY + 10);
+            doc.setFontSize(9); doc.text(observacoesTextarea.value, 14, doc.autoTable.previous.finalY + 15);
         }
-
         doc.save(`Prog_${reportDateInput.value}.pdf`);
     };
 
-    // Botão Voltar
-    document.getElementById('backButton').onclick = () => window.location.href = 'processos.html';
-
-    // Excel Loading
-    chooseFileButton.onclick = () => fileInput.click();
-    fileInput.onchange = (e) => {
-        const file = e.target.files[0];
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            const wb = XLSX.read(new Uint8Array(event.target.result), {type:'array', cellDates: true});
-            const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1});
-            allExcelData = data.slice(1).map(r => [
-                r[0], r[1], r[2], "", r[3], parsePtBrNumber(r[4]), parsePtBrNumber(r[5]), r[6], parsePtBrNumber(r[4])*parsePtBrNumber(r[5]), "", 0
-            ]);
-            displayTable(allExcelData, 'tableContainer');
-            saveRawDataButton.disabled = false;
-        };
-        reader.readAsArrayBuffer(file);
-    };
-
-    saveRawDataButton.onclick = async () => {
-        showSpinner();
-        try {
-            const dataToSave = allExcelData.map(r => ({
-                data: r[0] instanceof Date ? r[0].toISOString().split('T')[0] : r[0],
-                op: r[1], codigo: r[2], descricao: r[3], material: r[4], 
-                peso_un: r[5], quant: r[6], lote: r[7], peso_total: r[8], cliente: r[9], quant_fat: r[10]
-            }));
-            await apiFetch('import-raw', 'POST', dataToSave);
-            alert("Dados brutos salvos!");
-            location.reload();
-        } catch(e) { alert("Erro ao salvar raw."); }
-        finally { hideSpinner(); }
-    };
-
     // ==========================================================================
-    // 8. INICIALIZAÇÃO
+    // 9. INICIALIZAÇÃO FINAL
     // ==========================================================================
-    window.onload = async () => {
-        await Promise.all([
-            loadLastUpdate(),
-            loadMaterialDaysCorrelation(),
-            loadPosteriorCorrelation(),
-            loadSavedPrograms(),
-            loadRawDataFromServer()
-        ]);
-    };
+    window.onload = initSystem;
 </script>
 </body>
 </html>
