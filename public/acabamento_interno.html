@@ -862,29 +862,52 @@
         reader.readAsArrayBuffer(file);
     };
 
-    // Carregar Descrições
+    // Correlacionar Descrições (Arquivo De-Para)
     correlateButton.onclick = () => correlationFile.click();
+    
     correlationFile.onchange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        
         const reader = new FileReader();
         reader.onload = (event) => {
-            const data = XLSX.utils.sheet_to_json(XLSX.read(new Uint8Array(event.target.result), {type:'array'}).Sheets[0], {header:1});
-            descriptionMap.clear();
-            data.slice(1).forEach(r => {
-                const c = String(r[2]||'').trim();
-                if(c) descriptionMap.set(c, [String(r[3]||'').trim(), String(r[4]||'').trim()]);
-            });
-            if (allExcelData.length > 0) {
-                allExcelData.forEach(row => {
-                    if (descriptionMap.has(row[COL_MAP.CODIGO])) {
-                        row[COL_MAP.DESCRICAO] = descriptionMap.get(row[COL_MAP.CODIGO])[0];
-                        row[COL_MAP.CLIENTE] = descriptionMap.get(row[COL_MAP.CODIGO])[1];
+            try {
+                const data = XLSX.utils.sheet_to_json(XLSX.read(new Uint8Array(event.target.result), {type:'array'}).Sheets[0], {header:1});
+                
+                descriptionMap.clear();
+                
+                // Mapeia o arquivo (Coluna C=Código, D=Descrição, E=Cliente)
+                data.slice(1).forEach(r => {
+                    const c = String(r[2]||'').trim();
+                    if(c) {
+                        descriptionMap.set(c, [
+                            String(r[3]||'').trim(), // Descrição
+                            String(r[4]||'').trim()  // Cliente
+                        ]);
                     }
                 });
-                displayTable(allExcelData, 'tableContainer');
+
+                // Atualiza os dados que já estão na memória (allExcelData)
+                if (allExcelData.length > 0) {
+                    allExcelData.forEach(row => {
+                        const codigo = String(row[COL_MAP.CODIGO]).trim();
+                        if (descriptionMap.has(codigo)) {
+                            row[COL_MAP.DESCRICAO] = descriptionMap.get(codigo)[0];
+                            row[COL_MAP.CLIENTE] = descriptionMap.get(codigo)[1];
+                        }
+                    });
+                    // Redesenha a tabela de fundo para você ver que funcionou
+                    displayTable(allExcelData, 'tableContainer');
+                }
+                
+                alert(`Sucesso! ${descriptionMap.size} descrições carregadas.`);
+            } catch (err) {
+                alert("Erro ao ler arquivo de correlação. Verifique o formato.");
+                console.error(err);
             }
-            alert("Descrições correlacionadas com sucesso!");
+            event.target.value = null; // Reseta o input
         };
-        reader.readAsArrayBuffer(e.target.files[0]);
+        reader.readAsArrayBuffer(file);
     };
 
     // Carregar Materiais/Dias
@@ -976,29 +999,78 @@
     generateReportButton.onclick = () => {
         const dateStr = reportDateInput.value;
         if (!dateStr) return alert("Selecione uma data.");
+        
+        // Cria a data de referência (zera as horas para evitar problemas de fuso)
         const parts = dateStr.split('-');
-        const refDate = new Date(parts[0], parts[1]-1, parts[2]); refDate.setHours(0,0,0,0);
+        const refDate = new Date(parts[0], parts[1]-1, parts[2]); 
+        refDate.setHours(0,0,0,0);
         targetDateForPDF = refDate;
 
-        const filt = allExcelData.filter(row => {
+        // 1. Filtra os dados baseado na Data de Entrega - Dias de Processo
+        const filtered = allExcelData.filter(row => {
             const d = row[COL_MAP.DATA];
-            if (!(d instanceof Date)) return false;
-            const rd = new Date(d); rd.setHours(0,0,0,0);
+            
+            // Se não tiver data, ignora
+            if (!(d instanceof Date) || isNaN(d)) return false;
+            
+            // Pega o material e calcula os dias de antecedência
             const mat = String(row[COL_MAP.MATERIAL]||'').toUpperCase().trim();
-            const days = materialDaysMap.get(mat) || 5;
-            return getBusinessDayOffset(rd, days).getTime() === refDate.getTime();
+            const days = materialDaysMap.get(mat) || 5; // Padrão 5 dias se não achar material
+            
+            // Calcula a data que deveria estar no acabamento
+            const dataCalculada = getBusinessDayOffset(d, days);
+            
+            // Compara (ignorando horas)
+            return dataCalculada.getTime() === refDate.getTime();
         });
 
-        let agg = aggregateData(filt);
+        // 2. Agrega os dados (Soma quantidades do mesmo código)
+        const map = new Map();
+        filtered.forEach(r => {
+            // CORREÇÃO AQUI: Removemos a linha que ignorava itens sem descrição.
+            // Agora, se não tiver descrição, ele tenta buscar no mapa novamente.
+            
+            const codigoKey = String(r[COL_MAP.CODIGO]).trim();
+            
+            // Tenta recuperar descrição e cliente caso o mapa tenha sido carregado depois
+            if (descriptionMap.has(codigoKey)) {
+                r[COL_MAP.DESCRICAO] = descriptionMap.get(codigoKey)[0];
+                r[COL_MAP.CLIENTE] = descriptionMap.get(codigoKey)[1];
+            }
+
+            if (map.has(codigoKey)) {
+                // Se já existe, soma as quantidades
+                map.get(codigoKey)[COL_MAP.QTD] += r[COL_MAP.QTD];
+                map.get(codigoKey)[COL_MAP.PESO_TOTAL] += r[COL_MAP.PESO_TOTAL];
+            } else {
+                // Se é novo, adiciona
+                map.set(codigoKey, [...r]);
+            }
+        });
+
+        // 3. Aplica a dedução de peças já prontas (Posteriores)
+        let agg = Array.from(map.values());
         agg = applyPosteriorDeduction(agg);
+        
         currentReportData = agg;
         currentAdherenceStatus = new Array(agg.length).fill(false);
         
+        // Exibe na tela
         displayTable(agg, 'modalReportContainer', 'generate');
+        
+        // Libera os botões
         saveReportButton.style.display = 'inline-flex';
         generatePDFButton.style.display = 'inline-flex';
         addManualRowButton.style.display = 'inline-flex';
         observacoesContainer.style.display = 'block';
+        
+        if (agg.length === 0) {
+            document.getElementById('modalReportContainer').innerHTML = `
+                <p style='text-align: center; color: var(--text-muted); padding: 40px;'>
+                    Nenhum item programado para esta data (${formatDateToDisplay(dateStr)}).<br>
+                    Verifique se o arquivo Excel e o arquivo de Materiais/Dias foram carregados.
+                </p>`;
+        }
     };
 
     // ==========================================================================
