@@ -1,18 +1,24 @@
-import pool from '../../db.js';
+import pool from '../db.js'; // Importa o seu db.js que está na pasta pai
 
 export default async function handler(req, res) {
-    const client = await pool.connect();
-    // Captura o nome da ação da URL (ex: 'save-config', 'import-raw', etc)
-    const { action } = req.query; 
+    // Tenta conectar ao banco
+    let client;
+    try {
+        client = await pool.connect();
+    } catch (dbError) {
+        console.error("Erro de conexão com Banco:", dbError);
+        return res.status(500).json({ error: "Falha ao conectar no banco de dados." });
+    }
+
+    const { action } = req.query; // Pega o nome da ação da URL (ex: 'registros')
 
     try {
         // =================================================================
-        // 1. CONFIGURAÇÕES (Last Update, Materiais, Posteriores, Obs)
+        // 1. CONFIGURAÇÕES & UTILITÁRIOS
         // =================================================================
         
-        // Salvar Configuração Genérica (JSONB)
+        // Salvar configurações diversas (Data update, Dias/Material, Posteriores)
         if (action === 'save-config' || action === 'save-last-update' || action === 'save-material-days' || action === 'save-posterior-correlation') {
-            // Normaliza o input para salvar na tabela ai_configs
             let key, value;
             
             if (action === 'save-last-update') {
@@ -37,7 +43,7 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true });
         }
 
-        // Carregar Configurações
+        // Carregar configurações
         if (action === 'load-last-update') {
             const r = await client.query("SELECT config_value FROM ai_configs WHERE config_key = 'last_updated'");
             const lastUpdated = r.rows.length > 0 ? r.rows[0].config_value.value : null;
@@ -64,12 +70,12 @@ export default async function handler(req, res) {
         }
 
         // =================================================================
-        // 2. DADOS BRUTOS (Raw Data / Excel Import)
+        // 2. DADOS BRUTOS (EXCEL)
         // =================================================================
         
-        // Importar dados brutos (Limpa tabela e insere novos)
+        // Salvar Excel importado
         if (action === 'import-raw') {
-            const data = req.body; // Array de linhas
+            const data = req.body; 
             await client.query('BEGIN');
             await client.query('TRUNCATE TABLE ai_raw_data RESTART IDENTITY');
             
@@ -80,8 +86,7 @@ export default async function handler(req, res) {
             `;
 
             for (const row of data) {
-                // row vem como array do excel [data, op, cod, desc, mat, peso, qtd, lote, peso_tot, cliente, fat]
-                // Ajuste de data se necessário (string vazia vira null)
+                // row vem como array do excel
                 const dateVal = (row[0] && row[0] !== '') ? row[0] : null;
                 
                 await client.query(insertQuery, [
@@ -93,35 +98,33 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true });
         }
 
-        // Ler registros brutos
+        // Ler registros brutos para preencher a tela inicial
         if (action === 'registros') {
             const result = await client.query("SELECT to_char(data, 'YYYY-MM-DD') as data, op, codigo, descricao, material, peso_un, quant, lote, peso_total, cliente, quant_fat FROM ai_raw_data ORDER BY id ASC");
             return res.status(200).json(result.rows);
         }
 
-        // Limpar registros brutos
         if (action === 'clear-raw') {
             await client.query('TRUNCATE TABLE ai_raw_data RESTART IDENTITY');
             return res.status(200).json({ success: true });
         }
 
         // =================================================================
-        // 3. PROGRAMAÇÃO FINAL (Salvar, Listar, Carregar, Deletar)
+        // 3. PROGRAMAÇÃO FINAL (SALVA)
         // =================================================================
 
-        // Salvar Programação Final (Sobrescreve se existir data igual)
         if (action === 'save-final') {
             const { data_referencia, programacao, adherence_status, observacoes } = req.body;
             
             await client.query('BEGIN');
 
-            // 1. Remove existente para essa data (Cascade remove itens)
+            // Limpa dados antigos dessa data
             await client.query('DELETE FROM ai_reports WHERE data_referencia = $1', [data_referencia]);
             
-            // 2. Insere Cabeçalho
+            // Cria novo cabeçalho
             await client.query('INSERT INTO ai_reports (data_referencia, observacoes) VALUES ($1, $2)', [data_referencia, observacoes]);
 
-            // 3. Insere Itens
+            // Insere itens
             const itemQuery = `
                 INSERT INTO ai_report_items 
                 (data_referencia, op, codigo, descricao, material, peso_un, quant, lote, peso_total, cliente, quant_fat, item_index) 
@@ -130,7 +133,6 @@ export default async function handler(req, res) {
             
             let idx = 0;
             for (const row of programacao) {
-                // row format: [data(ignored here), op, cod, desc, mat, peso_un, qtd, lote, peso_tot, cli, fat]
                 await client.query(itemQuery, [
                     data_referencia, 
                     row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8], row[9], row[10], 
@@ -139,11 +141,9 @@ export default async function handler(req, res) {
                 idx++;
             }
 
-            // 4. Salvar Aderência (Se houver)
+            // Salva aderência
             if (adherence_status && adherence_status.length > 0) {
-                // Remove aderencias antigas dessa data
                 await client.query('DELETE FROM ai_adherence WHERE data_referencia = $1', [data_referencia]);
-                
                 const adhQuery = 'INSERT INTO ai_adherence (data_referencia, item_index, status) VALUES ($1, $2, $3)';
                 for (let i = 0; i < adherence_status.length; i++) {
                     if (adherence_status[i] === true) {
@@ -156,9 +156,8 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true });
         }
 
-        // Listar Programações Salvas
+        // Lista programações salvas (Sidebar)
         if (action === 'saved-list') {
-            // Calcula peso total somando os itens
             const query = `
                 SELECT 
                     r.data_referencia, 
@@ -169,7 +168,6 @@ export default async function handler(req, res) {
                 ORDER BY r.data_referencia DESC
             `;
             const r = await client.query(query);
-            // Formata data para retorno JSON
             const list = r.rows.map(row => ({
                 data_referencia: row.data_referencia.toISOString().split('T')[0],
                 peso_total_agregado: parseFloat(row.peso_total_agregado)
@@ -177,7 +175,7 @@ export default async function handler(req, res) {
             return res.status(200).json(list);
         }
 
-        // Carregar uma programação específica
+        // Carrega uma programação específica
         if (action === 'programacao') {
             const { data_referencia } = req.query;
             const query = `
@@ -188,13 +186,7 @@ export default async function handler(req, res) {
             `;
             const r = await client.query(query, [data_referencia]);
             
-            // Converter para o formato de array que o front espera
-            // Formato esperado pelo front: [OP, COD, DESC, MAT, PESO_UN, LOTE, QTD, FAT, ADERIU(placeholder)]
-            // NOTA: O front mapeia colunas visualmente. Vamos retornar um array de objetos ou arrays brutos.
-            // O código JS do front espera arrays brutos baseados em indices.
-            // Mapeamento COL_MAP do front para Saved Mode:
-            // OP:0, CODIGO:1, DESCRICAO:2, MATERIAL:3, PESO_UN:4, LOTE:5, QTD:6, QUANT_FAT:7
-            
+            // Retorna como array de arrays para o frontend
             const rows = r.rows.map(row => [
                 row.op, 
                 row.codigo, 
@@ -209,7 +201,6 @@ export default async function handler(req, res) {
             return res.status(200).json(rows);
         }
 
-        // Deletar programação
         if (action === 'delete-programacao') {
             const { data_referencia } = req.body;
             await client.query('DELETE FROM ai_reports WHERE data_referencia = $1', [data_referencia]);
@@ -217,7 +208,7 @@ export default async function handler(req, res) {
         }
 
         // =================================================================
-        // 4. ADERÊNCIA E ATUALIZAÇÕES PONTUAIS
+        // 4. ADERÊNCIA (CHECKBOX)
         // =================================================================
 
         if (action === 'update-adherence') {
@@ -241,20 +232,17 @@ export default async function handler(req, res) {
             const { data_referencia } = req.query;
             const r = await client.query('SELECT item_index FROM ai_adherence WHERE data_referencia = $1 AND status = true', [data_referencia]);
             
-            // Retorna um objeto map { '0': true, '5': true }
             const statusMap = {};
-            r.rows.forEach(row => {
-                statusMap[row.item_index] = true;
-            });
+            r.rows.forEach(row => { statusMap[row.item_index] = true; });
             return res.status(200).json(statusMap);
         }
 
-        // Se nenhuma action bater
+        // Se nenhuma action for encontrada
         return res.status(404).json({ error: 'Action not found' });
 
     } catch (e) {
         if (req.method === 'POST') await client.query('ROLLBACK');
-        console.error(e);
+        console.error("ERRO API:", e);
         return res.status(500).json({ error: e.message });
     } finally {
         client.release();
