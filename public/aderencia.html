@@ -97,6 +97,37 @@
         td { padding: 12px 14px; border-bottom: 1px solid var(--border-subtle); }
         tr:hover { background: rgba(255,255,255,0.02); }
 
+        /* ESTILOS DE AGRUPAMENTO (NOVO) */
+        .group-row {
+            background: rgba(255, 255, 255, 0.03);
+            cursor: pointer;
+            font-weight: 600;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+        .group-row:hover {
+            background: rgba(255, 255, 255, 0.07);
+        }
+        .group-icon {
+            margin-right: 8px;
+            transition: transform 0.2s;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+        }
+        .group-row.expanded .group-icon {
+            transform: rotate(90deg);
+        }
+        .child-row {
+            background: rgba(0, 0, 0, 0.2);
+            display: none; /* Oculto por padrão */
+        }
+        .child-row.visible {
+            display: table-row;
+        }
+        .child-row td:first-child {
+            padding-left: 35px; /* Indentação visual */
+            border-left: 2px solid var(--border-subtle);
+        }
+
         /* EDIÇÃO EM LINHA */
         .editable-cell {
             background: rgba(251, 191, 36, 0.1);
@@ -380,7 +411,7 @@
         }
     }
 
-    // --- FUNÇÕES DE INTERFACE (IGUAIS ÀS ORIGINAIS) ---
+    // --- FUNÇÕES DE INTERFACE ---
     function openModal() { document.getElementById('modalEntry').style.display = 'flex'; }
     function closeModal() { document.getElementById('modalEntry').style.display = 'none'; }
 
@@ -408,8 +439,21 @@
         input.onkeydown = (e) => { if(e.key === 'Enter') finishEdit(input, id); };
     }
 
+    // --- NOVA FUNÇÃO DE EXPANSÃO ---
+    function toggleGroup(groupId) {
+        const header = document.querySelector(`.group-row[data-group="${groupId}"]`);
+        const children = document.querySelectorAll(`.child-row[data-group="${groupId}"]`);
+        
+        if (header.classList.contains('expanded')) {
+            header.classList.remove('expanded');
+            children.forEach(row => row.classList.remove('visible'));
+        } else {
+            header.classList.add('expanded');
+            children.forEach(row => row.classList.add('visible'));
+        }
+    }
+
     function render() {
-        // Agora usamos os dados que vieram do banco (variável db)
         const filtered = db.filter(i => i.sector === currentSector);
         const tbody = document.querySelector('#mainTable tbody');
         tbody.innerHTML = '';
@@ -420,30 +464,100 @@
         document.getElementById('lbl-kpi-prog').innerText = `Total Programado (${unit})`;
         document.getElementById('lbl-kpi-real').innerText = `Total Realizado (${unit})`;
 
-        let tProg = 0, tReal = 0;
-
-        filtered.sort((a,b) => new Date(b.date) - new Date(a.date)).forEach(item => {
-            const prog = parseFloat(item.prog);
-            const real = parseFloat(item.real);
-            tProg += prog; 
-            tReal += real;
-            
-            const adh = prog > 0 ? (real / prog) * 100 : 0;
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td style="color:var(--text-muted)">${item.date.split('-').reverse().join('/')}</td>
-                <td><b>${item.op}</b></td>
-                <td>${item.code}</td>
-                <td><span class="badge-sector ${getBadge(item.sector)}">${item.heat}</span></td>
-                <td style="color:#60a5fa; font-weight:600">${prog}</td>
-                <td><span class="editable-cell" onclick="makeEditable(this, ${item.id})">${real}</span></td>
-                <td style="font-weight:700; color:${adh >= 95 ? '#10b981' : (adh < 80 ? '#ef4444' : '#fbbf24')}">${adh.toFixed(1)}%</td>
-                <td><button onclick="deleteEntry(${item.id})" style="background:none; border:none; color:rgba(239,68,68,0.3); cursor:pointer"><i class="fa-solid fa-trash"></i></button></td>
-            `;
-            tbody.appendChild(tr);
+        let tProgGlobal = 0, tRealGlobal = 0;
+        
+        // 1. Calcular KPIs Globais (para os cards do topo)
+        filtered.forEach(item => {
+            tProgGlobal += parseFloat(item.prog);
+            tRealGlobal += parseFloat(item.real);
         });
 
-        updateKPIs(tProg, tReal);
+        // 2. Agrupar os dados por DATA + CORRIDA
+        const groups = {};
+        filtered.forEach(item => {
+            // Chave de agrupamento: Data + Corrida (fLiga)
+            // Se a corrida for vazia, usamos "Sem Corrida"
+            const heatKey = item.heat ? item.heat.toUpperCase() : "GERAL";
+            const groupKey = `${item.date}_${heatKey}`;
+            
+            if (!groups[groupKey]) {
+                groups[groupKey] = {
+                    key: groupKey,
+                    date: item.date,
+                    heat: heatKey,
+                    items: [],
+                    progTotal: 0,
+                    realTotal: 0
+                };
+            }
+            groups[groupKey].items.push(item);
+            groups[groupKey].progTotal += parseFloat(item.prog);
+            groups[groupKey].realTotal += parseFloat(item.real);
+        });
+
+        // 3. Converter para array e ordenar (Data desc, depois Heat)
+        const sortedGroups = Object.values(groups).sort((a, b) => {
+            if (b.date !== a.date) return new Date(b.date) - new Date(a.date);
+            return a.heat.localeCompare(b.heat);
+        });
+
+        // 4. Renderizar a Tabela Agrupada
+        sortedGroups.forEach(group => {
+            // -- Cabeçalho do Grupo --
+            const gAdh = group.progTotal > 0 ? (group.realTotal / group.progTotal) * 100 : 0;
+            const formattedDate = group.date.split('-').reverse().join('/');
+            
+            // ID único para controle de colapso
+            const groupId = `grp_${group.key.replace(/[^a-zA-Z0-9]/g, '')}`;
+
+            const trHeader = document.createElement('tr');
+            trHeader.className = 'group-row';
+            trHeader.dataset.group = groupId;
+            trHeader.onclick = () => toggleGroup(groupId);
+            
+            trHeader.innerHTML = `
+                <td>
+                    <i class="fa-solid fa-chevron-right group-icon"></i> 
+                    ${formattedDate}
+                </td>
+                <td colspan="2" style="color:var(--text-muted); font-weight:400; font-size:0.8rem">
+                    ${group.items.length} item(s)
+                </td>
+                <td><span class="badge-sector ${getBadge(currentSector)}">${group.heat}</span></td>
+                <td style="color:#60a5fa; font-weight:700">${group.progTotal}</td>
+                <td style="color:#fff; font-weight:700">${group.realTotal}</td>
+                <td style="font-weight:700; color:${gAdh >= 95 ? '#10b981' : (gAdh < 80 ? '#ef4444' : '#fbbf24')}">
+                    ${gAdh.toFixed(1)}% (Méd)
+                </td>
+                <td></td>
+            `;
+            tbody.appendChild(trHeader);
+
+            // -- Itens do Grupo (Filhos) --
+            group.items.forEach(item => {
+                const prog = parseFloat(item.prog);
+                const real = parseFloat(item.real);
+                const adh = prog > 0 ? (real / prog) * 100 : 0;
+
+                const trChild = document.createElement('tr');
+                trChild.className = 'child-row';
+                trChild.dataset.group = groupId;
+                
+                trChild.innerHTML = `
+                    <td style="color:var(--text-muted)"></td> 
+                    <td><b>${item.op}</b></td>
+                    <td>${item.code}</td>
+                    <td style="opacity:0.5; font-size:0.8rem">"${item.heat}"</td>
+                    <td style="color:#60a5fa">${prog}</td>
+                    <td><span class="editable-cell" onclick="makeEditable(this, ${item.id})">${real}</span></td>
+                    <td style="color:${adh >= 95 ? '#10b981' : (adh < 80 ? '#ef4444' : '#fbbf24')}">${adh.toFixed(1)}%</td>
+                    <td><button onclick="deleteEntry(${item.id})" style="background:none; border:none; color:rgba(239,68,68,0.3); cursor:pointer"><i class="fa-solid fa-trash"></i></button></td>
+                `;
+                tbody.appendChild(trChild);
+            });
+        });
+
+        updateKPIs(tProgGlobal, tRealGlobal);
         updateCharts(filtered);
     }
 
