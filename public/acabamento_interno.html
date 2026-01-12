@@ -475,60 +475,6 @@
 </head>
 <body>
 
-    <script>
-    (function() {
-        // Configure aqui o tempo (30 minutos)
-        const tempoLimite = 30 * 60 * 1000; 
-        
-        function verificarSessao() {
-            // Se já estiver na página de login, não faz nada para evitar loop
-            if (window.location.pathname.includes('login.html')) return;
-
-            const logado = localStorage.getItem('erus_auth');
-            const ultimaAtividade = localStorage.getItem('erus_last_activity');
-            const agora = Date.now();
-
-            // 1. Verificação: Se não houver marca de login ou horário de atividade
-            if (logado !== 'true' || !ultimaAtividade) {
-                redirecionarLogin();
-                return;
-            }
-
-            // 2. Verificação de Tempo: Se o tempo de inatividade passou do limite
-            if (agora - parseInt(ultimaAtividade) > tempoLimite) {
-                alert("Sua sessão expirou por inatividade.");
-                redirecionarLogin();
-                return;
-            }
-        }
-
-        function atualizarAtividade() {
-            // Só atualiza se o usuário ainda estiver marcado como logado
-            if (localStorage.getItem('erus_auth') === 'true') {
-                localStorage.setItem('erus_last_activity', Date.now().toString());
-            }
-        }
-
-        function redirecionarLogin() {
-            localStorage.clear();
-            // Usamos replace para o usuário não conseguir "voltar" para a página protegida
-            window.location.replace('login.html');
-        }
-
-        // Executa a verificação IMEDIATAMENTE
-        verificarSessao();
-
-        // Monitora interações para resetar o cronômetro
-        const eventos = ['mousedown', 'mousemove', 'keypress', 'touchstart', 'scroll'];
-        eventos.forEach(evento => {
-            window.addEventListener(evento, atualizarAtividade, { passive: true });
-        });
-
-        // Verifica a cada 30 segundos se o tempo expirou
-        setInterval(verificarSessao, 60000);
-    })();
-</script>
-
     <!-- LOADING SCREEN -->
     <div id="loading-screen">
         <div class="spinner"></div>
@@ -717,596 +663,1086 @@
 
     <!-- SCRIPT ORIGINAL -->
     <script>
-    // ==========================================================================
-    // 0. CONFIGURAÇÕES, VARIÁVEIS GLOBAIS E DOM
-    // ==========================================================================
-    let allExcelData = [];
-    let currentReportData = [];
-    let targetDateForPDF = null;
-    let descriptionMap = new Map(); 
-    let materialDaysMap = new Map(); 
-    let posteriorMap = new Map(); 
-    let currentAdherenceStatus = []; 
-    let lastUpdateTimestamp = null; 
-    let manualRowsData = [];
-    let currentModalMode = 'generate'; 
+        // ==========================================================================
+        // 0. UI HELPERS (Clock & Loading)
+        // ==========================================================================
+        setInterval(() => {
+            const now = new Date();
+            document.getElementById('clock-time').innerText = now.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'});
+            document.getElementById('clock-date').innerText = now.toLocaleDateString('pt-BR', {weekday: 'short', day: 'numeric', month: 'short'}).toUpperCase();
+        }, 1000);
 
-    const COL_MAP = { 
-        DATA: 0, OP: 1, CODIGO: 2, DESCRICAO: 3, MATERIAL: 4, 
-        PESO_UN: 5, QTD: 6, LOTE: 7, PESO_TOTAL: 8, CLIENTE: 9, QUANT_FAT: 10
-    };
+        function hideLoadingScreen() {
+            const loadingScreen = document.getElementById('loading-screen');
+            loadingScreen.style.opacity = '0';
+            setTimeout(() => { loadingScreen.style.display = 'none'; }, 500);
+        }
 
-    // DOM Elements
-    const fileInput = document.getElementById('excelFile');
-    const chooseFileButton = document.getElementById('chooseFileButton');
-    const openModalButton = document.getElementById('openModalButton');
-    const correlateButton = document.getElementById('correlateButton');
-    const correlationFile = document.getElementById('correlationFile');
-    const materialDaysFile = document.getElementById('materialDaysFile');
-    const correlateMaterialsButton = document.getElementById('correlateMaterialsButton');
-    const saveMaterialDaysButton = document.getElementById('saveMaterialDaysButton');
-    const posteriorFile = document.getElementById('posteriorFile');
-    const correlatePosteriorButton = document.getElementById('correlatePosteriorButton');
-    const savePosteriorButton = document.getElementById('savePosteriorButton'); 
-    const reportModal = document.getElementById('reportModal');
-    const closeModalButton = document.querySelector('.modal-close');
-    const reportDateInput = document.getElementById('reportDate');
-    const reportDateLabel = document.getElementById('reportDateLabel'); 
-    const generateReportButton = document.getElementById('generateReportButton');
-    const generatePDFButton = document.getElementById('generatePDFButton');
-    const saveReportButton = document.getElementById('saveReportButton'); 
-    const addManualRowButton = document.getElementById('addManualRowButton');
-    const modalTitle = document.getElementById('modalTitle');
-    const savedList = document.getElementById('savedList'); 
-    const saveRawDataButton = document.getElementById('saveRawDataButton'); 
-    const clearRawDataButton = document.getElementById('clearRawDataButton'); 
-    const initialMessage = document.getElementById('initialMessage');
-    const lastUpdateDateTimeSpan = document.getElementById('lastUpdateDateTime');
-    const updateLastUpdateButton = document.getElementById('updateLastUpdateButton');
-    const modalAdherenceValue = document.getElementById('modalAdherenceValue');
-    const modalAdherenceCount = document.getElementById('modalAdherenceCount');
-    const totalProgrammedWeightValue = document.getElementById('totalProgrammedWeightValue');
-    const totalRealizedWeightValue = document.getElementById('totalRealizedWeightValue');
-    const observacoesTextarea = document.getElementById('observacoesTextarea'); 
-    const observacoesContainer = document.getElementById('observacoesContainer'); 
-    const modalControls = document.querySelector('.modal-controls');
-
-    // ==========================================================================
-    // 1. UTILITÁRIOS E UI
-    // ==========================================================================
-    setInterval(() => {
-        const now = new Date();
-        document.getElementById('clock-time').innerText = now.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'});
-        document.getElementById('clock-date').innerText = now.toLocaleDateString('pt-BR', {weekday: 'short', day: 'numeric', month: 'short'}).toUpperCase();
-    }, 1000);
-
-    function showSpinner() { document.getElementById('loading-screen').style.display = 'flex'; document.getElementById('loading-screen').style.opacity = '1'; }
-    function hideSpinner() { const s = document.getElementById('loading-screen'); s.style.opacity = '0'; setTimeout(() => s.style.display = 'none', 500); }
-
-    function formatDateTime(date) {
-        const d = new Date(date);
-        return d.toLocaleDateString('pt-BR') + " " + d.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
-    }
-
-    function parsePtBrNumber(str) {
-        if (typeof str === 'number') return str;
-        if (!str) return 0;
-        let s = String(str).trim().replace(/\./g, '').replace(',', '.');
-        return parseFloat(s) || 0;
-    }
-
-    function formatDateToDisplay(dateStr) {
-        if (!dateStr) return '';
-        const [year, month, day] = dateStr.split('-');
-        return `${day}/${month}/${year}`;
-    }
-
-    // ==========================================================================
-    // 2. FUNÇÃO MESTRE DE API
-    // ==========================================================================
-    async function apiRequest(action, method = 'GET', body = null, params = {}) {
-        let url = `/api/acabamento-interno?action=${action}`;
-        for (const key in params) url += `&${key}=${encodeURIComponent(params[key])}`;
-
-        const options = {
-            method,
-            headers: { 'Content-Type': 'application/json' }
+        // ==========================================================================
+        // 1. LOGIC 
+        // ==========================================================================
+        
+        let allExcelData = [];
+        let currentReportData = [];
+        let targetDateForPDF = null;
+        let descriptionMap = new Map(); 
+        let materialDaysMap = new Map(); 
+        let posteriorMap = new Map(); 
+        let currentAdherenceStatus = []; 
+        let lastUpdateTimestamp = null; 
+        
+        const colunasHeaders = [
+            "DATA", "OP", "CÓDIGO", "DESCRIÇÃO", "MATERIAL", 
+            "PESO UN", "QUANT.", "LOTE", "PESO", "CLIENTE" 
+        ];
+        
+        const modalSavedHeaders = [
+            "OP", "CÓDIGO", "DESCRIÇÃO", "MATERIAL", 
+            "PESO UN", "LOTE", "QUANT.", "FAT.", "ADERIU" 
+        ];
+        
+        const modalGenerateHeaders = [
+             "OP", "CÓDIGO", "DESCRIÇÃO", "MATERIAL", 
+             "PESO UN", "QUANT.", "LOTE", "PESO"
+        ];
+        
+        const COL_MAP = { 
+            DATA: 0, OP: 1, CODIGO: 2, DESCRICAO: 3, MATERIAL: 4, 
+            PESO_UN: 5, QTD: 6, LOTE: 7, PESO_TOTAL: 8, CLIENTE: 9, QUANT_FAT: 10
         };
-        if (body) options.body = JSON.stringify(body);
+        
+        const MODAL_COL_MAP = { 
+            OP: 0, CODIGO: 1, DESCRICAO: 2, MATERIAL: 3, PESO_UN: 4, 
+            LOTE: 5, QTD: 6, QUANT_FAT: 7, ADERIU: 8      
+        };
+        
+        const MODAL_GENERATE_COL_MAP = {
+            OP: 0, CODIGO: 1, DESCRICAO: 2, MATERIAL: 3, PESO_UN: 4,
+            QTD: 5, LOTE: 6, PESO_TOTAL: 7
+        };
 
-        const response = await fetch(url, options);
-        if (!response.ok) throw new Error(`Erro API: ${response.status}`);
-        return await response.json();
-    }
+        // DOM Elements
+        const fileInput = document.getElementById('excelFile');
+        const chooseFileButton = document.getElementById('chooseFileButton');
+        const openModalButton = document.getElementById('openModalButton');
+        const correlateButton = document.getElementById('correlateButton');
+        const correlationFile = document.getElementById('correlationFile');
+        const materialDaysFile = document.getElementById('materialDaysFile');
+        const correlateMaterialsButton = document.getElementById('correlateMaterialsButton');
+        const saveMaterialDaysButton = document.getElementById('saveMaterialDaysButton');
+        const posteriorFile = document.getElementById('posteriorFile');
+        const correlatePosteriorButton = document.getElementById('correlatePosteriorButton');
+        const savePosteriorButton = document.getElementById('savePosteriorButton'); 
+        const reportModal = document.getElementById('reportModal');
+        const closeModalButton = document.querySelector('.modal-close');
+        const reportDateInput = document.getElementById('reportDate');
+        const reportDateLabel = document.getElementById('reportDateLabel'); 
+        const generateReportButton = document.getElementById('generateReportButton');
+        const generatePDFButton = document.getElementById('generatePDFButton');
+        const saveReportButton = document.getElementById('saveReportButton'); 
+        const addManualRowButton = document.getElementById('addManualRowButton');
+        const modalTitle = document.getElementById('modalTitle');
+        const totalPanel = document.getElementById('totalPanel');
+        const totalWeightValue = document.getElementById('totalWeightValue');
+        const savedList = document.getElementById('savedList'); 
+        const backButton = document.getElementById('backButton'); 
+        const saveRawDataButton = document.getElementById('saveRawDataButton'); 
+        const clearRawDataButton = document.getElementById('clearRawDataButton'); 
+        const initialMessage = document.getElementById('initialMessage');
+        const lastUpdateDateTimeSpan = document.getElementById('lastUpdateDateTime');
+        const updateLastUpdateButton = document.getElementById('updateLastUpdateButton');
+        
+        const modalAdherencePanel = document.getElementById('modalAdherencePanel');
+        const modalAdherenceValue = document.getElementById('modalAdherenceValue');
+        const modalAdherenceCount = document.getElementById('modalAdherenceCount');
+        const totalProgrammedWeightPanel = document.getElementById('totalProgrammedWeightPanel');
+        const totalProgrammedWeightValue = document.getElementById('totalProgrammedWeightValue');
+        const totalRealizedWeightPanel = document.getElementById('totalRealizedWeightPanel');
+        const totalRealizedWeightValue = document.getElementById('totalRealizedWeightValue');
+        const observacoesTextarea = document.getElementById('observacoesTextarea'); 
+        const observacoesContainer = document.getElementById('observacoesContainer'); 
+        const modalControls = document.querySelector('.modal-controls');
+        
+        let manualRowsData = [];
+        let currentModalMode = 'generate'; 
 
-    // ==========================================================================
-    // 3. CARREGAMENTO DE DADOS E CONFIGURAÇÕES (BANCO)
-    // ==========================================================================
-    async function initSystem() {
-        showSpinner();
-        try {
-            await Promise.all([
-                loadLastUpdate(),
-                loadMaterialDaysCorrelation(),
-                loadPosteriorCorrelation(),
-                loadSavedPrograms(),
-                loadRawDataFromServer()
-            ]);
-        } catch (e) {
-            console.error("Erro no boot:", e);
-        } finally {
-            hideSpinner();
+        // --- Helper Functions ---
+        function formatDateTime(date) {
+            const day = String(date.getDate()).padStart(2, '0');
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const year = date.getFullYear();
+            const hours = String(date.getHours()).padStart(2, '0');
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+            return `${day}/${month}/${year} ${hours}:${minutes}`;
         }
-    }
-
-    async function loadLastUpdate() {
-        const data = await apiRequest('load-config', 'GET', null, { config_key: 'last_update' });
-        if (data.last_updated) lastUpdateDateTimeSpan.textContent = formatDateTime(data.last_updated);
-    }
-
-    async function loadMaterialDaysCorrelation() {
-        const data = await apiRequest('load-config', 'GET', null, { config_key: 'material_days' });
-        if (data.materialDays) {
-            materialDaysMap = new Map(data.materialDays);
-            saveMaterialDaysButton.disabled = false;
+        
+        function getTodayDateString() {
+            const today = new Date();
+            const year = today.getFullYear();
+            const month = String(today.getMonth() + 1).padStart(2, '0');
+            const day = String(today.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
         }
-    }
 
-    async function loadPosteriorCorrelation() {
-        const data = await apiRequest('load-config', 'GET', null, { config_key: 'posterior_map' });
-        if (data.posteriorCorrelation) {
-            posteriorMap = new Map(data.posteriorCorrelation.map(([op, apps]) => [
-                op, apps.map(a => ({ data: new Date(a.data), quant: a.quant }))
-            ]));
-            savePosteriorButton.disabled = false;
+        function parsePtBrNumber(str) {
+            if (typeof str === 'number') return str;
+            if (!str) return 0;
+            let s = String(str).trim();
+            if (s.match(/^[0-9]+(\.[0-9]{1,4})$/) && s.indexOf(',') === -1) return parseFloat(s);
+            s = s.replace(/\./g, '');
+            s = s.replace(/,/g, '.');
+            return parseFloat(s) || 0;
         }
-    }
-
-    async function loadRawDataFromServer() {
-        try {
-            const raw = await apiRequest('load-raw'); // Chamar o GET padrão do index.js
-            if (raw && raw.length > 0) {
-                allExcelData = raw.map(r => [
-                    new Date(r.data + 'T00:00:00'), r.op, r.codigo, r.descricao, r.material, 
-                    parseFloat(r.peso_un), parseFloat(r.quant), r.lote, parseFloat(r.peso_total), r.cliente, parseFloat(r.quant_fat)
-                ]);
-                displayTable(allExcelData, 'tableContainer');
-                initialMessage.style.display = 'none';
-                openModalButton.disabled = false; correlateButton.disabled = false;
-                saveRawDataButton.disabled = false; clearRawDataButton.disabled = false;
-            }
-        } catch (e) { initialMessage.textContent = "Sem dados no servidor."; }
-    }
-
-    // ==========================================================================
-    // 4. IMPORTAÇÃO DE ARQUIVOS (EXCEL)
-    // ==========================================================================
-    
-    // Principal (Programação Bruta)
-    chooseFileButton.onclick = () => fileInput.click();
-    fileInput.onchange = (e) => {
-        const file = e.target.files[0];
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            const wb = XLSX.read(new Uint8Array(event.target.result), {type:'array', cellDates: true});
-            const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1});
-            allExcelData = data.slice(1).map(row => {
-                const cod = String(row[2] || '').trim();
-                const p = parsePtBrNumber(row[4]);
-                const q = parsePtBrNumber(row[5]);
-                const newRow = [row[0], row[1], cod, "", row[3], p, q, row[6], p*q, "", 0];
-                if (descriptionMap.has(cod)) {
-                    newRow[COL_MAP.DESCRICAO] = descriptionMap.get(cod)[0];
-                    newRow[COL_MAP.CLIENTE] = descriptionMap.get(cod)[1];
+        
+        function parsePtPtBrNumber(str) { return parsePtBrNumber(str); }
+        
+        function formatDateToDisplay(dateStr) {
+            if (!dateStr) return '';
+            try {
+                const [year, month, day] = dateStr.split('-');
+                return `${day}/${month}/${year}`;
+            } catch (e) { return dateStr; }
+        }
+        
+        function convertRawDBRowToExcelFormat(rawRow) {
+            const dateStr = rawRow.data;
+            let dateObj = null;
+            if (dateStr) {
+                dateObj = new Date(dateStr + 'T00:00:00'); 
+                if (isNaN(dateObj.getTime())) {
+                    const parts = dateStr.split('-');
+                    dateObj = new Date(parts[0], parts[1] - 1, parts[2], 0, 0, 0, 0);
                 }
-                return newRow;
-            }).filter(r => r[0] instanceof Date);
-            displayTable(allExcelData, 'tableContainer');
-            saveRawDataButton.disabled = false;
-            initialMessage.style.display = 'none';
-            openModalButton.disabled = false; correlateButton.disabled = false;
-        };
-        reader.readAsArrayBuffer(file);
-    };
+            }
+            return [
+                dateObj, rawRow.op || '', rawRow.codigo || '', rawRow.descricao || '',
+                rawRow.material || '', rawRow.peso_un || 0.0, rawRow.quant || 0,
+                rawRow.lote || '', rawRow.peso_total || 0.0, rawRow.cliente || '', rawRow.quant_fat || 0
+            ];
+        }
 
-    // Correlação: Descrições/Clientes
-    correlateButton.onclick = () => correlationFile.click();
-    correlationFile.onchange = (e) => {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            const data = XLSX.utils.sheet_to_json(XLSX.read(new Uint8Array(event.target.result), {type:'array'}).Sheets[0], {header:1});
-            descriptionMap.clear();
-            data.slice(1).forEach(r => {
-                const c = String(r[2]||'').trim();
-                if(c) descriptionMap.set(c, [String(r[3]||'').trim(), String(r[4]||'').trim()]);
+        async function saveObservacoes(dataReferencia, observacoes) {
+            const dataToSend = { config_key: `obs_${dataReferencia}`, config_value: observacoes };
+            try {
+                await fetch('/api/acabamento-interno/save-config', { 
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dataToSend)
+                });
+            } catch (error) { console.error('Erro ao salvar observações:', error); }
+        }
+
+        async function loadObservacoes(dataReferencia) {
+             const configKey = `obs_${dataReferencia}`;
+             observacoesTextarea.value = ''; 
+             try {
+                const response = await fetch(`/api/acabamento-interno/load-config?config_key=${configKey}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    observacoesTextarea.value = data.config_value || '';
+                }
+            } catch (error) { console.error('Erro ao carregar observações:', error); }
+        }
+
+        // --- Calculation Functions ---
+        function calculateModalAdherence() {
+            const totalItems = currentReportData.length;
+            let adheredItems = 0;
+            
+            for (let i = 0; i < totalItems; i++) {
+                if (currentReportData[i][COL_MAP.DATA] !== null && currentAdherenceStatus[i]) {
+                    adheredItems++;
+                }
+            }
+            const totalSchedulableItems = currentReportData.filter(row => row[COL_MAP.DATA] !== null).length;
+            const adherencePercentage = totalSchedulableItems > 0 ? (adheredItems / totalSchedulableItems) * 100 : 0;
+            const isSavedProgram = (currentModalMode === 'saved');
+            
+            if (isSavedProgram) {
+                document.getElementById('modalInfoPanel').style.display = 'flex';
+                modalAdherencePanel.style.display = 'block';
+                totalProgrammedWeightPanel.style.display = 'block';
+                totalRealizedWeightPanel.style.display = 'block';
+            } else {
+                document.getElementById('modalInfoPanel').style.display = 'none';
+            }
+
+            if (modalAdherenceValue) {
+                modalAdherenceValue.textContent = `${adherencePercentage.toFixed(2).replace('.', ',')}%`;
+                if (adherencePercentage >= 75) modalAdherenceValue.style.color = 'var(--status-success)';
+                else if (adherencePercentage >= 50) modalAdherenceValue.style.color = 'var(--color-primary)';
+                else modalAdherenceValue.style.color = 'var(--status-danger)';
+            }
+            if (modalAdherenceCount) modalAdherenceCount.textContent = `${adheredItems}/${totalSchedulableItems} Itens`;
+            updateTotalWeightDisplay();
+        }
+
+        async function saveLineAdherenceStatus(dataReferencia, itemIndex, newStatus) {
+            if (!dataReferencia) return;
+            if (itemIndex < 0 || itemIndex >= currentReportData.length) return;
+            if (currentReportData[itemIndex][COL_MAP.DATA] === null) return;
+
+            const item = currentReportData[itemIndex];
+            const dataToSend = {
+                data_referencia: dataReferencia, item_index: itemIndex, new_status: newStatus,
+                codigo: String(item[COL_MAP.CODIGO] || '').trim(), op: String(item[COL_MAP.OP] || '').trim()
+            };
+            currentAdherenceStatus[itemIndex] = newStatus;
+            calculateModalAdherence();
+            
+            try {
+                await fetch('/api/acabamento-interno/update-adherence', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dataToSend)
+                });
+            } catch (error) { console.error(`Erro aderência: ${error.message}`); }
+        }
+
+        // --- System Update Logic ---
+        async function loadLastUpdate() {
+            lastUpdateDateTimeSpan.textContent = 'Carregando...';
+            try {
+                const response = await fetch('/api/acabamento-interno/load-last-update');
+                if (!response.ok) throw new Error(`Erro: ${response.status}`);
+                const data = await response.json();
+
+                if (data.last_updated) {
+                    lastUpdateTimestamp = data.last_updated; 
+                    let dateToFormat;
+                    if (data.last_updated.includes('T')) dateToFormat = new Date(data.last_updated);
+                    else {
+                        const parts = data.last_updated.match(/(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})/);
+                        if (parts) dateToFormat = new Date(parts[1], parts[2] - 1, parts[3], parts[4], parts[5], parts[6]);
+                        else dateToFormat = new Date(data.last_updated);
+                    }
+                    if (!isNaN(dateToFormat.getTime())) lastUpdateDateTimeSpan.textContent = formatDateTime(dateToFormat);
+                    else lastUpdateDateTimeSpan.textContent = `Inválida`;
+                } else {
+                    lastUpdateDateTimeSpan.textContent = 'N/A';
+                }
+            } catch (error) { lastUpdateDateTimeSpan.textContent = 'Erro'; }
+        }
+        
+        updateLastUpdateButton.addEventListener('click', async () => {
+            const password = prompt("Senha para atualizar data/hora:");
+            if (password !== "ATUALIZAR") return alert("Senha incorreta.");
+            
+            const btn = updateLastUpdateButton;
+            const originalHTML = btn.innerHTML;
+            btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ...';
+            
+            const now = new Date();
+            const dateToSave = now.toISOString();
+
+            try {
+                const response = await fetch('/api/acabamento-interno/save-last-update', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ last_updated: dateToSave })
+                });
+                const result = await response.json();
+                if (response.ok && result.success) {
+                    lastUpdateTimestamp = dateToSave;
+                    lastUpdateDateTimeSpan.textContent = formatDateTime(now);
+                    alert("Data/Hora atualizada.");
+                } else alert('Erro ao salvar.');
+            } catch (error) { alert('Erro conexão.'); } 
+            finally { btn.disabled = false; btn.innerHTML = originalHTML; }
+        });
+
+        // --- File Loading & Correlations ---
+        async function loadPosteriorCorrelation() {
+            try {
+                const response = await fetch('/api/acabamento-interno/load-posterior-correlation'); 
+                if (!response.ok) return;
+                const data = await response.json();
+                if (data && data.posteriorCorrelation) {
+                    posteriorMap.clear();
+                    data.posteriorCorrelation.forEach(([op, appointments]) => {
+                         const parsedAppointments = appointments.map(a => ({ data: new Date(a.data), quant: a.quant }));
+                        posteriorMap.set(op, parsedAppointments);
+                    });
+                    savePosteriorButton.disabled = false;
+                }
+            } catch (error) { console.error("Erro Posteriores", error); }
+        }
+
+        savePosteriorButton.addEventListener('click', async () => {
+             if (posteriorMap.size === 0) return alert("Nada para salvar.");
+            
+            const dataToSend = Array.from(posteriorMap.entries()).map(([op, appointments]) => {
+                return [op, appointments.map(a => ({ data: a.data.toISOString(), quant: a.quant }))];
             });
-            if (allExcelData.length > 0) {
-                allExcelData.forEach(row => {
-                    if (descriptionMap.has(row[COL_MAP.CODIGO])) {
-                        row[COL_MAP.DESCRICAO] = descriptionMap.get(row[COL_MAP.CODIGO])[0];
-                        row[COL_MAP.CLIENTE] = descriptionMap.get(row[COL_MAP.CODIGO])[1];
+
+            const btn = savePosteriorButton;
+            btn.disabled = true; btn.innerHTML = 'Salvando...';
+
+            try {
+                await fetch('/api/acabamento-interno/save-posterior-correlation', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ posteriorCorrelation: dataToSend })
+                });
+                alert("Posteriores salvos!");
+            } catch (error) { alert('Erro salvar posteriores.'); } 
+            finally { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save"></i> Salvar Correlação Posteriores'; }
+        });
+
+        correlatePosteriorButton.addEventListener('click', () => posteriorFile.click());
+        posteriorFile.addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array', cellDates: true });
+                const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1 });
+
+                posteriorMap.clear();
+                let count = 0;
+                jsonData.slice(1).forEach(row => { 
+                    let d = row[0];
+                    if (typeof d === 'string' && d.match(/^\d{4}-\d{2}-\d{2}T/)) d = new Date(d);
+                    else if (!(d instanceof Date)) return;
+                    const op = String(row[1] || '').trim(); 
+                    const q = parsePtBrNumber(row[2]); 
+                    if (d && op && q > 0) {
+                        d.setHours(0, 0, 0, 0); 
+                        if (!posteriorMap.has(op)) posteriorMap.set(op, []);
+                        posteriorMap.get(op).push({ data: d, quant: q });
+                        count++;
                     }
                 });
-                displayTable(allExcelData, 'tableContainer');
+                savePosteriorButton.disabled = count === 0;
+                alert(`Posteriores: ${count} carregados.`);
+                event.target.value = null;
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        async function loadMaterialDaysCorrelation() {
+            try {
+                const response = await fetch('/api/acabamento-interno/load-material-days'); 
+                if (!response.ok) return;
+                const data = await response.json();
+                if (data && data.materialDays) {
+                    materialDaysMap.clear();
+                    data.materialDays.forEach(([m, d]) => materialDaysMap.set(m, d));
+                    saveMaterialDaysButton.disabled = false;
+                }
+            } catch (error) { console.error("Erro MaterialDias", error); }
+        }
+        
+        saveMaterialDaysButton.addEventListener('click', async () => {
+            if (materialDaysMap.size === 0) return alert("Nada para salvar.");
+            const btn = saveMaterialDaysButton;
+            btn.disabled = true; btn.innerHTML = 'Salvando...';
+            try {
+                await fetch('/api/acabamento-interno/save-material-days', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ materialDays: Array.from(materialDaysMap.entries()) })
+                });
+                alert("Material/Dias salvos!");
+            } catch (error) { alert('Erro salvar materiais.'); }
+            finally { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save"></i> Salvar Correlação Materiais'; }
+        });
+        
+        correlateMaterialsButton.addEventListener('click', () => materialDaysFile.click());
+        materialDaysFile.addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const workbook = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+                const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1 });
+                materialDaysMap.clear();
+                let count = 0;
+                jsonData.forEach(row => {
+                    const m = String(row[0] || '').toUpperCase().trim(); 
+                    const d = parseInt(row[1], 10); 
+                    if (m && !isNaN(d) && d >= 0) { materialDaysMap.set(m, d); count++; }
+                });
+                saveMaterialDaysButton.disabled = count === 0;
+                alert(`Material/Dias: ${count} mapeados.`);
+                event.target.value = null;
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        // --- Raw Data ---
+        async function loadRawDataFromServer() {
+            initialMessage.textContent = "Carregando dados salvos...";
+            saveRawDataButton.disabled = true; clearRawDataButton.disabled = true;
+            try {
+                const response = await fetch('/api/acabamento-interno/registros'); 
+                if (!response.ok) throw new Error(`HTTP: ${response.status}`);
+                const rawData = await response.json();
+
+                if (rawData.length > 0) {
+                    allExcelData = rawData.map(convertRawDBRowToExcelFormat);
+                    displayTable(allExcelData, 'tableContainer');
+                    openModalButton.disabled = false; correlateButton.disabled = false;
+                    saveRawDataButton.disabled = false; clearRawDataButton.disabled = false;
+                    initialMessage.style.display = 'none'; 
+                } else {
+                    allExcelData = [];
+                    displayTable([], 'tableContainer');
+                    openModalButton.disabled = true; correlateButton.disabled = true;
+                    saveRawDataButton.disabled = true; clearRawDataButton.disabled = true;
+                    initialMessage.style.display = 'block';
+                    initialMessage.textContent = "Nenhum dado. Importe Excel.";
+                }
+            } catch (error) {
+                initialMessage.textContent = `Erro: ${error.message}`;
+                saveRawDataButton.disabled = true; clearRawDataButton.disabled = false;
+            } finally {
+                hideLoadingScreen();
             }
-            alert("Descrições vinculadas!");
-        };
-        reader.readAsArrayBuffer(e.target.files[0]);
-    };
-
-    // Correlação: Materiais/Dias
-    correlateMaterialsButton.onclick = () => materialDaysFile.click();
-    materialDaysFile.onchange = (e) => {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            const data = XLSX.utils.sheet_to_json(XLSX.read(new Uint8Array(event.target.result), {type:'array'}).Sheets[0], {header:1});
-            materialDaysMap.clear();
-            data.forEach(r => {
-                const m = String(r[0]||'').toUpperCase().trim();
-                const d = parseInt(r[1]);
-                if(m && !isNaN(d)) materialDaysMap.set(m, d);
+        }
+        
+        saveRawDataButton.addEventListener('click', async () => {
+            if (allExcelData.length === 0) return alert("Sem dados.");
+            const dataToSend = allExcelData.map(row => {
+                const newRow = [...row];
+                if (newRow.length <= COL_MAP.QUANT_FAT) while (newRow.length <= COL_MAP.QUANT_FAT) newRow.push(0.0);
+                if (newRow[COL_MAP.DATA] instanceof Date) {
+                    const d = newRow[COL_MAP.DATA];
+                    newRow[COL_MAP.DATA] = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+                } else if (typeof newRow[COL_MAP.DATA] !== 'string') newRow[COL_MAP.DATA] = ''; 
+                return newRow;
             });
-            saveMaterialDaysButton.disabled = false;
-            alert("Mapeamento de Dias carregado!");
-        };
-        reader.readAsArrayBuffer(e.target.files[0]);
-    };
+            
+            const btn = saveRawDataButton;
+            btn.disabled = true; btn.textContent = "Salvando...";
+            try {
+                const response = await fetch('/api/acabamento-interno/import-raw', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(dataToSend)
+                });
+                if (response.ok) { alert("Dados salvos!"); await loadRawDataFromServer(); }
+                else alert('Erro salvar.');
+            } catch (error) { alert('Erro conexão.'); }
+            finally { btn.disabled = false; btn.innerHTML = '<i class="fas fa-cloud-upload-alt"></i> Salvar Dados no Servidor'; }
+        });
+        
+        clearRawDataButton.addEventListener('click', async () => {
+            if (!confirm("APAGAR TODOS registros brutos?")) return;
+            const btn = clearRawDataButton;
+            btn.disabled = true; btn.textContent = "Limpando...";
+            try {
+                await fetch('/api/acabamento-interno/clear-raw', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+                alert("Limpo.");
+                allExcelData = []; displayTable([], 'tableContainer');
+            } catch (error) { alert('Erro limpar.'); }
+            finally { btn.disabled = false; btn.innerHTML = '<i class="fas fa-trash-alt"></i> Limpar Registros Servidor'; await loadRawDataFromServer(); }
+        });
 
-    // Correlação: Produções Posteriores
-    correlatePosteriorButton.onclick = () => posteriorFile.click();
-    posteriorFile.onchange = (e) => {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            const data = XLSX.utils.sheet_to_json(XLSX.read(new Uint8Array(event.target.result), {type:'array', cellDates: true}).Sheets[0], {header:1});
-            posteriorMap.clear();
-            data.slice(1).forEach(r => {
-                const op = String(r[1]||'').trim();
-                const q = parsePtBrNumber(r[2]);
-                if(r[0] instanceof Date && op && q > 0) {
-                    if(!posteriorMap.has(op)) posteriorMap.set(op, []);
-                    posteriorMap.get(op).push({ data: r[0], quant: q });
+        // --- Saved Programs ---
+        async function deleteSavedProgram(dataReferencia) {
+            if (!confirm(`Excluir ${formatDateToDisplay(dataReferencia)}?`)) return;
+            try {
+                await fetch('/api/acabamento-interno/delete-programacao', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ data_referencia: dataReferencia })
+                });
+                alert("Excluído."); await loadSavedPrograms();
+            } catch (error) { alert('Erro excluir.'); }
+        }
+
+        async function loadSavedPrograms() {
+            savedList.innerHTML = '<li class="empty-list-message">Carregando...</li>';
+            try {
+                const response = await fetch('/api/acabamento-interno/saved-list');
+                const savedPrograms = await response.json();
+                
+                savedList.innerHTML = ''; 
+                if (savedPrograms.length === 0) {
+                    savedList.innerHTML = '<li class="empty-list-message">Nenhuma prog. salva.</li>';
+                    return;
+                }
+                
+                savedPrograms.forEach(program => {
+                    const li = document.createElement('li');
+                    const dateDisplay = formatDateToDisplay(program.data_referencia);
+                    const weightDisplay = (program.peso_total_agregado || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' KG';
+                    
+                    const contentDiv = document.createElement('div');
+                    contentDiv.className = 'list-item-content';
+                    contentDiv.innerHTML = `<div class="list-item-title">${dateDisplay}</div><div class="list-item-details">Peso: ${weightDisplay}</div>`;
+                    contentDiv.addEventListener('click', () => loadSavedProgramToModal(program.data_referencia));
+                    
+                    const btnDiv = document.createElement('div');
+                    const delBtn = document.createElement('button');
+                    delBtn.className = 'delete-program-btn';
+                    delBtn.innerHTML = '<i class="fas fa-times"></i>';
+                    delBtn.onclick = (e) => { e.stopPropagation(); deleteSavedProgram(program.data_referencia); };
+                    
+                    btnDiv.appendChild(delBtn);
+                    li.appendChild(contentDiv); li.appendChild(btnDiv);
+                    savedList.appendChild(li);
+                });
+            } catch (error) { savedList.innerHTML = '<li class="empty-list-message">Erro ao carregar lista.</li>'; }
+        }
+        
+        async function loadSavedProgramToModal(dataReferencia) {
+            resetModalState('saved');
+            currentModalMode = 'saved';
+            modalControls.classList.add('saved-mode');
+            modalTitle.textContent = `Carregando ${formatDateToDisplay(dataReferencia)}...`;
+            
+            try {
+                const progResp = await fetch(`/api/acabamento-interno/programacao?data_referencia=${dataReferencia}`);
+                const programacaoData = await progResp.json();
+                
+                const adhResp = await fetch(`/api/acabamento-interno/adherence-status?data_referencia=${dataReferencia}`);
+                let adherenceMap = adhResp.ok ? await adhResp.json() : {};
+                
+                await loadObservacoes(dataReferencia);
+                
+                currentReportData = programacaoData.map(row => {
+                    if (row.length <= COL_MAP.QUANT_FAT) while (row.length <= COL_MAP.QUANT_FAT) row.push(0.0); 
+                    row[COL_MAP.PESO_UN] = parsePtBrNumber(row[COL_MAP.PESO_UN]);
+                    row[COL_MAP.QTD] = parsePtBrNumber(row[COL_MAP.QTD]);
+                    row[COL_MAP.PESO_TOTAL] = row[COL_MAP.PESO_UN] * row[COL_MAP.QTD];
+                    row[COL_MAP.QUANT_FAT] = parsePtBrNumber(row[COL_MAP.QUANT_FAT]);
+                    
+                    const codigo = String(row[COL_MAP.CODIGO] || '').trim();
+                    if (descriptionMap.has(codigo)) row[COL_MAP.CLIENTE] = descriptionMap.get(codigo)[1]; 
+                    return row;
+                });
+                
+                manualRowsData = [];
+                if (currentReportData.length === 0) { alert("Vazio."); resetModalState('generate'); return; }
+                
+                currentReportData = applyPosteriorDeduction(currentReportData);
+                
+                currentAdherenceStatus = new Array(currentReportData.length).fill(false); 
+                for (let i = 0; i < currentReportData.length; i++) {
+                    if (adherenceMap[i] === true || adherenceMap[String(i)] === true) currentAdherenceStatus[i] = true;
+                }
+                
+                reportDateInput.value = dataReferencia;
+                targetDateForPDF = new Date(dataReferencia + 'T00:00:00');
+
+                displayTable(currentReportData, 'modalReportContainer', 'saved'); 
+                calculateModalAdherence(); 
+
+                modalTitle.innerHTML = `<i class="fas fa-save" style="color: var(--color-primary);"></i> Prog. Salva: ${formatDateToDisplay(dataReferencia)}`;
+                
+                generateReportButton.disabled = true; addManualRowButton.style.display = 'inline-flex'; 
+                saveReportButton.disabled = false; generatePDFButton.disabled = false;
+                generatePDFButton.style.display = 'inline-flex'; saveReportButton.style.display = 'inline-flex';
+                observacoesContainer.style.display = 'block';
+
+                reportModal.classList.add('show');
+            } catch (error) { alert(`Erro: ${error.message}`); resetModalState('generate'); }
+        }
+        
+        function applyPosteriorDeduction(dataArray) {
+            if (posteriorMap.size === 0) return dataArray;
+            return dataArray.map(row => {
+                const op = String(row[COL_MAP.OP] || '').trim();
+                const d = row[COL_MAP.DATA]; 
+                const q = parsePtBrNumber(row[COL_MAP.QTD]);
+                const p = parsePtBrNumber(row[COL_MAP.PESO_UN]);
+                let postQ = 0;
+                
+                if (op && posteriorMap.has(op)) {
+                     postQ = posteriorMap.get(op).reduce((sum, post) => {
+                        if (d instanceof Date) { d.setHours(0,0,0,0); if (post.data.getTime() >= d.getTime()) return sum + post.quant; } 
+                        else if (d === null) return sum;
+                        return sum;
+                    }, 0);
+                }
+                const realQ = Math.max(0, q - postQ);
+                const newRow = [...row]; newRow[COL_MAP.QTD] = realQ; newRow[COL_MAP.PESO_TOTAL] = p * realQ;
+                return newRow;
+            }).filter(row => row[COL_MAP.QTD] > 0 || row[COL_MAP.DATA] === null); 
+        }
+
+        backButton.addEventListener('click', () => window.location.href = 'processos.html');
+
+        saveReportButton.addEventListener('click', async () => {
+            updateManualRowsData(); updateReportDataQuantFat(); 
+            const finalReportData = [...currentReportData, ...manualRowsData];
+            const dateStr = reportDateInput.value;
+            const obs = observacoesTextarea.value.trim() || ''; 
+            
+            if (finalReportData.length === 0 || !dateStr) return alert("Nada para salvar.");
+            
+            const dataToSend = finalReportData.map(row => {
+                const newRow = [...row];
+                newRow[COL_MAP.DATA] = dateStr; 
+                newRow[COL_MAP.PESO_UN] = parsePtBrNumber(newRow[COL_MAP.PESO_UN]);
+                newRow[COL_MAP.QTD] = parsePtBrNumber(newRow[COL_MAP.QTD]);
+                newRow[COL_MAP.PESO_TOTAL] = newRow[COL_MAP.PESO_UN] * newRow[COL_MAP.QTD];
+                newRow[COL_MAP.QUANT_FAT] = parsePtBrNumber(newRow[COL_MAP.QUANT_FAT] || 0); 
+                return newRow; 
+            });
+            
+            const btn = saveReportButton; btn.disabled = true; btn.innerHTML = 'Salvando...';
+            try {
+                await fetch('/api/acabamento-interno/save-final', { 
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        data_referencia: dateStr, programacao: dataToSend,
+                        adherence_status: currentAdherenceStatus.slice(0, currentReportData.length),
+                        observacoes: obs 
+                    })
+                });
+                alert("Salvo!"); await loadSavedPrograms();
+            } catch (error) { alert('Erro salvar.'); } 
+            finally { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save"></i> Salvar'; }
+        });
+        
+        window.addEventListener('load', () => {
+            loadSavedPrograms(); loadRawDataFromServer(); 
+            loadMaterialDaysCorrelation(); loadPosteriorCorrelation(); loadLastUpdate();
+        });
+        
+        // --- Modal Logic ---
+        function resetModalState(mode = 'generate') {
+            currentReportData = []; manualRowsData = []; currentAdherenceStatus = []; targetDateForPDF = null;
+            observacoesTextarea.value = ''; currentModalMode = mode; 
+            modalTitle.textContent = mode === 'saved' ? "Programação Salva" : "Gerar Programação Recomendada";
+            document.getElementById('modalReportContainer').innerHTML = `<p style='text-align: center; color: var(--text-muted); padding: 40px;'>${mode === 'saved' ? 'Carregando...' : 'Selecione a data e clique em Gerar.'}</p>`;
+            generatePDFButton.disabled = true; saveReportButton.disabled = true;
+            document.getElementById('modalInfoPanel').style.display = 'none'; observacoesContainer.style.display = 'none'; addManualRowButton.style.display = 'none';
+            
+            if (mode === 'generate') {
+                reportDateInput.style.display = 'inline-flex'; reportDateLabel.style.display = 'inline-flex';
+                generateReportButton.style.display = 'inline-flex'; generateReportButton.disabled = false;
+                modalControls.classList.remove('saved-mode'); 
+                generatePDFButton.style.display = 'none'; saveReportButton.style.display = 'none';
+            } else {
+                 reportDateInput.style.display = 'none'; reportDateLabel.style.display = 'none';
+                 generateReportButton.style.display = 'none'; generateReportButton.disabled = true; 
+                 modalControls.classList.add('saved-mode');
+                 generatePDFButton.style.display = 'inline-flex'; saveReportButton.style.display = 'inline-flex';
+            }
+        }
+
+        openModalButton.addEventListener('click', () => {
+            reportDateInput.value = getTodayDateString(); resetModalState('generate'); 
+            reportModal.classList.add('show');
+        });
+        
+        // FECHAR MODAL COM BOTÃO X
+        closeModalButton.addEventListener('click', () => reportModal.classList.remove('show'));
+        
+        // FECHAR MODAL COM ESC
+        window.addEventListener('keydown', (e) => {
+            if (e.key === "Escape" && reportModal.classList.contains('show')) {
+                reportModal.classList.remove('show');
+            }
+        });
+        
+        // --- Table Display & Logic ---
+        function getBusinessDayOffsetDateForward(startDate, days) {
+            let date = new Date(startDate.getTime()); date.setHours(0,0,0,0);
+            let daysToAdd = days;
+            while (daysToAdd > 0) {
+                date.setDate(date.getDate() + 1);
+                if (date.getDay() !== 0 && date.getDay() !== 6) daysToAdd--;
+            }
+            return date;
+        }
+
+        chooseFileButton.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', function(event) {
+            const file = event.target.files[0]; if (!file) return;
+            initialMessage.textContent = "Processando...";
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const workbook = XLSX.read(new Uint8Array(e.target.result), { type: 'array', cellDates: true }); 
+                const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1 }); 
+                
+                allExcelData = jsonData.slice(1).map(row => {
+                    const d = row[0] instanceof Date ? row[0] : null; 
+                    const op = String(row[1] || '').trim();
+                    const cod = String(row[2] || '').trim();
+                    const mat = String(row[3] || '').trim();
+                    const p = parsePtBrNumber(row[4]);
+                    const q = parsePtPtBrNumber(row[5]);
+                    const l = String(row[6] || '').trim();
+                    const newRow = [d, op, cod, "", mat, p, q, l, p * q, "", 0.0];
+                    if (descriptionMap.size > 0 && descriptionMap.has(cod)) {
+                         const corr = descriptionMap.get(cod);
+                         newRow[COL_MAP.DESCRICAO] = corr[0]; newRow[COL_MAP.CLIENTE] = corr[1]; 
+                    }
+                    return newRow;
+                }).filter(row => row[COL_MAP.DATA] !== null); 
+                
+                displayTable(allExcelData, 'tableContainer');
+                openModalButton.disabled = false; correlateButton.disabled = false;
+                saveRawDataButton.disabled = false; clearRawDataButton.disabled = false;
+                initialMessage.style.display = 'none';
+                event.target.value = null;
+            };
+            reader.readAsArrayBuffer(file);
+        });
+        
+        correlateButton.addEventListener('click', () => correlationFile.click());
+        correlationFile.addEventListener('change', function(event) {
+            const file = event.target.files[0]; if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const workbook = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+                const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1 });
+                descriptionMap.clear();
+                jsonData.slice(1).forEach(row => {
+                    const c = String(row[2] || '').trim(); if (c) descriptionMap.set(c, [String(row[3] || '').trim(), String(row[4] || '').trim()]); 
+                });
+                if (allExcelData.length > 0) applyCorrelation();
+                alert(`Descrições: ${descriptionMap.size} carregadas.`);
+                event.target.value = null;
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        function applyCorrelation() {
+            allExcelData = allExcelData.map(row => {
+                const c = String(row[COL_MAP.CODIGO] || '').trim();
+                if (descriptionMap.has(c)) { row[COL_MAP.DESCRICAO] = descriptionMap.get(c)[0]; row[COL_MAP.CLIENTE] = descriptionMap.get(c)[1]; }
+                else { row[COL_MAP.DESCRICAO] = ""; row[COL_MAP.CLIENTE] = ""; }
+                return row;
+            });
+            displayTable(allExcelData, 'tableContainer');
+        }
+
+        function aggregateData(filteredRows) {
+            const map = new Map();
+            for (const row of filteredRows) {
+                if (String(row[COL_MAP.DESCRICAO] || '').trim() === "") continue; 
+                const key = row[COL_MAP.CODIGO];
+                if (map.has(key)) {
+                    const ex = map.get(key); ex.quantidade += row[COL_MAP.QTD]; ex.pesoTotal += row[COL_MAP.PESO_TOTAL]; 
+                } else {
+                    map.set(key, {
+                        data: row[COL_MAP.DATA], op: row[COL_MAP.OP], codigo: key,
+                        descricao: row[COL_MAP.DESCRICAO], material: row[COL_MAP.MATERIAL],
+                        pesoUn: row[COL_MAP.PESO_UN], quantidade: row[COL_MAP.QTD],
+                        lote: row[COL_MAP.LOTE], pesoTotal: row[COL_MAP.PESO_TOTAL],
+                        cliente: row[COL_MAP.CLIENTE], quant_fat: 0.0
+                    });
+                }
+            }
+            return Array.from(map.values()).map(v => [v.data, v.op, v.codigo, v.descricao, v.material, v.pesoUn, v.quantidade, v.lote, v.pesoTotal, v.cliente, v.quant_fat]);
+        }
+        
+        function updateTotalWeightDisplay() {
+            const isSaved = currentModalMode === 'saved';
+            let prog = 0, real = 0;
+            
+            if (!isSaved) {
+                prog = currentReportData.reduce((s, r) => s + (r[COL_MAP.PESO_TOTAL] || 0), 0);
+                prog += manualRowsData.reduce((s, r) => s + (r[COL_MAP.PESO_TOTAL] || 0), 0);
+                document.getElementById('totalWeightValue').textContent = prog.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) + ' KG'; // Legacy
+                return;
+            }
+
+            // Saved Mode
+            const rows = document.querySelectorAll('#modalReportContainer table tbody tr');
+            const numAgg = currentReportData.length;
+            
+            rows.forEach((tr, i) => {
+                 const isManual = i >= numAgg;
+                 const rowData = isManual ? manualRowsData[i - numAgg] : currentReportData[i];
+                 if (!rowData) return;
+                 prog += rowData[COL_MAP.PESO_TOTAL] || 0;
+                 const inp = tr.querySelector('.quant-fat-input');
+                 if (inp) real += (rowData[COL_MAP.PESO_UN] || 0) * parsePtBrNumber(inp.value);
+            });
+
+            totalProgrammedWeightValue.textContent = prog.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) + ' KG';
+            totalRealizedWeightValue.textContent = real.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) + ' KG';
+        }
+
+        function displayTable(data, containerId, modalMode = null) {
+            const container = document.getElementById(containerId); container.innerHTML = "";
+            const isModal = containerId === 'modalReportContainer';
+            const isSaved = modalMode === 'saved';
+
+            let dataDisp = isModal ? data.slice(0) : data.filter(r => r[COL_MAP.DATA]);
+            if (isModal) dataDisp = [...dataDisp, ...manualRowsData.map(r => { const n = [...r]; n[COL_MAP.DATA] = null; return n; })];
+
+            if (isModal) {
+                 if (dataDisp.length > 0) {
+                     if (isSaved) { document.getElementById('modalInfoPanel').style.display = 'flex'; observacoesContainer.style.display = 'block'; }
+                     else { document.getElementById('modalInfoPanel').style.display = 'none'; }
+                     generatePDFButton.disabled = false; saveReportButton.disabled = false; 
+                 } else {
+                     generatePDFButton.disabled = true; saveReportButton.disabled = true;
+                 }
+                 updateTotalWeightDisplay();
+            }
+
+            if (dataDisp.length === 0) {
+                container.innerHTML = `<p style='text-align: center; color: var(--text-muted); padding: 40px;'>Nenhum dado encontrado.</p>`;
+                return;
+            }
+
+            const table = document.createElement('table');
+            const thead = document.createElement('thead');
+            const headers = (isModal ? (isSaved ? modalSavedHeaders : modalGenerateHeaders) : colunasHeaders);
+            
+            // Header Row
+            let tr = document.createElement('tr');
+            headers.forEach(h => { const th = document.createElement('th'); th.textContent = h; tr.appendChild(th); });
+            thead.appendChild(tr);
+            
+            // Filter Row
+            if (containerId === 'tableContainer') {
+                tr = document.createElement('tr'); tr.id = 'filterRow';
+                headers.forEach((h, i) => {
+                    const td = document.createElement('td'); 
+                    const inp = document.createElement('input'); 
+                    inp.className = 'filter-input'; inp.placeholder = h;
+                    inp.addEventListener('keyup', function() {
+                        const val = this.value.toLowerCase();
+                        const rows = table.querySelectorAll('tbody tr');
+                        rows.forEach(r => {
+                            const txt = r.cells[i].textContent.toLowerCase();
+                            r.style.display = txt.includes(val) ? '' : 'none';
+                        });
+                    });
+                    td.appendChild(inp); tr.appendChild(td);
+                });
+                thead.appendChild(tr);
+            }
+
+            const tbody = document.createElement('tbody');
+            const numAgg = isModal ? data.length : dataDisp.length;
+
+            dataDisp.forEach((row, i) => {
+                if (row.length <= COL_MAP.QUANT_FAT) while (row.length <= COL_MAP.QUANT_FAT) row.push(0.0);
+                const tr = document.createElement('tr'); tr.setAttribute('data-row-index', i);
+                const isManual = isModal && i >= numAgg;
+                if (isManual) tr.classList.add('manual-row');
+
+                let cols = isModal 
+                    ? (isSaved ? [1,2,3,4,5,7,6] : [1,2,3,4,5,6,7,8]) // Indices mapped to visual cols
+                    : [0,1,2,3,4,5,6,7,8,9];
+
+                cols.forEach(idx => {
+                    const td = document.createElement('td');
+                    let val = row[idx];
+                    if (idx === COL_MAP.DATA) val = val instanceof Date ? `${val.getDate()}/${val.getMonth()+1}/${val.getFullYear()}` : formatDateToDisplay(val);
+                    else if ([COL_MAP.QTD, COL_MAP.PESO_TOTAL, COL_MAP.PESO_UN].includes(idx) && typeof val === 'number') {
+                        val = val.toLocaleString('pt-BR', { maximumFractionDigits: idx === COL_MAP.QTD ? 0 : (idx === COL_MAP.PESO_UN ? 4 : 2), minimumFractionDigits: idx === COL_MAP.QTD ? 0 : 2 });
+                        td.classList.add('align-right');
+                    }
+                    td.textContent = val || "";
+                    
+                    // Edits
+                    if (containerId === 'tableContainer' && idx === COL_MAP.PESO_UN) {
+                        td.contentEditable = true; td.classList.add('editable-peso');
+                        td.onblur = (e) => {
+                            const p = parsePtBrNumber(e.target.textContent);
+                            allExcelData[i][COL_MAP.PESO_UN] = p; allExcelData[i][COL_MAP.PESO_TOTAL] = p * allExcelData[i][COL_MAP.QTD];
+                            e.target.parentElement.cells[8].textContent = allExcelData[i][COL_MAP.PESO_TOTAL].toLocaleString('pt-BR', {minimumFractionDigits:2});
+                        };
+                    }
+                    if (isManual && isModal) {
+                        if ([1,2,3,4,7].includes(idx)) { td.contentEditable = true; td.classList.add('editable-manual'); td.onblur = updateManualRowsData; }
+                        else if ([5,6].includes(idx)) { 
+                            td.contentEditable = true; td.classList.add('editable-manual'); 
+                            td.onblur = (e) => { updateManualRowsData(); }; 
+                        }
+                    }
+                    tr.appendChild(td);
+                });
+
+                if (isModal && isSaved) {
+                    // FAT
+                    const tdFat = document.createElement('td'); tdFat.style.textAlign = 'center';
+                    const inp = document.createElement('input'); inp.type = 'number'; inp.className = 'quant-fat-input';
+                    inp.min = 0; inp.value = isManual ? (manualRowsData[i-numAgg][COL_MAP.QUANT_FAT]||0) : (currentReportData[i][COL_MAP.QUANT_FAT]||0);
+                    inp.onchange = () => updateTotalWeightDisplay();
+                    tdFat.appendChild(inp); tr.appendChild(tdFat);
+                    
+                    // ADERIU
+                    const tdAdh = document.createElement('td'); tdAdh.style.textAlign = 'center';
+                    if (!isManual) {
+                        const cb = document.createElement('input'); cb.type = 'checkbox'; cb.className = 'adherence-checkbox';
+                        cb.checked = currentAdherenceStatus[i] || false;
+                        cb.onchange = (e) => saveLineAdherenceStatus(reportDateInput.value, i, e.target.checked);
+                        tdAdh.appendChild(cb);
+                    } else { tdAdh.textContent = '-'; }
+                    tr.appendChild(tdAdh);
+                }
+                tbody.appendChild(tr);
+            });
+            table.appendChild(thead); table.appendChild(tbody);
+            container.appendChild(table);
+        }
+
+        function updateManualRowsData() {
+            const table = document.querySelector('#modalReportContainer table'); if (!table) return;
+            const rows = Array.from(table.querySelectorAll('tbody tr.manual-row'));
+            const isSaved = currentModalMode === 'saved';
+            // Mapping visual index to data index
+            const map = isSaved ? [1,2,3,4,5,7,6,10] : [1,2,3,4,5,6,7,8]; 
+
+            const newMan = [];
+            rows.forEach((r, idx) => {
+                const rowDat = manualRowsData[idx] || [null, '', '', '', '', 0, 0, '', 0, '', 0];
+                const cells = r.cells;
+                map.forEach((dataIdx, cellIdx) => {
+                    if (dataIdx === COL_MAP.QUANT_FAT && isSaved) rowDat[dataIdx] = parsePtBrNumber(cells[cellIdx].querySelector('input').value);
+                    else if ([5,6,8].includes(dataIdx)) rowDat[dataIdx] = parsePtBrNumber(cells[cellIdx].textContent);
+                    else rowDat[dataIdx] = cells[cellIdx].textContent.trim();
+                });
+                rowDat[COL_MAP.PESO_TOTAL] = rowDat[COL_MAP.PESO_UN] * rowDat[COL_MAP.QTD];
+                if (rowDat[COL_MAP.CODIGO]) newMan.push(rowDat);
+            });
+            manualRowsData = newMan;
+            updateTotalWeightDisplay();
+        }
+        
+        // --- Generation ---
+        generateReportButton.addEventListener('click', () => {
+             const dateStr = reportDateInput.value; if (!dateStr) return alert("Selecione data.");
+             currentReportData = []; manualRowsData = []; currentAdherenceStatus = [];
+             modalControls.classList.remove('saved-mode');
+             generatePDFButton.style.display = 'none'; saveReportButton.style.display = 'none';
+
+             const parts = dateStr.split('-'); const refDate = new Date(parts[0], parts[1]-1, parts[2]); refDate.setHours(0,0,0,0);
+             targetDateForPDF = new Date(refDate);
+             modalTitle.textContent = `Programação: ${refDate.toLocaleDateString('pt-BR')}`;
+             
+             const filt = allExcelData.filter(row => {
+                 if (!(row[COL_MAP.DATA] instanceof Date)) return false;
+                 const rd = new Date(row[COL_MAP.DATA]); rd.setHours(0,0,0,0);
+                 const mat = String(row[COL_MAP.MATERIAL]||'').toUpperCase().trim();
+                 const days = materialDaysMap.get(mat) || 5;
+                 return getBusinessDayOffsetDateForward(rd, days).getTime() === refDate.getTime();
+             });
+             
+             let agg = aggregateData(filt);
+             agg = applyPosteriorDeduction(agg);
+             currentReportData = agg;
+             currentAdherenceStatus = new Array(agg.length).fill(false);
+             
+             displayTable(agg, 'modalReportContainer', 'generate');
+             addManualRowButton.style.display = 'inline-flex';
+             if (agg.length > 0) {
+                 generatePDFButton.disabled = false; saveReportButton.disabled = false;
+                 generatePDFButton.style.display = 'inline-flex'; saveReportButton.style.display = 'inline-flex';
+             }
+        });
+
+        addManualRowButton.addEventListener('click', () => {
+             updateManualRowsData();
+             manualRowsData.push([null, '', '', '', '', 0, 0, '', 0, '', 0]);
+             displayTable(currentReportData, 'modalReportContainer', currentModalMode);
+        });
+
+        // --- PDF GENERATION UPDATED ---
+        generatePDFButton.addEventListener('click', () => {
+            updateManualRowsData();
+            if (currentModalMode === 'saved') updateReportDataQuantFat();
+            
+            const all = [...currentReportData, ...manualRowsData];
+            if (all.length === 0) return alert("Nada para PDF.");
+
+            const { jsPDF } = window.jspdf; 
+            const doc = new jsPDF('l', 'mm', 'a4');
+            const pageWidth = doc.internal.pageSize.width;
+
+            // Header Background (Zinc 900)
+            doc.setFillColor(24, 24, 27); 
+            doc.rect(0, 0, pageWidth, 25, 'F');
+            
+            // Header Text (White & Amber)
+            doc.setFontSize(18); 
+            doc.setTextColor(255, 255, 255); 
+            doc.text('PROGRAMAÇÃO DO ACABAMENTO INTERNO', 14, 15);
+            
+            doc.setFontSize(12); 
+            doc.setTextColor(251, 191, 36);
+            doc.text(`DATA: ${targetDateForPDF.toLocaleDateString('pt-BR')}`, 14, 22);
+
+            let total = 0;
+            const body = [];
+            all.forEach(r => {
+                const q = parsePtBrNumber(r[COL_MAP.QTD]);
+                if (q > 0 || r[COL_MAP.DATA] === null) {
+                    total += parsePtBrNumber(r[COL_MAP.PESO_TOTAL]);
+                    const d = r[COL_MAP.DATA];
+                    body.push([
+                        r[COL_MAP.OP], d ? d.toLocaleDateString('pt-BR') : 'MANUAL',
+                        r[COL_MAP.CODIGO], r[COL_MAP.DESCRICAO], r[COL_MAP.MATERIAL], r[COL_MAP.CLIENTE],
+                        q.toLocaleString('pt-BR',{maximumFractionDigits:0}), r[COL_MAP.LOTE],
+                        parsePtBrNumber(r[COL_MAP.PESO_TOTAL]).toLocaleString('pt-BR',{minimumFractionDigits:2})
+                    ]);
                 }
             });
-            savePosteriorButton.disabled = false;
-            alert("Posteriores carregados!");
-        };
-        reader.readAsArrayBuffer(e.target.files[0]);
-    };
 
-    // ==========================================================================
-    // 5. GERAÇÃO E AGREGAÇÃO DA PROGRAMAÇÃO
-    // ==========================================================================
-    function getBusinessDayOffset(startDate, days) {
-        let date = new Date(startDate);
-        let added = 0;
-        while (added < days) {
-            date.setDate(date.getDate() + 1);
-            if (date.getDay() !== 0 && date.getDay() !== 6) added++;
-        }
-        return date;
-    }
-
-    function applyPosteriorDeduction(dataArray) {
-        if (posteriorMap.size === 0) return dataArray;
-        return dataArray.map(row => {
-            const op = String(row[COL_MAP.OP] || '').trim();
-            const d = row[COL_MAP.DATA]; 
-            const q = row[COL_MAP.QTD];
-            let postQ = 0;
-            if (op && posteriorMap.has(op) && d instanceof Date) {
-                postQ = posteriorMap.get(op).reduce((sum, p) => (p.data.getTime() >= d.getTime() ? sum + p.quant : sum), 0);
-            }
-            const realQ = Math.max(0, q - postQ);
-            const newRow = [...row]; 
-            newRow[COL_MAP.QTD] = realQ; 
-            newRow[COL_MAP.PESO_TOTAL] = row[COL_MAP.PESO_UN] * realQ;
-            return newRow;
-        }).filter(r => r[COL_MAP.QTD] > 0 || r[COL_MAP.DATA] === null);
-    }
-
-    generateReportButton.onclick = () => {
-        const dateStr = reportDateInput.value;
-        if (!dateStr) return alert("Selecione uma data.");
-        const refDate = new Date(dateStr + 'T00:00:00');
-        targetDateForPDF = refDate;
-
-        const filtered = allExcelData.filter(row => {
-            const d = row[COL_MAP.DATA];
-            const mat = String(row[COL_MAP.MATERIAL]).trim().toUpperCase();
-            const days = materialDaysMap.get(mat) || 5;
-            return getBusinessDayOffset(d, days).getTime() === refDate.getTime();
-        });
-
-        // Agregação
-        const map = new Map();
-        filtered.forEach(r => {
-            if (String(r[COL_MAP.DESCRICAO]).trim() === "") return;
-            const key = r[COL_MAP.CODIGO];
-            if (map.has(key)) {
-                map.get(key)[COL_MAP.QTD] += r[COL_MAP.QTD];
-                map.get(key)[COL_MAP.PESO_TOTAL] += r[COL_MAP.PESO_TOTAL];
-            } else {
-                map.set(key, [...r]);
-            }
-        });
-
-        currentReportData = applyPosteriorDeduction(Array.from(map.values()));
-        currentAdherenceStatus = new Array(currentReportData.length).fill(false);
-        displayTable(currentReportData, 'modalReportContainer', 'generate');
-        
-        observacoesContainer.style.display = 'block';
-        saveReportButton.style.display = 'inline-flex';
-        generatePDFButton.style.display = 'inline-flex';
-        addManualRowButton.style.display = 'inline-flex';
-    };
-
-    // ==========================================================================
-    // 6. BOTÕES DE SALVAMENTO (PARA O NEON)
-    // ==========================================================================
-    
-    // Salvar Dados Brutos (Raw)
-    saveRawDataButton.onclick = async () => {
-        showSpinner();
-        const dataToSave = allExcelData.map(r => [
-            r[0].toISOString().split('T')[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9], r[10]
-        ]);
-        try {
-            await apiRequest('import-raw', 'POST', dataToSave);
-            alert("Dados Brutos salvos no servidor!");
-            loadRawDataFromServer();
-        } catch (e) { alert("Erro ao salvar Raw."); }
-        finally { hideSpinner(); }
-    };
-
-    // Salvar Programação Final
-    saveReportButton.onclick = async () => {
-        updateManualRowsData();
-        updateReportDataQuantFat();
-        const fullData = [...currentReportData, ...manualRowsData];
-        const dateRef = reportDateInput.value;
-        showSpinner();
-        try {
-            await apiRequest('save-final', 'POST', {
-                data_referencia: dateRef,
-                programacao: fullData,
-                adherence_status: currentAdherenceStatus,
-                observacoes: observacoesTextarea.value
+            doc.autoTable({
+                head: [["OP", "Apont.", "Cód.", "Descrição", "Material", "Cliente", "Quant.", "Lote", "Peso Total"]],
+                body: body,
+                startY: 30,
+                theme: 'grid',
+                styles: {
+                    font: 'helvetica',
+                    fontSize: 7,
+                    cellPadding: 1.5,
+                    textColor: [20, 20, 20],
+                    overflow: 'ellipsize', // FORÇA O CORTE DO TEXTO (EXCETO COLUNA 1)
+                    valign: 'middle',
+                    lineWidth: 0.1,
+                    lineColor: [200, 200, 200]
+                },
+                headStyles: {
+                    fillColor: [24, 24, 27], // Zinc 900
+                    textColor: [251, 191, 36], // Amber 400
+                    fontStyle: 'bold',
+                    lineWidth: 0.1,
+                    lineColor: [24, 24, 27]
+                },
+                alternateRowStyles: {
+                    fillColor: [245, 245, 245]
+                },
+                columnStyles: {
+                    0: { cellWidth: 18 },  // OP
+                    1: { cellWidth: 22, overflow: 'visible' }, // Apont. (MOSTRA TUDO)
+                    2: { cellWidth: 20 },  // Cód
+                    3: { cellWidth: 'auto' }, // Descrição (Preenche)
+                    4: { cellWidth: 30 },  // Material
+                    5: { cellWidth: 40 },  // Cliente
+                    6: { cellWidth: 15, halign: 'right' }, // Quant
+                    7: { cellWidth: 15 },  // Lote
+                    8: { cellWidth: 22, halign: 'right' }  // Peso
+                },
+                tableWidth: 'auto',
+                margin: { left: 10, right: 10 } // MARGENS REDUZIDAS PARA OCUPAR TUDO
             });
-            alert("Programação salva com sucesso!");
-            loadSavedPrograms();
-        } catch (e) { alert("Erro ao salvar."); }
-        finally { hideSpinner(); }
-    };
-
-    // Salvar Materiais/Dias
-    saveMaterialDaysButton.onclick = async () => {
-        await apiRequest('save-config', 'POST', { 
-            config_key: 'material_days', 
-            config_value: { materialDays: Array.from(materialDaysMap.entries()) } 
-        });
-        alert("Configurações de Materiais salvas!");
-    };
-
-    // Salvar Posteriores
-    savePosteriorButton.onclick = async () => {
-        const data = Array.from(posteriorMap.entries()).map(([op, apps]) => [
-            op, apps.map(a => ({ data: a.data.toISOString(), quant: a.quant }))
-        ]);
-        await apiRequest('save-config', 'POST', { 
-            config_key: 'posterior_map', 
-            config_value: { posteriorCorrelation: data } 
-        });
-        alert("Configurações de Posteriores salvas!");
-    };
-
-    // Atualizar Data/Hora do Sistema
-    updateLastUpdateButton.onclick = async () => {
-        if (prompt("Senha:") !== "ATUALIZAR") return;
-        const now = new Date().toISOString();
-        await apiRequest('save-config', 'POST', { 
-            config_key: 'last_update', 
-            config_value: { last_updated: now } 
-        });
-        loadLastUpdate();
-    };
-
-    // Limpar Raw
-    clearRawDataButton.onclick = async () => {
-        if(!confirm("Apagar TUDO do servidor?")) return;
-        await apiRequest('clear-raw', 'POST');
-        location.reload();
-    };
-
-    // ==========================================================================
-    // 7. PROGRAMAÇÕES SALVAS (SIDEBAR)
-    // ==========================================================================
-    async function loadSavedPrograms() {
-        savedList.innerHTML = '<li>Carregando...</li>';
-        const data = await apiRequest('saved-list');
-        savedList.innerHTML = '';
-        if(data.length === 0) savedList.innerHTML = '<li class="empty-list-message">Vazio</li>';
-        data.forEach(p => {
-            const li = document.createElement('li');
-            li.innerHTML = `
-                <div class="list-item-content">
-                    <div class="list-item-title">${formatDateToDisplay(p.data_referencia)}</div>
-                    <div class="list-item-details">Peso: ${parsePtBrNumber(p.peso_total_agregado).toLocaleString('pt-BR')} KG</div>
-                </div>
-                <button class="delete-program-btn" onclick="event.stopPropagation(); deleteSavedProgram('${p.data_referencia}')"><i class="fas fa-times"></i></button>
-            `;
-            li.onclick = () => loadSavedProgramToModal(p.data_referencia);
-            savedList.appendChild(li);
-        });
-    }
-
-    async function loadSavedProgramToModal(dateRef) {
-        resetModalState('saved');
-        showSpinner();
-        try {
-            const prog = await apiRequest('programacao', 'GET', null, { data_referencia: dateRef });
-            const adh = await apiRequest('adherence-status', 'GET', null, { data_referencia: dateRef });
-            const obs = await apiRequest('load-config', 'GET', null, { config_key: `obs_${dateRef}` });
-
-            currentReportData = prog;
-            currentAdherenceStatus = new Array(prog.length).fill(false);
-            prog.forEach((_, i) => { if(adh[i]) currentAdherenceStatus[i] = true; });
-
-            reportDateInput.value = dateRef;
-            targetDateForPDF = new Date(dateRef + 'T00:00:00');
-            observacoesTextarea.value = obs.config_value || '';
-
-            displayTable(currentReportData, 'modalReportContainer', 'saved');
-            modalTitle.innerHTML = `<i class="fas fa-save" style="color: #fbbf24;"></i> ${formatDateToDisplay(dateRef)}`;
             
-            observacoesContainer.style.display = 'block';
-            saveReportButton.style.display = 'inline-flex';
-            generatePDFButton.style.display = 'inline-flex';
-            addManualRowButton.style.display = 'inline-flex';
-            reportModal.classList.add('show');
-        } catch (e) { alert("Erro ao abrir."); }
-        finally { hideSpinner(); }
-    }
-
-    async function deleteSavedProgram(dateRef) {
-        if(!confirm("Excluir definitivamente?")) return;
-        await apiRequest('delete-programacao', 'POST', { data_referencia: dateRef });
-        loadSavedPrograms();
-    }
-
-    // ==========================================================================
-    // 8. RENDERIZAÇÃO DE TABELAS E PDF
-    // ==========================================================================
-    function displayTable(data, containerId, mode = null) {
-        const container = document.getElementById(containerId);
-        container.innerHTML = "";
-        const table = document.createElement('table');
-        const isSaved = mode === 'saved';
-        const isModal = containerId === 'modalReportContainer';
-
-        const headers = isSaved ? ["OP", "CÓDIGO", "DESCRIÇÃO", "MATERIAL", "PESO UN", "LOTE", "QTD", "FAT.", "OK"] : 
-                                 ["DATA", "OP", "CÓDIGO", "DESCRIÇÃO", "MATERIAL", "PESO UN", "QTD", "LOTE", "PESO TOTAL", "CLIENTE"];
-        
-        let headHtml = "<thead><tr>";
-        headers.forEach(h => headHtml += `<th>${h}</th>`);
-        headHtml += "</tr></thead>";
-        table.innerHTML = headHtml;
-
-        const tbody = document.createElement('tbody');
-        data.forEach((row, i) => {
-            const tr = document.createElement('tr');
-            if (row[COL_MAP.DATA] === null) tr.classList.add('manual-row');
-
-            let html = "";
-            if (isSaved) {
-                html += `<td>${row[1]}</td><td>${row[2]}</td><td>${row[3]}</td><td>${row[4]}</td><td>${row[5].toFixed(2)}</td><td>${row[7]}</td><td>${row[6]}</td>`;
-                html += `<td><input type="number" class="quant-fat-input" value="${row[10] || 0}" onchange="updateTotalWeightDisplay()"></td>`;
-                html += `<td><input type="checkbox" class="adherence-checkbox" ${currentAdherenceStatus[i] ? 'checked' : ''} onchange="updateAdherence(${i}, this.checked)"></td>`;
-            } else {
-                row.slice(0, 10).forEach((val, idx) => {
-                    let d = val;
-                    if(idx === 0 && val instanceof Date) d = val.toLocaleDateString('pt-BR');
-                    if([5, 8].includes(idx)) d = val.toLocaleString('pt-BR', {minimumFractionDigits:2});
-                    html += `<td ${idx === 5 && !isModal ? 'contenteditable="true" class="editable-peso"' : ''}>${d || ''}</td>`;
-                });
+            // Add Observations if any
+            const obs = observacoesTextarea.value.trim();
+            if (obs) {
+                const finalY = doc.autoTable.previous.finalY + 5;
+                doc.setFontSize(10);
+                doc.setTextColor(20, 20, 20);
+                doc.text('Observações:', 14, finalY);
+                doc.setFontSize(9);
+                doc.setTextColor(80, 80, 80);
+                const splitText = doc.splitTextToSize(obs, pageWidth - 28);
+                doc.text(splitText, 14, finalY + 5);
             }
-            tr.innerHTML = html;
-            tbody.appendChild(tr);
-        });
-        table.appendChild(tbody);
-        container.appendChild(table);
-        updateTotalWeightDisplay();
-    }
 
-    async function updateAdherence(index, status) {
-        currentAdherenceStatus[index] = status;
-        calculateModalAdherence();
-        await apiRequest('update-adherence', 'POST', {
-            data_referencia: reportDateInput.value,
-            item_index: index,
-            new_status: status
-        });
-    }
-
-    function calculateModalAdherence() {
-        const total = currentAdherenceStatus.length;
-        const count = currentAdherenceStatus.filter(v => v === true).length;
-        modalAdherenceValue.textContent = (total > 0 ? (count / total * 100).toFixed(2) : "0.00") + "%";
-        modalAdherenceCount.textContent = `${count}/${total} Itens`;
-    }
-
-    function updateTotalWeightDisplay() {
-        let pWeight = 0, rWeight = 0;
-        const rows = [...currentReportData, ...manualRowsData];
-        const domRows = document.querySelectorAll('#modalReportContainer tbody tr');
-
-        rows.forEach((r, i) => {
-            pWeight += r[COL_MAP.PESO_TOTAL];
-            const inp = domRows[i]?.querySelector('.quant-fat-input');
-            if(inp) rWeight += (r[COL_MAP.PESO_UN] * parsePtBrNumber(inp.value));
+            doc.save(`Programacao_${targetDateForPDF.toLocaleDateString('pt-BR').replace(/\//g,'-')}.pdf`);
         });
 
-        totalProgrammedWeightValue.textContent = pWeight.toLocaleString('pt-BR') + " KG";
-        totalRealizedWeightValue.textContent = rWeight.toLocaleString('pt-BR') + " KG";
-    }
-
-    function updateManualRowsData() {
-        const domRows = document.querySelectorAll('#modalReportContainer tbody tr.manual-row');
-        manualRowsData = Array.from(domRows).map(tr => {
-            const cells = tr.cells;
-            return [null, cells[0].textContent, cells[1].textContent, cells[2].textContent, cells[3].textContent, parsePtBrNumber(cells[4].textContent), parsePtBrNumber(cells[6].textContent), cells[5].textContent, parsePtBrNumber(cells[4].textContent)*parsePtBrNumber(cells[6].textContent), "", 0];
-        });
-    }
-
-    function updateReportDataQuantFat() {
-        const domRows = document.querySelectorAll('#modalReportContainer tbody tr:not(.manual-row)');
-        domRows.forEach((tr, i) => {
-            const inp = tr.querySelector('.quant-fat-input');
-            if(inp) currentReportData[i][COL_MAP.QUANT_FAT] = parsePtBrNumber(inp.value);
-        });
-    }
-
-    function resetModalState(mode) {
-        currentModalMode = mode;
-        currentReportData = []; manualRowsData = []; currentAdherenceStatus = [];
-        observacoesTextarea.value = "";
-        document.getElementById('modalReportContainer').innerHTML = "";
-    }
-
-    addManualRowButton.onclick = () => {
-        manualRowsData.push([null, "OP", "COD", "DESC", "MAT", 0, 0, "LOTE", 0, "", 0]);
-        displayTable(currentReportData, 'modalReportContainer', currentModalMode);
-    };
-
-    // PDF 
-    generatePDFButton.onclick = () => {
-        updateManualRowsData(); updateReportDataQuantFat();
-        const { jsPDF } = window.jspdf;
-        const doc = new jsPDF('l', 'mm', 'a4');
-        doc.setFillColor(24, 24, 27); doc.rect(0, 0, 297, 25, 'F');
-        doc.setTextColor(255); doc.setFontSize(18); doc.text("PROGRAMAÇÃO ACABAMENTO INTERNO", 14, 15);
-        doc.setTextColor(251, 191, 36); doc.setFontSize(12); doc.text(`DATA: ${targetDateForPDF.toLocaleDateString('pt-BR')}`, 14, 22);
-
-        const body = [...currentReportData, ...manualRowsData].map(r => [
-            r[1], r[0] ? r[0].toLocaleDateString('pt-BR') : 'MANUAL', r[2], r[3], r[4], r[9], r[6], r[7], r[8].toLocaleString('pt-BR')
-        ]);
-
-        doc.autoTable({
-            head: [["OP", "Apont.", "Cód.", "Descrição", "Material", "Cliente", "Qtd", "Lote", "Peso"]],
-            body, startY: 30, theme: 'grid', styles: { fontSize: 7 },
-            headStyles: { fillColor: [24,24,27], textColor: [251,191,36] }
-        });
-        
-        if(observacoesTextarea.value) {
-            doc.setTextColor(0); doc.text("Observações:", 14, doc.autoTable.previous.finalY + 10);
-            doc.setFontSize(9); doc.text(observacoesTextarea.value, 14, doc.autoTable.previous.finalY + 15);
+        function updateReportDataQuantFat() {
+             const rows = document.querySelectorAll('#modalReportContainer table tbody tr');
+             const numAgg = currentReportData.length;
+             rows.forEach((tr, i) => {
+                 const inp = tr.querySelector('.quant-fat-input');
+                 if (inp) {
+                     const val = parsePtBrNumber(inp.value);
+                     if (i < numAgg) currentReportData[i][COL_MAP.QUANT_FAT] = val;
+                     else manualRowsData[i-numAgg][COL_MAP.QUANT_FAT] = val;
+                 }
+             });
         }
-        doc.save(`Prog_${reportDateInput.value}.pdf`);
-    };
 
-    // ==========================================================================
-    // 9. INICIALIZAÇÃO FINAL
-    // ==========================================================================
-    window.onload = initSystem;
-</script>
+    </script>
 </body>
 </html>
