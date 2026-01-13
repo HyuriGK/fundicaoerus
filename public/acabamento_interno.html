@@ -34,6 +34,7 @@
             
             --text-main: #f4f4f5;           /* Zinc 100 */
             --text-muted: #a1a1aa;          /* Zinc 400 */
+            --text-dark: #000000;
             
             --border-subtle: rgba(255, 255, 255, 0.08);
             --border-highlight: rgba(255, 255, 255, 0.15);
@@ -41,6 +42,7 @@
             --status-success: #10b981;
             --status-danger: #ef4444;
             --status-info: #06b6d4;
+            --status-purple: #a855f7;
             
             /* Dimensions */
             --sidebar-width: 260px;
@@ -105,7 +107,10 @@
             color: #000; font-size: 1.1rem;
             box-shadow: var(--shadow-glow);
         }
-        .brand-text { font-size: 1rem; font-weight: 700; color: #fff; line-height: 1.2; }
+        .brand-text { 
+            font-size: 1rem; font-weight: 700; color: #fff; line-height: 1.2; 
+            white-space: nowrap; /* Garante que não quebre linha */
+        }
 
         .sidebar-content {
             flex-grow: 1;
@@ -424,7 +429,7 @@
         <div class="sidebar-header">
             <div class="brand-wrapper">
                 <div class="brand-icon"><i class="fa-solid fa-industry"></i></div>
-                <div class="brand-text">Fundição<br>Erus</div>
+                <div class="brand-text">Fundição Erus</div>
             </div>
         </div>
         
@@ -650,11 +655,22 @@
         
         function parsePtPtBrNumber(str) { return parsePtBrNumber(str); }
         
+        // ATUALIZADO: Função para formatar data (YYYY-MM-DD -> DD/MM/AAAA) com zero à esquerda
         function formatDateToDisplay(dateStr) {
             if (!dateStr) return '';
             try {
-                const [year, month, day] = dateStr.split('-');
-                return `${day}/${month}/${year}`;
+                // Tenta dividir se for string YYYY-MM-DD
+                if (typeof dateStr === 'string' && dateStr.includes('-')) {
+                    const [year, month, day] = dateStr.split('-');
+                    return `${day.padStart(2, '0')}/${month.padStart(2, '0')}/${year}`;
+                }
+                // Se for objeto Date
+                if (dateStr instanceof Date) {
+                    const day = String(dateStr.getDate()).padStart(2, '0');
+                    const month = String(dateStr.getMonth() + 1).padStart(2, '0');
+                    return `${day}/${month}/${dateStr.getFullYear()}`;
+                }
+                return dateStr;
             } catch (e) { return dateStr; }
         }
         
@@ -965,7 +981,7 @@
         window.addEventListener('load', () => {
             loadRawDataFromServer(); 
             loadMaterialDaysCorrelation(); loadPosteriorCorrelation(); loadLastUpdate();
-            loadSavedSchedulesList(); // [NOVO] Carregar lista lateral
+            loadSavedSchedulesList(); 
         });
         
         function resetModalState() {
@@ -1181,9 +1197,17 @@
                     const td = document.createElement('td');
                     let val = row[idx];
                     
+                    // ATUALIZAÇÃO DE DATA (DD/MM/YYYY com zeros à esquerda)
                     if (idx === COL_MAP.DATA) {
-                        val = val instanceof Date ? `${val.getDate()}/${val.getMonth()+1}/${val.getFullYear()}` : formatDateToDisplay(val);
+                        if (val instanceof Date) {
+                            const day = String(val.getDate()).padStart(2, '0');
+                            const month = String(val.getMonth() + 1).padStart(2, '0');
+                            val = `${day}/${month}/${val.getFullYear()}`;
+                        } else {
+                            val = formatDateToDisplay(val);
+                        }
                     } else if ([COL_MAP.QTD, COL_MAP.PESO_TOTAL, COL_MAP.PESO_UN].includes(idx) && typeof val === 'number') {
+                        // ATUALIZAÇÃO DE PESOS (2 casas decimais)
                         const minDec = (idx === COL_MAP.QTD) ? 0 : 2;
                         const maxDec = (idx === COL_MAP.QTD) ? 0 : 2;
                         val = val.toLocaleString('pt-BR', { minimumFractionDigits: minDec, maximumFractionDigits: maxDec });
