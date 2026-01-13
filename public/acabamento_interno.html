@@ -109,7 +109,7 @@
         }
         .brand-text { 
             font-size: 1rem; font-weight: 700; color: #fff; line-height: 1.2; 
-            white-space: nowrap; /* CORREÇÃO: Não quebra linha */
+            white-space: nowrap;
         }
 
         .sidebar-content {
@@ -276,29 +276,36 @@
             border: 1px solid var(--border-subtle);
             border-radius: var(--radius-md);
             flex-grow: 1;
-            overflow-y: auto; 
-            overflow-x: hidden; 
+            overflow-y: hidden; /* Mudado para hidden para o overlay funcionar */
             position: relative;
             backdrop-filter: blur(5px);
             display: flex;
             flex-direction: column;
         }
+        
+        .table-scroll-area {
+            overflow-y: auto;
+            overflow-x: hidden;
+            flex-grow: 1;
+            width: 100%;
+        }
 
-        /* --- BLUR OVERLAY (NOVO) --- */
+        /* --- BLUR OVERLAY (MODIFICADO) --- */
         .blur-overlay {
             position: absolute;
             inset: 0;
-            background: rgba(9, 9, 11, 0.7); /* Fundo escuro semi-transparente */
-            backdrop-filter: blur(12px); /* Efeito de vidro fosco */
+            background: rgba(9, 9, 11, 0.8); 
+            backdrop-filter: blur(15px); /* Mais blur */
             z-index: 50;
             display: flex;
             align-items: center;
             justify-content: center;
-            transition: opacity 0.3s ease;
+            transition: opacity 0.3s ease, visibility 0.3s;
         }
         
         .blur-overlay.hidden {
             opacity: 0;
+            visibility: hidden;
             pointer-events: none;
         }
 
@@ -322,27 +329,27 @@
         }
         tr:hover td { background: rgba(255,255,255,0.02); color: var(--color-primary); }
         
-        /* --- COLUMN WIDTHS --- */
-        #tableContainer th:nth-child(1) { width: 10%; text-align: center; } 
-        #tableContainer th:nth-child(2) { width: 10%; text-align: center; } 
-        #tableContainer th:nth-child(3) { width: 10%; text-align: center; } 
-        #tableContainer th:nth-child(4) { width: 30%; } 
-        #tableContainer th:nth-child(5) { width: 12%; } 
-        #tableContainer th:nth-child(6) { width: 10%; text-align: center; } 
-        #tableContainer th:nth-child(7) { width: 8%; text-align: center; }  
-        #tableContainer th:nth-child(8) { width: 10%; text-align: center; } 
+        /* --- COLUMN WIDTHS (MAIN TABLE) --- */
+        #mainTableContent th:nth-child(1) { width: 10%; text-align: center; } 
+        #mainTableContent th:nth-child(2) { width: 10%; text-align: center; } 
+        #mainTableContent th:nth-child(3) { width: 10%; text-align: center; } 
+        #mainTableContent th:nth-child(4) { width: 30%; } 
+        #mainTableContent th:nth-child(5) { width: 12%; } 
+        #mainTableContent th:nth-child(6) { width: 10%; text-align: center; } 
+        #mainTableContent th:nth-child(7) { width: 8%; text-align: center; }  
+        #mainTableContent th:nth-child(8) { width: 10%; text-align: center; } 
 
-        /* MODAL WIDTHS (Adjusted for PDF similarity) */
-        /* OP, COD, DESC, MAT, PUN, QTD, LOTE, PESO, ACTION */
-        #modalReportContainer th:nth-child(1) { width: 7%; text-align: center; } /* OP */
-        #modalReportContainer th:nth-child(2) { width: 7%; text-align: center; } /* COD */
-        #modalReportContainer th:nth-child(3) { width: 23%; } /* DESC */
-        #modalReportContainer th:nth-child(4) { width: 23%; } /* MAT */
-        #modalReportContainer th:nth-child(5) { width: 8%; text-align: center; } /* PUN */
+        /* --- COLUMN WIDTHS (MODAL - PDF STYLE) --- */
+        /* PDF Structure: OP, COD, DESC, MAT, CLIENTE, QTD, LOTE, PESO */
+        #modalReportContainer th:nth-child(1) { width: 8%; text-align: center; } /* OP */
+        #modalReportContainer th:nth-child(2) { width: 8%; text-align: center; } /* COD */
+        #modalReportContainer th:nth-child(3) { width: 22%; } /* DESC */
+        #modalReportContainer th:nth-child(4) { width: 18%; } /* MAT */
+        #modalReportContainer th:nth-child(5) { width: 18%; } /* CLIENTE */
         #modalReportContainer th:nth-child(6) { width: 7%; text-align: center; } /* QTD */
         #modalReportContainer th:nth-child(7) { width: 10%; text-align: center; } /* LOTE */
-        #modalReportContainer th:nth-child(8) { width: 9%; text-align: center; } /* PESO */
-        #modalReportContainer th:nth-child(9) { width: 6%; text-align: center; } /* ACTION */
+        #modalReportContainer th:nth-child(8) { width: 10%; text-align: center; } /* PESO TOTAL */
+        #modalReportContainer th:nth-child(9) { width: 5%; text-align: center; } /* ACTION */
 
         td.align-right { text-align: right; }
         td.align-center { text-align: center !important; }
@@ -521,13 +528,19 @@
         <!-- MAIN CONTENT -->
         <main class="content-area">
             <div class="table-container" id="tableContainer">
+                <!-- BLUR OVERLAY FOR MAIN TABLE ONLY -->
                 <div id="blurOverlay" class="blur-overlay">
                     <button class="btn-primary" onclick="toggleBlur()">
                         <i class="fas fa-eye"></i> Visualizar Registros
                     </button>
                 </div>
-                <div style="height: 100%; display: flex; align-items: center; justify-content: center; color: var(--text-muted);">
-                    <p id="initialMessage">Aguardando carregamento do arquivo Excel ou dados do servidor...</p>
+                
+                <div class="table-scroll-area" id="mainTableScrollArea">
+                    <div id="mainTableContent" style="width: 100%; height: 100%;">
+                        <div style="height: 100%; display: flex; align-items: center; justify-content: center; color: var(--text-muted);">
+                            <p id="initialMessage">Aguardando carregamento do arquivo Excel ou dados do servidor...</p>
+                        </div>
+                    </div>
                 </div>
             </div>
         </main>
@@ -577,7 +590,7 @@
                     <button id="addManualRowButton" class="btn-glass" style="display: none;"><i class="fas fa-plus"></i> Add Linha Manual</button>
                 </div>
                 
-                <div id="modalReportContainer" class="table-container">
+                <div id="modalReportContainer" class="table-container" style="overflow-y: auto;">
                     <p style="text-align: center; color: var(--text-muted); padding: 40px;">Escolha uma data e clique em "Gerar" para ver a programação.</p>
                 </div>
                 
@@ -622,8 +635,11 @@
         
         let savedDatesSet = new Set(); 
         
+        // Headers Main Table
         const colunasHeaders = ["DATA", "OP", "CÓDIGO", "DESCRIÇÃO", "MATERIAL", "PESO UN", "QUANT.", "PESO"];
-        const modalGenerateHeaders = ["OP", "CÓDIGO", "DESCRIÇÃO", "MATERIAL", "PESO UN", "QUANT.", "LOTE", "PESO", ""];
+        
+        // Headers Modal/PDF Style (Removed Peso Un, Added Cliente)
+        const modalGenerateHeaders = ["OP", "CÓDIGO", "DESCRIÇÃO", "MATERIAL", "CLIENTE", "QUANT.", "LOTE", "PESO", ""];
         
         const COL_MAP = { DATA: 0, OP: 1, CODIGO: 2, DESCRICAO: 3, MATERIAL: 4, PESO_UN: 5, QTD: 6, LOTE: 7, PESO_TOTAL: 8, CLIENTE: 9, QUANT_FAT: 10 };
         
@@ -935,13 +951,13 @@
 
                 if (rawData.length > 0) {
                     allExcelData = rawData.map(convertRawDBRowToExcelFormat);
-                    displayTable(allExcelData, 'tableContainer');
+                    displayTable(allExcelData, 'mainTableContent');
                     openModalButton.disabled = false; correlateButton.disabled = false;
                     saveRawDataButton.disabled = false; clearRawDataButton.disabled = false;
                     initialMessage.style.display = 'none'; 
                 } else {
                     allExcelData = [];
-                    displayTable([], 'tableContainer');
+                    displayTable([], 'mainTableContent');
                     openModalButton.disabled = true; correlateButton.disabled = true;
                     saveRawDataButton.disabled = true; clearRawDataButton.disabled = true;
                     initialMessage.style.display = 'block';
@@ -986,7 +1002,7 @@
             try {
                 await fetch('/api/acabamento-interno/clear-raw', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
                 alert("Limpo.");
-                allExcelData = []; displayTable([], 'tableContainer');
+                allExcelData = []; displayTable([], 'mainTableContent');
             } catch (error) { alert('Erro limpar.'); }
             finally { btn.disabled = false; btn.innerHTML = '<i class="fas fa-trash-alt"></i> Limpar Registros Servidor'; await loadRawDataFromServer(); }
         });
@@ -1100,7 +1116,7 @@
                     return newRow;
                 }).filter(row => row[COL_MAP.DATA] !== null); 
                 
-                displayTable(allExcelData, 'tableContainer');
+                displayTable(allExcelData, 'mainTableContent');
                 openModalButton.disabled = false; correlateButton.disabled = false;
                 saveRawDataButton.disabled = false; clearRawDataButton.disabled = false;
                 initialMessage.style.display = 'none';
@@ -1134,7 +1150,7 @@
                 else { row[COL_MAP.DESCRICAO] = ""; row[COL_MAP.CLIENTE] = ""; }
                 return row;
             });
-            displayTable(allExcelData, 'tableContainer');
+            displayTable(allExcelData, 'mainTableContent');
         }
 
         function aggregateData(filteredRows) {
@@ -1181,7 +1197,8 @@
         };
 
         function displayTable(data, containerId) {
-            const container = document.getElementById(containerId); container.innerHTML = "";
+            const container = document.getElementById(containerId); 
+            container.innerHTML = "";
             const isModal = containerId === 'modalReportContainer';
 
             let dataDisp = isModal ? data.slice(0) : data.filter(r => r[COL_MAP.DATA]);
@@ -1206,13 +1223,14 @@
 
             const table = document.createElement('table');
             const thead = document.createElement('thead');
+            // Headers: Modal uses PDF style (no Peso Un, adds Client), Main table uses standard.
             const headers = isModal ? modalGenerateHeaders : colunasHeaders;
             
             let tr = document.createElement('tr');
             headers.forEach(h => { const th = document.createElement('th'); th.textContent = h; tr.appendChild(th); });
             thead.appendChild(tr);
             
-            if (containerId === 'tableContainer') {
+            if (containerId === 'mainTableContent') {
                 tr = document.createElement('tr'); tr.id = 'filterRow';
                 headers.forEach((h, i) => {
                     const td = document.createElement('td'); 
@@ -1242,9 +1260,11 @@
 
                 let cols;
                 if (isModal) {
-                    cols = [1, 2, 3, 4, 5, 6, 7, 8];
+                    // PDF Style Indices: OP, COD, DESC, MAT, CLIENTE, QTD, LOTE, PESO TOTAL
+                    cols = [COL_MAP.OP, COL_MAP.CODIGO, COL_MAP.DESCRICAO, COL_MAP.MATERIAL, COL_MAP.CLIENTE, COL_MAP.QTD, COL_MAP.LOTE, COL_MAP.PESO_TOTAL];
                 } else {
-                    cols = [0, 1, 2, 3, 4, 5, 6, 8];
+                    // Main Table Indices
+                    cols = [COL_MAP.DATA, COL_MAP.OP, COL_MAP.CODIGO, COL_MAP.DESCRICAO, COL_MAP.MATERIAL, COL_MAP.PESO_UN, COL_MAP.QTD, COL_MAP.PESO_TOTAL];
                 }
 
                 cols.forEach((idx, visualIndex) => {
@@ -1260,33 +1280,45 @@
                             val = formatDateToDisplay(val);
                         }
                     } else if ([COL_MAP.QTD, COL_MAP.PESO_TOTAL, COL_MAP.PESO_UN].includes(idx)) {
-                        // [FIXED] FORMATAÇÃO NUMÉRICA FORÇADA (pt-BR)
                         let numVal = (typeof val === 'number') ? val : parsePtBrNumber(val);
-                        
                         const minDec = (idx === COL_MAP.QTD) ? 0 : 2;
                         const maxDec = (idx === COL_MAP.QTD) ? 0 : 2;
-                        
                         val = numVal.toLocaleString('pt-BR', { minimumFractionDigits: minDec, maximumFractionDigits: maxDec });
                         
-                        if (!isModal && [0,1,2,5,6,8].includes(idx)) {} else { td.classList.add('align-right'); }
+                        // Right align numbers, except first few columns in main table
+                        if (isModal) {
+                            td.classList.add('align-right');
+                        } else {
+                            if (![0,1,2,5,6,8].includes(idx)) td.classList.add('align-right');
+                        }
                     }
                     td.textContent = val || "";
                     
                     if (!isModal) {
                         if ([0, 1, 2, 5, 6, 8].includes(idx)) { td.classList.add('align-center'); }
+                    } else {
+                         // Center OP, COD, QTD, LOTE, PESO in Modal
+                         if ([COL_MAP.OP, COL_MAP.CODIGO, COL_MAP.QTD, COL_MAP.LOTE, COL_MAP.PESO_TOTAL].includes(idx)) td.classList.add('align-center');
                     }
                     
-                    if (containerId === 'tableContainer' && idx === COL_MAP.PESO_UN) {
+                    // Main Table Editable Peso Un
+                    if (containerId === 'mainTableContent' && idx === COL_MAP.PESO_UN) {
                         td.contentEditable = true; td.classList.add('editable-peso');
                         td.onblur = (e) => {
                             const p = parsePtBrNumber(e.target.textContent);
                             allExcelData[i][COL_MAP.PESO_UN] = p; allExcelData[i][COL_MAP.PESO_TOTAL] = p * allExcelData[i][COL_MAP.QTD];
-                            e.target.parentElement.cells[8].textContent = allExcelData[i][COL_MAP.PESO_TOTAL].toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits: 2});
+                            e.target.parentElement.cells[7].textContent = allExcelData[i][COL_MAP.PESO_TOTAL].toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits: 2});
                         };
                     }
+                    
+                    // Manual Row Editable logic
                     if (isManual && isModal) {
-                        if ([1,2,3,4,7].includes(idx)) { td.contentEditable = true; td.classList.add('editable-manual'); td.onblur = updateManualRowsData; }
-                        else if ([5,6].includes(idx)) { 
+                        // Editable text fields: OP, COD, DESC, MAT, CLI, LOTE
+                        if ([COL_MAP.OP, COL_MAP.CODIGO, COL_MAP.DESCRICAO, COL_MAP.MATERIAL, COL_MAP.CLIENTE, COL_MAP.LOTE].includes(idx)) {
+                             td.contentEditable = true; td.classList.add('editable-manual'); td.onblur = updateManualRowsData; 
+                        }
+                        // Editable Numbers: QTD and PESO TOTAL (Since Peso Unit is hidden)
+                        else if ([COL_MAP.QTD, COL_MAP.PESO_TOTAL].includes(idx)) { 
                             td.contentEditable = true; td.classList.add('editable-manual'); 
                             td.onblur = (e) => { updateManualRowsData(); }; 
                         }
@@ -1310,18 +1342,37 @@
         function updateManualRowsData() {
             const table = document.querySelector('#modalReportContainer table'); if (!table) return;
             const rows = Array.from(table.querySelectorAll('tbody tr.manual-row'));
-            const map = [1,2,3,4,5,6,7,8]; 
+            
+            // Map Visual Columns to Data Indices
+            // Visual: OP(0), COD(1), DESC(2), MAT(3), CLI(4), QTD(5), LOTE(6), PESO_TOTAL(7)
+            // Data:   OP(1), COD(2), DESC(3), MAT(4), CLI(9), QTD(6), LOTE(7), PESO_TOTAL(8)
+            const visualToDataMap = [
+                COL_MAP.OP, COL_MAP.CODIGO, COL_MAP.DESCRICAO, COL_MAP.MATERIAL, COL_MAP.CLIENTE,
+                COL_MAP.QTD, COL_MAP.LOTE, COL_MAP.PESO_TOTAL
+            ];
 
             const newMan = [];
             rows.forEach((r, idx) => {
                 const rowDat = manualRowsData[idx] || [null, '', '', '', '', 0, 0, '', 0, '', 0];
                 const cells = r.cells;
-                map.forEach((dataIdx, cellIdx) => {
-                    if ([5,6,8].includes(dataIdx)) rowDat[dataIdx] = parsePtBrNumber(cells[cellIdx].textContent);
-                    else rowDat[dataIdx] = cells[cellIdx].textContent.trim();
+                
+                visualToDataMap.forEach((dataIdx, cellIdx) => {
+                    const text = cells[cellIdx].textContent;
+                    if ([COL_MAP.QTD, COL_MAP.PESO_TOTAL].includes(dataIdx)) {
+                        rowDat[dataIdx] = parsePtBrNumber(text);
+                    } else {
+                        rowDat[dataIdx] = text.trim();
+                    }
                 });
-                rowDat[COL_MAP.PESO_TOTAL] = rowDat[COL_MAP.PESO_UN] * rowDat[COL_MAP.QTD];
-                if (rowDat[COL_MAP.CODIGO]) newMan.push(rowDat);
+                
+                // Recalculate Peso Unitário mostly for consistency in background, though not shown
+                if (rowDat[COL_MAP.QTD] > 0) {
+                    rowDat[COL_MAP.PESO_UN] = rowDat[COL_MAP.PESO_TOTAL] / rowDat[COL_MAP.QTD];
+                } else {
+                    rowDat[COL_MAP.PESO_UN] = 0;
+                }
+                
+                if (rowDat[COL_MAP.CODIGO] || rowDat[COL_MAP.DESCRIÇÃO]) newMan.push(rowDat);
             });
             manualRowsData = newMan;
             updateTotalWeightDisplay();
@@ -1330,7 +1381,6 @@
         generateReportButton.addEventListener('click', () => {
              const dateStr = reportDateInput.value; if (!dateStr) return alert("Selecione data.");
              
-             // [NOVO] TRAVA DE SEGURANÇA
              if (savedDatesSet.has(dateStr)) {
                  alert("JÁ EXISTE UMA PROGRAMAÇÃO SALVA PARA ESTA DATA!\n\nPor favor, utilize o menu lateral para abrir e editar a programação existente, ou apague-a se desejar criar uma nova do zero.");
                  return;
@@ -1519,7 +1569,7 @@
             let totalQtd = 0;
             const body = [];
             
-            // MAP: OP(1), COD(2), DESC(3), MAT(4), PUN(5), QTD(6), LOTE(7), PESO(8)
+            // MAP: OP(1), COD(2), DESC(3), MAT(4), PUN(5), QTD(6), LOTE(7), PESO(8), CLI(9)
             // PDF Columns: OP, COD, DESC, MAT, CLIENTE, QTD, LOTE, PESO
             all.forEach(r => {
                 const q = parsePtBrNumber(r[COL_MAP.QTD]);
