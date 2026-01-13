@@ -10,9 +10,21 @@ export default async function handler(req, res) {
         return res.status(500).json({ error: "Falha ao conectar no banco de dados." });
     }
 
-    const { action } = req.query; // Pega o nome da ação da URL (ex: 'registros')
+    const { action } = req.query; // Pega o nome da ação da URL (ex: 'registros', 'save-schedule-day')
 
     try {
+        // =================================================================
+        // 0. GARANTIR TABELA DE AGENDAMENTOS (CRIAÇÃO AUTOMÁTICA)
+        // =================================================================
+        // Cria uma tabela flexível para salvar a programação do dia (Auto + Manual + Obs)
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS ai_daily_schedules (
+                date DATE PRIMARY KEY,
+                payload JSONB, 
+                updated_at TIMESTAMP DEFAULT NOW()
+            );
+        `);
+
         // =================================================================
         // 1. CONFIGURAÇÕES & UTILITÁRIOS
         // =================================================================
@@ -31,7 +43,7 @@ export default async function handler(req, res) {
                 key = 'posterior_correlation';
                 value = { data: req.body.posteriorCorrelation };
             } else {
-                // save-config genérico (usado para observações obs_DATA)
+                // save-config genérico (usado para observações obs_DATA antigas)
                 key = req.body.config_key;
                 value = { value: req.body.config_value };
             }
@@ -110,21 +122,56 @@ export default async function handler(req, res) {
         }
 
         // =================================================================
-        // 3. PROGRAMAÇÃO FINAL (SALVA)
+        // 3. NOVA PROGRAMAÇÃO DIÁRIA (SAVE/LOAD COMPLETO) - ADICIONADO AQUI
+        // =================================================================
+
+        if (action === 'save-schedule-day') {
+            const { date, autoRows, manualRows, observations } = req.body;
+            
+            // Cria um objeto JSON com tudo que precisamos recuperar depois
+            const payload = {
+                autoRows: autoRows || [],
+                manualRows: manualRows || [],
+                observations: observations || ""
+            };
+
+            // Upsert (Insere ou Atualiza se já existir data)
+            const query = `
+                INSERT INTO ai_daily_schedules (date, payload, updated_at)
+                VALUES ($1, $2, NOW())
+                ON CONFLICT (date) 
+                DO UPDATE SET payload = $2, updated_at = NOW()
+            `;
+
+            await client.query(query, [date, JSON.stringify(payload)]);
+            return res.status(200).json({ success: true });
+        }
+
+        if (action === 'get-schedule-day') {
+            const { date } = req.query;
+            
+            const query = `SELECT payload FROM ai_daily_schedules WHERE date = $1`;
+            const result = await client.query(query, [date]);
+
+            if (result.rows.length === 0) {
+                return res.status(404).json({ error: "Programação não encontrada." });
+            }
+
+            // O Postgres retorna o JSONB já parseado como objeto no JS
+            return res.status(200).json(result.rows[0].payload);
+        }
+
+        // =================================================================
+        // 4. PROGRAMAÇÃO FINAL (LEGADO/OUTRAS FUNÇÕES)
         // =================================================================
 
         if (action === 'save-final') {
             const { data_referencia, programacao, adherence_status, observacoes } = req.body;
             
             await client.query('BEGIN');
-
-            // Limpa dados antigos dessa data
             await client.query('DELETE FROM ai_reports WHERE data_referencia = $1', [data_referencia]);
-            
-            // Cria novo cabeçalho
             await client.query('INSERT INTO ai_reports (data_referencia, observacoes) VALUES ($1, $2)', [data_referencia, observacoes]);
 
-            // Insere itens
             const itemQuery = `
                 INSERT INTO ai_report_items 
                 (data_referencia, op, codigo, descricao, material, peso_un, quant, lote, peso_total, cliente, quant_fat, item_index) 
@@ -141,7 +188,6 @@ export default async function handler(req, res) {
                 idx++;
             }
 
-            // Salva aderência
             if (adherence_status && adherence_status.length > 0) {
                 await client.query('DELETE FROM ai_adherence WHERE data_referencia = $1', [data_referencia]);
                 const adhQuery = 'INSERT INTO ai_adherence (data_referencia, item_index, status) VALUES ($1, $2, $3)';
@@ -156,7 +202,6 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true });
         }
 
-        // Lista programações salvas (Sidebar)
         if (action === 'saved-list') {
             const query = `
                 SELECT 
@@ -175,7 +220,6 @@ export default async function handler(req, res) {
             return res.status(200).json(list);
         }
 
-        // Carrega uma programação específica
         if (action === 'programacao') {
             const { data_referencia } = req.query;
             const query = `
@@ -185,19 +229,11 @@ export default async function handler(req, res) {
                 ORDER BY item_index ASC
             `;
             const r = await client.query(query, [data_referencia]);
-            
-            // Retorna como array de arrays para o frontend
             const rows = r.rows.map(row => [
-                row.op, 
-                row.codigo, 
-                row.descricao, 
-                row.material, 
-                parseFloat(row.peso_un), 
-                row.lote, 
-                parseFloat(row.quant), 
+                row.op, row.codigo, row.descricao, row.material, 
+                parseFloat(row.peso_un), row.lote, parseFloat(row.quant), 
                 parseFloat(row.quant_fat)
             ]);
-            
             return res.status(200).json(rows);
         }
 
@@ -208,22 +244,18 @@ export default async function handler(req, res) {
         }
 
         // =================================================================
-        // 4. ADERÊNCIA (CHECKBOX)
+        // 5. ADERÊNCIA (CHECKBOX)
         // =================================================================
 
         if (action === 'update-adherence') {
             const { data_referencia, item_index, new_status } = req.body;
-            
             if (new_status === true) {
                 await client.query(
                     'INSERT INTO ai_adherence (data_referencia, item_index, status) VALUES ($1, $2, $3) ON CONFLICT (data_referencia, item_index) DO UPDATE SET status = $3',
                     [data_referencia, item_index, true]
                 );
             } else {
-                await client.query(
-                    'DELETE FROM ai_adherence WHERE data_referencia = $1 AND item_index = $2',
-                    [data_referencia, item_index]
-                );
+                await client.query('DELETE FROM ai_adherence WHERE data_referencia = $1 AND item_index = $2', [data_referencia, item_index]);
             }
             return res.status(200).json({ success: true });
         }
@@ -231,7 +263,6 @@ export default async function handler(req, res) {
         if (action === 'adherence-status') {
             const { data_referencia } = req.query;
             const r = await client.query('SELECT item_index FROM ai_adherence WHERE data_referencia = $1 AND status = true', [data_referencia]);
-            
             const statusMap = {};
             r.rows.forEach(row => { statusMap[row.item_index] = true; });
             return res.status(200).json(statusMap);
@@ -245,6 +276,6 @@ export default async function handler(req, res) {
         console.error("ERRO API:", e);
         return res.status(500).json({ error: e.message });
     } finally {
-        client.release();
+        if (client) client.release();
     }
 }
