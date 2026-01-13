@@ -10,7 +10,7 @@ export default async function handler(req, res) {
         return res.status(500).json({ error: "Falha ao conectar no banco de dados." });
     }
 
-    const { action } = req.query; // Pega o nome da ação da URL
+    const { action } = req.query; 
 
     try {
         // =================================================================
@@ -42,7 +42,6 @@ export default async function handler(req, res) {
                 key = req.body.config_key;
                 value = { value: req.body.config_value };
             }
-
             await client.query(
                 'INSERT INTO ai_configs (config_key, config_value) VALUES ($1, $2) ON CONFLICT (config_key) DO UPDATE SET config_value = $2',
                 [key, value]
@@ -82,13 +81,11 @@ export default async function handler(req, res) {
             const data = req.body; 
             await client.query('BEGIN');
             await client.query('TRUNCATE TABLE ai_raw_data RESTART IDENTITY');
-            
             const insertQuery = `
                 INSERT INTO ai_raw_data 
                 (data, op, codigo, descricao, material, peso_un, quant, lote, peso_total, cliente, quant_fat) 
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             `;
-
             for (const row of data) {
                 const dateVal = (row[0] && row[0] !== '') ? row[0] : null;
                 await client.query(insertQuery, [
@@ -111,7 +108,7 @@ export default async function handler(req, res) {
         }
 
         // =================================================================
-        // 3. PROGRAMAÇÃO DIÁRIA (SAVE / LOAD / DELETE)
+        // 3. PROGRAMAÇÃO DIÁRIA (SAVE / LOAD / DELETE / LIST)
         // =================================================================
 
         if (action === 'save-schedule-day') {
@@ -121,14 +118,12 @@ export default async function handler(req, res) {
                 manualRows: manualRows || [],
                 observations: observations || ""
             };
-
             const query = `
                 INSERT INTO ai_daily_schedules (date, payload, updated_at)
                 VALUES ($1, $2, NOW())
                 ON CONFLICT (date) 
                 DO UPDATE SET payload = $2, updated_at = NOW()
             `;
-
             await client.query(query, [date, JSON.stringify(payload)]);
             return res.status(200).json({ success: true });
         }
@@ -137,29 +132,54 @@ export default async function handler(req, res) {
             const { date } = req.query;
             const query = `SELECT payload FROM ai_daily_schedules WHERE date = $1`;
             const result = await client.query(query, [date]);
-
             if (result.rows.length === 0) {
                 return res.status(404).json({ error: "Programação não encontrada." });
             }
             return res.status(200).json(result.rows[0].payload);
         }
 
-        // ===> AQUI ESTAVA O PROBLEMA: FALTAVA ESTA PARTE <===
         if (action === 'delete-schedule-day') {
             const { date } = req.body;
             await client.query('DELETE FROM ai_daily_schedules WHERE date = $1', [date]);
             return res.status(200).json({ success: true });
         }
-        // ====================================================
+
+        // [NOVO] Listar programações para o Menu Lateral
+        if (action === 'list-schedules') {
+            const r = await client.query("SELECT date, payload FROM ai_daily_schedules ORDER BY date DESC");
+            
+            const list = r.rows.map(row => {
+                const p = row.payload;
+                let totalWeight = 0;
+                
+                // Soma peso dos Automáticos (Índice 8 é peso_total)
+                if (Array.isArray(p.autoRows)) {
+                    p.autoRows.forEach(item => { totalWeight += (parseFloat(item[8]) || 0); });
+                }
+                
+                // Soma peso dos Manuais
+                if (Array.isArray(p.manualRows)) {
+                    p.manualRows.forEach(item => { totalWeight += (parseFloat(item[8]) || 0); });
+                }
+
+                // Ajuste de data devido ao timezone do banco vs JS
+                const d = new Date(row.date);
+                const dateStr = d.toISOString().split('T')[0];
+
+                return {
+                    date: dateStr,
+                    totalWeight: totalWeight
+                };
+            });
+            
+            return res.status(200).json(list);
+        }
 
         // =================================================================
-        // 4. LEGADO (Mantido por compatibilidade)
+        // 4. LEGADO
         // =================================================================
-        if (action === 'save-final') {
-            return res.status(200).json({ success: true });
-        }
-        
-        // Se nenhuma action for encontrada
+        if (action === 'save-final') { return res.status(200).json({ success: true }); }
+
         return res.status(404).json({ error: 'Action not found' });
 
     } catch (e) {
