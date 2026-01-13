@@ -32,7 +32,7 @@
         body {
             margin: 0; font-family: var(--font-main); background-color: var(--bg-body); color: var(--text-main);
             background-image: radial-gradient(circle at 10% 20%, rgba(251, 191, 36, 0.05), transparent 40%);
-            height: 100vh; /* Fixa a altura na tela */
+            height: 100vh;
             overflow: hidden; /* Remove barra de rolagem da página principal */
             display: flex;
             flex-direction: column;
@@ -82,7 +82,13 @@
         .tab-btn.active[data-sector="ACABAMENTO"] { background: var(--color-acabamento); color: #fff; }
 
         /* DASHBOARD CONTENT */
-        .dashboard-content { padding: 20px 32px; flex-grow: 1; display: flex; flex-direction: column; overflow: hidden; }
+        .dashboard-content { 
+            padding: 20px 32px; 
+            flex-grow: 1; 
+            display: flex; 
+            flex-direction: column; 
+            overflow: hidden; 
+        }
         
         .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; flex-shrink: 0; }
         .kpi-card { 
@@ -97,7 +103,8 @@
             display: flex;
             flex-direction: column;
             flex-grow: 1;
-            min-height: 0; /* Importante para o flexbox não estourar */
+            min-height: 0;
+            margin-bottom: 20px; /* Margem inferior solicitada */
         }
         
         .chart-controls {
@@ -123,20 +130,20 @@
             border: 1px solid var(--border-subtle); 
             border-radius: var(--radius-md); 
             padding: 20px; 
-            height: 100%;
+            flex-grow: 1; /* Ocupa o restante da altura */
+            position: relative;
             display: flex;
             align-items: center;
             justify-content: center;
-            position: relative;
         }
 
-        /* TABLE (AGORA DENTRO DO MODAL) */
+        /* TABLE (DENTRO DO MODAL) */
         .table-container { 
             background: var(--bg-card); 
             border: 1px solid var(--border-subtle); 
             border-radius: var(--radius-md); 
             overflow-x: auto;
-            max-height: 70vh; /* Altura máxima dentro do modal */
+            max-height: 70vh; 
             overflow-y: auto;
         }
         table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
@@ -199,10 +206,7 @@
         }
         .modal-content { background: #18181b; padding: 25px; border-radius: 12px; border: 1px solid var(--border-subtle); }
         
-        /* Modal Padrão */
         .modal-standard { width: 420px; }
-        
-        /* Modal Grande (Tabela) */
         .modal-large { width: 90%; max-width: 1200px; display: flex; flex-direction: column; max-height: 90vh; }
 
         .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
@@ -324,7 +328,7 @@
                 <h3 class="modal-title"><i class="fa-solid fa-list"></i> Registros de Produção</h3>
                 <button class="btn-close-modal" onclick="closeRecordsModal()">&times;</button>
             </div>
-            
+            <!-- A tabela aqui dentro será preenchida com o setor atual -->
             <div class="table-container">
                 <table id="mainTable">
                     <thead>
@@ -388,13 +392,13 @@
                 </div>
             </div>
 
-            <!-- GRÁFICO (APENAS BARRAS COM FILTRO) -->
+            <!-- GRÁFICO (BARRAS COM FILTRO E MARGEM INFERIOR) -->
             <div class="charts-container">
                 <div class="chart-controls">
                     <input type="month" id="chartMonthFilter" class="month-picker" onchange="render()">
                 </div>
                 <div class="panel">
-                    <canvas id="chartLine" style="width: 100%; height: 100%;"></canvas>
+                    <canvas id="chartLine"></canvas>
                 </div>
             </div>
         </main>
@@ -496,7 +500,7 @@
         currentSector = s;
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
         document.querySelector(`[data-sector="${s}"]`).classList.add('active');
-        render();
+        render(); // Re-renderiza gráficos e tabela com o novo setor
     }
 
     function makeEditable(el, id) {
@@ -522,8 +526,26 @@
         }
     }
 
+    // --- RENDERIZAÇÃO CENTRALIZADA (Gráficos + Tabela) ---
     function render() {
+        // Filtra os dados globais APENAS para o setor atual
         const filtered = db.filter(i => i.sector === currentSector);
+
+        // Atualiza a tabela (que fica dentro do modal)
+        updateTable(filtered);
+        
+        // Atualiza KPIs e Gráficos
+        let tProgGlobal = 0, tRealGlobal = 0;
+        filtered.forEach(item => {
+            tProgGlobal += parseFloat(item.prog);
+            tRealGlobal += parseFloat(item.real);
+        });
+
+        updateKPIs(tProgGlobal, tRealGlobal);
+        updateCharts(filtered);
+    }
+
+    function updateTable(data) {
         const tbody = document.querySelector('#mainTable tbody');
         tbody.innerHTML = '';
 
@@ -533,17 +555,9 @@
         document.getElementById('lbl-kpi-prog').innerText = `Total Programado (${unit})`;
         document.getElementById('lbl-kpi-real').innerText = `Total Realizado (${unit})`;
 
-        let tProgGlobal = 0, tRealGlobal = 0;
-        
-        // 1. Calcular KPIs Globais
-        filtered.forEach(item => {
-            tProgGlobal += parseFloat(item.prog);
-            tRealGlobal += parseFloat(item.real);
-        });
-
-        // 2. Agrupar os dados por DATA + CORRIDA
+        // Agrupar os dados por DATA + CORRIDA
         const groups = {};
-        filtered.forEach(item => {
+        data.forEach(item => {
             const heatKey = item.heat ? item.heat.toUpperCase() : "GERAL";
             const groupKey = `${item.date}_${heatKey}`;
             
@@ -562,17 +576,14 @@
             groups[groupKey].realTotal += parseFloat(item.real);
         });
 
-        // 3. Converter e ordenar
         const sortedGroups = Object.values(groups).sort((a, b) => {
             if (b.date !== a.date) return new Date(b.date) - new Date(a.date);
             return a.heat.localeCompare(b.heat);
         });
 
-        // 4. Renderizar a Tabela Agrupada
         sortedGroups.forEach(group => {
             const gAdh = group.progTotal > 0 ? (group.realTotal / group.progTotal) * 100 : 0;
             const formattedDate = group.date.split('-').reverse().join('/');
-            
             const groupId = `grp_${group.key.replace(/[^a-zA-Z0-9]/g, '')}`;
 
             const trHeader = document.createElement('tr');
@@ -581,19 +592,12 @@
             trHeader.onclick = () => toggleGroup(groupId);
             
             trHeader.innerHTML = `
-                <td>
-                    <i class="fa-solid fa-chevron-right group-icon"></i> 
-                    ${formattedDate}
-                </td>
-                <td colspan="2" style="color:var(--text-muted); font-weight:400; font-size:0.8rem">
-                    ${group.items.length} item(s)
-                </td>
+                <td><i class="fa-solid fa-chevron-right group-icon"></i> ${formattedDate}</td>
+                <td colspan="2" style="color:var(--text-muted); font-weight:400; font-size:0.8rem">${group.items.length} item(s)</td>
                 <td><span class="badge-sector ${getBadge(currentSector)}">${group.heat}</span></td>
                 <td style="color:#60a5fa; font-weight:700">${group.progTotal}</td>
                 <td style="color:#fff; font-weight:700">${group.realTotal}</td>
-                <td style="font-weight:700; color:${gAdh >= 95 ? '#10b981' : (gAdh < 80 ? '#ef4444' : '#fbbf24')}">
-                    ${gAdh.toFixed(1)}% (Méd)
-                </td>
+                <td style="font-weight:700; color:${gAdh >= 95 ? '#10b981' : (gAdh < 80 ? '#ef4444' : '#fbbf24')}">${gAdh.toFixed(1)}% (Méd)</td>
                 <td></td>
             `;
             tbody.appendChild(trHeader);
@@ -602,11 +606,9 @@
                 const prog = parseFloat(item.prog);
                 const real = parseFloat(item.real);
                 const adh = prog > 0 ? (real / prog) * 100 : 0;
-
                 const trChild = document.createElement('tr');
                 trChild.className = 'child-row';
                 trChild.dataset.group = groupId;
-                
                 trChild.innerHTML = `
                     <td style="color:var(--text-muted)"></td> 
                     <td><b>${item.op}</b></td>
@@ -620,9 +622,6 @@
                 tbody.appendChild(trChild);
             });
         });
-
-        updateKPIs(tProgGlobal, tRealGlobal);
-        updateCharts(filtered);
     }
 
     function getBadge(s) { return s === 'MOLDAGEM' ? 'badge-m' : (s === 'FUSAO' ? 'badge-f' : 'badge-a'); }
@@ -638,24 +637,22 @@
 
     function updateCharts(data) {
         const ctxLine = document.getElementById('chartLine').getContext('2d');
-        const selectedMonth = document.getElementById('chartMonthFilter').value; // formato "YYYY-MM"
+        const selectedMonth = document.getElementById('chartMonthFilter').value; // YYYY-MM
         
         if (!selectedMonth) return;
 
         const [yearStr, monthStr] = selectedMonth.split('-');
         const year = parseInt(yearStr);
-        const month = parseInt(monthStr) - 1; // 0-indexed
+        const month = parseInt(monthStr) - 1; 
 
-        // Obter número de dias no mês
+        // Dias do mês
         const daysInMonth = new Date(year, month + 1, 0).getDate();
-
         const labels = [];
         const values = [];
 
-        // Pré-processar dados para o mês selecionado
+        // Agrupamento diário
         const dailyData = {};
         data.forEach(d => {
-            // Verificar se o dado pertence ao mês selecionado
             if (d.date.startsWith(selectedMonth)) {
                 dailyData[d.date] = (dailyData[d.date] || {p:0, r:0});
                 dailyData[d.date].p += parseFloat(d.prog);
@@ -663,18 +660,16 @@
             }
         });
 
-        // Gerar labels para TODOS os dias do mês
+        // Preencher 01 até fim do mês
         for (let i = 1; i <= daysInMonth; i++) {
             const dayStr = i.toString().padStart(2, '0');
-            const fullDate = `${selectedMonth}-${dayStr}`; // YYYY-MM-DD
-            
-            labels.push(dayStr); // Label ex: "01", "02"
-            
+            const fullDate = `${selectedMonth}-${dayStr}`; 
+            labels.push(dayStr); 
             if (dailyData[fullDate] && dailyData[fullDate].p > 0) {
                 const adh = (dailyData[fullDate].r / dailyData[fullDate].p) * 100;
                 values.push(adh);
             } else {
-                values.push(0); // 0 se não houver dados
+                values.push(0);
             }
         }
 
@@ -690,21 +685,24 @@
                     borderColor: '#fbbf24',
                     borderWidth: 1,
                     backgroundColor: 'rgba(251, 191, 36, 0.4)',
-                    borderRadius: 4
+                    borderRadius: 4,
+                    barPercentage: 0.6
                 }] 
             },
             options: { 
                 responsive: true, 
-                maintainAspectRatio: false,
+                maintainAspectRatio: false, /* Crucial para flexbox */
                 plugins: { legend: { display: false } }, 
                 scales: { 
                     y: { 
                         beginAtZero: true, 
                         max: 120,
-                        grid: { color: 'rgba(255,255,255,0.05)' }
+                        grid: { color: 'rgba(255,255,255,0.05)' },
+                        ticks: { color: '#a1a1aa' }
                     },
                     x: {
-                        grid: { display: false }
+                        grid: { display: false },
+                        ticks: { color: '#a1a1aa' }
                     }
                 } 
             }
@@ -713,7 +711,7 @@
 
     // Inicialização
     document.getElementById('fData').valueAsDate = new Date();
-    loadData(); // Carrega os dados do banco ao abrir
+    loadData(); 
 </script>
 </body>
 </html>
