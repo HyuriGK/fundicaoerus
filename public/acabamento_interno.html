@@ -478,15 +478,15 @@
                         
                         <button id="chooseFileButton"><i class="fas fa-file-excel"></i> Carregar Excel</button>
                         <button id="correlateButton" disabled><i class="fas fa-link"></i> Carregar Descrições</button>
-                        <button id="correlateMaterialsButton"><i class="fas fa-clock"></i> Carregar Materiais</button>
+                        <button id="correlateMaterialsButton"><i class="fas fa-clock"></i> Carregar Materiais/Dias</button>
                         <button id="correlatePosteriorButton"><i class="fas fa-sign-in-alt"></i> Carregar Posteriores</button>
                         
                         <div class="separator"></div>
                         
-                        <button id="saveMaterialDaysButton" disabled><i class="fas fa-save"></i> Salvar Materiais</button>
-                        <button id="savePosteriorButton" disabled><i class="fas fa-save"></i> Salvar Posteriores</button>
-                        <button id="saveRawDataButton" disabled><i class="fas fa-cloud-upload-alt"></i> Salvar Dados</button>
-                        <button id="clearRawDataButton" style="color: var(--status-danger);" disabled><i class="fas fa-trash-alt"></i> Limpar Registros</button>
+                        <button id="saveMaterialDaysButton" disabled><i class="fas fa-save"></i> Salvar Correlação Materiais</button>
+                        <button id="savePosteriorButton" disabled><i class="fas fa-save"></i> Salvar Correlação Posteriores</button>
+                        <button id="saveRawDataButton" disabled><i class="fas fa-cloud-upload-alt"></i> Salvar Dados no Servidor</button>
+                        <button id="clearRawDataButton" style="color: var(--status-danger);" disabled><i class="fas fa-trash-alt"></i> Limpar Registros Servidor</button>
                     </div>
                 </div>
 
@@ -510,7 +510,7 @@
         <!-- FOOTER -->
         <footer class="app-footer">
             <div style="display: flex; gap: 24px;">
-                <span>Sistema: <strong style="color: #fff;">Acabamento Interno v2.6</strong></span>
+                <span>Sistema: <strong style="color: #fff;">Acabamento Interno v2.7</strong></span>
                 <span>Status: <strong style="color: var(--status-success);">Online</strong></span>
             </div>
             <div>
@@ -543,7 +543,7 @@
                     <button id="generateReportButton" class="btn-primary"><i class="fas fa-play"></i> Gerar</button>
                     <button id="loadSavedButton" class="btn-glass"><i class="fas fa-cloud-download-alt"></i> Carregar Salvo</button>
 
-                    <div style="width: 1px; height: 24px; background: var(--border-subtle); margin: 0 10px;"></div>
+                    <div id="controlSeparator" style="width: 1px; height: 24px; background: var(--border-subtle); margin: 0 10px;"></div>
 
                     <button id="generatePDFButton" class="btn-glass" disabled style="display: none;"><i class="fas fa-file-pdf"></i> PDF</button>
                     <button id="saveScheduleButton" class="btn-success" disabled style="display: none;"><i class="fas fa-save"></i> Salvar Programação</button>
@@ -630,6 +630,7 @@
         const loadSavedButton = document.getElementById('loadSavedButton');
         const deleteScheduleButton = document.getElementById('deleteScheduleButton');
         const savedSchedulesList = document.getElementById('savedSchedulesList');
+        const controlSeparator = document.getElementById('controlSeparator');
         
         let manualRowsData = [];
 
@@ -655,16 +656,14 @@
         
         function parsePtPtBrNumber(str) { return parsePtBrNumber(str); }
         
-        // ATUALIZADO: Função para formatar data (YYYY-MM-DD -> DD/MM/AAAA) com zero à esquerda
+        // Formatar Data com zeros à esquerda (04/02/2023)
         function formatDateToDisplay(dateStr) {
             if (!dateStr) return '';
             try {
-                // Tenta dividir se for string YYYY-MM-DD
                 if (typeof dateStr === 'string' && dateStr.includes('-')) {
                     const [year, month, day] = dateStr.split('-');
                     return `${day.padStart(2, '0')}/${month.padStart(2, '0')}/${year}`;
                 }
-                // Se for objeto Date
                 if (dateStr instanceof Date) {
                     const day = String(dateStr.getDate()).padStart(2, '0');
                     const month = String(dateStr.getMonth() + 1).padStart(2, '0');
@@ -691,7 +690,7 @@
             ];
         }
 
-        // --- FETCH SAVED LIST FOR SIDEBAR (NOVO) ---
+        // --- FETCH SAVED LIST FOR SIDEBAR ---
         async function loadSavedSchedulesList() {
             savedSchedulesList.innerHTML = '<li style="color: var(--text-muted); padding:10px;">Carregando...</li>';
             try {
@@ -719,6 +718,7 @@
                     
                     li.addEventListener('click', () => {
                         reportDateInput.value = item.date;
+                        setModalMode('SAVED'); // Set to saved mode
                         loadSavedButton.click();
                         reportModal.classList.add('show');
                     });
@@ -984,25 +984,43 @@
             loadSavedSchedulesList(); 
         });
         
+        // --- UI TOGGLER FOR SAVED VIEW (NOVO) ---
+        function setModalMode(mode) {
+            if (mode === 'SAVED') {
+                reportDateInput.style.display = 'none';
+                reportDateLabel.style.display = 'none';
+                generateReportButton.style.display = 'none';
+                loadSavedButton.style.display = 'none';
+                controlSeparator.style.display = 'none';
+            } else {
+                reportDateInput.style.display = 'inline-flex';
+                reportDateLabel.style.display = 'inline-flex';
+                generateReportButton.style.display = 'inline-flex';
+                loadSavedButton.style.display = 'inline-flex';
+                controlSeparator.style.display = 'block';
+            }
+        }
+
         function resetModalState() {
             currentReportData = []; manualRowsData = []; targetDateForPDF = null;
             observacoesTextarea.value = ''; 
             modalTitle.textContent = "Gerar Programação Recomendada";
             document.getElementById('modalReportContainer').innerHTML = `<p style='text-align: center; color: var(--text-muted); padding: 40px;'>Selecione a data e clique em Gerar.</p>`;
+            
             generatePDFButton.disabled = true; 
             saveScheduleButton.disabled = true;
             document.getElementById('modalInfoPanel').style.display = 'none'; observacoesContainer.style.display = 'none'; addManualRowButton.style.display = 'none';
             
-            reportDateInput.style.display = 'inline-flex'; reportDateLabel.style.display = 'inline-flex';
-            generateReportButton.style.display = 'inline-flex'; generateReportButton.disabled = false;
-            loadSavedButton.style.display = 'inline-flex';
             generatePDFButton.style.display = 'none'; 
             saveScheduleButton.style.display = 'none';
             deleteScheduleButton.style.display = 'none'; 
+            
+            setModalMode('NEW'); // Padrão resetar para Novo
         }
 
         openModalButton.addEventListener('click', () => {
-            reportDateInput.value = getTodayDateString(); resetModalState(); 
+            reportDateInput.value = getTodayDateString(); 
+            resetModalState(); 
             reportModal.classList.add('show');
         });
         
@@ -1197,7 +1215,7 @@
                     const td = document.createElement('td');
                     let val = row[idx];
                     
-                    // ATUALIZAÇÃO DE DATA (DD/MM/YYYY com zeros à esquerda)
+                    // FORMATTING DATE AND WEIGHT IN TABLE
                     if (idx === COL_MAP.DATA) {
                         if (val instanceof Date) {
                             const day = String(val.getDate()).padStart(2, '0');
@@ -1207,7 +1225,6 @@
                             val = formatDateToDisplay(val);
                         }
                     } else if ([COL_MAP.QTD, COL_MAP.PESO_TOTAL, COL_MAP.PESO_UN].includes(idx) && typeof val === 'number') {
-                        // ATUALIZAÇÃO DE PESOS (2 casas decimais)
                         const minDec = (idx === COL_MAP.QTD) ? 0 : 2;
                         const maxDec = (idx === COL_MAP.QTD) ? 0 : 2;
                         val = val.toLocaleString('pt-BR', { minimumFractionDigits: minDec, maximumFractionDigits: maxDec });
@@ -1272,6 +1289,7 @@
         
         generateReportButton.addEventListener('click', () => {
              const dateStr = reportDateInput.value; if (!dateStr) return alert("Selecione data.");
+             setModalMode('NEW'); // Force new mode
              currentReportData = []; manualRowsData = [];
              generatePDFButton.style.display = 'none';
              saveScheduleButton.style.display = 'none';
@@ -1337,7 +1355,7 @@
                 if (response.ok) {
                     alert("Programação salva com sucesso!");
                     deleteScheduleButton.style.display = 'inline-flex';
-                    loadSavedSchedulesList(); // [NOVO] Atualiza sidebar
+                    loadSavedSchedulesList(); 
                 } else {
                     alert("Erro ao salvar programação.");
                 }
@@ -1416,7 +1434,7 @@
                 if (response.ok) {
                     alert("Programação apagada.");
                     resetModalState(); 
-                    loadSavedSchedulesList(); // [NOVO] Atualiza sidebar
+                    loadSavedSchedulesList(); 
                 } else {
                     alert("Erro ao apagar.");
                     btn.disabled = false; btn.innerHTML = '<i class="fas fa-trash"></i> Apagar Programação';
@@ -1428,6 +1446,7 @@
             }
         });
 
+        // --- PDF GENERATION UPDATED ---
         generatePDFButton.addEventListener('click', () => {
             updateManualRowsData();
             
@@ -1439,22 +1458,24 @@
             const pageWidth = doc.internal.pageSize.width;
 
             doc.setFillColor(24, 24, 27); 
-            doc.rect(0, 0, pageWidth, 25, 'F');
+            doc.rect(0, 0, pageWidth, 32, 'F'); // Aumentado altura do header
             
             doc.setFontSize(18); 
             doc.setTextColor(255, 255, 255); 
             doc.text('PROGRAMAÇÃO DO ACABAMENTO INTERNO', 14, 15);
             
-            doc.setFontSize(12); 
+            doc.setFontSize(11); 
             doc.setTextColor(251, 191, 36);
-            doc.text(`DATA: ${targetDateForPDF.toLocaleDateString('pt-BR')}`, 14, 22);
+            doc.text(`DATA: ${targetDateForPDF.toLocaleDateString('pt-BR')}`, 14, 23);
 
             let total = 0;
+            let totalQtd = 0;
             const body = [];
             all.forEach(r => {
                 const q = parsePtBrNumber(r[COL_MAP.QTD]);
                 if (q > 0 || r[COL_MAP.DATA] === null) {
                     total += parsePtBrNumber(r[COL_MAP.PESO_TOTAL]);
+                    totalQtd += q;
                     const d = r[COL_MAP.DATA];
                     body.push([
                         r[COL_MAP.OP], d ? d.toLocaleDateString('pt-BR') : 'MANUAL',
@@ -1465,13 +1486,20 @@
                 }
             });
 
+            // HEADER INFO
+            doc.setFontSize(10);
+            doc.setTextColor(255, 255, 255);
+            doc.text(`PESO TOTAL: ${total.toLocaleString('pt-BR', {minimumFractionDigits:2})} KG`, 14, 28);
+            doc.text(`QTD TOTAL: ${totalQtd} PEÇAS`, 80, 28);
+
             doc.autoTable({
                 head: [["OP", "Apont.", "Cód.", "Descrição", "Material", "Cliente", "Quant.", "Lote", "Peso Total"]],
                 body: body,
-                startY: 30,
+                startY: 35,
                 theme: 'grid',
                 styles: {
-                    font: 'helvetica', fontSize: 7, cellPadding: 1.5,
+                    font: 'helvetica', fontSize: 7, 
+                    cellPadding: 3, // AUMENTADO PADDING (Altura)
                     textColor: [20, 20, 20], overflow: 'ellipsize',
                     valign: 'middle', lineWidth: 0.1, lineColor: [200, 200, 200]
                 },
