@@ -510,7 +510,7 @@
         <!-- FOOTER -->
         <footer class="app-footer">
             <div style="display: flex; gap: 24px;">
-                <span>Sistema: <strong style="color: #fff;">Acabamento Interno v2.7</strong></span>
+                <span>Sistema: <strong style="color: #fff;">Acabamento Interno v2.8</strong></span>
                 <span>Status: <strong style="color: var(--status-success);">Online</strong></span>
             </div>
             <div>
@@ -656,7 +656,6 @@
         
         function parsePtPtBrNumber(str) { return parsePtBrNumber(str); }
         
-        // Formatar Data com zeros à esquerda (04/02/2023)
         function formatDateToDisplay(dateStr) {
             if (!dateStr) return '';
             try {
@@ -718,7 +717,7 @@
                     
                     li.addEventListener('click', () => {
                         reportDateInput.value = item.date;
-                        setModalMode('SAVED'); // Set to saved mode
+                        setModalMode('SAVED'); 
                         loadSavedButton.click();
                         reportModal.classList.add('show');
                     });
@@ -984,7 +983,6 @@
             loadSavedSchedulesList(); 
         });
         
-        // --- UI TOGGLER FOR SAVED VIEW (NOVO) ---
         function setModalMode(mode) {
             if (mode === 'SAVED') {
                 reportDateInput.style.display = 'none';
@@ -1015,7 +1013,7 @@
             saveScheduleButton.style.display = 'none';
             deleteScheduleButton.style.display = 'none'; 
             
-            setModalMode('NEW'); // Padrão resetar para Novo
+            setModalMode('NEW');
         }
 
         openModalButton.addEventListener('click', () => {
@@ -1215,7 +1213,6 @@
                     const td = document.createElement('td');
                     let val = row[idx];
                     
-                    // FORMATTING DATE AND WEIGHT IN TABLE
                     if (idx === COL_MAP.DATA) {
                         if (val instanceof Date) {
                             const day = String(val.getDate()).padStart(2, '0');
@@ -1227,7 +1224,14 @@
                     } else if ([COL_MAP.QTD, COL_MAP.PESO_TOTAL, COL_MAP.PESO_UN].includes(idx) && typeof val === 'number') {
                         const minDec = (idx === COL_MAP.QTD) ? 0 : 2;
                         const maxDec = (idx === COL_MAP.QTD) ? 0 : 2;
-                        val = val.toLocaleString('pt-BR', { minimumFractionDigits: minDec, maximumFractionDigits: maxDec });
+                        
+                        // Garante formatação com 2 casas para Peso Un e Peso Total
+                        if (idx !== COL_MAP.QTD) {
+                            val = val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                        } else {
+                            val = val.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+                        }
+                        
                         if (!isModal && [0,1,2,5,6,8].includes(idx)) {} else { td.classList.add('align-right'); }
                     }
                     td.textContent = val || "";
@@ -1458,7 +1462,7 @@
             const pageWidth = doc.internal.pageSize.width;
 
             doc.setFillColor(24, 24, 27); 
-            doc.rect(0, 0, pageWidth, 32, 'F'); // Aumentado altura do header
+            doc.rect(0, 0, pageWidth, 32, 'F'); 
             
             doc.setFontSize(18); 
             doc.setTextColor(255, 255, 255); 
@@ -1471,16 +1475,23 @@
             let total = 0;
             let totalQtd = 0;
             const body = [];
+            
+            // MAP: OP(1), COD(2), DESC(3), MAT(4), PUN(5), QTD(6), LOTE(7), PESO(8)
+            // PDF Columns: OP, COD, DESC, MAT, CLIENTE, QTD, LOTE, PESO
             all.forEach(r => {
                 const q = parsePtBrNumber(r[COL_MAP.QTD]);
                 if (q > 0 || r[COL_MAP.DATA] === null) {
                     total += parsePtBrNumber(r[COL_MAP.PESO_TOTAL]);
                     totalQtd += q;
-                    const d = r[COL_MAP.DATA];
+                    // Note: No Apont (Date) column anymore
                     body.push([
-                        r[COL_MAP.OP], d ? d.toLocaleDateString('pt-BR') : 'MANUAL',
-                        r[COL_MAP.CODIGO], r[COL_MAP.DESCRICAO], r[COL_MAP.MATERIAL], r[COL_MAP.CLIENTE],
-                        q.toLocaleString('pt-BR',{maximumFractionDigits:0}), r[COL_MAP.LOTE],
+                        r[COL_MAP.OP], 
+                        r[COL_MAP.CODIGO], 
+                        r[COL_MAP.DESCRICAO], 
+                        r[COL_MAP.MATERIAL], 
+                        r[COL_MAP.CLIENTE],
+                        q.toLocaleString('pt-BR',{maximumFractionDigits:0}), 
+                        r[COL_MAP.LOTE],
                         parsePtBrNumber(r[COL_MAP.PESO_TOTAL]).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits: 2})
                     ]);
                 }
@@ -1493,13 +1504,13 @@
             doc.text(`QTD TOTAL: ${totalQtd} PEÇAS`, 80, 28);
 
             doc.autoTable({
-                head: [["OP", "Apont.", "Cód.", "Descrição", "Material", "Cliente", "Quant.", "Lote", "Peso Total"]],
+                head: [["OP", "Cód.", "Descrição", "Material", "Cliente", "Quant.", "Lote", "Peso Total"]],
                 body: body,
                 startY: 35,
                 theme: 'grid',
                 styles: {
                     font: 'helvetica', fontSize: 7, 
-                    cellPadding: 3, // AUMENTADO PADDING (Altura)
+                    cellPadding: 3, 
                     textColor: [20, 20, 20], overflow: 'ellipsize',
                     valign: 'middle', lineWidth: 0.1, lineColor: [200, 200, 200]
                 },
@@ -1509,15 +1520,14 @@
                 },
                 alternateRowStyles: { fillColor: [245, 245, 245] },
                 columnStyles: {
-                    0: { cellWidth: 18 },  
-                    1: { cellWidth: 22, overflow: 'visible' },
-                    2: { cellWidth: 20 },  
-                    3: { cellWidth: 'auto' }, 
-                    4: { cellWidth: 30 },  
-                    5: { cellWidth: 40 },  
-                    6: { cellWidth: 15, halign: 'right' },
-                    7: { cellWidth: 15 },  
-                    8: { cellWidth: 22, halign: 'right' }
+                    0: { cellWidth: 18 },  // OP
+                    1: { cellWidth: 20 },  // Cod
+                    2: { cellWidth: 'auto' }, // Desc
+                    3: { cellWidth: 30 },  // Mat
+                    4: { cellWidth: 60 },  // Client (Increased width)
+                    5: { cellWidth: 15, halign: 'right' }, // Qtd
+                    6: { cellWidth: 15 },  // Lote
+                    7: { cellWidth: 22, halign: 'right' }  // Peso
                 },
                 tableWidth: 'auto', margin: { left: 10, right: 10 }
             });
