@@ -109,7 +109,7 @@
         }
         .brand-text { 
             font-size: 1rem; font-weight: 700; color: #fff; line-height: 1.2; 
-            white-space: nowrap; /* Garante que não quebre linha */
+            white-space: nowrap; 
         }
 
         .sidebar-content {
@@ -510,7 +510,7 @@
         <!-- FOOTER -->
         <footer class="app-footer">
             <div style="display: flex; gap: 24px;">
-                <span>Sistema: <strong style="color: #fff;">Acabamento Interno v2.8</strong></span>
+                <span>Sistema: <strong style="color: #fff;">Acabamento Interno v2.9</strong></span>
                 <span>Status: <strong style="color: var(--status-success);">Online</strong></span>
             </div>
             <div>
@@ -541,7 +541,8 @@
                     <input type="date" id="reportDate" class="input-for-report-date">
                     
                     <button id="generateReportButton" class="btn-primary"><i class="fas fa-play"></i> Gerar</button>
-                    <button id="loadSavedButton" class="btn-glass"><i class="fas fa-cloud-download-alt"></i> Carregar Salvo</button>
+                    <!-- Botão Carregar Salvo Removido -->
+                    <button id="loadSavedButton" style="display:none;"></button>
 
                     <div id="controlSeparator" style="width: 1px; height: 24px; background: var(--border-subtle); margin: 0 10px;"></div>
 
@@ -587,6 +588,9 @@
         let materialDaysMap = new Map(); 
         let posteriorMap = new Map(); 
         let lastUpdateTimestamp = null; 
+        
+        // [NOVO] Armazena as datas que já possuem programação salva
+        let savedDatesSet = new Set(); 
         
         const colunasHeaders = ["DATA", "OP", "CÓDIGO", "DESCRIÇÃO", "MATERIAL", "PESO UN", "QUANT.", "PESO"];
         const modalGenerateHeaders = ["OP", "CÓDIGO", "DESCRIÇÃO", "MATERIAL", "PESO UN", "QUANT.", "LOTE", "PESO", ""];
@@ -692,6 +696,8 @@
         // --- FETCH SAVED LIST FOR SIDEBAR ---
         async function loadSavedSchedulesList() {
             savedSchedulesList.innerHTML = '<li style="color: var(--text-muted); padding:10px;">Carregando...</li>';
+            savedDatesSet.clear(); // Limpa o Set
+            
             try {
                 const response = await fetch('/api/acabamento-interno/list-schedules');
                 if (!response.ok) throw new Error("Erro ao buscar lista");
@@ -704,6 +710,9 @@
                 }
 
                 list.forEach(item => {
+                    // Adiciona a data ao Set para verificação posterior
+                    savedDatesSet.add(item.date);
+                    
                     const li = document.createElement('li');
                     li.className = 'saved-item';
                     
@@ -988,13 +997,13 @@
                 reportDateInput.style.display = 'none';
                 reportDateLabel.style.display = 'none';
                 generateReportButton.style.display = 'none';
-                loadSavedButton.style.display = 'none';
+                loadSavedButton.style.display = 'none'; // Sempre oculto, mas mantendo a lógica se precisar reativar
                 controlSeparator.style.display = 'none';
             } else {
                 reportDateInput.style.display = 'inline-flex';
                 reportDateLabel.style.display = 'inline-flex';
                 generateReportButton.style.display = 'inline-flex';
-                loadSavedButton.style.display = 'inline-flex';
+                loadSavedButton.style.display = 'none'; // Mantido oculto por solicitação
                 controlSeparator.style.display = 'block';
             }
         }
@@ -1013,7 +1022,7 @@
             saveScheduleButton.style.display = 'none';
             deleteScheduleButton.style.display = 'none'; 
             
-            setModalMode('NEW');
+            setModalMode('NEW'); // Padrão resetar para Novo
         }
 
         openModalButton.addEventListener('click', () => {
@@ -1221,16 +1230,15 @@
                         } else {
                             val = formatDateToDisplay(val);
                         }
-                    } else if ([COL_MAP.QTD, COL_MAP.PESO_TOTAL, COL_MAP.PESO_UN].includes(idx) && typeof val === 'number') {
+                    } else if ([COL_MAP.QTD, COL_MAP.PESO_TOTAL, COL_MAP.PESO_UN].includes(idx)) {
+                        // [FIX] Force formatting for weight/qtd columns in BOTH tables
+                        // Ensure value is a number
+                        let numVal = (typeof val === 'number') ? val : parsePtBrNumber(val);
+                        
                         const minDec = (idx === COL_MAP.QTD) ? 0 : 2;
                         const maxDec = (idx === COL_MAP.QTD) ? 0 : 2;
                         
-                        // Garante formatação com 2 casas para Peso Un e Peso Total
-                        if (idx !== COL_MAP.QTD) {
-                            val = val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                        } else {
-                            val = val.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-                        }
+                        val = numVal.toLocaleString('pt-BR', { minimumFractionDigits: minDec, maximumFractionDigits: maxDec });
                         
                         if (!isModal && [0,1,2,5,6,8].includes(idx)) {} else { td.classList.add('align-right'); }
                     }
@@ -1293,7 +1301,14 @@
         
         generateReportButton.addEventListener('click', () => {
              const dateStr = reportDateInput.value; if (!dateStr) return alert("Selecione data.");
-             setModalMode('NEW'); // Force new mode
+             
+             // [NOVO] Verificação se já existe
+             if (savedDatesSet.has(dateStr)) {
+                 alert("JÁ EXISTE UMA PROGRAMAÇÃO SALVA PARA ESTA DATA!\n\nPor favor, utilize o menu lateral para abrir e editar a programação existente, ou apague-a se desejar criar uma nova do zero.");
+                 return;
+             }
+
+             setModalMode('NEW'); 
              currentReportData = []; manualRowsData = [];
              generatePDFButton.style.display = 'none';
              saveScheduleButton.style.display = 'none';
@@ -1483,7 +1498,6 @@
                 if (q > 0 || r[COL_MAP.DATA] === null) {
                     total += parsePtBrNumber(r[COL_MAP.PESO_TOTAL]);
                     totalQtd += q;
-                    // Note: No Apont (Date) column anymore
                     body.push([
                         r[COL_MAP.OP], 
                         r[COL_MAP.CODIGO], 
@@ -1520,14 +1534,14 @@
                 },
                 alternateRowStyles: { fillColor: [245, 245, 245] },
                 columnStyles: {
-                    0: { cellWidth: 18 },  // OP
-                    1: { cellWidth: 20 },  // Cod
-                    2: { cellWidth: 'auto' }, // Desc
+                    0: { cellWidth: 18, halign: 'center' },  // OP
+                    1: { cellWidth: 20, halign: 'center' },  // Cod
+                    2: { cellWidth: 35 }, // Desc (Diminuído)
                     3: { cellWidth: 30 },  // Mat
-                    4: { cellWidth: 60 },  // Client (Increased width)
-                    5: { cellWidth: 15, halign: 'right' }, // Qtd
-                    6: { cellWidth: 15 },  // Lote
-                    7: { cellWidth: 22, halign: 'right' }  // Peso
+                    4: { cellWidth: 'auto' },  // Client (Preenche resto)
+                    5: { cellWidth: 15, halign: 'center' }, // Qtd
+                    6: { cellWidth: 25, halign: 'center' },  // Lote (Aumentado)
+                    7: { cellWidth: 22, halign: 'center' }  // Peso
                 },
                 tableWidth: 'auto', margin: { left: 10, right: 10 }
             });
