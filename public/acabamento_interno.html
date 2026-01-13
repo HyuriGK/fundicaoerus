@@ -722,6 +722,7 @@
             } catch (e) { return dateStr; }
         }
         
+        // --- CORREÇÃO AQUI: Forçar conversão para Number ao ler do servidor ---
         function convertRawDBRowToExcelFormat(rawRow) {
             const dateStr = rawRow.data;
             let dateObj = null;
@@ -733,9 +734,17 @@
                 }
             }
             return [
-                dateObj, rawRow.op || '', rawRow.codigo || '', rawRow.descricao || '',
-                rawRow.material || '', rawRow.peso_un || 0.0, rawRow.quant || 0,
-                rawRow.lote || '', rawRow.peso_total || 0.0, rawRow.cliente || '', rawRow.quant_fat || 0
+                dateObj, 
+                rawRow.op || '', 
+                rawRow.codigo || '', 
+                rawRow.descricao || '',
+                rawRow.material || '', 
+                Number(rawRow.peso_un) || 0.0, 
+                Number(rawRow.quant) || 0, // Garante que é número
+                rawRow.lote || '', 
+                Number(rawRow.peso_total) || 0.0, // Garante que é número
+                rawRow.cliente || '', 
+                Number(rawRow.quant_fat) || 0
             ];
         }
 
@@ -1153,20 +1162,30 @@
             displayTable(allExcelData, 'mainTableContent');
         }
 
+        // --- CORREÇÃO AQUI: Forçar Number() nas somas para evitar concatenação ---
         function aggregateData(filteredRows) {
             const map = new Map();
             for (const row of filteredRows) {
                 if (String(row[COL_MAP.DESCRICAO] || '').trim() === "") continue; 
                 const key = row[COL_MAP.CODIGO];
                 if (map.has(key)) {
-                    const ex = map.get(key); ex.quantidade += row[COL_MAP.QTD]; ex.pesoTotal += row[COL_MAP.PESO_TOTAL]; 
+                    const ex = map.get(key);
+                    // Correção: Converte para número antes de somar
+                    ex.quantidade += Number(row[COL_MAP.QTD]) || 0; 
+                    ex.pesoTotal += Number(row[COL_MAP.PESO_TOTAL]) || 0; 
                 } else {
                     map.set(key, {
-                        data: row[COL_MAP.DATA], op: row[COL_MAP.OP], codigo: key,
-                        descricao: row[COL_MAP.DESCRICAO], material: row[COL_MAP.MATERIAL],
-                        pesoUn: row[COL_MAP.PESO_UN], quantidade: row[COL_MAP.QTD],
-                        lote: row[COL_MAP.LOTE], pesoTotal: row[COL_MAP.PESO_TOTAL],
-                        cliente: row[COL_MAP.CLIENTE], quant_fat: 0.0
+                        data: row[COL_MAP.DATA], 
+                        op: row[COL_MAP.OP], 
+                        codigo: key,
+                        descricao: row[COL_MAP.DESCRICAO], 
+                        material: row[COL_MAP.MATERIAL],
+                        pesoUn: Number(row[COL_MAP.PESO_UN]) || 0, 
+                        quantidade: Number(row[COL_MAP.QTD]) || 0, // Garante número inicial
+                        lote: row[COL_MAP.LOTE], 
+                        pesoTotal: Number(row[COL_MAP.PESO_TOTAL]) || 0, // Garante número inicial
+                        cliente: row[COL_MAP.CLIENTE], 
+                        quant_fat: 0.0
                     });
                 }
             }
@@ -1175,8 +1194,8 @@
         
         function updateTotalWeightDisplay() {
             let prog = 0;
-            prog = currentReportData.reduce((s, r) => s + (r[COL_MAP.PESO_TOTAL] || 0), 0);
-            prog += manualRowsData.reduce((s, r) => s + (r[COL_MAP.PESO_TOTAL] || 0), 0);
+            prog = currentReportData.reduce((s, r) => s + (Number(r[COL_MAP.PESO_TOTAL]) || 0), 0);
+            prog += manualRowsData.reduce((s, r) => s + (Number(r[COL_MAP.PESO_TOTAL]) || 0), 0);
             document.getElementById('totalWeightValue').textContent = prog.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' KG'; // Legacy
             totalProgrammedWeightValue.textContent = prog.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' KG';
         }
