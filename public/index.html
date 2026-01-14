@@ -66,7 +66,7 @@
         .brand-text p { font-size: 0.75rem; color: var(--text-muted); margin: 0; }
 
         .nav-menu { list-style: none; padding: 0; margin: 0; flex-grow: 1; overflow-y: auto; }
-        .nav-link { display: flex; align-items: center; padding: 10px 14px; border-radius: 6px; color: var(--text-muted); font-size: 0.9rem; font-weight: 500; transition: all 0.2s; margin-bottom: 4px; text-decoration: none; }
+        .nav-link { display: flex; align-items: center; padding: 10px 14px; border-radius: 6px; color: var(--text-muted); font-size: 0.9rem; font-weight: 500; transition: all 0.2s; margin-bottom: 4px; text-decoration: none; cursor: pointer; }
         .nav-link:hover, .nav-link.active { background-color: rgba(255, 255, 255, 0.03); color: #fff; }
         .nav-link.active { color: var(--color-primary); background: rgba(251, 191, 36, 0.05); }
         .nav-link i { width: 24px; margin-right: 10px; text-align: center; }
@@ -76,6 +76,11 @@
         .nav-group-line { height: 1px; flex-grow: 1; background: linear-gradient(to right, var(--border-subtle), transparent); margin: 2px 10px 0 12px; }
         .nav-group-wrapper { overflow: hidden; transition: max-height 0.4s var(--ease-out); max-height: 500px; }
         .nav-group-wrapper.collapsed { max-height: 0; }
+        
+        /* Sidebar Footer (Logout) */
+        .sidebar-footer { margin-top: auto; padding-top: 15px; border-top: 1px solid var(--border-subtle); }
+        .logout-link { color: #ef4444 !important; }
+        .logout-link:hover { background-color: rgba(239, 68, 68, 0.1) !important; }
 
         /* MAIN CONTENT */
         .main-wrapper { grid-column: 2; grid-row: 1; display: flex; flex-direction: column; overflow: hidden; }
@@ -112,6 +117,16 @@
         .chart-title { font-size: 0.85rem; font-weight: 800; text-transform: uppercase; color: #fff; letter-spacing: 0.1em; }
         .chart-title span { color: var(--color-primary); margin-left: 5px; }
         
+        /* Chart Controls */
+        .chart-controls { display: flex; align-items: center; gap: 8px; }
+        
+        .nav-chart-btn {
+            background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-subtle);
+            color: var(--text-muted); width: 28px; height: 28px; border-radius: 6px;
+            cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; font-size: 0.8rem;
+        }
+        .nav-chart-btn:hover { background: rgba(251, 191, 36, 0.1); color: var(--color-primary); border-color: var(--color-primary-dim); }
+
         .chart-timer-badge {
             background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.2);
             color: var(--color-primary); padding: 4px 10px; border-radius: 20px; font-family: var(--font-mono);
@@ -227,6 +242,13 @@
                     <a href="refugo.html" class="nav-link"><i class="fa-solid fa-trash-can"></i>Refugo</a>
                 </div>
             </ul>
+
+            <!-- RODAPÉ DA SIDEBAR COM BOTÃO SAIR -->
+            <div class="sidebar-footer">
+                <a href="#" onclick="logout()" class="nav-link logout-link">
+                    <i class="fa-solid fa-right-from-bracket"></i>Sair do Sistema
+                </a>
+            </div>
         </aside>
 
         <div class="main-wrapper">
@@ -253,10 +275,21 @@
                 <div class="chart-panel">
                     <div class="chart-header">
                         <span class="chart-title" id="chart-display-title">Produção Diária (Fusão) - <span id="chart-month-name">---</span></span>
-                        <div class="chart-timer-badge">
-                            <i class="fa-solid fa-clock-rotate-left"></i>
-                            <span id="countdown-timer">10s</span>
+                        
+                        <!-- CONTROLES DO GRÁFICO E TIMER -->
+                        <div class="chart-controls">
+                            <button class="nav-chart-btn" onclick="prevChart()" title="Anterior">
+                                <i class="fa-solid fa-chevron-left"></i>
+                            </button>
+                            <button class="nav-chart-btn" onclick="nextChart()" title="Próximo">
+                                <i class="fa-solid fa-chevron-right"></i>
+                            </button>
+                            <div class="chart-timer-badge">
+                                <i class="fa-solid fa-clock-rotate-left"></i>
+                                <span id="countdown-timer">10s</span>
+                            </div>
                         </div>
+
                     </div>
                     <div style="height: 380px; position: relative;">
                         <canvas id="prodChart"></canvas>
@@ -333,28 +366,26 @@
 
                 if (link.id === 'producaosetor') {
                     if (data.length > 1) {
-                        // Correção na filtragem de data para aceitar YYYY-MM ou MM/YYYY
                         const monthRows = data.slice(1).filter(r => {
                             const dateStr = String(r[0]);
                             return dateStr.includes(`${curYear}-${curMonth}`) || dateStr.includes(`/${curMonth}/${curYear}`);
                         });
                         
                         monthRows.forEach(r => {
-                            // Correção na extração do dia (suporta - ou /)
                             const dateStr = String(r[0]);
                             let day = 0;
                             
                             if (dateStr.includes('-')) {
-                                day = parseInt(dateStr.split('-')[2]); // Formato YYYY-MM-DD
+                                day = parseInt(dateStr.split('-')[2]); 
                             } else if (dateStr.includes('/')) {
-                                day = parseInt(dateStr.split('/')[0]); // Formato DD/MM/YYYY
+                                day = parseInt(dateStr.split('/')[0]);
                             }
 
                             const setor = String(r[1]).toUpperCase();
                             const kg = parseFloat(r[6] || 0);
 
                             if(day > 0 && day <= daysInMonth) {
-                                if (setor.includes("FUS")) { // Verifica FUSAO ou FUSÃO
+                                if (setor.includes("FUS")) { 
                                     chartData.fusao[day-1] += (kg / 1000);
                                 }
                                 if (setor.includes("MOLDAGEM") || setor.includes("LEVE") || setor.includes("PESADA") || setor.includes("ROLLOVER")) {
@@ -373,50 +404,39 @@
                     }
                 }
                 else if (link.id === 'acabamentoexterno') {
-    // O novo banco retorna um objeto { registros: [...], itens: [...], recebidos: [...] }
-    // Por isso usamos data.registros
-    const listaDeRegistros = data.registros || [];
+                    const listaDeRegistros = data.registros || [];
+                    const monthData = listaDeRegistros.filter(r => {
+                        const d = r.data || ""; 
+                        return d.includes(`${curYear}-${curMonth}`);
+                    });
 
-    const monthData = listaDeRegistros.filter(r => {
-        const d = r.data || ""; // O banco retorna YYYY-MM-DD
-        return d.includes(`${curYear}-${curMonth}`);
-    });
+                    monthData.forEach(r => {
+                        let day = 0;
+                        if(r.data && r.data.includes('-')) {
+                            day = parseInt(r.data.split('-')[2]);
+                        }
 
-    monthData.forEach(r => {
-        let day = 0;
-        // O banco Neon retorna a data como 2025-01-10
-        if(r.data && r.data.includes('-')) {
-            day = parseInt(r.data.split('-')[2]);
-        }
+                        if(day > 0 && day <= daysInMonth) {
+                            const pesoLinha = parseFloat(r.quant || 0) * parseFloat(r.peso || 0);
+                            chartData.terceiro[day-1] += pesoLinha;
+                        }
+                    });
 
-        if(day > 0 && day <= daysInMonth) {
-            // Soma o peso total daquela linha no gráfico (em KG)
-            // r.quant e r.peso vêm como números do banco
-            const pesoLinha = parseFloat(r.quant || 0) * parseFloat(r.peso || 0);
-            chartData.terceiro[day-1] += pesoLinha;
-        }
-    });
-
-    const totalKg = monthData.reduce((acc, r) => acc + (parseFloat(r.quant || 0) * parseFloat(r.peso || 0)), 0);
-    const uniqueCargas = new Set(monthData.map(r => r.carga)).size;
-    
-    mainValue = (totalKg / 1000).toFixed(2) + " Ton";
-    subLabel = `${uniqueCargas} Cargas no Mês`;
-}
+                    const totalKg = monthData.reduce((acc, r) => acc + (parseFloat(r.quant || 0) * parseFloat(r.peso || 0)), 0);
+                    const uniqueCargas = new Set(monthData.map(r => r.carga)).size;
+                    
+                    mainValue = (totalKg / 1000).toFixed(2) + " Ton";
+                    subLabel = `${uniqueCargas} Cargas no Mês`;
+                }
                 else if (link.id === 'faturamento') {
                     if (data.length > 1) {
-                        // Lista de códigos de clientes que devem ser ignorados (mesma lógica do detalhado)
                         const CLIENTES_EXCLUIDOS = ['2020', '257', '316'];
 
                         const monthRows = data.slice(1).filter(r => {
-                            const d = String(r[1]); // Data
-                            const codCliente = String(r[4] || '').trim(); // Código do Cliente (Coluna 5)
-                            
-                            // Verifica se foi ignorado manualmente ou se é um cliente de serviço
+                            const d = String(r[1]);
+                            const codCliente = String(r[4] || '').trim();
                             const isManualExcluded = r[14] === 1 || r[14] === true;
                             const isClientExcluded = CLIENTES_EXCLUIDOS.includes(codCliente);
-                            
-                            // Só processa se NÃO for excluído manual E NÃO for cliente de serviço
                             return !isManualExcluded && !isClientExcluded && 
                                    (d.includes(`${curYear}-${curMonth}`) || d.includes(`/${curMonth}/${curYear}`));
                         });
@@ -428,12 +448,10 @@
                             else if(d.includes('/')) day = parseInt(d.split('/')[0]);
 
                             if(day > 0 && day <= daysInMonth) {
-                                // Soma peso (r[12]) em toneladas para o gráfico
                                 chartData.faturado[day-1] += (parseFloat(r[12] || 0) / 1000);
                             }
                         });
 
-                        // Soma peso total (r[12]) em toneladas para o KPI
                         const totalTon = monthRows.reduce((acc, r) => acc + (parseFloat(r[12] || 0) / 1000), 0);
                         mainValue = totalTon.toFixed(2) + " Ton";
                         subLabel = `Produção Faturada no Mês`;
@@ -445,18 +463,12 @@
                     subLabel = "Total em Carteira";
                 }
                 else if (link.id === 'refugo') {
-                    // O banco retorna um objeto { refugoRawData: [...], ... }
                     const listaRefugo = data.refugoRawData || [];
-
-                    // Filtra apenas o refugo do mês atual
                     const monthData = listaRefugo.filter(r => {
-                        const d = r.data || ""; // Formato YYYY-MM-DD
+                        const d = r.data || ""; 
                         return d.includes(`${curYear}-${curMonth}`);
                     });
-
-                    // Calcula o peso total (usando a coluna peso_total do banco)
                     const totalKg = monthData.reduce((acc, r) => acc + parseFloat(r.peso_total || 0), 0);
-                    
                     mainValue = (totalKg / 1000).toFixed(2) + " Ton";
                     subLabel = `${monthData.length} Ocorrências no Mês`;
                 }
@@ -474,18 +486,18 @@
         function initChart() {
             const ctx = document.getElementById('prodChart').getContext('2d');
             prodChartInstance = new Chart(ctx, {
-                type: 'line',
+                type: 'bar', // Alterado para Gráfico de Barras
                 data: {
                     labels: chartData.labels,
                     datasets: [{
                         label: 'Valor',
                         data: chartData.fusao,
                         borderColor: '#fbbf24',
-                        backgroundColor: 'rgba(251, 191, 36, 0.1)',
-                        borderWidth: 2,
-                        tension: 0.3,
-                        pointRadius: 3,
-                        fill: true
+                        backgroundColor: '#fbbf24',
+                        borderWidth: 0,
+                        borderRadius: 4, // Barras arredondadas
+                        barPercentage: 0.6,
+                        categoryPercentage: 0.8
                     }]
                 },
                 options: {
@@ -500,8 +512,16 @@
                         }
                     },
                     scales: {
-                        y: { beginAtZero: true, grid: { color: 'rgba(255, 255, 255, 0.05)' }, ticks: { color: '#a1a1aa', font: { size: 10 } } },
-                        x: { grid: { display: false }, ticks: { color: '#a1a1aa', font: { size: 10 } } }
+                        y: { 
+                            beginAtZero: true, 
+                            grid: { color: 'rgba(255, 255, 255, 0.05)' }, 
+                            ticks: { color: '#a1a1aa', font: { size: 10 } },
+                            border: { display: false }
+                        },
+                        x: { 
+                            grid: { display: false }, 
+                            ticks: { color: '#a1a1aa', font: { size: 10 } } 
+                        }
                     }
                 }
             });
@@ -510,9 +530,10 @@
         }
 
         function logout() {
-    localStorage.removeItem('erus_auth');
-    window.location.href = 'login.html';
-}
+            localStorage.removeItem('erus_auth');
+            localStorage.removeItem('erus_last_activity');
+            window.location.href = 'login.html';
+        }
 
         function startRotationTimer() {
             setInterval(() => {
@@ -525,6 +546,34 @@
                     timeLeft = 10;
                 }
             }, 1000);
+        }
+
+        // Função para avançar manualmente
+        function nextChart() {
+            // Reseta o timer para o usuário ter tempo de ver
+            timeLeft = 10;
+            rotateChart();
+        }
+
+        // Função para voltar manualmente
+        function prevChart() {
+            timeLeft = 10;
+            // Lógica para decrementar circularmente
+            currentChartMode = (currentChartMode - 1 + 4) % 4; // +4 evita números negativos
+            
+            // Mas rotateChart() incrementa +1 no início. 
+            // Para "voltar", precisamos ajustar o índice antes de chamar updateChartVisuals
+            // ou criar uma função update separada.
+            // Para simplificar e reutilizar código, vamos setar o currentChartMode para 2 posições atrás
+            // para que o incremento do rotateChart caia na posição anterior correta.
+            
+            // Ex: Estou em 1. Quero ir para 0.
+            // Se chamar rotateChart: 1 -> 2.
+            // Preciso que rotateChart faça X -> 0. Então X deve ser -1 (ou 3).
+            // Formula: (Atual - 2 + 4) % 4
+            
+            currentChartMode = (currentChartMode - 2 + 4) % 4;
+            rotateChart();
         }
 
         function rotateChart() {
@@ -557,11 +606,10 @@
 
             prodChartInstance.data.datasets[0].data = data;
             prodChartInstance.data.datasets[0].borderColor = color;
-            prodChartInstance.data.datasets[0].backgroundColor = color + "1A"; 
+            prodChartInstance.data.datasets[0].backgroundColor = color; // Cor sólida para barras
 
             prodChartInstance.options.plugins.tooltip.callbacks.label = function(context) {
                 if (currentChartMode === 2) return context.parsed.y.toLocaleString('pt-BR') + " Kg";
-                // Modo 3 agora retorna Toneladas
                 return context.parsed.y.toFixed(2) + " Ton";
             };
             
