@@ -1067,10 +1067,16 @@
             const toStr = document.getElementById('filterToDate').value;
             
             activeDateFilter = null;
-            activeFromDate = fromStr ? new Date(fromStr + 'T00:00:00') : null;
+            // Corrigido para interpretar YYYY-MM-DD como local, não UTC
+            if (fromStr) {
+                const p = fromStr.split('-');
+                activeFromDate = new Date(p[0], p[1]-1, p[2]);
+            } else { activeFromDate = null; }
+
             if (toStr) {
-                const d = new Date(toStr + 'T00:00:00');
-                d.setDate(d.getDate() + 1);
+                const p = toStr.split('-');
+                const d = new Date(p[0], p[1]-1, p[2]);
+                d.setDate(d.getDate() + 1); // Incluir o dia final
                 activeToDate = d;
             } else { activeToDate = null; }
 
@@ -1374,16 +1380,39 @@
         }
 
         // =========================================================
-        // HELPERS
+        // HELPERS - CORREÇÃO DE DATA
         // =========================================================
         function getDateObject(cellData) {
             let dateObj;
             if (typeof cellData === 'number' && cellData > 1) {
+                // EXCEL SERIAL NUMBER FIX:
+                // O padrão new Date((n - 25569) * 86400000) cria um timestamp UTC.
+                // Se o fuso local for UTC-3 (Brasil), ao usar .getDate(), volta 1 dia.
+                // Correção: Adicionar o offset do fuso para que o horário LOCAL seja Meia-Noite.
                 const utc_days = Math.floor(cellData - 25569);
-                dateObj = new Date(utc_days * 86400000);
-            } else if (typeof cellData === 'string' && cellData.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
-                const p = cellData.split('/');
-                dateObj = new Date(`${p[1]}/${p[0]}/${p[2]}`); 
+                const utc_value = utc_days * 86400000;
+                const tempDate = new Date(utc_value);
+                const offsetMinutes = tempDate.getTimezoneOffset(); // Retorna ex: 180 (para UTC-3)
+                dateObj = new Date(utc_value + (offsetMinutes * 60 * 1000));
+
+            } else if (typeof cellData === 'string') {
+                // STRING FIX:
+                // Tenta forçar a interpretação como local.
+                // Se for DD/MM/YYYY
+                if (cellData.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+                    const p = cellData.split('/');
+                    // Construtor Date(ano, mesIndex, dia) usa hora LOCAL
+                    dateObj = new Date(p[2], p[1] - 1, p[0]);
+                } 
+                // Se for YYYY-MM-DD
+                else if (cellData.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                     const p = cellData.split('-');
+                     // Construtor Date(ano, mesIndex, dia) usa hora LOCAL
+                     dateObj = new Date(p[0], p[1] - 1, p[2]);
+                }
+                else {
+                    dateObj = new Date(cellData);
+                }
             } else {
                 dateObj = new Date(cellData);
             }
@@ -1454,6 +1483,7 @@
             dataArray.forEach(i => {
                 const d = getDateObject(i.date);
                 if (isNaN(d.getTime())) return;
+                // Agora o getDate() retorna o dia correto (Local)
                 const k = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
                 map.set(k, (map.get(k)||0) + i.peso);
             });
