@@ -78,14 +78,9 @@
         .page-subtitle { font-size: 0.85rem; color: var(--text-muted); margin: 2px 0 0 0; font-weight: 400; }
         .header-actions { display: flex; align-items: center; gap: 12px; }
 
-        .dropdown { position: relative; display: inline-block; }
         .btn-dropdown-trigger { background: rgba(255, 255, 255, 0.05); color: var(--text-main); border: 1px solid var(--border-subtle); padding: 8px 20px; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.9rem; display: flex; align-items: center; gap: 8px; transition: all 0.2s; }
         .btn-dropdown-trigger:hover, .btn-dropdown-trigger.active { background: rgba(251, 191, 36, 0.1); border-color: var(--color-primary); color: var(--color-primary); }
-        .dropdown-menu { display: none; position: absolute; top: 100%; left: 0; background-color: #18181b; min-width: 220px; border: 1px solid var(--border-highlight); border-radius: var(--radius-sm); box-shadow: 0 8px 16px rgba(0,0,0,0.5); z-index: 200; margin-top: 5px; padding: 5px 0; }
-        .dropdown-menu.show { display: block; animation: fadeIn 0.2s ease; }
-        .dropdown-item { display: flex; align-items: center; gap: 10px; padding: 10px 15px; color: var(--text-muted); text-decoration: none; font-size: 0.9rem; cursor: pointer; transition: background 0.2s, color 0.2s; }
-        .dropdown-item:hover { background-color: rgba(251, 191, 36, 0.1); color: #fff; }
-
+        
         .btn-back { background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2); padding: 8px 20px; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.9rem; display: flex; align-items: center; gap: 8px; transition: all 0.2s; }
         .btn-back:hover { background: #ef4444; color: #fff; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3); }
 
@@ -106,13 +101,6 @@
         .chart-filters { display: flex; gap: 10px; }
         
         select { background: rgba(0, 0, 0, 0.3); border: 1px solid var(--border-subtle); color: #fff; padding: 6px 12px; border-radius: 6px; font-family: var(--font-main); font-size: 0.85rem; }
-
-        .collapsible-container { background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); margin-bottom: 24px; overflow: hidden; transition: all 0.3s ease; }
-        .collapsible-header { padding: 15px 20px; background: rgba(255, 255, 255, 0.03); border-bottom: 1px solid var(--border-subtle); cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-weight: 600; font-size: 0.95rem; color: var(--text-main); }
-        .collapsible-header .arrow { transition: transform 0.3s; color: var(--color-primary); }
-        .collapsible-header.collapsed .arrow { transform: rotate(-90deg); }
-        .collapsible-content { padding: 20px; transition: max-height 0.4s ease-in-out, padding 0.4s, opacity 0.4s; max-height: 2000px; opacity: 1; padding-bottom: 30px; }
-        .collapsible-content.collapsed { max-height: 0; padding-top: 0; padding-bottom: 0; opacity: 0; overflow: hidden; }
 
         .form-row { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 16px; align-items: flex-end; }
         .form-group { flex: 1; min-width: 140px; }
@@ -145,7 +133,8 @@
         .modal-content { background: #18181b; border: 1px solid var(--border-highlight); border-radius: var(--radius-md); width: 98vw; max-width: 98vw; max-height: 95vh; display: flex; flex-direction: column; transform: scale(0.95); transition: transform 0.3s; }
         .modal-overlay.visible .modal-content { transform: scale(1); }
         #cargaModal .modal-content { height: 96vh; }
-        #buscaModal .modal-content, #registrosModal .modal-content { width: 100vw; height: 100vh; border-radius: 0; border: none; }
+        /* Todos os modais "principais" (Novo, Registros, Busca) são tela cheia */
+        #novoEnvioModal .modal-content, #registrosModal .modal-content, #buscaModal .modal-content { width: 100vw; height: 100vh; border-radius: 0; border: none; }
         .modal-header { padding: 20px; border-bottom: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: center; }
         .modal-title { font-size: 1.2rem; font-weight: 700; color: #fff; }
         .modal-close { cursor: pointer; font-size: 1.5rem; color: var(--text-muted); }
@@ -168,50 +157,18 @@
         const tempoLimite = 30 * 60 * 1000; 
         
         function verificarSessao() {
-            // Se já estiver na página de login, não faz nada para evitar loop
             if (window.location.pathname.includes('login.html')) return;
-
             const logado = localStorage.getItem('erus_auth');
             const ultimaAtividade = localStorage.getItem('erus_last_activity');
             const agora = Date.now();
-
-            // 1. Verificação: Se não houver marca de login ou horário de atividade
-            if (logado !== 'true' || !ultimaAtividade) {
-                redirecionarLogin();
-                return;
-            }
-
-            // 2. Verificação de Tempo: Se o tempo de inatividade passou do limite
-            if (agora - parseInt(ultimaAtividade) > tempoLimite) {
-                alert("Sua sessão expirou por inatividade.");
-                redirecionarLogin();
-                return;
-            }
+            if (logado !== 'true' || !ultimaAtividade) { redirecionarLogin(); return; }
+            if (agora - parseInt(ultimaAtividade) > tempoLimite) { alert("Sua sessão expirou por inatividade."); redirecionarLogin(); return; }
         }
-
-        function atualizarAtividade() {
-            // Só atualiza se o usuário ainda estiver marcado como logado
-            if (localStorage.getItem('erus_auth') === 'true') {
-                localStorage.setItem('erus_last_activity', Date.now().toString());
-            }
-        }
-
-        function redirecionarLogin() {
-            localStorage.clear();
-            // Usamos replace para o usuário não conseguir "voltar" para a página protegida
-            window.location.replace('login.html');
-        }
-
-        // Executa a verificação IMEDIATAMENTE
+        function atualizarAtividade() { if (localStorage.getItem('erus_auth') === 'true') { localStorage.setItem('erus_last_activity', Date.now().toString()); } }
+        function redirecionarLogin() { localStorage.clear(); window.location.replace('login.html'); }
         verificarSessao();
-
-        // Monitora interações para resetar o cronômetro
         const eventos = ['mousedown', 'mousemove', 'keypress', 'touchstart', 'scroll'];
-        eventos.forEach(evento => {
-            window.addEventListener(evento, atualizarAtividade, { passive: true });
-        });
-
-        // Verifica a cada 30 segundos se o tempo expirou
+        eventos.forEach(evento => { window.addEventListener(evento, atualizarAtividade, { passive: true }); });
         setInterval(verificarSessao, 60000);
     })();
 </script>
@@ -231,16 +188,11 @@
                 </div>
             </div>
             <div class="header-actions">
-                <!-- Botão NOVO para abrir o modal de Registros -->
-                <button class="btn-dropdown-trigger" onclick="abrirModalRegistros()"><i class="fa-solid fa-table"></i> Registros</button>
-                
-                <div class="dropdown">
-                    <button class="btn-dropdown-trigger" onclick="toggleDropdown()"><i class="fa-solid fa-gear"></i> Funções</button>
-                    <div id="functionsDropdown" class="dropdown-menu">
-                        <!-- Mantive aqui caso queira acessar por aqui também, mas o botão principal agora estará dentro do modal de registros -->
-                        <a href="#" class="dropdown-item" onclick="abrirModalBusca()"><i class="fa-solid fa-magnifying-glass"></i> Buscar por Código</a>
-                    </div>
-                </div>
+                <!-- Botão Novo Envio (Esquerda de Registros) -->
+                <button class="btn-dropdown-trigger" onclick="abrirModalPorId('novoEnvioModal')"><i class="fa-solid fa-plus-circle"></i> Novo Envio</button>
+                <!-- Botão Registros -->
+                <button class="btn-dropdown-trigger" onclick="abrirModalPorId('registrosModal')"><i class="fa-solid fa-table"></i> Registros</button>
+                <!-- Botão Voltar -->
                 <button class="btn-back" onclick="redirectToLink()"><i class="fa-solid fa-arrow-right-from-bracket"></i> Voltar</button>
             </div>
         </header>
@@ -257,49 +209,6 @@
                 </div>
                 <div style="height: 550px; position: relative;"><canvas id="barChart"></canvas></div>
             </div>
-
-            <div class="collapsible-container">
-                <div class="collapsible-header collapsed" id="formTitleBar">
-                    <span><i class="fa-solid fa-plus-circle" style="margin-right:8px; color:var(--color-primary);"></i> Novo Registro de Envio</span>
-                    <span class="arrow"><i class="fa-solid fa-chevron-down"></i></span>
-                </div>
-                <div class="collapsible-content collapsed" id="formCollapsibleContent">
-                    <div class="form-row">
-                        <div class="form-group" style="flex: 0.5;"><label>Carga</label><input type="text" id="inputCarga" placeholder="Ex: 123" class="mono" autocomplete="off"></div>
-                        <div class="form-group" style="flex: 0.6;"><label>Data</label><input type="date" id="inputData"></div>
-                        <div class="form-group" style="flex: 0.6;"><label>Código</label><input type="text" id="inputCodigo" placeholder="CÓDIGO" class="mono" style="text-transform: uppercase;" onblur="verificarCodigoParaAutopreenchimento()" autocomplete="off"></div>
-                        <div class="form-group" style="flex: 2;"><label>Descrição</label><input type="text" id="inputDescricao" placeholder="DESCRIÇÃO DA PEÇA" style="text-transform: uppercase;" autocomplete="off"></div>
-                        <div class="form-group" style="flex: 1;"><label>Cliente</label><input type="text" id="inputCliente" placeholder="CLIENTE" style="text-transform: uppercase;" autocomplete="off"></div>
-                        <div class="form-group" style="flex: 1;">
-                            <label>Terceiro</label>
-                            <select id="inputTerceiro">
-                                <option value="BSP REBARBAÇÃO">BSP REBARBAÇÃO</option>
-                                <option value="JM REBARBAÇÃO">JM REBARBAÇÃO</option>
-                                <option value="VG REBARBAÇÃO">VG REBARBAÇÃO</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group"><label>Peso Un. (kg)</label><input type="number" id="inputPesoUn" placeholder="0.00" min="0" step="0.01" class="mono"></div>
-                        <div class="form-group"><label>Qtd. Total</label><input type="number" id="inputQuantidade" placeholder="0" min="1" class="mono" oninput="atualizarQuantidades('total')"></div>
-                        <div class="form-group"><label>Qtd. Escariar</label><input type="number" id="inputQtdEscariar" placeholder="0" min="0" class="mono" oninput="atualizarQuantidades('escariar')"></div>
-                        <div class="form-group"><label>Qtd. Só Rebarbar</label><input type="number" id="inputQtdRebarba" placeholder="0" min="0" class="mono" oninput="atualizarQuantidades('rebarba')"></div>
-                        <div class="form-group" style="flex: 2;"><label>Observações</label><input type="text" id="inputObservacoes" placeholder="OBSERVAÇÕES..." style="text-transform: uppercase;" autocomplete="off"></div>
-                        <div class="form-group" style="flex: 0.5;"><label>&nbsp;</label><button class="btn-modern btn-add" onclick="adicionarRegistro()" style="width:100%;"><i class="fa-solid fa-plus"></i> Adicionar</button></div>
-                    </div>
-                    <div class="controls-panel">
-                        <div class="controls-group">
-                            <button class="btn-modern btn-outline" onclick="abrirModalItens()"><i class="fa-solid fa-list"></i> Itens Salvos</button>
-                            <button class="btn-modern btn-outline" onclick="fazerBackup()"><i class="fa-solid fa-download"></i> Backup</button>
-                            <button class="btn-modern btn-outline" onclick="iniciarImportacao()"><i class="fa-solid fa-upload"></i> Restaurar</button>
-                            <button class="btn-modern btn-success" onclick="iniciarRelatorioMensal()"><i class="fa-solid fa-file-excel"></i> Relatório Mensal</button>
-                        </div>
-                        <button class="btn-modern btn-danger" onclick="confirmAndClear()"><i class="fa-solid fa-trash"></i> Apagar Tudo</button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- A tabela foi removida daqui conforme solicitado e movida para o Modal -->
         </main>
 
         <footer class="app-footer">
@@ -310,16 +219,60 @@
 
     <!-- MODAIS -->
     
-    <!-- Novo Modal de Registros (Tabela Principal) -->
+    <!-- Modal de Novo Envio (Tela Cheia) -->
+    <div id="novoEnvioModal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Novo Registro de Envio</h2>
+                <span class="modal-close" onclick="fecharModalTopo()"><i class="fa-solid fa-xmark"></i></span>
+            </div>
+            <div class="modal-body" style="padding: 30px;">
+                <div class="form-row">
+                    <div class="form-group" style="flex: 0.5;"><label>Carga</label><input type="text" id="inputCarga" placeholder="Ex: 123" class="mono" autocomplete="off"></div>
+                    <div class="form-group" style="flex: 0.6;"><label>Data</label><input type="date" id="inputData"></div>
+                    <div class="form-group" style="flex: 0.6;"><label>Código</label><input type="text" id="inputCodigo" placeholder="CÓDIGO" class="mono" style="text-transform: uppercase;" onblur="verificarCodigoParaAutopreenchimento()" autocomplete="off"></div>
+                    <div class="form-group" style="flex: 2;"><label>Descrição</label><input type="text" id="inputDescricao" placeholder="DESCRIÇÃO DA PEÇA" style="text-transform: uppercase;" autocomplete="off"></div>
+                    <div class="form-group" style="flex: 1;"><label>Cliente</label><input type="text" id="inputCliente" placeholder="CLIENTE" style="text-transform: uppercase;" autocomplete="off"></div>
+                    <div class="form-group" style="flex: 1;">
+                        <label>Terceiro</label>
+                        <select id="inputTerceiro">
+                            <option value="BSP REBARBAÇÃO">BSP REBARBAÇÃO</option>
+                            <option value="JM REBARBAÇÃO">JM REBARBAÇÃO</option>
+                            <option value="VG REBARBAÇÃO">VG REBARBAÇÃO</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label>Peso Un. (kg)</label><input type="number" id="inputPesoUn" placeholder="0.00" min="0" step="0.01" class="mono"></div>
+                    <div class="form-group"><label>Qtd. Total</label><input type="number" id="inputQuantidade" placeholder="0" min="1" class="mono" oninput="atualizarQuantidades('total')"></div>
+                    <div class="form-group"><label>Qtd. Escariar</label><input type="number" id="inputQtdEscariar" placeholder="0" min="0" class="mono" oninput="atualizarQuantidades('escariar')"></div>
+                    <div class="form-group"><label>Qtd. Só Rebarbar</label><input type="number" id="inputQtdRebarba" placeholder="0" min="0" class="mono" oninput="atualizarQuantidades('rebarba')"></div>
+                    <div class="form-group" style="flex: 2;"><label>Observações</label><input type="text" id="inputObservacoes" placeholder="OBSERVAÇÕES..." style="text-transform: uppercase;" autocomplete="off"></div>
+                    <div class="form-group" style="flex: 0.5;"><label>&nbsp;</label><button class="btn-modern btn-add" onclick="adicionarRegistro()" style="width:100%;"><i class="fa-solid fa-plus"></i> Adicionar</button></div>
+                </div>
+                <div class="controls-panel">
+                    <div class="controls-group">
+                        <button class="btn-modern btn-outline" onclick="abrirModalPorId('itensModal')"><i class="fa-solid fa-list"></i> Itens Salvos</button>
+                        <button class="btn-modern btn-outline" onclick="fazerBackup()"><i class="fa-solid fa-download"></i> Backup</button>
+                        <button class="btn-modern btn-outline" onclick="iniciarImportacao()"><i class="fa-solid fa-upload"></i> Restaurar</button>
+                        <button class="btn-modern btn-success" onclick="iniciarRelatorioMensal()"><i class="fa-solid fa-file-excel"></i> Relatório Mensal</button>
+                    </div>
+                    <button class="btn-modern btn-danger" onclick="confirmAndClear()"><i class="fa-solid fa-trash"></i> Apagar Tudo</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Registros (Tabela Principal) -->
     <div id="registrosModal" class="modal-overlay">
         <div class="modal-content">
             <div class="modal-header">
                 <div style="display: flex; align-items: center; gap: 20px;">
                     <h2 class="modal-title">Registros de Envio</h2>
-                    <!-- Botão de busca movido para cá -->
-                    <button class="btn-modern btn-outline" onclick="abrirModalBusca()"><i class="fa-solid fa-magnifying-glass"></i> Buscar por Código</button>
+                    <!-- Botão de busca -->
+                    <button class="btn-modern btn-outline" onclick="abrirModalPorId('buscaModal')"><i class="fa-solid fa-magnifying-glass"></i> Buscar por Código</button>
                 </div>
-                <span class="modal-close" onclick="fecharModalRegistros()"><i class="fa-solid fa-xmark"></i></span>
+                <span class="modal-close" onclick="fecharModalTopo()"><i class="fa-solid fa-xmark"></i></span>
             </div>
             <div class="modal-body table-container" style="border:none; margin:0; border-radius:0;">
                 <table id="terceiroTable">
@@ -341,6 +294,7 @@
         </div>
     </div>
 
+    <!-- Modal Detalhes da Carga -->
     <div id="cargaModal" class="modal-overlay">
         <div class="modal-content">
             <div class="modal-header">
@@ -349,23 +303,25 @@
                     <button class="btn-modern btn-success" id="recebidoBtn" onclick="marcarCargaRecebida()"><i class="fa-solid fa-check-double"></i> Receber Tudo</button>
                     <button class="btn-modern btn-add" id="generatePdfBtn" onclick="generateCargaPDF(document.getElementById('modalTitle').textContent.split(': ')[1].split('<')[0])"><i class="fa-solid fa-file-pdf"></i> PDF</button>
                 </div>
-                <span class="modal-close" onclick="hideCargaDetails()"><i class="fa-solid fa-xmark"></i></span>
+                <span class="modal-close" onclick="fecharModalTopo()"><i class="fa-solid fa-xmark"></i></span>
             </div>
             <div id="modalTableContainer" class="modal-body table-container" style="border:none; margin:0; border-radius:0;"></div>
             <div id="modalFooter" class="modal-footer"></div>
         </div>
     </div>
 
+    <!-- Modal Itens Salvos -->
     <div id="itensModal" class="modal-overlay">
         <div class="modal-content" style="max-width: 800px;">
-            <div class="modal-header"><h2 class="modal-title">Itens Cadastrados</h2><span class="modal-close" onclick="fecharModalItens()"><i class="fa-solid fa-xmark"></i></span></div>
+            <div class="modal-header"><h2 class="modal-title">Itens Cadastrados</h2><span class="modal-close" onclick="fecharModalTopo()"><i class="fa-solid fa-xmark"></i></span></div>
             <div id="itensModalTableContainer" class="modal-body table-container" style="border:none; margin:0; border-radius:0;"></div>
         </div>
     </div>
 
+    <!-- Modal Busca Avançada -->
     <div id="buscaModal" class="modal-overlay">
         <div class="modal-content">
-            <div class="modal-header"><h2 class="modal-title">Busca Avançada</h2><span class="modal-close" onclick="fecharModalBusca()"><i class="fa-solid fa-xmark"></i></span></div>
+            <div class="modal-header"><h2 class="modal-title">Busca Avançada</h2><span class="modal-close" onclick="fecharModalTopo()"><i class="fa-solid fa-xmark"></i></span></div>
             <div style="padding: 20px; background: rgba(0,0,0,0.2);">
                 <div class="form-row">
                     <div class="form-group"><label>Código</label><input type="text" id="buscaCodigo" class="mono"></div>
@@ -392,12 +348,44 @@
         let recebidos = {}; 
         let itensConhecidos = new Map();
         let barChartInstance = null;
+        
+        // --- SISTEMA DE PILHA DE MODAIS (MODAL STACK) ---
+        // Permite abrir modais em cima de outros e fechar um por um com ESC
+        const modalStack = [];
+
+        function abrirModalPorId(id) {
+            const m = document.getElementById(id);
+            if (!m) return;
+            m.style.display = 'flex';
+            setTimeout(() => m.classList.add('visible'), 10);
+            document.body.classList.add('modal-open');
+            modalStack.push(id); // Adiciona à pilha
+        }
+
+        function fecharModalTopo() {
+            if (modalStack.length === 0) return;
+            const id = modalStack.pop(); // Remove o último da pilha
+            const m = document.getElementById(id);
+            if (m) {
+                m.classList.remove('visible');
+                setTimeout(() => m.style.display = 'none', 300);
+            }
+            // Se não houver mais modais abertos, remove classe do body
+            if (modalStack.length === 0) {
+                document.body.classList.remove('modal-open');
+            }
+        }
+
+        // Listener Global para ESC
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') {
+                fecharModalTopo();
+            }
+        });
+        // ---------------------------------------------------
 
         async function apiRequest(actionOrEndpoint, method = 'GET', data = null) {
-            // Endereço único da sua nova API
             let url = '/api/acabamento-externo';
-            
-            // Se for um método de escrita (POST), adicionamos a "action" na URL
             if (method === 'POST') {
                 const actionMap = {
                     'registros': 'add-registro',
@@ -411,21 +399,13 @@
                 const action = actionMap[actionOrEndpoint] || actionOrEndpoint;
                 url += `?action=${action}`;
             }
-
-            const options = { 
-                method, 
-                headers: { 'Content-Type': 'application/json' } 
-            };
+            const options = { method, headers: { 'Content-Type': 'application/json' } };
             if (data) options.body = JSON.stringify(data);
-
             try {
                 const response = await fetch(url, options);
                 if (!response.ok) throw new Error(`Erro: ${response.status}`);
                 return await response.json();
-            } catch (error) { 
-                console.error(error); 
-                throw error; 
-            }
+            } catch (error) { console.error(error); throw error; }
         }
         
         const formatNumber = v => Number(v || 0).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
@@ -439,11 +419,9 @@
             const peso = parseFloat(reg.peso || 0);
             const qEsc = parseInt(reg.quant_escariar || 0);
             const qReb = parseInt(reg.quant_rebarba || 0);
-
             if (terc === 'BSP REBARBAÇÃO') return (qEsc * peso * 1.10) + (qReb * peso * 0.90);
             if (terc === 'VG REBARBAÇÃO') return (qEsc + qReb) * peso * 1.00;
             if (terc === 'JM REBARBAÇÃO') return (qEsc * peso * 1.10) + (qReb * peso * 1.00);
-            
             return 0;
         }
         
@@ -456,10 +434,7 @@
             tIn.value = t; eIn.value = e; rIn.value = r;
         }
 
-        async function carregarItensConhecidos() {
-            // Não precisa fazer nada aqui, pois já carregamos tudo na função acima
-            return Promise.resolve(); 
-        }
+        async function carregarItensConhecidos() { return Promise.resolve(); }
         
         function verificarCodigoParaAutopreenchimento() {
             const cod = document.getElementById('inputCodigo').value.trim().toUpperCase();
@@ -479,36 +454,13 @@
             try { const res = await apiRequest('itens', 'POST', data); if (res.success) itensConhecidos.set(data.codigo, data); } catch (e) {}
         }
 
-        function abrirModalItens() {
-            const modal = document.getElementById('itensModal'), container = document.getElementById('itensModalTableContainer');
-            let html = `<table><thead><tr><th>CÓDIGO</th><th>DESCRIÇÃO</th><th>PESO UN.</th><th>CLIENTE</th><th>AÇÕES</th></tr></thead><tbody>`;
-            Array.from(itensConhecidos.values()).sort((a, b) => a.codigo.localeCompare(b.codigo)).forEach(item => {
-                html += `<tr><td>${item.codigo}</td><td>${item.descricao}</td><td>${formatNumber(item.peso)}</td><td>${item.cliente}</td><td><i class="fa-solid fa-trash action-icon icon-delete" onclick="excluirItemConhecido('${item.codigo}')"></i></td></tr>`;
-            });
-            container.innerHTML = html + `</tbody></table>`;
-            modal.style.display = 'flex'; setTimeout(() => modal.classList.add('visible'), 10);
-            document.body.classList.add('modal-open');
-        }
-
-        function fecharModalItens() { const m = document.getElementById('itensModal'); m.classList.remove('visible'); setTimeout(() => m.style.display = 'none', 300); document.body.classList.remove('modal-open'); }
-
-        async function excluirItemConhecido(cod) {
-            if (!confirm(`Excluir item "${cod}"?`)) return;
-            try { const res = await apiRequest('itens-delete', 'POST', { codigo: cod }); if (res.success) { itensConhecidos.delete(cod); abrirModalItens(); } } catch (e) {}
-        }
-
-        function toggleDropdown() { document.getElementById("functionsDropdown").classList.toggle("show"); }
-        window.onclick = function(e) { if (!e.target.matches('.btn-dropdown-trigger') && !e.target.closest('.btn-dropdown-trigger')) { const drps = document.getElementsByClassName("dropdown-menu"); for (let i = 0; i < drps.length; i++) drps[i].classList.remove('show'); } }
-
         function abrirModalBusca() {
             const dl = document.getElementById('clientesList'); dl.innerHTML = '';
             const set = new Set(); registros.forEach(r => { if (r.cliente) set.add(r.cliente.toUpperCase().trim()); });
             Array.from(set).sort().forEach(c => { const opt = document.createElement('option'); opt.value = c; dl.appendChild(opt); });
-            const m = document.getElementById('buscaModal'); m.style.display = 'flex'; setTimeout(() => m.classList.add('visible'), 10);
-            document.body.classList.add('modal-open');
+            // Usa o novo sistema de modal
+            abrirModalPorId('buscaModal');
         }
-
-        function fecharModalBusca() { const m = document.getElementById('buscaModal'); m.classList.remove('visible'); setTimeout(() => m.style.display = 'none', 300); document.body.classList.remove('modal-open'); }
 
         function realizarBuscaAvancada() {
             const cod = document.getElementById('buscaCodigo').value.trim().toUpperCase();
@@ -525,26 +477,12 @@
             let h = `<table><thead><tr><th>DATA</th><th>CARGA</th><th>TERCEIRO</th><th>CÓDIGO</th><th>DESCRIÇÃO</th><th>QTD</th><th>PESO (KG)</th></tr></thead><tbody>`;
             res.sort((a,b) => new Date(b.data) - new Date(a.data)).forEach(r => {
                 const isRec = recebidos[r.carga]?.some(i => i.id === r.id);
-                h += `<tr class="${isRec ? 'row-received' : ''}"><td>${formatDate(r.data)}</td><td style="font-weight:bold;color:var(--color-primary);cursor:pointer;" onclick="fecharModalBusca(); fecharModalRegistros(); showCargaDetails('${r.carga}')">${r.carga}</td><td>${r.terceiro || '-'}</td><td>${r.codigo || '-'}</td><td>${r.descricao || '-'}</td><td>${r.quant}</td><td>${formatNumber(r.quant * (r.peso || 0))}</td></tr>`;
+                // Fecha Busca, fecha Registros e abre Detalhes
+                h += `<tr class="${isRec ? 'row-received' : ''}"><td>${formatDate(r.data)}</td><td style="font-weight:bold;color:var(--color-primary);cursor:pointer;" onclick="fecharModalTopo(); fecharModalTopo(); showCargaDetails('${r.carga}')">${r.carga}</td><td>${r.terceiro || '-'}</td><td>${r.codigo || '-'}</td><td>${r.descricao || '-'}</td><td>${r.quant}</td><td>${formatNumber(r.quant * (r.peso || 0))}</td></tr>`;
             });
             cont.innerHTML = h + `</tbody></table>`;
         }
 
-        // Funções para o novo modal de Registros
-        function abrirModalRegistros() {
-            const m = document.getElementById('registrosModal');
-            m.style.display = 'flex';
-            setTimeout(() => m.classList.add('visible'), 10);
-            document.body.classList.add('modal-open');
-        }
-
-        function fecharModalRegistros() {
-            const m = document.getElementById('registrosModal');
-            m.classList.remove('visible');
-            setTimeout(() => m.style.display = 'none', 300);
-            document.body.classList.remove('modal-open');
-        }
-        
         async function adicionarRegistro() {
             const t = parseInt(document.getElementById('inputQuantidade').value) || 0, e = parseInt(document.getElementById('inputQtdEscariar').value) || 0, r = parseInt(document.getElementById('inputQtdRebarba').value) || 0;
             const cod = document.getElementById('inputCodigo').value.trim().toUpperCase(), c = document.getElementById('inputCarga').value.trim().toUpperCase();
@@ -554,98 +492,51 @@
             await salvarOuAtualizarItem(item);
             const reg = { carga: c, ...item, quant: t, quant_escariar: e, quant_rebarba: r, terceiro: document.getElementById('inputTerceiro').value.toUpperCase(), observacoes: document.getElementById('inputObservacoes').value.toUpperCase(), data: document.getElementById('inputData').value || new Date().toISOString().split('T')[0], tipo: "terceiro" };
             reg.valor = calcularValorItem(reg);
-            try { const res = await apiRequest('registros', 'POST', reg); if (res.success) { reg.id = res.id; registros.unshift(reg); renderTable(); updateDashboardAndCharts(); limparFormularioParcialmente(); } } catch (err) {}
+            try { const res = await apiRequest('registros', 'POST', reg); if (res.success) { reg.id = res.id; registros.unshift(reg); renderTable(); updateDashboardAndCharts(); limparFormularioParcialmente(); alert('Registro adicionado!'); } } catch (err) {}
         }
 
         async function carregarDados() {
             showSpinner();
             try {
-                // Agora fazemos apenas UMA chamada ao banco que traz tudo
                 await carregarRegistrosERecebidos(); 
-                
                 populateDateFilters();
                 const anoAtual = new Date().getFullYear().toString();
                 const selAno = document.getElementById('filterAno');
                 if([...selAno.options].some(o => o.value === anoAtual)) { selAno.value = anoAtual; }
-                
                 renderTable();
                 updateDashboardAndCharts();
-            } catch (e) { 
-                console.error(e); 
-            } finally { 
-                hideSpinner(); 
-            }
+            } catch (e) { console.error(e); } finally { hideSpinner(); }
         }
 
         async function carregarRegistrosERecebidos() {
             try {
-                // Faz a chamada GET para a API unificada
                 const data = await apiRequest('acabamento-externo', 'GET'); 
-                
-                // 1. Organiza os Registros de Envio
                 registros = data.registros.sort((a, b) => new Date(b.data) - new Date(a.data));
-                
-                // 2. Organiza os Itens Conhecidos (Auto-preenchimento)
                 itensConhecidos.clear();
-                data.itens.forEach(item => {
-                    // Garante que o peso seja um número para o gráfico não quebrar
-                    item.peso = parseFloat(item.peso);
-                    itensConhecidos.set(item.codigo, item);
-                });
-
-                // 3. Organiza os Itens Recebidos (Checks verdes na tabela)
+                data.itens.forEach(item => { item.peso = parseFloat(item.peso); itensConhecidos.set(item.codigo, item); });
                 recebidos = {}; 
-                data.recebidos.forEach(i => { 
-                    if (!recebidos[i.carga]) recebidos[i.carga] = []; 
-                    recebidos[i.carga].push(i); 
-                });
-            } catch (e) { 
-                throw e; 
-            }
+                data.recebidos.forEach(i => { if (!recebidos[i.carga]) recebidos[i.carga] = []; recebidos[i.carga].push(i); });
+            } catch (e) { throw e; }
         }
 
         function renderTable(dadosParaExibir = registros) {
             const tbody = document.querySelector('#terceiroTable tbody'); 
             tbody.innerHTML = '';
-
-            // Agrupa apenas os dados que devem ser exibidos (respeitando o filtro)
-            const grouped = dadosParaExibir.reduce((acc, r) => { 
-                if (!acc[r.carga]) acc[r.carga] = []; 
-                acc[r.carga].push(r); 
-                return acc; 
-            }, {});
-
+            const grouped = dadosParaExibir.reduce((acc, r) => { if (!acc[r.carga]) acc[r.carga] = []; acc[r.carga].push(r); return acc; }, {});
             Object.keys(grouped).sort((a, b) => (parseInt(b) || 0) - (parseInt(a) || 0)).forEach(c => {
                 const its = grouped[c];
                 const p = its[0];
-
-                // CORREÇÃO: Forçar parseFloat/parseInt para evitar concatenação de texto
                 const tP = its.reduce((s, i) => s + (parseFloat(i.quant || 0) * parseFloat(i.peso || 0)), 0);
                 const tV = its.reduce((s, i) => s + parseFloat(i.valor || 0), 0);
                 const tQ = its.reduce((s, i) => s + parseInt(i.quant || 0), 0);
-                
                 const recC = (recebidos[c] || []).length;
                 const totC = its.length;
-
                 const tr = document.createElement('tr'); 
                 tr.className = 'group-row'; 
                 tr.onclick = () => showCargaDetails(c);
-                
-                tr.innerHTML = `
-                    <td>${c}</td>
-                    <td>${formatDate(p.data)}</td>
-                    <td>${p.terceiro}</td>
-                    <td>${formatNumber(tP)}</td>
-                    <td>${tQ}</td>
-                    <td>${formatCurrency(tV)}</td>
-                    <td>${(totC > 0 && recC >= totC) ? 
-                        '<span class="badge badge-success">Recebido</span>' : 
-                        `<span class="badge badge-pending">${recC}/${totC} Pendente</span>`}</td>
-                `;
+                tr.innerHTML = `<td>${c}</td><td>${formatDate(p.data)}</td><td>${p.terceiro}</td><td>${formatNumber(tP)}</td><td>${tQ}</td><td>${formatCurrency(tV)}</td><td>${(totC > 0 && recC >= totC) ? '<span class="badge badge-success">Recebido</span>' : `<span class="badge badge-pending">${recC}/${totC} Pendente</span>`}</td>`;
                 tbody.appendChild(tr);
             });
-
-            // Atualiza o contador de cargas no footer baseado no que está na tela
             document.getElementById('totalRegistros').textContent = Object.keys(grouped).length;
             applyColumnFilters();
         }
@@ -663,58 +554,14 @@
         function updateDashboardAndCharts() {
             const fM = document.getElementById('filterMes').value;
             const fA = document.getElementById('filterAno').value;
-
-            // 1. Filtra os registros com base no Mês e Ano selecionados
-            const filtrados = registros.filter(r => { 
-                if (!r.data) return false; 
-                const p = r.data.split('T')[0].split('-'); 
-                return (!fM || p[1] === fM) && (!fA || p[0] === fA); 
-            });
-
-            // 2. Calcula os Totais para os Cards de KPI
+            const filtrados = registros.filter(r => { if (!r.data) return false; const p = r.data.split('T')[0].split('-'); return (!fM || p[1] === fM) && (!fA || p[0] === fA); });
             let tV = 0, tP = 0; 
-            filtrados.forEach(r => { 
-                tV += parseFloat(r.valor || 0); 
-                tP += (parseFloat(r.quant || 0) * parseFloat(r.peso || 0)); 
-            });
-
-            // 3. Atualiza os Cards Superiores (KPIs)
-            document.getElementById('statsPanel').innerHTML = `
-                <div class="kpi-card kpi-purple">
-                    <div class="kpi-title">Valor Total</div>
-                    <div class="kpi-value">${formatCurrency(tV)}</div>
-                </div>
-                <div class="kpi-card kpi-default">
-                    <div class="kpi-title">Peso Total (KG)</div>
-                    <div class="kpi-value">${formatNumber(tP)}</div>
-                </div>
-                <div class="kpi-card kpi-info">
-                    <div class="kpi-title">Cargas Filtradas</div>
-                    <div class="kpi-value">${new Set(filtrados.map(r => r.carga)).size}</div>
-                </div>
-            `;
-
-            // 4. ATUALIZA A TABELA (IMPORTANTE: Agora ela obedece ao filtro)
+            filtrados.forEach(r => { tV += parseFloat(r.valor || 0); tP += (parseFloat(r.quant || 0) * parseFloat(r.peso || 0)); });
+            document.getElementById('statsPanel').innerHTML = `<div class="kpi-card kpi-purple"><div class="kpi-title">Valor Total</div><div class="kpi-value">${formatCurrency(tV)}</div></div><div class="kpi-card kpi-default"><div class="kpi-title">Peso Total (KG)</div><div class="kpi-value">${formatNumber(tP)}</div></div><div class="kpi-card kpi-info"><div class="kpi-title">Cargas Filtradas</div><div class="kpi-value">${new Set(filtrados.map(r => r.carga)).size}</div></div>`;
             renderTable(filtrados);
-
-            // 5. Prepara os dados para o Gráfico de Barras
             let cD = {};
-            if (fM === "") {
-                // Se nenhum mês selecionado, mostra o acumulado por meses do ano
-                for(let i = 1; i <= 12; i++) cD[i.toString().padStart(2, '0')] = 0;
-                filtrados.forEach(r => { 
-                    const m = r.data.split('T')[0].split('-')[1]; 
-                    cD[m] += (parseFloat(r.quant || 0) * parseFloat(r.peso || 0)); 
-                });
-            } else { 
-                // Se um mês está selecionado, mostra o peso por dia do mês
-                filtrados.forEach(r => { 
-                    const d = r.data.split('T')[0]; 
-                    cD[d] = (cD[d] || 0) + (parseFloat(r.quant || 0) * parseFloat(r.peso || 0)); 
-                }); 
-            }
-
-            // 6. Redesenha o Gráfico
+            if (fM === "") { for(let i = 1; i <= 12; i++) cD[i.toString().padStart(2, '0')] = 0; filtrados.forEach(r => { const m = r.data.split('T')[0].split('-')[1]; cD[m] += (parseFloat(r.quant || 0) * parseFloat(r.peso || 0)); }); }
+            else { filtrados.forEach(r => { const d = r.data.split('T')[0]; cD[d] = (cD[d] || 0) + (parseFloat(r.quant || 0) * parseFloat(r.peso || 0)); }); }
             renderBarChart(cD, fM === "");
         }
 
@@ -728,104 +575,45 @@
         }
 
         function showCargaDetails(carga) {
-            const m = document.getElementById('cargaModal');
             document.getElementById('modalTitle').innerHTML = `Detalhes: <span style="color:var(--color-primary);">${carga}</span>`;
-            m.setAttribute('data-current-carga', carga);
+            document.getElementById('cargaModal').setAttribute('data-current-carga', carga);
             
             const its = registros.filter(r => r.carga === carga);
             let h = `<table><thead><tr><th>DATA</th><th>CÓDIGO</th><th>DESCRIÇÃO</th><th>PESO UN.</th><th>QTD</th><th>R$ UNIT</th><th>TOTAL</th><th>OK</th><th>AÇÃO</th></tr></thead><tbody>`;
-            
             its.forEach(r => {
                 const isRec = recebidos[r.carga]?.some(i => i.id === r.id);
-                
-                // Garantir que os valores são números para o cálculo
                 const vTotal = parseFloat(r.valor || 0);
                 const qtd = parseInt(r.quant || 0);
                 const pUn = parseFloat(r.peso || 0);
-                
-                // Calcular valor unitário com segurança
                 const vUnit = qtd > 0 ? vTotal / qtd : 0;
-
-                h += `<tr>
-                    <td>${formatDate(r.data)}</td>
-                    <td>${r.codigo}</td>
-                    <td>${r.descricao}</td>
-                    <td>${formatNumber(pUn)}</td>
-                    <td>${qtd}</td>
-                    <td>${formatCurrency(vUnit)}</td>
-                    <td>${formatCurrency(vTotal)}</td>
-                    <td><input type="checkbox" onchange="toggleRecebido(${r.id},'${r.carga}',this.checked)" ${isRec?'checked':''}></td>
-                    <td><i class="fa-solid fa-trash action-icon icon-delete" onclick="excluirRegistro(${r.id})"></i></td>
-                </tr>`;
+                h += `<tr><td>${formatDate(r.data)}</td><td>${r.codigo}</td><td>${r.descricao}</td><td>${formatNumber(pUn)}</td><td>${qtd}</td><td>${formatCurrency(vUnit)}</td><td>${formatCurrency(vTotal)}</td><td><input type="checkbox" onchange="toggleRecebido(${r.id},'${r.carga}',this.checked)" ${isRec?'checked':''}></td><td><i class="fa-solid fa-trash action-icon icon-delete" onclick="excluirRegistro(${r.id})"></i></td></tr>`;
             });
-            
             document.getElementById('modalTableContainer').innerHTML = h + `</tbody></table>`;
-            
-            // Totais do Rodapé do Modal
             const tP = its.reduce((s, i) => s + (parseFloat(i.quant || 0) * parseFloat(i.peso || 0)), 0);
             const tV = its.reduce((s, i) => s + parseFloat(i.valor || 0), 0);
+            document.getElementById('modalFooter').innerHTML = `<div class="modal-stat">ITENS: <strong>${its.length}</strong></div><div class="modal-stat">PESO: <strong>${formatNumber(tP)} KG</strong></div><div class="modal-stat">VALOR: <strong>${formatCurrency(tV)}</strong></div>`;
             
-            document.getElementById('modalFooter').innerHTML = `
-                <div class="modal-stat">ITENS: <strong>${its.length}</strong></div>
-                <div class="modal-stat">PESO: <strong>${formatNumber(tP)} KG</strong></div>
-                <div class="modal-stat">VALOR: <strong>${formatCurrency(tV)}</strong></div>
-            `;
-            
-            m.style.display = 'flex'; 
-            setTimeout(() => m.classList.add('visible'), 10); 
-            document.body.classList.add('modal-open');
-        }
-
-        function hideCargaDetails() { 
-            const m = document.getElementById('cargaModal'); 
-            m.classList.remove('visible'); 
-            setTimeout(() => { m.style.display = 'none'; }, 300); 
-            document.body.classList.remove('modal-open'); 
+            abrirModalPorId('cargaModal');
         }
 
         async function excluirRegistro(id) {
-            // 1. Validação básica
-            if (!id) {
-                alert("Erro: Este item não possui um ID válido para exclusão no banco.");
-                return;
-            }
-
-            if (!confirm('Tem certeza que deseja excluir este registro permanentemente do banco de dados?')) return;
-            
+            if (!id || !confirm('Excluir este registro permanentemente?')) return;
             showSpinner();
             try {
-                // 2. Faz a chamada ao backend e ESPERA a resposta
-                console.log("Solicitando exclusão do ID:", id);
                 const response = await apiRequest('delete', 'POST', { id: id });
-                
                 if (response.success) {
-                    // 3. SE E SOMENTE SE o banco confirmou, recarregamos os dados do servidor
                     await carregarRegistrosERecebidos();
-                    
-                    // Atualiza o modal caso esteja aberto
-                    const modal = document.getElementById('cargaModal');
-                    if (modal.style.display === 'flex') {
-                        const cargaAtual = modal.getAttribute('data-current-carga');
-                        const aindaTemItens = registros.some(r => r.carga === cargaAtual);
-                        if (aindaTemItens) {
-                            showCargaDetails(cargaAtual);
-                        } else {
-                            hideCargaDetails();
-                        }
+                    // Atualiza o modal de carga se estiver aberto
+                    const m = document.getElementById('cargaModal');
+                    if (m.classList.contains('visible')) {
+                        const cargaAtual = m.getAttribute('data-current-carga');
+                        const aindaTem = registros.some(r => r.carga === cargaAtual);
+                        if (aindaTem) showCargaDetails(cargaAtual); else fecharModalTopo();
                     }
-                    
                     renderTable();
                     updateDashboardAndCharts();
-                    console.log("Exclusão confirmada e tela atualizada.");
-                } else {
-                    alert('Erro: O banco de dados não encontrou esse registro.');
-                }
-            } catch (err) {
-                console.error("Falha na comunicação com a API:", err);
-                alert('Erro ao tentar excluir: ' + err.message);
-            } finally {
-                hideSpinner();
-            }
+                } else alert('Erro: Registro não encontrado.');
+            } catch (err) { alert('Erro: ' + err.message); } finally { hideSpinner(); }
         }
 
         async function toggleRecebido(id, carga, checked) {
@@ -836,12 +624,7 @@
             const c = document.getElementById('cargaModal').getAttribute('data-current-carga');
             const ids = registros.filter(r => r.carga === c && !recebidos[c]?.some(re => re.id === r.id)).map(r => r.id);
             if (ids.length === 0) return;
-            try { 
-                await Promise.all(ids.map(id => apiRequest('recebidos', 'POST', { id, carga: c, checked: true }))); 
-                await carregarRegistrosERecebidos(); 
-                renderTable(); 
-                showCargaDetails(c); 
-            } catch (e) {}
+            try { await Promise.all(ids.map(id => apiRequest('recebidos', 'POST', { id, carga: c, checked: true }))); await carregarRegistrosERecebidos(); renderTable(); showCargaDetails(c); } catch (e) {}
         }
 
         function generateCargaPDF(carga) {
@@ -849,86 +632,37 @@
             const cStr = carga.replace(/<[^>]*>?/gm, '').trim();
             const items = registros.filter(r => r.carga === cStr);
             if (!items.length) return;
-
             const doc = new jsPDF('l', 'mm', 'a4');
-            const pW = doc.internal.pageSize.getWidth();
-            const pH = doc.internal.pageSize.getHeight();
-
-            // Cabeçalho
+            const pW = doc.internal.pageSize.getWidth(); const pH = doc.internal.pageSize.getHeight();
             doc.setFillColor(24, 24, 27); doc.rect(0, 0, pW, 35, 'F');
             doc.setFontSize(24); doc.setTextColor(251, 191, 36); doc.setFont("helvetica", "bold"); doc.text("FUNDIÇÃO ERUS", 14, 18);
             doc.setFontSize(10); doc.setTextColor(161, 161, 170); doc.text("SISTEMA DE GESTÃO DE ACABAMENTO EXTERNO", 14, 25);
             doc.setFontSize(12); doc.setTextColor(255, 255, 255); doc.text(`CARGA: ${cStr}`, pW - 14, 18, { align: 'right' }); doc.text(`TERCEIRO: ${items[0].terceiro}`, pW - 14, 25, { align: 'right' });
             doc.setDrawColor(251, 191, 36); doc.setLineWidth(1); doc.line(14, 30, pW - 14, 30);
-
-            // Tabela Principal
-            doc.autoTable({
-                startY: 45,
-                head: [['DATA', 'CÓDIGO', 'DESCRIÇÃO', 'PESO UN.', 'QTD', 'VALOR UNIT', 'TOTAL']],
-                body: items.map(r => [
-                    formatDate(r.data), r.codigo, r.descricao, 
-                    formatNumber(r.peso) + " kg", r.quant, 
-                    formatCurrency(r.quant > 0 ? r.valor / r.quant : 0), formatCurrency(r.valor)
-                ]),
-                styles: { fontSize: 9, cellPadding: 3, valign: 'middle', halign: 'center' },
-                headStyles: { fillColor: [39, 39, 42], textColor: [251, 191, 36], fontStyle: 'bold' },
-                alternateRowStyles: { fillColor: [250, 250, 250] },
-                columnStyles: { 2: { halign: 'left', cellWidth: 60 }, 6: { fontStyle: 'bold' } },
-                margin: { bottom: 70 } // Garante espaço para o rodapé fixo
-            });
-
-            // RESUMO FIXO NO FINAL DA FOLHA (CORREÇÃO: ParseInt e ParseFloat)
+            doc.autoTable({ startY: 45, head: [['DATA', 'CÓDIGO', 'DESCRIÇÃO', 'PESO UN.', 'QTD', 'VALOR UNIT', 'TOTAL']], body: items.map(r => [formatDate(r.data), r.codigo, r.descricao, formatNumber(r.peso) + " kg", r.quant, formatCurrency(r.quant > 0 ? r.valor / r.quant : 0), formatCurrency(r.valor)]), styles: { fontSize: 9, cellPadding: 3, valign: 'middle', halign: 'center' }, headStyles: { fillColor: [39, 39, 42], textColor: [251, 191, 36], fontStyle: 'bold' }, alternateRowStyles: { fillColor: [250, 250, 250] }, columnStyles: { 2: { halign: 'left', cellWidth: 60 }, 6: { fontStyle: 'bold' } }, margin: { bottom: 70 } });
             const tP = items.reduce((s, i) => s + (parseFloat(i.quant || 0) * parseFloat(i.peso || 0)), 0);
             const tV = items.reduce((s, i) => s + parseFloat(i.valor || 0), 0);
             const tQ = items.reduce((s, i) => s + parseInt(i.quant || 0), 0);
-
-            // Posição Y para o bloco de resumo (ancorado no final da página)
             const summaryY = pH - 65; 
-            
-            // Retângulo do Resumo
-            doc.setFillColor(248, 250, 252);
-            doc.rect(14, summaryY, pW - 28, 20, 'F');
-            doc.setDrawColor(226, 232, 240);
-            doc.rect(14, summaryY, pW - 28, 20, 'S');
-
-            doc.setFontSize(10);
-            doc.setTextColor(51, 65, 85);
-            doc.setFont("helvetica", "bold");
-            
-            doc.text(`QUANTIDADE TOTAL: ${tQ}`, 20, summaryY + 12);
-            doc.text(`PESO TOTAL: ${formatNumber(tP)} KG`, (pW / 2) - 30, summaryY + 12);
-            doc.text(`VALOR TOTAL: ${formatCurrency(tV)}`, pW - 20, summaryY + 12, { align: 'right' });
-
-            // Assinaturas fixas
-            const sigY = pH - 30;
-            doc.setDrawColor(200);
-            doc.line(20, sigY, 90, sigY);
-            doc.line(pW - 90, sigY, pW - 20, sigY);
-            doc.setFontSize(8);
-            doc.text("RESPONSÁVEL EXPEDIÇÃO", 55, sigY + 5, { align: 'center' });
-            doc.text("RESPONSÁVEL RECEBIMENTO (TERCEIRO)", pW - 55, sigY + 5, { align: 'center' });
-
-            // Data de Emissão
-            doc.setFontSize(7);
-            doc.setTextColor(150);
-            doc.text(`Documento gerado em: ${new Date().toLocaleString('pt-BR')} | Fundição Erus Software`, 14, pH - 10);
-
+            doc.setFillColor(248, 250, 252); doc.rect(14, summaryY, pW - 28, 20, 'F'); doc.setDrawColor(226, 232, 240); doc.rect(14, summaryY, pW - 28, 20, 'S');
+            doc.setFontSize(10); doc.setTextColor(51, 65, 85); doc.setFont("helvetica", "bold");
+            doc.text(`QUANTIDADE TOTAL: ${tQ}`, 20, summaryY + 12); doc.text(`PESO TOTAL: ${formatNumber(tP)} KG`, (pW / 2) - 30, summaryY + 12); doc.text(`VALOR TOTAL: ${formatCurrency(tV)}`, pW - 20, summaryY + 12, { align: 'right' });
+            const sigY = pH - 30; doc.setDrawColor(200); doc.line(20, sigY, 90, sigY); doc.line(pW - 90, sigY, pW - 20, sigY);
+            doc.setFontSize(8); doc.text("RESPONSÁVEL EXPEDIÇÃO", 55, sigY + 5, { align: 'center' }); doc.text("RESPONSÁVEL RECEBIMENTO (TERCEIRO)", pW - 55, sigY + 5, { align: 'center' });
+            doc.setFontSize(7); doc.setTextColor(150); doc.text(`Documento gerado em: ${new Date().toLocaleString('pt-BR')} | Fundição Erus Software`, 14, pH - 10);
             doc.save(`Carga_${cStr}_Erus.pdf`);
         }
 
         function fazerBackup() {
             const data = { registros: registros.filter(r=>r.tipo==='terceiro'), recebidos, itens: Array.from(itensConhecidos.entries()) };
             const b = new Blob([JSON.stringify(data)], {type:'application/json'});
-            const u = URL.createObjectURL(b);
-            const a = document.createElement('a'); a.href = u; a.download = `Backup_Erus_${new Date().toISOString().slice(0,10)}.json`; a.click();
+            const u = URL.createObjectURL(b); const a = document.createElement('a'); a.href = u; a.download = `Backup_Erus_${new Date().toISOString().slice(0,10)}.json`; a.click();
         }
 
         function iniciarImportacao() { document.getElementById('importFile').click(); }
         document.getElementById('importFile').onchange = e => {
             const f = e.target.files[0]; if (!f) return;
-            const r = new FileReader();
-            r.onload = async ev => { try { await apiRequest('import', 'POST', JSON.parse(ev.target.result)); location.reload(); } catch(e){} };
-            r.readAsText(f);
+            const r = new FileReader(); r.onload = async ev => { try { await apiRequest('import', 'POST', JSON.parse(ev.target.result)); location.reload(); } catch(e){} }; r.readAsText(f);
         };
 
         function iniciarRelatorioMensal() {
@@ -942,15 +676,6 @@
              XLSX.utils.book_append_sheet(wb, ws, "Relatorio"); XLSX.writeFile(wb, `Relatorio_${mA.replace('/','-')}.xlsx`);
         }
 
-        function toggleCollapsible(hI, cI) {
-            const h = document.getElementById(hI), c = document.getElementById(cI);
-            h.onclick = () => {
-                const isC = c.classList.contains('collapsed');
-                if (isC) { c.classList.remove('collapsed'); h.classList.remove('collapsed'); c.style.maxHeight = (c.scrollHeight+200)+"px"; }
-                else { c.classList.add('collapsed'); h.classList.add('collapsed'); c.style.maxHeight = "0"; }
-            };
-        }
-        
         function applyColumnFilters() {
             const filters = Array.from(document.querySelectorAll('#terceiroTable .filter-input-table')).map(i=>i.value.toUpperCase());
             document.querySelectorAll('#terceiroTable tbody tr').forEach(row => {
@@ -966,18 +691,8 @@
 
         document.addEventListener('DOMContentLoaded', () => {
             carregarDados();
-            toggleCollapsible('formTitleBar', 'formCollapsibleContent');
             document.querySelectorAll('.filter-input-table').forEach(i => i.oninput = applyColumnFilters);
             document.getElementById('inputData').valueAsDate = new Date();
-            document.addEventListener('keydown', e => {
-                if (e.key === 'Escape') { 
-                    document.querySelectorAll('.modal-overlay').forEach(m => {
-                        m.classList.remove('visible');
-                        setTimeout(() => m.style.display = 'none', 300);
-                    });
-                    document.body.classList.remove('modal-open');
-                }
-            });
         });
     </script>
 </body>
