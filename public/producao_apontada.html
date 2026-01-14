@@ -154,12 +154,8 @@
         /* --- 4. CONTENT --- */
         .dashboard-content { flex-grow: 1; padding: 10px 32px 32px 32px; }
 
-        .status-bar-container {
-            background: var(--bg-card); border-left: 4px solid var(--color-primary);
-            padding: 10px 16px; margin-bottom: 20px; border-radius: 4px;
-            display: flex; justify-content: space-between; align-items: center;
-            font-family: var(--font-mono); font-size: 0.8rem;
-        }
+        /* Status Bar (Hidden but defined for JS compatibility) */
+        .status-bar-container-hidden { display: none; }
         .status-text.success { color: var(--status-success); }
         .status-text.error { color: var(--status-danger); }
         .status-text.normal { color: var(--text-muted); }
@@ -167,9 +163,38 @@
         /* --- TOOLBAR WITH FILTER TOGGLE --- */
         .compact-toolbar {
             background: var(--bg-card); border: 1px solid var(--border-subtle);
-            border-radius: var(--radius-md); padding: 10px 20px; margin-bottom: 20px;
-            display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap;
+            border-radius: var(--radius-md); 
+            margin-bottom: 20px;
+            display: flex; flex-direction: column;
+            overflow: hidden;
+            transition: all 0.3s ease;
         }
+
+        .toolbar-header {
+            padding: 12px 20px;
+            background: rgba(255, 255, 255, 0.03);
+            border-bottom: 1px solid transparent;
+            display: flex; align-items: center; justify-content: space-between;
+            cursor: pointer;
+            transition: background 0.2s;
+            user-select: none;
+        }
+        .toolbar-header:hover { background: rgba(255, 255, 255, 0.06); }
+        .toolbar-header span { font-size: 0.9rem; font-weight: 600; color: var(--color-primary); display: flex; align-items: center; gap: 8px; }
+        .toolbar-header i { font-size: 0.9rem; color: var(--text-muted); transition: transform 0.3s; }
+
+        .toolbar-content {
+            display: none; /* Initially Hidden */
+            padding: 20px;
+            gap: 20px;
+            flex-wrap: wrap;
+            align-items: center;
+            border-top: 1px solid var(--border-subtle);
+        }
+
+        /* Show content when expanded */
+        .compact-toolbar.expanded .toolbar-content { display: flex; }
+        .compact-toolbar.expanded .toolbar-header { border-bottom-color: var(--border-subtle); }
 
         .filters-left-group {
             display: flex; gap: 20px; align-items: center; flex-wrap: wrap;
@@ -237,8 +262,12 @@
         /* Chart Panel */
         .chart-panel {
             background: var(--bg-card); border: 1px solid var(--border-subtle);
-            border-radius: var(--radius-md); padding: 20px; margin-bottom: 24px; height: 420px;
+            border-radius: var(--radius-md); padding: 20px; margin-bottom: 24px; 
+            /* Height will be manipulated by JS for resize */
+            height: 60vh; 
+            min-height: 350px;
             position: relative; display: flex; flex-direction: column;
+            transition: height 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
         }
 
         /* Tables */
@@ -419,74 +448,81 @@
         <!-- DASHBOARD CONTENT -->
         <main class="dashboard-content">
             
-            <!-- STATUS BAR -->
-            <div class="status-bar-container">
+            <!-- STATUS BAR (HIDDEN TO KEEP JS WORKING) -->
+            <div class="status-bar-container-hidden" style="display: none;">
                 <span id="status-message" class="status-text normal">Carregando sistema...</span>
                 <span id="error-message" class="status-text error"></span>
             </div>
 
-            <!-- UNIFIED COMPACT TOOLBAR -->
-            <div class="compact-toolbar">
-                <div class="filters-left-group">
-                    <!-- Setor -->
-                    <div class="input-group-compact">
-                        <label>Setor:</label>
-                        <select id="sector-chart-select"></select>
-                    </div>
-                    
-                    <!-- Grupo -->
-                    <div class="input-group-compact">
-                        <label>Grupo:</label>
-                        <select id="group-filter-select">
-                            <option value="TODOS">Todos</option>
-                        </select>
-                    </div>
-
-                    <!-- Material -->
-                    <div class="input-group-compact">
-                        <label>Material:</label>
-                        <select id="material-filter-select">
-                            <option value="TODOS">Todas</option>
-                        </select>
-                    </div>
+            <!-- UNIFIED COMPACT TOOLBAR (Collapsible) -->
+            <div class="compact-toolbar" id="filter-panel">
+                <div class="toolbar-header" onclick="toggleFilterPanel()">
+                    <span><i class="fa-solid fa-filter"></i> Filtros de Pesquisa</span>
+                    <i class="fa-solid fa-chevron-down" id="filter-chevron"></i>
                 </div>
+                
+                <div class="toolbar-content">
+                    <div class="filters-left-group">
+                        <!-- Setor -->
+                        <div class="input-group-compact">
+                            <label>Setor:</label>
+                            <select id="sector-chart-select"></select>
+                        </div>
+                        
+                        <!-- Grupo -->
+                        <div class="input-group-compact">
+                            <label>Grupo:</label>
+                            <select id="group-filter-select">
+                                <option value="TODOS">Todos</option>
+                            </select>
+                        </div>
 
-                <!-- DATE RANGE & MONTH FILTER WRAPPER -->
-                <div class="filter-section-wrapper">
-                    
-                    <!-- Ano -->
-                    <div class="input-group-compact">
-                        <label>Ano:</label>
-                        <select id="year-filter-select">
-                            <option value="TODOS">Todos</option>
-                        </select>
+                        <!-- Material -->
+                        <div class="input-group-compact">
+                            <label>Material:</label>
+                            <select id="material-filter-select">
+                                <option value="TODOS">Todas</option>
+                            </select>
+                        </div>
                     </div>
 
-                    <!-- Date Range Filter -->
-                    <div class="input-group-compact filter-obsolete" id="date-range-container">
-                        <label>Período:</label>
-                        <input type="date" id="filter-date-start" style="width: 130px;">
-                        <span style="color:var(--text-muted); font-size:0.8rem;">a</span>
-                        <input type="date" id="filter-date-end" style="width: 130px;">
-                    </div>
+                    <!-- DATE RANGE & MONTH FILTER WRAPPER -->
+                    <div class="filter-section-wrapper">
+                        
+                        <!-- Ano -->
+                        <div class="input-group-compact">
+                            <label>Ano:</label>
+                            <select id="year-filter-select">
+                                <option value="TODOS">Todos</option>
+                            </select>
+                        </div>
 
-                    <!-- Month Buttons Filter -->
-                    <div class="month-filter-group" id="month-filter-container">
-                        <label style="color: var(--text-muted); font-size: 0.8rem;">Mês:</label>
-                        <div class="month-buttons-container">
-                            <button class="btn-month active" data-month="0">Todos</button>
-                            <button class="btn-month" data-month="1">Jan</button>
-                            <button class="btn-month" data-month="2">Fev</button>
-                            <button class="btn-month" data-month="3">Mar</button>
-                            <button class="btn-month" data-month="4">Abr</button>
-                            <button class="btn-month" data-month="5">Mai</button>
-                            <button class="btn-month" data-month="6">Jun</button>
-                            <button class="btn-month" data-month="7">Jul</button>
-                            <button class="btn-month" data-month="8">Ago</button>
-                            <button class="btn-month" data-month="9">Set</button>
-                            <button class="btn-month" data-month="10">Out</button>
-                            <button class="btn-month" data-month="11">Nov</button>
-                            <button class="btn-month" data-month="12">Dez</button>
+                        <!-- Date Range Filter -->
+                        <div class="input-group-compact filter-obsolete" id="date-range-container">
+                            <label>Período:</label>
+                            <input type="date" id="filter-date-start" style="width: 130px;">
+                            <span style="color:var(--text-muted); font-size:0.8rem;">a</span>
+                            <input type="date" id="filter-date-end" style="width: 130px;">
+                        </div>
+
+                        <!-- Month Buttons Filter -->
+                        <div class="month-filter-group" id="month-filter-container">
+                            <label style="color: var(--text-muted); font-size: 0.8rem;">Mês:</label>
+                            <div class="month-buttons-container">
+                                <button class="btn-month active" data-month="0">Todos</button>
+                                <button class="btn-month" data-month="1">Jan</button>
+                                <button class="btn-month" data-month="2">Fev</button>
+                                <button class="btn-month" data-month="3">Mar</button>
+                                <button class="btn-month" data-month="4">Abr</button>
+                                <button class="btn-month" data-month="5">Mai</button>
+                                <button class="btn-month" data-month="6">Jun</button>
+                                <button class="btn-month" data-month="7">Jul</button>
+                                <button class="btn-month" data-month="8">Ago</button>
+                                <button class="btn-month" data-month="9">Set</button>
+                                <button class="btn-month" data-month="10">Out</button>
+                                <button class="btn-month" data-month="11">Nov</button>
+                                <button class="btn-month" data-month="12">Dez</button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -914,6 +950,31 @@
             const ls = document.getElementById('loading-screen');
             ls.style.opacity = '0';
             setTimeout(() => { ls.style.display = 'none'; }, 500); 
+        }
+
+        function toggleFilterPanel() {
+            const panel = document.getElementById('filter-panel');
+            const chevron = document.getElementById('filter-chevron');
+            const chartPanel = document.querySelector('.chart-panel');
+            
+            panel.classList.toggle('expanded');
+            
+            if (panel.classList.contains('expanded')) {
+                chevron.classList.remove('fa-chevron-down');
+                chevron.classList.add('fa-chevron-up');
+                // Diminui a altura do gráfico quando filtros abertos
+                chartPanel.style.height = '45vh'; 
+            } else {
+                chevron.classList.remove('fa-chevron-up');
+                chevron.classList.add('fa-chevron-down');
+                // Aumenta a altura do gráfico quando filtros fechados
+                chartPanel.style.height = '60vh'; 
+            }
+            
+            // Força redimensionamento do gráfico
+            setTimeout(() => {
+                if(dailyChart) dailyChart.resize();
+            }, 350); 
         }
 
         // --- FILTER MODE LOGIC ---
@@ -1371,17 +1432,11 @@
             sectorGoalDisplay.textContent = formatNumber(goal, 0);
             sectorGoalDisplay.setAttribute('data-goal-key', goalKey);
 
-            const regression = linearRegression(data);
-            const trendLineData = [];
-            let idx = 0;
-            data.forEach(val => {
-                let tVal = regression.m * idx + regression.b;
-                if (tVal < 0) tVal = 0; 
-                trendLineData.push(tVal); 
-                idx++; 
-            });
+            // Regressão removida a pedido
+            // const regression = linearRegression(data);
+            // const trendLineData = []; ...
 
-            const maxDataValue = Math.max(...data, ...trendLineData.filter(v => v !== null), 0);
+            const maxDataValue = Math.max(...data, 0);
             const suggestedMaxY = maxDataValue > 0 ? maxDataValue * 1.2 : 10; 
 
             const barDataset = {
@@ -1393,14 +1448,10 @@
                     formatter: (value) => formatNumber(value, 0)
                 }
             };
-            const trendDataset = {
-                label: 'Tendência', data: trendLineData, type: 'line', fill: false,
-                borderColor: '#ef4444', borderWidth: 2, pointRadius: 0, tension: 0.1, datalabels: { display: false }
-            };
 
             const config = {
                 type: 'bar',
-                data: { labels: labels, datasets: [barDataset, trendDataset] },
+                data: { labels: labels, datasets: [barDataset] }, // trendDataset removido
                 options: {
                     responsive: true, maintainAspectRatio: false, 
                     plugins: { legend: { display: false } },
