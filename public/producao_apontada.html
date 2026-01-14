@@ -63,7 +63,8 @@
             background-image: 
                 radial-gradient(circle at 15% 50%, rgba(251, 191, 36, 0.03), transparent 25%), 
                 radial-gradient(circle at 85% 30%, rgba(63, 63, 70, 0.05), transparent 25%);
-            overflow-x: hidden; 
+            overflow: hidden; /* Evita scroll na página inteira, usamos flexbox */
+            height: 100vh;
         }
         
         ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -71,13 +72,19 @@
         ::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 10px; }
         ::-webkit-scrollbar-thumb:hover { background: #52525b; }
 
-        .app-layout { display: flex; flex-direction: column; min-height: 100vh; }
+        .app-layout { 
+            display: flex; 
+            flex-direction: column; 
+            height: 100vh; 
+            overflow: hidden;
+        }
 
         /* --- 3. HEADER --- */
         .top-header {
             height: auto; min-height: 60px; margin: 10px 32px 0 32px; 
             display: flex; align-items: center; justify-content: space-between; 
             background: transparent; padding: 10px 0; z-index: 100;
+            flex-shrink: 0; /* Header não encolhe */
         }
         .header-brand { display: flex; align-items: center; gap: 16px; }
         .brand-icon {
@@ -152,7 +159,13 @@
         .dropdown-item.danger:hover { background: rgba(239, 68, 68, 0.1); }
 
         /* --- 4. CONTENT --- */
-        .dashboard-content { flex-grow: 1; padding: 10px 32px 32px 32px; }
+        .dashboard-content { 
+            flex-grow: 1; 
+            padding: 10px 32px 10px 32px; /* Reduzi padding inferior de 32 para 10 */
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
 
         /* Status Bar (Hidden but defined for JS compatibility) */
         .status-bar-container-hidden { display: none; }
@@ -167,6 +180,7 @@
             margin-bottom: 20px;
             display: flex; flex-direction: column;
             overflow: hidden;
+            flex-shrink: 0; /* Barra não encolhe */
             transition: all 0.3s ease;
         }
 
@@ -243,7 +257,10 @@
         }
 
         /* KPIs Row */
-        .kpi-row { display: flex; gap: 20px; margin-bottom: 24px; flex-wrap: wrap; }
+        .kpi-row { 
+            display: flex; gap: 20px; margin-bottom: 20px; flex-wrap: wrap;
+            flex-shrink: 0; /* KPI não encolhe */
+        }
         .kpi-card {
             flex: 1; min-width: 150px; background: var(--bg-card);
             border: 1px solid var(--border-subtle); border-radius: var(--radius-md);
@@ -262,12 +279,14 @@
         /* Chart Panel */
         .chart-panel {
             background: var(--bg-card); border: 1px solid var(--border-subtle);
-            border-radius: var(--radius-md); padding: 20px; margin-bottom: 24px; 
-            /* Height will be manipulated by JS for resize */
-            height: 60vh; 
-            min-height: 400px;
+            border-radius: var(--radius-md); padding: 20px; 
+            /* Flex properties for auto-height */
+            flex: 1;
+            min-height: 0; /* Crucial for flex child scroll/resize */
+            margin-bottom: 0; /* Remove margin bottom */
+            
             position: relative; display: flex; flex-direction: column;
-            transition: height 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
         }
 
         /* Tables */
@@ -426,7 +445,7 @@
                         <i class="fa-solid fa-gear" style="color: #fff;"></i> Funções <i class="fa-solid fa-chevron-down" style="font-size: 0.7rem; margin-left: 5px;"></i>
                     </button>
                     <div class="dropdown-content">
-                        <button class="dropdown-item" onclick="openDashboardModal()"><i class=""></i> Dashboard (Full)</button>
+                        <!-- Dashboard Removed -->
                         <button class="dropdown-item" onclick="handleAuthAction(saveLocalDataToDatabase, 'Salvar Alterações')"><i class=""></i> Salvar no Banco</button>
                         <button class="dropdown-item" onclick="handleAuthAction(confirmAndSaveWeightsToLocalStorage, 'Salvar Pesos Produto (Local)')"><i class=""></i> Salvar Pesos</button>
                         <div class="dropdown-divider"></div>
@@ -597,60 +616,6 @@
             
             <div style="text-align: center; color: var(--text-muted); margin-top: 20px; font-size: 0.8rem;">
                 Pressione ESC para fechar
-            </div>
-        </div>
-    </div>
-
-    <!-- MODAL DASHBOARD FULLSCREEN -->
-    <div id="dashboard-modal" class="modal-overlay">
-        <div class="modal-card fullscreen">
-            <div class="modal-header">
-                <div>
-                    <h2 class="modal-title" style="margin: 0;">Dashboard de Produção</h2>
-                    <div id="dashboard-subtitle" style="font-size: 1rem; color: var(--text-muted); margin-top: 5px;"></div>
-                </div>
-                
-                <div style="display: flex; gap: 30px; align-items: center;">
-                    <div style="text-align: right;">
-                        <div id="dashboard-sector-title" style="color: var(--color-primary); font-weight: bold; font-size: 1.5rem;"></div>
-                        <div id="dashboard-timer-display" style="color: var(--text-muted); font-family: var(--font-mono); font-size: 0.9rem;"></div>
-                    </div>
-                    <span class="modal-close" onclick="closeDashboardModal()" title="Fechar (ESC)">&times;</span>
-                </div>
-            </div>
-            
-            <div class="kpi-row" style="margin-bottom: 40px;">
-                <div class="kpi-card kpi-default">
-                    <div class="kpi-title">Total Acumulado</div>
-                    <div id="dashboard-total-produced" class="kpi-value" style="font-size: 2.5rem;">0</div>
-                </div>
-                <div class="kpi-card kpi-info">
-                    <div class="kpi-title">Média Diária</div>
-                    <div id="dashboard-daily-average" class="kpi-value" style="font-size: 2.5rem;">0</div>
-                </div>
-                <div class="kpi-card kpi-purple">
-                    <div class="kpi-title">Meta Mensal</div>
-                    <div id="dashboard-monthly-goal" class="kpi-value" style="font-size: 2.5rem;">0</div>
-                </div>
-                 <div class="kpi-card" style="border-left: 4px solid var(--status-warning);">
-                    <div class="kpi-title">Saldo Meta</div>
-                    <div id="dashboard-goal-balance" class="kpi-value" style="font-size: 2.5rem;">0</div>
-                </div>
-            </div>
-
-            <div style="display: flex; gap: 30px; flex: 1; min-height: 0;">
-                <div class="chart-panel" style="flex: 2; height: auto;">
-                    <div class="kpi-title" style="font-size: 1rem;">Evolução Diária (Kg)</div>
-                    <div style="position: relative; flex: 1; width: 100%;">
-                        <canvas id="dashboardDailyChart"></canvas>
-                    </div>
-                </div>
-                <div class="chart-panel" style="flex: 1; height: auto;">
-                    <div class="kpi-title" style="font-size: 1rem;">Eficiência vs Meta</div>
-                    <div style="position: relative; flex: 1; width: 100%;">
-                        <canvas id="dashboardEfficiencyChart"></canvas>
-                    </div>
-                </div>
             </div>
         </div>
     </div>
@@ -923,23 +888,6 @@
         
         // Modal Registros Vars
         const recordsModal = document.getElementById('records-modal');
-
-        // Dashboard Vars
-        const dashboardModal = document.getElementById('dashboard-modal');
-        const dashboardSectorTitle = document.getElementById('dashboard-sector-title');
-        const dashboardTimerDisplay = document.getElementById('dashboard-timer-display');
-        const dashboardTotalProduced = document.getElementById('dashboard-total-produced');
-        const dashboardDailyAverage = document.getElementById('dashboard-daily-average');
-        const dashboardMonthlyGoal = document.getElementById('dashboard-monthly-goal');
-        const dashboardGoalBalance = document.getElementById('dashboard-goal-balance');
-        const dashboardDailyChartCanvas = document.getElementById('dashboardDailyChart');
-        const dashboardEfficiencyChartCanvas = document.getElementById('dashboardEfficiencyChart');
-        let dashboardDailyChartInstance = null;
-        let dashboardEfficiencyChartInstance = null;
-        let dashboardSectors = [];
-        let dashboardTimer = null;
-        let currentDashboardSectorIndex = 0;
-        const CAROUSEL_INTERVAL = 10000;
         
         const monthSelectorModal = document.getElementById('month-selector-modal');
         const monthToClearInput = document.getElementById('month-to-clear-input');
@@ -955,23 +903,19 @@
         function toggleFilterPanel() {
             const panel = document.getElementById('filter-panel');
             const chevron = document.getElementById('filter-chevron');
-            const chartPanel = document.querySelector('.chart-panel');
+            // Logic for chart resizing is now handled by CSS Flexbox
             
             panel.classList.toggle('expanded');
             
             if (panel.classList.contains('expanded')) {
                 chevron.classList.remove('fa-chevron-down');
                 chevron.classList.add('fa-chevron-up');
-                // Diminui a altura do gráfico quando filtros abertos
-                chartPanel.style.height = '45vh'; 
             } else {
                 chevron.classList.remove('fa-chevron-up');
                 chevron.classList.add('fa-chevron-down');
-                // Aumenta a altura do gráfico quando filtros fechados
-                chartPanel.style.height = '60vh'; 
             }
             
-            // Força redimensionamento do gráfico
+            // Força redimensionamento do gráfico para caber no novo espaço
             setTimeout(() => {
                 if(dailyChart) dailyChart.resize();
             }, 350); 
@@ -1486,7 +1430,7 @@
             });
             sectorChartSelect.value = GENERAL_MOLDING_KEY; 
             updateDailyProductionChartFromSelection(); 
-            dashboardSectors = [GENERAL_MOLDING_KEY, ...sortedSectors];
+            // dashboardSectors removido
         }
 
         function populateGroupFilter() {
@@ -1961,110 +1905,12 @@
             recordsModal.style.display = 'none';
         }
 
-        // --- Dashboard Logic ---
-        function openDashboardModal() { 
-            if (!dashboardSectors.length) { alert('Sem dados.'); return; }
-            dashboardModal.style.display = 'flex'; 
-            loadDashboard(); 
-        }
-        function closeDashboardModal() { clearInterval(dashboardTimer); dashboardModal.style.display = 'none'; }
-        window.closeDashboardModal = closeDashboardModal;
-        
         // Listeners para fechar modais com ESC
         document.addEventListener('keydown', function(event) {
             if (event.key === "Escape") {
-                if (dashboardModal.style.display === 'flex') closeDashboardModal();
                 if (recordsModal.style.display === 'flex') closeRecordsModal();
             }
         });
-
-        function loadDashboard() {
-            currentDashboardSectorIndex = 0;
-            updateDashboardView(dashboardSectors[0]);
-            if (dashboardTimer) clearInterval(dashboardTimer);
-            let timeLeft = CAROUSEL_INTERVAL/1000;
-            const tick = () => { timeLeft--; if (timeLeft<0) timeLeft=9; dashboardTimerDisplay.textContent = `Próximo: ${timeLeft}s`; };
-            dashboardTimer = setInterval(() => {
-                currentDashboardSectorIndex = (currentDashboardSectorIndex+1)%dashboardSectors.length;
-                updateDashboardView(dashboardSectors[currentDashboardSectorIndex]);
-                timeLeft = CAROUSEL_INTERVAL/1000;
-            }, CAROUSEL_INTERVAL);
-            setInterval(tick, 1000); tick();
-        }
-
-        function updateDashboardView(sector) {
-            dashboardSectorTitle.textContent = sector;
-            const now = new Date();
-            const monthName = now.toLocaleString('pt-BR', { month: 'long' }).toUpperCase();
-            document.getElementById('dashboard-subtitle').textContent = `(${monthName}/${now.getFullYear()})`;
-
-            const currentMonthData = allData.filter(r => {
-                const d = parseDate(r[COLUMN_MAP.DATA]);
-                return d && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-            });
-
-            let goal = sectorGoals[sector===GENERAL_MOLDING_KEY?TOTAL_MOLDAGEM_SECTOR_KEY:sector] || 0;
-            if (sector.toLowerCase().includes('moldagem') && goal===0) goal = 40000; 
-
-            const d = aggregateSectorData(sector, goal, currentMonthData);
-            const total = sector === GENERAL_MOLDING_KEY ? d.totalMoldagem : d.totalProduced;
-            const bal = goal - total;
-            
-            dashboardTotalProduced.textContent = formatNumber(total, 2);
-            dashboardDailyAverage.textContent = formatNumber(d.dailyAverage, 2);
-            dashboardMonthlyGoal.textContent = formatNumber(goal, 0);
-            dashboardGoalBalance.textContent = formatNumber(bal, 2);
-            dashboardGoalBalance.style.color = bal < 0 ? 'var(--status-danger)' : 'var(--status-success)';
-
-            renderDashboardDailyChart(sector, d.dataByDay);
-            renderDashboardEfficiencyChart(sector, goal>0?(total/goal)*100:0, total, goal);
-        }
-
-        function renderDashboardDailyChart(sector, dailyData) {
-            let labels = [], data = [];
-            Object.keys(dailyData).sort((a,b)=>parseDate(a)-parseDate(b)).forEach(k => { labels.push(k); data.push(dailyData[k]); });
-            
-            const maxDataValue = Math.max(...data, 0);
-            const suggestedMaxY = maxDataValue > 0 ? maxDataValue * 1.2 : 10;
-
-            const config = {
-                type: 'bar',
-                data: { labels, datasets: [{ data, backgroundColor: 'rgba(251, 191, 36, 0.7)', borderColor: '#fbbf24', borderWidth: 1 }] },
-                options: {
-                    responsive: true, maintainAspectRatio: false,
-                    plugins: { legend: { display: false }, datalabels: { display: false } },
-                    scales: { 
-                        y: { 
-                            beginAtZero: true, 
-                            min: 0,
-                            suggestedMax: suggestedMaxY,
-                            grid: { color: 'rgba(255,255,255,0.05)' } 
-                        }, 
-                        x: { grid: { display: false } } 
-                    }
-                }
-            };
-            if (dashboardDailyChartInstance) { dashboardDailyChartInstance.data = config.data; dashboardDailyChartInstance.options = config.options; dashboardDailyChartInstance.update(); }
-            else dashboardDailyChartInstance = new Chart(dashboardDailyChartCanvas, config);
-        }
-
-        function renderDashboardEfficiencyChart(sector, pct, prod, goal) {
-            const rem = Math.max(0, goal - prod);
-            const color = pct >= 100 ? '#fbbf24' : (pct >= 80 ? '#a855f7' : '#ef4444');
-            const config = {
-                type: 'doughnut',
-                data: { labels: ['Produzido', 'Restante'], datasets: [{ data: [prod, rem], backgroundColor: [color, '#27272a'], borderWidth: 0 }] },
-                options: {
-                    responsive: true, maintainAspectRatio: false,
-                    plugins: { 
-                        legend: { position: 'bottom', labels: { color: '#e0e0e0' } },
-                        datalabels: { color: '#fff', formatter: (v, ctx) => ctx.dataIndex===0 ? pct.toFixed(1)+'%' : '', font: {size: 18, weight: 'bold'} }
-                    }
-                }
-            };
-            if (dashboardEfficiencyChartInstance) { dashboardEfficiencyChartInstance.data = config.data; dashboardEfficiencyChartInstance.update(); }
-            else dashboardEfficiencyChartInstance = new Chart(dashboardEfficiencyChartCanvas, config);
-        }
 
         window.onload = loadInitialData;
     </script>
