@@ -173,7 +173,8 @@
         .action-icon:hover { transform: scale(1.2); }
         .icon-delete { color: var(--status-danger); }
 
-        .app-footer { height: var(--footer-height); background: #0f1012; border-top: 1px solid var(--border-subtle); display: flex; align-items: center; justify-content: space-between; padding: 0 32px; font-size: 0.75rem; color: var(--text-muted); font-family: var(--font-mono); flex-shrink: 0; }
+        /* FOOTER */
+        .app-footer { height: var(--footer-height); background: #0f1012; border-top: 1px solid var(--border-subtle); display: flex; align-items: center; justify-content: space-between; padding: 0 32px; font-size: 0.75rem; color: var(--text-muted); font-family: var(--font-mono); flex-shrink: 0; z-index: 100; }
     </style>
 </head>
 <body class="no-scroll">
@@ -196,6 +197,15 @@
         const eventos = ['mousedown', 'mousemove', 'keypress', 'touchstart', 'scroll'];
         eventos.forEach(evento => { window.addEventListener(evento, atualizarAtividade, { passive: true }); });
         setInterval(verificarSessao, 60000);
+
+        // --- RELÓGIO DO RODAPÉ ---
+        setInterval(() => {
+            const now = new Date();
+            const timeEl = document.getElementById('clock-time');
+            const dateEl = document.getElementById('clock-date');
+            if (timeEl) timeEl.innerText = now.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'});
+            if (dateEl) dateEl.innerText = now.toLocaleDateString('pt-BR', {weekday: 'short', day: 'numeric', month: 'short'}).toUpperCase();
+        }, 1000);
     })();
 </script>
 
@@ -237,8 +247,14 @@
         </main>
 
         <footer class="app-footer">
-            <div style="display: flex; gap: 24px;"><span>Total de Cargas: <strong id="totalRegistros" style="color: #fff;">0</strong></span></div>
-            <div><span>FUNDIÇÃO ERUS &copy; 2025</span></div>
+            <div style="display: flex; gap: 24px;">
+                <span>Total Peso: <strong id="footer-total-weight" style="color: #fff;">0,00 KG</strong></span>
+                <span>Qtd Peças: <strong id="footer-total-qty" style="color: var(--color-primary);">0</strong></span>
+            </div>
+            <div>
+                <span id="clock-date"></span>
+                <span id="clock-time" style="color: #fff; font-weight: 700; margin-left:10px;"></span>
+            </div>
         </footer>
     </div>
 
@@ -428,6 +444,14 @@
         const parseNumberSafe = t => { const s = String(t || '').trim().replace(/,/g, '.'); const n = parseFloat(s); return isNaN(n) ? 0 : n; };
         const formatMonthYear = d => { if (!d) return ''; const p = d.split('T')[0].split('-'); return p.length < 3 ? '' : `${p[1]}/${p[0]}`; };
 
+        // --- FUNÇÃO PARA ATUALIZAR O FOOTER ---
+        function updateFooterTotals(weight, qty) {
+            const wEl = document.getElementById('footer-total-weight');
+            const qEl = document.getElementById('footer-total-qty');
+            if(wEl) wEl.textContent = formatNumber(weight) + ' KG';
+            if(qEl) qEl.textContent = qty.toLocaleString('pt-BR');
+        }
+
         function calcularValorItem(reg) {
             const terc = String(reg.terceiro || '').toUpperCase();
             const peso = parseFloat(reg.peso || 0);
@@ -532,12 +556,21 @@
             const tbody = document.querySelector('#terceiroTable tbody'); 
             tbody.innerHTML = '';
             const grouped = dadosParaExibir.reduce((acc, r) => { if (!acc[r.carga]) acc[r.carga] = []; acc[r.carga].push(r); return acc; }, {});
+            
+            let totalWeight = 0;
+            let totalQty = 0;
+
             Object.keys(grouped).sort((a, b) => (parseInt(b) || 0) - (parseInt(a) || 0)).forEach(c => {
                 const its = grouped[c];
                 const p = its[0];
                 const tP = its.reduce((s, i) => s + (parseFloat(i.quant || 0) * parseFloat(i.peso || 0)), 0);
                 const tV = its.reduce((s, i) => s + parseFloat(i.valor || 0), 0);
                 const tQ = its.reduce((s, i) => s + parseInt(i.quant || 0), 0);
+                
+                // Sumarizar para o footer
+                totalWeight += tP;
+                totalQty += tQ;
+
                 const recC = (recebidos[c] || []).length;
                 const totC = its.length;
                 const tr = document.createElement('tr'); 
@@ -546,7 +579,9 @@
                 tr.innerHTML = `<td>${c}</td><td>${formatDate(p.data)}</td><td>${p.terceiro}</td><td>${formatNumber(tP)}</td><td>${tQ}</td><td>${formatCurrency(tV)}</td><td>${(totC > 0 && recC >= totC) ? '<span class="badge badge-success">Recebido</span>' : `<span class="badge badge-pending">${recC}/${totC} Pendente</span>`}</td>`;
                 tbody.appendChild(tr);
             });
-            document.getElementById('totalRegistros').textContent = Object.keys(grouped).length;
+            
+            // Atualizar footer
+            updateFooterTotals(totalWeight, totalQty);
             applyColumnFilters();
         }
 
@@ -734,11 +769,24 @@
 
         function applyColumnFilters() {
             const filters = Array.from(document.querySelectorAll('#terceiroTable .filter-input-table')).map(i=>i.value.toUpperCase());
+            let visibleWeight = 0;
+            let visibleQty = 0;
+
             document.querySelectorAll('#terceiroTable tbody tr').forEach(row => {
-                const cells = row.querySelectorAll('td'); let vis = true;
+                const cells = row.querySelectorAll('td'); 
+                let vis = true;
                 for(let i=0; i<6; i++) if(filters[i] && !cells[i].textContent.toUpperCase().includes(filters[i])) vis=false;
                 row.style.display = vis ? '' : 'none';
+
+                if (vis) {
+                    // Cell 3 is Weight, Cell 4 is Qty based on Table Head order
+                    const wStr = cells[3].textContent;
+                    const qStr = cells[4].textContent;
+                    visibleWeight += parseNumberSafe(wStr);
+                    visibleQty += parseNumberSafe(qStr);
+                }
             });
+            updateFooterTotals(visibleWeight, visibleQty);
         }
         
         function limparFormularioParcialmente() { ['inputCodigo','inputDescricao','inputPesoUn','inputQuantidade','inputQtdEscariar','inputQtdRebarba','inputCliente','inputObservacoes'].forEach(id => document.getElementById(id).value = ''); document.getElementById('inputCodigo').focus(); }
