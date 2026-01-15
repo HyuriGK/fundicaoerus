@@ -548,8 +548,8 @@
         <!-- FOOTER -->
         <footer class="app-footer">
             <div style="display: flex; gap: 24px;">
-                <span>Sistema: <strong style="color: #fff;">Acabamento Interno v3.1</strong></span>
-                <span>Status: <strong style="color: var(--status-success);">Online</strong></span>
+                <span>Total Peso: <strong id="footer-total-weight" style="color: #fff;">0,00 KG</strong></span>
+                <span>Qtd Peças: <strong id="footer-total-qty" style="color: var(--color-primary);">0</strong></span>
             </div>
             <div>
                 <span id="clock-date"></span>
@@ -1223,6 +1223,23 @@
             let dataDisp = isModal ? data.slice(0) : data.filter(r => r[COL_MAP.DATA]);
             if (isModal) dataDisp = [...dataDisp, ...manualRowsData.map(r => { const n = [...r]; n[COL_MAP.DATA] = null; return n; })];
 
+            // --- Lógica para atualizar o Footer do Dashboard Principal ---
+            if (containerId === 'mainTableContent') {
+                let footerWeight = 0;
+                let footerQty = 0;
+                dataDisp.forEach(r => {
+                    footerWeight += (Number(r[COL_MAP.PESO_TOTAL]) || 0);
+                    footerQty += (Number(r[COL_MAP.QTD]) || 0);
+                });
+                
+                const footerWEl = document.getElementById('footer-total-weight');
+                const footerQEl = document.getElementById('footer-total-qty');
+                
+                if (footerWEl) footerWEl.textContent = footerWeight.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' KG';
+                if (footerQEl) footerQEl.textContent = footerQty.toLocaleString('pt-BR');
+            }
+            // -------------------------------------------------------------
+
             if (isModal) {
                  if (dataDisp.length > 0) {
                      document.getElementById('modalInfoPanel').style.display = 'flex'; observacoesContainer.style.display = 'block';
@@ -1258,10 +1275,27 @@
                     inp.addEventListener('keyup', function() {
                         const val = this.value.toLowerCase();
                         const rows = table.querySelectorAll('tbody tr');
-                        rows.forEach(r => {
+                        let currentFooterW = 0;
+                        let currentFooterQ = 0;
+                        
+                        rows.forEach((r, idx) => {
                             const txt = r.cells[i].textContent.toLowerCase();
-                            r.style.display = txt.includes(val) ? '' : 'none';
+                            const visible = txt.includes(val);
+                            r.style.display = visible ? '' : 'none';
+                            
+                            if (visible) {
+                                // Recalcula totais baseado nas linhas visíveis
+                                const rowData = dataDisp[idx];
+                                currentFooterW += (Number(rowData[COL_MAP.PESO_TOTAL]) || 0);
+                                currentFooterQ += (Number(rowData[COL_MAP.QTD]) || 0);
+                            }
                         });
+
+                        // Atualiza footer com totais filtrados
+                        const footerWEl = document.getElementById('footer-total-weight');
+                        const footerQEl = document.getElementById('footer-total-qty');
+                        if (footerWEl) footerWEl.textContent = currentFooterW.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' KG';
+                        if (footerQEl) footerQEl.textContent = currentFooterQ.toLocaleString('pt-BR');
                     });
                     td.appendChild(inp); tr.appendChild(td);
                 });
