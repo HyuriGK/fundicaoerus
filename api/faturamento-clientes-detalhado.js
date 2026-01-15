@@ -1,4 +1,4 @@
-import pool from './db.js';
+import pool from '../../db.js';
 
 // Função auxiliar para forçar conversão para número
 // Evita erro se vier texto ou formato moeda (ex: "R$ 1.000,00")
