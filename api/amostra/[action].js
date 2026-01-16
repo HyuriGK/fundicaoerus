@@ -1,4 +1,4 @@
-import pool from '../../db.js';
+import pool from '../lib/db.js';
 
 export default async function handler(req, res) {
     // Conecta ao banco
