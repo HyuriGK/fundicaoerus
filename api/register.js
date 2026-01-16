@@ -1,5 +1,5 @@
 // api/register.js
-import pool from '../db.js';
+import pool from '../lib/db.js';
 import bcrypt from 'bcryptjs';
 
 export default async function handler(req, res) {
