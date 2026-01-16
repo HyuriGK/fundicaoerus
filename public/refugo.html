@@ -236,15 +236,21 @@
 
         /* --- TABLE --- */
         .table-container {
-            background: var(--bg-card); border: 1px solid var(--border-subtle);
-            border-radius: var(--radius-md); margin-bottom: 20px;
-            overflow-x: auto; width: 100%;
+            /* Removido borda e fundo pois estará no modal agora, ou reestilizado para o modal */
+            background: transparent; 
+            border: none;
+            overflow: auto; 
+            width: 100%;
+            height: 100%; /* Ocupa altura do modal */
         }
         table { width: 100%; min-width: 1200px; border-collapse: collapse; font-family: var(--font-mono); font-size: 0.75rem; }
         th, td { padding: 10px 12px; border-bottom: 1px solid var(--border-subtle); border-right: 1px solid var(--border-separator); white-space: nowrap; }
-        th { background: rgba(0,0,0,0.4); color: var(--text-muted); font-weight: 600; text-transform: uppercase; }
+        th { background: rgba(0,0,0,0.6); color: var(--text-muted); font-weight: 600; text-transform: uppercase; position: sticky; top: 0; z-index: 10; }
         tr:hover td { background: rgba(255,255,255,0.02); color: var(--color-primary); }
         td { color: var(--text-main); }
+
+        /* Ajuste para cabeçalho fixo na tabela */
+        thead th { box-shadow: 0 1px 0 var(--border-subtle); }
 
         .filter-input-table {
             width: 100%; background: transparent; border: none; border-bottom: 1px solid var(--border-subtle);
@@ -283,11 +289,22 @@
             box-shadow: 0 0 30px rgba(0,0,0,0.8); border: 1px solid var(--border-highlight); color: var(--text-main);
         }
         
-        #evolutionModalOverlay .modal-content {
+        /* Modal de Evolução e Tabela - Full Screen */
+        #evolutionModalOverlay .modal-content,
+        #tableModalOverlay .modal-content {
             width: 98vw;
             height: 95vh;
             max-width: none;
             padding: 20px;
+        }
+
+        #tableModalOverlay .modal-content {
+            padding: 0; /* Remover padding para tabela encostar nas bordas se quiser */
+        }
+        
+        #tableModalOverlay .modal-header {
+            padding: 20px 20px 10px 20px;
+            margin-bottom: 0;
         }
 
         .modal-header {
@@ -342,6 +359,45 @@
         </div>
     </div>
 
+    <!-- MODAL TABELA DE REGISTROS (NOVO) -->
+    <div id="tableModalOverlay" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Registros Detalhados</h2>
+                <button class="modal-close" onclick="closeTableModal()">&times;</button>
+            </div>
+            <!-- Container flexível para a tabela ocupar o resto da altura -->
+            <div style="flex: 1; overflow: hidden; padding: 0 20px 20px 20px; display: flex; flex-direction: column;">
+                <div class="table-container" id="tableWrapper">
+                    <table id="dataTable">
+                        <thead>
+                            <tr>
+                                <th>Setor</th> <th>Motivo</th> <th>Data</th> <th>Cód. Cliente</th> <th>Cliente</th>
+                                <th>Cód. Produto</th> <th>Descrição</th> <th>Material</th> <th>Qtd.</th> 
+                                <th>Peso (Un)</th> 
+                                <th>Total (kg)</th> 
+                            </tr>
+                            <tr id="filterRow">
+                                <th><input class="filter-input-table" placeholder="Filtro..." onkeyup="applyTableFilters()"></th>
+                                <th><input class="filter-input-table" placeholder="Filtro..." onkeyup="applyTableFilters()"></th>
+                                <th><input class="filter-input-table" placeholder="Filtro..." onkeyup="applyTableFilters()"></th>
+                                <th><input class="filter-input-table" placeholder="Filtro..." onkeyup="applyTableFilters()"></th>
+                                <th><input class="filter-input-table" placeholder="Filtro..." onkeyup="applyTableFilters()"></th>
+                                <th><input class="filter-input-table" placeholder="Filtro..." onkeyup="applyTableFilters()"></th>
+                                <th><input class="filter-input-table" placeholder="Filtro..." onkeyup="applyTableFilters()"></th>
+                                <th><input class="filter-input-table" placeholder="Filtro..." onkeyup="applyTableFilters()"></th>
+                                <th><input class="filter-input-table" placeholder="Filtro..." onkeyup="applyTableFilters()"></th>
+                                <th><input class="filter-input-table" placeholder="Filtro..." onkeyup="applyTableFilters()"></th>
+                                <th><input class="filter-input-table" placeholder="Filtro..." onkeyup="applyTableFilters()"></th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- MODAL PRODUÇÃO -->
     <div id="productionModalOverlay" class="modal-overlay">
         <div class="modal-content" style="max-width: 400px; height: auto;">
@@ -375,6 +431,11 @@
                 </div>
             </div>
             <div class="header-actions">
+                <!-- BOTÃO REGISTROS (NOVO) -->
+                <button class="btn-glass" onclick="showTableModal()" style="margin-right: 12px;">
+                    <i class="fa-solid fa-table-list" style="color: var(--status-warning);"></i> Registros
+                </button>
+
                 <div class="dropdown">
                     <button class="btn-glass">
                         <i class="fa-solid fa-gear" style="color: var(--status-info);"></i> Funções <i class="fa-solid fa-chevron-down" style="font-size: 0.7rem; margin-left: 5px;"></i>
@@ -468,32 +529,8 @@
                 </div>
             </div>
 
-            <div class="table-container" id="tableWrapper">
-                <table id="dataTable">
-                    <thead>
-                        <tr>
-                            <th>Setor</th> <th>Motivo</th> <th>Data</th> <th>Cód. Cliente</th> <th>Cliente</th>
-                            <th>Cód. Produto</th> <th>Descrição</th> <th>Material</th> <th>Qtd.</th> 
-                            <th>Peso (Un)</th> 
-                            <th>Total (kg)</th> 
-                        </tr>
-                        <tr id="filterRow">
-                            <th><input class="filter-input-table" placeholder="Filtro..." onkeyup="applyTableFilters()"></th>
-                            <th><input class="filter-input-table" placeholder="Filtro..." onkeyup="applyTableFilters()"></th>
-                            <th><input class="filter-input-table" placeholder="Filtro..." onkeyup="applyTableFilters()"></th>
-                            <th><input class="filter-input-table" placeholder="Filtro..." onkeyup="applyTableFilters()"></th>
-                            <th><input class="filter-input-table" placeholder="Filtro..." onkeyup="applyTableFilters()"></th>
-                            <th><input class="filter-input-table" placeholder="Filtro..." onkeyup="applyTableFilters()"></th>
-                            <th><input class="filter-input-table" placeholder="Filtro..." onkeyup="applyTableFilters()"></th>
-                            <th><input class="filter-input-table" placeholder="Filtro..." onkeyup="applyTableFilters()"></th>
-                            <th><input class="filter-input-table" placeholder="Filtro..." onkeyup="applyTableFilters()"></th>
-                            <th><input class="filter-input-table" placeholder="Filtro..." onkeyup="applyTableFilters()"></th>
-                            <th><input class="filter-input-table" placeholder="Filtro..." onkeyup="applyTableFilters()"></th>
-                        </tr>
-                    </thead>
-                    <tbody></tbody>
-                </table>
-            </div>
+            <!-- A tabela foi movida para o Modal #tableModalOverlay -->
+            
         </main>
 
         <footer class="app-footer">
@@ -542,13 +579,17 @@
         // FECHAR MODAL COM ESC
         document.addEventListener('keydown', function(event) {
             if (event.key === 'Escape') {
-                const modal = document.getElementById('evolutionModalOverlay');
-                if (modal.classList.contains('active')) {
+                const modalEvol = document.getElementById('evolutionModalOverlay');
+                if (modalEvol.classList.contains('active')) {
                     closeEvolutionModal();
                 }
                 const prodModal = document.getElementById('productionModalOverlay');
                 if (prodModal.classList.contains('active')) {
                     closeProductionModal();
+                }
+                const tableModal = document.getElementById('tableModalOverlay');
+                if (tableModal.classList.contains('active')) {
+                    closeTableModal();
                 }
             }
         });
@@ -639,43 +680,43 @@
         }
 
         async function loadDataFromDB() {
-    showSpinner();
-    try {
-        const response = await fetch('/api/refugo'); // Chama o GET
-        if (!response.ok) throw new Error('Falha API');
-        
-        const data = await response.json(); 
-        monthlyProduction = data.refugoMonthlyProduction || {};
-        
-        // Formata os dados vindo do banco para o formato que o HTML espera (Array de Arrays)
-        rawData = data.refugoRawData.map(r => [
-            r.setor, r.motivo, r.data, r.cod_cliente, r.cliente, 
-            r.cod_produto, r.descricao, r.material, r.quantidade, 
-            r.peso_un, r.peso_total, r.id // Guardamos o ID no final para edições
-        ]);
-    } catch (e) {
-        console.error('Erro ao carregar dados:', e);
-        rawData = [];
-        monthlyProduction = {};
-    } finally { hideSpinner(); }
-}
+            showSpinner();
+            try {
+                const response = await fetch('/api/refugo'); // Chama o GET
+                if (!response.ok) throw new Error('Falha API');
+                
+                const data = await response.json(); 
+                monthlyProduction = data.refugoMonthlyProduction || {};
+                
+                // Formata os dados vindo do banco para o formato que o HTML espera (Array de Arrays)
+                rawData = data.refugoRawData.map(r => [
+                    r.setor, r.motivo, r.data, r.cod_cliente, r.cliente, 
+                    r.cod_produto, r.descricao, r.material, r.quantidade, 
+                    r.peso_un, r.peso_total, r.id // Guardamos o ID no final para edições
+                ]);
+            } catch (e) {
+                console.error('Erro ao carregar dados:', e);
+                rawData = [];
+                monthlyProduction = {};
+            } finally { hideSpinner(); }
+        }
 
         async function saveRawData() {
-    showSpinner();
-    try {
-        await fetch('/api/refugo?action=save-all', {
-            method: 'POST', 
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(rawData)
-        });
-    } catch (e) { console.error('Erro ao salvar:', e); } 
-    finally { hideSpinner(); }
-}
+            showSpinner();
+            try {
+                await fetch('/api/refugo?action=save-all', {
+                    method: 'POST', 
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(rawData)
+                });
+            } catch (e) { console.error('Erro ao salvar:', e); } 
+            finally { hideSpinner(); }
+        }
 
         async function saveMonthlyProduction() {
-    // Note: Esta função agora precisa do mes e valor especifico
-    // No seu modal de produção, chame a API conforme abaixo:
-}
+            // Note: Esta função agora precisa do mes e valor especifico
+            // No seu modal de produção, chame a API conforme abaixo:
+        }
 
         async function handleFileSelect(event) {
             const file = event.target.files[0];
@@ -919,29 +960,29 @@
         }
 
         async function updatePesoUn(index, newVal) {
-    const w = parseFloat(newVal);
-    if (isNaN(w)) return;
-    
-    const row = rawData[index];
-    const id = row[11]; // O ID que guardamos no carregamento
-    const qtd = parseFloat(row[8]) || 0;
-    const total = qtd * w;
+            const w = parseFloat(newVal);
+            if (isNaN(w)) return;
+            
+            const row = rawData[index];
+            const id = row[11]; // O ID que guardamos no carregamento
+            const qtd = parseFloat(row[8]) || 0;
+            const total = qtd * w;
 
-    // Atualiza localmente
-    row[9] = w;
-    row[10] = total;
+            // Atualiza localmente
+            row[9] = w;
+            row[10] = total;
 
-    if (id) {
-        try {
-            await fetch('/api/refugo?action=update-weight', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id, peso_un: w, peso_total: total })
-            });
-        } catch(e) { console.error("Erro ao sincronizar peso."); }
-    }
-    processData();
-}
+            if (id) {
+                try {
+                    await fetch('/api/refugo?action=update-weight', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ id, peso_un: w, peso_total: total })
+                    });
+                } catch(e) { console.error("Erro ao sincronizar peso."); }
+            }
+            processData();
+        }
 
         // ==========================================================================
         // 5. GRÁFICOS
@@ -1054,6 +1095,14 @@
         }
         function closeEvolutionModal() { document.getElementById('evolutionModalOverlay').classList.remove('active'); }
         
+        // --- FUNÇÕES DO MODAL DE REGISTROS (NOVO) ---
+        function showTableModal() {
+            document.getElementById('tableModalOverlay').classList.add('active');
+        }
+        function closeTableModal() {
+            document.getElementById('tableModalOverlay').classList.remove('active');
+        }
+
         function showProductionModal() {
             const key = getCurrentFilterKey();
             if (!key) return alert("Selecione um mês específico para lançar produção.");
@@ -1069,25 +1118,25 @@
         function closeProductionModal() { document.getElementById('productionModalOverlay').classList.remove('active'); }
 
         async function saveProductionFromModal() {
-    const key = document.getElementById('prodModalKey').value;
-    const v = parseFloat(document.getElementById('prodModalValue').value);
-    if(!key || isNaN(v)) return alert('Valor inválido.');
+            const key = document.getElementById('prodModalKey').value;
+            const v = parseFloat(document.getElementById('prodModalValue').value);
+            if(!key || isNaN(v)) return alert('Valor inválido.');
 
-    showSpinner();
-    try {
-        const res = await fetch('/api/refugo?action=save-prod', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mes_ano: key, peso_produzido: v })
-        });
-        if(res.ok) {
-            monthlyProduction[key] = v;
-            closeProductionModal();
-            processData();
+            showSpinner();
+            try {
+                const res = await fetch('/api/refugo?action=save-prod', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mes_ano: key, peso_produzido: v })
+                });
+                if(res.ok) {
+                    monthlyProduction[key] = v;
+                    closeProductionModal();
+                    processData();
+                }
+            } catch (e) { alert("Erro ao salvar produção."); }
+            finally { hideSpinner(); }
         }
-    } catch (e) { alert("Erro ao salvar produção."); }
-    finally { hideSpinner(); }
-}
 
         async function clearCurrentMonthData() {
             const key = getCurrentFilterKey();
