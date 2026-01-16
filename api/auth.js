@@ -4,8 +4,8 @@ export default async function handler(req, res) {
     const { user, pass } = req.body;
 
     // Defina o usuário e a senha padrão aqui ou via variáveis de ambiente na Vercel
-    const MASTER_USER = process.env.LOGIN_USER || "erus";
-    const MASTER_PASS = process.env.LOGIN_PASS || "erus";
+    const MASTER_USER = process.env.LOGIN_USER || "comercial";
+    const MASTER_PASS = process.env.LOGIN_PASS || "comercial";
 
     if (user === MASTER_USER && pass === MASTER_PASS) {
         return res.status(200).json({ success: true });
