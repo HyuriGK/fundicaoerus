@@ -351,23 +351,28 @@
                 const data = await res.json();
 
                 if (data.success) {
+                    // Limpa sessão anterior
                     localStorage.clear();
                     
-                    // Salva a permissão que veio do banco de dados (Ex: 'admin', 'operador', 'visitante')
-                    // Se não vier nada, define como 'padrao'
                     const userRole = data.role || 'padrao'; 
                     const userName = data.name || user;
 
+                    // Salva credenciais
                     localStorage.setItem('erus_auth', 'true');
                     localStorage.setItem('erus_role', userRole); 
                     localStorage.setItem('erus_user', userName);
+
+                    // --- IMPORTANTE: Salva a hora da atividade para o index não bloquear ---
+                    localStorage.setItem('erus_last_activity', Date.now().toString());
                     
+                    // Redireciona
                     window.location.replace('index.html');
                 } else {
-                    showMsg(msg, "Usuário ou senha incorretos.", "error");
+                    showMsg(msg, data.message || "Usuário ou senha incorretos.", "error");
                 }
             } catch (err) {
-                showMsg(msg, "Erro de conexão.", "error");
+                console.error(err);
+                showMsg(msg, "Erro de conexão com o servidor.", "error");
             } finally {
                 setLoading(false, btn, txt, spin, "ENTRAR");
             }
@@ -388,7 +393,6 @@
             msg.style.display = 'none';
 
             try {
-                // Ao criar conta, seu backend deve salvar o usuário com role='padrao' (nível baixo)
                 const res = await fetch('/api/register', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -398,19 +402,20 @@
                 const data = await res.json();
 
                 if (data.success) {
-                    showMsg(msg, "Conta criada com sucesso! Redirecionando...", "success");
+                    showMsg(msg, "Conta criada com sucesso! Faça login.", "success");
                     
-                    // Opcional: Auto-Login após registro
+                    // Preenche login automaticamente
                     setTimeout(() => {
-                        toggleMode(); // Ou preencher o form de login automaticamente
+                        toggleMode(); 
                         document.getElementById('loginUser').value = user;
-                        showMsg(document.getElementById('loginMsg'), "Por favor, confirme sua senha para entrar.", "success");
+                        showMsg(document.getElementById('loginMsg'), "Conta criada. Confirme a senha para entrar.", "success");
                     }, 1500);
                 } else {
                     showMsg(msg, data.message || "Erro ao criar conta.", "error");
                 }
             } catch (err) {
-                showMsg(msg, "Erro de conexão.", "error");
+                console.error(err);
+                showMsg(msg, "Erro de conexão com o servidor.", "error");
             } finally {
                 setLoading(false, btn, txt, spin, "REGISTRAR E ENTRAR");
             }
