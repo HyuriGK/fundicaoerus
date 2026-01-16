@@ -1,5 +1,5 @@
 // api/auth.js
-import pool from './db';
+import pool from '../db.js';
 import bcrypt from 'bcryptjs';
 
 export default async function handler(req, res) {
