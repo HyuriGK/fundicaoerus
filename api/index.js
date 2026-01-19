@@ -7,7 +7,7 @@ app.use(express.json());
 
 // --- IMPORTAÇÃO DOS ARQUIVOS DA PASTA SRC ---
 // Note que estou usando "../src/" para voltar uma pasta e entrar em src
-const acabamentoExterno = require('../src/acabamento_externo');
+const acabamentoExterno = require('../src/acabamento-externo');
 const acabamentoInterno = require('../src/acabamento-interno');
 const aderencia = require('../src/aderencia');
 const amostra = require('../src/amostra');
