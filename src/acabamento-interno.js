@@ -1,24 +1,16 @@
 const express = require('express');
 const router = express.Router();
-const pool = require('../lib/db'); // Importação do DB corrigida para CommonJS
+const pool = require('../lib/db'); 
 
-// Middleware para capturar o client do banco em cada requisição
-// (Opcional, mas ajuda a organizar o try/catch/finally)
+// =========================================================================
+// FUNÇÕES CONTROLADORAS (Lógica separada para reutilizar nas rotas)
+// =========================================================================
 
-router.use(async (req, res, next) => {
-    // Apenas passamos para as rotas específicas lidarem com a conexão
-    // para ter controle fino do client.release()
-    next();
-});
-
-// --- ROTA UNIFICADA (POST e GET) ---
-// Como sua lógica original misturava actions em GET e POST e usava req.query.action para tudo,
-// vamos usar router.all ou separar por verbo. Para manter compatibilidade máxima,
-// vou separar o que é leitura (GET) e escrita (POST), mas mantendo a lógica do 'action'.
-
-// --- GET ACTIONS ---
-router.get('/', async (req, res) => {
-    const { action } = req.query;
+// --- Lógica para GET (Leitura) ---
+const handleGet = async (req, res) => {
+    // Tenta pegar a action da URL (ex: /registros) OU da Query (ex: ?action=registros)
+    const action = req.params.action || req.query.action;
+    
     const client = await pool.connect();
 
     try {
@@ -56,7 +48,7 @@ router.get('/', async (req, res) => {
 
         // 3. CARREGAR AGENDAMENTO DE UM DIA
         if (action === 'get-schedule-day') {
-            const { date } = req.query;
+            const { date } = req.query; // Aqui a data provavelmente vem na query mesmo sendo uma rota nomeada
             const query = `SELECT payload FROM ai_daily_schedules WHERE date = $1`;
             const result = await client.query(query, [date]);
             if (result.rows.length === 0) {
@@ -73,19 +65,14 @@ router.get('/', async (req, res) => {
                 const p = row.payload;
                 let totalWeight = 0;
                 
-                // Soma peso dos Automáticos (Índice 8 é peso_total, baseado no seu array excel)
                 if (Array.isArray(p.autoRows)) {
                     p.autoRows.forEach(item => { totalWeight += (parseFloat(item[8]) || 0); });
                 }
                 
-                // Soma peso dos Manuais
                 if (Array.isArray(p.manualRows)) {
                     p.manualRows.forEach(item => { totalWeight += (parseFloat(item[8]) || 0); });
                 }
 
-                // Ajuste de data simples
-                // (Garante YYYY-MM-DD sem voltar 1 dia por fuso horário)
-                const d = new Date(row.date);
                 const dateStr = row.date instanceof Date ? row.date.toISOString().split('T')[0] : row.date;
 
                 return {
@@ -105,17 +92,14 @@ router.get('/', async (req, res) => {
     } finally {
         client.release();
     }
-});
+};
 
-// --- POST ACTIONS ---
-router.post('/', async (req, res) => {
-    // No POST, a action geralmente vem na query string mesmo, mas às vezes no body.
-    // Vamos garantir pegando da query primeiro.
-    const { action } = req.query;
+// --- Lógica para POST (Escrita) ---
+const handlePost = async (req, res) => {
+    const action = req.params.action || req.query.action;
     const client = await pool.connect();
 
     try {
-        // 0. GARANTIR TABELA DE AGENDAMENTOS (Executa rápido se já existir)
         await client.query(`
             CREATE TABLE IF NOT EXISTS ai_daily_schedules (
                 date DATE PRIMARY KEY,
@@ -205,7 +189,7 @@ router.post('/', async (req, res) => {
             return res.json({ success: true });
         }
 
-        // 6. LEGADO (Compatibilidade)
+        // 6. LEGADO
         if (action === 'save-final') { 
             return res.json({ success: true }); 
         }
@@ -219,6 +203,21 @@ router.post('/', async (req, res) => {
     } finally {
         client.release();
     }
-});
+};
+
+// =========================================================================
+// DEFINIÇÃO DAS ROTAS (Aqui está o pulo do gato!)
+// =========================================================================
+
+// Agora aceitamos tanto "/api/acabamento-interno/registros" (params)
+// Quanto "/api/acabamento-interno?action=registros" (query)
+
+// 1. Rotas com parâmetro dinâmico na URL (ex: /list-schedules)
+router.get('/:action', handleGet);
+router.post('/:action', handlePost);
+
+// 2. Rotas raiz (ex: ?action=list-schedules)
+router.get('/', handleGet);
+router.post('/', handlePost);
 
 module.exports = router;
