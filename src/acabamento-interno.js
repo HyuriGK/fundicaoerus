@@ -1,21 +1,121 @@
-import pool from '../lib/db.js'; // Importa o seu db.js que está na pasta pai
+const express = require('express');
+const router = express.Router();
+const pool = require('../lib/db'); // Importação do DB corrigida para CommonJS
 
-export default async function handler(req, res) {
-    // Tenta conectar ao banco
-    let client;
+// Middleware para capturar o client do banco em cada requisição
+// (Opcional, mas ajuda a organizar o try/catch/finally)
+
+router.use(async (req, res, next) => {
+    // Apenas passamos para as rotas específicas lidarem com a conexão
+    // para ter controle fino do client.release()
+    next();
+});
+
+// --- ROTA UNIFICADA (POST e GET) ---
+// Como sua lógica original misturava actions em GET e POST e usava req.query.action para tudo,
+// vamos usar router.all ou separar por verbo. Para manter compatibilidade máxima,
+// vou separar o que é leitura (GET) e escrita (POST), mas mantendo a lógica do 'action'.
+
+// --- GET ACTIONS ---
+router.get('/', async (req, res) => {
+    const { action } = req.query;
+    const client = await pool.connect();
+
     try {
-        client = await pool.connect();
-    } catch (dbError) {
-        console.error("Erro de conexão com Banco:", dbError);
-        return res.status(500).json({ error: "Falha ao conectar no banco de dados." });
+        // 1. CARREGAR CONFIGURAÇÕES
+        if (action === 'load-last-update') {
+            const r = await client.query("SELECT config_value FROM ai_configs WHERE config_key = 'last_updated'");
+            const lastUpdated = r.rows.length > 0 ? r.rows[0].config_value.value : null;
+            return res.json({ last_updated: lastUpdated });
+        }
+
+        if (action === 'load-material-days') {
+            const r = await client.query("SELECT config_value FROM ai_configs WHERE config_key = 'material_days'");
+            const data = r.rows.length > 0 ? r.rows[0].config_value.data : [];
+            return res.json({ materialDays: data });
+        }
+
+        if (action === 'load-posterior-correlation') {
+            const r = await client.query("SELECT config_value FROM ai_configs WHERE config_key = 'posterior_correlation'");
+            const data = r.rows.length > 0 ? r.rows[0].config_value.data : [];
+            return res.json({ posteriorCorrelation: data });
+        }
+
+        if (action === 'load-config') {
+            const key = req.query.config_key;
+            const r = await client.query("SELECT config_value FROM ai_configs WHERE config_key = $1", [key]);
+            const val = r.rows.length > 0 ? r.rows[0].config_value.value : '';
+            return res.json({ config_value: val });
+        }
+
+        // 2. LISTAR REGISTROS (MATÉRIA PRIMA)
+        if (action === 'registros') {
+            const result = await client.query("SELECT to_char(data, 'YYYY-MM-DD') as data, op, codigo, descricao, material, peso_un, quant, lote, peso_total, cliente, quant_fat FROM ai_raw_data ORDER BY id ASC");
+            return res.json(result.rows);
+        }
+
+        // 3. CARREGAR AGENDAMENTO DE UM DIA
+        if (action === 'get-schedule-day') {
+            const { date } = req.query;
+            const query = `SELECT payload FROM ai_daily_schedules WHERE date = $1`;
+            const result = await client.query(query, [date]);
+            if (result.rows.length === 0) {
+                return res.status(404).json({ error: "Programação não encontrada." });
+            }
+            return res.json(result.rows[0].payload);
+        }
+
+        // 4. LISTAR TODOS OS AGENDAMENTOS (MENU LATERAL)
+        if (action === 'list-schedules') {
+            const r = await client.query("SELECT date, payload FROM ai_daily_schedules ORDER BY date DESC");
+            
+            const list = r.rows.map(row => {
+                const p = row.payload;
+                let totalWeight = 0;
+                
+                // Soma peso dos Automáticos (Índice 8 é peso_total, baseado no seu array excel)
+                if (Array.isArray(p.autoRows)) {
+                    p.autoRows.forEach(item => { totalWeight += (parseFloat(item[8]) || 0); });
+                }
+                
+                // Soma peso dos Manuais
+                if (Array.isArray(p.manualRows)) {
+                    p.manualRows.forEach(item => { totalWeight += (parseFloat(item[8]) || 0); });
+                }
+
+                // Ajuste de data simples
+                // (Garante YYYY-MM-DD sem voltar 1 dia por fuso horário)
+                const d = new Date(row.date);
+                const dateStr = row.date instanceof Date ? row.date.toISOString().split('T')[0] : row.date;
+
+                return {
+                    date: dateStr,
+                    totalWeight: totalWeight
+                };
+            });
+            
+            return res.json(list);
+        }
+
+        return res.status(400).json({ error: 'Action GET desconhecida: ' + action });
+
+    } catch (e) {
+        console.error("Erro GET acabamento-interno:", e);
+        res.status(500).json({ error: e.message });
+    } finally {
+        client.release();
     }
+});
 
-    const { action } = req.query; 
+// --- POST ACTIONS ---
+router.post('/', async (req, res) => {
+    // No POST, a action geralmente vem na query string mesmo, mas às vezes no body.
+    // Vamos garantir pegando da query primeiro.
+    const { action } = req.query;
+    const client = await pool.connect();
 
     try {
-        // =================================================================
-        // 0. GARANTIR TABELA DE AGENDAMENTOS
-        // =================================================================
+        // 0. GARANTIR TABELA DE AGENDAMENTOS (Executa rápido se já existir)
         await client.query(`
             CREATE TABLE IF NOT EXISTS ai_daily_schedules (
                 date DATE PRIMARY KEY,
@@ -24,9 +124,7 @@ export default async function handler(req, res) {
             );
         `);
 
-        // =================================================================
-        // 1. CONFIGURAÇÕES & UTILITÁRIOS
-        // =================================================================
+        // 1. SALVAR CONFIGURAÇÕES
         if (action === 'save-config' || action === 'save-last-update' || action === 'save-material-days' || action === 'save-posterior-correlation') {
             let key, value;
             if (action === 'save-last-update') {
@@ -42,50 +140,26 @@ export default async function handler(req, res) {
                 key = req.body.config_key;
                 value = { value: req.body.config_value };
             }
+            
             await client.query(
                 'INSERT INTO ai_configs (config_key, config_value) VALUES ($1, $2) ON CONFLICT (config_key) DO UPDATE SET config_value = $2',
                 [key, value]
             );
-            return res.status(200).json({ success: true });
+            return res.json({ success: true });
         }
 
-        if (action === 'load-last-update') {
-            const r = await client.query("SELECT config_value FROM ai_configs WHERE config_key = 'last_updated'");
-            const lastUpdated = r.rows.length > 0 ? r.rows[0].config_value.value : null;
-            return res.status(200).json({ last_updated: lastUpdated });
-        }
-
-        if (action === 'load-material-days') {
-            const r = await client.query("SELECT config_value FROM ai_configs WHERE config_key = 'material_days'");
-            const data = r.rows.length > 0 ? r.rows[0].config_value.data : [];
-            return res.status(200).json({ materialDays: data });
-        }
-
-        if (action === 'load-posterior-correlation') {
-            const r = await client.query("SELECT config_value FROM ai_configs WHERE config_key = 'posterior_correlation'");
-            const data = r.rows.length > 0 ? r.rows[0].config_value.data : [];
-            return res.status(200).json({ posteriorCorrelation: data });
-        }
-
-        if (action === 'load-config') {
-            const key = req.query.config_key;
-            const r = await client.query("SELECT config_value FROM ai_configs WHERE config_key = $1", [key]);
-            const val = r.rows.length > 0 ? r.rows[0].config_value.value : '';
-            return res.status(200).json({ config_value: val });
-        }
-
-        // =================================================================
-        // 2. DADOS BRUTOS (EXCEL)
-        // =================================================================
+        // 2. IMPORTAR DADOS BRUTOS (EXCEL)
         if (action === 'import-raw') {
             const data = req.body; 
             await client.query('BEGIN');
             await client.query('TRUNCATE TABLE ai_raw_data RESTART IDENTITY');
+            
             const insertQuery = `
                 INSERT INTO ai_raw_data 
                 (data, op, codigo, descricao, material, peso_un, quant, lote, peso_total, cliente, quant_fat) 
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             `;
+            
             for (const row of data) {
                 const dateVal = (row[0] && row[0] !== '') ? row[0] : null;
                 await client.query(insertQuery, [
@@ -94,99 +168,57 @@ export default async function handler(req, res) {
                 ]);
             }
             await client.query('COMMIT');
-            return res.status(200).json({ success: true });
+            return res.json({ success: true });
         }
 
-        if (action === 'registros') {
-            const result = await client.query("SELECT to_char(data, 'YYYY-MM-DD') as data, op, codigo, descricao, material, peso_un, quant, lote, peso_total, cliente, quant_fat FROM ai_raw_data ORDER BY id ASC");
-            return res.status(200).json(result.rows);
-        }
-
+        // 3. LIMPAR DADOS BRUTOS
         if (action === 'clear-raw') {
             await client.query('TRUNCATE TABLE ai_raw_data RESTART IDENTITY');
-            return res.status(200).json({ success: true });
+            return res.json({ success: true });
         }
 
-        // =================================================================
-        // 3. PROGRAMAÇÃO DIÁRIA (SAVE / LOAD / DELETE / LIST)
-        // =================================================================
-
+        // 4. SALVAR AGENDAMENTO DIÁRIO
         if (action === 'save-schedule-day') {
             const { date, autoRows, manualRows, observations } = req.body;
+            
             const payload = {
                 autoRows: autoRows || [],
                 manualRows: manualRows || [],
                 observations: observations || ""
             };
+            
             const query = `
                 INSERT INTO ai_daily_schedules (date, payload, updated_at)
                 VALUES ($1, $2, NOW())
                 ON CONFLICT (date) 
                 DO UPDATE SET payload = $2, updated_at = NOW()
             `;
+            
             await client.query(query, [date, JSON.stringify(payload)]);
-            return res.status(200).json({ success: true });
+            return res.json({ success: true });
         }
 
-        if (action === 'get-schedule-day') {
-            const { date } = req.query;
-            const query = `SELECT payload FROM ai_daily_schedules WHERE date = $1`;
-            const result = await client.query(query, [date]);
-            if (result.rows.length === 0) {
-                return res.status(404).json({ error: "Programação não encontrada." });
-            }
-            return res.status(200).json(result.rows[0].payload);
-        }
-
+        // 5. EXCLUIR AGENDAMENTO
         if (action === 'delete-schedule-day') {
             const { date } = req.body;
             await client.query('DELETE FROM ai_daily_schedules WHERE date = $1', [date]);
-            return res.status(200).json({ success: true });
+            return res.json({ success: true });
         }
 
-        // [NOVO] Listar programações para o Menu Lateral
-        if (action === 'list-schedules') {
-            const r = await client.query("SELECT date, payload FROM ai_daily_schedules ORDER BY date DESC");
-            
-            const list = r.rows.map(row => {
-                const p = row.payload;
-                let totalWeight = 0;
-                
-                // Soma peso dos Automáticos (Índice 8 é peso_total)
-                if (Array.isArray(p.autoRows)) {
-                    p.autoRows.forEach(item => { totalWeight += (parseFloat(item[8]) || 0); });
-                }
-                
-                // Soma peso dos Manuais
-                if (Array.isArray(p.manualRows)) {
-                    p.manualRows.forEach(item => { totalWeight += (parseFloat(item[8]) || 0); });
-                }
-
-                // Ajuste de data devido ao timezone do banco vs JS
-                const d = new Date(row.date);
-                const dateStr = d.toISOString().split('T')[0];
-
-                return {
-                    date: dateStr,
-                    totalWeight: totalWeight
-                };
-            });
-            
-            return res.status(200).json(list);
+        // 6. LEGADO (Compatibilidade)
+        if (action === 'save-final') { 
+            return res.json({ success: true }); 
         }
 
-        // =================================================================
-        // 4. LEGADO
-        // =================================================================
-        if (action === 'save-final') { return res.status(200).json({ success: true }); }
-
-        return res.status(404).json({ error: 'Action not found' });
+        return res.status(400).json({ error: 'Action POST desconhecida: ' + action });
 
     } catch (e) {
-        if (req.method === 'POST') await client.query('ROLLBACK');
-        console.error("ERRO API:", e);
-        return res.status(500).json({ error: e.message });
+        await client.query('ROLLBACK');
+        console.error("ERRO POST acabamento-interno:", e);
+        res.status(500).json({ error: e.message });
     } finally {
-        if (client) client.release();
+        client.release();
     }
-}
+});
+
+module.exports = router;

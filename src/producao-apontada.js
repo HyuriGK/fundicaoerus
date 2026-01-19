@@ -1,5 +1,8 @@
-import pool from '../lib/db.js';
+const express = require('express');
+const router = express.Router();
+const pool = require('../lib/db');
 
+// Função auxiliar para limpeza de números
 function parseNumeric(value) {
     if (typeof value === 'number') return value;
     if (!value) return 0;
@@ -9,72 +12,114 @@ function parseNumeric(value) {
     return isNaN(num) ? 0 : num;
 }
 
-export default async function handler(req, res) {
+// --- ROTA GET: Ler dados (Metas ou Produção) ---
+router.get('/', async (req, res) => {
+    const { action } = req.query;
     const client = await pool.connect();
-    const { action } = req.query; // Vamos usar isso para saber o que o HTML quer
 
     try {
-        // --- LÓGICA DE METAS ---
+        // 1. Ler Metas
         if (action === 'metas') {
-            if (req.method === 'GET') {
-                const result = await client.query('SELECT setor, meta_peso FROM metas_producao');
-                return res.status(200).json(result.rows);
-            } 
-            if (req.method === 'POST') {
-                const { setor, meta_peso } = req.body;
-                let cleanMeta = String(meta_peso).replace(/[^\d.,]/g, '').replace(',', '.');
-                await client.query('INSERT INTO metas_producao (setor, meta_peso) VALUES ($1, $2) ON CONFLICT (setor) DO UPDATE SET meta_peso = $2', [setor, cleanMeta || 0]);
-                return res.status(200).json({ success: true });
-            }
+            const result = await client.query('SELECT setor, meta_peso FROM metas_producao');
+            return res.status(200).json(result.rows);
         }
 
-        // --- LÓGICA DE LIMPEZA ---
-        if (action === 'clear' && req.method === 'POST') {
-            await client.query('TRUNCATE TABLE producao_apontada RESTART IDENTITY');
-            return res.status(200).json({ success: true });
-        }
+        // 2. Ler Produção Apontada (Padrão)
+        const result = await client.query("SELECT to_char(data_producao, 'DD/MM/YYYY') as data, setor, produto, liga, peso_un, quantidade, peso_total FROM producao_apontada ORDER BY data_producao DESC");
+        
+        // Formata como array de arrays para o frontend (mantendo compatibilidade)
+        const formattedData = result.rows.map(row => [
+            row.data,
+            row.setor,
+            row.produto,
+            row.liga,
+            row.peso_un,    // Número puro
+            row.quantidade, // Número puro
+            row.peso_total  // Número puro
+        ]);
 
-        // --- LÓGICA PADRÃO (LER PRODUÇÃO) ---
-if (req.method === 'GET') {
-    const result = await client.query("SELECT to_char(data_producao, 'DD/MM/YYYY') as data, setor, produto, liga, peso_un, quantidade, peso_total FROM producao_apontada ORDER BY data_producao DESC");
-    
-    const formattedData = result.rows.map(row => [
-        row.data,
-        row.setor,
-        row.produto,
-        row.liga,
-        row.peso_un,    // ENVIAR O NÚMERO PURO
-        row.quantidade, // ENVIAR O NÚMERO PURO
-        row.peso_total  // ENVIAR O NÚMERO PURO
-    ]);
-
-    formattedData.unshift(["Data", "Setor", "Produto", "Liga", "Peso Un", "Quant.", "Peso Total"]);
-    return res.status(200).json(formattedData);
-}
-
-        if (req.method === 'POST') {
-            const data = req.body;
-            await client.query('BEGIN');
-            await client.query('TRUNCATE TABLE producao_apontada RESTART IDENTITY');
-            const insertQuery = `INSERT INTO producao_apontada (data_producao, setor, produto, liga, peso_un, quantidade, peso_total) VALUES ($1, $2, $3, $4, $5, $6, $7)`;
-            for (const row of data) {
-                if (row[0] === "Data") continue;
-                let dateVal = null;
-                if (typeof row[0] === 'number') dateVal = new Date((row[0] - (25567 + 2)) * 86400 * 1000).toISOString().split('T')[0];
-                else {
-                    const parts = String(row[0]).split('/');
-                    if (parts.length === 3) dateVal = `${parts[2]}-${parts[1]}-${parts[0]}`;
-                }
-                if (dateVal) await client.query(insertQuery, [dateVal, row[1], row[2], row[3], parseNumeric(row[4]), parseNumeric(row[5]), parseNumeric(row[6])]);
-            }
-            await client.query('COMMIT');
-            return res.status(200).json({ success: true });
-        }
+        // Adiciona cabeçalho
+        formattedData.unshift(["Data", "Setor", "Produto", "Liga", "Peso Un", "Quant.", "Peso Total"]);
+        
+        return res.status(200).json(formattedData);
 
     } catch (error) {
-        if (req.method === 'POST') await client.query('ROLLBACK');
+        console.error("Erro GET Produção Apontada:", error);
         res.status(500).json({ error: error.message });
     } finally {
         client.release();
     }
-}
+});
+
+// --- ROTA POST: Gravar dados (Metas, Limpar ou Importar) ---
+router.post('/', async (req, res) => {
+    const { action } = req.query;
+    const client = await pool.connect();
+
+    try {
+        // 1. Salvar Metas
+        if (action === 'metas') {
+            const { setor, meta_peso } = req.body;
+            let cleanMeta = String(meta_peso).replace(/[^\d.,]/g, '').replace(',', '.');
+            
+            await client.query(
+                'INSERT INTO metas_producao (setor, meta_peso) VALUES ($1, $2) ON CONFLICT (setor) DO UPDATE SET meta_peso = $2', 
+                [setor, cleanMeta || 0]
+            );
+            return res.status(200).json({ success: true });
+        }
+
+        // 2. Limpar Tabela
+        if (action === 'clear') {
+            await client.query('TRUNCATE TABLE producao_apontada RESTART IDENTITY');
+            return res.status(200).json({ success: true });
+        }
+
+        // 3. Importar Produção (Excel) - PADRÃO
+        const data = req.body;
+        
+        await client.query('BEGIN');
+        await client.query('TRUNCATE TABLE producao_apontada RESTART IDENTITY');
+        
+        const insertQuery = `INSERT INTO producao_apontada (data_producao, setor, produto, liga, peso_un, quantidade, peso_total) VALUES ($1, $2, $3, $4, $5, $6, $7)`;
+        
+        for (const row of data) {
+            // Pula o cabeçalho se vier no array
+            if (row[0] === "Data") continue;
+            
+            let dateVal = null;
+            
+            // Tratamento de data Excel vs Texto
+            if (typeof row[0] === 'number') {
+                dateVal = new Date((row[0] - (25567 + 2)) * 86400 * 1000).toISOString().split('T')[0];
+            } else {
+                const parts = String(row[0]).split('/');
+                if (parts.length === 3) dateVal = `${parts[2]}-${parts[1]}-${parts[0]}`;
+            }
+
+            if (dateVal) {
+                await client.query(insertQuery, [
+                    dateVal, 
+                    row[1], 
+                    row[2], 
+                    row[3], 
+                    parseNumeric(row[4]), 
+                    parseNumeric(row[5]), 
+                    parseNumeric(row[6])
+                ]);
+            }
+        }
+        
+        await client.query('COMMIT');
+        return res.status(200).json({ success: true });
+
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error("Erro POST Produção Apontada:", error);
+        res.status(500).json({ error: error.message });
+    } finally {
+        client.release();
+    }
+});
+
+module.exports = router;
