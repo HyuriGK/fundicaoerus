@@ -1,4 +1,4 @@
-import pool from '.../lib/db.js'; // Importa o seu db.js que está na pasta pai
+import pool from '../../lib/db.js'; // Importa o seu db.js que está na pasta pai
 
 export default async function handler(req, res) {
     // Tenta conectar ao banco
