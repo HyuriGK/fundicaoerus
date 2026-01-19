@@ -32,7 +32,7 @@ app.use('/api/auth', auth); // Ex: /api/auth/login
 app.use('/api/carteira', carteira);
 app.use('/api/dureza', dureza);
 app.use('/api/faturamento', faturamento);
-app.use('/api/faturamento-detalhado', fatDetalhado);
+app.use('/api/faturamento-clientes-detalhado', fatDetalhado);
 app.use('/api/metas', metas);
 app.use('/api/producao-apontada', producaoApontada);
 app.use('/api/refugo', refugo);
