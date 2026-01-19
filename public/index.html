@@ -84,7 +84,19 @@
 
         /* MAIN CONTENT */
         .main-wrapper { grid-column: 2; grid-row: 1; display: flex; flex-direction: column; overflow: hidden; }
-        .top-header { height: var(--header-height); display: flex; align-items: center; justify-content: space-between; padding: 0 32px; background: rgba(9, 9, 11, 0.7); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border-subtle); }
+        
+        /* --- HEADER ATUALIZADO --- */
+        .top-header { 
+            height: var(--header-height); 
+            display: flex; 
+            align-items: center; 
+            justify-content: space-between; 
+            padding: 0 32px; 
+            background: rgba(9, 9, 11, 0.7); 
+            backdrop-filter: blur(12px); 
+            border-bottom: 1px solid var(--border-subtle); 
+        }
+        
         .search-input { width: 300px; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 8px 12px 8px 35px; color: #fff; font-size: 0.85rem; }
 
         .dashboard-content { flex-grow: 1; padding: 32px; overflow-y: auto; scroll-behavior: smooth; }
@@ -274,8 +286,11 @@
                     <i class="fa-solid fa-magnifying-glass" style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--text-dim); font-size: 0.8rem;"></i>
                     <input type="text" id="searchInput" class="search-input" placeholder="Pesquisar..." autocomplete="off">
                 </div>
-                <div style="display:flex; align-items:center; gap:15px; font-family:var(--font-mono); font-size:0.7rem;">
-                    <span style="color:var(--text-muted);"><i class="fa-solid fa-wifi" style="color:#10b981;"></i> https://fundicaoerus.vercel.app/</span>
+                
+                <!-- ÁREA DE USUÁRIO DINÂMICA -->
+                <div style="display:flex; flex-direction:column; align-items:flex-end; font-family:var(--font-main);">
+                    <span id="header-greeting" style="color:var(--text-muted); font-size:0.85rem; font-weight:600;">Bem-vindo</span>
+                    <span id="header-role" style="color:var(--color-primary); font-size:0.7rem; text-transform:uppercase; letter-spacing:0.05em; font-family:var(--font-mono);">Role</span>
                 </div>
             </header>
 
@@ -353,6 +368,26 @@
             { id: 'refugo', title: 'Refugo Total', url: 'refugo.html', icon: 'fa-trash-can', api: '/api/refugo' }
         ];
 
+        // --- NOVA FUNÇÃO DE USUÁRIO ---
+        function updateUserInfo() {
+            // Pega dados do LocalStorage (definidos no login)
+            const rawUser = localStorage.getItem('erus_user') || 'Colaborador';
+            const rawRole = localStorage.getItem('erus_role') || 'Visitante';
+
+            // Formata nome (Primeira letra maiúscula)
+            const userName = rawUser.charAt(0).toUpperCase() + rawUser.slice(1);
+
+            // Lógica de Saudação
+            const hour = new Date().getHours();
+            let greeting = 'Bom dia';
+            if (hour >= 12 && hour < 18) greeting = 'Boa tarde';
+            if (hour >= 18) greeting = 'Boa noite';
+
+            // Atualiza HTML
+            document.getElementById('header-greeting').innerHTML = `${greeting}, <span style="color:#fff;">${userName}</span>`;
+            document.getElementById('header-role').innerHTML = `<i class="fa-solid fa-id-badge" style="margin-right:4px;"></i> ${rawRole}`;
+        }
+
         function renderCards() {
             const grid = document.getElementById('quickAccessGrid');
             grid.innerHTML = '';
@@ -385,29 +420,15 @@
 
                 if (link.id === 'producaosetor') {
                     if (data.length > 1) {
-                        // 1. Busca os pesos mestre salvos no Banco de Dados (centralizado)
-                        let dbWeights = {};
-                        try {
-                            const resPesos = await fetch('/api/producao-apontada?action=pesos');
-                            dbWeights = await resPesos.json();
-                        } catch (e) {
-                            console.error("Erro ao buscar pesos mestre:", e);
-                            // Se falhar o banco, tenta pegar do localStorage como plano B
-                            dbWeights = JSON.parse(localStorage.getItem('producao_product_weights') || '{}');
-                        }
-
                         const monthRows = data.slice(1).filter(r => {
                             const dateStr = String(r[0]);
                             return dateStr.includes(`${curYear}-${curMonth}`) || dateStr.includes(`/${curMonth}/${curYear}`);
                         });
                         
-                        let totalFusaoKg = 0;
-
                         monthRows.forEach(r => {
                             const dateStr = String(r[0]);
                             let day = 0;
                             
-                            // Extração do dia para o gráfico
                             if (dateStr.includes('-')) {
                                 day = parseInt(dateStr.split('-')[2]); 
                             } else if (dateStr.includes('/')) {
@@ -415,23 +436,11 @@
                             }
 
                             const setor = String(r[1]).toUpperCase();
-                            const productCode = String(r[2]);
-                            const quantity = parseFloat(r[5] || 0);
-                            let kg = parseFloat(r[6] || 0);
-
-                            // --- LÓGICA DE CORREÇÃO DE PESO ---
-                            // Se no banco de produção o peso está 0, mas temos o peso mestre desse produto
-                            if (kg === 0 && quantity > 0 && dbWeights[productCode]) {
-                                const unitWeight = parseFloat(dbWeights[productCode]);
-                                kg = unitWeight * quantity;
-                            }
-                            // ----------------------------------
+                            const kg = parseFloat(r[6] || 0);
 
                             if(day > 0 && day <= daysInMonth) {
-                                // Alimenta os dados do gráfico
                                 if (setor.includes("FUS")) { 
                                     chartData.fusao[day-1] += (kg / 1000);
-                                    totalFusaoKg += kg; // Soma para o KPI principal
                                 }
                                 if (setor.includes("MOLDAGEM") || setor.includes("LEVE") || setor.includes("PESADA") || setor.includes("ROLLOVER")) {
                                     chartData.moldagem[day-1] += (kg / 1000);
@@ -439,7 +448,9 @@
                             }
                         });
 
-                        // Atualiza o valor exibido no card
+                        const totalFusaoKg = monthRows.filter(r => String(r[1]).toUpperCase().includes("FUS"))
+                                                    .reduce((acc, r) => acc + parseFloat(r[6] || 0), 0);
+                        
                         mainValue = (totalFusaoKg / 1000).toFixed(2) + " Ton";
                         subLabel = `Produção Apontada no Mês`;
                         
@@ -653,7 +664,7 @@
                 // Atualiza textos
                 const titleSpan = document.getElementById('chart-display-title').querySelector('span');
                 document.getElementById('chart-display-title').firstChild.textContent = label + " - ";
-                titleSpan.style.color = color;
+                if(titleSpan) titleSpan.style.color = color;
 
                 // Atualiza Chart.js Data
                 prodChartInstance.data.datasets[0].data = data;
@@ -692,7 +703,10 @@
             document.getElementById('clock-display').innerText = d.toLocaleDateString('pt-BR') + " " + d.toLocaleTimeString('pt-BR');
         }, 1000);
 
-        document.addEventListener('DOMContentLoaded', renderCards);
+        document.addEventListener('DOMContentLoaded', () => {
+            renderCards();
+            updateUserInfo(); // CHAMA A NOVA FUNÇÃO AQUI
+        });
     </script>
 </body>
 </html>
