@@ -12,6 +12,30 @@ function parseNumeric(value) {
     return isNaN(num) ? 0 : num;
 }
 
+// --- NOVO: Buscar e Salvar Pesos Mestre ---
+
+// No GET, adicione esta condição:
+if (action === 'pesos') {
+    const result = await client.query('SELECT produto, peso_un FROM pesos_produtos');
+    const pesosMap = {};
+    result.rows.forEach(r => { pesosMap[r.produto] = r.peso_un; });
+    return res.status(200).json(pesosMap);
+}
+
+// No POST, adicione esta condição:
+if (action === 'pesos') {
+    const { pesos } = req.body; // Espera um objeto { "PRODUTO1": 10.5, "PRODUTO2": 5.0 }
+    await client.query('BEGIN');
+    for (const [prod, peso] of Object.entries(pesos)) {
+        await client.query(
+            'INSERT INTO pesos_produtos (produto, peso_un) VALUES ($1, $2) ON CONFLICT (produto) DO UPDATE SET peso_un = $2',
+            [prod, peso]
+        );
+    }
+    await client.query('COMMIT');
+    return res.status(200).json({ success: true });
+}
+
 // --- ROTA GET: Ler dados (Metas ou Produção) ---
 router.get('/', async (req, res) => {
     const { action } = req.query;

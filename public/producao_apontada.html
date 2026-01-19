@@ -1055,27 +1055,31 @@
         const LOCAL_STORAGE_KEY = 'producao_product_weights';
         function loadWeightsFromLocalStorage() { try { return JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY)) || {}; } catch (e) { return {}; } }
         
-        function saveWeightsToLocalStorage(weights) {
-            try { 
-                localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(weights)); productWeights = weights; 
-                statusMessage.textContent = `Pesos salvos localmente.`; 
-                statusMessage.className = 'status-text success';
-                setTimeout(() => { statusMessage.textContent = ''; statusMessage.className = 'status-text normal'; }, 3000); 
-            } 
-            catch (e) { errorMessage.textContent = 'Erro ao salvar pesos localmente.'; }
+        async function saveWeightsToDatabase() {
+    if (!confirm('Deseja salvar os pesos unitários atuais no Banco de Dados para todos os computadores?')) return;
+    
+    const currentWeights = {};
+    allData.forEach(rowData => {
+        const product = rowData[COLUMN_MAP.PRODUTO];
+        const pesoUn = parseFloat(rowData[COLUMN_MAP.PESO_UN].replace(/\./g, '').replace(',', '.'));
+        if (product && pesoUn > 0) {
+            currentWeights[product] = pesoUn;
         }
-        
-        function confirmAndSaveWeightsToLocalStorage() {
-            if (!confirm('Deseja salvar os pesos unitários atuais no armazenamento local?')) return;
-            const currentWeights = {};
-            allData.forEach(rowData => {
-                const product = rowData[COLUMN_MAP.PRODUTO];
-                const pesoUn = parseFloat(rowData[COLUMN_MAP.PESO_UN].replace(/\./g, '').replace(',', '.'));
-                if (product && pesoUn > 0) currentWeights[product] = pesoUn.toFixed(2);
-            });
-            saveWeightsToLocalStorage(currentWeights);
+    });
+
+    try {
+        const response = await fetch('/api/producao-apontada?action=pesos', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pesos: currentWeights })
+        });
+        if (response.ok) {
+            alert('Pesos salvos no Banco de Dados com sucesso!');
         }
-        window.confirmAndSaveWeightsToLocalStorage = confirmAndSaveWeightsToLocalStorage;
+    } catch (e) {
+        alert('Erro ao salvar pesos no servidor.');
+    }
+}
 
         async function loadGoals() {
             try {

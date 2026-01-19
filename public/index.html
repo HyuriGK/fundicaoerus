@@ -420,15 +420,29 @@
 
                 if (link.id === 'producaosetor') {
                     if (data.length > 1) {
+                        // 1. Busca os pesos mestre salvos no Banco de Dados (centralizado)
+                        let dbWeights = {};
+                        try {
+                            const resPesos = await fetch('/api/producao-apontada?action=pesos');
+                            dbWeights = await resPesos.json();
+                        } catch (e) {
+                            console.error("Erro ao buscar pesos mestre:", e);
+                            // Se falhar o banco, tenta pegar do localStorage como plano B
+                            dbWeights = JSON.parse(localStorage.getItem('producao_product_weights') || '{}');
+                        }
+
                         const monthRows = data.slice(1).filter(r => {
                             const dateStr = String(r[0]);
                             return dateStr.includes(`${curYear}-${curMonth}`) || dateStr.includes(`/${curMonth}/${curYear}`);
                         });
                         
+                        let totalFusaoKg = 0;
+
                         monthRows.forEach(r => {
                             const dateStr = String(r[0]);
                             let day = 0;
                             
+                            // Extração do dia para o gráfico
                             if (dateStr.includes('-')) {
                                 day = parseInt(dateStr.split('-')[2]); 
                             } else if (dateStr.includes('/')) {
@@ -436,11 +450,23 @@
                             }
 
                             const setor = String(r[1]).toUpperCase();
-                            const kg = parseFloat(r[6] || 0);
+                            const productCode = String(r[2]);
+                            const quantity = parseFloat(r[5] || 0);
+                            let kg = parseFloat(r[6] || 0);
+
+                            // --- LÓGICA DE CORREÇÃO DE PESO ---
+                            // Se no banco de produção o peso está 0, mas temos o peso mestre desse produto
+                            if (kg === 0 && quantity > 0 && dbWeights[productCode]) {
+                                const unitWeight = parseFloat(dbWeights[productCode]);
+                                kg = unitWeight * quantity;
+                            }
+                            // ----------------------------------
 
                             if(day > 0 && day <= daysInMonth) {
+                                // Alimenta os dados do gráfico
                                 if (setor.includes("FUS")) { 
                                     chartData.fusao[day-1] += (kg / 1000);
+                                    totalFusaoKg += kg; // Soma para o KPI principal
                                 }
                                 if (setor.includes("MOLDAGEM") || setor.includes("LEVE") || setor.includes("PESADA") || setor.includes("ROLLOVER")) {
                                     chartData.moldagem[day-1] += (kg / 1000);
@@ -448,14 +474,13 @@
                             }
                         });
 
-                        const totalFusaoKg = monthRows.filter(r => String(r[1]).toUpperCase().includes("FUS"))
-                                                    .reduce((acc, r) => acc + parseFloat(r[6] || 0), 0);
-                        
+                        // Atualiza o valor exibido no card
                         mainValue = (totalFusaoKg / 1000).toFixed(2) + " Ton";
                         subLabel = `Produção Apontada no Mês`;
                         
                         if(!prodChartInstance) initChart();
                     }
+                }
                 }
                 else if (link.id === 'acabamentoexterno') {
                     const listaDeRegistros = data.registros || [];
