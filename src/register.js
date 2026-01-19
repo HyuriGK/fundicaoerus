@@ -1,12 +1,10 @@
-// api/register.js
-import pool from '../lib/db.js';
-import bcrypt from 'bcryptjs';
+const express = require('express');
+const router = express.Router();
+const pool = require('../lib/db'); // Importação no padrão CommonJS
+const bcrypt = require('bcryptjs');
 
-export default async function handler(req, res) {
-    if (req.method !== 'POST') {
-        return res.status(405).json({ error: 'Método não permitido' });
-    }
-
+// Rota: POST /api/register (conforme definido no api/index.js)
+router.post('/', async (req, res) => {
     const { fullName, user, pass } = req.body;
 
     // Validação básica
@@ -38,4 +36,6 @@ export default async function handler(req, res) {
         console.error('Erro no registro:', error);
         return res.status(500).json({ success: false, message: "Erro interno do servidor." });
     }
-}
+});
+
+module.exports = router;

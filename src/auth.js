@@ -1,12 +1,10 @@
-// api/auth.js
-import pool from '../lib/db.js';
-import bcrypt from 'bcryptjs';
+const express = require('express');
+const router = express.Router();
+const pool = require('../lib/db'); // Importa o db convertido
+const bcrypt = require('bcryptjs');
 
-export default async function handler(req, res) {
-    if (req.method !== 'POST') {
-        return res.status(405).json({ error: 'Método não permitido' });
-    }
-
+// Rota: POST /api/auth (definido no index.js)
+router.post('/', async (req, res) => {
     const { user, pass } = req.body;
 
     if (!user || !pass) {
@@ -27,10 +25,10 @@ export default async function handler(req, res) {
         const isMatch = await bcrypt.compare(pass, userData.password);
 
         if (isMatch) {
-            // Sucesso! Retorna os dados (menos a senha)
+            // Sucesso! Retorna os dados
             return res.status(200).json({ 
                 success: true, 
-                role: userData.role, // Aqui vem 'visitante', 'admin', etc.
+                role: userData.role, 
                 name: userData.name
             });
         } else {
@@ -41,4 +39,6 @@ export default async function handler(req, res) {
         console.error('Erro no login:', error);
         return res.status(500).json({ success: false, message: "Erro interno do servidor." });
     }
-}
+});
+
+module.exports = router;
