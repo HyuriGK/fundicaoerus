@@ -43,5 +43,15 @@ app.get('/api', (req, res) => {
   res.json({ status: 'API Online', version: '1.0.0' });
 });
 
+// --- ADICIONE ISTO NO FINAL, ANTES DO EXPORT ---
+// Middleware de Tratamento de Erros Global
+app.use((err, req, res, next) => {
+  console.error("ERRO NO SERVIDOR:", err); // Mostra no terminal/logs da Vercel
+  res.status(500).json({ 
+    success: false, 
+    message: "Erro interno: " + err.message // Envia o motivo do erro para o navegador
+  });
+});
+
 // Exporta o app para a Vercel rodar
 module.exports = app;
