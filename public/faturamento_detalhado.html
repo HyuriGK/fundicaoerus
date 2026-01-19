@@ -426,6 +426,33 @@
             flex-shrink: 0; /* Footer não encolhe */
         }
 
+        /* --- TOAST NOTIFICATION --- */
+        .toast-container {
+            position: fixed; bottom: 20px; right: 20px; z-index: 5000;
+            display: flex; flex-direction: column; gap: 10px;
+        }
+        .toast {
+            background: #18181b; border: 1px solid var(--border-subtle);
+            border-left: 4px solid var(--color-primary);
+            color: #fff; padding: 16px 20px; border-radius: 6px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+            font-family: var(--font-main); font-size: 0.9rem;
+            display: flex; align-items: center; gap: 12px;
+            animation: slideIn 0.3s ease-out forwards;
+            min-width: 300px;
+        }
+        .toast.danger { border-left-color: var(--status-danger); }
+        .toast i { font-size: 1.1rem; }
+        .toast.danger i { color: var(--status-danger); }
+
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes fadeOut {
+            to { opacity: 0; transform: translateY(10px); }
+        }
+
         @media (max-width: 1000px) {
             body { overflow: auto; height: auto; } /* Mobile permite rolagem */
             .top-header { flex-direction: column; height: auto; align-items: flex-start; gap: 15px; margin: 16px; }
@@ -836,7 +863,7 @@
         });
 
         // =========================================================
-        // FUNÇÕES UI (Loading, Dropdown, Modal)
+        // FUNÇÕES UI (Loading, Dropdown, Modal, Toast)
         // =========================================================
         function showSpinner() {
             const spinner = document.getElementById('loading-screen');
@@ -858,6 +885,33 @@
                     }
                 }, 500);
             }
+        }
+
+        function showToast(message, type = 'info') {
+            let container = document.getElementById('toast-container');
+            if (!container) {
+                container = document.createElement('div');
+                container.id = 'toast-container';
+                container.className = 'toast-container';
+                document.body.appendChild(container);
+            }
+
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            
+            const icon = type === 'danger' ? '<i class="fa-solid fa-ban"></i>' : '<i class="fa-solid fa-circle-info"></i>';
+            
+            toast.innerHTML = `${icon} <span>${message}</span>`;
+            
+            container.appendChild(toast);
+
+            // Remove após 3 segundos
+            setTimeout(() => {
+                toast.style.animation = 'fadeOut 0.5s ease-out forwards';
+                setTimeout(() => {
+                    if (toast.parentNode) toast.parentNode.removeChild(toast);
+                }, 500);
+            }, 3000);
         }
         
         function toggleDropdown() {
@@ -1054,6 +1108,15 @@
         // =========================================================
 
         function toggleValorTotal() {
+            // --- NOVA VERIFICAÇÃO DE PERMISSÃO ---
+            const userRole = localStorage.getItem('erus_role');
+            
+            // Se for visitante, bloqueia e mostra o aviso
+            if (userRole === 'visitante') {
+                showToast("Você não tem permissão comercial", "danger");
+                return; // Para a execução aqui
+            }
+
             const cardValor = document.getElementById('cardValorTotal');
             const valueElement = document.getElementById('totalValor');
             const avgPriceTab = document.getElementById('avgPriceTab');
