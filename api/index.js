@@ -3,7 +3,9 @@ const express = require('express');
 const app = express();
 
 // Middleware para entender JSON
-app.use(express.json());
+// Aumentamos o limite para 50MB (mais que suficiente para planilhas grandes)
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // --- IMPORTAÇÃO DOS ARQUIVOS DA PASTA SRC ---
 // Note que estou usando "../src/" para voltar uma pasta e entrar em src
