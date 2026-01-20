@@ -129,7 +129,7 @@
         /* Dropdown */
         .dropdown { position: relative; display: inline-block; height: 100%; }
         
-        /* Alterado: Dropdown agora controlado por classe 'open' via JS */
+        /* Dropdown Controlado por JS */
         .dropdown-content {
             display: none; position: absolute; right: 0; top: 100%; margin-top: 10px;
             background-color: #18181b; min-width: 220px; border: 1px solid var(--border-subtle);
@@ -381,7 +381,6 @@
                 </button>
 
                 <div class="dropdown" id="functionsDropdown">
-                    <!-- Atualizado: Onclick chama função de verificação -->
                     <button class="btn-glass" onclick="toggleFunctionsDropdown()">
                         <i class="fa-solid fa-gear" style="color: var(--color-primary);"></i> Funções <i class="fa-solid fa-chevron-down" style="font-size: 0.7rem; margin-left: 5px;"></i>
                     </button>
@@ -416,6 +415,7 @@
                 <div class="kpi-card kpi-purple">
                     <div class="kpi-title">Peso Total (kg)</div>
                     <div id="totalWeightCard" class="kpi-value">0,00</div>
+                    <!-- Alterado o texto do KPI -->
                     <div id="estimatedSubtext" class="kpi-subtext">Peso Total em Carteira</div>
                 </div>
 
@@ -786,10 +786,11 @@
             document.getElementById('totalQuantity').textContent = tQ.toLocaleString('pt-BR');
             document.getElementById('blockedWeightCard').textContent = formatNumber(tB);
             document.getElementById('avgWeightCard').textContent = formatNumber(tQ > 0 ? tW/tQ : 0);
-            const pct = tW > 0 ? (tEst/tW)*100 : 0;
+            
+            // Removida a lógica de cálculo de porcentagem "Est"
+            // O texto agora é estático no HTML: "Peso Total em Carteira"
             const sub = document.getElementById('estimatedSubtext');
-            sub.innerHTML = `Est: ${formatNumber(tEst)} (${pct.toFixed(1)}%)`;
-            sub.style.color = tEst > 0 ? 'var(--status-warning)' : 'rgba(255,255,255,0.4)';
+            sub.style.color = 'rgba(255,255,255,0.6)'; // Reseta a cor para o padrão
         }
 
         // ==========================================================================
@@ -829,35 +830,39 @@
         function updateMonthlyChart() {
             const mData = Array(12).fill(0);
             
-            // Lógica de visualização do gráfico:
-            // Se houver um filtro de cliente ativo (ou outro filtro de coluna), o gráfico mostra apenas as barras resultantes desse filtro.
-            // Se houver um filtro de MÊS ativo (zoom), o gráfico ainda mostra todos os meses para contexto, mas destaca a seleção?
-            // A solicitação pede: "aparecer somente o mês... que foi clicado (com zoom)".
-            // Portanto, usamos as linhas visíveis da tabela para popular o gráfico. 
-            // Como applyColumnFilters esconde as linhas dos outros meses quando filtramos, o gráfico mostraria apenas 1 barra.
-            // Para permitir que o gráfico mostre todos os meses quando NENHUM filtro de mês está ativo, ou apenas o mês selecionado quando ATIVO,
-            // precisamos ter cuidado pois a tabela já está filtrada.
-            
-            // Solução Atual: O gráfico reflete exatamente o que está na tabela.
-            // Se a tabela só tem Janeiro, o gráfico só tem barra em Janeiro.
-            // Para "resetar", o usuário clica na barra de Janeiro novamente.
-            
             document.querySelectorAll('#dataTable tbody tr').forEach(tr => {
+                // Para calcular o peso total corretamente, pegamos todas as linhas visíveis OU todas se o filtro de mês estiver ativo (para reconstruir a base se precisar)
+                // Mas a lógica do 'applyColumnFilters' já esconde as linhas. 
+                // Se quisermos mostrar TODOS os meses no gráfico, precisamos iterar sobre todas as linhas ignorando apenas os filtros que NÃO SÃO de mês?
+                // Não, a abordagem mais simples é: 
+                // 1. Iterar sobre as linhas visíveis para popular os dados (comportamento padrão).
+                // 2. MAS, se houver um activeMonthFilter, nós forçamos o gráfico a mostrar APENAS aquele mês (Zoom).
+                
                 if (tr.style.display === 'none') return;
                 const dt = parseDate(tr.cells[COL_ENTREGA].textContent);
                 if (dt.getFullYear() > 2000) mData[dt.getMonth()] += parseFloat(tr.getAttribute('data-raw-total'));
             });
 
+            const monthLabels = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+            let chartLabels = monthLabels;
+            let chartData = mData;
+
+            // Lógica de Zoom: Se houver filtro, mostra apenas o mês filtrado
+            if (activeMonthFilter !== null) {
+                chartLabels = [monthLabels[activeMonthFilter]];
+                chartData = [mData[activeMonthFilter]];
+            }
+
             if (monthlyChart) monthlyChart.destroy();
             monthlyChart = new Chart(document.getElementById('monthlyChart').getContext('2d'), {
                 type:'bar', 
                 data: { 
-                    labels:['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'], 
+                    labels: chartLabels, 
                     datasets:[{
                         label:'kg', 
-                        data:mData, 
-                        // Destacar a barra selecionada se houver filtro ativo
-                        backgroundColor: mData.map((_, idx) => idx === activeMonthFilter ? '#fff' : chartColorAmber)
+                        data: chartData, 
+                        // Cor única (Amber) ou Destaque Branco se filtrado (embora com zoom, só haverá uma barra)
+                        backgroundColor: activeMonthFilter !== null ? '#fff' : chartColorAmber
                     }] 
                 },
                 options: { 
@@ -865,13 +870,12 @@
                     maintainAspectRatio:false, 
                     onClick:(e, el) => { 
                         if (el.length) {
-                            const clickedIndex = el[0].index;
-                            // Se clicou no mesmo mês que já está filtrado, reseta (toggle)
-                            if (activeMonthFilter === clickedIndex) {
+                            // Se estivermos em modo zoom (activeMonthFilter != null), qualquer clique deve resetar
+                            if (activeMonthFilter !== null) {
                                 activeMonthFilter = null;
                             } else {
-                                // Se clicou em outro mês, filtra por ele
-                                activeMonthFilter = clickedIndex;
+                                // Se estamos vendo todos os meses, o clique define o filtro pelo índice clicado
+                                activeMonthFilter = el[0].index;
                             }
                             applyColumnFilters(); 
                         }
@@ -887,7 +891,8 @@
             document.querySelectorAll('#dataTable tbody tr').forEach(tr => {
                 if (tr.style.display === 'none') return;
                 const fn = tr.cells[COL_CLIENTE].textContent, n = getFirstName(fn);
-                cMap[n] = (cMap[n] || 0) + parseFloat(tr.getAttribute('data-raw-total')); fNames[n] = fn;
+                cMap[n] = (cMap[n] || 0) + parseFloat(tr.getAttribute('data-raw-total')); 
+                fNames[n] = fn; // Mapeia Nome Curto -> Nome Completo
             });
             const sorted = Object.entries(cMap).sort((a,b) => b[1]-a[1]).slice(0, 10);
             let total = sorted.reduce((a,b)=>a+b[1], 0), acc = 0;
@@ -904,7 +909,6 @@
                             type:'bar', 
                             label:'kg', 
                             data:sorted.map(x=>x[1]), 
-                            // Destacar a barra se estiver filtrada
                             backgroundColor: sorted.map(x => x[0] === activeClientFilter ? '#fff' : chartColorAmber),
                             yAxisID:'y'
                         }
@@ -916,7 +920,6 @@
                     onClick:(e, el) => { 
                         if (el.length) {
                             const clickedLabel = sorted[el[0].index][0];
-                            // Lógica de Toggle (Resetar se clicar no mesmo)
                             if (activeClientFilter === clickedLabel) {
                                 activeClientFilter = null;
                             } else {
@@ -925,7 +928,19 @@
                             applyColumnFilters(); 
                         }
                     }, 
-                    plugins:{legend:{display:false}}, 
+                    plugins:{
+                        legend:{display:false},
+                        tooltip: {
+                            callbacks: {
+                                title: function(context) {
+                                    // Pega o nome curto (label do eixo X)
+                                    const shortName = context[0].label;
+                                    // Retorna o nome completo salvo no mapa fNames
+                                    return fNames[shortName] || shortName;
+                                }
+                            }
+                        }
+                    }, 
                     scales:{y:{beginAtZero:true}, y1:{position:'right', min:0, max:100}} 
                 }
             });
