@@ -22,7 +22,7 @@ const metas = require('../src/metas');
 const producaoApontada = require('../src/producao-apontada');
 const refugo = require('../src/refugo');
 const register = require('../src/register');
-const custosRoutes = require('./src/custos'); // <--- Importe o arquivo novo
+const custosRoutes = require('../src/custos'); // <--- Importe o arquivo novo
 
 // --- DEFINIÇÃO DAS ROTAS ---
 // Aqui definimos qual URL chama qual arquivo
