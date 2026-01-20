@@ -18,7 +18,7 @@
             /* Colors */
             --bg-app: #09090b;
             --bg-panel: #121214;
-            --bg-glass: rgba(24, 24, 27, 0.6);
+            --bg-glass: rgba(24, 24, 27, 0.85); /* Mais escuro para contraste */
             --bg-input: #1f1f22;
             
             --border-subtle: rgba(255, 255, 255, 0.08);
@@ -57,7 +57,6 @@
             overflow: hidden; 
             display: flex; 
             flex-direction: column;
-            /* Background noise texture simulation */
             background-image: radial-gradient(circle at top right, rgba(251,191,36,0.03), transparent 40%),
                               radial-gradient(circle at bottom left, rgba(59,130,246,0.03), transparent 40%);
         }
@@ -70,7 +69,7 @@
 
         /* --- HEADER --- */
         .app-header {
-            height: 70px;
+            height: 80px; /* Aumentado levemente para caber os meses */
             padding: 0 32px;
             display: flex; justify-content: space-between; align-items: center;
             background: var(--bg-glass);
@@ -79,7 +78,7 @@
             z-index: 50;
         }
 
-        .brand { display: flex; align-items: center; gap: 16px; }
+        .brand { display: flex; align-items: center; gap: 16px; min-width: 200px; }
         .brand-icon {
             width: 40px; height: 40px;
             background: linear-gradient(135deg, var(--primary), #d97706);
@@ -91,20 +90,29 @@
         .brand-info h1 { margin: 0; font-size: 1.1rem; font-weight: 700; letter-spacing: -0.5px; }
         .brand-info span { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
 
-        /* Month Filter */
-        .month-selector {
-            background: var(--bg-input);
+        /* MONTH NAVIGATOR (NEW) */
+        .month-nav {
+            display: flex; align-items: center; gap: 15px;
+            background: rgba(0,0,0,0.3); padding: 5px 10px; border-radius: var(--radius-md);
             border: 1px solid var(--border-subtle);
-            border-radius: var(--radius-sm);
-            padding: 8px 16px;
-            color: #fff;
-            font-family: var(--font-ui);
-            font-size: 0.9rem;
-            cursor: pointer;
-            transition: 0.2s;
         }
-        .month-selector:hover { border-color: var(--border-highlight); }
-        .month-selector:focus { border-color: var(--primary); }
+        .year-select {
+            background: transparent; border: none; color: var(--primary); 
+            font-family: var(--font-mono); font-weight: 700; font-size: 1rem;
+            cursor: pointer; padding-right: 5px;
+        }
+        .month-list { display: flex; gap: 4px; }
+        .btn-month {
+            background: transparent; border: 1px solid transparent;
+            color: var(--text-muted); font-size: 0.75rem; font-weight: 600;
+            padding: 6px 10px; border-radius: var(--radius-sm);
+            cursor: pointer; text-transform: uppercase; transition: all 0.2s;
+        }
+        .btn-month:hover { background: rgba(255,255,255,0.05); color: #fff; }
+        .btn-month.active {
+            background: var(--primary); color: #000;
+            box-shadow: 0 0 10px var(--primary-glow);
+        }
 
         /* Actions */
         .actions { display: flex; gap: 12px; }
@@ -285,9 +293,14 @@
             </div>
         </div>
 
-        <div>
-            <!-- FILTRO DE MÊS -->
-            <input type="month" id="monthFilter" class="month-selector" onchange="updateDashboard()">
+        <!-- NEW: MONTH BUTTONS NAVIGATOR -->
+        <div class="month-nav">
+            <select id="yearSelect" class="year-select" onchange="updateDashboard()">
+                <!-- Populated by JS -->
+            </select>
+            <div class="month-list" id="monthButtonContainer">
+                <!-- JS will generate buttons -->
+            </div>
         </div>
 
         <div class="actions">
@@ -402,8 +415,9 @@
             <div class="form-container">
                 <div class="input-grid">
                     <div class="form-group span-3">
-                        <label>Data</label>
-                        <input type="date" id="formDate" class="form-input">
+                        <label>Mês de Referência</label>
+                        <!-- CHANGED TO MONTH INPUT -->
+                        <input type="month" id="formMonth" class="form-input">
                     </div>
                     <div class="form-group span-3">
                         <label>Valor (R$)</label>
@@ -433,6 +447,8 @@
                             <option value="MOLDAGEM">Moldagem</option>
                             <option value="MACHARIA">Macharia</option>
                             <option value="ACABAMENTO">Acabamento</option>
+                            <option value="USINAGEM">Usinagem</option> <!-- ADDED -->
+                            <option value="EXPEDICAO">Expedição</option> <!-- ADDED -->
                             <option value="MANUTENCAO">Manutenção</option>
                             <option value="ADM">Administrativo</option>
                             <option value="VENDAS">Vendas</option>
@@ -474,6 +490,8 @@
                                 <option value="MOLDAGEM">Moldagem</option>
                                 <option value="MACHARIA">Macharia</option>
                                 <option value="ACABAMENTO">Acabamento</option>
+                                <option value="USINAGEM">Usinagem</option> <!-- ADDED -->
+                                <option value="EXPEDICAO">Expedição</option> <!-- ADDED -->
                                 <option value="MANUTENCAO">Manutenção</option>
                                 <option value="ADM">Administrativo</option>
                             </select>
@@ -517,9 +535,13 @@
                             <strong style="font-size:2rem; color:#fff;" id="rhTotalMonth">R$ 0,00</strong>
                             <span style="display:block; margin-top:10px; font-size:0.9rem; color:var(--text-muted);">Colaboradores: <span id="rhCount" style="color:#fff;">0</span></span>
                         </div>
-                        <button class="btn btn-primary" style="height:60px; font-size:1rem;" onclick="postPayrollToExpenses()">
-                            Lançar Folha no Mês
-                        </button>
+                        <div style="padding-top:20px; border-top:1px solid var(--border-subtle);">
+                            <label style="color:#aaa; font-size:0.8rem; display:block; margin-bottom:5px;">Mês de Lançamento:</label>
+                            <input type="month" id="rhMonthPost" class="form-input" style="margin-bottom:10px;">
+                            <button class="btn btn-primary" style="height:50px; font-size:1rem; width:100%;" onclick="postPayrollToExpenses()">
+                                Lançar Folha
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -562,8 +584,9 @@
     <script>
         // --- CONFIG & STATE ---
         const CAT_COLORS = { 'MATERIA PRIMA': '#fbbf24', 'ENERGIA': '#3b82f6', 'MAO DE OBRA': '#ef4444', 'INSUMOS': '#10b981', 'MANUTENCAO': '#f97316', 'GERAL': '#a855f7' };
-        const SECTOR_COLORS = ['#06b6d4', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#6366f1'];
-        
+        const SECTOR_COLORS = ['#06b6d4', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#6366f1', '#84cc16', '#64748b'];
+        const MONTH_NAMES = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
+
         let costData = JSON.parse(localStorage.getItem('erus_custos')) || [];
         let employeeData = JSON.parse(localStorage.getItem('erus_funcionarios')) || [];
         
@@ -571,16 +594,19 @@
         let mainChartInstance = null;
         let drilldownChartInstance = null;
 
+        // Global Selection State
+        let selectedYear = new Date().getFullYear();
+        let selectedMonthIndex = new Date().getMonth(); // 0-11
+
         // --- INIT ---
         window.onload = function() {
-            // Set default month to current
-            const now = new Date();
-            const monthStr = now.toISOString().slice(0, 7); // YYYY-MM
-            document.getElementById('monthFilter').value = monthStr;
-            document.getElementById('formDate').value = now.toISOString().split('T')[0];
-
+            initMonthNavigator();
             startClock();
-            updateDashboard();
+            
+            // Set input defaults
+            const nowIso = new Date().toISOString().slice(0, 7);
+            document.getElementById('formMonth').value = nowIso;
+            document.getElementById('rhMonthPost').value = nowIso;
 
             // ESC Key Listener
             document.addEventListener('keydown', (e) => {
@@ -590,24 +616,63 @@
                     closeDrilldown();
                 }
             });
+
+            updateDashboard();
         };
 
-        // --- CORE LOGIC ---
+        // --- NAVIGATION LOGIC ---
+        function initMonthNavigator() {
+            // Populate Years (Current - 2 to Current + 1)
+            const yearSelect = document.getElementById('yearSelect');
+            const currentYear = new Date().getFullYear();
+            for(let y = currentYear - 2; y <= currentYear + 1; y++) {
+                const opt = document.createElement('option');
+                opt.value = y;
+                opt.innerText = y;
+                if(y === selectedYear) opt.selected = true;
+                yearSelect.appendChild(opt);
+            }
 
-        function getSelectedMonth() {
-            return document.getElementById('monthFilter').value; // YYYY-MM
+            // Populate Months
+            const container = document.getElementById('monthButtonContainer');
+            container.innerHTML = '';
+            MONTH_NAMES.forEach((name, idx) => {
+                const btn = document.createElement('button');
+                btn.className = `btn-month ${idx === selectedMonthIndex ? 'active' : ''}`;
+                btn.innerText = name;
+                btn.onclick = () => selectMonth(idx);
+                container.appendChild(btn);
+            });
         }
 
+        function selectMonth(idx) {
+            selectedMonthIndex = idx;
+            // Update UI buttons
+            document.querySelectorAll('.btn-month').forEach((btn, i) => {
+                btn.classList.toggle('active', i === idx);
+            });
+            
+            // Sync year if changed
+            selectedYear = parseInt(document.getElementById('yearSelect').value);
+            
+            updateDashboard();
+        }
+
+        // --- CORE DATA LOGIC ---
+
         function getFilteredData() {
-            const selectedMonth = getSelectedMonth();
+            // item.data_formatada is DD/MM/YYYY
+            // Filter matches selectedMonthIndex (0-based) and selectedYear
             return costData.filter(item => {
-                // item.data_formatada is DD/MM/YYYY
                 const [d, m, y] = item.data_formatada.split('/');
-                return `${y}-${m}` === selectedMonth;
+                return parseInt(m) === (selectedMonthIndex + 1) && parseInt(y) === selectedYear;
             });
         }
 
         function updateDashboard() {
+            // Also update year if select changed directly
+            selectedYear = parseInt(document.getElementById('yearSelect').value);
+
             const filteredData = getFilteredData();
             const tableBody = document.querySelector('#costTable tbody');
             tableBody.innerHTML = '';
@@ -647,7 +712,7 @@
 
             // Empty State
             if (filteredData.length === 0) {
-                tableBody.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:30px; color:var(--text-muted);">Nenhum lançamento neste mês.</td></tr>`;
+                tableBody.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:30px; color:var(--text-muted);">Nenhum lançamento em ${MONTH_NAMES[selectedMonthIndex]}/${selectedYear}.</td></tr>`;
             }
 
             // KPIs
@@ -718,30 +783,24 @@
         // --- ENTRY MANAGEMENT ---
 
         function openEntryModal() { 
-            const now = new Date();
-            // Set modal date to match selected month if possible
-            const selectedMonth = getSelectedMonth(); // YYYY-MM
-            const currentMonth = now.toISOString().slice(0, 7);
-            
-            if (selectedMonth === currentMonth) {
-                document.getElementById('formDate').value = now.toISOString().split('T')[0];
-            } else {
-                // Set to 1st of selected month
-                document.getElementById('formDate').value = `${selectedMonth}-01`;
-            }
-            
+            // Default to dashboard selected month
+            const mStr = String(selectedMonthIndex + 1).padStart(2,'0');
+            document.getElementById('formMonth').value = `${selectedYear}-${mStr}`;
             document.getElementById('entryModal').style.display = 'flex'; 
         }
         function closeEntryModal() { document.getElementById('entryModal').style.display = 'none'; }
 
         function submitEntry() {
-            const dateInput = document.getElementById('formDate').value;
-            if(!dateInput) { alert("Data obrigatória"); return; }
-            const [y, m, d] = dateInput.split('-');
+            const monthInput = document.getElementById('formMonth').value; // YYYY-MM
+            if(!monthInput) { alert("Mês de referência obrigatório"); return; }
+            
+            const [y, m] = monthInput.split('-');
+            // Default to day 01 for storage purposes
+            const dateFmt = `01/${m}/${y}`;
 
             const entry = {
-                id: Date.now().toString(), // Unique ID for deletion
-                data_formatada: `${d}/${m}/${y}`,
+                id: Date.now().toString(),
+                data_formatada: dateFmt,
                 categoria: document.getElementById('formCategory').value,
                 descricao: document.getElementById('formDesc').value,
                 centro: document.getElementById('formCenter').value,
@@ -752,7 +811,15 @@
 
             costData.push(entry);
             saveData();
-            updateDashboard();
+            
+            // If entry is for current view, update. If not, maybe notify?
+            // For now, simple update
+            if(parseInt(m) === selectedMonthIndex + 1 && parseInt(y) === selectedYear) {
+                updateDashboard();
+            } else {
+                alert(`Lançamento salvo em ${m}/${y}. Mude o filtro para visualizar.`);
+            }
+
             closeEntryModal();
             
             // Reset fields
@@ -761,7 +828,6 @@
         }
 
         function deleteCost(id) {
-            // Find index by ID instead of array index to avoid sorting issues
             const idx = costData.findIndex(item => item.id === id);
             if (idx > -1 && confirm("Excluir este lançamento?")) {
                 costData.splice(idx, 1);
@@ -831,7 +897,10 @@
         function postPayrollToExpenses() {
             const chargePercent = parseFloat(document.getElementById('socialChargesParams').value) || 0;
             const multiplier = 1 + (chargePercent / 100);
+            const monthInput = document.getElementById('rhMonthPost').value; // YYYY-MM
             
+            if(!monthInput) { alert("Selecione o mês para lançamento."); return; }
+
             const sectorCosts = {};
             employeeData.forEach(emp => {
                 const cost = emp.salary * multiplier;
@@ -841,12 +910,10 @@
 
             if(Object.keys(sectorCosts).length === 0) return;
 
-            if(confirm("Gerar lançamentos de folha no mês selecionado?")) {
-                const selectedMonth = getSelectedMonth(); // YYYY-MM
-                const [y, m] = selectedMonth.split('-');
-                // Default to day 05 (payment day)
-                const dateFmt = `05/${m}/${y}`;
+            const [y, m] = monthInput.split('-');
+            const dateFmt = `05/${m}/${y}`; // Default payroll date
 
+            if(confirm(`Gerar lançamentos de folha em ${m}/${y}?`)) {
                 for (const [sector, value] of Object.entries(sectorCosts)) {
                     costData.push({
                         id: Date.now().toString() + Math.random(),
@@ -858,8 +925,14 @@
                     });
                 }
                 saveData();
-                updateDashboard();
+                
+                // If dashboard is showing selected month, refresh
+                if(parseInt(m) === selectedMonthIndex + 1 && parseInt(y) === selectedYear) {
+                    updateDashboard();
+                }
+
                 closeEmployeeModal();
+                alert("Folha lançada com sucesso!");
             }
         }
 
