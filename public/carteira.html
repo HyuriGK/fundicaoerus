@@ -128,18 +128,52 @@
 
         /* Dropdown */
         .dropdown { position: relative; display: inline-block; height: 100%; }
+        
+        /* Alterado: Dropdown agora controlado por classe 'open' via JS */
         .dropdown-content {
             display: none; position: absolute; right: 0; top: 100%; margin-top: 10px;
             background-color: #18181b; min-width: 220px; border: 1px solid var(--border-subtle);
             border-radius: 6px; box-shadow: var(--shadow-card); z-index: 200;
         }
+        .dropdown-content.open { display: block; }
+
         .dropdown-content::before { content: ''; position: absolute; top: -15px; left: 0; width: 100%; height: 15px; background: transparent; }
         .dropdown-content .dropdown-item {
             color: var(--text-main); padding: 12px 16px; display: block; font-size: 0.85rem;
             cursor: pointer; transition: background 0.2s; font-family: var(--font-main);
         }
         .dropdown-content .dropdown-item:hover { background-color: rgba(251, 191, 36, 0.1); color: var(--color-primary); }
-        .dropdown:hover .dropdown-content { display: block; }
+        
+        /* TOAST NOTIFICATION STYLES */
+        .toast-container {
+            position: fixed; bottom: 20px; right: 20px; z-index: 5000;
+            display: flex; flex-direction: column; gap: 10px;
+        }
+        .toast {
+            background: #18181b; border: 1px solid var(--border-subtle);
+            border-left: 4px solid var(--color-primary);
+            color: #fff; padding: 16px 20px; border-radius: 6px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+            font-family: var(--font-main); font-size: 0.9rem;
+            display: flex; align-items: center; gap: 12px;
+            animation: slideIn 0.3s ease-out forwards;
+            min-width: 350px;
+        }
+        .toast.danger { border-left-color: var(--status-danger); }
+        
+        .toast-icon { font-size: 1.2rem; }
+        .toast.danger .toast-icon { color: var(--status-danger); }
+        .toast-content { display: flex; flex-direction: column; }
+        .toast-title { font-weight: 600; font-size: 0.95rem; }
+        .toast-subtitle { font-size: 0.75rem; color: #a1a1aa; margin-top: 4px; }
+
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes fadeOut {
+            to { opacity: 0; transform: translateY(10px); }
+        }
 
         /* --- 4. MAIN CONTENT --- */
         .dashboard-content { 
@@ -327,6 +361,9 @@
         <div style="color: var(--text-muted); font-family: var(--font-main);">Processando dados...</div>
     </div>
 
+    <!-- Container para Toasts -->
+    <div id="toast-container" class="toast-container"></div>
+
     <div class="app-layout">
         
         <!-- HEADER -->
@@ -343,11 +380,13 @@
                     <i class="fa-solid fa-table-list"></i> Registros
                 </button>
 
-                <div class="dropdown">
-                    <button class="btn-glass">
+                <div class="dropdown" id="functionsDropdown">
+                    <!-- Atualizado: Onclick chama função de verificação -->
+                    <button class="btn-glass" onclick="toggleFunctionsDropdown()">
                         <i class="fa-solid fa-gear" style="color: var(--color-primary);"></i> Funções <i class="fa-solid fa-chevron-down" style="font-size: 0.7rem; margin-left: 5px;"></i>
                     </button>
-                    <div class="dropdown-content">
+                    <!-- Conteúdo do dropdown (agora controlado via JS) -->
+                    <div class="dropdown-content" id="functionsDropdownContent">
                         <div class="dropdown-item" onclick="document.getElementById('excelFile').click()">
                             <i class="fa-solid fa-file-arrow-up"></i> Importar Excel
                         </div>
@@ -506,6 +545,67 @@
         function closeModal() { document.getElementById('recordsModal').style.display = 'none'; }
         
         window.addEventListener('keydown', (e) => { if (e.key === "Escape") closeModal(); });
+
+        // --- FUNÇÕES TOAST E DROPDOWN ---
+        function showToast(title, subtitle, type = 'info') {
+            let container = document.getElementById('toast-container');
+            if (!container) {
+                container = document.createElement('div');
+                container.id = 'toast-container';
+                container.className = 'toast-container';
+                document.body.appendChild(container);
+            }
+
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            
+            const icon = type === 'danger' ? '<i class="fa-solid fa-ban toast-icon"></i>' : '<i class="fa-solid fa-circle-info toast-icon"></i>';
+            
+            toast.innerHTML = `
+                ${icon} 
+                <div class="toast-content">
+                    <span class="toast-title">${title}</span>
+                    <span class="toast-subtitle">${subtitle}</span>
+                </div>
+            `;
+            
+            container.appendChild(toast);
+
+            // Remove após 4 segundos
+            setTimeout(() => {
+                toast.style.animation = 'fadeOut 0.5s ease-out forwards';
+                setTimeout(() => {
+                    if (toast.parentNode) toast.parentNode.removeChild(toast);
+                }, 500);
+            }, 4000);
+        }
+
+        function toggleFunctionsDropdown() {
+            const userRole = localStorage.getItem('erus_role');
+            
+            if (userRole === 'desenvolvedor') {
+                const dropdownContent = document.getElementById('functionsDropdownContent');
+                dropdownContent.classList.toggle('open');
+            } else {
+                showToast(
+                    "Acesso Negado", 
+                    "Você não tem permissão de desenvolvedor para acessar este menu.", 
+                    "danger"
+                );
+            }
+        }
+
+        // Fechar dropdown ao clicar fora
+        document.addEventListener('click', function(event) {
+            const dropdown = document.getElementById('functionsDropdownContent');
+            const btn = document.querySelector('#functionsDropdown button');
+            
+            if (dropdown && dropdown.classList.contains('open') && 
+                !dropdown.contains(event.target) && 
+                !btn.contains(event.target)) {
+                dropdown.classList.remove('open');
+            }
+        });
 
         // ==========================================================================
         // UTILITÁRIOS
@@ -728,15 +828,57 @@
 
         function updateMonthlyChart() {
             const mData = Array(12).fill(0);
+            
+            // Lógica de visualização do gráfico:
+            // Se houver um filtro de cliente ativo (ou outro filtro de coluna), o gráfico mostra apenas as barras resultantes desse filtro.
+            // Se houver um filtro de MÊS ativo (zoom), o gráfico ainda mostra todos os meses para contexto, mas destaca a seleção?
+            // A solicitação pede: "aparecer somente o mês... que foi clicado (com zoom)".
+            // Portanto, usamos as linhas visíveis da tabela para popular o gráfico. 
+            // Como applyColumnFilters esconde as linhas dos outros meses quando filtramos, o gráfico mostraria apenas 1 barra.
+            // Para permitir que o gráfico mostre todos os meses quando NENHUM filtro de mês está ativo, ou apenas o mês selecionado quando ATIVO,
+            // precisamos ter cuidado pois a tabela já está filtrada.
+            
+            // Solução Atual: O gráfico reflete exatamente o que está na tabela.
+            // Se a tabela só tem Janeiro, o gráfico só tem barra em Janeiro.
+            // Para "resetar", o usuário clica na barra de Janeiro novamente.
+            
             document.querySelectorAll('#dataTable tbody tr').forEach(tr => {
                 if (tr.style.display === 'none') return;
                 const dt = parseDate(tr.cells[COL_ENTREGA].textContent);
                 if (dt.getFullYear() > 2000) mData[dt.getMonth()] += parseFloat(tr.getAttribute('data-raw-total'));
             });
+
             if (monthlyChart) monthlyChart.destroy();
             monthlyChart = new Chart(document.getElementById('monthlyChart').getContext('2d'), {
-                type:'bar', data: { labels:['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'], datasets:[{label:'kg', data:mData, backgroundColor:chartColorAmber}] },
-                options: { responsive:true, maintainAspectRatio:false, onClick:(e, el) => { activeMonthFilter = el.length ? el[0].index : null; applyColumnFilters(); }, scales:{y:{beginAtZero:true}}, plugins:{legend:{display:false}} }
+                type:'bar', 
+                data: { 
+                    labels:['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'], 
+                    datasets:[{
+                        label:'kg', 
+                        data:mData, 
+                        // Destacar a barra selecionada se houver filtro ativo
+                        backgroundColor: mData.map((_, idx) => idx === activeMonthFilter ? '#fff' : chartColorAmber)
+                    }] 
+                },
+                options: { 
+                    responsive:true, 
+                    maintainAspectRatio:false, 
+                    onClick:(e, el) => { 
+                        if (el.length) {
+                            const clickedIndex = el[0].index;
+                            // Se clicou no mesmo mês que já está filtrado, reseta (toggle)
+                            if (activeMonthFilter === clickedIndex) {
+                                activeMonthFilter = null;
+                            } else {
+                                // Se clicou em outro mês, filtra por ele
+                                activeMonthFilter = clickedIndex;
+                            }
+                            applyColumnFilters(); 
+                        }
+                    }, 
+                    scales:{y:{beginAtZero:true}}, 
+                    plugins:{legend:{display:false}} 
+                }
             });
         }
 
@@ -750,10 +892,42 @@
             const sorted = Object.entries(cMap).sort((a,b) => b[1]-a[1]).slice(0, 10);
             let total = sorted.reduce((a,b)=>a+b[1], 0), acc = 0;
             const accData = sorted.map(x => { acc += x[1]; return total > 0 ? (acc/total)*100 : 0; });
+            
             if (paretoChart) paretoChart.destroy();
             paretoChart = new Chart(document.getElementById('paretoChart').getContext('2d'), {
-                type:'bar', data: { labels:sorted.map(x=>x[0]), datasets:[{type:'line', label:'%', data:accData, borderColor:'#fff', yAxisID:'y1'}, {type:'bar', label:'kg', data:sorted.map(x=>x[1]), backgroundColor:chartColorAmber, yAxisID:'y'}] },
-                options: { responsive:true, maintainAspectRatio:false, onClick:(e, el) => { activeClientFilter = el.length ? sorted[el[0].index][0] : null; applyColumnFilters(); }, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true}, y1:{position:'right', min:0, max:100}} }
+                type:'bar', 
+                data: { 
+                    labels:sorted.map(x=>x[0]), 
+                    datasets:[
+                        {type:'line', label:'%', data:accData, borderColor:'#fff', yAxisID:'y1'}, 
+                        {
+                            type:'bar', 
+                            label:'kg', 
+                            data:sorted.map(x=>x[1]), 
+                            // Destacar a barra se estiver filtrada
+                            backgroundColor: sorted.map(x => x[0] === activeClientFilter ? '#fff' : chartColorAmber),
+                            yAxisID:'y'
+                        }
+                    ] 
+                },
+                options: { 
+                    responsive:true, 
+                    maintainAspectRatio:false, 
+                    onClick:(e, el) => { 
+                        if (el.length) {
+                            const clickedLabel = sorted[el[0].index][0];
+                            // Lógica de Toggle (Resetar se clicar no mesmo)
+                            if (activeClientFilter === clickedLabel) {
+                                activeClientFilter = null;
+                            } else {
+                                activeClientFilter = clickedLabel;
+                            }
+                            applyColumnFilters(); 
+                        }
+                    }, 
+                    plugins:{legend:{display:false}}, 
+                    scales:{y:{beginAtZero:true}, y1:{position:'right', min:0, max:100}} 
+                }
             });
         }
 
