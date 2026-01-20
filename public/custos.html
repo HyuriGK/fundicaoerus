@@ -340,6 +340,232 @@
 <body>
 
     <script>
+    (function() {
+        // Lógica de sessão mantida para segurança
+        const tempoLimite = 30 * 60 * 1000; 
+        
+        function verificarSessao() {
+            if (window.location.pathname.includes('login.html')) return;
+            const logado = localStorage.getItem('erus_auth');
+            const ultimaAtividade = localStorage.getItem('erus_last_activity');
+            const agora = Date.now();
+            if (logado !== 'true' || !ultimaAtividade) { redirecionarLogin(); return; }
+            if (agora - parseInt(ultimaAtividade) > tempoLimite) { alert("Sessão expirada."); redirecionarLogin(); return; }
+        }
+        function atualizarAtividade() { if (localStorage.getItem('erus_auth') === 'true') localStorage.setItem('erus_last_activity', Date.now().toString()); }
+        function redirecionarLogin() { localStorage.clear(); window.location.replace('login.html'); }
+        verificarSessao();
+        ['mousedown', 'mousemove', 'keypress', 'touchstart', 'scroll'].forEach(e => window.addEventListener(e, atualizarAtividade, { passive: true }));
+        setInterval(verificarSessao, 60000);
+
+        setInterval(() => {
+            const now = new Date();
+            const timeEl = document.getElementById('clock-time');
+            const dateEl = document.getElementById('clock-date');
+            if (timeEl) timeEl.innerText = now.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'});
+            if (dateEl) dateEl.innerText = now.toLocaleDateString('pt-BR', {weekday: 'short', day: 'numeric', month: 'short'}).toUpperCase();
+        }, 1000);
+    })();
+    </script>
+
+    <div id="loading-screen" style="display: none;">
+        <div class="spinner"></div>
+        <div style="color: var(--text-muted); font-family: var(--font-main);">Calculando despesas...</div>
+    </div>
+
+    <!-- MAIN LAYOUT -->
+    <div class="app-layout">
+        
+        <!-- HEADER -->
+        <header class="top-header">
+            <div class="header-brand">
+                <div class="brand-icon"><i class="fa-solid fa-coins"></i></div>
+                <div class="header-text">
+                    <h1 class="page-title">Gestão de Custos</h1>
+                    <p class="page-subtitle">Análise Financeira & Despesas</p>
+                </div>
+            </div>
+            <div class="header-actions">
+                <button class="btn-glass" onclick="openRecordsModal(); this.blur()" title="Ver Registros">
+                    <i class="fa-solid fa-table-list"></i> <span style="margin-left:5px;">Lançamentos</span>
+                </button>
+
+                <div class="separator-vertical"></div>
+                
+                <div class="dropdown" id="functionsDropdown">
+                    <button class="btn-glass" onclick="toggleDropdown()">
+                        <i class="fa-solid fa-gear" style="color: #fff;"></i> Funções <i class="fa-solid fa-chevron-down" style="font-size: 0.7rem; margin-left: 5px;"></i>
+                    </button>
+                    <div class="dropdown-content">
+                        <button class="dropdown-item" onclick="handleAuthAction(saveLocalDataToDatabase, 'Salvar Dados')"><i class=""></i> Salvar no Banco</button>
+                        <div class="dropdown-divider"></div>
+                        <label for="excelFileInput" class="dropdown-item" style="cursor: pointer;"><i class=""></i> Importar Custos (Excel)</label>
+                        <input type="file" id="excelFileInput" accept=".xls,.xlsx" style="display:none" multiple>
+                        <div class="dropdown-divider"></div>
+                        <button class="dropdown-item danger" onclick="handleAuthAction(() => handleClearDatabase('full'), 'Limpar DB Completo')"><i class=""></i> Limpar Tudo</button>
+                    </div>
+                </div>
+                <div class="separator-vertical"></div>
+                <button class="btn-back" onclick="window.location.href='index.html'" title="Voltar">
+                    <i class="fa-solid fa-arrow-right-from-bracket"></i> Voltar
+                </button>
+            </div>
+        </header>
+
+        <!-- DASHBOARD CONTENT -->
+        <main class="dashboard-content">
+            
+            <div class="status-bar-container-hidden" style="display: none;">
+                <span id="status-message" class="status-text normal">Carregando sistema...</span>
+                <span id="error-message" class="status-text error"></span>
+            </div>
+
+            <!-- FILTROS -->
+            <div class="compact-toolbar" id="filter-panel">
+                <div class="toolbar-header" onclick="toggleFilterPanel()">
+                    <span><i class="fa-solid fa-filter"></i> Filtros de Custo</span>
+                    <i class="fa-solid fa-chevron-down" id="filter-chevron"></i>
+                </div>
+                
+                <div class="toolbar-content">
+                    <div class="filters-left-group">
+                        <!-- Categoria (Antigo Setor) -->
+                        <div class="input-group-compact">
+                            <label>Categoria:</label>
+                            <select id="category-filter-select">
+                                <option value="TODOS">Todas</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Centro de Custo (Antigo Grupo) -->
+                        <div class="input-group-compact">
+                            <label>Centro Custo:</label>
+                            <select id="cost-center-select">
+                                <option value="TODOS">Todos</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="filter-section-wrapper">
+                        <!-- Ano -->
+                        <div class="input-group-compact">
+                            <label>Ano:</label>
+                            <select id="year-filter-select">
+                                <option value="TODOS">Todos</option>
+                            </select>
+                        </div>
+
+                        <!-- Range -->
+                        <div class="input-group-compact filter-obsolete" id="date-range-container">
+                            <label>Período:</label>
+                            <input type="date" id="filter-date-start" style="width: 130px;">
+                            <span style="color:var(--text-muted); font-size:0.8rem;">a</span>
+                            <input type="date" id="filter-date-end" style="width: 130px;">
+                        </div>
+
+                        <!-- Month -->
+                        <div class="month-filter-group" id="month-filter-container">
+                            <label style="color: var(--text-muted); font-size: 0.8rem;">Mês:</label>
+                            <div class="month-buttons-container">
+                                <button class="btn-month active" data-month="0">Todos</button>
+                                <button class="btn-month" data-month="1">Jan</button>
+                                <button class="btn-month" data-month="2">Fev</button>
+                                <button class="btn-month" data-month="3">Mar</button>
+                                <button class="btn-month" data-month="4">Abr</button>
+                                <button class="btn-month" data-month="5">Mai</button>
+                                <button class="btn-month" data-month="6">Jun</button>
+                                <button class="btn-month" data-month="7">Jul</button>
+                                <button class="btn-month" data-month="8">Ago</button>
+                                <button class="btn-month" data-month="9">Set</button>
+                                <button class="btn-month" data-month="10">Out</button>
+                                <button class="btn-month" data-month="11">Nov</button>
+                                <button class="btn-month" data-month="12">Dez</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+             <!-- KPIS ROW -->
+             <div class="kpi-row">
+                 <div class="kpi-card kpi-default">
+                     <div class="kpi-title">Custo Total (Filtrado)</div>
+                     <div id="total-cost-display" class="kpi-value">R$ 0,00</div>
+                 </div>
+                 
+                 <div class="kpi-card kpi-info">
+                     <div class="kpi-title">Produção Ref. (Kg)</div>
+                     <!-- KPI Editável para inserir a produção do mês e calcular o Custo/Kg -->
+                     <div id="production-ref-display" class="kpi-value" contenteditable="true" style="border-bottom: 1px dashed rgba(255,255,255,0.3); cursor: pointer;" title="Clique para editar">0</div>
+                 </div>
+
+                 <div class="kpi-card kpi-teal">
+                     <div class="kpi-title">Custo Global / Kg</div>
+                     <div id="cost-per-kg-display" class="kpi-value">R$ 0,00</div>
+                 </div>
+
+                 <div class="kpi-card kpi-purple">
+                     <div class="kpi-title">Orçamento (Meta)</div>
+                     <div id="budget-display" class="kpi-value" contenteditable="true" style="border-bottom: 1px dashed rgba(255,255,255,0.3); cursor: pointer;">R$ 0</div>
+                 </div>
+             </div>
+
+            <!-- MAIN CHART -->
+            <div class="chart-panel">
+                <canvas id="costChart"></canvas>
+            </div>
+
+        </main>
+
+        <footer class="app-footer">
+            <div style="display: flex; gap: 24px;">
+                <span>Total Despesas: <strong id="footer-total" style="color: #fff;">R$ 0,00</strong></span>
+                <span>Custo/Kg: <strong id="footer-cpk" style="color: var(--color-primary);">R$ 0,00</strong></span>
+            </div>
+            <div>
+                <span id="clock-date"></span>
+                <span id="clock-time" style="color: #fff; font-weight: 700; margin-left:10px;"></span>
+            </div>
+        </footer>
+    </div>
+
+    <!-- MODAL DE REGISTROS (FULLSCREEN) -->
+    <div id="records-modal" class="modal-overlay">
+        <div class="modal-card fullscreen">
+            <div class="modal-header">
+                <h2 class="modal-title" style="margin: 0;"><i class="fa-solid fa-list-check" style="margin-right: 15px;"></i>Detalhamento de Custos</h2>
+                <span class="modal-close" onclick="closeRecordsModal()" title="Fechar (ESC)">&times;</span>
+            </div>
+            
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Data</th>
+                            <th>Categoria</th>
+                            <th>Descrição</th>
+                            <th>Centro Custo</th>
+                            <th>Valor (R$)</th>
+                        </tr>
+                        <tr id="monthColumnFilters">
+                            <th><input class="filter-input-table month-column-filter" data-column="0" placeholder="Filtro..."></th>
+                            <th><input class="filter-input-table month-column-filter" data-column="1" placeholder="Filtro..."></th>
+                            <th><input class="filter-input-table month-column-filter" data-column="2" placeholder="Filtro..."></th>
+                            <th><input class="filter-input-table month-column-filter" data-column="3" placeholder="Filtro..."></th>
+                            <th><input class="filter-input-table month-column-filter" data-column="4" placeholder="Valor..."></th>
+                        </tr>
+                    </thead>
+                    <tbody id="costTableBody"></tbody>
+                </table>
+            </div>
+            
+            <div style="text-align: center; color: var(--text-muted); margin-top: 20px; font-size: 0.8rem;">
+                Pressione ESC para fechar
+            </div>
+        </div>
+    </div>
+
+    <script>
     // =========================================================
     // CONFIGURAÇÕES GERAIS E CONSTANTES
     // =========================================================
@@ -837,466 +1063,5 @@
     window.onload = loadInitialData;
 
 </script>
-        // =========================================================
-        // CONFIGURAÇÕES GERAIS E CONSTANTES
-        // =========================================================
-        Chart.defaults.color = '#a1a1aa';
-        Chart.defaults.borderColor = 'rgba(255,255,255,0.05)';
-        Chart.defaults.font.family = "'JetBrains Mono', monospace";
-        Chart.register(ChartDataLabels);
-
-        const ADMIN_PASSWORD_HASH = 'ADMIN'; // Em produção, usar hash real
-        const fileInput = document.getElementById('excelFileInput');
-        const costTableBody = document.getElementById('costTableBody');
-        const statusMessage = document.getElementById('status-message');
-        const errorMessage = document.getElementById('error-message');
-        const monthColumnFilters = document.querySelectorAll('.month-column-filter');
-        
-        // Filtros
-        const categoryFilterSelect = document.getElementById('category-filter-select');
-        const costCenterSelect = document.getElementById('cost-center-select');
-        const yearFilterSelect = document.getElementById('year-filter-select'); 
-        
-        const filterDateStart = document.getElementById('filter-date-start');
-        const filterDateEnd = document.getElementById('filter-date-end');
-        const dateRangeContainer = document.getElementById('date-range-container');
-        const monthFilterContainer = document.getElementById('month-filter-container');
-        const monthButtons = document.querySelectorAll('.btn-month');
-
-        let currentFilterMode = 'month'; 
-        let currentMonthFilterIndex = new Date().getMonth() + 1;
-
-        // Chart & KPIs
-        const costChartCanvas = document.getElementById('costChart');
-        const totalCostDisplay = document.getElementById('total-cost-display');
-        const costPerKgDisplay = document.getElementById('cost-per-kg-display');
-        const productionRefDisplay = document.getElementById('production-ref-display');
-        const budgetDisplay = document.getElementById('budget-display');
-        let costChart = null; 
-        
-        // Mapeamento de Colunas do Excel/DB
-        const COLUMN_MAP = { DATA: 0, CATEGORIA: 1, DESCRICAO: 2, CENTRO_CUSTO: 3, VALOR: 4 };
-        
-        // Categorias Padrão de Fundição (para ordenação e cores)
-        const CATEGORY_COLORS = {
-            'MATERIA PRIMA': '#fbbf24',    // Amarelo
-            'MAO DE OBRA': '#ef4444',      // Vermelho
-            'ENERGIA': '#3b82f6',          // Azul
-            'MANUTENCAO': '#f97316',       // Laranja
-            'INSUMOS': '#10b981',          // Verde
-            'GERAL': '#a855f7',            // Roxo
-            'OUTROS': '#6b7280'            // Cinza
-        };
-
-        let allCostData = []; // Array principal de dados
-        let productionVolume = 0; // Volume de produção para cálculo de R$/kg
-        let budgetTarget = 0;
-
-        // --- UI Logic ---
-        function showLoading() { document.getElementById('loading-screen').style.display = 'flex'; document.getElementById('loading-screen').style.opacity = '1'; }
-        function hideLoading() { 
-            const ls = document.getElementById('loading-screen');
-            ls.style.opacity = '0';
-            setTimeout(() => { ls.style.display = 'none'; }, 500); 
-        }
-
-        function toggleFilterPanel() {
-            const panel = document.getElementById('filter-panel');
-            const chevron = document.getElementById('filter-chevron');
-            panel.classList.toggle('expanded');
-            if (panel.classList.contains('expanded')) {
-                chevron.classList.remove('fa-chevron-down'); chevron.classList.add('fa-chevron-up');
-            } else {
-                chevron.classList.remove('fa-chevron-up'); chevron.classList.add('fa-chevron-down');
-            }
-            setTimeout(() => { if(costChart) costChart.resize(); }, 350); 
-        }
-
-        function toggleDropdown() {
-             const content = document.querySelector('#functionsDropdown .dropdown-content');
-             content.style.display = content.style.display === 'block' ? 'none' : 'block';
-        }
-        window.onclick = function(event) {
-            if (!event.target.matches('.btn-glass') && !event.target.closest('.dropdown')) {
-                document.querySelectorAll(".dropdown-content").forEach(d => d.style.display = 'none');
-            }
-        }
-
-        // --- Filter Logic ---
-        function setFilterMode(mode) {
-            currentFilterMode = mode;
-            if (mode === 'month') {
-                dateRangeContainer.classList.add('filter-obsolete');
-                monthFilterContainer.classList.remove('filter-obsolete');
-                filterDateStart.value = ''; filterDateEnd.value = '';
-            } else {
-                monthFilterContainer.classList.add('filter-obsolete');
-                dateRangeContainer.classList.remove('filter-obsolete');
-                monthButtons.forEach(b => b.classList.remove('active'));
-            }
-            updateCostChartFromSelection();
-        }
-
-        monthButtons.forEach(btn => {
-            btn.addEventListener('click', function() {
-                monthButtons.forEach(b => b.classList.remove('active'));
-                this.classList.add('active');
-                currentMonthFilterIndex = parseInt(this.getAttribute('data-month'));
-                setFilterMode('month');
-            });
-        });
-
-        filterDateStart.addEventListener('input', () => { if(filterDateStart.value) setFilterMode('range'); });
-        filterDateEnd.addEventListener('input', () => { if(filterDateEnd.value) setFilterMode('range'); });
-
-        // --- Formatação e Datas ---
-        function formatCurrency(num) {
-            if (isNaN(num) || num === null) return 'R$ 0,00';
-            return num.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-        }
-        
-        function parseDate(dateString) {
-            if (!dateString) return null;
-            let parts = String(dateString).split('/');
-            if (parts.length === 3) return new Date(parts[2], parts[1] - 1, parts[0]);
-            let d = new Date(dateString);
-            if (!isNaN(d.getTime())) return d;
-            return null;
-        }
-
-        // --- Autenticação ---
-        async function handleAuthAction(action, actionName) {
-            const password = prompt(`Digite a senha de administrador:`);
-            if (password === null) return;
-            if (password.trim().toUpperCase() === ADMIN_PASSWORD_HASH) {
-                statusMessage.textContent = `Executando: ${actionName}...`;
-                try { await action(); } catch (e) { 
-                    errorMessage.textContent = `Erro: ${e.message}`; 
-                    statusMessage.className = 'status-text error';
-                }
-            } else { 
-                errorMessage.textContent = `Erro: Senha incorreta.`; 
-                statusMessage.className = 'status-text error';
-            }
-        }
-        window.handleAuthAction = handleAuthAction;
-
-        // --- Manipulação de Dados ---
-        
-        // Carrega volume de produção (simulado - em produção real viria de API)
-        productionRefDisplay.addEventListener('blur', (e) => {
-            let val = parseFloat(String(e.target.textContent).replace(/[^\d,]/g, '').replace(',', '.')) || 0;
-            productionVolume = val;
-            e.target.textContent = val.toLocaleString('pt-BR');
-            updateCostChartFromSelection(); // Recalcula R$/kg
-        });
-        
-        budgetDisplay.addEventListener('blur', (e) => {
-            let val = parseFloat(String(e.target.textContent).replace(/[^\d,]/g, '').replace(',', '.')) || 0;
-            budgetTarget = val;
-            e.target.textContent = formatCurrency(val);
-        });
-
-        // --- Charts e Tabelas ---
-
-        function updateCostChartFromSelection() {
-            const selectedCategory = categoryFilterSelect.value;
-            const selectedCenter = costCenterSelect.value;
-            const selectedYear = yearFilterSelect.value; 
-            
-            const isMonthMode = currentFilterMode === 'month';
-            const selectedMonthIndex = currentMonthFilterIndex;
-            const isAllMonths = isMonthMode && selectedMonthIndex === 0;
-
-            let startDateObj = null, endDateObj = null;
-            if (!isMonthMode && filterDateStart.value && filterDateEnd.value) {
-                const [sY, sM, sD] = filterDateStart.value.split('-').map(Number);
-                startDateObj = new Date(sY, sM - 1, sD);
-                const [eY, eM, eD] = filterDateEnd.value.split('-').map(Number);
-                endDateObj = new Date(eY, eM - 1, eD, 23, 59, 59);
-            }
-
-            // Filtragem
-            const filteredRows = allCostData.filter(row => {
-                const rowDate = parseDate(row[COLUMN_MAP.DATA]);
-                if (!rowDate) return false;
-
-                if (selectedYear !== 'TODOS' && rowDate.getFullYear() !== parseInt(selectedYear)) return false;
-
-                if (isMonthMode) {
-                    if (!isAllMonths && (rowDate.getMonth() + 1) !== selectedMonthIndex) return false;
-                } else {
-                    if (startDateObj && endDateObj && (rowDate < startDateObj || rowDate > endDateObj)) return false;
-                }
-
-                if (selectedCategory !== 'TODOS' && row[COLUMN_MAP.CATEGORIA] !== selectedCategory) return false;
-                if (selectedCenter !== 'TODOS' && row[COLUMN_MAP.CENTRO_CUSTO] !== selectedCenter) return false;
-
-                return true;
-            });
-
-            // Agregação
-            let totalCost = 0;
-            const aggregated = {}; // Key: Label (Date/Month), Value: { Category: Sum }
-            const labelsSet = new Set();
-            
-            filteredRows.forEach(row => {
-                const date = parseDate(row[COLUMN_MAP.DATA]);
-                const val = parseFloat(row[COLUMN_MAP.VALOR]) || 0;
-                const cat = row[COLUMN_MAP.CATEGORIA] || 'OUTROS';
-                
-                totalCost += val;
-
-                let key;
-                if (isAllMonths && isMonthMode) {
-                    // Agrupar por Mês
-                    key = date.toLocaleString('pt-BR', { month: 'short' }).toUpperCase() + '/' + date.getFullYear();
-                } else {
-                    // Agrupar por Dia
-                    key = `${String(date.getDate()).padStart(2,'0')}/${String(date.getMonth()+1).padStart(2,'0')}`;
-                }
-                labelsSet.add(key);
-
-                if (!aggregated[key]) aggregated[key] = {};
-                aggregated[key][cat] = (aggregated[key][cat] || 0) + val;
-            });
-
-            // Labels Ordenadas
-            const labels = Array.from(labelsSet); // Em app real, ordenar cronologicamente
-
-            // Construir Datasets Empilhados
-            const uniqueCategories = new Set();
-            filteredRows.forEach(r => uniqueCategories.add(r[COLUMN_MAP.CATEGORIA] || 'OUTROS'));
-            
-            const datasets = Array.from(uniqueCategories).map(cat => {
-                return {
-                    label: cat,
-                    data: labels.map(lbl => aggregated[lbl] ? (aggregated[lbl][cat] || 0) : 0),
-                    backgroundColor: CATEGORY_COLORS[cat.toUpperCase()] || CATEGORY_COLORS['OUTROS'],
-                    borderWidth: 1,
-                    stack: 'Stack 0'
-                };
-            });
-
-            renderChart(labels, datasets, totalCost);
-            updateTable(filteredRows);
-        }
-
-        function renderChart(labels, datasets, total) {
-            // Update KPIs
-            totalCostDisplay.textContent = formatCurrency(total);
-            document.getElementById('footer-total').textContent = formatCurrency(total);
-            
-            const cpk = productionVolume > 0 ? total / productionVolume : 0;
-            costPerKgDisplay.textContent = formatCurrency(cpk) + " / kg";
-            document.getElementById('footer-cpk').textContent = formatCurrency(cpk) + " / kg";
-
-            const config = {
-                type: 'bar',
-                data: { labels: labels, datasets: datasets },
-                options: {
-                    responsive: true, maintainAspectRatio: false,
-                    plugins: {
-                        legend: { position: 'top', labels: { color: '#a1a1aa', font: { size: 10 } } },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    let label = context.dataset.label || '';
-                                    if (label) label += ': ';
-                                    if (context.parsed.y !== null) label += formatCurrency(context.parsed.y);
-                                    return label;
-                                }
-                            }
-                        }
-                    },
-                    scales: {
-                        y: { 
-                            beginAtZero: true, 
-                            stacked: true,
-                            grid: { color: 'rgba(255,255,255,0.05)' },
-                            ticks: { callback: function(value) { return 'R$ ' + value; } }
-                        },
-                        x: { stacked: true, grid: { display: false } }
-                    }
-                }
-            };
-
-            if (costChart) { costChart.destroy(); }
-            costChart = new Chart(costChartCanvas, config);
-        }
-
-        function updateTable(data) {
-            costTableBody.innerHTML = '';
-            // Aplica filtros de texto das colunas se houver
-            const columnFilterValues = Array.from(monthColumnFilters).map(input => input.value.trim().toLowerCase());
-            
-            const finalData = data.filter(row => {
-                if (!columnFilterValues.length) return true;
-                for (let i = 0; i < row.length; i++) {
-                    if (columnFilterValues[i]) {
-                        const cellText = String(row[i]).toLowerCase();
-                        if (!cellText.includes(columnFilterValues[i])) return false;
-                    }
-                }
-                return true;
-            });
-
-            finalData.forEach(row => {
-                const tr = costTableBody.insertRow();
-                tr.insertCell().textContent = row[COLUMN_MAP.DATA];
-                tr.insertCell().textContent = row[COLUMN_MAP.CATEGORIA];
-                tr.insertCell().textContent = row[COLUMN_MAP.DESCRICAO];
-                tr.insertCell().textContent = row[COLUMN_MAP.CENTRO_CUSTO];
-                
-                const valCell = tr.insertCell();
-                valCell.textContent = formatCurrency(row[COLUMN_MAP.VALOR]);
-                valCell.style.color = '#10b981'; // Verde para dinheiro
-            });
-        }
-
-        monthColumnFilters.forEach(input => input.addEventListener('input', updateCostChartFromSelection));
-
-        // --- Populando Filtros ---
-        function populateFilters() {
-            const cats = new Set(), centers = new Set(), years = new Set();
-            allCostData.forEach(r => {
-                cats.add(r[COLUMN_MAP.CATEGORIA]);
-                centers.add(r[COLUMN_MAP.CENTRO_CUSTO]);
-                const d = parseDate(r[COLUMN_MAP.DATA]);
-                if(d) years.add(d.getFullYear());
-            });
-
-            categoryFilterSelect.innerHTML = '<option value="TODOS">Todas</option>';
-            Array.from(cats).sort().forEach(c => {
-                if(c) categoryFilterSelect.innerHTML += `<option value="${c}">${c}</option>`;
-            });
-
-            costCenterSelect.innerHTML = '<option value="TODOS">Todos</option>';
-            Array.from(centers).sort().forEach(c => {
-                if(c) costCenterSelect.innerHTML += `<option value="${c}">${c}</option>`;
-            });
-
-            yearFilterSelect.innerHTML = '<option value="TODOS">Todos</option>';
-            Array.from(years).sort((a,b)=>b-a).forEach(y => {
-                yearFilterSelect.innerHTML += `<option value="${y}">${y}</option>`;
-            });
-            const curYear = new Date().getFullYear();
-            if(years.has(curYear)) yearFilterSelect.value = curYear;
-        }
-
-        categoryFilterSelect.addEventListener('change', updateCostChartFromSelection);
-        costCenterSelect.addEventListener('change', updateCostChartFromSelection);
-        yearFilterSelect.addEventListener('change', updateCostChartFromSelection);
-
-        // --- Importação Excel ---
-        function formatExcelDate(excelDate) {
-            if (typeof excelDate === 'number' && excelDate > 0) {
-                const date = new Date(Math.round((excelDate - 25569) * 86400000)); 
-                return `${String(date.getUTCDate()).padStart(2, '0')}/${String(date.getUTCMonth() + 1).padStart(2, '0')}/${date.getUTCFullYear()}`;
-            }
-            return String(excelDate); 
-        }
-
-        fileInput.addEventListener('change', async (e) => {
-            if (!e.target.files.length) return;
-            showLoading(); 
-            try {
-                const file = e.target.files[0];
-                const reader = new FileReader();
-                reader.onload = async (evt) => {
-                    const wb = XLSX.read(new Uint8Array(evt.target.result), {type: 'array'});
-                    const sheet = wb.Sheets[wb.SheetNames[0]];
-                    const json = XLSX.utils.sheet_to_json(sheet, {header: 1, defval: ''});
-                    // Ignorar header se existir e processar
-                    // Formato esperado: Data, Categoria, Descrição, Centro, Valor
-                    const newRows = [];
-                    json.forEach((r, idx) => {
-                        if (idx === 0 && (String(r[0]).toUpperCase().includes('DATA'))) return; // Skip Header
-                        if (r.length < 5) return;
-                        
-                        let val = parseFloat(String(r[4]).replace(/[^\d.,-]/g, '').replace(',', '.')) || 0;
-                        newRows.push([
-                            formatExcelDate(r[0]),
-                            String(r[1]).toUpperCase(),
-                            String(r[2]),
-                            String(r[3]).toUpperCase(),
-                            val
-                        ]);
-                    });
-                    
-                    await saveDataToDatabase(newRows);
-                    hideLoading();
-                };
-                reader.readAsArrayBuffer(file);
-            } catch (err) {
-                hideLoading();
-                errorMessage.textContent = "Erro na importação.";
-            }
-            e.target.value = '';
-        });
-
-        // --- API Mock / Real ---
-        async function saveDataToDatabase(newData) {
-            // Em produção: fetch('/api/custos', { method: 'POST', body: JSON.stringify(newData) })
-            // Simulação local:
-            allCostData = [...allCostData, ...newData];
-            alert("Dados salvos com sucesso (Simulação Local).");
-            populateFilters();
-            updateCostChartFromSelection();
-        }
-        window.saveLocalDataToDatabase = () => saveDataToDatabase([]);
-
-        async function handleClearDatabase(mode) {
-            if(!confirm("Tem certeza que deseja limpar os dados?")) return;
-            allCostData = [];
-            updateCostChartFromSelection();
-            statusMessage.textContent = 'Banco limpo.';
-        }
-        window.handleClearDatabase = handleClearDatabase;
-
-        // --- Inicialização ---
-        async function loadInitialData() {
-            showLoading();
-            // Dados Mockados para Demonstração Inicial
-            // Data, Categoria, Descricao, Centro Custo, Valor
-            const mockData = [
-                ['02/01/2026', 'MATERIA PRIMA', 'Compra de Sucata Aco', 'FUSAO', 15000.00],
-                ['05/01/2026', 'ENERGIA', 'Conta Luz Fabrica', 'GERAL', 12500.50],
-                ['10/01/2026', 'MAO DE OBRA', 'Folha Pagamento Jan', 'RH', 45000.00],
-                ['12/01/2026', 'INSUMOS', 'Resina Fenolica', 'MOLDAGEM', 5600.00],
-                ['15/01/2026', 'MANUTENCAO', 'Reparo Forno Inducao', 'MANUTENCAO', 3200.00],
-                ['20/01/2026', 'MATERIA PRIMA', 'Ferro Ligas FeSi', 'FUSAO', 8900.00],
-                ['25/01/2026', 'GERAL', 'Material Escritorio', 'ADM', 450.00],
-            ];
-            
-            allCostData = mockData; // Em prod: fetch('/api/custos')...
-            
-            populateFilters();
-            
-            // Set Filtro Default para Mês Atual
-            const currentMonth = new Date().getMonth() + 1;
-            monthButtons.forEach(btn => {
-                if (parseInt(btn.getAttribute('data-month')) === currentMonth) btn.classList.add('active');
-                else btn.classList.remove('active');
-            });
-            currentMonthFilterIndex = currentMonth;
-            
-            // Valor Default Produção
-            productionRefDisplay.textContent = "50000"; 
-            productionVolume = 50000;
-            
-            updateCostChartFromSelection();
-            hideLoading();
-            statusMessage.textContent = 'Sistema de Custos pronto.';
-        }
-
-        // Modal Functions
-        function openRecordsModal() { document.getElementById('records-modal').style.display = 'flex'; }
-        function closeRecordsModal() { document.getElementById('records-modal').style.display = 'none'; }
-        document.addEventListener('keydown', (e) => { if (e.key === "Escape") closeRecordsModal(); });
-
-        window.onload = loadInitialData;
-
-    </script>
 </body>
 </html>
