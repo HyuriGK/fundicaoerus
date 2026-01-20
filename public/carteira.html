@@ -292,9 +292,20 @@
             border-right: 1px solid var(--border-separator);
         }
 
-        /* FILTROS FIXOS (Abaixo dos títulos) */
+        /* 
+           MODIFICADO: Altura fixa para o título do cabeçalho.
+           Isso garante que a segunda linha (filtros) saiba exatamente onde grudar.
+        */
+        thead tr:first-child th {
+            height: 40px; 
+        }
+
+        /* 
+           MODIFICADO: Filtros Fixos.
+           Definido 'top: 40px' para corresponder exatamente à altura da linha acima.
+        */
         thead tr:nth-child(2) th { 
-            top: 35px; /* Ajuste exato para colar abaixo da primeira linha */
+            top: 40px; 
             z-index: 19; 
             padding-top: 2px;
             padding-bottom: 10px;
@@ -422,13 +433,13 @@
                 <div class="kpi-card kpi-info">
                     <div class="kpi-title">Peso Liberado (kg)</div>
                     <div id="releasedWeightCard" class="kpi-value">0,00</div>
-                    <div class="kpi-subtext">Peso Lib. em Carteira</div>
+                    <div class="kpi-subtext">Pedidos Lib. em Carteira</div>
                 </div>
 
                 <div class="kpi-card kpi-danger">
                     <div class="kpi-title">Peso Bloqueado (kg)</div>
                     <div id="blockedWeightCard" class="kpi-value">0,00</div>
-                    <div class="kpi-subtext">Peso Bloq. em Carteira</div>
+                    <div class="kpi-subtext">Pedidos Bloq. em Carteira</div>
                 </div>
 
                 <div class="kpi-card kpi-default">
@@ -588,8 +599,8 @@
                 dropdownContent.classList.toggle('open');
             } else {
                 showToast(
-                    "Você não tem permissão de desenvolvedor", 
-                    "Se necessário, entre em contato com o administrador do sistema", 
+                    "Acesso Negado", 
+                    "Você não tem permissão de desenvolvedor para acessar este menu.", 
                     "danger"
                 );
             }
@@ -812,7 +823,17 @@
 
             rows.forEach(r => {
                 let vis = true; const c = r.cells;
-                fs.forEach((f, i) => { if (f && !c[i].textContent.toUpperCase().includes(f)) vis = false; });
+                fs.forEach((f, i) => { 
+                    if (f) {
+                        const cellText = c[i].textContent.toUpperCase();
+                        // MODIFICADO: Coluna 7 (PESO UN) usa filtro exato
+                        if (i === COL_PESO_UN) {
+                            if (cellText !== f) vis = false;
+                        } else {
+                            if (!cellText.includes(f)) vis = false; 
+                        }
+                    }
+                });
                 if (vis && isModelosHidden && c[COL_PRODUTO].textContent.toUpperCase().startsWith("MODELO")) vis = false;
                 if (vis && (dF || dT)) {
                     const dt = parseDate(c[COL_ENTREGA].textContent);
@@ -831,13 +852,6 @@
             const mData = Array(12).fill(0);
             
             document.querySelectorAll('#dataTable tbody tr').forEach(tr => {
-                // Para calcular o peso total corretamente, pegamos todas as linhas visíveis OU todas se o filtro de mês estiver ativo (para reconstruir a base se precisar)
-                // Mas a lógica do 'applyColumnFilters' já esconde as linhas. 
-                // Se quisermos mostrar TODOS os meses no gráfico, precisamos iterar sobre todas as linhas ignorando apenas os filtros que NÃO SÃO de mês?
-                // Não, a abordagem mais simples é: 
-                // 1. Iterar sobre as linhas visíveis para popular os dados (comportamento padrão).
-                // 2. MAS, se houver um activeMonthFilter, nós forçamos o gráfico a mostrar APENAS aquele mês (Zoom).
-                
                 if (tr.style.display === 'none') return;
                 const dt = parseDate(tr.cells[COL_ENTREGA].textContent);
                 if (dt.getFullYear() > 2000) mData[dt.getMonth()] += parseFloat(tr.getAttribute('data-raw-total'));
