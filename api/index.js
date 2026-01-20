@@ -22,6 +22,7 @@ const metas = require('../src/metas');
 const producaoApontada = require('../src/producao-apontada');
 const refugo = require('../src/refugo');
 const register = require('../src/register');
+const custosRoutes = require('./src/custos'); // <--- Importe o arquivo novo
 
 // --- DEFINIÇÃO DAS ROTAS ---
 // Aqui definimos qual URL chama qual arquivo
@@ -39,6 +40,7 @@ app.use('/api/metas', metas);
 app.use('/api/producao-apontada', producaoApontada);
 app.use('/api/refugo', refugo);
 app.use('/api/register', register); 
+app.use('/api/custos', custosRoutes); // <--- Defina a URL base
 
 // Rota de teste para ver se a API está de pé
 app.get('/api', (req, res) => {
