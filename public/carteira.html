@@ -807,15 +807,53 @@
         }
 
         async function saveToServerSnapshot() {
-            const rows = Array.from(document.querySelectorAll('#dataTable tbody tr')).map(r => ({
-                pedido: r.cells[0].textContent.replace(' BLOCK','').trim(), ordem_compra: r.cells[1].textContent, entrega: r.cells[2].textContent,
-                razao_social: r.cells[3].textContent, codigo: r.cells[4].textContent, nome_produto: r.cells[5].textContent, material: r.cells[6].textContent,
-                peso_un: parseNumberSafe(r.cells[7].textContent), qtd_pedido: parseNumberSafe(r.cells[8].textContent),
-                saldo: r.getAttribute('data-force-block-state') === 'true' ? 0 : parseNumberSafe(r.cells[9].textContent),
-                peso_total: parseNumberSafe(r.cells[10].textContent)
-            }));
-            try { await fetch('/api/save-carteira', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(rows) }); } catch(e){}
+    // 1. Mapeia todas as linhas da tabela para um array de objetos
+    const rows = Array.from(document.querySelectorAll('#dataTable tbody tr')).map(r => {
+        // Capturamos os valores brutos para garantir precisão
+        const saldoRaw = parseFloat(r.getAttribute('data-raw-qty')) || 0;
+        const totalRaw = parseFloat(r.getAttribute('data-raw-total')) || 0;
+        const pesoUnRaw = parseNumberSafe(r.cells[COL_PESO_UN].textContent);
+
+        return {
+            // .replace(' BLOCK','') garante que não salvemos o marcador visual no banco
+            pedido: r.cells[COL_PEDIDO].textContent.replace(' BLOCK', '').trim(),
+            ordem_compra: r.cells[COL_OC].textContent.trim(),
+            entrega: r.cells[COL_ENTREGA].textContent.trim(),
+            razao_social: r.cells[COL_CLIENTE].textContent.trim(),
+            codigo: r.cells[COL_CODIGO].textContent.trim(),
+            nome_produto: r.cells[COL_PRODUTO].textContent.trim(),
+            material: r.cells[COL_MATERIAL].textContent.trim(),
+            peso_un: pesoUnRaw,
+            qtd_pedido: parseNumberSafe(r.cells[COL_QTD_PEDIDO].textContent),
+            // Se a linha estiver bloqueada via sistema, o saldo enviado deve ser 0 para consistência
+            saldo: r.getAttribute('data-force-block-state') === 'true' ? 0 : saldoRaw,
+            peso_total: totalRaw
+        };
+    });
+
+    try {
+        // CORREÇÃO DA URL: Deve apontar para /api/carteira com a query string action=save-snapshot
+        const response = await fetch('/api/carteira?action=save-snapshot', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(rows)
+        });
+
+        if (response.ok) {
+            console.log("Snapshot da carteira salvo com sucesso!");
+            showToast("Sucesso", "Importação finalizada e salva no servidor.");
+        } else {
+            const errorData = await response.json();
+            console.error("Erro do servidor:", errorData);
+            showToast("Erro ao Salvar", errorData.error || "O servidor recusou os dados", "danger");
         }
+    } catch (e) {
+        console.error("Erro na comunicação com o servidor:", e);
+        showToast("Erro de Rede", "Não foi possível conectar ao servidor para salvar.", "danger");
+    }
+}
 
         async function loadDataFromServer() {
             try {
