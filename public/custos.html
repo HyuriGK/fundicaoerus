@@ -12,13 +12,15 @@
     <!-- Libraries -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@1.2.1/dist/chartjs-plugin-zoom.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
     <style>
         :root {
             /* Colors */
             --bg-app: #09090b;
             --bg-panel: #121214;
-            --bg-glass: rgba(24, 24, 27, 0.85); /* Mais escuro para contraste */
+            --bg-glass: rgba(24, 24, 27, 0.85);
             --bg-input: #1f1f22;
             
             --border-subtle: rgba(255, 255, 255, 0.08);
@@ -31,6 +33,8 @@
             --danger: #ef4444;        /* Red */
             --info: #3b82f6;          /* Blue */
             --purple: #a855f7;        /* Purple */
+            --warning: #f59e0b;       /* Yellow */
+            --cyan: #06b6d4;          /* Cyan */
             
             --text-main: #f4f4f5;
             --text-muted: #a1a1aa;
@@ -57,8 +61,10 @@
             overflow: hidden; 
             display: flex; 
             flex-direction: column;
-            background-image: radial-gradient(circle at top right, rgba(251,191,36,0.03), transparent 40%),
-                              radial-gradient(circle at bottom left, rgba(59,130,246,0.03), transparent 40%);
+            background-image: 
+                radial-gradient(circle at top right, rgba(251,191,36,0.03), transparent 40%),
+                radial-gradient(circle at bottom left, rgba(59,130,246,0.03), transparent 40%),
+                radial-gradient(circle at 20% 80%, rgba(168,85,247,0.02), transparent 30%);
         }
 
         /* --- SCROLLBAR --- */
@@ -69,7 +75,7 @@
 
         /* --- HEADER --- */
         .app-header {
-            height: 80px; /* Aumentado levemente para caber os meses */
+            height: 80px;
             padding: 0 32px;
             display: flex; justify-content: space-between; align-items: center;
             background: var(--bg-glass);
@@ -90,7 +96,7 @@
         .brand-info h1 { margin: 0; font-size: 1.1rem; font-weight: 700; letter-spacing: -0.5px; }
         .brand-info span { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
 
-        /* MONTH NAVIGATOR (NEW) */
+        /* MONTH NAVIGATOR */
         .month-nav {
             display: flex; align-items: center; gap: 15px;
             background: rgba(0,0,0,0.3); padding: 5px 10px; border-radius: var(--radius-md);
@@ -134,6 +140,15 @@
 
         .btn-back { background: transparent; color: var(--text-muted); border: 1px solid transparent; }
         .btn-back:hover { color: #fff; background: rgba(255,255,255,0.05); }
+        
+        .btn-success { background: var(--success); color: white; }
+        .btn-success:hover { background: #0da271; box-shadow: 0 0 15px rgba(16, 185, 129, 0.3); }
+        
+        .btn-info { background: var(--info); color: white; }
+        .btn-info:hover { background: #2563eb; box-shadow: 0 0 15px rgba(59, 130, 246, 0.3); }
+        
+        .btn-purple { background: var(--purple); color: white; }
+        .btn-purple:hover { background: #9333ea; box-shadow: 0 0 15px rgba(168, 85, 247, 0.3); }
 
         /* --- DASHBOARD GRID --- */
         .main-container {
@@ -142,15 +157,23 @@
             display: flex; flex-direction: column; gap: 24px;
         }
 
-        /* 1. Production Hero Panel */
+        /* Hero Panel - Produção e Custo */
         .hero-panel {
             background: linear-gradient(90deg, rgba(16, 185, 129, 0.08) 0%, rgba(9, 9, 11, 0) 100%);
             border: 1px solid rgba(16, 185, 129, 0.2);
             border-radius: var(--radius-md);
             padding: 24px;
-            display: flex; align-items: center; justify-content: space-between;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
         }
-        .hero-title { display: flex; align-items: center; gap: 16px; }
+        .hero-card {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 20px;
+            background: rgba(255,255,255,0.03);
+            border-radius: var(--radius-md);
+            border: 1px solid rgba(255,255,255,0.05);
+        }
         .hero-icon { 
             width: 48px; height: 48px; border-radius: 50%; background: rgba(16, 185, 129, 0.15); 
             color: var(--success); display: flex; align-items: center; justify-content: center; font-size: 1.4rem;
@@ -162,15 +185,16 @@
         }
         .hero-input:focus { border-bottom-width: 3px; }
 
-        /* 2. KPIs Grid */
+        /* KPIs Grid Expandida */
         .kpi-grid {
-            display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px;
+            display: grid; grid-template-columns: repeat(5, 1fr); gap: 20px;
         }
         .kpi-card {
             background: var(--bg-glass); border: 1px solid var(--border-subtle);
             border-radius: var(--radius-md); padding: 20px;
             display: flex; flex-direction: column; justify-content: space-between;
             min-height: 120px; transition: transform 0.2s;
+            position: relative; overflow: hidden;
         }
         .kpi-card:hover { transform: translateY(-2px); border-color: var(--border-highlight); }
         .kpi-label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px; }
@@ -180,10 +204,13 @@
         .kpi-success { border-left: 4px solid var(--success); }
         .kpi-info { border-left: 4px solid var(--info); }
         .kpi-purple { border-left: 4px solid var(--purple); }
+        .kpi-warning { border-left: 4px solid var(--warning); }
+        .kpi-danger { border-left: 4px solid var(--danger); }
+        .kpi-cyan { border-left: 4px solid var(--cyan); }
 
-        /* 3. Analytics Section */
+        /* Analytics Section Expandida */
         .analytics-grid {
-            display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 24px;
+            display: grid; grid-template-columns: 1fr 1fr; gap: 24px;
             min-height: 400px; flex: 1;
         }
         .panel {
@@ -215,6 +242,32 @@
         }
         .col-money { font-family: var(--font-mono); color: var(--text-main); font-weight: 500; }
 
+        /* Tab Navigation */
+        .tab-nav {
+            display: flex; gap: 5px;
+            background: var(--bg-panel);
+            border-radius: var(--radius-md);
+            padding: 4px;
+            border: 1px solid var(--border-subtle);
+            margin-bottom: 20px;
+        }
+        .tab {
+            flex: 1; padding: 12px 16px;
+            text-align: center; cursor: pointer;
+            border-radius: 6px; font-weight: 600;
+            font-size: 0.9rem; transition: all 0.2s;
+            color: var(--text-muted);
+        }
+        .tab.active {
+            background: rgba(251, 191, 36, 0.15);
+            color: var(--primary);
+            border: 1px solid rgba(251, 191, 36, 0.3);
+        }
+        .tab:hover:not(.active) {
+            background: rgba(255, 255, 255, 0.05);
+            color: #fff;
+        }
+
         /* --- FULL SCREEN MODALS --- */
         .modal-overlay {
             display: none; position: fixed; inset: 0; 
@@ -244,13 +297,14 @@
 
         .modal-body {
             flex: 1; overflow-y: auto; padding: 40px;
-            background: #09090b; /* Deep black for focus */
+            background: #09090b;
             display: flex; justify-content: center;
         }
 
         .form-container { width: 100%; max-width: 1000px; display: flex; flex-direction: column; gap: 30px; }
 
         .input-grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 24px; }
+        .span-2 { grid-column: span 2; }
         .span-3 { grid-column: span 3; }
         .span-4 { grid-column: span 4; }
         .span-6 { grid-column: span 6; }
@@ -268,9 +322,44 @@
         .theme-rh .modal-title-icon { color: var(--info); background: rgba(59, 130, 246, 0.1); }
         .theme-rh .form-input:focus { border-color: var(--info); }
         
+        .theme-costs .modal-title-icon { color: var(--success); background: rgba(16, 185, 129, 0.1); }
+        .theme-costs .form-input:focus { border-color: var(--success); }
+        
+        .theme-forecast .modal-title-icon { color: var(--purple); background: rgba(168, 85, 247, 0.1); }
+        .theme-forecast .form-input:focus { border-color: var(--purple); }
+
         .drilldown-layout { display: flex; gap: 40px; height: 100%; width: 100%; max-width: 1200px; align-items: center; }
         .drill-chart { flex: 1; min-height: 400px; display: flex; align-items: center; justify-content: center; }
         .drill-data { flex: 1; height: 100%; overflow-y: auto; }
+
+        /* Notification */
+        .notification {
+            position: fixed; bottom: 20px; right: 20px; z-index: 2000;
+            background: var(--bg-panel); border: 1px solid var(--border-subtle);
+            border-left: 4px solid var(--primary); color: #fff;
+            padding: 16px 20px; border-radius: var(--radius-md);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            display: flex; align-items: center; gap: 12px;
+            animation: slideInRight 0.3s ease-out;
+            max-width: 400px;
+        }
+        @keyframes slideInRight {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        .notification.success { border-left-color: var(--success); }
+        .notification.danger { border-left-color: var(--danger); }
+        .notification.info { border-left-color: var(--info); }
+
+        /* Progress Bar */
+        .progress-bar {
+            height: 6px; background: rgba(255,255,255,0.1);
+            border-radius: 3px; overflow: hidden; margin-top: 8px;
+        }
+        .progress-fill {
+            height: 100%; background: var(--primary); border-radius: 3px;
+            transition: width 0.3s ease;
+        }
 
         /* FOOTER */
         .app-footer {
@@ -279,21 +368,58 @@
             font-size: 0.75rem; color: var(--text-muted); background: var(--bg-app);
         }
 
+        /* Custom Badges */
+        .badge {
+            padding: 2px 8px; border-radius: 10px; font-size: 0.7rem; font-weight: 700;
+            display: inline-block; margin-left: 8px;
+        }
+        .badge-success { background: rgba(16, 185, 129, 0.2); color: var(--success); }
+        .badge-danger { background: rgba(239, 68, 68, 0.2); color: var(--danger); }
+        .badge-warning { background: rgba(245, 158, 11, 0.2); color: var(--warning); }
+        .badge-info { background: rgba(59, 130, 246, 0.2); color: var(--info); }
+
+        /* Advanced Charts */
+        .chart-container {
+            position: relative; flex: 1; min-height: 300px;
+        }
+
+        /* Loading */
+        .loading {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.8);
+            display: flex; align-items: center; justify-content: center;
+            z-index: 9999;
+        }
+        .spinner {
+            width: 40px; height: 40px;
+            border: 3px solid rgba(251, 191, 36, 0.3);
+            border-top-color: var(--primary);
+            border-radius: 50%; animation: spin 1s infinite linear;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
     </style>
 </head>
 <body>
 
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading" style="display: none;">
+        <div class="spinner"></div>
+        <div style="margin-left: 15px; color: var(--text-muted);">Processando dados...</div>
+    </div>
+
     <!-- HEADER -->
     <header class="app-header">
         <div class="brand">
-            <div class="brand-icon"><i class="fa-solid fa-layer-group"></i></div>
+            <div class="brand-icon"><i class="fa-solid fa-calculator"></i></div>
             <div class="brand-info">
                 <h1>Fundição Erus</h1>
-                <span>Gestão de Custos</span>
+                <span>Gestão Avançada de Custos</span>
             </div>
         </div>
 
-        <!-- NEW: MONTH BUTTONS NAVIGATOR -->
+        <!-- MONTH NAVIGATOR -->
         <div class="month-nav">
             <select id="yearSelect" class="year-select" onchange="updateDashboard()">
                 <!-- Populated by JS -->
@@ -304,8 +430,14 @@
         </div>
 
         <div class="actions">
+            <button class="btn btn-secondary" onclick="openAdvancedAnalysisModal()">
+                <i class="fa-solid fa-chart-line"></i> Análise
+            </button>
             <button class="btn btn-secondary" onclick="openEmployeeModal()">
                 <i class="fa-solid fa-users"></i> RH
+            </button>
+            <button class="btn btn-info" onclick="openForecastModal()">
+                <i class="fa-solid fa-crystal-ball"></i> Projeções
             </button>
             <button class="btn btn-primary" onclick="openEntryModal()">
                 <i class="fa-solid fa-plus"></i> Novo Lançamento
@@ -319,52 +451,102 @@
     <!-- DASHBOARD -->
     <div class="main-container">
         
-        <!-- Hero: Produção -->
+        <!-- Tabs para diferentes visualizações -->
+        <div class="tab-nav">
+            <div class="tab active" onclick="switchTab('overview')">Visão Geral</div>
+            <div class="tab" onclick="switchTab('analysis')">Análise Detalhada</div>
+            <div class="tab" onclick="switchTab('comparison')">Comparativo</div>
+            <div class="tab" onclick="switchTab('trends')">Tendências</div>
+        </div>
+
+        <!-- Hero: Produção e Custo -->
         <div class="hero-panel">
-            <div class="hero-title">
-                <div class="hero-icon"><i class="fa-solid fa-weight-hanging"></i></div>
-                <div>
-                    <h2 style="margin:0; font-size:1.2rem; color:#fff;">Produção Mensal</h2>
-                    <span style="color:var(--text-muted); font-size:0.85rem;">Volume fundido (Kg)</span>
+            <div class="hero-card">
+                <div class="hero-title">
+                    <div class="hero-icon"><i class="fa-solid fa-weight-hanging"></i></div>
+                    <div>
+                        <h2 style="margin:0; font-size:1.2rem; color:#fff;">Produção Mensal</h2>
+                        <span style="color:var(--text-muted); font-size:0.85rem;">Volume fundido (Kg)</span>
+                    </div>
+                </div>
+                <div style="display:flex; align-items:baseline;">
+                    <input type="number" id="inputProducao" class="hero-input" value="10000" oninput="updateDashboard()">
+                    <span style="color:var(--text-muted);">Kg</span>
                 </div>
             </div>
-            <div style="display:flex; align-items:baseline;">
-                <input type="number" id="inputProducao" class="hero-input" value="10000" oninput="updateDashboard()">
-                <span style="color:var(--text-muted);">Kg</span>
+            
+            <div class="hero-card" style="border-color: rgba(59,130,246,0.2); background: linear-gradient(90deg, rgba(59,130,246,0.08) 0%, transparent 100%);">
+                <div class="hero-title">
+                    <div class="hero-icon" style="background: rgba(59,130,246,0.15); color: var(--info);">
+                        <i class="fa-solid fa-dollar-sign"></i>
+                    </div>
+                    <div>
+                        <h2 style="margin:0; font-size:1.2rem; color:#fff;">Meta de Custo/kg</h2>
+                        <span style="color:var(--text-muted); font-size:0.85rem;">Custo alvo por kg</span>
+                    </div>
+                </div>
+                <div style="display:flex; align-items:baseline;">
+                    <input type="number" id="inputTargetCost" class="hero-input" value="15.50" step="0.01" 
+                           style="border-bottom-color: var(--info);" oninput="updateDashboard()">
+                    <span style="color:var(--text-muted);">R$/kg</span>
+                </div>
             </div>
         </div>
 
-        <!-- KPIs -->
+        <!-- KPIs Expandidas -->
         <div class="kpi-grid">
             <div class="kpi-card kpi-primary">
                 <span class="kpi-label">Custo Total (Mês)</span>
                 <span class="kpi-value" id="kpiTotalCost">R$ 0,00</span>
+                <div class="progress-bar">
+                    <div id="costProgress" class="progress-fill" style="width: 0%"></div>
+                </div>
             </div>
             <div class="kpi-card kpi-purple">
-                <span class="kpi-label">Custo / Kg (Global)</span>
+                <span class="kpi-label">Custo / Kg (Real)</span>
                 <span class="kpi-value" id="kpiCostPerKg">R$ 0,00</span>
+                <div style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">
+                    Meta: <span id="targetCostDisplay">R$ 15,50</span>
+                </div>
             </div>
             <div class="kpi-card kpi-info">
                 <span class="kpi-label">Energia / Kg</span>
                 <span class="kpi-value" id="kpiEnergyPerKg">R$ 0,00</span>
+                <div class="progress-bar">
+                    <div id="energyProgress" class="progress-fill" style="width: 0%"></div>
+                </div>
             </div>
             <div class="kpi-card kpi-success">
                 <span class="kpi-label">Mão de Obra Total</span>
                 <span class="kpi-value" id="kpiLaborTotal">R$ 0,00</span>
+                <div style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">
+                    <span id="employeeCount">0 funcionários</span>
+                </div>
+            </div>
+            <div class="kpi-card kpi-warning">
+                <span class="kpi-label">Margem Bruta</span>
+                <span class="kpi-value" id="kpiMargin">0,0%</span>
+                <div style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">
+                    Faturamento: <span id="revenueDisplay">R$ 0,00</span>
+                </div>
             </div>
         </div>
 
-        <!-- Charts & Table -->
+        <!-- Charts & Table Expandida -->
         <div class="analytics-grid">
             <div class="panel">
                 <div class="panel-header">
                     <span class="panel-title"><i class="fa-solid fa-chart-pie" style="color:var(--primary)"></i> Análise de Custos</span>
                     <div style="display:flex; gap:10px;">
-                        <button class="btn btn-secondary" style="height:30px; font-size:0.7rem;" onclick="toggleChartMode('category')">Categoria</button>
-                        <button class="btn btn-secondary" style="height:30px; font-size:0.7rem;" onclick="toggleChartMode('sector')">Setor</button>
+                        <button class="btn btn-secondary" style="height:30px; font-size:0.7rem;" 
+                                onclick="toggleChartMode('category')">Categoria</button>
+                        <button class="btn btn-secondary" style="height:30px; font-size:0.7rem;" 
+                                onclick="toggleChartMode('sector')">Setor</button>
+                        <button class="btn btn-secondary" style="height:30px; font-size:0.7rem;" 
+                                onclick="toggleChartMode('trend')">Tendência</button>
                     </div>
                 </div>
-                <div style="flex:1; position:relative;">
+                <div class="chart-container">
                     <canvas id="mainChart"></canvas>
                 </div>
             </div>
@@ -372,7 +554,11 @@
             <div class="panel">
                 <div class="panel-header">
                     <span class="panel-title"><i class="fa-solid fa-list" style="color:var(--text-muted)"></i> Registros do Mês</span>
-                    <span class="tag" id="entryCount">0</span>
+                    <div style="display:flex; gap:8px; align-items:center;">
+                        <span class="tag" id="entryCount">0</span>
+                        <button class="btn btn-secondary" style="height:30px; font-size:0.7rem; padding:0 10px;" 
+                                onclick="exportToExcel()">Exportar</button>
+                    </div>
                 </div>
                 <div class="table-container">
                     <table id="costTable">
@@ -381,11 +567,42 @@
                                 <th>Dia</th>
                                 <th>Setor / Descrição</th>
                                 <th style="text-align:right;">Valor</th>
+                                <th style="width:80px;">Status</th>
                                 <th style="width:40px;"></th>
                             </tr>
                         </thead>
                         <tbody></tbody>
                     </table>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Segunda Linha de Gráficos -->
+        <div class="analytics-grid">
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="panel-title"><i class="fa-solid fa-chart-line" style="color:var(--info)"></i> Evolução Mensal</span>
+                    <select id="trendMetric" style="background:transparent; border:1px solid var(--border-subtle); color:#fff; padding:4px 8px; border-radius:4px;" 
+                            onchange="updateTrendChart()">
+                        <option value="total">Custo Total</option>
+                        <option value="per_kg">Custo por kg</option>
+                        <option value="energy">Energia</option>
+                        <option value="labor">Mão de Obra</option>
+                    </select>
+                </div>
+                <div class="chart-container">
+                    <canvas id="trendChart"></canvas>
+                </div>
+            </div>
+            
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="panel-title"><i class="fa-solid fa-balance-scale" style="color:var(--success)"></i> Orçamento vs Realizado</span>
+                    <button class="btn btn-secondary" style="height:30px; font-size:0.7rem; padding:0 10px;" 
+                            onclick="openBudgetModal()">Configurar</button>
+                </div>
+                <div class="chart-container">
+                    <canvas id="budgetChart"></canvas>
                 </div>
             </div>
         </div>
@@ -395,11 +612,12 @@
         <span id="clock-date"></span>
         <div style="display:flex; gap:15px;">
             <span style="cursor:pointer; color:var(--danger);" onclick="handleClearDatabase()">Limpar Dados</span>
+            <span style="color:var(--text-muted);">Versão 2.0 | Sistema de Custos Avançado</span>
             <span id="clock-time"></span>
         </div>
     </footer>
 
-    <!-- MODAL 1: NOVO LANÇAMENTO (FULL SCREEN) -->
+    <!-- MODAL 1: NOVO LANÇAMENTO -->
     <div id="entryModal" class="modal-overlay">
         <div class="modal-toolbar">
             <div class="modal-title-group">
@@ -416,13 +634,26 @@
                 <div class="input-grid">
                     <div class="form-group span-3">
                         <label>Mês de Referência</label>
-                        <!-- CHANGED TO MONTH INPUT -->
                         <input type="month" id="formMonth" class="form-input">
+                    </div>
+                    <div class="form-group span-2">
+                        <label>Dia</label>
+                        <input type="number" id="formDay" class="form-input" placeholder="01" min="1" max="31" value="1">
                     </div>
                     <div class="form-group span-3">
                         <label>Valor (R$)</label>
                         <input type="number" id="formValue" class="form-input" placeholder="0,00" step="0.01">
                     </div>
+                    <div class="form-group span-4">
+                        <label>Status</label>
+                        <select id="formStatus" class="form-input">
+                            <option value="PENDENTE">Pendente</option>
+                            <option value="PAGO">Pago</option>
+                            <option value="AGENDADO">Agendado</option>
+                            <option value="CANCELADO">Cancelado</option>
+                        </select>
+                    </div>
+                    
                     <div class="form-group span-6">
                         <label>Descrição</label>
                         <input type="text" id="formDesc" class="form-input" placeholder="Detalhes da despesa...">
@@ -436,6 +667,9 @@
                             <option value="MAO DE OBRA">Mão de Obra</option>
                             <option value="INSUMOS">Insumos</option>
                             <option value="MANUTENCAO">Manutenção</option>
+                            <option value="DEPRECIACAO">Depreciação</option>
+                            <option value="ALUGUEL">Aluguel</option>
+                            <option value="TRANSPORTE">Transporte</option>
                             <option value="GERAL">Geral/Admin</option>
                         </select>
                     </div>
@@ -447,16 +681,25 @@
                             <option value="MOLDAGEM">Moldagem</option>
                             <option value="MACHARIA">Macharia</option>
                             <option value="ACABAMENTO">Acabamento</option>
-                            <option value="USINAGEM">Usinagem</option> <!-- ADDED -->
-                            <option value="EXPEDICAO">Expedição</option> <!-- ADDED -->
+                            <option value="USINAGEM">Usinagem</option>
+                            <option value="EXPEDICAO">Expedição</option>
                             <option value="MANUTENCAO">Manutenção</option>
                             <option value="ADM">Administrativo</option>
                             <option value="VENDAS">Vendas</option>
+                            <option value="TI">Tecnologia</option>
                         </select>
+                    </div>
+                    
+                    <div class="form-group span-12">
+                        <label>Observações (Opcional)</label>
+                        <textarea id="formNotes" class="form-input" rows="3" placeholder="Observações adicionais..."></textarea>
                     </div>
                 </div>
 
-                <div style="margin-top:20px; display:flex; justify-content:flex-end;">
+                <div style="margin-top:20px; display:flex; justify-content:flex-end; gap:15px;">
+                    <button class="btn btn-secondary" onclick="closeEntryModal()" style="height:50px; font-size:1rem; padding:0 30px;">
+                        Cancelar
+                    </button>
                     <button class="btn btn-primary" onclick="submitEntry()" style="height:50px; font-size:1rem; padding:0 40px;">
                         Confirmar Lançamento
                     </button>
@@ -465,7 +708,7 @@
         </div>
     </div>
 
-    <!-- MODAL 2: RH (FULL SCREEN) -->
+    <!-- MODAL 2: RH -->
     <div id="employeeModal" class="modal-overlay theme-rh">
         <div class="modal-toolbar">
             <div class="modal-title-group">
@@ -490,10 +733,11 @@
                                 <option value="MOLDAGEM">Moldagem</option>
                                 <option value="MACHARIA">Macharia</option>
                                 <option value="ACABAMENTO">Acabamento</option>
-                                <option value="USINAGEM">Usinagem</option> <!-- ADDED -->
-                                <option value="EXPEDICAO">Expedição</option> <!-- ADDED -->
+                                <option value="USINAGEM">Usinagem</option>
+                                <option value="EXPEDICAO">Expedição</option>
                                 <option value="MANUTENCAO">Manutenção</option>
                                 <option value="ADM">Administrativo</option>
+                                <option value="VENDAS">Vendas</option>
                             </select>
                         </div>
                         <div class="form-group span-3">
@@ -520,6 +764,7 @@
                                     <tr>
                                         <th>Nome</th>
                                         <th>Setor</th>
+                                        <th style="text-align:right">Salário</th>
                                         <th style="text-align:right">Custo Total</th>
                                         <th></th>
                                     </tr>
@@ -533,13 +778,16 @@
                         <div style="background:rgba(59, 130, 246, 0.1); border:1px solid rgba(59, 130, 246, 0.3); padding:24px; border-radius:var(--radius-md);">
                             <span style="display:block; font-size:0.85rem; color:var(--info); margin-bottom:8px;">TOTAL FOLHA MENSAL</span>
                             <strong style="font-size:2rem; color:#fff;" id="rhTotalMonth">R$ 0,00</strong>
-                            <span style="display:block; margin-top:10px; font-size:0.9rem; color:var(--text-muted);">Colaboradores: <span id="rhCount" style="color:#fff;">0</span></span>
+                            <span style="display:block; margin-top:10px; font-size:0.9rem; color:var(--text-muted);">
+                                Colaboradores: <span id="rhCount" style="color:#fff;">0</span><br>
+                                Custo médio: <span id="rhAvgCost" style="color:#fff;">R$ 0,00</span>
+                            </span>
                         </div>
                         <div style="padding-top:20px; border-top:1px solid var(--border-subtle);">
                             <label style="color:#aaa; font-size:0.8rem; display:block; margin-bottom:5px;">Mês de Lançamento:</label>
                             <input type="month" id="rhMonthPost" class="form-input" style="margin-bottom:10px;">
                             <button class="btn btn-primary" style="height:50px; font-size:1rem; width:100%;" onclick="postPayrollToExpenses()">
-                                Lançar Folha
+                                <i class="fa-solid fa-paper-plane"></i> Lançar Folha
                             </button>
                         </div>
                     </div>
@@ -548,7 +796,7 @@
         </div>
     </div>
 
-    <!-- MODAL 3: DRILLDOWN (FULL SCREEN) -->
+    <!-- MODAL 3: DRILLDOWN -->
     <div id="drilldownModal" class="modal-overlay">
         <div class="modal-toolbar">
             <div class="modal-title-group">
@@ -571,6 +819,7 @@
                                 <tr>
                                     <th>Item</th>
                                     <th style="text-align:right">Total</th>
+                                    <th style="text-align:right">%</th>
                                 </tr>
                             </thead>
                             <tbody></tbody>
@@ -581,32 +830,306 @@
         </div>
     </div>
 
+    <!-- MODAL 4: ANÁLISE AVANÇADA -->
+    <div id="analysisModal" class="modal-overlay theme-costs">
+        <div class="modal-toolbar">
+            <div class="modal-title-group">
+                <div class="modal-title-icon"><i class="fa-solid fa-chart-line"></i></div>
+                <h2 style="margin:0; font-size:1.2rem; color:#fff;">Análise Avançada de Custos</h2>
+            </div>
+            <button class="modal-close-btn" onclick="closeAnalysisModal()">Fechar <i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body">
+            <div class="form-container">
+                <div class="tab-nav" style="margin-bottom: 30px;">
+                    <div class="tab active" onclick="switchAnalysisTab('breakdown')">Detalhamento</div>
+                    <div class="tab" onclick="switchAnalysisTab('comparison')">Comparativo</div>
+                    <div class="tab" onclick="switchAnalysisTab('efficiency')">Eficiência</div>
+                    <div class="tab" onclick="switchAnalysisTab('roi')">ROI</div>
+                </div>
+                
+                <div id="analysisBreakdownTab" class="analysis-tab">
+                    <div class="input-grid">
+                        <div class="form-group span-6">
+                            <label>Período Inicial</label>
+                            <input type="month" id="analysisStart" class="form-input" value="2024-01">
+                        </div>
+                        <div class="form-group span-6">
+                            <label>Período Final</label>
+                            <input type="month" id="analysisEnd" class="form-input" value="2024-12">
+                        </div>
+                    </div>
+                    
+                    <div style="display: flex; gap: 30px; margin-top: 30px;">
+                        <div style="flex: 1;">
+                            <canvas id="analysisChart1" height="300"></canvas>
+                        </div>
+                        <div style="width: 300px;">
+                            <div style="background: var(--bg-panel); padding: 20px; border-radius: var(--radius-md); border: 1px solid var(--border-subtle);">
+                                <h4 style="margin: 0 0 15px 0;">Resumo do Período</h4>
+                                <div style="display: flex; flex-direction: column; gap: 10px;">
+                                    <div style="display: flex; justify-content: space-between;">
+                                        <span style="color: var(--text-muted);">Custo Total:</span>
+                                        <span id="analysisTotalCost" style="font-weight: bold; color: #fff;">R$ 0,00</span>
+                                    </div>
+                                    <div style="display: flex; justify-content: space-between;">
+                                        <span style="color: var(--text-muted);">Produção Total:</span>
+                                        <span id="analysisTotalProd" style="font-weight: bold; color: #fff;">0 kg</span>
+                                    </div>
+                                    <div style="display: flex; justify-content: space-between;">
+                                        <span style="color: var(--text-muted);">Custo Médio/kg:</span>
+                                        <span id="analysisAvgCost" style="font-weight: bold; color: var(--primary);">R$ 0,00</span>
+                                    </div>
+                                    <div style="display: flex; justify-content: space-between;">
+                                        <span style="color: var(--text-muted);">Variação:</span>
+                                        <span id="analysisVariation" style="font-weight: bold; color: var(--success);">0%</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="analysisComparisonTab" class="analysis-tab" style="display: none;">
+                    <div class="input-grid">
+                        <div class="form-group span-6">
+                            <label>Ano 1</label>
+                            <select id="compareYear1" class="form-input">
+                                <option value="2023">2023</option>
+                                <option value="2024" selected>2024</option>
+                                <option value="2025">2025</option>
+                            </select>
+                        </div>
+                        <div class="form-group span-6">
+                            <label>Ano 2</label>
+                            <select id="compareYear2" class="form-input">
+                                <option value="2023">2023</option>
+                                <option value="2024" selected>2024</option>
+                                <option value="2025">2025</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div style="margin-top: 30px; height: 400px;">
+                        <canvas id="comparisonChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 5: PROJEÇÕES E FORECAST -->
+    <div id="forecastModal" class="modal-overlay theme-forecast">
+        <div class="modal-toolbar">
+            <div class="modal-title-group">
+                <div class="modal-title-icon"><i class="fa-solid fa-crystal-ball"></i></div>
+                <h2 style="margin:0; font-size:1.2rem; color:#fff;">Projeções e Forecast</h2>
+            </div>
+            <button class="modal-close-btn" onclick="closeForecastModal()">Fechar <i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body">
+            <div class="form-container">
+                <div class="input-grid">
+                    <div class="form-group span-4">
+                        <label>Horizonte (meses)</label>
+                        <select id="forecastMonths" class="form-input">
+                            <option value="3">3 meses</option>
+                            <option value="6" selected>6 meses</option>
+                            <option value="12">12 meses</option>
+                        </select>
+                    </div>
+                    <div class="form-group span-4">
+                        <label>Taxa de Crescimento (%)</label>
+                        <input type="number" id="forecastGrowth" class="form-input" value="5" step="0.1">
+                    </div>
+                    <div class="form-group span-4">
+                        <label>Inflação Projetada (%)</label>
+                        <input type="number" id="forecastInflation" class="form-input" value="4.5" step="0.1">
+                    </div>
+                </div>
+                
+                <div style="margin-top: 30px; display: flex; gap: 30px;">
+                    <div style="flex: 1;">
+                        <h4 style="margin: 0 0 15px 0;">Projeção de Custos</h4>
+                        <div style="height: 300px;">
+                            <canvas id="forecastChart"></canvas>
+                        </div>
+                    </div>
+                    <div style="width: 300px;">
+                        <div style="background: var(--bg-panel); padding: 20px; border-radius: var(--radius-md); border: 1px solid var(--border-subtle);">
+                            <h4 style="margin: 0 0 15px 0;">Sumário da Projeção</h4>
+                            <div style="display: flex; flex-direction: column; gap: 10px;">
+                                <div style="display: flex; justify-content: space-between;">
+                                    <span style="color: var(--text-muted);">Custo Atual:</span>
+                                    <span id="forecastCurrent" style="font-weight: bold; color: #fff;">R$ 0,00</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between;">
+                                    <span style="color: var(--text-muted);">Custo Projetado:</span>
+                                    <span id="forecastProjected" style="font-weight: bold; color: var(--warning);">R$ 0,00</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between;">
+                                    <span style="color: var(--text-muted);">Variação:</span>
+                                    <span id="forecastChange" style="font-weight: bold; color: var(--danger);">0%</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between;">
+                                    <span style="color: var(--text-muted);">Custo/kg Projetado:</span>
+                                    <span id="forecastCostPerKg" style="font-weight: bold; color: var(--primary);">R$ 0,00</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <button class="btn btn-purple" onclick="generateForecast()" style="width: 100%; height: 50px; margin-top: 20px;">
+                            <i class="fa-solid fa-calculator"></i> Gerar Projeção
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 6: ORÇAMENTO -->
+    <div id="budgetModal" class="modal-overlay theme-costs">
+        <div class="modal-toolbar">
+            <div class="modal-title-group">
+                <div class="modal-title-icon"><i class="fa-solid fa-coins"></i></div>
+                <h2 style="margin:0; font-size:1.2rem; color:#fff;">Gestão de Orçamento</h2>
+            </div>
+            <button class="modal-close-btn" onclick="closeBudgetModal()">Fechar <i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body">
+            <div class="form-container">
+                <div class="input-grid">
+                    <div class="form-group span-3">
+                        <label>Mês/Ano</label>
+                        <input type="month" id="budgetMonth" class="form-input">
+                    </div>
+                    <div class="form-group span-3">
+                        <label>Orçamento Total (R$)</label>
+                        <input type="number" id="budgetTotal" class="form-input" placeholder="0,00" step="0.01">
+                    </div>
+                    <div class="form-group span-6">
+                        <label>Categoria</label>
+                        <select id="budgetCategory" class="form-input">
+                            <option value="MATERIA PRIMA">Matéria Prima</option>
+                            <option value="ENERGIA">Energia</option>
+                            <option value="MAO DE OBRA">Mão de Obra</option>
+                            <option value="INSUMOS">Insumos</option>
+                            <option value="GERAL">Geral</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <button class="btn btn-primary" onclick="addBudget()" style="width: 200px; height: 45px;">
+                    <i class="fa-solid fa-plus"></i> Adicionar Orçamento
+                </button>
+                
+                <div style="margin-top: 30px; background: var(--bg-panel); border-radius: var(--radius-md); border: 1px solid var(--border-subtle); overflow: hidden;">
+                    <table style="width: 100%;">
+                        <thead>
+                            <tr>
+                                <th style="padding: 15px;">Mês</th>
+                                <th style="padding: 15px;">Categoria</th>
+                                <th style="padding: 15px; text-align: right;">Orçamento</th>
+                                <th style="padding: 15px; text-align: right;">Realizado</th>
+                                <th style="padding: 15px; text-align: right;">Diferença</th>
+                                <th style="padding: 15px; text-align: center;">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="budgetTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         // --- CONFIG & STATE ---
-        const CAT_COLORS = { 'MATERIA PRIMA': '#fbbf24', 'ENERGIA': '#3b82f6', 'MAO DE OBRA': '#ef4444', 'INSUMOS': '#10b981', 'MANUTENCAO': '#f97316', 'GERAL': '#a855f7' };
+        const CAT_COLORS = { 
+            'MATERIA PRIMA': '#fbbf24', 
+            'ENERGIA': '#3b82f6', 
+            'MAO DE OBRA': '#ef4444', 
+            'INSUMOS': '#10b981', 
+            'MANUTENCAO': '#f97316', 
+            'DEPRECIACAO': '#8b5cf6',
+            'ALUGUEL': '#64748b',
+            'TRANSPORTE': '#06b6d4',
+            'GERAL': '#a855f7' 
+        };
+        
         const SECTOR_COLORS = ['#06b6d4', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#6366f1', '#84cc16', '#64748b'];
         const MONTH_NAMES = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
+        
+        // Status Colors
+        const STATUS_COLORS = {
+            'PAGO': '#10b981',
+            'PENDENTE': '#f59e0b',
+            'AGENDADO': '#3b82f6',
+            'CANCELADO': '#64748b'
+        };
 
         let costData = JSON.parse(localStorage.getItem('erus_custos')) || [];
         let employeeData = JSON.parse(localStorage.getItem('erus_funcionarios')) || [];
+        let budgetData = JSON.parse(localStorage.getItem('erus_orcamento')) || [];
+        let revenueData = JSON.parse(localStorage.getItem('erus_faturamento')) || [];
         
-        let currentChartMode = 'sector'; // 'sector' or 'category'
+        let currentChartMode = 'sector'; // 'sector', 'category', or 'trend'
+        let currentTab = 'overview';
         let mainChartInstance = null;
+        let trendChartInstance = null;
+        let budgetChartInstance = null;
         let drilldownChartInstance = null;
+        let analysisChart1Instance = null;
+        let comparisonChartInstance = null;
+        let forecastChartInstance = null;
 
         // Global Selection State
         let selectedYear = new Date().getFullYear();
         let selectedMonthIndex = new Date().getMonth(); // 0-11
 
+        // --- NOTIFICATION SYSTEM ---
+        function showNotification(message, type = 'info', duration = 5000) {
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            notification.innerHTML = `
+                <i class="fa-solid fa-${type === 'success' ? 'check-circle' : type === 'danger' ? 'exclamation-circle' : 'info-circle'}" 
+                   style="color: ${type === 'success' ? '#10b981' : type === 'danger' ? '#ef4444' : '#3b82f6'}"></i>
+                <div>
+                    <div style="font-weight: 600; margin-bottom: 4px;">${type === 'success' ? 'Sucesso' : type === 'danger' ? 'Erro' : 'Informação'}</div>
+                    <div style="font-size: 0.9rem; color: #a1a1aa;">${message}</div>
+                </div>
+            `;
+            
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.style.animation = 'slideInRight 0.3s ease-out reverse';
+                setTimeout(() => notification.remove(), 300);
+            }, duration);
+        }
+
+        // --- LOADING OVERLAY ---
+        function showLoading() {
+            document.getElementById('loadingOverlay').style.display = 'flex';
+        }
+        
+        function hideLoading() {
+            document.getElementById('loadingOverlay').style.display = 'none';
+        }
+
         // --- INIT ---
         window.onload = function() {
             initMonthNavigator();
             startClock();
+            loadRevenueData();
             
             // Set input defaults
-            const nowIso = new Date().toISOString().slice(0, 7);
+            const now = new Date();
+            const nowIso = now.toISOString().slice(0, 7);
             document.getElementById('formMonth').value = nowIso;
             document.getElementById('rhMonthPost').value = nowIso;
+            document.getElementById('budgetMonth').value = nowIso;
+            document.getElementById('analysisStart').value = `${selectedYear}-01`;
+            document.getElementById('analysisEnd').value = `${selectedYear}-12`;
 
             // ESC Key Listener
             document.addEventListener('keydown', (e) => {
@@ -614,10 +1137,14 @@
                     closeEntryModal();
                     closeEmployeeModal();
                     closeDrilldown();
+                    closeAnalysisModal();
+                    closeForecastModal();
+                    closeBudgetModal();
                 }
             });
 
             updateDashboard();
+            renderBudgetTable();
         };
 
         // --- NAVIGATION LOGIC ---
@@ -657,6 +1184,32 @@
             
             updateDashboard();
         }
+        
+        function switchTab(tab) {
+            currentTab = tab;
+            
+            // Update tabs
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            // Update dashboard based on tab
+            updateDashboard();
+        }
+        
+        function switchAnalysisTab(tab) {
+            document.querySelectorAll('#analysisModal .tab').forEach(t => t.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            // Hide all tabs
+            document.querySelectorAll('.analysis-tab').forEach(t => t.style.display = 'none');
+            
+            // Show selected tab
+            document.getElementById(`analysis${tab.charAt(0).toUpperCase() + tab.slice(1)}Tab`).style.display = 'block';
+            
+            // Update charts for the tab
+            if (tab === 'breakdown') updateAnalysisBreakdown();
+            else if (tab === 'comparison') updateAnalysisComparison();
+        }
 
         // --- CORE DATA LOGIC ---
 
@@ -667,6 +1220,14 @@
                 const [d, m, y] = item.data_formatada.split('/');
                 return parseInt(m) === (selectedMonthIndex + 1) && parseInt(y) === selectedYear;
             });
+        }
+        
+        function getRevenueForMonth() {
+            const revenueEntry = revenueData.find(item => {
+                const [d, m, y] = item.data_formatada.split('/');
+                return parseInt(m) === (selectedMonthIndex + 1) && parseInt(y) === selectedYear;
+            });
+            return revenueEntry ? parseFloat(revenueEntry.valor) : 0;
         }
 
         function updateDashboard() {
@@ -697,6 +1258,7 @@
 
                 // Fill Table
                 const [d, m, y] = item.data_formatada.split('/');
+                const statusColor = STATUS_COLORS[item.status] || '#64748b';
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
                     <td style="color:var(--text-muted);">${d}</td>
@@ -704,32 +1266,85 @@
                         <span style="font-weight:600; color:#fff;">${setor}</span><br>
                         <span style="font-size:0.75rem; color:var(--text-muted);">${item.descricao}</span>
                     </td>
-                    <td class="col-money" style="text-align:right;">R$ ${val.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
-                    <td style="text-align:center;"><i class="fa-solid fa-trash" style="cursor:pointer; color:var(--border-subtle); font-size:0.8rem;" onmouseover="this.style.color='var(--danger)'" onmouseout="this.style.color='var(--border-subtle)'" onclick="deleteCost('${item.id}')"></i></td>
+                    <td class="col-money" style="text-align:right; font-weight:600;">R$ ${val.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
+                    <td style="text-align:center;">
+                        <span class="tag" style="background:${statusColor + '20'}; color:${statusColor}; border:1px solid ${statusColor + '40'}">
+                            ${item.status || 'PENDENTE'}
+                        </span>
+                    </td>
+                    <td style="text-align:center;">
+                        <i class="fa-solid fa-trash" style="cursor:pointer; color:var(--border-subtle); font-size:0.8rem;" 
+                           onmouseover="this.style.color='var(--danger)'" 
+                           onmouseout="this.style.color='var(--border-subtle)'" 
+                           onclick="deleteCost('${item.id}')"></i>
+                    </td>
                 `;
                 tableBody.prepend(tr);
             });
 
             // Empty State
             if (filteredData.length === 0) {
-                tableBody.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:30px; color:var(--text-muted);">Nenhum lançamento em ${MONTH_NAMES[selectedMonthIndex]}/${selectedYear}.</td></tr>`;
+                tableBody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:30px; color:var(--text-muted);">
+                    Nenhum lançamento em ${MONTH_NAMES[selectedMonthIndex]}/${selectedYear}.
+                </td></tr>`;
             }
 
             // KPIs
             const producaoKg = parseFloat(document.getElementById('inputProducao').value) || 1;
+            const targetCost = parseFloat(document.getElementById('inputTargetCost').value) || 0;
+            const revenue = getRevenueForMonth();
+            
             document.getElementById('kpiTotalCost').innerText = totalCost.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
             document.getElementById('kpiCostPerKg').innerText = (totalCost / producaoKg).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
             document.getElementById('kpiEnergyPerKg').innerText = (energyCost / producaoKg).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
             document.getElementById('kpiLaborTotal').innerText = laborCost.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
             document.getElementById('entryCount').innerText = filteredData.length;
+            document.getElementById('targetCostDisplay').innerText = targetCost.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
+            
+            // Calculate margin
+            const margin = revenue > 0 ? ((revenue - totalCost) / revenue * 100) : 0;
+            document.getElementById('kpiMargin').innerText = margin.toFixed(1) + '%';
+            document.getElementById('revenueDisplay').innerText = revenue.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
+            
+            // Update progress bars
+            const costPerKg = totalCost / producaoKg;
+            const costProgress = targetCost > 0 ? Math.min((costPerKg / targetCost) * 100, 100) : 0;
+            document.getElementById('costProgress').style.width = costProgress + '%';
+            document.getElementById('costProgress').style.background = costPerKg > targetCost ? 'var(--danger)' : 'var(--success)';
+            
+            const energyPerKg = energyCost / producaoKg;
+            const avgEnergyPerKg = 1.5; // Example average
+            const energyProgress = Math.min((energyPerKg / avgEnergyPerKg) * 100, 100);
+            document.getElementById('energyProgress').style.width = energyProgress + '%';
 
-            updateMainChart(currentChartMode === 'category' ? catTotals : sectorTotals);
+            // Update employee count
+            document.getElementById('employeeCount').innerText = `${employeeData.length} funcionários`;
+
+            // Update charts based on current mode
+            if (currentChartMode === 'category') {
+                updateMainChart(catTotals);
+            } else if (currentChartMode === 'sector') {
+                updateMainChart(sectorTotals);
+            } else if (currentChartMode === 'trend') {
+                updateMainChartTrend();
+            }
+            
+            // Update additional charts
+            updateTrendChart();
+            updateBudgetChart();
         }
 
         // --- CHARTING ---
 
         function toggleChartMode(mode) {
             currentChartMode = mode;
+            
+            // Update button states
+            document.querySelectorAll('.panel-header .btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
             updateDashboard();
         }
 
@@ -765,7 +1380,25 @@
                     maintainAspectRatio: false,
                     layout: { padding: 20 },
                     plugins: { 
-                        legend: { position: 'right', labels: { color: '#a1a1aa', font: {family: 'Inter', size: 11}, boxWidth: 10 } }
+                        legend: { 
+                            position: 'right', 
+                            labels: { 
+                                color: '#a1a1aa', 
+                                font: {family: 'Inter', size: 11}, 
+                                boxWidth: 10,
+                                padding: 15
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const value = context.parsed;
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = total > 0 ? (value / total * 100).toFixed(1) : 0;
+                                    return `${context.label}: R$ ${value.toLocaleString('pt-BR', {minimumFractionDigits: 2})} (${percentage}%)`;
+                                }
+                            }
+                        }
                     },
                     onClick: (evt, elements) => {
                         if(isSector && elements.length > 0) {
@@ -778,6 +1411,214 @@
                     }
                 }
             });
+        }
+        
+        function updateMainChartTrend() {
+            // Show trend of costs over last 6 months
+            const ctx = document.getElementById('mainChart').getContext('2d');
+            
+            const monthsToShow = 6;
+            const labels = [];
+            const data = [];
+            
+            for (let i = monthsToShow - 1; i >= 0; i--) {
+                const date = new Date(selectedYear, selectedMonthIndex - i, 1);
+                const month = date.getMonth();
+                const year = date.getFullYear();
+                
+                labels.push(`${MONTH_NAMES[month]}/${year.toString().slice(2)}`);
+                
+                // Calculate total cost for this month
+                const monthCost = costData.reduce((total, item) => {
+                    const [d, m, y] = item.data_formatada.split('/');
+                    if (parseInt(m) === (month + 1) && parseInt(y) === year) {
+                        return total + parseFloat(item.valor || 0);
+                    }
+                    return total;
+                }, 0);
+                
+                data.push(monthCost);
+            }
+
+            if (mainChartInstance) mainChartInstance.destroy();
+
+            mainChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{ 
+                        data: data, 
+                        borderColor: '#fbbf24',
+                        backgroundColor: 'rgba(251, 191, 36, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true, 
+                    maintainAspectRatio: false,
+                    plugins: { 
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return 'R$ ' + value.toLocaleString('pt-BR');
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        function updateTrendChart() {
+            const ctx = document.getElementById('trendChart').getContext('2d');
+            const metric = document.getElementById('trendMetric').value;
+            
+            const months = [];
+            const data = [];
+            
+            // Show last 12 months
+            for (let i = 11; i >= 0; i--) {
+                const date = new Date(selectedYear, selectedMonthIndex - i, 1);
+                const month = date.getMonth();
+                const year = date.getFullYear();
+                
+                months.push(`${MONTH_NAMES[month]}/${year.toString().slice(2)}`);
+                
+                // Calculate metric for this month
+                let monthValue = 0;
+                const monthData = costData.filter(item => {
+                    const [d, m, y] = item.data_formatada.split('/');
+                    return parseInt(m) === (month + 1) && parseInt(y) === year;
+                });
+                
+                if (metric === 'total') {
+                    monthValue = monthData.reduce((sum, item) => sum + parseFloat(item.valor || 0), 0);
+                } else if (metric === 'energy') {
+                    monthValue = monthData
+                        .filter(item => item.categoria === 'ENERGIA')
+                        .reduce((sum, item) => sum + parseFloat(item.valor || 0), 0);
+                } else if (metric === 'labor') {
+                    monthValue = monthData
+                        .filter(item => item.categoria === 'MAO DE OBRA')
+                        .reduce((sum, item) => sum + parseFloat(item.valor || 0), 0);
+                } else if (metric === 'per_kg') {
+                    const totalCost = monthData.reduce((sum, item) => sum + parseFloat(item.valor || 0), 0);
+                    // For simplicity, using fixed production of 10000kg per month
+                    monthValue = totalCost / 10000;
+                }
+                
+                data.push(monthValue);
+            }
+
+            if (trendChartInstance) trendChartInstance.destroy();
+
+            trendChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: months,
+                    datasets: [{ 
+                        data: data, 
+                        backgroundColor: '#3b82f6',
+                        borderColor: '#3b82f6',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true, 
+                    maintainAspectRatio: false,
+                    plugins: { 
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    if (metric === 'per_kg') {
+                                        return 'R$ ' + value.toLocaleString('pt-BR', {minimumFractionDigits: 2});
+                                    }
+                                    return 'R$ ' + value.toLocaleString('pt-BR');
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        function updateBudgetChart() {
+            const ctx = document.getElementById('budgetChart').getContext('2d');
+            
+            // Get budget for selected month
+            const monthStr = `${selectedYear}-${String(selectedMonthIndex + 1).padStart(2, '0')}`;
+            const monthBudget = budgetData.find(b => b.mes === monthStr);
+            const budgetTotal = monthBudget ? parseFloat(monthBudget.valor) : 0;
+            
+            // Get actual cost for selected month
+            const actualCost = getFilteredData().reduce((sum, item) => sum + parseFloat(item.valor || 0), 0);
+            
+            const percentage = budgetTotal > 0 ? (actualCost / budgetTotal * 100) : 0;
+            const remaining = budgetTotal - actualCost;
+
+            if (budgetChartInstance) budgetChartInstance.destroy();
+
+            budgetChartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Realizado', 'Restante'],
+                    datasets: [{ 
+                        data: [actualCost, Math.max(remaining, 0)], 
+                        backgroundColor: [percentage > 100 ? '#ef4444' : '#10b981', 'rgba(255,255,255,0.1)'],
+                        borderWidth: 0,
+                        hoverOffset: 10
+                    }]
+                },
+                options: {
+                    responsive: true, 
+                    maintainAspectRatio: false,
+                    cutout: '70%',
+                    plugins: { 
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.label}: R$ ${context.parsed.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+            
+            // Add center text
+            const centerText = `R$ ${actualCost.toLocaleString('pt-BR', {minimumFractionDigits: 0})}`;
+            const centerSubtext = `de R$ ${budgetTotal.toLocaleString('pt-BR', {minimumFractionDigits: 0})}`;
+            
+            // Clear previous center text
+            const chartContainer = document.getElementById('budgetChart').parentNode;
+            const existingText = chartContainer.querySelector('.center-text');
+            if (existingText) existingText.remove();
+            
+            const centerTextDiv = document.createElement('div');
+            centerTextDiv.className = 'center-text';
+            centerTextDiv.style.position = 'absolute';
+            centerTextDiv.style.top = '50%';
+            centerTextDiv.style.left = '50%';
+            centerTextDiv.style.transform = 'translate(-50%, -50%)';
+            centerTextDiv.style.textAlign = 'center';
+            centerTextDiv.innerHTML = `
+                <div style="font-size: 1.5rem; font-weight: 700; color: ${percentage > 100 ? '#ef4444' : '#10b981'};">${percentage.toFixed(0)}%</div>
+                <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 5px;">Utilizado</div>
+            `;
+            
+            chartContainer.style.position = 'relative';
+            chartContainer.appendChild(centerTextDiv);
         }
 
         // --- ENTRY MANAGEMENT ---
@@ -792,32 +1633,40 @@
 
         function submitEntry() {
             const monthInput = document.getElementById('formMonth').value; // YYYY-MM
-            if(!monthInput) { alert("Mês de referência obrigatório"); return; }
+            if(!monthInput) { 
+                showNotification("Mês de referência obrigatório", "danger");
+                return; 
+            }
             
             const [y, m] = monthInput.split('-');
-            // Default to day 01 for storage purposes
-            const dateFmt = `01/${m}/${y}`;
+            const day = document.getElementById('formDay').value || '01';
+            const dateFmt = `${day.padStart(2, '0')}/${m}/${y}`;
 
             const entry = {
-                id: Date.now().toString(),
+                id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
                 data_formatada: dateFmt,
                 categoria: document.getElementById('formCategory').value,
                 descricao: document.getElementById('formDesc').value,
                 centro: document.getElementById('formCenter').value,
-                valor: parseFloat(document.getElementById('formValue').value)
+                valor: parseFloat(document.getElementById('formValue').value),
+                status: document.getElementById('formStatus').value,
+                observacoes: document.getElementById('formNotes').value,
+                timestamp: new Date().toISOString()
             };
 
-            if (!entry.valor || !entry.descricao) { alert("Preencha descrição e valor"); return; }
+            if (!entry.valor || !entry.descricao) { 
+                showNotification("Preencha descrição e valor", "danger");
+                return; 
+            }
 
             costData.push(entry);
             saveData();
             
-            // If entry is for current view, update. If not, maybe notify?
-            // For now, simple update
+            // If entry is for current view, update. If not, notify
             if(parseInt(m) === selectedMonthIndex + 1 && parseInt(y) === selectedYear) {
                 updateDashboard();
             } else {
-                alert(`Lançamento salvo em ${m}/${y}. Mude o filtro para visualizar.`);
+                showNotification(`Lançamento salvo em ${m}/${y}. Mude o filtro para visualizar.`, "info");
             }
 
             closeEntryModal();
@@ -825,6 +1674,9 @@
             // Reset fields
             document.getElementById('formDesc').value = '';
             document.getElementById('formValue').value = '';
+            document.getElementById('formNotes').value = '';
+            
+            showNotification("Lançamento adicionado com sucesso!", "success");
         }
 
         function deleteCost(id) {
@@ -833,6 +1685,7 @@
                 costData.splice(idx, 1);
                 saveData();
                 updateDashboard();
+                showNotification("Lançamento excluído com sucesso!", "success");
             }
         }
 
@@ -849,22 +1702,34 @@
             const sector = document.getElementById('empSector').value;
             const salary = parseFloat(document.getElementById('empSalary').value);
 
-            if (!name || isNaN(salary)) { alert("Dados inválidos"); return; }
+            if (!name || isNaN(salary)) { 
+                showNotification("Dados inválidos. Preencha nome e salário.", "danger");
+                return; 
+            }
 
-            employeeData.push({ id: Date.now().toString(), name, sector, salary });
+            employeeData.push({ 
+                id: Date.now().toString() + Math.random().toString(36).substr(2, 9), 
+                name, 
+                sector, 
+                salary,
+                data_admissao: new Date().toISOString().split('T')[0]
+            });
             localStorage.setItem('erus_funcionarios', JSON.stringify(employeeData));
             
             document.getElementById('empName').value = '';
             document.getElementById('empSalary').value = '';
             renderEmployeeTable();
+            
+            showNotification(`Colaborador ${name} adicionado com sucesso!`, "success");
         }
 
         function deleteEmployee(id) {
             const idx = employeeData.findIndex(e => e.id === id);
-            if (idx > -1) {
+            if (idx > -1 && confirm("Excluir este colaborador?")) {
                 employeeData.splice(idx, 1);
                 localStorage.setItem('erus_funcionarios', JSON.stringify(employeeData));
                 renderEmployeeTable();
+                showNotification("Colaborador excluído com sucesso!", "success");
             }
         }
 
@@ -884,14 +1749,21 @@
                 tr.innerHTML = `
                     <td style="color:#fff;">${emp.name}</td>
                     <td><span class="tag">${emp.sector}</span></td>
-                    <td class="col-money" style="text-align:right;">R$ ${totalCost.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
-                    <td style="text-align:center;"><i class="fa-solid fa-trash" style="cursor:pointer; color:var(--text-muted);" onclick="deleteEmployee('${emp.id}')"></i></td>
+                    <td class="col-money" style="text-align:right;">R$ ${emp.salary.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
+                    <td class="col-money" style="text-align:right; font-weight:600;">R$ ${totalCost.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
+                    <td style="text-align:center;">
+                        <i class="fa-solid fa-trash" style="cursor:pointer; color:var(--text-muted);" 
+                           onclick="deleteEmployee('${emp.id}')"></i>
+                    </td>
                 `;
                 tbody.appendChild(tr);
             });
 
+            const avgCost = employeeData.length > 0 ? totalPayroll / employeeData.length : 0;
+            
             document.getElementById('rhTotalMonth').innerText = totalPayroll.toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
             document.getElementById('rhCount').innerText = employeeData.length;
+            document.getElementById('rhAvgCost').innerText = avgCost.toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
         }
 
         function postPayrollToExpenses() {
@@ -899,7 +1771,10 @@
             const multiplier = 1 + (chargePercent / 100);
             const monthInput = document.getElementById('rhMonthPost').value; // YYYY-MM
             
-            if(!monthInput) { alert("Selecione o mês para lançamento."); return; }
+            if(!monthInput) { 
+                showNotification("Selecione o mês para lançamento.", "danger");
+                return; 
+            }
 
             const sectorCosts = {};
             employeeData.forEach(emp => {
@@ -908,7 +1783,10 @@
                 sectorCosts[emp.sector] += cost;
             });
 
-            if(Object.keys(sectorCosts).length === 0) return;
+            if(Object.keys(sectorCosts).length === 0) {
+                showNotification("Nenhum colaborador cadastrado.", "warning");
+                return;
+            }
 
             const [y, m] = monthInput.split('-');
             const dateFmt = `05/${m}/${y}`; // Default payroll date
@@ -916,12 +1794,14 @@
             if(confirm(`Gerar lançamentos de folha em ${m}/${y}?`)) {
                 for (const [sector, value] of Object.entries(sectorCosts)) {
                     costData.push({
-                        id: Date.now().toString() + Math.random(),
+                        id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
                         data_formatada: dateFmt,
                         categoria: 'MAO DE OBRA',
-                        descricao: `Folha + Encargos (${chargePercent}%)`,
+                        descricao: `Folha + Encargos (${chargePercent}%) - ${sector}`,
                         centro: sector,
-                        valor: value
+                        valor: value,
+                        status: 'AGENDADO',
+                        timestamp: new Date().toISOString()
                     });
                 }
                 saveData();
@@ -932,7 +1812,7 @@
                 }
 
                 closeEmployeeModal();
-                alert("Folha lançada com sucesso!");
+                showNotification("Folha lançada com sucesso!", "success");
             }
         }
 
@@ -948,6 +1828,13 @@
             filteredData.forEach(item => {
                 if (!drillTotals[item.categoria]) drillTotals[item.categoria] = 0;
                 drillTotals[item.categoria] += parseFloat(item.valor);
+            });
+
+            // Calculate percentages
+            const total = Object.values(drillTotals).reduce((a, b) => a + b, 0);
+            const percentages = {};
+            Object.keys(drillTotals).forEach(key => {
+                percentages[key] = total > 0 ? (drillTotals[key] / total * 100) : 0;
             });
 
             // Chart
@@ -973,11 +1860,16 @@
             // Table
             const tbody = document.querySelector('#drilldownTable tbody');
             tbody.innerHTML = '';
-            labels.forEach((label, i) => {
+            
+            // Sort by value descending
+            const sortedEntries = Object.entries(drillTotals).sort((a, b) => b[1] - a[1]);
+            
+            sortedEntries.forEach(([label, value], i) => {
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
                     <td><span class="tag" style="color:${colors[i]}">${label}</span></td>
-                    <td style="text-align:right; color:#fff; font-weight:bold;">R$ ${values[i].toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
+                    <td style="text-align:right; color:#fff; font-weight:bold;">R$ ${value.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
+                    <td style="text-align:right; color:var(--text-muted);">${percentages[label].toFixed(1)}%</td>
                 `;
                 tbody.appendChild(tr);
             });
@@ -985,8 +1877,403 @@
 
         function closeDrilldown() { document.getElementById('drilldownModal').style.display = 'none'; }
 
+        // --- ADVANCED ANALYSIS ---
+        function openAdvancedAnalysisModal() {
+            document.getElementById('analysisModal').style.display = 'flex';
+            updateAnalysisBreakdown();
+        }
+        
+        function closeAnalysisModal() { document.getElementById('analysisModal').style.display = 'none'; }
+        
+        function updateAnalysisBreakdown() {
+            const start = document.getElementById('analysisStart').value;
+            const end = document.getElementById('analysisEnd').value;
+            
+            if (!start || !end) return;
+            
+            const [startYear, startMonth] = start.split('-').map(Number);
+            const [endYear, endMonth] = end.split('-').map(Number);
+            
+            // Filter data for period
+            const periodData = costData.filter(item => {
+                const [d, m, y] = item.data_formatada.split('/').map(Number);
+                const itemDate = new Date(y, m - 1, d);
+                const startDate = new Date(startYear, startMonth - 1, 1);
+                const endDate = new Date(endYear, endMonth, 0); // Last day of end month
+                
+                return itemDate >= startDate && itemDate <= endDate;
+            });
+            
+            // Calculate totals
+            const totalCost = periodData.reduce((sum, item) => sum + parseFloat(item.valor || 0), 0);
+            const totalProduction = periodData.length * 10000; // Simplified production estimate
+            
+            // Update summary
+            document.getElementById('analysisTotalCost').innerText = totalCost.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
+            document.getElementById('analysisTotalProd').innerText = totalProduction.toLocaleString('pt-BR') + ' kg';
+            document.getElementById('analysisAvgCost').innerText = (totalCost / totalProduction).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
+            
+            // Simple variation calculation (vs previous period)
+            document.getElementById('analysisVariation').innerText = '0%';
+            
+            // Update chart
+            updateAnalysisChart(periodData);
+        }
+        
+        function updateAnalysisChart(periodData) {
+            const ctx = document.getElementById('analysisChart1').getContext('2d');
+            
+            // Group by category
+            const categoryTotals = {};
+            periodData.forEach(item => {
+                if (!categoryTotals[item.categoria]) categoryTotals[item.categoria] = 0;
+                categoryTotals[item.categoria] += parseFloat(item.valor || 0);
+            });
+            
+            const labels = Object.keys(categoryTotals);
+            const data = Object.values(categoryTotals);
+            const colors = labels.map(l => CAT_COLORS[l] || '#888');
+            
+            if (analysisChart1Instance) analysisChart1Instance.destroy();
+            
+            analysisChart1Instance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: data,
+                        backgroundColor: colors,
+                        borderColor: colors,
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return 'R$ ' + value.toLocaleString('pt-BR');
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        function updateAnalysisComparison() {
+            const year1 = document.getElementById('compareYear1').value;
+            const year2 = document.getElementById('compareYear2').value;
+            
+            if (!year1 || !year2) return;
+            
+            const ctx = document.getElementById('comparisonChart').getContext('2d');
+            
+            // Prepare data for comparison
+            const year1Data = Array(12).fill(0);
+            const year2Data = Array(12).fill(0);
+            
+            costData.forEach(item => {
+                const [d, m, y] = item.data_formatada.split('/').map(Number);
+                const value = parseFloat(item.valor || 0);
+                
+                if (y == year1) {
+                    year1Data[m - 1] += value;
+                } else if (y == year2) {
+                    year2Data[m - 1] += value;
+                }
+            });
+            
+            if (comparisonChartInstance) comparisonChartInstance.destroy();
+            
+            comparisonChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: MONTH_NAMES,
+                    datasets: [
+                        {
+                            label: year1,
+                            data: year1Data,
+                            borderColor: '#3b82f6',
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            borderWidth: 2,
+                            tension: 0.3
+                        },
+                        {
+                            label: year2,
+                            data: year2Data,
+                            borderColor: '#f59e0b',
+                            backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                            borderWidth: 2,
+                            tension: 0.3
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: { color: '#a1a1aa' }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return 'R$ ' + value.toLocaleString('pt-BR');
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // --- FORECAST ---
+        function openForecastModal() {
+            document.getElementById('forecastModal').style.display = 'flex';
+            generateForecast();
+        }
+        
+        function closeForecastModal() { document.getElementById('forecastModal').style.display = 'none'; }
+        
+        function generateForecast() {
+            const months = parseInt(document.getElementById('forecastMonths').value);
+            const growth = parseFloat(document.getElementById('forecastGrowth').value) / 100;
+            const inflation = parseFloat(document.getElementById('forecastInflation').value) / 100;
+            
+            // Get current month cost
+            const currentCost = getFilteredData().reduce((sum, item) => sum + parseFloat(item.valor || 0), 0);
+            
+            // Generate forecast
+            const labels = [];
+            const forecastData = [];
+            let projectedCost = currentCost;
+            
+            for (let i = 0; i < months; i++) {
+                const date = new Date(selectedYear, selectedMonthIndex + i + 1, 1);
+                labels.push(`${MONTH_NAMES[date.getMonth()]}/${date.getFullYear().toString().slice(2)}`);
+                
+                // Apply growth and inflation
+                projectedCost = projectedCost * (1 + growth) * (1 + inflation);
+                forecastData.push(projectedCost);
+            }
+            
+            // Update summary
+            document.getElementById('forecastCurrent').innerText = currentCost.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
+            document.getElementById('forecastProjected').innerText = projectedCost.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
+            
+            const change = ((projectedCost - currentCost) / currentCost * 100).toFixed(1);
+            document.getElementById('forecastChange').innerText = change + '%';
+            document.getElementById('forecastChange').style.color = change >= 0 ? 'var(--danger)' : 'var(--success)';
+            
+            // Calculate cost per kg (assuming same production)
+            const producaoKg = parseFloat(document.getElementById('inputProducao').value) || 10000;
+            document.getElementById('forecastCostPerKg').innerText = (projectedCost / producaoKg).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
+            
+            // Update chart
+            const ctx = document.getElementById('forecastChart').getContext('2d');
+            
+            if (forecastChartInstance) forecastChartInstance.destroy();
+            
+            forecastChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: ['Atual', ...labels],
+                    datasets: [{
+                        label: 'Projeção de Custos',
+                        data: [currentCost, ...forecastData],
+                        borderColor: '#a855f7',
+                        backgroundColor: 'rgba(168, 85, 247, 0.1)',
+                        borderWidth: 3,
+                        tension: 0.3,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return 'R$ ' + value.toLocaleString('pt-BR');
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // --- BUDGET MANAGEMENT ---
+        function openBudgetModal() {
+            document.getElementById('budgetModal').style.display = 'flex';
+        }
+        
+        function closeBudgetModal() { document.getElementById('budgetModal').style.display = 'none'; }
+        
+        function addBudget() {
+            const month = document.getElementById('budgetMonth').value;
+            const total = parseFloat(document.getElementById('budgetTotal').value);
+            const category = document.getElementById('budgetCategory').value;
+            
+            if (!month || isNaN(total)) {
+                showNotification("Preencha mês e valor do orçamento.", "danger");
+                return;
+            }
+            
+            const budget = {
+                id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+                mes: month,
+                categoria: category,
+                valor: total,
+                timestamp: new Date().toISOString()
+            };
+            
+            budgetData.push(budget);
+            localStorage.setItem('erus_orcamento', JSON.stringify(budgetData));
+            
+            renderBudgetTable();
+            updateBudgetChart();
+            
+            document.getElementById('budgetTotal').value = '';
+            showNotification("Orçamento adicionado com sucesso!", "success");
+        }
+        
+        function renderBudgetTable() {
+            const tbody = document.getElementById('budgetTableBody');
+            tbody.innerHTML = '';
+            
+            budgetData.forEach(budget => {
+                const [year, month] = budget.mes.split('-');
+                const monthName = MONTH_NAMES[parseInt(month) - 1];
+                
+                // Calculate actual cost for this month and category
+                const actualCost = costData.reduce((sum, item) => {
+                    const [d, m, y] = item.data_formatada.split('/');
+                    if (`${y}-${m.padStart(2, '0')}` === budget.mes && item.categoria === budget.categoria) {
+                        return sum + parseFloat(item.valor || 0);
+                    }
+                    return sum;
+                }, 0);
+                
+                const difference = budget.valor - actualCost;
+                const diffPercentage = budget.valor > 0 ? (actualCost / budget.valor * 100).toFixed(1) : 0;
+                
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td style="padding: 15px;">${monthName}/${year}</td>
+                    <td style="padding: 15px;">${budget.categoria}</td>
+                    <td style="padding: 15px; text-align: right; font-weight: 600;">R$ ${budget.valor.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
+                    <td style="padding: 15px; text-align: right; color: ${actualCost > budget.valor ? '#ef4444' : '#10b981'};">
+                        R$ ${actualCost.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+                        <div style="font-size: 0.8rem; color: var(--text-muted);">${diffPercentage}%</div>
+                    </td>
+                    <td style="padding: 15px; text-align: right; color: ${difference < 0 ? '#ef4444' : '#10b981'};">
+                        R$ ${difference.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+                    </td>
+                    <td style="padding: 15px; text-align: center;">
+                        <i class="fa-solid fa-trash" style="cursor:pointer; color:var(--text-muted);" 
+                           onclick="deleteBudget('${budget.id}')"></i>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+        
+        function deleteBudget(id) {
+            const idx = budgetData.findIndex(b => b.id === id);
+            if (idx > -1 && confirm("Excluir este orçamento?")) {
+                budgetData.splice(idx, 1);
+                localStorage.setItem('erus_orcamento', JSON.stringify(budgetData));
+                renderBudgetTable();
+                updateBudgetChart();
+                showNotification("Orçamento excluído com sucesso!", "success");
+            }
+        }
+
+        // --- REVENUE DATA ---
+        function loadRevenueData() {
+            // Load sample revenue data if none exists
+            if (!revenueData || revenueData.length === 0) {
+                const currentYear = new Date().getFullYear();
+                revenueData = [];
+                
+                for (let month = 1; month <= 12; month++) {
+                    // Generate random revenue between 150000 and 300000
+                    const revenue = 150000 + Math.random() * 150000;
+                    revenueData.push({
+                        id: `rev-${currentYear}-${month}`,
+                        data_formatada: `01/${String(month).padStart(2, '0')}/${currentYear}`,
+                        valor: revenue,
+                        categoria: 'FATURAMENTO',
+                        descricao: 'Faturamento mensal'
+                    });
+                }
+                
+                localStorage.setItem('erus_faturamento', JSON.stringify(revenueData));
+            }
+        }
+
+        // --- EXPORT ---
+        function exportToExcel() {
+            const filteredData = getFilteredData();
+            
+            if (filteredData.length === 0) {
+                showNotification("Nenhum dado para exportar.", "warning");
+                return;
+            }
+            
+            // Prepare data
+            const exportData = [
+                ["Data", "Categoria", "Setor", "Descrição", "Valor (R$)", "Status", "Observações"]
+            ];
+            
+            filteredData.forEach(item => {
+                exportData.push([
+                    item.data_formatada,
+                    item.categoria,
+                    item.centro,
+                    item.descricao,
+                    item.valor,
+                    item.status || 'PENDENTE',
+                    item.observacoes || ''
+                ]);
+            });
+            
+            // Add summary
+            const totalCost = filteredData.reduce((sum, item) => sum + parseFloat(item.valor || 0), 0);
+            exportData.push([]);
+            exportData.push(["", "", "", "TOTAL:", totalCost, "", ""]);
+            
+            // Create worksheet
+            const ws = XLSX.utils.aoa_to_sheet(exportData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Custos");
+            
+            // Generate filename
+            const monthName = MONTH_NAMES[selectedMonthIndex];
+            const filename = `Custos_${monthName}_${selectedYear}.xlsx`;
+            
+            // Save file
+            XLSX.writeFile(wb, filename);
+            
+            showNotification(`Planilha exportada: ${filename}`, "success");
+        }
+
         // --- UTILS ---
-        function saveData() { localStorage.setItem('erus_custos', JSON.stringify(costData)); }
+        function saveData() { 
+            localStorage.setItem('erus_custos', JSON.stringify(costData)); 
+        }
         
         function handleClearDatabase() {
             if(confirm("Isso apagará TODOS os dados locais. Continuar?")) {
