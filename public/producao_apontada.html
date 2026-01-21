@@ -342,9 +342,39 @@
             background: #09090b; overflow-y: auto;
         }
         
-        .modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-subtle); padding-bottom: 15px; margin-bottom: 20px; }
-        .modal-title { font-size: 1.8rem; color: var(--color-primary); font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
-        .modal-close { color: var(--status-danger); cursor: pointer; font-size: 2rem; transition: transform 0.2s; }
+        .modal-header { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            border-bottom: 1px solid var(--border-subtle); 
+            padding-bottom: 15px; 
+            margin-bottom: 20px; 
+            gap: 15px;
+        }
+        
+        .modal-title { 
+            font-size: 1.8rem; 
+            color: var(--color-primary); 
+            font-weight: 700; 
+            text-transform: uppercase; 
+            letter-spacing: 1px; 
+            margin: 0;
+            flex: 1;
+        }
+        
+        .modal-header-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .modal-close { 
+            color: var(--status-danger); 
+            cursor: pointer; 
+            font-size: 2rem; 
+            transition: transform 0.2s;
+            line-height: 1;
+        }
         .modal-close:hover { transform: scale(1.1); color: #ff0000; }
         
         /* Loading */
@@ -460,9 +490,7 @@
                     <i class="fa-solid fa-table-list"></i> <span style="margin-left:5px;">Registros</span>
                 </button>
 
-                <button class="btn-glass" id="generate-complete-report-button" title="Gerar Relatório PDF" style="border-color: var(--status-info); color: var(--status-info);">
-                    <i class="fa-solid fa-file-pdf"></i> <span style="margin-left:5px;">Relatório</span>
-                </button>
+                <!-- Botão Relatório REMOVIDO daqui - agora está dentro do modal -->
                 
                 <div class="separator-vertical"></div>
                 
@@ -624,8 +652,14 @@
     <div id="records-modal" class="modal-overlay">
         <div class="modal-card fullscreen">
             <div class="modal-header">
-                <h2 class="modal-title" style="margin: 0;"><i class="fa-solid fa-list-check" style="margin-right: 15px;"></i>Detalhamento de Registros</h2>
-                <span class="modal-close" onclick="closeRecordsModal()" title="Fechar (ESC)">&times;</span>
+                <h2 class="modal-title"><i class="fa-solid fa-list-check" style="margin-right: 15px;"></i>Detalhamento de Registros</h2>
+                <div class="modal-header-actions">
+                    <!-- Botão Relatório movido para cá -->
+                    <button class="btn-glass" id="generate-complete-report-button" title="Gerar Relatório PDF" style="border-color: var(--status-info); color: var(--status-info);">
+                        <i class="fa-solid fa-file-pdf"></i> <span style="margin-left:5px;">Relatório</span>
+                    </button>
+                    <span class="modal-close" onclick="closeRecordsModal()" title="Fechar (ESC)">&times;</span>
+                </div>
             </div>
             
             <div class="table-container">
@@ -797,7 +831,7 @@
             "SAE J435 GR 080": "ACO BAIXA LIGA",
             "DIN EN 1561 GG-25": "FERRO FUNDIDO CINZENTO",
             "ASTM A159 G1800": "FERRO FUNDIDO CINZENTO",
-            "ASTM A159 G3500": "FERRO FUNDIDO CINZENTO",
+            "ASTM A159 G3500": "FERRO FUNDIDO CINZENTo",
             "ASTM A-216WCA": "ACO BAIXA LIGA",
             "DIN EN 1561 GG-30": "FERRO FUNDIDO CINZENTO",
             "ASTM A-216WCB": "ACO BAIXA LIGA",
@@ -929,6 +963,14 @@
         const monthSelectorModal = document.getElementById('month-selector-modal');
         const monthToClearInput = document.getElementById('month-to-clear-input');
 
+        // --- Verificação de permissão para dropdown de funções ---
+        function checkFunctionPermissions() {
+            const userRole = localStorage.getItem('erus_role') || '';
+            if (userRole !== 'desenvolvedor') {
+                functionsDropdown.style.display = 'none';
+            }
+        }
+
         // --- UI Interactions ---
         function showLoading() { document.getElementById('loading-screen').style.display = 'flex'; document.getElementById('loading-screen').style.opacity = '1'; }
         function hideLoading() { 
@@ -989,9 +1031,16 @@
         filterDateEnd.addEventListener('focus', () => setFilterMode('range'));
 
         function toggleDropdown() {
-             const content = document.querySelector('#functionsDropdown .dropdown-content');
-             if(content.style.display === 'block') content.style.display = 'none';
-             else content.style.display = 'block';
+            // Verifica se o usuário tem permissão
+            const userRole = localStorage.getItem('erus_role') || '';
+            if (userRole !== 'desenvolvedor') {
+                alert('Acesso restrito a desenvolvedores');
+                return;
+            }
+            
+            const content = document.querySelector('#functionsDropdown .dropdown-content');
+            if(content.style.display === 'block') content.style.display = 'none';
+            else content.style.display = 'block';
         }
         window.onclick = function(event) {
             if (!event.target.matches('.btn-glass') && !event.target.closest('.dropdown')) {
@@ -1740,7 +1789,7 @@
                 setTimeout(() => { statusMessage.textContent = 'Pronto.'; statusMessage.className = 'status-text normal'; pdfTempContainer.innerHTML = ''; }, 5000);
             }
         }
-        document.getElementById('generate-complete-report-button').onclick = generateCompleteReport;
+        // A função é atribuída ao botão após o carregamento da página
 
         async function exportReportToPDF(name, contentId) {
             const content = document.getElementById(contentId);
@@ -1935,6 +1984,12 @@
                 setFilterMode('month'); 
                 applyBaseFilters(); 
                 statusMessage.textContent = 'Sistema pronto.';
+                
+                // Atribui o evento ao botão de relatório após o carregamento
+                document.getElementById('generate-complete-report-button').onclick = generateCompleteReport;
+                
+                // Verifica permissões para o dropdown
+                checkFunctionPermissions();
             } catch(e) { 
                 console.error("Erro ao carregar:", e);
                 allData = []; 
