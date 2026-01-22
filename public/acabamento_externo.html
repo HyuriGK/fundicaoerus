@@ -207,21 +207,43 @@
             to { opacity: 0; transform: translateY(10px); }
         }
 
-        /* Checkbox styles for search filters */
+        /* Checkbox styles for search filters - CORRIGIDO */
         .search-checkbox-group {
             display: flex;
             align-items: center;
             gap: 5px;
             margin-top: 5px;
+            white-space: nowrap;
+            flex-wrap: nowrap;
         }
         .search-checkbox-group input[type="checkbox"] {
             accent-color: var(--color-primary);
             cursor: pointer;
+            min-width: 16px;
         }
         .search-checkbox-group label {
-            font-size: 0.75rem;
+            font-size: 0.7rem;
             color: var(--text-muted);
             cursor: pointer;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        /* Ajuste para os formulários de busca */
+        #buscaModal .form-row {
+            align-items: flex-start;
+        }
+        
+        #buscaModal .form-group {
+            min-width: 160px;
+        }
+        
+        /* Estilo para gráfico de linha */
+        .line-chart-point {
+            background-color: var(--color-primary);
+            border-radius: 50%;
+            border: 2px solid var(--bg-card);
         }
     </style>
 </head>
@@ -292,7 +314,7 @@
                     </div>
                 </div>
                 <div class="chart-container-wrapper">
-                    <canvas id="barChart"></canvas>
+                    <canvas id="lineChart"></canvas>
                 </div>
             </div>
         </main>
@@ -409,32 +431,34 @@
         <div class="modal-content">
             <div class="modal-header"><h2 class="modal-title">Busca Avançada</h2><span class="modal-close" onclick="fecharModalTopo()"><i class="fa-solid fa-xmark"></i></span></div>
             <div style="padding: 20px; background: rgba(0,0,0,0.2);">
-                <div class="form-row">
-                    <div class="form-group">
+                <div class="form-row" style="align-items: flex-start;">
+                    <div class="form-group" style="min-width: 180px;">
                         <label>Código</label>
-                        <input type="text" id="buscaCodigo" class="mono" autocomplete="off">
+                        <input type="text" id="buscaCodigo" class="mono" autocomplete="off" style="width: 100%;">
                         <div class="search-checkbox-group">
                             <input type="checkbox" id="checkCodigo" checked>
                             <label for="checkCodigo">Buscar por código</label>
                         </div>
                     </div>
-                    <div class="form-group">
+                    <div class="form-group" style="min-width: 200px;">
                         <label>Descrição</label>
-                        <input type="text" id="buscaDescricao" autocomplete="off">
+                        <input type="text" id="buscaDescricao" autocomplete="off" style="width: 100%;">
                         <div class="search-checkbox-group">
                             <input type="checkbox" id="checkDescricao" checked>
                             <label for="checkDescricao">Buscar por descrição</label>
                         </div>
                     </div>
-                    <div class="form-group">
+                    <div class="form-group" style="min-width: 180px;">
                         <label>Cliente</label>
-                        <input type="text" id="buscaCliente" autocomplete="off">
+                        <input type="text" id="buscaCliente" autocomplete="off" style="width: 100%;">
                         <div class="search-checkbox-group">
                             <input type="checkbox" id="checkCliente" checked>
                             <label for="checkCliente">Buscar por cliente</label>
                         </div>
                     </div>
-                    <button class="btn-modern btn-add" onclick="realizarBuscaAvancada()"><i class="fa-solid fa-search"></i> Pesquisar</button>
+                    <div class="form-group" style="min-width: auto; align-self: flex-end;">
+                        <button class="btn-modern btn-add" onclick="realizarBuscaAvancada()" style="height: 42px;"><i class="fa-solid fa-search"></i> Pesquisar</button>
+                    </div>
                 </div>
             </div>
             <div id="buscaTableContainer" class="modal-body table-container" style="border:none; margin:0; border-radius:0;"></div>
@@ -493,7 +517,7 @@
         let registros = [];
         let recebidos = {}; 
         let itensConhecidos = new Map();
-        let barChartInstance = null;
+        let lineChartInstance = null;
         
         const modalStack = [];
 
@@ -633,10 +657,10 @@
 
             const cont = document.getElementById('buscaTableContainer');
             if (res.length === 0) { cont.innerHTML = `<div style="padding:20px;text-align:center;">Nenhum registro.</div>`; return; }
-            let h = `<table><thead><tr><th>DATA</th><th>CARGA</th><th>TERCEIRO</th><th>CÓDIGO</th><th>DESCRIÇÃO</th><th>QTD</th><th>PESO (KG)</th></tr></thead><tbody>`;
+            let h = `<table><thead><tr><th>DATA</th><th>CARGA</th><th>TERCEIRO</th><th>CÓDIGO</th><th>DESCRIÇÃO</th><th>CLIENTE</th><th>QTD</th><th>PESO (KG)</th></tr></thead><tbody>`;
             res.sort((a,b) => new Date(b.data) - new Date(a.data)).forEach(r => {
                 const isRec = recebidos[r.carga]?.some(i => i.id === r.id);
-                h += `<tr class="${isRec ? 'row-received' : ''}"><td>${formatDate(r.data)}</td><td style="font-weight:bold;color:var(--color-primary);cursor:pointer;" onclick="fecharModalTopo(); fecharModalTopo(); showCargaDetails('${r.carga}')">${r.carga}</td><td>${r.terceiro || '-'}</td><td>${r.codigo || '-'}</td><td>${r.descricao || '-'}</td><td>${r.quant}</td><td>${formatNumber(r.quant * (r.peso || 0))}</td></tr>`;
+                h += `<tr class="${isRec ? 'row-received' : ''}"><td>${formatDate(r.data)}</td><td style="font-weight:bold;color:var(--color-primary);cursor:pointer;" onclick="fecharModalTopo(); fecharModalTopo(); showCargaDetails('${r.carga}')">${r.carga}</td><td>${r.terceiro || '-'}</td><td>${r.codigo || '-'}</td><td>${r.descricao || '-'}</td><td>${r.cliente || '-'}</td><td>${r.quant}</td><td>${formatNumber(r.quant * (r.peso || 0))}</td></tr>`;
             });
             cont.innerHTML = h + `</tbody></table>`;
         }
@@ -749,12 +773,12 @@
             let cD = {};
             if (fM === "") { for(let i = 1; i <= 12; i++) cD[i.toString().padStart(2, '0')] = 0; filtrados.forEach(r => { const m = r.data.split('T')[0].split('-')[1]; cD[m] += (parseFloat(r.quant || 0) * parseFloat(r.peso || 0)); }); }
             else { filtrados.forEach(r => { const d = r.data.split('T')[0]; cD[d] = (cD[d] || 0) + (parseFloat(r.quant || 0) * parseFloat(r.peso || 0)); }); }
-            renderBarChart(cD, fM === "");
+            renderLineChart(cD, fM === "");
         }
 
-        function renderBarChart(data, isM) {
+        function renderLineChart(data, isM) {
             let l = [], w = [];
-            const ctx = document.getElementById('barChart').getContext('2d');
+            const ctx = document.getElementById('lineChart').getContext('2d');
             
             if (isM) {
                 // Visão Anual (meses)
@@ -776,25 +800,63 @@
                 }
             }
 
-            // Calcular um máximo sugerido para a régua ficar maior que a barra mais alta
+            // Calcular um máximo sugerido para a régua ficar maior que o valor mais alto
             const maxVal = Math.max(...w, 0);
-            const suggestedMax = maxVal > 0 ? maxVal * 1.3 : 10; // Adiciona 30% de folga
+            const suggestedMax = maxVal > 0 ? maxVal * 1.2 : 10; // Adiciona 20% de folga
 
-            if (barChartInstance) barChartInstance.destroy();
-            barChartInstance = new Chart(ctx, { 
-                type: 'bar', 
+            if (lineChartInstance) lineChartInstance.destroy();
+            lineChartInstance = new Chart(ctx, { 
+                type: 'line', 
                 data: { 
                     labels: l, 
-                    datasets: [{ label: 'Peso (KG)', data: w, backgroundColor: '#fbbf24', borderRadius: 4 }] 
+                    datasets: [{ 
+                        label: 'Peso (KG)', 
+                        data: w, 
+                        borderColor: '#fbbf24',
+                        backgroundColor: 'rgba(251, 191, 36, 0.1)',
+                        borderWidth: 3,
+                        fill: true,
+                        tension: 0.4,
+                        pointBackgroundColor: '#fbbf24',
+                        pointBorderColor: '#09090b',
+                        pointBorderWidth: 2,
+                        pointRadius: 5,
+                        pointHoverRadius: 7
+                    }] 
                 }, 
                 options: { 
                     responsive: true, 
                     maintainAspectRatio: false, 
-                    plugins: { legend: { display: false } },
+                    plugins: { 
+                        legend: { 
+                            display: true,
+                            position: 'top',
+                            labels: {
+                                color: '#a1a1aa',
+                                font: {
+                                    size: 12
+                                }
+                            }
+                        } 
+                    },
                     scales: {
                         y: {
                             beginAtZero: true,
-                            suggestedMax: suggestedMax // Aplica a régua mais alta
+                            suggestedMax: suggestedMax,
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.05)'
+                            },
+                            ticks: {
+                                color: '#a1a1aa'
+                            }
+                        },
+                        x: {
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.05)'
+                            },
+                            ticks: {
+                                color: '#a1a1aa'
+                            }
                         }
                     }
                 } 
@@ -806,14 +868,14 @@
             document.getElementById('cargaModal').setAttribute('data-current-carga', carga);
             
             const its = registros.filter(r => r.carga === carga);
-            let h = `<table><thead><tr><th>DATA</th><th>CÓDIGO</th><th>DESCRIÇÃO</th><th>PESO UN.</th><th>QTD</th><th>R$ UNIT</th><th>TOTAL</th><th>OK</th><th>AÇÃO</th></tr></thead><tbody>`;
+            let h = `<table><thead><tr><th>DATA</th><th>CÓDIGO</th><th>DESCRIÇÃO</th><th>CLIENTE</th><th>PESO UN.</th><th>QTD</th><th>R$ UNIT</th><th>TOTAL</th><th>OK</th><th>AÇÃO</th></tr></thead><tbody>`;
             its.forEach(r => {
                 const isRec = recebidos[r.carga]?.some(i => i.id === r.id);
                 const vTotal = parseFloat(r.valor || 0);
                 const qtd = parseInt(r.quant || 0);
                 const pUn = parseFloat(r.peso || 0);
                 const vUnit = qtd > 0 ? vTotal / qtd : 0;
-                h += `<tr><td>${formatDate(r.data)}</td><td>${r.codigo}</td><td>${r.descricao}</td><td>${formatNumber(pUn)}</td><td>${qtd}</td><td>${formatCurrency(vUnit)}</td><td>${formatCurrency(vTotal)}</td><td><input type="checkbox" onchange="toggleRecebido(${r.id},'${r.carga}',this.checked)" ${isRec?'checked':''}></td><td><i class="fa-solid fa-trash action-icon icon-delete" onclick="excluirRegistro(${r.id})"></i></td></tr>`;
+                h += `<tr><td>${formatDate(r.data)}</td><td>${r.codigo}</td><td>${r.descricao}</td><td>${r.cliente || '-'}</td><td>${formatNumber(pUn)}</td><td>${qtd}</td><td>${formatCurrency(vUnit)}</td><td>${formatCurrency(vTotal)}</td><td><input type="checkbox" onchange="toggleRecebido(${r.id},'${r.carga}',this.checked)" ${isRec?'checked':''}></td><td><i class="fa-solid fa-trash action-icon icon-delete" onclick="excluirRegistro(${r.id})"></i></td></tr>`;
             });
             document.getElementById('modalTableContainer').innerHTML = h + `</tbody></table>`;
             const tP = its.reduce((s, i) => s + (parseFloat(i.quant || 0) * parseFloat(i.peso || 0)), 0);
@@ -871,7 +933,20 @@
             doc.setFontSize(10); doc.setTextColor(161, 161, 170); doc.text("SISTEMA DE GESTÃO DE ACABAMENTO EXTERNO", 14, 25);
             doc.setFontSize(12); doc.setTextColor(255, 255, 255); doc.text(`CARGA: ${cStr}`, pW - 14, 18, { align: 'right' }); doc.text(`TERCEIRO: ${items[0].terceiro}`, pW - 14, 25, { align: 'right' });
             doc.setDrawColor(251, 191, 36); doc.setLineWidth(1); doc.line(14, 30, pW - 14, 30);
-            doc.autoTable({ startY: 45, head: [['DATA', 'CÓDIGO', 'DESCRIÇÃO', 'PESO UN.', 'QTD', 'VALOR UNIT', 'TOTAL']], body: items.map(r => [formatDate(r.data), r.codigo, r.descricao, formatNumber(r.peso) + " kg", r.quant, formatCurrency(r.quant > 0 ? r.valor / r.quant : 0), formatCurrency(r.valor)]), styles: { fontSize: 9, cellPadding: 3, valign: 'middle', halign: 'center' }, headStyles: { fillColor: [39, 39, 42], textColor: [251, 191, 36], fontStyle: 'bold' }, alternateRowStyles: { fillColor: [250, 250, 250] }, columnStyles: { 2: { halign: 'left', cellWidth: 60 }, 6: { fontStyle: 'bold' } }, margin: { bottom: 70 } });
+            doc.autoTable({ 
+                startY: 45, 
+                head: [['DATA', 'CÓDIGO', 'DESCRIÇÃO', 'CLIENTE', 'PESO UN.', 'QTD', 'VALOR UNIT', 'TOTAL']], 
+                body: items.map(r => [formatDate(r.data), r.codigo, r.descricao, r.cliente || '-', formatNumber(r.peso) + " kg", r.quant, formatCurrency(r.quant > 0 ? r.valor / r.quant : 0), formatCurrency(r.valor)]), 
+                styles: { fontSize: 9, cellPadding: 3, valign: 'middle', halign: 'center' }, 
+                headStyles: { fillColor: [39, 39, 42], textColor: [251, 191, 36], fontStyle: 'bold' }, 
+                alternateRowStyles: { fillColor: [250, 250, 250] }, 
+                columnStyles: { 
+                    2: { halign: 'left', cellWidth: 50 },
+                    3: { halign: 'left', cellWidth: 40 },
+                    7: { fontStyle: 'bold' } 
+                }, 
+                margin: { bottom: 70 } 
+            });
             const tP = items.reduce((s, i) => s + (parseFloat(i.quant || 0) * parseFloat(i.peso || 0)), 0);
             const tV = items.reduce((s, i) => s + parseFloat(i.valor || 0), 0);
             const tQ = items.reduce((s, i) => s + parseInt(i.quant || 0), 0);
@@ -902,8 +977,8 @@
              if (!mA) return;
              const filtrados = registros.filter(r => formatMonthYear(r.data) === mA);
              if (!filtrados.length) return alert('Sem dados.');
-             const wsData = [["DATA", "CARGA", "TERCEIRO", "CÓDIGO", "QTD", "VALOR"]];
-             filtrados.forEach(r => wsData.push([formatDate(r.data), r.carga, r.terceiro, r.codigo, r.quant, r.valor]));
+             const wsData = [["DATA", "CARGA", "TERCEIRO", "CÓDIGO", "CLIENTE", "QTD", "VALOR"]];
+             filtrados.forEach(r => wsData.push([formatDate(r.data), r.carga, r.terceiro, r.codigo, r.cliente || '-', r.quant, r.valor]));
              const wb = XLSX.utils.book_new(); const ws = XLSX.utils.aoa_to_sheet(wsData);
              XLSX.utils.book_append_sheet(wb, ws, "Relatorio"); XLSX.writeFile(wb, `Relatorio_${mA.replace('/','-')}.xlsx`);
         }
