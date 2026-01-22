@@ -174,7 +174,55 @@
         .icon-delete { color: var(--status-danger); }
 
         /* FOOTER */
-        .app-footer { height: var(--footer-height); background: #0f1012; border-top: 1px solid var(--border-subtle); display: flex; align-items: center; justify-content: space-between; padding: 0 32px; font-size: 0.75rem; color: var(--text-muted); font-family: var(--font-mono); flex-shrink: 0; z-index: 100; }z
+        .app-footer { height: var(--footer-height); background: #0f1012; border-top: 1px solid var(--border-subtle); display: flex; align-items: center; justify-content: space-between; padding: 0 32px; font-size: 0.75rem; color: var(--text-muted); font-family: var(--font-mono); flex-shrink: 0; z-index: 100; }
+
+        /* --- TOAST NOTIFICATION --- */
+        .toast-container {
+            position: fixed; bottom: 20px; right: 20px; z-index: 5000;
+            display: flex; flex-direction: column; gap: 10px;
+        }
+        .toast {
+            background: #18181b; border: 1px solid var(--border-subtle);
+            border-left: 4px solid var(--color-primary);
+            color: #fff; padding: 16px 20px; border-radius: 6px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+            font-family: var(--font-main); font-size: 0.9rem;
+            display: flex; align-items: center; gap: 12px;
+            animation: slideIn 0.3s ease-out forwards;
+            min-width: 350px;
+        }
+        .toast.danger { border-left-color: var(--status-danger); }
+        
+        .toast-icon { font-size: 1.2rem; }
+        .toast.danger .toast-icon { color: var(--status-danger); }
+        .toast-content { display: flex; flex-direction: column; }
+        .toast-title { font-weight: 600; font-size: 0.95rem; }
+        .toast-subtitle { font-size: 0.75rem; color: #a1a1aa; margin-top: 4px; }
+
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes fadeOut {
+            to { opacity: 0; transform: translateY(10px); }
+        }
+
+        /* Checkbox styles for search filters */
+        .search-checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            margin-top: 5px;
+        }
+        .search-checkbox-group input[type="checkbox"] {
+            accent-color: var(--color-primary);
+            cursor: pointer;
+        }
+        .search-checkbox-group label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            cursor: pointer;
+        }
     </style>
 </head>
 <body class="no-scroll">
@@ -209,6 +257,9 @@
     })();
 </script>
 
+    <!-- TOAST CONTAINER -->
+    <div id="toast-container" class="toast-container"></div>
+
     <div id="loading-screen">
         <div class="spinner"></div>
         <div style="color: var(--text-muted); font-family: var(--font-main);">Processando dados...</div>
@@ -224,7 +275,7 @@
                 </div>
             </div>
             <div class="header-actions">
-                <button class="btn-dropdown-trigger" onclick="abrirModalPorId('novoEnvioModal'); this.blur()"><i class="fa-solid fa-plus-circle"></i> Novo Envio</button>
+                <button class="btn-dropdown-trigger" id="novoEnvioButton" onclick="abrirModalPorId('novoEnvioModal'); this.blur()"><i class="fa-solid fa-plus-circle"></i> Novo Envio</button>
                 <button class="btn-dropdown-trigger" onclick="abrirModalPorId('registrosModal'); this.blur()"><i class="fa-solid fa-table"></i> Registros</button>
                 <button class="btn-back" onclick="redirectToLink()"><i class="fa-solid fa-arrow-right-from-bracket"></i> Voltar</button>
             </div>
@@ -306,11 +357,11 @@
     <div id="registrosModal" class="modal-overlay">
         <div class="modal-content">
             <div class="modal-header">
-                <div style="display: flex; align-items: center; gap: 20px;">
-                    <h2 class="modal-title">Registros de Envio</h2>
+                <h2 class="modal-title">Registros de Envio</h2>
+                <div style="display: flex; align-items: center; gap: 10px;">
                     <button class="btn-modern btn-outline" onclick="abrirModalPorId('buscaModal')"><i class="fa-solid fa-magnifying-glass"></i> Buscar por Código</button>
+                    <span class="modal-close" onclick="fecharModalTopo()"><i class="fa-solid fa-xmark"></i></span>
                 </div>
-                <span class="modal-close" onclick="fecharModalTopo()"><i class="fa-solid fa-xmark"></i></span>
             </div>
             <div class="modal-body table-container" style="border:none; margin:0; border-radius:0;">
                 <table id="terceiroTable">
@@ -359,9 +410,30 @@
             <div class="modal-header"><h2 class="modal-title">Busca Avançada</h2><span class="modal-close" onclick="fecharModalTopo()"><i class="fa-solid fa-xmark"></i></span></div>
             <div style="padding: 20px; background: rgba(0,0,0,0.2);">
                 <div class="form-row">
-                    <div class="form-group"><label>Código</label><input type="text" id="buscaCodigo" class="mono"></div>
-                    <div class="form-group"><label>Descrição</label><input type="text" id="buscaDescricao"></div>
-                    <div class="form-group"><label>Cliente</label><input type="text" id="buscaCliente" list="clientesList"><datalist id="clientesList"></datalist></div>
+                    <div class="form-group">
+                        <label>Código</label>
+                        <input type="text" id="buscaCodigo" class="mono" autocomplete="off">
+                        <div class="search-checkbox-group">
+                            <input type="checkbox" id="checkCodigo" checked>
+                            <label for="checkCodigo">Buscar por código</label>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Descrição</label>
+                        <input type="text" id="buscaDescricao" autocomplete="off">
+                        <div class="search-checkbox-group">
+                            <input type="checkbox" id="checkDescricao" checked>
+                            <label for="checkDescricao">Buscar por descrição</label>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Cliente</label>
+                        <input type="text" id="buscaCliente" autocomplete="off">
+                        <div class="search-checkbox-group">
+                            <input type="checkbox" id="checkCliente" checked>
+                            <label for="checkCliente">Buscar por cliente</label>
+                        </div>
+                    </div>
                     <button class="btn-modern btn-add" onclick="realizarBuscaAvancada()"><i class="fa-solid fa-search"></i> Pesquisar</button>
                 </div>
             </div>
@@ -372,6 +444,45 @@
     <input type="file" id="importFile" accept=".json" style="display: none;">
 
     <script>
+        // Toast Notification Function
+        function showToast(title, subtitle, type = 'info') {
+            let container = document.getElementById('toast-container');
+            if (!container) {
+                container = document.createElement('div');
+                container.id = 'toast-container';
+                container.className = 'toast-container';
+                document.body.appendChild(container);
+            }
+
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            
+            const icon = type === 'danger' ? '<i class="fa-solid fa-ban toast-icon"></i>' : '<i class="fa-solid fa-circle-info toast-icon"></i>';
+            
+            toast.innerHTML = `
+                ${icon} 
+                <div class="toast-content">
+                    <span class="toast-title">${title}</span>
+                    <span class="toast-subtitle">${subtitle}</span>
+                </div>
+            `;
+            
+            container.appendChild(toast);
+
+            // Remove após 4 segundos
+            setTimeout(() => {
+                toast.style.animation = 'fadeOut 0.5s ease-out forwards';
+                setTimeout(() => {
+                    if (toast.parentNode) toast.parentNode.removeChild(toast);
+                }, 500);
+            }, 4000);
+        }
+
+        // Check user role
+        function checkUserRole() {
+            return localStorage.getItem('erus_role');
+        }
+
         function showSpinner() { const s = document.getElementById('loading-screen'); if(s){ s.style.display='flex'; s.style.opacity='1'; document.body.classList.add('no-scroll'); } }
         function hideSpinner() { const s = document.getElementById('loading-screen'); if(s){ s.style.opacity='0'; document.body.classList.remove('no-scroll'); setTimeout(()=>s.style.display='none', 500); } }
 
@@ -493,9 +604,6 @@
         }
 
         function abrirModalBusca() {
-            const dl = document.getElementById('clientesList'); dl.innerHTML = '';
-            const set = new Set(); registros.forEach(r => { if (r.cliente) set.add(r.cliente.toUpperCase().trim()); });
-            Array.from(set).sort().forEach(c => { const opt = document.createElement('option'); opt.value = c; dl.appendChild(opt); });
             abrirModalPorId('buscaModal');
         }
 
@@ -503,12 +611,26 @@
             const cod = document.getElementById('buscaCodigo').value.trim().toUpperCase();
             const desc = document.getElementById('buscaDescricao').value.trim().toUpperCase();
             const cli = document.getElementById('buscaCliente').value.trim().toUpperCase();
+            const checkCod = document.getElementById('checkCodigo').checked;
+            const checkDesc = document.getElementById('checkDescricao').checked;
+            const checkCli = document.getElementById('checkCliente').checked;
+
             const res = registros.filter(r => {
-                const mCo = cod ? (r.codigo && r.codigo.toUpperCase().includes(cod)) : true;
-                const mDe = desc ? (r.descricao && r.descricao.toUpperCase().includes(desc)) : true;
-                const mCl = cli ? (r.cliente && r.cliente.toUpperCase().includes(cli)) : true;
+                let mCo = true, mDe = true, mCl = true;
+
+                if (checkCod && cod) {
+                    mCo = r.codigo && r.codigo.toUpperCase().includes(cod);
+                }
+                if (checkDesc && desc) {
+                    mDe = r.descricao && r.descricao.toUpperCase().includes(desc);
+                }
+                if (checkCli && cli) {
+                    mCl = r.cliente && r.cliente.toUpperCase().includes(cli);
+                }
+
                 return mCo && mDe && mCl;
             });
+
             const cont = document.getElementById('buscaTableContainer');
             if (res.length === 0) { cont.innerHTML = `<div style="padding:20px;text-align:center;">Nenhum registro.</div>`; return; }
             let h = `<table><thead><tr><th>DATA</th><th>CARGA</th><th>TERCEIRO</th><th>CÓDIGO</th><th>DESCRIÇÃO</th><th>QTD</th><th>PESO (KG)</th></tr></thead><tbody>`;
@@ -520,6 +642,12 @@
         }
 
         async function adicionarRegistro() {
+            const role = checkUserRole();
+            if (role !== 'desenvolvedor') {
+                showToast("Você não tem permissão para adicionar", "Apenas desenvolvedores podem adicionar registros", "danger");
+                return;
+            }
+
             const t = parseInt(document.getElementById('inputQuantidade').value) || 0, e = parseInt(document.getElementById('inputQtdEscariar').value) || 0, r = parseInt(document.getElementById('inputQtdRebarba').value) || 0;
             const cod = document.getElementById('inputCodigo').value.trim().toUpperCase(), c = document.getElementById('inputCarga').value.trim().toUpperCase();
             if (t !== (e + r)) return alert('Soma incorreta.');
@@ -528,7 +656,7 @@
             await salvarOuAtualizarItem(item);
             const reg = { carga: c, ...item, quant: t, quant_escariar: e, quant_rebarba: r, terceiro: document.getElementById('inputTerceiro').value.toUpperCase(), observacoes: document.getElementById('inputObservacoes').value.toUpperCase(), data: document.getElementById('inputData').value || new Date().toISOString().split('T')[0], tipo: "terceiro" };
             reg.valor = calcularValorItem(reg);
-            try { const res = await apiRequest('registros', 'POST', reg); if (res.success) { reg.id = res.id; registros.unshift(reg); renderTable(); updateDashboardAndCharts(); limparFormularioParcialmente(); alert('Registro adicionado!'); } } catch (err) {}
+            try { const res = await apiRequest('registros', 'POST', reg); if (res.success) { reg.id = res.id; registros.unshift(reg); renderTable(); updateDashboardAndCharts(); limparFormularioParcialmente(); showToast("Registro adicionado", "O item foi adicionado com sucesso", "info"); } } catch (err) {}
         }
 
         async function carregarDados() {
@@ -538,6 +666,13 @@
                 populateDateFilters();
                 renderTable();
                 updateDashboardAndCharts();
+                
+                // Verificar permissões para mostrar/ocultar botões
+                const role = checkUserRole();
+                if (role !== 'desenvolvedor') {
+                    const novoEnvioBtn = document.getElementById('novoEnvioButton');
+                    if (novoEnvioBtn) novoEnvioBtn.style.display = 'none';
+                }
             } catch (e) { console.error(e); } finally { hideSpinner(); }
         }
 
@@ -689,6 +824,12 @@
         }
 
         async function excluirRegistro(id) {
+            const role = checkUserRole();
+            if (role !== 'desenvolvedor') {
+                showToast("Você não tem permissão para excluir", "Apenas desenvolvedores podem excluir registros", "danger");
+                return;
+            }
+
             if (!id || !confirm('Excluir este registro permanentemente?')) return;
             showSpinner();
             try {
