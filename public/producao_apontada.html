@@ -535,10 +535,7 @@
                         <i class="fa-solid fa-gear" style="color: #fff;"></i> Funções <i class="fa-solid fa-chevron-down" style="font-size: 0.7rem; margin-left: 5px;"></i>
                     </button>
                     <div class="dropdown-content">
-                        <!-- Dashboard Removed -->
-                        <button class="dropdown-item" onclick="handleAuthAction(saveLocalDataToDatabase, 'Salvar Alterações')"><i class=""></i> Salvar no Banco</button>
-                        <button class="dropdown-item" onclick="handleAuthAction(confirmAndSaveWeightsToLocalStorage, 'Salvar Pesos Produto (Local)')"><i class=""></i> Salvar Pesos</button>
-                        <div class="dropdown-divider"></div>
+                        <!-- Botões removidos: Salvar no Banco e Salvar Pesos -->
                         <label for="excelFileInput" class="dropdown-item" style="cursor: pointer;"><i class=""></i> Importar Excel</label>
                         <input type="file" id="excelFileInput" accept=".xls,.xlsx" style="display:none" multiple>
                         <div class="dropdown-divider"></div>
@@ -1177,31 +1174,31 @@
         const LOCAL_STORAGE_KEY = 'producao_product_weights';
         function loadWeightsFromLocalStorage() { try { return JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY)) || {}; } catch (e) { return {}; } }
         
+        // Função para salvar pesos no servidor automaticamente
         async function saveWeightsToDatabase() {
-    if (!confirm('Deseja salvar os pesos unitários atuais no Banco de Dados para todos os computadores?')) return;
-    
-    const currentWeights = {};
-    allData.forEach(rowData => {
-        const product = rowData[COLUMN_MAP.PRODUTO];
-        const pesoUn = parseFloat(rowData[COLUMN_MAP.PESO_UN].replace(/\./g, '').replace(',', '.'));
-        if (product && pesoUn > 0) {
-            currentWeights[product] = pesoUn;
-        }
-    });
+            const currentWeights = {};
+            allData.forEach(rowData => {
+                const product = rowData[COLUMN_MAP.PRODUTO];
+                const pesoUn = parseFloat(rowData[COLUMN_MAP.PESO_UN].replace(/\./g, '').replace(',', '.'));
+                if (product && pesoUn > 0) {
+                    currentWeights[product] = pesoUn;
+                }
+            });
 
-    try {
-        const response = await fetch('/api/producao-apontada?action=pesos', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ pesos: currentWeights })
-        });
-        if (response.ok) {
-            alert('Pesos salvos no Banco de Dados com sucesso!');
+            try {
+                const response = await fetch('/api/producao-apontada?action=pesos', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ pesos: currentWeights })
+                });
+                if (response.ok) {
+                    // Não mostra toast aqui para não poluir a interface
+                    console.log('Pesos salvos no servidor automaticamente');
+                }
+            } catch (e) {
+                console.error('Erro ao salvar pesos no servidor:', e);
+            }
         }
-    } catch (e) {
-        alert('Erro ao salvar pesos no servidor.');
-    }
-}
 
         async function loadGoals() {
             try {
@@ -1316,6 +1313,14 @@
                         r[COLUMN_MAP.PESO_TOTAL] = formatNumber(pu * (parseFloat(r[COLUMN_MAP.QUANT])||0), 2);
                     }
                 });
+                
+                // Salva automaticamente no servidor
+                await saveWeightsToDatabase();
+                // Salva também no localStorage para cache local
+                localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(productWeights));
+                
+                // Mostra mensagem de sucesso
+                showToast('Peso Atualizado', 'Peso unitário salvo automaticamente no servidor.', 'info');
             }
             applyBaseFilters();
             updateDailyProductionChartFromSelection();
@@ -1931,16 +1936,23 @@
             let finalData = dataToSave.length ? dataToSave : allData.map(r => [r[0], r[1], r[2], r[3], r[4], parseInt(r[5]), r[6]]);
             if (!finalData.length) return;
             statusMessage.textContent = 'Salvando no banco...';
-            const res = await fetch('/api/producao-apontada', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(finalData) });
-            if (res.ok) { 
-                statusMessage.textContent = 'Dados salvos.'; 
-                statusMessage.className = 'status-text success';
-                await loadInitialData(); 
-            } else { 
-                errorMessage.textContent = 'Erro ao salvar.'; 
+            try {
+                const res = await fetch('/api/producao-apontada', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(finalData) });
+                if (res.ok) { 
+                    statusMessage.textContent = 'Dados salvos.';
+                    statusMessage.className = 'status-text success';
+                    // Mostrar toast de sucesso
+                    showToast('Importação Concluída', 'Importação finalizada e salva no servidor.', 'info');
+                    await loadInitialData(); 
+                } else { 
+                    errorMessage.textContent = 'Erro ao salvar.'; 
+                    showToast('Erro', 'Não foi possível salvar os dados no servidor.', 'danger');
+                }
+            } catch (e) {
+                errorMessage.textContent = 'Erro ao salvar: ' + e.message;
+                showToast('Erro', 'Falha na conexão ao tentar salvar os dados.', 'danger');
             }
         }
-        window.saveLocalDataToDatabase = () => saveDataToDatabase([]);
 
         function openClearSpecificMonthModal() { monthSelectorModal.style.display = 'flex'; }
         function closeClearSpecificMonthModal() { monthSelectorModal.style.display = 'none'; }
@@ -2061,8 +2073,6 @@
                 // Atribui o evento ao botão de relatório após o carregamento
                 document.getElementById('generate-complete-report-button').onclick = generateCompleteReport;
                 
-                // REMOVIDO: Verificação de permissões para o dropdown
-                // checkFunctionPermissions();
             } catch(e) { 
                 console.error("Erro ao carregar:", e);
                 allData = []; 
