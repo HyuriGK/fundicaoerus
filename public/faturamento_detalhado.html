@@ -471,7 +471,7 @@
 
     <script>
     (function() {
-        // Configure aqui o tempo (30 minutos)
+        // Configure aqui o tempo (30 minutos) 
         const tempoLimite = 30 * 60 * 1000; 
         
         function verificarSessao() {
@@ -577,7 +577,10 @@
             <table id="dataTable">
                 <thead>
                     <tr>
-                        <th class="text-center" style="width: 50px;" title="Marcar para ignorar no cálculo">IGN.</th>
+                        <!-- MODIFICAÇÃO: Adicionado checkbox para marcar todos -->
+                        <th class="text-center" style="width: 50px;" title="Marcar para incluir no cálculo">
+                            <input type="checkbox" id="selectAllCheckbox" title="Marcar/desmarcar todos os registros visíveis" onclick="toggleSelectAll()"> INCL.
+                        </th>
                         <th>DATA</th>
                         <th>PEDIDO</th>
                         <th>O.C.</th>
@@ -626,9 +629,9 @@
             </div>
         </div>
         <div class="header-actions">
-            <!-- BOTÃO REGISTROS -->
+            <!-- BOTÃO REGISTROS (ÍCONE BRANCO) -->
             <button class="btn-glass" onclick="openTableModal(); this.blur()">
-                <i class="fa-solid fa-table-list" style="color: var(--color-primary);"></i> Registros
+                <i class="fa-solid fa-table-list" style="color: #fff;"></i> Registros
             </button>
 
             <div class="separator-vertical"></div>
@@ -636,7 +639,8 @@
             <div class="dropdown" id="functionsDropdown">
                 <!-- ATUALIZAÇÃO AQUI: Chama a função toggleFunctionsDropdown -->
                 <button class="btn-glass" onclick="toggleFunctionsDropdown()">
-                    <i class="fa-solid fa-gear" style="color: var(--status-info);"></i> Funções <i class="fa-solid fa-chevron-down" style="font-size: 0.7rem; margin-left: 5px;"></i>
+                    <!-- ÍCONE AMARELO -->
+                    <i class="fa-solid fa-gear" style="color: #f59e0b;"></i> Funções <i class="fa-solid fa-chevron-down" style="font-size: 0.7rem; margin-left: 5px;"></i>
                 </button>
                 <div class="dropdown-content" id="functionsDropdownContent">
                     <label for="fileInput" class="dropdown-item">
@@ -1175,19 +1179,21 @@
             const isChecked = checkboxElement.checked;
             const row = checkboxElement.closest('tr');
             
+            // MODIFICAÇÃO: Agora a lógica está invertida - marcar IGN significa INCLUIR
             if (isChecked) {
-                row.classList.add('row-ignored');
-                row.setAttribute('data-manual-exclude', 'true');
-            } else {
                 row.classList.remove('row-ignored');
-                row.setAttribute('data-manual-exclude', 'false');
+                row.setAttribute('data-manual-include', 'true'); // MODIFICAÇÃO: Mudado para data-manual-include
+            } else {
+                row.classList.add('row-ignored');
+                row.setAttribute('data-manual-include', 'false'); // MODIFICAÇÃO: Mudado para data-manual-include
             }
             
             filterTable();
             
+            // MODIFICAÇÃO: Invertido o valor enviado para a API
             const rowData = {
                 id: dbId,
-                excluded: isChecked,
+                excluded: !isChecked, // Se está marcado (INCLUIR), então excluded é false
                 data: row.getAttribute('data-raw-date'), 
                 cod_cliente: row.cells[4].textContent.trim(), 
                 codigo: row.cells[6].textContent.trim(),
@@ -1201,8 +1207,35 @@
                     body: JSON.stringify(rowData)
                 });
                 const globalRow = globalDataArray.find(r => r[COL_INDEX.ID] == dbId);
-                if (globalRow) globalRow[COL_INDEX.EXCLUIDO_MANUALMENTE] = isChecked ? 1 : 0;
-            } catch (e) { console.log('Erro ao salvar exclusão.'); }
+                if (globalRow) {
+                    // MODIFICAÇÃO: Invertida a lógica de armazenamento
+                    // Se está marcado (INCLUIR), então EXCLUIDO_MANUALMENTE = 0
+                    // Se não está marcado (NÃO INCLUIR), então EXCLUIDO_MANUALMENTE = 1
+                    globalRow[COL_INDEX.EXCLUIDO_MANUALMENTE] = isChecked ? 0 : 1;
+                }
+            } catch (e) { console.log('Erro ao salvar inclusão/exclusão.'); }
+        }
+
+        // NOVA FUNÇÃO: Marcar/Desmarcar todos os registros visíveis
+        function toggleSelectAll() {
+            const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+            const isChecked = selectAllCheckbox.checked;
+            
+            // Seleciona todas as linhas visíveis (que não estão com display: none)
+            const visibleRows = document.querySelectorAll('#dataTable tbody tr:not([style*="display: none"])');
+            
+            // Para cada linha visível, encontra o checkbox e marca/desmarca
+            visibleRows.forEach(row => {
+                const checkbox = row.querySelector('input[type="checkbox"]');
+                if (checkbox) {
+                    checkbox.checked = isChecked;
+                    // Dispara o evento para atualizar a linha
+                    checkbox.dispatchEvent(new Event('click'));
+                }
+            });
+            
+            // Atualiza a tabela após marcar/desmarcar todos
+            filterTable();
         }
 
         function toggleServiceExclusion() {
@@ -1341,7 +1374,9 @@
                 const rowSearchData = JSON.parse(row.getAttribute('data-search-data') || '[]');
                 const rawDateValue = row.getAttribute('data-raw-date');
                 const isService = row.getAttribute('data-exclude-service') === 'true'; 
-                const isManuallyExcluded = row.getAttribute('data-manual-exclude') === 'true';
+                
+                // MODIFICAÇÃO: Agora verificamos se a linha está marcada para INCLUSÃO
+                const isManuallyIncluded = row.getAttribute('data-manual-include') === 'true';
                 
                 let visible = true;
 
@@ -1366,7 +1401,8 @@
 
                 if (visible) {
                     row.style.display = ""; 
-                    if (!isManuallyExcluded) {
+                    // MODIFICAÇÃO: Agora só soma as linhas que estão MARCADAS (INCLUÍDAS)
+                    if (isManuallyIncluded) {
                         const rPeso = parseFloat(row.getAttribute('data-raw-peso'));
                         const rValor = parseFloat(row.getAttribute('data-raw-valor'));
                         const rQuant = parseFloat(row.getAttribute('data-raw-quant'));
@@ -1419,22 +1455,24 @@
                 let rawDateValue = '', rawMaterial = ''; 
                 
                 const dbId = row[COL_INDEX.ID];
-                const isManuallyExcluded = (row[COL_INDEX.EXCLUIDO_MANUALMENTE] === 1 || row[COL_INDEX.EXCLUIDO_MANUALMENTE] === true);
+                
+                // MODIFICAÇÃO: Invertida a lógica - agora 0 significa INCLUÍDO, 1 significa NÃO INCLUÍDO
+                const isManuallyIncluded = (row[COL_INDEX.EXCLUIDO_MANUALMENTE] === 0 || row[COL_INDEX.EXCLUIDO_MANUALMENTE] === false || 
+                                           row[COL_INDEX.EXCLUIDO_MANUALMENTE] === null || row[COL_INDEX.EXCLUIDO_MANUALMENTE] === undefined);
 
                 const checkboxCell = newRow.insertCell();
                 checkboxCell.className = "checkbox-cell text-center";
                 const checkbox = document.createElement('input');
                 checkbox.type = 'checkbox';
-                checkbox.checked = isManuallyExcluded;
+                checkbox.checked = isManuallyIncluded; // MODIFICAÇÃO: Marcado se INCLUÍDO
                 checkbox.onclick = function() { toggleLineExclusion(dbId, this); };
                 checkboxCell.appendChild(checkbox);
 
-                if(isManuallyExcluded) {
+                // MODIFICAÇÃO: Aplica classe row-ignored se NÃO estiver incluído
+                if(!isManuallyIncluded) {
                     newRow.classList.add('row-ignored');
-                    newRow.setAttribute('data-manual-exclude', 'true');
-                } else {
-                    newRow.setAttribute('data-manual-exclude', 'false');
                 }
+                newRow.setAttribute('data-manual-include', isManuallyIncluded ? 'true' : 'false'); // MODIFICAÇÃO
 
                 const codCliente = String(row[COL_INDEX.COD_CLIENTE] || '').trim();
                 const isServiceRow = EXCLUDED_CLIENT_CODES.includes(codCliente);
@@ -1770,8 +1808,12 @@
             for (let i = 1; i < globalDataArray.length; i++) {
                 const row = globalDataArray[i];
                 
-                const isManuallyExcluded = (row[COL_INDEX.EXCLUIDO_MANUALMENTE] === 1 || row[COL_INDEX.EXCLUIDO_MANUALMENTE] === true);
-                if (isManuallyExcluded) continue;
+                // MODIFICAÇÃO: Agora considera apenas linhas INCLUÍDAS (EXCLUIDO_MANUALMENTE === 0)
+                const isManuallyIncluded = (row[COL_INDEX.EXCLUIDO_MANUALMENTE] === 0 || 
+                                           row[COL_INDEX.EXCLUIDO_MANUALMENTE] === false ||
+                                           row[COL_INDEX.EXCLUIDO_MANUALMENTE] === null ||
+                                           row[COL_INDEX.EXCLUIDO_MANUALMENTE] === undefined);
+                if (!isManuallyIncluded) continue;
 
                 const codCliente = String(row[COL_INDEX.COD_CLIENTE] || '').trim();
                 const isService = EXCLUDED_CLIENT_CODES.includes(codCliente);
@@ -1915,7 +1957,13 @@
                 const row = globalDataArray[i];
                 const cod = String(row[COL_INDEX.COD_CLIENTE] || '').trim();
                 
-                if (EXCLUDED_CLIENT_CODES.includes(cod) || row[COL_INDEX.EXCLUIDO_MANUALMENTE] == 1) continue;
+                // MODIFICAÇÃO: Agora inclui apenas linhas que estão MARCADAS (INCLUÍDAS)
+                const isManuallyIncluded = (row[COL_INDEX.EXCLUIDO_MANUALMENTE] === 0 || 
+                                           row[COL_INDEX.EXCLUIDO_MANUALMENTE] === false ||
+                                           row[COL_INDEX.EXCLUIDO_MANUALMENTE] === null ||
+                                           row[COL_INDEX.EXCLUIDO_MANUALMENTE] === undefined);
+                
+                if (EXCLUDED_CLIENT_CODES.includes(cod) || !isManuallyIncluded) continue;
 
                 const d = getDateObject(row[COL_INDEX.DATA]);
                 if (!isNaN(d.getTime())) {
