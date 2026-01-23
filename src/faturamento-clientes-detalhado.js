@@ -48,7 +48,7 @@ router.get('/', async (req, res) => {
             Number(row.peso_un),
             Number(row.peso_total),
             Number(row.valor_total),
-            row.excluido_manualmente ? 1 : 0
+            row.excluido_manualmente ? 1 : 0  // MODIFICAÇÃO: Mantido como 1 para excluído, 0 para incluído
         ]);
 
         // Adiciona o cabeçalho fake para compatibilidade com o frontend antigo
@@ -103,6 +103,7 @@ router.post('/', async (req, res) => {
                 else dateVal = rawDate; // Tenta ISO direto se falhar
             }
 
+            // MODIFICAÇÃO: Ao importar dados, todas as linhas começam como INCLUÍDAS (excluido_manualmente = false)
             await client.query(insertQuery, [
                 dateVal,                // $1  - Data (Excel Col 0)
                 row[1],                 // $2  - Pedido (Excel Col 1)
@@ -117,7 +118,7 @@ router.post('/', async (req, res) => {
                 parseNumeric(row[10]),  // $11 - Peso Un (Excel Col 10)
                 parseNumeric(row[11]),  // $12 - Peso Total (Excel Col 11)
                 parseNumeric(row[12]),  // $13 - Valor Total (Excel Col 12)
-                false                   // $14 - Excluido
+                false                   // $14 - Excluido (inicia como false = INCLUÍDO)
             ]);
         }
 
