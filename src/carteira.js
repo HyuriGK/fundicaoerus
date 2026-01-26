@@ -4,6 +4,12 @@ const pool = require('../lib/db');
 const { Resend } = require('resend');
 const xlsx = require('xlsx');
 
+// Adicione isto no início do arquivo carteira.js, após as importações:
+console.log('=== DEBUG ENVIRONMENT VARIABLES ===');
+console.log('RESEND_API_KEY exists:', !!process.env.RESEND_API_KEY);
+console.log('RESEND_API_KEY value (first 5 chars):', process.env.RESEND_API_KEY ? process.env.RESEND_API_KEY.substring(0, 5) + '...' : 'undefined');
+console.log('All env vars:', Object.keys(process.env).filter(key => key.includes('RESEND') || key.includes('DATABASE')));
+
 // Log para verificar se a API key está disponível
 console.log('Resend API Key configurada?', process.env.RESEND_API_KEY ? 'Sim' : 'Não');
 
