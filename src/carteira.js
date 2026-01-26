@@ -1,11 +1,17 @@
 const express = require('express');
 const router = express.Router();
-const pool = require('../lib/db'); // Certifique-se que o db.js exporta usando module.exports = pool ou similar
+const pool = require('../lib/db');
+const { Resend } = require('resend');
+const xlsx = require('xlsx');
+
+// Inicializa o Resend com a chave da API
+// Nota: A chave deve ser configurada via variável de ambiente
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 // --- ROTA DE ESCRITA (POST) ---
 // Captura: save-weight, save-quantity, save-snapshot
 router.post('/', async (req, res) => {
-    const { action } = req.query; // Mantivemos a lógica de ler a action da URL
+    const { action } = req.query;
     const client = await pool.connect();
 
     try {
@@ -58,6 +64,75 @@ router.post('/', async (req, res) => {
         res.status(500).json({ error: e.message });
     } finally {
         client.release();
+    }
+});
+
+// --- ROTA PARA ENVIO DE EMAIL COM RESEND ---
+router.post('/send-email', async (req, res) => {
+    const { to, cc, subject, body, includeAttachment, attachmentData } = req.body;
+    
+    try {
+        // Verifica se a chave do Resend está configurada
+        if (!process.env.RESEND_API_KEY) {
+            throw new Error('RESEND_API_KEY não configurada no servidor');
+        }
+
+        const emailOptions = {
+            from: 'Fundição Erus <sistema@fundicaoerus.com>', // Substitua pelo seu domínio verificado no Resend
+            to: [to],
+            subject: subject || 'Relatório da Carteira de Pedidos',
+            html: body ? body.replace(/\n/g, '<br>') : '<p>Relatório em anexo.</p>',
+        };
+
+        // Adiciona CC se fornecido
+        if (cc && cc.trim()) {
+            emailOptions.cc = [cc];
+        }
+
+        // Se houver anexo, gerar o arquivo Excel
+        if (includeAttachment && attachmentData && attachmentData.length > 0) {
+            // Criar worksheet
+            const ws = xlsx.utils.json_to_sheet(attachmentData);
+            const wb = xlsx.utils.book_new();
+            xlsx.utils.book_append_sheet(wb, ws, 'Carteira de Pedidos');
+            
+            // Gerar buffer do Excel
+            const excelBuffer = xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' });
+            
+            // Converter para base64 (Resend requer base64 para anexos)
+            const base64Excel = excelBuffer.toString('base64');
+            
+            emailOptions.attachments = [{
+                filename: `Carteira_Pedidos_${new Date().toISOString().slice(0, 10)}.xlsx`,
+                content: base64Excel,
+                contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            }];
+        }
+
+        // Enviar email usando Resend
+        const { data, error } = await resend.emails.send(emailOptions);
+
+        if (error) {
+            console.error('Erro do Resend:', error);
+            return res.status(500).json({ 
+                error: 'Erro ao enviar email via Resend', 
+                details: error.message 
+            });
+        }
+
+        console.log('Email enviado com sucesso via Resend. ID:', data?.id);
+        return res.status(200).json({ 
+            success: true, 
+            message: 'Email enviado com sucesso!',
+            emailId: data?.id 
+        });
+
+    } catch (error) {
+        console.error('Erro ao enviar email:', error);
+        return res.status(500).json({ 
+            error: 'Erro interno ao processar envio de email', 
+            details: error.message 
+        });
     }
 });
 
