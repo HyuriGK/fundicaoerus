@@ -1,3 +1,7 @@
+// --- ADICIONE ESTA LINHA NO TOPO ---
+require('dotenv').config(); 
+// -----------------------------------
+
 const express = require('express');
 const router = express.Router();
 const pool = require('../lib/db');
@@ -7,8 +11,9 @@ const xlsx = require('xlsx');
 // Adicione isto no início do arquivo carteira.js, após as importações:
 console.log('=== DEBUG ENVIRONMENT VARIABLES ===');
 console.log('RESEND_API_KEY exists:', !!process.env.RESEND_API_KEY);
+// Log de segurança: mostra apenas os primeiros 5 caracteres
 console.log('RESEND_API_KEY value (first 5 chars):', process.env.RESEND_API_KEY ? process.env.RESEND_API_KEY.substring(0, 5) + '...' : 'undefined');
-console.log('All env vars:', Object.keys(process.env).filter(key => key.includes('RESEND') || key.includes('DATABASE')));
+console.log('All env vars (Filtered):', Object.keys(process.env).filter(key => key.includes('RESEND') || key.includes('DATABASE')));
 
 // Log para verificar se a API key está disponível
 console.log('Resend API Key configurada?', process.env.RESEND_API_KEY ? 'Sim' : 'Não');
@@ -40,15 +45,15 @@ router.post('/send-email', async (req, res) => {
     try {
         // Verifica se o Resend está configurado
         if (!resend || !process.env.RESEND_API_KEY) {
-            console.error('Erro: Resend não configurado');
+            console.error('Erro: Resend não configurado. env:', process.env.RESEND_API_KEY ? 'Presente' : 'Ausente');
             return res.status(500).json({ 
                 error: 'Serviço de email não configurado',
-                message: 'O serviço de email não está configurado no servidor. Contate o administrador.'
+                message: 'O serviço de email não está configurado no servidor (API Key ausente). Contate o administrador.'
             });
         }
 
         const emailOptions = {
-            from: 'Fundição Erus <onboarding@resend.dev>', // Use onboarding@resend.dev para testes
+            from: 'Fundição Erus <onboarding@resend.dev>', // Use onboarding@resend.dev para testes se não tiver domínio verificado
             to: [to.trim()],
             subject: subject || `Relatório da Carteira de Pedidos - ${new Date().toLocaleDateString('pt-BR')}`,
             html: body ? body.replace(/\n/g, '<br>') : 
@@ -122,7 +127,7 @@ router.post('/', async (req, res) => {
     const { action } = req.query;
     console.log(`POST /?action=${action} - Recebida requisição`);
     
-    // Se for ação de send-email, já foi tratada acima
+    // Se for ação de send-email, já foi tratada acima (se a rota bater, mas aqui é fallback)
     if (action === 'send-email') {
         return res.status(400).json({ error: 'Use a rota /send-email para envio de emails' });
     }
