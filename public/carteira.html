@@ -1000,7 +1000,8 @@ Fundição Erus`;
                     
                     listString += `• Ped: ${item.pedido} | Cód: ${codigo}\n`; // Adicionado Cód
                     listString += `  Desc: ${truncatedProduct}\n`;
-                    listString += `  Mat: ${material} | Qtd: ${item.saldo} | Peso: ${item.total} kg\n\n`; // Incluído Material
+                    // Incluído Peso Unitário na exibição do email
+                    listString += `  Mat: ${material} | Qtd: ${item.saldo} | Peso Un: ${formatNumber(item.peso_un)} | Total: ${item.total} kg\n\n`; 
                 });
             }
 
@@ -1438,6 +1439,9 @@ Fundição Erus`;
                     if (!currentKeysSet.has(item.uniqueKey)) {
                         // Determina a quantidade efetiva (Logica BLOCK: se saldo 0 e qtd > 0, usa qtd)
                         const effectiveQty = (item.saldoOriginal === 0 && item.qtdOriginal > 0) ? item.qtdOriginal : item.saldoOriginal;
+                        
+                        // CORREÇÃO: Usar Peso Corrigido do servidor se existir, senão usa do Excel
+                        const effectiveWeight = serverWeightsCache[item.codigo] !== undefined ? serverWeightsCache[item.codigo] : item.pesoUn;
 
                         newItemsDetected.push({
                             pedido: item.pedido,
@@ -1445,8 +1449,9 @@ Fundição Erus`;
                             codigo: item.codigo, 
                             produto: item.produto,
                             material: item.material, 
+                            peso_un: effectiveWeight, // Salva o peso unitário correto
                             saldo: effectiveQty, // Usa qtd efetiva
-                            total: (effectiveQty * item.pesoUn).toFixed(2).replace('.',','), // Recalcula peso
+                            total: (effectiveQty * effectiveWeight).toFixed(2).replace('.',','), // Recalcula peso total com peso corrigido
                             uniqueKey: item.uniqueKey
                         });
                         newItemsKeys.push(item.uniqueKey);
