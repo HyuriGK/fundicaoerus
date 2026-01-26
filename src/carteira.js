@@ -1,15 +1,11 @@
 const express = require('express');
 const router = express.Router();
-const pool = require('../lib/db');
-const { Resend } = require('resend');
-const XLSX = require('xlsx');
-
-// Inicializa Resend - USANDO AMBAS AS VARIÁVEIS PARA COMPATIBILIDADE
-const resend = new Resend(process.env.RESEND_API_KEY || process.env.SEND_API_KEY);
+const pool = require('../lib/db'); // Certifique-se que o db.js exporta usando module.exports = pool ou similar
 
 // --- ROTA DE ESCRITA (POST) ---
+// Captura: save-weight, save-quantity, save-snapshot
 router.post('/', async (req, res) => {
-    const { action } = req.query;
+    const { action } = req.query; // Mantivemos a lógica de ler a action da URL
     const client = await pool.connect();
 
     try {
@@ -53,14 +49,7 @@ router.post('/', async (req, res) => {
             return res.status(200).json({ success: true });
         }
 
-        // 4. ENVIAR EMAIL COM RESEND - REMOVIDO (AGORA TEM ROTA SEPARADA)
-        if (action === 'send-email') {
-            return res.status(400).json({ 
-                error: 'Use a rota /api/carteira/send-email',
-                message: 'Esta rota foi movida para /api/carteira/send-email'
-            });
-        }
-
+        // Se nenhuma action for encontrada
         return res.status(400).json({ error: 'Action não reconhecida para POST' });
 
     } catch (e) {
@@ -73,11 +62,13 @@ router.post('/', async (req, res) => {
 });
 
 // --- ROTA DE LEITURA (GET) ---
+// Captura: weights, quantities ou lista geral
 router.get('/', async (req, res) => {
     const { action } = req.query;
     const client = await pool.connect();
 
     try {
+        // Se pedir pesos
         if (action === 'weights') {
             const r = await client.query('SELECT codigo, peso FROM pesos_customizados');
             const map = {}; 
@@ -85,6 +76,7 @@ router.get('/', async (req, res) => {
             return res.status(200).json(map);
         }
         
+        // Se pedir quantidades
         if (action === 'quantities') {
             const r = await client.query('SELECT unique_key, quantidade FROM quantidades_manuais');
             const map = {}; 
@@ -92,6 +84,7 @@ router.get('/', async (req, res) => {
             return res.status(200).json(map);
         }
         
+        // Padrão: ler a carteira inteira
         const result = await client.query("SELECT pedido, ordem_compra, to_char(entrega, 'DD/MM/YYYY') as entrega, razao_social, codigo, nome_produto, material, peso_un, qtd_pedido, saldo, peso_total FROM carteira ORDER BY entrega ASC");
         return res.status(200).json(result.rows);
 
@@ -101,224 +94,6 @@ router.get('/', async (req, res) => {
     } finally {
         client.release();
     }
-});
-
-// Rota específica para envio de email (SIMPLIFICADA)
-router.post('/send-email', async (req, res) => {
-    console.log('[EMAIL] Recebendo requisição para enviar email');
-    
-    try {
-        const { to, cc, subject, body, includeAttachment, attachmentData } = req.body;
-        
-        console.log('[EMAIL] Dados recebidos:', { 
-            to: to ? '***' : 'vazio',
-            cc: cc ? '***' : 'vazio',
-            subject: subject || 'padrão',
-            includeAttachment: !!includeAttachment,
-            attachmentDataLength: attachmentData ? attachmentData.length : 0
-        });
-        
-        if (!to) {
-            return res.status(400).json({ error: 'Destinatário (to) é obrigatório' });
-        }
-
-        // VERIFICAÇÃO MELHORADA
-        const apiKey = process.env.RESEND_API_KEY || process.env.SEND_API_KEY;
-        if (!apiKey) {
-            console.error('[EMAIL] ERRO: Nenhuma chave de API encontrada');
-            console.error('[EMAIL] RESEND_API_KEY:', !!process.env.RESEND_API_KEY);
-            console.error('[EMAIL] SEND_API_KEY:', !!process.env.SEND_API_KEY);
-            
-            return res.status(500).json({ 
-                error: 'Resend não configurado',
-                details: 'Adicione RESEND_API_KEY ou SEND_API_KEY nas variáveis de ambiente',
-                debug: {
-                    resendKeyExists: !!process.env.RESEND_API_KEY,
-                    sendKeyExists: !!process.env.SEND_API_KEY
-                }
-            });
-        }
-
-        console.log('[EMAIL] Chave de API encontrada, comprimento:', apiKey.length);
-        
-        // Prepara dados do email
-        const emailData = {
-            from: 'Fundição Erus <sistema@fundicaoerus.com.br>',
-            to: [to],
-            subject: subject || 'Relatório da Carteira de Pedidos',
-            html: `
-                <div style="font-family: Arial, sans-serif; max-width: 600px;">
-                    <h2 style="color: #fbbf24; border-bottom: 2px solid #fbbf24; padding-bottom: 10px;">
-                        📊 Relatório da Carteira de Pedidos
-                    </h2>
-                    <div style="background-color: #f9f9f9; padding: 20px; border-radius: 5px; margin: 20px 0;">
-                        <p style="white-space: pre-line; line-height: 1.6;">${body || 'Segue em anexo o relatório atual da carteira de pedidos.'}</p>
-                    </div>
-                    <div style="background-color: #f5f5f5; padding: 15px; border-left: 4px solid #fbbf24; margin: 20px 0;">
-                        <p><strong>📅 Data de envio:</strong> ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}</p>
-                        <p><strong>🏭 Sistema:</strong> Gestão Comercial - Fundição Erus</p>
-                    </div>
-                    <hr style="border: none; border-top: 1px solid #ddd;">
-                    <p style="color: #666; font-size: 12px; text-align: center;">
-                        <i>Esta é uma mensagem automática do sistema.</i>
-                    </p>
-                </div>
-            `
-        };
-
-        // Adicionar CC se existir
-        if (cc && cc.trim()) {
-            emailData.cc = [cc.trim()];
-        }
-
-        // Adicionar anexo se solicitado
-        if (includeAttachment && attachmentData && attachmentData.length > 0) {
-            console.log('[EMAIL] Gerando anexo Excel com', attachmentData.length, 'linhas');
-            const base64Excel = generateExcelBase64(attachmentData);
-            emailData.attachments = [{
-                filename: `Carteira_Pedidos_${new Date().toISOString().slice(0, 10)}.xlsx`,
-                content: base64Excel
-            }];
-        }
-
-        console.log('[EMAIL] Enviando email via Resend...');
-        
-        // Enviar email via Resend
-        const { data, error } = await resend.emails.send(emailData);
-        
-        if (error) {
-            console.error('[EMAIL] ❌ Erro Resend:', error);
-            return res.status(500).json({ 
-                error: 'Falha ao enviar email', 
-                details: error.message,
-                resendError: error
-            });
-        }
-        
-        console.log('[EMAIL] ✅ Email enviado via Resend:', data.id);
-        return res.status(200).json({ 
-            success: true, 
-            message: 'Email enviado com sucesso',
-            messageId: data.id
-        });
-        
-    } catch (e) {
-        console.error('[EMAIL] ❌ Erro ao enviar email:', e);
-        return res.status(500).json({ 
-            error: 'Falha ao enviar email', 
-            details: e.message,
-            stack: process.env.NODE_ENV === 'development' ? e.stack : undefined
-        });
-    }
-});
-
-// Função auxiliar para gerar Excel em base64
-function generateExcelBase64(data) {
-    const workbook = XLSX.utils.book_new();
-    const worksheetData = [
-        ['PEDIDO', 'OC', 'ENTREGA', 'CLIENTE', 'CÓDIGO', 'PRODUTO', 'MATERIAL', 'PESO UN (kg)', 'SALDO', 'TOTAL (kg)'],
-        ...data.map(item => [
-            item.pedido || '',
-            item.oc || '',
-            item.entrega || '',
-            item.cliente || '',
-            item.codigo || '',
-            item.produto || '',
-            item.material || '',
-            item.peso_un || '0',
-            item.saldo || '0',
-            item.total || '0'
-        ])
-    ];
-    
-    const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Carteira');
-    
-    const excelBuffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
-    return excelBuffer.toString('base64');
-}
-
-// Rota para testar configuração (MELHORADA)
-router.get('/test-email', async (req, res) => {
-    const apiKey = process.env.RESEND_API_KEY || process.env.SEND_API_KEY;
-    
-    if (!apiKey) {
-        return res.status(500).json({ 
-            error: 'API KEY não configurada',
-            required: 'Adicione RESEND_API_KEY ou SEND_API_KEY no Vercel',
-            debug: {
-                RESEND_API_KEY: !!process.env.RESEND_API_KEY,
-                SEND_API_KEY: !!process.env.SEND_API_KEY
-            }
-        });
-    }
-    
-    try {
-        console.log('[TESTE] Enviando email de teste com chave:', apiKey.substring(0, 10) + '...');
-        
-        const { data, error } = await resend.emails.send({
-            from: 'Teste Resend <onboarding@resend.dev>',
-            to: ['brasil.hyuri@gmail.com'],
-            subject: 'Teste de Email - Fundição Erus',
-            html: `
-                <div style="font-family: Arial, sans-serif;">
-                    <h2 style="color: #4CAF50;">✅ Teste de Email - Funcionando!</h2>
-                    <p>Se você recebeu este email, o Resend está configurado corretamente.</p>
-                    <p><strong>Timestamp:</strong> ${new Date().toISOString()}</p>
-                    <p><strong>Ambiente:</strong> ${process.env.NODE_ENV || 'development'}</p>
-                    <hr>
-                    <p style="font-size: 12px; color: #666;">Sistema de Gestão Comercial - Fundição Erus</p>
-                </div>
-            `
-        });
-
-        if (error) {
-            console.error('[TESTE] Erro Resend:', error);
-            return res.status(500).json({ 
-                error: 'Falha no teste de email', 
-                details: error.message 
-            });
-        }
-
-        console.log('[TESTE] ✅ Email de teste enviado:', data.id);
-        
-        res.json({ 
-            success: true, 
-            message: 'Email de teste enviado com sucesso!',
-            messageId: data.id,
-            debug: {
-                apiKeyLength: apiKey.length,
-                keyPrefix: apiKey.substring(0, 10) + '...'
-            }
-        });
-    } catch (error) {
-        console.error('[TESTE] ❌ Erro ao enviar teste:', error);
-        res.status(500).json({ 
-            error: 'Erro ao enviar email de teste', 
-            details: error.message,
-            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-        });
-    }
-});
-
-// Rota para diagnóstico (MELHORADA)
-router.get('/diagnose', (req, res) => {
-    const apiKey = process.env.RESEND_API_KEY || process.env.SEND_API_KEY;
-    
-    res.json({
-        timestamp: new Date().toISOString(),
-        environment: process.env.NODE_ENV || 'development',
-        emailService: 'Resend',
-        apiKeyConfigured: !!apiKey,
-        apiKeyLength: apiKey ? apiKey.length : 0,
-        keyType: process.env.RESEND_API_KEY ? 'RESEND_API_KEY' : 
-                process.env.SEND_API_KEY ? 'SEND_API_KEY' : 'Nenhuma',
-        databaseConnected: true,
-        status: apiKey ? '✅ Configurado para envio de emails' : '❌ API KEY não configurada',
-        recommendations: apiKey ? 
-            '✅ Resend configurado corretamente' : 
-            '❌ Adicione RESEND_API_KEY ou SEND_API_KEY no Vercel'
-    });
 });
 
 module.exports = router;
