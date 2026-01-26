@@ -961,16 +961,46 @@ Fundição Erus`;
             // Calcula totais
             let totalNewWeight = 0;
             let totalNewQty = 0;
-            let listString = "";
-
+            
+            // Agrupar por Cliente
+            const itemsByClient = {};
+            
             newItems.forEach(item => {
                 const totalItem = parseFloat(String(item.total).replace(/\./g, '').replace(',', '.'));
                 const qtyItem = parseFloat(String(item.saldo).replace(/\./g, '').replace(',', '.'));
                 totalNewWeight += isNaN(totalItem) ? 0 : totalItem;
                 totalNewQty += isNaN(qtyItem) ? 0 : qtyItem;
 
-                listString += `• Pedido ${item.pedido} - ${item.cliente}: ${item.produto} (${item.saldo} pçs - ${item.total} kg)\n`;
+                if (!itemsByClient[item.cliente]) {
+                    itemsByClient[item.cliente] = [];
+                }
+                itemsByClient[item.cliente].push(item);
             });
+
+            // Helper para truncar texto
+            const truncateText = (text, limit) => {
+                if (!text) return '';
+                return text.length > limit ? text.substring(0, limit) + '...' : text;
+            };
+
+            // Construir a string da lista agrupada
+            let listString = "";
+            
+            for (const [clientName, items] of Object.entries(itemsByClient)) {
+                const truncatedClient = truncateText(clientName, 20);
+                
+                listString += `--------------------------------------------------\n`;
+                listString += `CLIENTE: ${truncatedClient}\n`;
+                listString += `--------------------------------------------------\n`;
+
+                items.forEach(item => {
+                    const truncatedProduct = truncateText(item.produto, 20);
+                    const material = item.material || 'N/A';
+                    
+                    listString += `• ${truncatedProduct} | Mat: ${material}\n`;
+                    listString += `  Qtd: ${item.saldo} | Peso: ${item.total} kg\n\n`;
+                });
+            }
 
             const dataAtual = new Date().toLocaleDateString('pt-BR');
             
@@ -1403,13 +1433,14 @@ Fundição Erus`;
                             produto: item.produto,
                             saldo: item.saldoOriginal,
                             total: (item.saldoOriginal * item.pesoUn).toFixed(2).replace('.',','),
-                            uniqueKey: item.uniqueKey
+                            uniqueKey: item.uniqueKey,
+                            material: item.material // Adicionado MATERIAL aqui
                         });
                         newItemsKeys.push(item.uniqueKey);
                     }
                 });
 
-                // 4. Salvar lista de novos itens no LocalStorage para uso posterior (Botão de Email)
+                // 4. Salvar lista de novos itens no LocalStorage
                 if (newItemsDetected.length > 0) {
                     localStorage.setItem(STORAGE_KEY_NEW_ITEMS, JSON.stringify(newItemsDetected));
                     showToast('Novos Pedidos', `${newItemsDetected.length} novos itens identificados.`, 'success');
