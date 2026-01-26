@@ -1,6 +1,5 @@
-// --- ADICIONE ESTA LINHA NO TOPO ---
+// --- CARREGA AS VARIÁVEIS DE AMBIENTE DO ARQUIVO .ENV ---
 require('dotenv').config(); 
-// -----------------------------------
 
 const express = require('express');
 const router = express.Router();
@@ -8,20 +7,20 @@ const pool = require('../lib/db');
 const { Resend } = require('resend');
 const xlsx = require('xlsx');
 
-// Adicione isto no início do arquivo carteira.js, após as importações:
+// --- DEBUG ENVIRONMENT VARIABLES ---
 console.log('=== DEBUG ENVIRONMENT VARIABLES ===');
 console.log('RESEND_API_KEY exists:', !!process.env.RESEND_API_KEY);
-// Log de segurança: mostra apenas os primeiros 5 caracteres
+// Log de segurança: mostra apenas os primeiros 5 caracteres para conferência
 console.log('RESEND_API_KEY value (first 5 chars):', process.env.RESEND_API_KEY ? process.env.RESEND_API_KEY.substring(0, 5) + '...' : 'undefined');
-console.log('All env vars (Filtered):', Object.keys(process.env).filter(key => key.includes('RESEND') || key.includes('DATABASE')));
-
-// Log para verificar se a API key está disponível
-console.log('Resend API Key configurada?', process.env.RESEND_API_KEY ? 'Sim' : 'Não');
 
 // Inicializa o Resend com a chave da API
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
-// Middleware para log de todas as requisições
+if (!resend) {
+    console.warn('AVISO: RESEND_API_KEY não encontrada. O envio de emails não funcionará.');
+}
+
+// Middleware para log de todas as requisições neste router
 router.use((req, res, next) => {
     console.log(`${new Date().toISOString()} - ${req.method} ${req.originalUrl}`);
     next();
@@ -29,7 +28,11 @@ router.use((req, res, next) => {
 
 // --- ROTA PARA ENVIO DE EMAIL COM RESEND (DEVE VIR ANTES DA ROTA POST '/') ---
 router.post('/send-email', async (req, res) => {
-    console.log('POST /send-email - Body recebido:', JSON.stringify(req.body, null, 2));
+    console.log('POST /send-email - Body recebido (resumo):', {
+        to: req.body.to,
+        subject: req.body.subject,
+        hasAttachment: req.body.includeAttachment
+    });
     
     const { to, cc, subject, body, includeAttachment, attachmentData } = req.body;
     
@@ -45,15 +48,15 @@ router.post('/send-email', async (req, res) => {
     try {
         // Verifica se o Resend está configurado
         if (!resend || !process.env.RESEND_API_KEY) {
-            console.error('Erro: Resend não configurado. env:', process.env.RESEND_API_KEY ? 'Presente' : 'Ausente');
+            console.error('Erro: Resend não configurado. Chave ausente.');
             return res.status(500).json({ 
                 error: 'Serviço de email não configurado',
-                message: 'O serviço de email não está configurado no servidor (API Key ausente). Contate o administrador.'
+                message: 'O serviço de email não está configurado no servidor (API Key não encontrada). Verifique o arquivo .env.'
             });
         }
 
         const emailOptions = {
-            from: 'Fundição Erus <onboarding@resend.dev>', // Use onboarding@resend.dev para testes se não tiver domínio verificado
+            from: 'Fundição Erus <onboarding@resend.dev>', // Em produção, altere para seu domínio verificado (ex: nao-responda@fundicaoerus.com.br)
             to: [to.trim()],
             subject: subject || `Relatório da Carteira de Pedidos - ${new Date().toLocaleDateString('pt-BR')}`,
             html: body ? body.replace(/\n/g, '<br>') : 
@@ -68,7 +71,7 @@ router.post('/send-email', async (req, res) => {
 
         // Se houver anexo, gerar o arquivo Excel
         if (includeAttachment && attachmentData && attachmentData.length > 0) {
-            console.log(`Gerando anexo com ${attachmentData.length} registros`);
+            console.log(`Gerando anexo com ${attachmentData.length} registros...`);
             
             // Criar worksheet
             const ws = xlsx.utils.json_to_sheet(attachmentData);
@@ -87,9 +90,9 @@ router.post('/send-email', async (req, res) => {
                 contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
             }];
             
-            console.log('Anexo gerado com sucesso');
+            console.log('Anexo gerado com sucesso.');
         } else {
-            console.log('Enviando sem anexo');
+            console.log('Enviando sem anexo.');
         }
 
         // Enviar email usando Resend
@@ -97,7 +100,7 @@ router.post('/send-email', async (req, res) => {
         const { data, error } = await resend.emails.send(emailOptions);
 
         if (error) {
-            console.error('Erro do Resend:', JSON.stringify(error, null, 2));
+            console.error('Erro retornado pelo Resend:', JSON.stringify(error, null, 2));
             return res.status(500).json({ 
                 error: 'Erro ao enviar email', 
                 message: error.message || 'Não foi possível enviar o email.',
@@ -113,7 +116,7 @@ router.post('/send-email', async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Erro ao processar envio de email:', error);
+        console.error('Erro interno ao processar envio de email:', error);
         return res.status(500).json({ 
             error: 'Erro interno', 
             message: 'Ocorreu um erro interno ao processar o envio do email.',
@@ -127,7 +130,7 @@ router.post('/', async (req, res) => {
     const { action } = req.query;
     console.log(`POST /?action=${action} - Recebida requisição`);
     
-    // Se for ação de send-email, já foi tratada acima (se a rota bater, mas aqui é fallback)
+    // Se for ação de send-email, já foi tratada acima, mas como segurança:
     if (action === 'send-email') {
         return res.status(400).json({ error: 'Use a rota /send-email para envio de emails' });
     }
