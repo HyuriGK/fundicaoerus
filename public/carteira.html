@@ -321,6 +321,17 @@
         }
 
         .badge-block { background: var(--status-danger); color: #fff; font-size: 0.6rem; padding: 1px 4px; border-radius: 3px; font-weight: 800; margin-left: 4px; box-shadow: 0 0 8px rgba(239, 68, 68, 0.4); }
+        
+        /* NOVA BADGE: Item Novo */
+        .badge-new {
+            background: var(--status-success); color: #000;
+            font-size: 0.6rem; padding: 1px 4px; border-radius: 3px;
+            font-weight: 800; margin-left: 4px;
+            box-shadow: 0 0 8px rgba(16, 185, 129, 0.4);
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.7; } 100% { opacity: 1; } }
+
         tr[data-estimated="true"] td:nth-child(8) { color: var(--status-warning); background: rgba(245, 158, 11, 0.08); }
         tr[data-manual-qty="true"] td:nth-child(10) { color: var(--status-info); background: rgba(6, 182, 212, 0.1); }
         tr[data-is-blocked="true"] td:nth-child(10) { color: var(--status-danger); font-weight: 700; }
@@ -667,6 +678,10 @@
                         <div class="dropdown-item" onclick="openEmailModal()">
                             <i class="fa-solid fa-envelope"></i> Enviar Relatório
                         </div>
+                        <!-- NOVO ITEM: Enviar Novos Pedidos -->
+                        <div class="dropdown-item" onclick="openNewOrdersEmailModal()">
+                            <i class="fa-solid fa-envelope-open-text" style="color: var(--status-success);"></i> Enviar Novos Pedidos
+                        </div>
                         <div class="dropdown-item" onclick="window.location.reload()">
                              <i class="fa-solid fa-sync"></i> Atualizar Dados
                         </div>
@@ -814,6 +829,9 @@
         
         let isModelosHidden = true, monthlyChart = null, paretoChart = null, activeMonthFilter = null, activeClientFilter = null;
         let serverWeightsCache = {}, serverQuantitiesCache = {}, previousCellValue = "";
+        
+        // --- NOVOS ITENS DETECTADOS NA IMPORTAÇÃO ---
+        const STORAGE_KEY_NEW_ITEMS = 'erus_new_items_cache';
 
         const chartColorAmber = '#fbbf24'; 
 
@@ -824,102 +842,80 @@
         // --- GERENCIAMENTO DE LISTA CC ---
         const STORAGE_KEY_CC = 'erus_cc_list_v1';
 
-        // Carrega a lista do LocalStorage
         function getSavedCCList() {
             const saved = localStorage.getItem(STORAGE_KEY_CC);
             return saved ? JSON.parse(saved) : [];
         }
 
-        // Salva a lista no LocalStorage
         function saveCCList(list) {
             localStorage.setItem(STORAGE_KEY_CC, JSON.stringify(list));
-            updateCCInputField(); // Atualiza o input principal
-            renderCCTags();       // Atualiza visualmente as tags
+            updateCCInputField();
+            renderCCTags();
         }
 
-        // Adiciona novo email à lista
         function addNewCCToList() {
             const input = document.getElementById('newCCInput');
             const email = input.value.trim();
-            
             if (!email) return;
             if (!email.includes('@') || !email.includes('.')) {
                 showToast('Email inválido', 'Verifique o formato do email.', 'danger');
                 return;
             }
-
             const currentList = getSavedCCList();
-            
-            // Evita duplicatas
             if (currentList.includes(email)) {
                 showToast('Email já existe', 'Este email já está na lista padrão.', 'info');
                 input.value = '';
                 return;
             }
-
             currentList.push(email);
             saveCCList(currentList);
-            input.value = ''; // Limpa o input de adição
+            input.value = '';
         }
 
-        // Remove email da lista
         function removeCCFromList(emailToRemove) {
             let currentList = getSavedCCList();
             currentList = currentList.filter(email => email !== emailToRemove);
             saveCCList(currentList);
         }
 
-        // Renderiza as tags visuais (chips)
         function renderCCTags() {
             const container = document.getElementById('ccTagsContainer');
             const list = getSavedCCList();
-            
             container.innerHTML = '';
-            
             if (list.length === 0) {
                 container.innerHTML = '<span style="color:var(--text-muted); font-size:0.8rem; font-style:italic;">Nenhum email salvo na lista padrão.</span>';
                 return;
             }
-
             list.forEach(email => {
                 const tag = document.createElement('div');
                 tag.className = 'cc-tag';
-                tag.innerHTML = `
-                    ${email}
-                    <i class="fa-solid fa-times cc-tag-remove" onclick="removeCCFromList('${email}')" title="Remover"></i>
-                `;
+                tag.innerHTML = `${email}<i class="fa-solid fa-times cc-tag-remove" onclick="removeCCFromList('${email}')" title="Remover"></i>`;
                 container.appendChild(tag);
             });
         }
 
-        // Atualiza o campo de input principal (que vai pro backend)
         function updateCCInputField() {
             const list = getSavedCCList();
-            // Junta os emails com vírgula e espaço
             document.getElementById('emailCc').value = list.join(', ');
         }
 
-        // Mostra/Oculta a área de gerenciamento
         function toggleCCManager() {
             const div = document.getElementById('ccManagerArea');
             const isHidden = div.style.display === 'none';
             div.style.display = isHidden ? 'block' : 'none';
-            
-            if (isHidden) {
-                renderCCTags(); // Garante que renderiza ao abrir
-            }
+            if (isHidden) renderCCTags();
         }
 
-        // Funções para Modal de Email (Modificada)
+        // --- FUNÇÕES DE EMAIL ---
+        
+        // 1. Email Padrão (Resumo Geral)
         function openEmailModal() {
-            // Coletar dados atuais para pré-preencher o email
             const totalPedidos = document.getElementById('totalOrdersCard').textContent;
             const pesoTotal = document.getElementById('totalWeightCard').textContent;
             const pesoLiberado = document.getElementById('releasedWeightCard').textContent;
             const pesoBloqueado = document.getElementById('blockedWeightCard').textContent;
             const dataAtual = new Date().toLocaleDateString('pt-BR');
             
-            // Pré-preencher os campos
             document.getElementById('emailSubject').value = `Relatório da Carteira de Pedidos - ${dataAtual}`;
             
             const emailBody = `Prezados,
@@ -940,16 +936,68 @@ Sistema de Gestão Comercial
 Fundição Erus`;
             
             document.getElementById('emailBody').value = emailBody;
-            
-            // --- NOVO: Carregar a lista de CC salva automaticamente ---
             updateCCInputField();
             renderCCTags(); 
             
-            // Fechar dropdown se estiver aberto
             const dropdownContent = document.getElementById('functionsDropdownContent');
             if(dropdownContent) dropdownContent.classList.remove('open');
             
-            // Abrir modal
+            document.getElementById('emailModal').style.display = 'flex';
+        }
+
+        // 2. Novo Email (Apenas Novos Pedidos)
+        function openNewOrdersEmailModal() {
+            // Recupera os itens novos do cache local
+            const newItemsJson = localStorage.getItem(STORAGE_KEY_NEW_ITEMS);
+            const newItems = newItemsJson ? JSON.parse(newItemsJson) : [];
+
+            if (newItems.length === 0) {
+                showToast('Sem novos pedidos', 'Não há registros novos detectados na última importação.', 'info');
+                const dropdownContent = document.getElementById('functionsDropdownContent');
+                if(dropdownContent) dropdownContent.classList.remove('open');
+                return;
+            }
+
+            // Calcula totais
+            let totalNewWeight = 0;
+            let totalNewQty = 0;
+            let listString = "";
+
+            newItems.forEach(item => {
+                const totalItem = parseFloat(String(item.total).replace(/\./g, '').replace(',', '.'));
+                const qtyItem = parseFloat(String(item.saldo).replace(/\./g, '').replace(',', '.'));
+                totalNewWeight += isNaN(totalItem) ? 0 : totalItem;
+                totalNewQty += isNaN(qtyItem) ? 0 : qtyItem;
+
+                listString += `• Pedido ${item.pedido} - ${item.cliente}: ${item.produto} (${item.saldo} pçs - ${item.total} kg)\n`;
+            });
+
+            const dataAtual = new Date().toLocaleDateString('pt-BR');
+            
+            document.getElementById('emailSubject').value = `Novos Pedidos Incluídos - ${dataAtual}`;
+            
+            const emailBody = `Prezados,
+
+Foram incluídos novos pedidos na carteira:
+
+• Total de Novos Itens: ${newItems.length}
+• Quantidade Total: ${totalNewQty} pçs
+• Peso Total Adicionado: ${totalNewWeight.toLocaleString('pt-BR', {minimumFractionDigits:2})} kg
+
+Lista Detalhada:
+${listString}
+
+Atenciosamente,
+Sistema de Gestão Comercial
+Fundição Erus`;
+            
+            document.getElementById('emailBody').value = emailBody;
+            updateCCInputField();
+            renderCCTags(); 
+            
+            const dropdownContent = document.getElementById('functionsDropdownContent');
+            if(dropdownContent) dropdownContent.classList.remove('open');
+            
             document.getElementById('emailModal').style.display = 'flex';
         }
         
@@ -970,7 +1018,6 @@ Fundição Erus`;
             }
             
             try {
-                // Preparar os dados do email
                 const emailData = {
                     to: emailTo,
                     cc: emailCc,
@@ -979,12 +1026,11 @@ Fundição Erus`;
                     includeAttachment: includeAttachment
                 };
                 
-                // Se incluir anexo, gerar os dados da tabela
                 if (includeAttachment) {
                     const tableData = Array.from(document.querySelectorAll('#dataTable tbody tr'))
                         .filter(r => r.style.display !== 'none')
                         .map(r => ({
-                            pedido: r.cells[COL_PEDIDO].textContent.replace(' BLOCK',''),
+                            pedido: r.cells[COL_PEDIDO].textContent.replace(' BLOCK','').replace(' NOVO',''),
                             oc: r.cells[COL_OC].textContent,
                             entrega: r.cells[COL_ENTREGA].textContent,
                             cliente: r.cells[COL_CLIENTE].textContent,
@@ -999,12 +1045,9 @@ Fundição Erus`;
                     emailData.attachmentData = tableData;
                 }
                 
-                // Enviar para o backend
                 const response = await fetch('/api/carteira/send-email', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(emailData)
                 });
                 
@@ -1056,7 +1099,6 @@ Fundição Erus`;
             
             container.appendChild(toast);
 
-            // Remove após 4 segundos
             setTimeout(() => {
                 toast.style.animation = 'fadeOut 0.5s ease-out forwards';
                 setTimeout(() => {
@@ -1080,7 +1122,6 @@ Fundição Erus`;
             }
         }
 
-        // Fechar dropdown ao clicar fora
         document.addEventListener('click', function(event) {
             const dropdown = document.getElementById('functionsDropdownContent');
             const btn = document.querySelector('#functionsDropdown button');
@@ -1150,21 +1191,21 @@ Fundição Erus`;
 
         async function loadSavedWeightsFromServer() { 
             try { 
-                const r = await fetch('/api/carteira?action=weights'); // Alterado para query string
+                const r = await fetch('/api/carteira?action=weights'); 
                 serverWeightsCache = r.ok ? await r.json() : {}; 
             } catch(e){} 
         }
         
         async function loadSavedQuantitiesFromServer() { 
             try { 
-                const r = await fetch('/api/carteira?action=quantities'); // Alterado para query string
+                const r = await fetch('/api/carteira?action=quantities'); 
                 serverQuantitiesCache = r.ok ? await r.json() : {}; 
             } catch(e){} 
         }
         
         async function saveWeightToDb(c, w) { 
             try { 
-                await fetch('/api/carteira?action=save-weight', { // Ajustado
+                await fetch('/api/carteira?action=save-weight', { 
                     method:'POST', 
                     headers:{'Content-Type':'application/json'}, 
                     body:JSON.stringify({codigo:c, peso:w}) 
@@ -1175,7 +1216,7 @@ Fundição Erus`;
         
         async function saveQuantityToDb(k, q) { 
             try { 
-                await fetch('/api/carteira?action=save-quantity', { // Ajustado
+                await fetch('/api/carteira?action=save-quantity', { 
                     method:'POST', 
                     headers:{'Content-Type':'application/json'}, 
                     body:JSON.stringify({unique_key:k, quantity:q}) 
@@ -1209,9 +1250,13 @@ Fundição Erus`;
         // ==========================================================================
         // RENDERIZAÇÃO
         // ==========================================================================
-        function renderTable(data) {
+        function renderTable(data, newItemsKeys = []) {
             const tbody = document.querySelector('#dataTable tbody');
             tbody.innerHTML = '';
+            
+            // Set para busca rápida
+            const newKeysSet = new Set(newItemsKeys);
+
             data.forEach(row => {
                 const tr = document.createElement('tr');
                 tr.setAttribute('data-unique-key', row.uniqueKey);
@@ -1228,11 +1273,24 @@ Fundição Erus`;
                 const total = saldo * pu;
                 tr.setAttribute('data-raw-qty', saldo); tr.setAttribute('data-raw-total', total);
 
+                // Verifica se é novo
+                const isNew = newKeysSet.has(row.uniqueKey);
+
                 const cells = [row.pedido, row.oc, row.entrega, row.cliente, row.codigo, row.produto, row.material, formatNumber(pu), row.qtdOriginal, saldo, formatNumber(total)];
                 cells.forEach((v, i) => {
                     const td = document.createElement('td');
-                    if (i === COL_PEDIDO && isBlocked) td.innerHTML = `${v} <span class="badge-block">BLOCK</span>`;
-                    else td.textContent = v;
+                    
+                    // Coluna Pedido: Verifica se tem BLOCK ou NOVO
+                    if (i === COL_PEDIDO) {
+                        let htmlContent = v;
+                        if (isBlocked) htmlContent += ` <span class="badge-block">BLOCK</span>`;
+                        if (isNew) htmlContent += ` <span class="badge-new">NOVO</span>`;
+                        td.innerHTML = htmlContent;
+                    } 
+                    else {
+                        td.textContent = v;
+                    }
+
                     if (i === COL_PESO_UN || i === COL_SALDO) { td.contentEditable = "true"; td.classList.add("editable-cell"); }
                     tr.appendChild(td);
                 });
@@ -1252,14 +1310,12 @@ Fundição Erus`;
         async function saveToServerSnapshot() {
             // 1. Mapeia todas as linhas da tabela para um array de objetos
             const rows = Array.from(document.querySelectorAll('#dataTable tbody tr')).map(r => {
-                // Capturamos os valores brutos para garantir precisão
                 const saldoRaw = parseFloat(r.getAttribute('data-raw-qty')) || 0;
                 const totalRaw = parseFloat(r.getAttribute('data-raw-total')) || 0;
                 const pesoUnRaw = parseNumberSafe(r.cells[COL_PESO_UN].textContent);
 
                 return {
-                    // .replace(' BLOCK','') garante que não salvemos o marcador visual no banco
-                    pedido: r.cells[COL_PEDIDO].textContent.replace(' BLOCK', '').trim(),
+                    pedido: r.cells[COL_PEDIDO].textContent.replace(' BLOCK', '').replace(' NOVO', '').trim(),
                     ordem_compra: r.cells[COL_OC].textContent.trim(),
                     entrega: r.cells[COL_ENTREGA].textContent.trim(),
                     razao_social: r.cells[COL_CLIENTE].textContent.trim(),
@@ -1268,19 +1324,15 @@ Fundição Erus`;
                     material: r.cells[COL_MATERIAL].textContent.trim(),
                     peso_un: pesoUnRaw,
                     qtd_pedido: parseNumberSafe(r.cells[COL_QTD_PEDIDO].textContent),
-                    // Se a linha estiver bloqueada via sistema, o saldo enviado deve ser 0 para consistência
                     saldo: r.getAttribute('data-force-block-state') === 'true' ? 0 : saldoRaw,
                     peso_total: totalRaw
                 };
             });
 
             try {
-                // CORREÇÃO DA URL: Deve apontar para /api/carteira com a query string action=save-snapshot
                 const response = await fetch('/api/carteira?action=save-snapshot', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(rows)
                 });
 
@@ -1302,16 +1354,74 @@ Fundição Erus`;
             try {
                 await Promise.all([loadSavedWeightsFromServer(), loadSavedQuantitiesFromServer()]);
                 const r = await fetch('/api/carteira');
-                if (r.ok) renderTable(normalizeAndGroupData(await r.json(), false));
+                if (r.ok) {
+                    const data = normalizeAndGroupData(await r.json(), false);
+                    
+                    // Verifica se temos itens novos "em cache" da sessão anterior (localstorage)
+                    const cachedNewItemsJson = localStorage.getItem(STORAGE_KEY_NEW_ITEMS);
+                    let cachedNewKeys = [];
+                    if (cachedNewItemsJson) {
+                        try {
+                            const items = JSON.parse(cachedNewItemsJson);
+                            cachedNewKeys = items.map(i => i.uniqueKey || generateGroupingKey(i.pedido, i.codigo, i.entrega, i.oc));
+                        } catch(e) {}
+                    }
+
+                    renderTable(data, cachedNewKeys);
+                }
             } catch(e){} finally { hideLoadingScreen(); }
         }
 
         async function importExcel(e) {
             const f = e.target.files[0]; if(!f) return;
             const reader = new FileReader();
+            
+            // 1. Capturar o estado ATUAL da tabela antes de sobrescrever
+            const currentRows = Array.from(document.querySelectorAll('#dataTable tbody tr'));
+            const currentKeysSet = new Set();
+            currentRows.forEach(tr => {
+                const key = tr.getAttribute('data-unique-key');
+                if (key) currentKeysSet.add(key);
+            });
+
             reader.onload = async (ev) => {
                 const wb = XLSX.read(new Uint8Array(ev.target.result), {type:'array'});
-                renderTable(normalizeAndGroupData(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1}).slice(1), true));
+                const rawData = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1}).slice(1);
+                
+                // 2. Processar os novos dados
+                const normalizedData = normalizeAndGroupData(rawData, true);
+                
+                // 3. Identificar o que é NOVO (diferença)
+                const newItemsDetected = [];
+                const newItemsKeys = [];
+
+                normalizedData.forEach(item => {
+                    if (!currentKeysSet.has(item.uniqueKey)) {
+                        newItemsDetected.push({
+                            pedido: item.pedido,
+                            cliente: item.cliente,
+                            produto: item.produto,
+                            saldo: item.saldoOriginal,
+                            total: (item.saldoOriginal * item.pesoUn).toFixed(2).replace('.',','),
+                            uniqueKey: item.uniqueKey
+                        });
+                        newItemsKeys.push(item.uniqueKey);
+                    }
+                });
+
+                // 4. Salvar lista de novos itens no LocalStorage para uso posterior (Botão de Email)
+                if (newItemsDetected.length > 0) {
+                    localStorage.setItem(STORAGE_KEY_NEW_ITEMS, JSON.stringify(newItemsDetected));
+                    showToast('Novos Pedidos', `${newItemsDetected.length} novos itens identificados.`, 'success');
+                } else {
+                    localStorage.removeItem(STORAGE_KEY_NEW_ITEMS); // Limpa se não houver novos
+                    showToast('Atualização', 'Nenhum item novo detectado. Dados atualizados.', 'info');
+                }
+
+                // 5. Renderizar com destaque
+                renderTable(normalizedData, newItemsKeys);
+                
+                // 6. Salvar no servidor
                 await saveToServerSnapshot();
             };
             reader.readAsArrayBuffer(f);
@@ -1328,7 +1438,7 @@ Fundição Erus`;
             const rows = Array.from(document.querySelectorAll('#dataTable tbody tr')).filter(r => r.style.display !== 'none');
             let tQ = 0, tW = 0, tEst = 0, tB = 0; const set = new Set();
             rows.forEach(tr => {
-                set.add(tr.cells[COL_PEDIDO].textContent.replace(' BLOCK','').trim());
+                set.add(tr.cells[COL_PEDIDO].textContent.replace(' BLOCK','').replace(' NOVO','').trim());
                 const q = parseFloat(tr.getAttribute('data-raw-qty'))||0, w = parseFloat(tr.getAttribute('data-raw-total'))||0;
                 tQ += q; tW += w;
                 if (tr.getAttribute('data-estimated') === 'true') tEst += w;
@@ -1341,10 +1451,8 @@ Fundição Erus`;
             document.getElementById('blockedWeightCard').textContent = formatNumber(tB);
             document.getElementById('avgWeightCard').textContent = formatNumber(tQ > 0 ? tW/tQ : 0);
             
-            // Removida a lógica de cálculo de porcentagem "Est"
-            // O texto agora é estático no HTML: "Peso Total em Carteira"
             const sub = document.getElementById('estimatedSubtext');
-            sub.style.color = 'rgba(255,255,255,0.6)'; // Reseta a cor para o padrão
+            sub.style.color = 'rgba(255,255,255,0.6)';
         }
 
         // ==========================================================================
@@ -1369,7 +1477,6 @@ Fundição Erus`;
                 fs.forEach((f, i) => { 
                     if (f) {
                         const cellText = c[i].textContent.toUpperCase();
-                        // MODIFICADO: Coluna 7 (PESO UN) usa filtro exato
                         if (i === COL_PESO_UN) {
                             if (cellText !== f) vis = false;
                         } else {
@@ -1404,7 +1511,6 @@ Fundição Erus`;
             let chartLabels = monthLabels;
             let chartData = mData;
 
-            // Lógica de Zoom: Se houver filtro, mostra apenas o mês filtrado
             if (activeMonthFilter !== null) {
                 chartLabels = [monthLabels[activeMonthFilter]];
                 chartData = [mData[activeMonthFilter]];
@@ -1418,7 +1524,6 @@ Fundição Erus`;
                     datasets:[{
                         label:'kg', 
                         data: chartData, 
-                        // Cor única (Amber) ou Destaque Branco se filtrado (embora com zoom, só haverá uma barra)
                         backgroundColor: activeMonthFilter !== null ? '#fff' : chartColorAmber
                     }] 
                 },
@@ -1427,11 +1532,9 @@ Fundição Erus`;
                     maintainAspectRatio:false, 
                     onClick:(e, el) => { 
                         if (el.length) {
-                            // Se estivermos em modo zoom (activeMonthFilter != null), qualquer clique deve resetar
                             if (activeMonthFilter !== null) {
                                 activeMonthFilter = null;
                             } else {
-                                // Se estamos vendo todos os meses, o clique define o filtro pelo índice clicado
                                 activeMonthFilter = el[0].index;
                             }
                             applyColumnFilters(); 
@@ -1449,7 +1552,7 @@ Fundição Erus`;
                 if (tr.style.display === 'none') return;
                 const fn = tr.cells[COL_CLIENTE].textContent, n = getFirstName(fn);
                 cMap[n] = (cMap[n] || 0) + parseFloat(tr.getAttribute('data-raw-total')); 
-                fNames[n] = fn; // Mapeia Nome Curto -> Nome Completo
+                fNames[n] = fn; 
             });
             const sorted = Object.entries(cMap).sort((a,b) => b[1]-a[1]).slice(0, 10);
             let total = sorted.reduce((a,b)=>a+b[1], 0), acc = 0;
@@ -1490,9 +1593,7 @@ Fundição Erus`;
                         tooltip: {
                             callbacks: {
                                 title: function(context) {
-                                    // Pega o nome curto (label do eixo X)
                                     const shortName = context[0].label;
-                                    // Retorna o nome completo salvo no mapa fNames
                                     return fNames[shortName] || shortName;
                                 }
                             }
@@ -1506,7 +1607,7 @@ Fundição Erus`;
         function exportToExcel() {
             const data = [["PEDIDO","OC","ENTREGA","CLIENTE","CODIGO","PRODUTO","MAT","PESO UN","SALDO","TOTAL"]];
             Array.from(document.querySelectorAll('#dataTable tbody tr')).filter(r => r.style.display !== 'none').forEach(r => {
-                data.push([r.cells[0].textContent.replace(' BLOCK',''), r.cells[1].textContent, r.cells[2].textContent, r.cells[3].textContent, r.cells[4].textContent, r.cells[5].textContent, r.cells[6].textContent, r.cells[7].textContent, r.cells[9].textContent, r.cells[10].textContent]);
+                data.push([r.cells[0].textContent.replace(' BLOCK','').replace(' NOVO',''), r.cells[1].textContent, r.cells[2].textContent, r.cells[3].textContent, r.cells[4].textContent, r.cells[5].textContent, r.cells[6].textContent, r.cells[7].textContent, r.cells[9].textContent, r.cells[10].textContent]);
             });
             const ws = XLSX.utils.aoa_to_sheet(data), wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "Carteira"); XLSX.writeFile(wb, `Carteira_${new Date().toISOString().slice(0,10)}.xlsx`);
