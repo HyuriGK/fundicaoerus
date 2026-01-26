@@ -6,6 +6,7 @@
     <title>Acesso Restrito - Fundição Erus</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
         :root {
             --color-primary: #fbbf24;
@@ -27,12 +28,28 @@
             height: 100vh; width: 100vw;
             display: flex; align-items: center; justify-content: center;
             color: var(--text-main);
-            overflow: hidden; /* Garantia total sem scroll */
+            overflow: hidden;
             position: relative;
         }
 
+        /* --- CANVAS 3D DO FORNO --- */
+        #ovenCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+        }
+
         /* --- ANIMAÇÕES DE FUNDO --- */
-        .bg-layers { position: absolute; inset: 0; z-index: 0; overflow: hidden; }
+        .bg-layers { 
+            position: absolute; 
+            inset: 0; 
+            z-index: 1; 
+            overflow: hidden; 
+            pointer-events: none;
+        }
         .bg-glow {
             position: absolute; inset: 0;
             background: 
@@ -60,7 +77,7 @@
             -webkit-backdrop-filter: blur(25px);
             box-shadow: 0 40px 100px -20px rgba(0,0,0,0.8);
             position: relative; z-index: 10;
-            overflow: hidden; /* Para a transição dos forms */
+            overflow: hidden;
             animation: cardShow 0.8s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
@@ -72,7 +89,7 @@
         /* --- CONTAINER DE TRANSIÇÃO --- */
         .forms-slider {
             display: flex;
-            width: 200%; /* Dois forms lado a lado */
+            width: 200%;
             transition: transform 0.6s cubic-bezier(0.65, 0, 0.35, 1);
         }
         .form-page {
@@ -106,6 +123,20 @@
             padding: 14px 45px 14px 46px; border-radius: 14px;
             color: #fff; font-size: 0.95rem; font-family: inherit;
             transition: all 0.3s;
+            /* Removendo autocomplete styles */
+            autocomplete: off;
+            -webkit-autocomplete: off;
+            -moz-autocomplete: off;
+        }
+
+        /* Removendo balão de recomendação */
+        input:-webkit-autofill,
+        input:-webkit-autofill:hover,
+        input:-webkit-autofill:focus,
+        input:-webkit-autofill:active {
+            -webkit-box-shadow: 0 0 0 30px rgba(0,0,0,0.4) inset !important;
+            -webkit-text-fill-color: #fff !important;
+            transition: background-color 5000s ease-in-out 0s;
         }
 
         input:focus { border-color: var(--color-primary); background: rgba(0,0,0,0.4); outline: none; box-shadow: 0 0 0 4px rgba(251, 191, 36, 0.1); }
@@ -163,13 +194,53 @@
         }
         @keyframes spin { to { transform: rotate(360deg); } }
 
+        /* --- CONTROLES DO FORNO --- */
+        .oven-controls {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 5;
+            background: rgba(0,0,0,0.5);
+            padding: 10px 20px;
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .control-btn {
+            background: rgba(251, 191, 36, 0.2);
+            border: 1px solid rgba(251, 191, 36, 0.3);
+            color: var(--color-primary);
+            padding: 8px 15px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: all 0.3s;
+        }
+
+        .control-btn:hover {
+            background: rgba(251, 191, 36, 0.3);
+            transform: translateY(-2px);
+        }
     </style>
 </head>
 <body>
 
+    <canvas id="ovenCanvas"></canvas>
+
     <div class="bg-layers">
         <div class="bg-glow"></div>
         <div id="emberField"></div>
+    </div>
+
+    <div class="oven-controls">
+        <span style="color: #fbbf24; font-size: 0.9rem;">Forno 3D Interativo</span>
+        <div class="control-btn" onclick="toggleAnimation()">⏯️ Pausar/Continuar</div>
+        <div class="control-btn" onclick="changePouring()">🔄 Alterar Vazão</div>
+        <div class="control-btn" onclick="resetScene()">🔄 Resetar Cena</div>
     </div>
 
     <div class="login-card" id="mainCard">
@@ -181,12 +252,12 @@
                 <h2>Fundição Erus</h2>
                 <p class="subtitle">Painel de Login - Gestão de Processos</p>
 
-                <form id="loginForm">
+                <form id="loginForm" autocomplete="off">
                     <div class="form-group">
                         <label>Usuário</label>
                         <div class="input-wrapper">
                             <i class="fa-solid fa-user field-icon"></i>
-                            <input type="text" id="loginUser" placeholder="Seu ID de acesso" required>
+                            <input type="text" id="loginUser" placeholder="Seu ID de acesso" required autocomplete="off">
                         </div>
                     </div>
 
@@ -194,7 +265,7 @@
                         <label>Senha</label>
                         <div class="input-wrapper">
                             <i class="fa-solid fa-lock field-icon"></i>
-                            <input type="password" id="loginPass" placeholder="••••••••" required>
+                            <input type="password" id="loginPass" placeholder="••••••••" required autocomplete="new-password">
                             <i class="fa-solid fa-eye toggle-password" onclick="togglePass('loginPass', this)"></i>
                         </div>
                     </div>
@@ -216,12 +287,12 @@
                 <h2>Novo Colaborador</h2>
                 <p class="subtitle">Crie sua conta para começar</p>
 
-                <form id="registerForm">
+                <form id="registerForm" autocomplete="off">
                     <div class="form-group" style="margin-bottom: 12px;">
                         <label>Nome Completo</label>
                         <div class="input-wrapper">
                             <i class="fa-solid fa-id-badge field-icon"></i>
-                            <input type="text" id="regName" placeholder="Ex: João Silva" required>
+                            <input type="text" id="regName" placeholder="Ex: João Silva" required autocomplete="off">
                         </div>
                     </div>
 
@@ -229,7 +300,7 @@
                         <label>Usuário</label>
                         <div class="input-wrapper">
                             <i class="fa-solid fa-at field-icon"></i>
-                            <input type="text" id="regUser" placeholder="Ex: joao.silva" required>
+                            <input type="text" id="regUser" placeholder="Ex: joao.silva" required autocomplete="off">
                         </div>
                     </div>
 
@@ -237,7 +308,7 @@
                         <label>Senha</label>
                         <div class="input-wrapper">
                             <i class="fa-solid fa-key field-icon"></i>
-                            <input type="password" id="regPass" placeholder="Mín. 6 dígitos" required>
+                            <input type="password" id="regPass" placeholder="Mín. 6 dígitos" required autocomplete="new-password">
                             <i class="fa-solid fa-eye toggle-password" onclick="togglePass('regPass', this)"></i>
                         </div>
                     </div>
@@ -246,7 +317,7 @@
                         <label>Confirmar Senha</label>
                         <div class="input-wrapper">
                             <i class="fa-solid fa-circle-check field-icon"></i>
-                            <input type="password" id="regPassConfirm" placeholder="Repita a senha" required>
+                            <input type="password" id="regPassConfirm" placeholder="Repita a senha" required autocomplete="new-password">
                             <i class="fa-solid fa-eye toggle-password" onclick="togglePass('regPassConfirm', this)"></i>
                         </div>
                     </div>
@@ -277,7 +348,343 @@
     </div>
 
     <script>
-        // --- ANIMAÇÃO DE BRASAS ---
+        // --- SISTEMA 3D DO FORNO ---
+        let scene, camera, renderer;
+        let furnace, liquid, pouringLiquid, particles = [];
+        let isAnimating = true;
+        let pourSpeed = 0.05;
+        let pourAngle = 0;
+        let clock = new THREE.Clock();
+
+        function init3DOven() {
+            // Cena
+            scene = new THREE.Scene();
+            scene.fog = new THREE.Fog(0x050505, 10, 50);
+
+            // Câmera
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 5, 15);
+            camera.lookAt(0, 0, 0);
+
+            // Renderizador
+            renderer = new THREE.WebGLRenderer({ 
+                canvas: document.getElementById('ovenCanvas'),
+                alpha: true,
+                antialias: true 
+            });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+            // Luzes
+            const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
+            scene.add(ambientLight);
+
+            const mainLight = new THREE.PointLight(0xfbbf24, 2, 50);
+            mainLight.position.set(5, 10, 5);
+            mainLight.castShadow = true;
+            scene.add(mainLight);
+
+            const furnaceLight = new THREE.PointLight(0xea580c, 3, 20);
+            furnaceLight.position.set(0, 3, 0);
+            furnaceLight.castShadow = true;
+            scene.add(furnaceLight);
+
+            // Chão
+            const groundGeometry = new THREE.PlaneGeometry(50, 50);
+            const groundMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x111111,
+                roughness: 0.8,
+                metalness: 0.2
+            });
+            const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+
+            // Criar forno
+            createFurnace();
+
+            // Criar metal líquido no forno
+            createLiquid();
+
+            // Criar fluxo de vazão
+            createPouringStream();
+
+            // Criar partículas de brasa
+            createEmberParticles();
+
+            // Animação
+            animate();
+
+            // Resize handler
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function createFurnace() {
+            const furnaceGroup = new THREE.Group();
+
+            // Corpo principal do forno (cilindro)
+            const furnaceGeometry = new THREE.CylinderGeometry(3, 3.5, 6, 32);
+            const furnaceMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x222222,
+                roughness: 0.7,
+                metalness: 0.9
+            });
+            const mainBody = new THREE.Mesh(furnaceGeometry, furnaceMaterial);
+            mainBody.castShadow = true;
+            mainBody.receiveShadow = true;
+            furnaceGroup.add(mainBody);
+
+            // Boca do forno
+            const mouthGeometry = new THREE.CylinderGeometry(1.2, 1.5, 0.5, 32);
+            const mouthMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x333333,
+                roughness: 0.5,
+                metalness: 0.8,
+                emissive: 0xea580c,
+                emissiveIntensity: 0.2
+            });
+            const mouth = new THREE.Mesh(mouthGeometry, mouthMaterial);
+            mouth.position.y = 2.8;
+            mouth.castShadow = true;
+            furnaceGroup.add(mouth);
+
+            // Tampa da boca
+            const lidGeometry = new THREE.CylinderGeometry(1.3, 1.3, 0.2, 32);
+            const lidMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x444444,
+                roughness: 0.6,
+                metalness: 0.7
+            });
+            const lid = new THREE.Mesh(lidGeometry, lidMaterial);
+            lid.position.y = 3.2;
+            lid.rotation.x = pourAngle;
+            furnaceGroup.add(lid);
+
+            // Suportes
+            for (let i = 0; i < 3; i++) {
+                const legGeometry = new THREE.CylinderGeometry(0.3, 0.4, 1, 16);
+                const legMaterial = new THREE.MeshStandardMaterial({ 
+                    color: 0x555555,
+                    roughness: 0.5,
+                    metalness: 0.8
+                });
+                const leg = new THREE.Mesh(legGeometry, legMaterial);
+                const angle = (i / 3) * Math.PI * 2;
+                leg.position.x = Math.cos(angle) * 2.5;
+                leg.position.z = Math.sin(angle) * 2.5;
+                leg.position.y = -3.5;
+                leg.castShadow = true;
+                furnaceGroup.add(leg);
+            }
+
+            // Luz interna (emissiva)
+            const innerLight = new THREE.PointLight(0xfbbf24, 2, 5);
+            innerLight.position.y = 1;
+            furnaceGroup.add(innerLight);
+
+            furnaceGroup.position.y = -1;
+            scene.add(furnaceGroup);
+            furnace = furnaceGroup;
+        }
+
+        function createLiquid() {
+            // Metal líquido dentro do forno
+            const liquidGeometry = new THREE.CylinderGeometry(2, 2.2, 2, 32);
+            const liquidMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0xfbbf24,
+                roughness: 0.3,
+                metalness: 1.0,
+                emissive: 0xea580c,
+                emissiveIntensity: 0.5,
+                transparent: true,
+                opacity: 0.9
+            });
+            liquid = new THREE.Mesh(liquidGeometry, liquidMaterial);
+            liquid.position.y = 0;
+            liquid.castShadow = true;
+            scene.add(liquid);
+        }
+
+        function createPouringStream() {
+            // Criação do fluxo de vazão
+            const streamGroup = new THREE.Group();
+
+            // Curva do fluxo
+            const curve = new THREE.CatmullRomCurve3([
+                new THREE.Vector3(0, 2.5, 0),
+                new THREE.Vector3(1, 1.5, 0),
+                new THREE.Vector3(2, 0, 0),
+                new THREE.Vector3(3, -2, 0)
+            ]);
+
+            const tubeGeometry = new THREE.TubeGeometry(curve, 64, 0.2, 16, false);
+            const tubeMaterial = new THREE.MeshStandardMaterial({
+                color: 0xfbbf24,
+                emissive: 0xea580c,
+                emissiveIntensity: 0.7,
+                transparent: true,
+                opacity: 0.8
+            });
+
+            pouringLiquid = new THREE.Mesh(tubeGeometry, tubeMaterial);
+            streamGroup.add(pouringLiquid);
+
+            // Gotas
+            for (let i = 0; i < 20; i++) {
+                const dropGeometry = new THREE.SphereGeometry(0.1, 8, 8);
+                const dropMaterial = new THREE.MeshStandardMaterial({
+                    color: 0xfbbf24,
+                    emissive: 0xea580c,
+                    emissiveIntensity: 0.5
+                });
+                const drop = new THREE.Mesh(dropGeometry, dropMaterial);
+                drop.userData = { speed: 0.02 + Math.random() * 0.03, curvePos: Math.random() };
+                streamGroup.add(drop);
+            }
+
+            scene.add(streamGroup);
+            pouringLiquid = streamGroup;
+        }
+
+        function createEmberParticles() {
+            const particleGeometry = new THREE.SphereGeometry(0.05, 4, 4);
+            const particleMaterial = new THREE.MeshBasicMaterial({
+                color: 0xfbbf24,
+                transparent: true,
+                opacity: 0.7
+            });
+
+            for (let i = 0; i < 100; i++) {
+                const particle = new THREE.Mesh(particleGeometry, particleMaterial);
+                
+                // Posição aleatória ao redor do forno
+                const angle = Math.random() * Math.PI * 2;
+                const radius = 3 + Math.random() * 2;
+                particle.position.x = Math.cos(angle) * radius;
+                particle.position.z = Math.sin(angle) * radius;
+                particle.position.y = Math.random() * 4 - 2;
+                
+                particle.userData = {
+                    speed: 0.01 + Math.random() * 0.02,
+                    angle: angle,
+                    radius: radius,
+                    height: particle.position.y,
+                    floatSpeed: 0.5 + Math.random() * 1
+                };
+                
+                particles.push(particle);
+                scene.add(particle);
+            }
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            if (!isAnimating) return;
+
+            const delta = clock.getDelta();
+            const time = Date.now() * 0.001;
+
+            // Animar líquido dentro do forno
+            if (liquid) {
+                liquid.position.y = Math.sin(time * 2) * 0.1;
+                liquid.scale.y = 1 + Math.sin(time * 1.5) * 0.05;
+                liquid.rotation.y += 0.01;
+            }
+
+            // Animar tampa da boca (vazão)
+            if (furnace && furnace.children[2]) { // Lid is third child
+                pourAngle = Math.sin(time) * 0.3;
+                furnace.children[2].rotation.x = pourAngle;
+            }
+
+            // Animar fluxo de vazão
+            if (pouringLiquid) {
+                pouringLiquid.position.x = Math.sin(time * 0.5) * 0.5;
+                pouringLiquid.rotation.z = Math.sin(time * 0.3) * 0.1;
+                
+                // Animar gotas
+                pouringLiquid.children.forEach((child, i) => {
+                    if (i > 0) { // Skip the tube mesh
+                        child.userData.curvePos += child.userData.speed * pourSpeed;
+                        if (child.userData.curvePos > 1) {
+                            child.userData.curvePos = 0;
+                        }
+                        
+                        const curve = new THREE.CatmullRomCurve3([
+                            new THREE.Vector3(0, 2.5, 0),
+                            new THREE.Vector3(1, 1.5, 0),
+                            new THREE.Vector3(2, 0, 0),
+                            new THREE.Vector3(3 + Math.sin(time + i) * 0.5, -2, Math.cos(time + i) * 0.5)
+                        ]);
+                        
+                        const point = curve.getPoint(child.userData.curvePos);
+                        child.position.copy(point);
+                        
+                        // Efeito de piscar
+                        child.material.opacity = 0.5 + Math.sin(time * 10 + i) * 0.3;
+                    }
+                });
+            }
+
+            // Animar partículas de brasa
+            particles.forEach((particle, i) => {
+                particle.userData.angle += particle.userData.speed;
+                particle.position.x = Math.cos(particle.userData.angle) * particle.userData.radius;
+                particle.position.z = Math.sin(particle.userData.angle) * particle.userData.radius;
+                particle.position.y = particle.userData.height + Math.sin(time * particle.userData.floatSpeed) * 0.5;
+                
+                // Efeito de brilho pulsante
+                particle.material.opacity = 0.4 + Math.sin(time * 3 + i) * 0.3;
+            });
+
+            // Rotação suave da câmera
+            camera.position.x = Math.sin(time * 0.1) * 5;
+            camera.position.z = 12 + Math.cos(time * 0.1) * 3;
+            camera.lookAt(0, 0, 0);
+
+            renderer.render(scene, camera);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // --- CONTROLES DO FORNO ---
+        function toggleAnimation() {
+            isAnimating = !isAnimating;
+            if (isAnimating) {
+                clock = new THREE.Clock();
+                notify('Forno 3D', 'Animação continuada', 'success');
+            } else {
+                notify('Forno 3D', 'Animação pausada', 'success');
+            }
+        }
+
+        function changePouring() {
+            pourSpeed = pourSpeed === 0.05 ? 0.1 : 0.05;
+            notify('Forno 3D', `Velocidade de vazão: ${pourSpeed === 0.05 ? 'Normal' : 'Rápida'}`, 'success');
+        }
+
+        function resetScene() {
+            // Limpa a cena e recria
+            while(scene.children.length > 0) {
+                scene.remove(scene.children[0]);
+            }
+            particles = [];
+            createFurnace();
+            createLiquid();
+            createPouringStream();
+            createEmberParticles();
+            notify('Forno 3D', 'Cena resetada', 'success');
+        }
+
+        // --- ANIMAÇÃO DE BRASAS (2D) ---
         function initEmbers() {
             const field = document.getElementById('emberField');
             for(let i=0; i<30; i++) {
@@ -292,7 +699,6 @@
                 field.appendChild(e);
             }
         }
-        initEmbers();
 
         // --- VISIBILIDADE DE SENHA ---
         function togglePass(id, icon) {
@@ -361,12 +767,17 @@
                     localStorage.setItem('erus_auth', 'true');
                     localStorage.setItem('erus_user', data.name || user);
                     
-                    // --- ADIÇÃO SOLICITADA: SALVANDO O CARGO ---
-                    // Tenta salvar o cargo vindo da API. Se não vier, define como 'Visitante'
+                    // ADIÇÃO SOLICITADA: SALVANDO O CARGO
                     localStorage.setItem('erus_role', data.role || 'Visitante');
                     
                     localStorage.setItem('erus_last_activity', Date.now().toString());
-                    setTimeout(() => window.location.replace('index.html'), 1500);
+                    
+                    // Efeito especial no forno ao logar
+                    pourSpeed = 0.15;
+                    setTimeout(() => {
+                        pourSpeed = 0.05;
+                        window.location.replace('index.html');
+                    }, 1500);
                 } else {
                     notify('Falha no Acesso', data.message || 'Usuário ou senha incorretos.', 'error');
                 }
@@ -410,6 +821,8 @@
 
                 if(data.success) {
                     notify('Conta Criada!', 'Seu acesso foi registrado com sucesso.');
+                    // Efeito especial no forno ao registrar
+                    changePouring();
                     setTimeout(() => {
                         switchMode('login');
                         document.getElementById('loginUser').value = user;
@@ -424,6 +837,20 @@
                 spin.style.display = 'none';
                 txt.innerText = 'CRIAR CONTA';
             }
+        });
+
+        // --- INICIALIZAÇÃO ---
+        document.addEventListener('DOMContentLoaded', () => {
+            init3DOven();
+            initEmbers();
+            
+            // Desativa autocomplete em todos os inputs
+            document.querySelectorAll('input').forEach(input => {
+                input.setAttribute('autocomplete', 'off');
+                input.setAttribute('autocorrect', 'off');
+                input.setAttribute('autocapitalize', 'off');
+                input.setAttribute('spellcheck', 'false');
+            });
         });
     </script>
 </body>
