@@ -211,7 +211,7 @@
             border-radius: var(--radius-md);
             padding: 15px;
             width: 100%;
-            height: 300px;
+            height: 350px; /* AUMENTADO DE 300px PARA 350px */
             margin-bottom: 24px;
             position: relative;
             display: flex;
@@ -696,6 +696,25 @@
             setTimeout(() => { screen.style.display = 'none'; }, 500);
         }
 
+        // Função para pegar apenas o primeiro nome do cliente
+        function getFirstName(cliente) {
+            if (!cliente) return 'Desconhecido';
+            // Remove sufixos comuns
+            cliente = cliente.replace(/ LTDA$/i, '')
+                           .replace(/ EIRELI$/i, '')
+                           .replace(/ S\/?A$/i, '')
+                           .replace(/ COMERCIO$/i, '')
+                           .replace(/ INDUSTRIA$/i, '')
+                           .replace(/ ME$/i, '');
+            
+            // Pega o primeiro nome (até o primeiro espaço)
+            const firstSpace = cliente.indexOf(' ');
+            if (firstSpace > 0) {
+                return cliente.substring(0, firstSpace);
+            }
+            return cliente;
+        }
+
         // ==========================================================================
         // 3. INICIALIZAÇÃO
         // ==========================================================================
@@ -987,7 +1006,8 @@
                     if (selectedMonthIndex === -1) {
                         dKey = MONTHS_SHORT[dataObj.getMonth()];
                     } else {
-                        dKey = dataObj.toLocaleDateString('pt-BR');
+                        // MUDANÇA: Agora mostra apenas o dia (número)
+                        dKey = dataObj.getDate().toString();
                     }
                     refugoPorDia[dKey] = (refugoPorDia[dKey] || 0) + peso;
                 }
@@ -1146,7 +1166,8 @@
                 
                 // Pegar top 10 clientes
                 const topEntries = sortedEntries.slice(0, 10);
-                labels = topEntries.map(entry => entry[0]);
+                // MUDANÇA: Usar apenas o primeiro nome do cliente
+                labels = topEntries.map(entry => getFirstName(entry[0]));
                 values = topEntries.map(entry => entry[1]);
                 title = "Top 10 Clientes por Refugo (Pareto)";
                 currentLevelName = "Clientes";
@@ -1166,8 +1187,8 @@
                 const sortedEntries = Object.entries(chartData).sort((a, b) => b[1] - a[1]);
                 labels = sortedEntries.map(entry => entry[0]);
                 values = sortedEntries.map(entry => entry[1]);
-                title = `Refugo por Setor - Cliente: ${currentDrilldownClient}`;
-                currentLevelName = `Setores (${currentDrilldownClient})`;
+                title = `Refugo por Setor - Cliente: ${getFirstName(currentDrilldownClient)}`;
+                currentLevelName = `Setores (${getFirstName(currentDrilldownClient)})`;
                 
             } else if (currentDrilldownLevel === 'details' && currentDrilldownClient && currentDrilldownSector) {
                 // Agrupar por motivo para o cliente e setor selecionados
@@ -1184,8 +1205,8 @@
                 const sortedEntries = Object.entries(chartData).sort((a, b) => b[1] - a[1]);
                 labels = sortedEntries.map(entry => entry[0]);
                 values = sortedEntries.map(entry => entry[1]);
-                title = `Refugo por Motivo - ${currentDrilldownClient} / ${currentDrilldownSector}`;
-                currentLevelName = `Motivos (${currentDrilldownClient} / ${currentDrilldownSector})`;
+                title = `Refugo por Motivo - ${getFirstName(currentDrilldownClient)} / ${currentDrilldownSector}`;
+                currentLevelName = `Motivos (${getFirstName(currentDrilldownClient)} / ${currentDrilldownSector})`;
             }
             
             // Calcular linha de Pareto (acumulado percentual)
@@ -1296,14 +1317,37 @@
                             
                             if (currentDrilldownLevel === 'client') {
                                 // Drilldown para setores do cliente
-                                drilldownStack.push({
-                                    level: 'client',
-                                    client: currentDrilldownClient,
-                                    sector: currentDrilldownSector
+                                // Precisamos encontrar o nome completo do cliente
+                                const filteredData = getFilteredDataForDrilldown();
+                                const clientData = {};
+                                filteredData.forEach(item => {
+                                    const cliente = item.row[4] || 'Desconhecido';
+                                    const peso = parseFloat(String(item.row[10]).replace(',', '.')) || 0;
+                                    clientData[cliente] = (clientData[cliente] || 0) + peso;
                                 });
-                                currentDrilldownClient = label;
-                                currentDrilldownLevel = 'sector';
-                                updateParetoClientChart();
+                                
+                                const sortedEntries = Object.entries(clientData).sort((a, b) => b[1] - a[1]);
+                                const topEntries = sortedEntries.slice(0, 10);
+                                
+                                // Encontrar o nome completo correspondente ao primeiro nome
+                                let fullClientName = '';
+                                for (const entry of topEntries) {
+                                    if (getFirstName(entry[0]) === label) {
+                                        fullClientName = entry[0];
+                                        break;
+                                    }
+                                }
+                                
+                                if (fullClientName) {
+                                    drilldownStack.push({
+                                        level: 'client',
+                                        client: currentDrilldownClient,
+                                        sector: currentDrilldownSector
+                                    });
+                                    currentDrilldownClient = fullClientName;
+                                    currentDrilldownLevel = 'sector';
+                                    updateParetoClientChart();
+                                }
                             } else if (currentDrilldownLevel === 'sector') {
                                 // Drilldown para detalhes do setor
                                 drilldownStack.push({
@@ -1418,8 +1462,8 @@
                 if (selectedMonthIndex === -1) {
                     return MONTHS_SHORT.indexOf(a[0]) - MONTHS_SHORT.indexOf(b[0]);
                 } else {
-                    const partsA = a[0].split('/'); const partsB = b[0].split('/');
-                    return new Date(partsA[2], partsA[1]-1, partsA[0]) - new Date(partsB[2], partsB[1]-1, partsB[0]);
+                    // MUDANÇA: Ordenar por número do dia
+                    return parseInt(a[0]) - parseInt(b[0]);
                 }
             });
             const labels = sortedEntries.map(e=>e[0]);
@@ -1441,7 +1485,24 @@
                         }
                     },
                     plugins: { legend: { display: false }, datalabels: { display: false } },
-                    scales: { x: { grid: { display: false } }, y: { grid: { color: 'rgba(255,255,255,0.05)' } } }
+                    scales: { 
+                        x: { 
+                            grid: { display: false },
+                            title: {
+                                display: true,
+                                text: 'Dia do Mês',
+                                color: '#a1a1aa'
+                            }
+                        }, 
+                        y: { 
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            title: {
+                                display: true,
+                                text: 'Peso (kg)',
+                                color: '#a1a1aa'
+                            }
+                        } 
+                    }
                 }
             });
         }
@@ -1465,7 +1526,24 @@
                         processData();
                     },
                     plugins: { legend: { display: false }, datalabels: { display: false } },
-                    scales: { x: { grid: { color: 'rgba(255,255,255,0.05)' } }, y: { grid: { display: false } } }
+                    scales: { 
+                        x: { 
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            title: {
+                                display: true,
+                                text: 'Peso (kg)',
+                                color: '#a1a1aa'
+                            }
+                        }, 
+                        y: { 
+                            grid: { display: false },
+                            title: {
+                                display: true,
+                                text: 'Setor',
+                                color: '#a1a1aa'
+                            }
+                        } 
+                    }
                 }
             });
         }
