@@ -204,19 +204,41 @@
         .month-btn.all-btn { border-color: var(--status-info); color: var(--status-info); }
         .month-btn.all-btn.active { background: var(--status-info); color: #000; }
 
-        /* --- NOVO GRÁFICO PARETO CLIENTE --- */
+        /* --- CHARTS ROW (3 GRÁFICOS PEQUENOS) --- */
+        .charts-row { 
+            display: flex; gap: 24px; 
+            flex-wrap: wrap; 
+            margin-bottom: 24px;
+            flex-shrink: 0;
+            min-height: 300px;
+        }
+        
+        .chart-panel {
+            flex: 1; min-width: 300px; background: var(--bg-card);
+            border: 1px solid var(--border-subtle); border-radius: var(--radius-md);
+            padding: 15px; 
+            height: 300px;
+            position: relative; display: flex; flex-direction: column;
+        }
+        .chart-title { font-size: 1rem; font-weight: 600; color: var(--text-main); margin-bottom: 10px; text-align: center; }
+        
+        .chart-container-inner {
+            position: relative; flex: 1; min-height: 0; width:100%;
+        }
+
+        /* --- GRÁFICO PARETO CLIENTE --- */
         .pareto-client-panel {
             background: var(--bg-card);
             border: 1px solid var(--border-subtle);
             border-radius: var(--radius-md);
             padding: 15px;
             width: 100%;
-            height: 350px; /* AUMENTADO DE 300px PARA 350px */
-            margin-bottom: 24px;
+            height: 350px;
             position: relative;
             display: flex;
             flex-direction: column;
-            flex-shrink: 0;
+            flex: 1;
+            min-height: 0;
         }
 
         .pareto-header {
@@ -293,28 +315,6 @@
             flex: 1;
             min-height: 0;
             width: 100%;
-        }
-
-        /* --- CHARTS --- */
-        .charts-row { 
-            display: flex; gap: 24px; 
-            flex-wrap: wrap; 
-            flex: 1;
-            min-height: 0;
-            overflow: hidden; 
-        }
-        
-        .chart-panel {
-            flex: 1; min-width: 300px; background: var(--bg-card);
-            border: 1px solid var(--border-subtle); border-radius: var(--radius-md);
-            padding: 15px; 
-            height: 100%; 
-            position: relative; display: flex; flex-direction: column;
-        }
-        .chart-title { font-size: 1rem; font-weight: 600; color: var(--text-main); margin-bottom: 10px; text-align: center; }
-        
-        .chart-container-inner {
-            position: relative; flex: 1; min-height: 0; width:100%;
         }
 
         /* --- TABLE --- */
@@ -403,7 +403,7 @@
 
         @media (max-width: 1200px) {
             .charts-row { flex-direction: column; overflow-y: auto; }
-            .chart-panel { min-height: 350px; } 
+            .chart-panel { min-height: 300px; } 
         }
     </style>
 </head>
@@ -573,7 +573,29 @@
                 </div>
             </div>
 
-            <!-- NOVO GRÁFICO PARETO CLIENTE COM DRILLDOWN -->
+            <!-- TRÊS GRÁFICOS PEQUENOS (REORDENADOS PARA FICAREM ACIMA) -->
+            <div class="charts-row">
+                <div class="chart-panel">
+                    <div class="chart-title" id="barChartTitle">Refugo por Dia (kg)</div>
+                    <div class="chart-container-inner">
+                        <canvas id="barChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-panel">
+                    <div class="chart-title">Refugo por Setor (kg)</div>
+                    <div class="chart-container-inner">
+                        <canvas id="sectorChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-panel">
+                    <div class="chart-title">Top 5 Motivos (Peso)</div>
+                    <div class="chart-container-inner">
+                        <canvas id="pieChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- GRÁFICO PARETO CLIENTE COM DRILLDOWN (AGORA ABAIXO DOS OUTROS) -->
             <div class="pareto-client-panel">
                 <div class="pareto-header">
                     <div class="pareto-title">
@@ -593,27 +615,6 @@
                 </div>
                 <div class="pareto-chart-container">
                     <canvas id="paretoClientChart"></canvas>
-                </div>
-            </div>
-
-            <div class="charts-row">
-                <div class="chart-panel">
-                    <div class="chart-title" id="barChartTitle">Refugo por Dia (kg)</div>
-                    <div class="chart-container-inner">
-                        <canvas id="barChart"></canvas>
-                    </div>
-                </div>
-                <div class="chart-panel">
-                    <div class="chart-title">Refugo por Setor (kg)</div>
-                    <div class="chart-container-inner">
-                        <canvas id="sectorChart"></canvas>
-                    </div>
-                </div>
-                <div class="chart-panel">
-                    <div class="chart-title">Top 5 Motivos (Peso)</div>
-                    <div class="chart-container-inner">
-                        <canvas id="pieChart"></canvas>
-                    </div>
                 </div>
             </div>
             
@@ -948,6 +949,9 @@
                 updateKPIs(0, 0, 0);
                 tbody.innerHTML = '<tr><td colspan="11" style="text-align:center; color: var(--text-muted);">Nenhum dado encontrado. Importe um arquivo.</td></tr>';
                 updateParetoClientChart();
+                renderBarChart({});
+                renderSectorChart({});
+                renderPieChart({});
                 return;
             }
 
@@ -1147,6 +1151,7 @@
             let chartData = {};
             let labels = [];
             let values = [];
+            let fullLabels = []; // Para tooltips
             let title = "Refugo por Cliente (Pareto)";
             let currentLevelName = "Clientes";
             
@@ -1166,7 +1171,9 @@
                 
                 // Pegar top 10 clientes
                 const topEntries = sortedEntries.slice(0, 10);
-                // MUDANÇA: Usar apenas o primeiro nome do cliente
+                // MUDANÇA: Para tooltip - nome completo
+                fullLabels = topEntries.map(entry => entry[0]);
+                // MUDANÇA: Para labels do eixo X - apenas primeiro nome
                 labels = topEntries.map(entry => getFirstName(entry[0]));
                 values = topEntries.map(entry => entry[1]);
                 title = "Top 10 Clientes por Refugo (Pareto)";
@@ -1186,6 +1193,7 @@
                 // Ordenar por peso
                 const sortedEntries = Object.entries(chartData).sort((a, b) => b[1] - a[1]);
                 labels = sortedEntries.map(entry => entry[0]);
+                fullLabels = labels; // Para setor, não precisa de abreviação
                 values = sortedEntries.map(entry => entry[1]);
                 title = `Refugo por Setor - Cliente: ${getFirstName(currentDrilldownClient)}`;
                 currentLevelName = `Setores (${getFirstName(currentDrilldownClient)})`;
@@ -1203,7 +1211,9 @@
                 
                 // Ordenar por peso
                 const sortedEntries = Object.entries(chartData).sort((a, b) => b[1] - a[1]);
+                // MUDANÇA: Para motivos, mostrar nome completo sem truncar
                 labels = sortedEntries.map(entry => entry[0]);
+                fullLabels = labels; // Para motivos, não precisa de abreviação
                 values = sortedEntries.map(entry => entry[1]);
                 title = `Refugo por Motivo - ${getFirstName(currentDrilldownClient)} / ${currentDrilldownSector}`;
                 currentLevelName = `Motivos (${getFirstName(currentDrilldownClient)} / ${currentDrilldownSector})`;
@@ -1226,7 +1236,7 @@
             btnBack.disabled = drilldownStack.length === 0;
             
             // Renderizar gráfico
-            renderParetoClientChart(labels, values, paretoLine);
+            renderParetoClientChart(labels, values, paretoLine, fullLabels);
         }
 
         function getFilteredDataForDrilldown() {
@@ -1251,15 +1261,18 @@
             });
         }
 
-        function renderParetoClientChart(labels, values, paretoLine) {
+        function renderParetoClientChart(labels, values, paretoLine, fullLabels) {
             const ctx = document.getElementById('paretoClientChart').getContext('2d');
             
             if (paretoClientChartInstance) {
                 paretoClientChartInstance.destroy();
             }
             
-            // Truncar labels muito longas
+            // MUDANÇA: Para motivos, não truncar labels
             const truncatedLabels = labels.map(label => {
+                if (currentDrilldownLevel === 'details') {
+                    return label; // Não truncar motivos
+                }
                 if (label.length > 20) {
                     return label.substring(0, 17) + '...';
                 }
@@ -1276,13 +1289,15 @@
                             label: '% Acumulado',
                             data: paretoLine,
                             borderColor: '#06b6d4',
-                            backgroundColor: 'rgba(6, 182, 212, 0.1)',
-                            fill: true,
+                            backgroundColor: 'transparent', // MUDANÇA: Remover preenchimento
+                            fill: false, // MUDANÇA: Não preencher abaixo da linha
                             yAxisID: 'y1',
                             tension: 0.3,
-                            borderWidth: 2,
-                            pointRadius: 4,
-                            pointBackgroundColor: '#06b6d4'
+                            borderWidth: 3, // MUDANÇA: Linha mais grossa
+                            pointRadius: 5,
+                            pointBackgroundColor: '#06b6d4',
+                            pointBorderColor: '#fff',
+                            pointBorderWidth: 1
                         },
                         {
                             type: 'bar',
@@ -1373,6 +1388,13 @@
                         },
                         tooltip: {
                             callbacks: {
+                                title: function(context) {
+                                    // MUDANÇA: Mostrar nome completo no tooltip
+                                    if (fullLabels && fullLabels[context[0].dataIndex]) {
+                                        return fullLabels[context[0].dataIndex];
+                                    }
+                                    return context[0].label;
+                                },
                                 label: function(context) {
                                     if (context.datasetIndex === 0) {
                                         return `% Acumulado: ${context.parsed.y.toFixed(2)}%`;
@@ -1576,9 +1598,34 @@
                     plugins: { 
                         legend: { 
                             position: 'bottom', 
-                            labels: { color: '#a1a1aa', boxWidth: 12, padding: 15 } 
+                            labels: { 
+                                color: '#a1a1aa', 
+                                boxWidth: 12, 
+                                padding: 15,
+                                // MUDANÇA: Não truncar labels dos motivos
+                                generateLabels: function(chart) {
+                                    const data = chart.data;
+                                    if (data.labels.length && data.datasets.length) {
+                                        return data.labels.map(function(label, i) {
+                                            return {
+                                                text: label, // Nome completo do motivo
+                                                fillStyle: data.datasets[0].backgroundColor[i],
+                                                hidden: false,
+                                                index: i
+                                            };
+                                        });
+                                    }
+                                    return [];
+                                }
+                            } 
                         }, 
                         datalabels: { display: false } 
+                    },
+                    // MUDANÇA: Ajustar layout para labels completos
+                    layout: {
+                        padding: {
+                            bottom: 20
+                        }
                     }
                 }
             });
