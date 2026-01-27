@@ -717,14 +717,56 @@
         // ==========================================================================
         function parseRowDate(dateValue) {
             if (!dateValue) return null;
-            if (dateValue instanceof Date && !isNaN(dateValue)) return dateValue;
-            if (typeof dateValue === 'number' && dateValue > 10000) return new Date(Date.UTC(0, 0, dateValue - 1));
-            if (typeof dateValue === 'string') {
-                const brMatch = dateValue.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
-                if (brMatch) return new Date(brMatch[3], brMatch[2] - 1, brMatch[1]);
-                const isoDate = new Date(dateValue);
-                if (!isNaN(isoDate)) return isoDate;
+            
+            // Se já for um objeto Date válido
+            if (dateValue instanceof Date && !isNaN(dateValue)) {
+                // CORREÇÃO: Manter a data exata sem ajustes de fuso horário
+                // Usar a data como está, sem conversões que podem subtrair dias
+                return new Date(dateValue.getFullYear(), dateValue.getMonth(), dateValue.getDate());
             }
+            
+            // Se for um número (serial date do Excel)
+            if (typeof dateValue === 'number' && dateValue > 10000) {
+                // CORREÇÃO: Converter número do Excel para data sem ajustes de UTC
+                // O Excel usa 30/12/1899 como data zero (mas com bug do ano 1900)
+                // Vamos converter diretamente usando a abordagem da biblioteca XLSX
+                const excelEpoch = new Date(1899, 11, 30); // 30/12/1899
+                const jsDate = new Date(excelEpoch.getTime() + Math.round((dateValue - 1) * 86400000));
+                
+                // CORREÇÃO IMPORTANTE: Usar os componentes locais da data
+                // Isso evita problemas de fuso horário
+                return new Date(jsDate.getFullYear(), jsDate.getMonth(), jsDate.getDate());
+            }
+            
+            // Se for uma string
+            if (typeof dateValue === 'string') {
+                const dateStr = dateValue.trim();
+                
+                // Tentar formato brasileiro DD/MM/YYYY
+                const brMatch = dateStr.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+                if (brMatch) {
+                    const day = parseInt(brMatch[1], 10);
+                    const month = parseInt(brMatch[2], 10) - 1; // Mês em JS é 0-based
+                    const year = parseInt(brMatch[3], 10);
+                    return new Date(year, month, day);
+                }
+                
+                // Tentar formato YYYY-MM-DD (ISO)
+                const isoMatch = dateStr.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+                if (isoMatch) {
+                    const year = parseInt(isoMatch[1], 10);
+                    const month = parseInt(isoMatch[2], 10) - 1;
+                    const day = parseInt(isoMatch[3], 10);
+                    return new Date(year, month, day);
+                }
+                
+                // Tentar parse genérico
+                const parsedDate = new Date(dateStr);
+                if (!isNaN(parsedDate)) {
+                    return new Date(parsedDate.getFullYear(), parsedDate.getMonth(), parsedDate.getDate());
+                }
+            }
+            
             return null;
         }
 
