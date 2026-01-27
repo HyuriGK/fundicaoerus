@@ -204,11 +204,102 @@
         .month-btn.all-btn { border-color: var(--status-info); color: var(--status-info); }
         .month-btn.all-btn.active { background: var(--status-info); color: #000; }
 
+        /* --- NOVO GRÁFICO PARETO CLIENTE --- */
+        .pareto-client-panel {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-md);
+            padding: 15px;
+            width: 100%;
+            height: 300px;
+            margin-bottom: 24px;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+        }
+
+        .pareto-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            flex-shrink: 0;
+        }
+
+        .pareto-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-main);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .breadcrumb {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            flex-wrap: wrap;
+        }
+
+        .breadcrumb-separator {
+            color: var(--text-muted);
+            margin: 0 5px;
+        }
+
+        .breadcrumb-item {
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+
+        .breadcrumb-item:hover {
+            color: var(--color-primary);
+        }
+
+        .breadcrumb-current {
+            color: var(--color-primary);
+            font-weight: 600;
+        }
+
+        .btn-back-drilldown {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-main);
+            padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            transition: all 0.2s;
+        }
+
+        .btn-back-drilldown:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+        }
+
+        .btn-back-drilldown:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .pareto-chart-container {
+            position: relative;
+            flex: 1;
+            min-height: 0;
+            width: 100%;
+        }
+
         /* --- CHARTS --- */
         .charts-row { 
             display: flex; gap: 24px; 
             flex-wrap: wrap; 
-            flex: 1; /* Ocupa o restante do espaço */
+            flex: 1;
             min-height: 0;
             overflow: hidden; 
         }
@@ -482,6 +573,29 @@
                 </div>
             </div>
 
+            <!-- NOVO GRÁFICO PARETO CLIENTE COM DRILLDOWN -->
+            <div class="pareto-client-panel">
+                <div class="pareto-header">
+                    <div class="pareto-title">
+                        <i class="fa-solid fa-chart-bar" style="color: var(--status-info);"></i>
+                        <span id="paretoChartTitle">Refugo por Cliente (Pareto)</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <div class="breadcrumb" id="breadcrumb">
+                            <span class="breadcrumb-item" onclick="resetDrilldown()">Todos</span>
+                            <span class="breadcrumb-separator">/</span>
+                            <span class="breadcrumb-current" id="currentLevel">Clientes</span>
+                        </div>
+                        <button class="btn-back-drilldown" id="btnBackDrilldown" onclick="goBackDrilldown()" disabled>
+                            <i class="fa-solid fa-arrow-left"></i> Voltar
+                        </button>
+                    </div>
+                </div>
+                <div class="pareto-chart-container">
+                    <canvas id="paretoClientChart"></canvas>
+                </div>
+            </div>
+
             <div class="charts-row">
                 <div class="chart-panel">
                     <div class="chart-title" id="barChartTitle">Refugo por Dia (kg)</div>
@@ -529,13 +643,19 @@
         const PIE_COLORS = ['#ef4444', '#f97316', '#facc15', '#a855f7', '#06b6d4', '#10b981'];
         const MONTHS_SHORT = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
 
-        let barChartInstance, pieChartInstance, sectorChartInstance, evolutionChartInstance; 
+        let barChartInstance, pieChartInstance, sectorChartInstance, evolutionChartInstance, paretoClientChartInstance; 
         let rawData = [];
         let monthlyProduction = {}; 
         
         let selectedYear = new Date().getFullYear();
         let selectedMonthIndex = new Date().getMonth(); 
         let activeChartFilters = { day: null, sector: null, reason: null };
+
+        // Variáveis para controle do drilldown
+        let drilldownStack = [];
+        let currentDrilldownLevel = 'client'; // 'client', 'sector', 'details'
+        let currentDrilldownClient = null;
+        let currentDrilldownSector = null;
 
         const inputFile = document.getElementById('fileInput');
 
@@ -622,12 +742,14 @@
         function onYearChange() {
             selectedYear = parseInt(document.getElementById('yearSelector').value);
             activeChartFilters = { day: null, sector: null, reason: null }; 
+            resetDrilldown();
             processData();
         }
 
         function selectMonth(idx) {
             selectedMonthIndex = idx;
             activeChartFilters = { day: null, sector: null, reason: null }; 
+            resetDrilldown();
             updateMonthButtonsUI();
             processData();
         }
@@ -806,6 +928,7 @@
             if (!rawData || rawData.length === 0) {
                 updateKPIs(0, 0, 0);
                 tbody.innerHTML = '<tr><td colspan="11" style="text-align:center; color: var(--text-muted);">Nenhum dado encontrado. Importe um arquivo.</td></tr>';
+                updateParetoClientChart();
                 return;
             }
 
@@ -902,6 +1025,7 @@
             });
 
             updateKPIs(totalPeso, totalQtd);
+            updateParetoClientChart();
             renderBarChart(refugoPorDia);
             renderSectorChart(refugoPorSetor);
             renderPieChart(refugoPorMotivo);
@@ -998,6 +1122,297 @@
         // ==========================================================================
         // 5. GRÁFICOS
         // ==========================================================================
+        function updateParetoClientChart() {
+            // Coleta dados de acordo com o nível atual do drilldown
+            let chartData = {};
+            let labels = [];
+            let values = [];
+            let title = "Refugo por Cliente (Pareto)";
+            let currentLevelName = "Clientes";
+            
+            const filteredData = getFilteredDataForDrilldown();
+            
+            if (currentDrilldownLevel === 'client') {
+                // Agrupar por cliente
+                chartData = {};
+                filteredData.forEach(item => {
+                    const cliente = item.row[4] || 'Desconhecido';
+                    const peso = parseFloat(String(item.row[10]).replace(',', '.')) || 0;
+                    chartData[cliente] = (chartData[cliente] || 0) + peso;
+                });
+                
+                // Ordenar por peso (Pareto)
+                const sortedEntries = Object.entries(chartData).sort((a, b) => b[1] - a[1]);
+                
+                // Pegar top 10 clientes
+                const topEntries = sortedEntries.slice(0, 10);
+                labels = topEntries.map(entry => entry[0]);
+                values = topEntries.map(entry => entry[1]);
+                title = "Top 10 Clientes por Refugo (Pareto)";
+                currentLevelName = "Clientes";
+                
+            } else if (currentDrilldownLevel === 'sector' && currentDrilldownClient) {
+                // Agrupar por setor para o cliente selecionado
+                chartData = {};
+                filteredData.forEach(item => {
+                    if (item.row[4] === currentDrilldownClient) {
+                        const setor = item.row[0] || 'Desconhecido';
+                        const peso = parseFloat(String(item.row[10]).replace(',', '.')) || 0;
+                        chartData[setor] = (chartData[setor] || 0) + peso;
+                    }
+                });
+                
+                // Ordenar por peso
+                const sortedEntries = Object.entries(chartData).sort((a, b) => b[1] - a[1]);
+                labels = sortedEntries.map(entry => entry[0]);
+                values = sortedEntries.map(entry => entry[1]);
+                title = `Refugo por Setor - Cliente: ${currentDrilldownClient}`;
+                currentLevelName = `Setores (${currentDrilldownClient})`;
+                
+            } else if (currentDrilldownLevel === 'details' && currentDrilldownClient && currentDrilldownSector) {
+                // Agrupar por motivo para o cliente e setor selecionados
+                chartData = {};
+                filteredData.forEach(item => {
+                    if (item.row[4] === currentDrilldownClient && item.row[0] === currentDrilldownSector) {
+                        const motivo = item.row[1] || 'Desconhecido';
+                        const peso = parseFloat(String(item.row[10]).replace(',', '.')) || 0;
+                        chartData[motivo] = (chartData[motivo] || 0) + peso;
+                    }
+                });
+                
+                // Ordenar por peso
+                const sortedEntries = Object.entries(chartData).sort((a, b) => b[1] - a[1]);
+                labels = sortedEntries.map(entry => entry[0]);
+                values = sortedEntries.map(entry => entry[1]);
+                title = `Refugo por Motivo - ${currentDrilldownClient} / ${currentDrilldownSector}`;
+                currentLevelName = `Motivos (${currentDrilldownClient} / ${currentDrilldownSector})`;
+            }
+            
+            // Calcular linha de Pareto (acumulado percentual)
+            let total = values.reduce((a, b) => a + b, 0);
+            let cumulative = 0;
+            let paretoLine = values.map(value => {
+                cumulative += value;
+                return total > 0 ? (cumulative / total) * 100 : 0;
+            });
+            
+            // Atualizar título e breadcrumb
+            document.getElementById('paretoChartTitle').textContent = title;
+            document.getElementById('currentLevel').textContent = currentLevelName;
+            
+            // Atualizar botão voltar
+            const btnBack = document.getElementById('btnBackDrilldown');
+            btnBack.disabled = drilldownStack.length === 0;
+            
+            // Renderizar gráfico
+            renderParetoClientChart(labels, values, paretoLine);
+        }
+
+        function getFilteredDataForDrilldown() {
+            const selectedMonthKey = getCurrentFilterKey();
+            const indexedData = rawData.map((row, index) => ({ row, originalIndex: index }));
+
+            return indexedData.filter(item => {
+                const row = item.row;
+                if (!row || row.length < 5) return false; 
+                
+                const rowDate = parseRowDate(row[2]); 
+                if (!rowDate) return false; 
+
+                const rYear = rowDate.getFullYear();
+                if (rYear !== selectedYear) return false; 
+
+                if (selectedMonthIndex !== -1) {
+                    const rMonth = rowDate.getMonth();
+                    if (rMonth !== selectedMonthIndex) return false;
+                }
+                return true;
+            });
+        }
+
+        function renderParetoClientChart(labels, values, paretoLine) {
+            const ctx = document.getElementById('paretoClientChart').getContext('2d');
+            
+            if (paretoClientChartInstance) {
+                paretoClientChartInstance.destroy();
+            }
+            
+            // Truncar labels muito longas
+            const truncatedLabels = labels.map(label => {
+                if (label.length > 20) {
+                    return label.substring(0, 17) + '...';
+                }
+                return label;
+            });
+            
+            paretoClientChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: truncatedLabels,
+                    datasets: [
+                        {
+                            type: 'line',
+                            label: '% Acumulado',
+                            data: paretoLine,
+                            borderColor: '#06b6d4',
+                            backgroundColor: 'rgba(6, 182, 212, 0.1)',
+                            fill: true,
+                            yAxisID: 'y1',
+                            tension: 0.3,
+                            borderWidth: 2,
+                            pointRadius: 4,
+                            pointBackgroundColor: '#06b6d4'
+                        },
+                        {
+                            type: 'bar',
+                            label: 'Peso (kg)',
+                            data: values,
+                            backgroundColor: labels.map((label, index) => {
+                                // Destacar a barra selecionada (se aplicável)
+                                if (currentDrilldownLevel === 'client' && index === 0) {
+                                    return '#ef4444'; // Vermelho para o maior
+                                } else if (currentDrilldownLevel === 'client') {
+                                    // Gradiente de cores para o Pareto
+                                    const intensity = 1 - (index / labels.length) * 0.7;
+                                    return `rgba(251, 191, 36, ${intensity})`;
+                                } else {
+                                    return '#fbbf24'; // Amarelo padrão
+                                }
+                            }),
+                            borderRadius: 4,
+                            borderWidth: 1,
+                            borderColor: 'rgba(255, 255, 255, 0.1)',
+                            yAxisID: 'y'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    onClick: (event, elements) => {
+                        if (elements.length > 0) {
+                            const index = elements[0].index;
+                            const label = labels[index];
+                            
+                            if (currentDrilldownLevel === 'client') {
+                                // Drilldown para setores do cliente
+                                drilldownStack.push({
+                                    level: 'client',
+                                    client: currentDrilldownClient,
+                                    sector: currentDrilldownSector
+                                });
+                                currentDrilldownClient = label;
+                                currentDrilldownLevel = 'sector';
+                                updateParetoClientChart();
+                            } else if (currentDrilldownLevel === 'sector') {
+                                // Drilldown para detalhes do setor
+                                drilldownStack.push({
+                                    level: 'sector',
+                                    client: currentDrilldownClient,
+                                    sector: currentDrilldownSector
+                                });
+                                currentDrilldownSector = label;
+                                currentDrilldownLevel = 'details';
+                                updateParetoClientChart();
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top',
+                            labels: {
+                                color: '#a1a1aa',
+                                boxWidth: 12,
+                                padding: 15
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    if (context.datasetIndex === 0) {
+                                        return `% Acumulado: ${context.parsed.y.toFixed(2)}%`;
+                                    } else {
+                                        return `Peso: ${context.parsed.y.toLocaleString('pt-BR', {minimumFractionDigits: 2})} kg`;
+                                    }
+                                }
+                            }
+                        },
+                        datalabels: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: {
+                                display: false
+                            },
+                            ticks: {
+                                color: '#a1a1aa',
+                                maxRotation: 45,
+                                minRotation: 45
+                            }
+                        },
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            title: {
+                                display: true,
+                                text: 'Peso (kg)',
+                                color: '#a1a1aa'
+                            },
+                            grid: {
+                                color: 'rgba(255,255,255,0.05)'
+                            },
+                            ticks: {
+                                color: '#a1a1aa'
+                            }
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            title: {
+                                display: true,
+                                text: '% Acumulado',
+                                color: '#06b6d4'
+                            },
+                            min: 0,
+                            max: 100,
+                            grid: {
+                                drawOnChartArea: false
+                            },
+                            ticks: {
+                                color: '#06b6d4',
+                                callback: function(value) {
+                                    return value + '%';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function resetDrilldown() {
+            drilldownStack = [];
+            currentDrilldownLevel = 'client';
+            currentDrilldownClient = null;
+            currentDrilldownSector = null;
+            updateParetoClientChart();
+        }
+
+        function goBackDrilldown() {
+            if (drilldownStack.length > 0) {
+                const prevState = drilldownStack.pop();
+                currentDrilldownLevel = prevState.level;
+                currentDrilldownClient = prevState.client;
+                currentDrilldownSector = prevState.sector;
+                updateParetoClientChart();
+            }
+        }
+
         function renderBarChart(data) {
             const sortedEntries = Object.entries(data).sort((a,b) => {
                 if (selectedMonthIndex === -1) {
@@ -1161,13 +1576,16 @@
                     return km !== key;
                 });
                 await saveRawData();
+                resetDrilldown();
                 processData();
             }
         }
         
         async function clearAllData() {
             if(confirm('Tem certeza que deseja apagar TODOS os dados importados?')) { 
-                rawData=[]; await saveRawData(); processData(); 
+                rawData=[]; await saveRawData(); 
+                resetDrilldown();
+                processData(); 
             }
         }
 
