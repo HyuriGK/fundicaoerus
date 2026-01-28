@@ -1068,52 +1068,71 @@
                 return;
             }
             
-            // Mantém o cabeçalho (primeira linha)
+            // Mantém o cabeçalho (primeira linha) EXATAMENTE como está
             const newData = [currentData[0]];
             
-            // Para cada linha de dados (a partir da segunda), preserva a estrutura mas limpa os valores
+            // Para cada linha de dados (a partir da segunda)
             for (let i = 1; i < currentData.length; i++) {
                 const row = currentData[i];
                 
-                // Preserva o ID (se existir) e a marcação EXCLUIDO_MANUALMENTE
-                const id = row[COL_INDEX.ID] || null;
-                const excluded = row[COL_INDEX.EXCLUIDO_MANUALMENTE] || 0;
+                // Preserva o ID (se existir)
+                const id = row[0] || null;
                 
-                // Cria nova linha com valores zerados/vazios, mantendo a estrutura
+                // Determina o valor atual de EXCLUIDO_MANUALMENTE
+                // A coluna 14 (índice 14) contém EXCLUIDO_MANUALMENTE
+                let excludedValue = 0;
+                if (row.length > 14) {
+                    excludedValue = row[14] || 0;
+                } else if (row.length === 14) {
+                    excludedValue = row[13] || 0; // Se tiver 14 elementos, o último é EXCLUIDO_MANUALMENTE
+                }
+                
+                // Cria nova linha com 15 elementos:
+                // [ID, DATA, PEDIDO, O.C., CÓD.CLI, CLIENTE, CÓDIGO, DESCRIÇÃO, QUANT., PREÇO_UN, MATERIAL, PESO_UN, PESO_TOTAL, VALOR_TOTAL, EXCLUIDO_MANUALMENTE]
                 const newRow = [
                     id,                    // ID (preservado)
-                    '',                    // DATA
-                    '',                    // PEDIDO
-                    '',                    // O.C.
-                    '',                    // CÓD. CLI
-                    '',                    // CLIENTE
-                    '',                    // CÓDIGO
-                    '',                    // DESCRIÇÃO
-                    0,                     // QUANT.
-                    0,                     // PREÇO (UN)
-                    '',                    // MATERIAL
-                    0,                     // PESO UN
-                    0,                     // PESO TOTAL
-                    0,                     // R$ TOTAL
-                    excluded               // EXCLUIDO_MANUALMENTE (preservado)
+                    '',                    // DATA (1)
+                    '',                    // PEDIDO (2)
+                    '',                    // O.C. (3)
+                    '',                    // CÓD.CLI (4)
+                    '',                    // CLIENTE (5)
+                    '',                    // CÓDIGO (6)
+                    '',                    // DESCRIÇÃO (7)
+                    0,                     // QUANT. (8)
+                    0,                     // PREÇO_UN (9)
+                    '',                    // MATERIAL (10)
+                    0,                     // PESO_UN (11)
+                    0,                     // PESO_TOTAL (12)
+                    0,                     // VALOR_TOTAL (13)
+                    excludedValue          // EXCLUIDO_MANUALMENTE (14) - preservado
                 ];
                 
                 newData.push(newRow);
             }
             
+            // DEBUG: Verifique o que está sendo enviado
+            console.log('Enviando dados para limpeza:', newData);
+            
             // Envia os dados modificados para o servidor
-            await fetch(API_URL_FATURAMENTO, {
+            const saveResponse = await fetch(API_URL_FATURAMENTO, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(newData)
             });
             
-            // Recarrega a página para refletir as mudanças
-            setTimeout(() => window.location.reload(), 50);
+            const result = await saveResponse.json();
+            console.log('Resposta do servidor:', result);
+            
+            if (result.success) {
+                // Recarrega a página para refletir as mudanças
+                setTimeout(() => window.location.reload(), 100);
+            } else {
+                throw new Error(result.error || 'Erro desconhecido ao salvar');
+            }
             
         } catch (error) {
             console.error('Erro ao limpar dados:', error);
-            alert("Erro ao limpar dados. Consulte o console para mais detalhes.");
+            alert("Erro ao limpar dados: " + error.message);
         } finally {
             hideSpinner();
         }
