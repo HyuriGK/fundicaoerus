@@ -1,3 +1,5 @@
+--- START OF FILE faturamento_detalhado.html ---
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -1052,92 +1054,127 @@
                 hideSpinner();
             }
         }
+
+        // --- LÓGICA DE PERSISTÊNCIA DE EXCLUSÃO (LOCALSTORAGE) ---
+
+        // Helper para gerar chave única do registro (Data + Pedido + Código + Quant)
+        function getRowKey(row) {
+            if (!row || row.length < COL_INDEX.QUANT) return null;
+            
+            // Usamos Data, Pedido, Código e Quantidade como chave composta para identificar o item
+            // mesmo que o ID do banco mude ou não exista.
+            const dataVal = String(row[COL_INDEX.DATA] || '').trim();
+            const pedido = String(row[COL_INDEX.PEDIDO] || '').trim();
+            const codigo = String(row[COL_INDEX.CODIGO] || '').trim();
+            const quant = String(row[COL_INDEX.QUANT] || '').trim();
+
+            if (!pedido && !codigo) return null; // Sem identificação suficiente
+
+            return `${dataVal}_${pedido}_${codigo}_${quant}`;
+        }
+
+        // Salva as preferências de exclusão no LocalStorage antes de limpar
+        function saveExclusionPreferences() {
+            const exclusionMap = {};
+            
+            // Carrega mapa existente para não perder exclusões de arquivos anteriores que não estão na tela agora
+            const existingSaved = localStorage.getItem('erus_excluded_items');
+            if (existingSaved) {
+                try {
+                    Object.assign(exclusionMap, JSON.parse(existingSaved));
+                } catch(e) { console.error('Erro ao ler cache antigo', e); }
+            }
+
+            // Atualiza com o estado atual da tela
+            globalDataArray.forEach((row, index) => {
+                if (index === 0) return; // Pula cabeçalho
+                
+                const key = getRowKey(row);
+                if (!key) return;
+
+                // Lógica de exclusão: Coluna 14 (EXCLUIDO_MANUALMENTE)
+                // Se for 1, está EXCLUÍDO (Checkbox desmarcado)
+                const excludedValue = row[COL_INDEX.EXCLUIDO_MANUALMENTE];
+                const isExcluded = (excludedValue === 1 || excludedValue === true || excludedValue === '1');
+
+                if (isExcluded) {
+                    exclusionMap[key] = true;
+                } else {
+                    // Se o usuário incluiu novamente, removemos da lista negra
+                    delete exclusionMap[key];
+                }
+            });
+
+            localStorage.setItem('erus_excluded_items', JSON.stringify(exclusionMap));
+        }
+
+        // Aplica as preferências de exclusão aos novos dados importados
+        function applyExclusionPreferences(newDataArray) {
+            const saved = localStorage.getItem('erus_excluded_items');
+            if (!saved) return newDataArray;
+
+            let exclusionMap = {};
+            try {
+                exclusionMap = JSON.parse(saved);
+            } catch(e) { return newDataArray; }
+
+            // Percorre os novos dados (exceto header)
+            for (let i = 1; i < newDataArray.length; i++) {
+                const row = newDataArray[i];
+                const key = getRowKey(row);
+                
+                if (key && exclusionMap[key]) {
+                    // Se estiver na lista negra, marca como excluído (Valor 1)
+                    // Garante que o array tenha a coluna de exclusão
+                    while (row.length <= COL_INDEX.EXCLUIDO_MANUALMENTE) {
+                        row.push(null);
+                    }
+                    row[COL_INDEX.EXCLUIDO_MANUALMENTE] = 1;
+                }
+            }
+            
+            return newDataArray;
+        }
         
         async function clearDataFromDatabase() {
-    if (window.confirm('Deseja limpar os dados visuais? (Suas preferências de INCL. serão mantidas)')) {
-        showSpinner();
-        try {
-            // Primeiro, obtém os dados atuais do servidor
-            const response = await fetch(API_URL_FATURAMENTO);
-            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-            const currentData = await response.json();
-            
-            if (currentData.length < 2) {
-                // Se não há dados além do cabeçalho, não há o que limpar
-                hideSpinner();
-                return;
-            }
-            
-            // Mantém o cabeçalho (primeira linha) EXATAMENTE como está
-            const newData = [currentData[0]];
-            
-            // Para cada linha de dados (a partir da segunda)
-            for (let i = 1; i < currentData.length; i++) {
-                const row = currentData[i];
-                
-                // Preserva o ID (se existir)
-                const id = row[0] || null;
-                
-                // Determina o valor atual de EXCLUIDO_MANUALMENTE
-                // A coluna 14 (índice 14) contém EXCLUIDO_MANUALMENTE
-                let excludedValue = 0;
-                if (row.length > 14) {
-                    excludedValue = row[14] || 0;
-                } else if (row.length === 14) {
-                    excludedValue = row[13] || 0; // Se tiver 14 elementos, o último é EXCLUIDO_MANUALMENTE
+            if (window.confirm('Deseja limpar todos os registros do banco de dados? (Suas preferências de INCL. serão salvas localmente para futuras importações)')) {
+                showSpinner();
+                try {
+                    // 1. Salva o estado atual de exclusão no LocalStorage
+                    saveExclusionPreferences();
+
+                    // 2. Obtém os dados atuais para pegar o cabeçalho
+                    const response = await fetch(API_URL_FATURAMENTO);
+                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                    const currentData = await response.json();
+                    
+                    // 3. Prepara apenas o cabeçalho para salvar (Deletando efetivamente os dados)
+                    // Mantemos apenas a linha 0 (cabeçalho)
+                    const newData = [currentData[0]];
+                    
+                    // 4. Envia para o servidor
+                    const saveResponse = await fetch(API_URL_FATURAMENTO, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(newData)
+                    });
+                    
+                    const result = await saveResponse.json();
+                    
+                    if (result.success) {
+                        setTimeout(() => window.location.reload(), 100);
+                    } else {
+                        throw new Error(result.error || 'Erro desconhecido ao salvar');
+                    }
+                    
+                } catch (error) {
+                    console.error('Erro ao limpar dados:', error);
+                    alert("Erro ao limpar dados: " + error.message);
+                } finally {
+                    hideSpinner();
                 }
-                
-                // Cria nova linha com 15 elementos:
-                // [ID, DATA, PEDIDO, O.C., CÓD.CLI, CLIENTE, CÓDIGO, DESCRIÇÃO, QUANT., PREÇO_UN, MATERIAL, PESO_UN, PESO_TOTAL, VALOR_TOTAL, EXCLUIDO_MANUALMENTE]
-                const newRow = [
-                    id,                    // ID (preservado)
-                    '',                    // DATA (1)
-                    '',                    // PEDIDO (2)
-                    '',                    // O.C. (3)
-                    '',                    // CÓD.CLI (4)
-                    '',                    // CLIENTE (5)
-                    '',                    // CÓDIGO (6)
-                    '',                    // DESCRIÇÃO (7)
-                    0,                     // QUANT. (8)
-                    0,                     // PREÇO_UN (9)
-                    '',                    // MATERIAL (10)
-                    0,                     // PESO_UN (11)
-                    0,                     // PESO_TOTAL (12)
-                    0,                     // VALOR_TOTAL (13)
-                    excludedValue          // EXCLUIDO_MANUALMENTE (14) - preservado
-                ];
-                
-                newData.push(newRow);
             }
-            
-            // DEBUG: Verifique o que está sendo enviado
-            console.log('Enviando dados para limpeza:', newData);
-            
-            // Envia os dados modificados para o servidor
-            const saveResponse = await fetch(API_URL_FATURAMENTO, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(newData)
-            });
-            
-            const result = await saveResponse.json();
-            console.log('Resposta do servidor:', result);
-            
-            if (result.success) {
-                // Recarrega a página para refletir as mudanças
-                setTimeout(() => window.location.reload(), 100);
-            } else {
-                throw new Error(result.error || 'Erro desconhecido ao salvar');
-            }
-            
-        } catch (error) {
-            console.error('Erro ao limpar dados:', error);
-            alert("Erro ao limpar dados: " + error.message);
-        } finally {
-            hideSpinner();
         }
-    }
-}
 
         // =========================================================
         // METAS (Weight Target)
@@ -1278,6 +1315,9 @@
                     // Se está marcado (INCLUIR), então EXCLUIDO_MANUALMENTE = 0
                     // Se não está marcado (NÃO INCLUIR), então EXCLUIDO_MANUALMENTE = 1
                     globalRow[COL_INDEX.EXCLUIDO_MANUALMENTE] = isChecked ? 0 : 1;
+                    
+                    // ATUALIZAÇÃO: Também salva no LocalStorage imediatamente para garantir sincronia
+                    saveExclusionPreferences();
                 }
             } catch (e) { console.log('Erro ao salvar inclusão/exclusão.'); }
         }
@@ -2005,7 +2045,11 @@
                     const wb = XLSX.read(data, { type: 'array', cellDates: true }); 
                     const ws = wb.Sheets[wb.SheetNames[0]];
                     const json = XLSX.utils.sheet_to_json(ws, { header: 1 }); 
-                    saveDataToDatabase(json);
+                    
+                    // APLICA AS PREFERÊNCIAS SALVAS ANTES DE ENVIAR AO SERVIDOR
+                    const processedData = applyExclusionPreferences(json);
+                    
+                    saveDataToDatabase(processedData);
                 } catch (error) {
                     alert("Erro ao processar arquivo.");
                     hideSpinner();
