@@ -15,8 +15,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
 
     <style>
         /* --- 1. ROOT VARIABLES --- */
@@ -295,7 +295,8 @@
             display: flex;
             flex-direction: column;
             min-height: 0;
-            display: none; /* Inicialmente oculto */
+            /* Inicialmente VISÍVEL - alterado */
+            display: flex;
         }
 
         .pareto-header {
@@ -620,7 +621,10 @@
                         <i class="fa-solid fa-calendar"></i> Período:
                     </div>
                     
+                    <!-- Filtro de Ano com opção "Todos" -->
                     <select id="yearSelector" class="year-select" onchange="onYearChange()">
+                        <option value="0">Todos</option>
+                        <option value="2023">2023</option>
                         <option value="2024">2024</option>
                         <option value="2025" selected>2025</option>
                         <option value="2026">2026</option>
@@ -633,16 +637,16 @@
             <!-- BOTÃO DE ALTERNAR GRÁFICOS -->
             <div class="toggle-charts-container">
                 <button class="toggle-charts-btn" id="toggleChartsBtn" onclick="toggleCharts()">
-                    <i class="fa-solid fa-chart-bar"></i>
-                    <span id="toggleChartsText">Alternar para Gráfico de Clientes (Pareto)</span>
+                    <i class="fa-solid fa-chart-pie"></i>
+                    <span id="toggleChartsText">Alternar para Gráficos Detalhados</span>
                 </button>
             </div>
 
             <!-- CONTAINER DOS GRÁFICOS -->
             <div class="charts-container">
                 
-                <!-- CONJUNTO 1: TRÊS GRÁFICOS PEQUENOS -->
-                <div class="charts-row" id="chartsRow">
+                <!-- CONJUNTO 1: TRÊS GRÁFICOS PEQUENOS (inicialmente oculto) -->
+                <div class="charts-row" id="chartsRow" style="display: none;">
                     <div class="chart-panel">
                         <div class="chart-title" id="barChartTitle">Refugo por Dia (kg)</div>
                         <div class="chart-container-inner">
@@ -663,7 +667,7 @@
                     </div>
                 </div>
 
-                <!-- CONJUNTO 2: GRÁFICO PARETO CLIENTE -->
+                <!-- CONJUNTO 2: GRÁFICO PARETO CLIENTE (inicialmente visível) -->
                 <div class="pareto-client-full" id="paretoClientFull">
                     <div class="pareto-header">
                         <div class="pareto-title">
@@ -718,18 +722,18 @@
         let rawData = [];
         let monthlyProduction = {}; 
         
-        let selectedYear = new Date().getFullYear();
+        // Alterado: selectedYear pode ser 0 para "Todos"
+        let selectedYear = 0; // 0 representa "Todos"
         let selectedMonthIndex = new Date().getMonth(); 
         let activeChartFilters = { day: null, sector: null, reason: null };
 
         // Variáveis para controle do drilldown
         let drilldownStack = [];
-        let currentDrilldownLevel = 'client'; // 'client', 'sector', 'details'
+        let currentDrilldownLevel = 'client'; // 'client', 'reason'
         let currentDrilldownClient = null;
-        let currentDrilldownSector = null;
 
-        // Variável para controle do toggle dos gráficos
-        let showingPareto = false;
+        // Variável para controle do toggle dos gráficos - inicialmente mostrando Pareto
+        let showingPareto = true;
 
         const inputFile = document.getElementById('fileInput');
 
@@ -834,6 +838,10 @@
         document.addEventListener('DOMContentLoaded', function() {
             initMonthSelector();
             init();
+            // Inicialmente mostrar o gráfico de Pareto
+            setTimeout(() => {
+                updateParetoClientChart();
+            }, 100);
         });
 
         async function init() {
@@ -860,26 +868,33 @@
                 btn.dataset.idx = idx;
                 container.appendChild(btn);
             });
-
-            const yearSelect = document.getElementById('yearSelector');
-            const currentYear = new Date().getFullYear();
-            if (![...yearSelect.options].some(o => o.value == currentYear)) {
-                const opt = document.createElement('option');
-                opt.value = currentYear; opt.textContent = currentYear;
-                yearSelect.appendChild(opt);
-            }
-            yearSelect.value = selectedYear;
         }
 
         function onYearChange() {
-            selectedYear = parseInt(document.getElementById('yearSelector').value);
+            const yearValue = document.getElementById('yearSelector').value;
+            selectedYear = yearValue === "0" ? 0 : parseInt(yearValue);
             activeChartFilters = { day: null, sector: null, reason: null }; 
             resetDrilldown();
+            
+            // Atualizar visibilidade dos botões de mês
+            if (selectedYear === 0) {
+                document.getElementById('monthButtons').style.display = 'none';
+                selectedMonthIndex = -1; // Forçar "TODOS" quando ano é "Todos"
+            } else {
+                document.getElementById('monthButtons').style.display = 'flex';
+            }
+            
+            updateMonthButtonsUI();
             processData();
         }
 
         function selectMonth(idx) {
-            selectedMonthIndex = idx;
+            // Se ano for "Todos", não permitir selecionar mês específico
+            if (selectedYear === 0) {
+                selectedMonthIndex = -1;
+            } else {
+                selectedMonthIndex = idx;
+            }
             activeChartFilters = { day: null, sector: null, reason: null }; 
             resetDrilldown();
             updateMonthButtonsUI();
@@ -890,7 +905,7 @@
             const buttons = document.querySelectorAll('#monthButtons .month-btn');
             buttons.forEach(btn => btn.classList.remove('active'));
 
-            if (selectedMonthIndex === -1) {
+            if (selectedMonthIndex === -1 || selectedYear === 0) {
                 document.querySelector('.month-btn.all-btn').classList.add('active');
             } else {
                 if(buttons[selectedMonthIndex + 1]) {
@@ -900,7 +915,7 @@
         }
 
         function getCurrentFilterKey() {
-            if (selectedMonthIndex === -1) return null; 
+            if (selectedMonthIndex === -1 || selectedYear === 0) return null; 
             const m = String(selectedMonthIndex + 1).padStart(2, '0');
             return `${selectedYear}-${m}`;
         }
@@ -1051,7 +1066,7 @@
             tbody.innerHTML = ''; 
             
             const barTitle = document.getElementById('barChartTitle');
-            if (selectedMonthIndex === -1) {
+            if (selectedMonthIndex === -1 || selectedYear === 0) {
                 barTitle.textContent = "Refugo por Mês (kg)";
             } else {
                 barTitle.textContent = "Refugo por Dia (kg)";
@@ -1077,10 +1092,13 @@
                 const rowDate = parseRowDate(row[2]); 
                 if (!rowDate) return false; 
 
-                const rYear = rowDate.getFullYear();
-                if (rYear !== selectedYear) return false; 
+                // Filtro por ano (0 = Todos os anos)
+                if (selectedYear !== 0) {
+                    const rYear = rowDate.getFullYear();
+                    if (rYear !== selectedYear) return false; 
+                }
 
-                if (selectedMonthIndex !== -1) {
+                if (selectedMonthIndex !== -1 && selectedYear !== 0) {
                     const rMonth = rowDate.getMonth();
                     if (rMonth !== selectedMonthIndex) return false;
                 }
@@ -1119,8 +1137,13 @@
                 
                 if (dataObj) {
                     let dKey;
-                    if (selectedMonthIndex === -1) {
-                        dKey = MONTHS_SHORT[dataObj.getMonth()];
+                    if (selectedMonthIndex === -1 || selectedYear === 0) {
+                        // Se ano for "Todos", agrupar por mês/ano
+                        if (selectedYear === 0) {
+                            dKey = `${MONTHS_SHORT[dataObj.getMonth()]}/${dataObj.getFullYear()}`;
+                        } else {
+                            dKey = MONTHS_SHORT[dataObj.getMonth()];
+                        }
                     } else {
                         // MUDANÇA: Agora mostra apenas o dia (número)
                         dKey = dataObj.getDate().toString();
@@ -1181,11 +1204,19 @@
             if (selKey && monthlyProduction[selKey]) {
                 pesoFundido = monthlyProduction[selKey];
             } else if (!selKey) {
-                Object.keys(monthlyProduction).forEach(k => {
-                    if (k.startsWith(selectedYear + '-')) {
+                // Se ano for "Todos", somar toda a produção
+                if (selectedYear === 0) {
+                    Object.keys(monthlyProduction).forEach(k => {
                         pesoFundido += monthlyProduction[k];
-                    }
-                });
+                    });
+                } else {
+                    // Somar todos os meses do ano selecionado
+                    Object.keys(monthlyProduction).forEach(k => {
+                        if (k.startsWith(selectedYear + '-')) {
+                            pesoFundido += monthlyProduction[k];
+                        }
+                    });
+                }
             }
 
             document.getElementById('pesoFundidoDisplay').textContent = pesoFundido.toLocaleString('pt-BR', {minimumFractionDigits:2}) + ' kg';
@@ -1199,8 +1230,12 @@
             feedbackEl.innerHTML = ''; 
             feedbackEl.style.color = 'var(--text-muted)';
 
-            if (selectedMonthIndex === -1) {
-                feedbackEl.textContent = "Mostrando todos os meses do ano selecionado";
+            if (selectedMonthIndex === -1 || selectedYear === 0) {
+                if (selectedYear === 0) {
+                    feedbackEl.textContent = "Mostrando todos os anos";
+                } else {
+                    feedbackEl.textContent = "Mostrando todos os meses do ano selecionado";
+                }
                 feedbackEl.style.color = 'var(--status-info)';
             } else {
                 let prevMonth = selectedMonthIndex - 1;
@@ -1281,40 +1316,21 @@
                 // Ordenar por peso (Pareto)
                 const sortedEntries = Object.entries(chartData).sort((a, b) => b[1] - a[1]);
                 
-                // Pegar top 10 clientes
-                const topEntries = sortedEntries.slice(0, 10);
-                // MUDANÇA: Para tooltip - nome completo
+                // Pegar top 15 clientes (aumentado para mostrar mais)
+                const topEntries = sortedEntries.slice(0, 15);
+                // Para tooltip - nome completo
                 fullLabels = topEntries.map(entry => entry[0]);
-                // MUDANÇA: Para labels do eixo X - apenas primeiro nome
+                // Para labels do eixo X - apenas primeiro nome
                 labels = topEntries.map(entry => getFirstName(entry[0]));
                 values = topEntries.map(entry => entry[1]);
-                title = "Top 10 Clientes por Refugo (Pareto)";
+                title = "Top 15 Clientes por Refugo (Pareto)";
                 currentLevelName = "Clientes";
                 
-            } else if (currentDrilldownLevel === 'sector' && currentDrilldownClient) {
-                // Agrupar por setor para o cliente selecionado
+            } else if (currentDrilldownLevel === 'reason' && currentDrilldownClient) {
+                // Agrupar por motivo para o cliente selecionado
                 chartData = {};
                 filteredData.forEach(item => {
                     if (item.row[4] === currentDrilldownClient) {
-                        const setor = item.row[0] || 'Desconhecido';
-                        const peso = parseFloat(String(item.row[10]).replace(',', '.')) || 0;
-                        chartData[setor] = (chartData[setor] || 0) + peso;
-                    }
-                });
-                
-                // Ordenar por peso
-                const sortedEntries = Object.entries(chartData).sort((a, b) => b[1] - a[1]);
-                labels = sortedEntries.map(entry => entry[0]);
-                fullLabels = labels; // Para setor, não precisa de abreviação
-                values = sortedEntries.map(entry => entry[1]);
-                title = `Refugo por Setor - Cliente: ${getFirstName(currentDrilldownClient)}`;
-                currentLevelName = `Setores (${getFirstName(currentDrilldownClient)})`;
-                
-            } else if (currentDrilldownLevel === 'details' && currentDrilldownClient && currentDrilldownSector) {
-                // Agrupar por motivo para o cliente e setor selecionados
-                chartData = {};
-                filteredData.forEach(item => {
-                    if (item.row[4] === currentDrilldownClient && item.row[0] === currentDrilldownSector) {
                         const motivo = item.row[1] || 'Desconhecido';
                         const peso = parseFloat(String(item.row[10]).replace(',', '.')) || 0;
                         chartData[motivo] = (chartData[motivo] || 0) + peso;
@@ -1323,12 +1339,12 @@
                 
                 // Ordenar por peso
                 const sortedEntries = Object.entries(chartData).sort((a, b) => b[1] - a[1]);
-                // MUDANÇA: Para motivos, mostrar nome completo sem truncar
+                // Para motivos, mostrar nome completo sem truncar
                 labels = sortedEntries.map(entry => entry[0]);
                 fullLabels = labels; // Para motivos, não precisa de abreviação
                 values = sortedEntries.map(entry => entry[1]);
-                title = `Refugo por Motivo - ${getFirstName(currentDrilldownClient)} / ${currentDrilldownSector}`;
-                currentLevelName = `Motivos (${getFirstName(currentDrilldownClient)} / ${currentDrilldownSector})`;
+                title = `Refugo por Motivo - Cliente: ${getFirstName(currentDrilldownClient)}`;
+                currentLevelName = `Motivos (${getFirstName(currentDrilldownClient)})`;
             }
             
             // Calcular linha de Pareto (acumulado percentual)
@@ -1362,10 +1378,13 @@
                 const rowDate = parseRowDate(row[2]); 
                 if (!rowDate) return false; 
 
-                const rYear = rowDate.getFullYear();
-                if (rYear !== selectedYear) return false; 
+                // Filtro por ano (0 = Todos os anos)
+                if (selectedYear !== 0) {
+                    const rYear = rowDate.getFullYear();
+                    if (rYear !== selectedYear) return false; 
+                }
 
-                if (selectedMonthIndex !== -1) {
+                if (selectedMonthIndex !== -1 && selectedYear !== 0) {
                     const rMonth = rowDate.getMonth();
                     if (rMonth !== selectedMonthIndex) return false;
                 }
@@ -1380,9 +1399,9 @@
                 paretoClientChartInstance.destroy();
             }
             
-            // MUDANÇA: Para motivos, não truncar labels
+            // Para motivos, não truncar labels
             const truncatedLabels = labels.map(label => {
-                if (currentDrilldownLevel === 'details') {
+                if (currentDrilldownLevel === 'reason') {
                     return label; // Não truncar motivos
                 }
                 if (label.length > 20) {
@@ -1401,11 +1420,11 @@
                             label: '% Acumulado',
                             data: paretoLine,
                             borderColor: '#06b6d4',
-                            backgroundColor: 'transparent', // MUDANÇA: Remover preenchimento
-                            fill: false, // MUDANÇA: Não preencher abaixo da linha
+                            backgroundColor: 'transparent', // Remover preenchimento
+                            fill: false, // Não preencher abaixo da linha
                             yAxisID: 'y1',
                             tension: 0.3,
-                            borderWidth: 3, // MUDANÇA: Linha mais grossa
+                            borderWidth: 3, // Linha mais grossa
                             pointRadius: 5,
                             pointBackgroundColor: '#06b6d4',
                             pointBorderColor: '#fff',
@@ -1443,7 +1462,7 @@
                             const label = labels[index];
                             
                             if (currentDrilldownLevel === 'client') {
-                                // Drilldown para setores do cliente
+                                // Drilldown para motivos do cliente
                                 // Precisamos encontrar o nome completo do cliente
                                 const filteredData = getFilteredDataForDrilldown();
                                 const clientData = {};
@@ -1454,7 +1473,7 @@
                                 });
                                 
                                 const sortedEntries = Object.entries(clientData).sort((a, b) => b[1] - a[1]);
-                                const topEntries = sortedEntries.slice(0, 10);
+                                const topEntries = sortedEntries.slice(0, 15);
                                 
                                 // Encontrar o nome completo correspondente ao primeiro nome
                                 let fullClientName = '';
@@ -1468,23 +1487,12 @@
                                 if (fullClientName) {
                                     drilldownStack.push({
                                         level: 'client',
-                                        client: currentDrilldownClient,
-                                        sector: currentDrilldownSector
+                                        client: currentDrilldownClient
                                     });
                                     currentDrilldownClient = fullClientName;
-                                    currentDrilldownLevel = 'sector';
+                                    currentDrilldownLevel = 'reason';
                                     updateParetoClientChart();
                                 }
-                            } else if (currentDrilldownLevel === 'sector') {
-                                // Drilldown para detalhes do setor
-                                drilldownStack.push({
-                                    level: 'sector',
-                                    client: currentDrilldownClient,
-                                    sector: currentDrilldownSector
-                                });
-                                currentDrilldownSector = label;
-                                currentDrilldownLevel = 'details';
-                                updateParetoClientChart();
                             }
                         }
                     },
@@ -1501,7 +1509,7 @@
                         tooltip: {
                             callbacks: {
                                 title: function(context) {
-                                    // MUDANÇA: Mostrar nome completo no tooltip
+                                    // Mostrar nome completo no tooltip
                                     if (fullLabels && fullLabels[context[0].dataIndex]) {
                                         return fullLabels[context[0].dataIndex];
                                     }
@@ -1577,7 +1585,6 @@
             drilldownStack = [];
             currentDrilldownLevel = 'client';
             currentDrilldownClient = null;
-            currentDrilldownSector = null;
             updateParetoClientChart();
         }
 
@@ -1586,17 +1593,31 @@
                 const prevState = drilldownStack.pop();
                 currentDrilldownLevel = prevState.level;
                 currentDrilldownClient = prevState.client;
-                currentDrilldownSector = prevState.sector;
                 updateParetoClientChart();
             }
         }
 
         function renderBarChart(data) {
             const sortedEntries = Object.entries(data).sort((a,b) => {
-                if (selectedMonthIndex === -1) {
+                if (selectedMonthIndex === -1 || selectedYear === 0) {
+                    // Para ano "Todos", ordenar por data completa
+                    if (selectedYear === 0) {
+                        // Extrair mês e ano para ordenação
+                        const aParts = a[0].split('/');
+                        const bParts = b[0].split('/');
+                        if (aParts.length === 2 && bParts.length === 2) {
+                            const aMonthIdx = MONTHS_SHORT.indexOf(aParts[0]);
+                            const bMonthIdx = MONTHS_SHORT.indexOf(bParts[0]);
+                            const aYear = parseInt(aParts[1]);
+                            const bYear = parseInt(bParts[1]);
+                            
+                            if (aYear !== bYear) return aYear - bYear;
+                            return aMonthIdx - bMonthIdx;
+                        }
+                    }
                     return MONTHS_SHORT.indexOf(a[0]) - MONTHS_SHORT.indexOf(b[0]);
                 } else {
-                    // MUDANÇA: Ordenar por número do dia
+                    // Ordenar por número do dia
                     return parseInt(a[0]) - parseInt(b[0]);
                 }
             });
@@ -1612,7 +1633,7 @@
                 options: {
                     responsive: true, maintainAspectRatio: false,
                     onClick: (e, els) => {
-                        if (selectedMonthIndex !== -1) {
+                        if (selectedMonthIndex !== -1 && selectedYear !== 0) {
                             if(els.length > 0) activeChartFilters.day = (activeChartFilters.day === labels[els[0].index]) ? null : labels[els[0].index];
                             else activeChartFilters.day = null;
                             processData();
@@ -1624,7 +1645,7 @@
                             grid: { display: false },
                             title: {
                                 display: true,
-                                text: 'Dia do Mês',
+                                text: selectedYear === 0 ? 'Mês/Ano' : (selectedMonthIndex === -1 ? 'Mês' : 'Dia do Mês'),
                                 color: '#a1a1aa'
                             }
                         }, 
@@ -1711,10 +1732,10 @@
                         legend: { 
                             position: 'bottom', 
                             labels: { 
-                                color: '#a1a1aa', 
+                                color: '#ffffff', // ALTERADO: Cor branca para a legenda
                                 boxWidth: 12, 
                                 padding: 15,
-                                // MUDANÇA: Não truncar labels dos motivos
+                                // Não truncar labels dos motivos
                                 generateLabels: function(chart) {
                                     const data = chart.data;
                                     if (data.labels.length && data.datasets.length) {
@@ -1733,7 +1754,7 @@
                         }, 
                         datalabels: { display: false } 
                     },
-                    // MUDANÇA: Ajustar layout para labels completos
+                    // Ajustar layout para labels completos
                     layout: {
                         padding: {
                             bottom: 20
@@ -1747,6 +1768,12 @@
         // 6. MODAIS & FUNCIONALIDADES EXTRAS
         // ==========================================================================
         function showEvolutionModal() {
+            // Se ano for "Todos", não mostrar evolução
+            if (selectedYear === 0) {
+                alert('A visualização de evolução está disponível apenas quando um ano específico é selecionado.');
+                return;
+            }
+            
             const data = calculateMonthlyEvolution();
             if(!data || data.length === 0) { alert('Sem dados suficientes no ano selecionado.'); return; }
             renderEvolutionChart(data);
@@ -1766,6 +1793,12 @@
         }
 
         function showProductionModal() {
+            // Não permitir registrar produção quando ano é "Todos"
+            if (selectedYear === 0) {
+                alert('Selecione um ano específico para registrar produção.');
+                return;
+            }
+            
             const key = getCurrentFilterKey();
             if (!key) return alert("Selecione um mês específico para lançar produção.");
 
@@ -1801,6 +1834,12 @@
         }
 
         async function clearCurrentMonthData() {
+            // Não permitir limpar mês quando ano é "Todos"
+            if (selectedYear === 0) {
+                alert('Selecione um ano específico para limpar dados de um mês.');
+                return;
+            }
+            
             const key = getCurrentFilterKey();
             if(!key) return alert('Por favor, selecione um Mês Específico (não "TODOS") para limpar os dados.');
             
@@ -1914,7 +1953,7 @@
                 const d = parseRowDate(r[2]);
                 if(!d) return;
                 
-                if (d.getFullYear() !== selectedYear) return; 
+                if (selectedYear !== 0 && d.getFullYear() !== selectedYear) return; 
 
                 const k = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
                 const w = parseFloat(r[10]) || 0;
