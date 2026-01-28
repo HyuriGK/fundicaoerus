@@ -204,37 +204,31 @@
         .month-btn.all-btn { border-color: var(--status-info); color: var(--status-info); }
         .month-btn.all-btn.active { background: var(--status-info); color: #000; }
 
-        /* --- TOGGLE BUTTON --- */
-        .toggle-charts-container {
-            display: flex;
-            justify-content: center;
-            margin-bottom: 20px;
-            flex-shrink: 0;
-        }
-
-        .toggle-charts-btn {
-            background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dim));
-            border: none;
-            color: #000;
-            padding: 10px 24px;
-            border-radius: 8px;
-            font-weight: 700;
-            font-size: 0.9rem;
+        /* --- BOTÃO DE ALTERNAR GRÁFICO (movido para toolbar) --- */
+        .toggle-charts-btn-toolbar {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-main);
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            font-weight: 500;
             cursor: pointer;
             display: flex;
             align-items: center;
-            gap: 10px;
-            transition: all 0.3s;
-            box-shadow: 0 4px 12px rgba(251, 191, 36, 0.2);
+            gap: 6px;
+            transition: all 0.2s;
+            white-space: nowrap;
         }
 
-        .toggle-charts-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 16px rgba(251, 191, 36, 0.3);
+        .toggle-charts-btn-toolbar:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
         }
 
-        .toggle-charts-btn i {
-            font-size: 1rem;
+        /* Removido o container anterior do botão toggle */
+        .toggle-charts-container {
+            display: none;
         }
 
         /* --- CHARTS CONTAINER --- */
@@ -462,6 +456,14 @@
         @media (max-width: 1200px) {
             .charts-row { flex-direction: column; overflow-y: auto; }
             .chart-panel { min-height: 300px; } 
+            .toolbar-row {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            .toggle-charts-btn-toolbar {
+                align-self: flex-end;
+                margin-top: 10px;
+            }
         }
     </style>
 </head>
@@ -626,19 +628,17 @@
                         <option value="0">Todos</option>
                         <option value="2023">2023</option>
                         <option value="2024">2024</option>
-                        <option value="2025" selected>2025</option>
+                        <option value="2025">2025</option>
                         <option value="2026">2026</option>
                     </select>
 
                     <div class="months-group" id="monthButtons"></div>
                 </div>
-            </div>
-
-            <!-- BOTÃO DE ALTERNAR GRÁFICOS -->
-            <div class="toggle-charts-container">
-                <button class="toggle-charts-btn" id="toggleChartsBtn" onclick="toggleCharts()">
-                    <i class="fa-solid fa-chart-pie"></i>
-                    <span id="toggleChartsText">Alternar para Gráficos Detalhados</span>
+                
+                <!-- Botão de alternar gráficos movido para toolbar -->
+                <button class="toggle-charts-btn-toolbar" id="toggleChartsBtnToolbar" onclick="toggleCharts()">
+                    <i class="fa-solid fa-chart-pie" id="toggleChartsIcon"></i>
+                    <span id="toggleChartsTextToolbar">Detalhados</span>
                 </button>
             </div>
 
@@ -723,7 +723,7 @@
         let monthlyProduction = {}; 
         
         // Alterado: selectedYear pode ser 0 para "Todos"
-        let selectedYear = 0; // 0 representa "Todos"
+        let selectedYear = 0; // Inicialmente "Todos"
         let selectedMonthIndex = new Date().getMonth(); 
         let activeChartFilters = { day: null, sector: null, reason: null };
 
@@ -793,20 +793,28 @@
             return cliente;
         }
 
+        // Função para truncar texto (para motivos no gráfico)
+        function truncateText(text, maxLength = 10) {
+            if (!text) return '';
+            if (text.length <= maxLength) return text;
+            return text.substring(0, maxLength) + '...';
+        }
+
         // Função para alternar entre os conjuntos de gráficos
         function toggleCharts() {
             const chartsRow = document.getElementById('chartsRow');
             const paretoClientFull = document.getElementById('paretoClientFull');
-            const toggleBtn = document.getElementById('toggleChartsBtn');
-            const toggleText = document.getElementById('toggleChartsText');
+            const toggleBtn = document.getElementById('toggleChartsBtnToolbar');
+            const toggleText = document.getElementById('toggleChartsTextToolbar');
+            const toggleIcon = document.getElementById('toggleChartsIcon');
             
             showingPareto = !showingPareto;
             
             if (showingPareto) {
                 chartsRow.style.display = 'none';
                 paretoClientFull.style.display = 'flex';
-                toggleText.textContent = 'Alternar para Gráficos Detalhados';
-                toggleBtn.innerHTML = '<i class="fa-solid fa-chart-pie"></i><span id="toggleChartsText">Alternar para Gráficos Detalhados</span>';
+                toggleText.textContent = 'Detalhados';
+                toggleIcon.className = 'fa-solid fa-chart-pie';
                 
                 // Atualizar o gráfico de Pareto se necessário
                 updateParetoClientChart();
@@ -820,8 +828,8 @@
             } else {
                 chartsRow.style.display = 'flex';
                 paretoClientFull.style.display = 'none';
-                toggleText.textContent = 'Alternar para Gráfico de Clientes (Pareto)';
-                toggleBtn.innerHTML = '<i class="fa-solid fa-chart-bar"></i><span id="toggleChartsText">Alternar para Gráfico de Clientes (Pareto)</span>';
+                toggleText.textContent = 'Pareto';
+                toggleIcon.className = 'fa-solid fa-chart-bar';
                 
                 // Redimensionar os gráficos pequenos
                 setTimeout(() => {
@@ -836,6 +844,11 @@
         // 3. INICIALIZAÇÃO
         // ==========================================================================
         document.addEventListener('DOMContentLoaded', function() {
+            // Definir ano e mês atual por padrão
+            const currentDate = new Date();
+            selectedYear = currentDate.getFullYear();
+            selectedMonthIndex = currentDate.getMonth();
+            
             initMonthSelector();
             init();
             // Inicialmente mostrar o gráfico de Pareto
@@ -868,6 +881,13 @@
                 btn.dataset.idx = idx;
                 container.appendChild(btn);
             });
+            
+            // Definir ano atual no seletor
+            const yearSelect = document.getElementById('yearSelector');
+            yearSelect.value = selectedYear;
+            
+            // Mostrar botões de mês (pois ano não é "Todos")
+            document.getElementById('monthButtons').style.display = 'flex';
         }
 
         function onYearChange() {
@@ -1339,9 +1359,10 @@
                 
                 // Ordenar por peso
                 const sortedEntries = Object.entries(chartData).sort((a, b) => b[1] - a[1]);
-                // Para motivos, mostrar nome completo sem truncar
-                labels = sortedEntries.map(entry => entry[0]);
-                fullLabels = labels; // Para motivos, não precisa de abreviação
+                // Para motivos, guardar nome completo para tooltip
+                fullLabels = sortedEntries.map(entry => entry[0]);
+                // Para labels do gráfico - truncar para 10 caracteres
+                labels = sortedEntries.map(entry => truncateText(entry[0], 10));
                 values = sortedEntries.map(entry => entry[1]);
                 title = `Refugo por Motivo - Cliente: ${getFirstName(currentDrilldownClient)}`;
                 currentLevelName = `Motivos (${getFirstName(currentDrilldownClient)})`;
@@ -1399,21 +1420,10 @@
                 paretoClientChartInstance.destroy();
             }
             
-            // Para motivos, não truncar labels
-            const truncatedLabels = labels.map(label => {
-                if (currentDrilldownLevel === 'reason') {
-                    return label; // Não truncar motivos
-                }
-                if (label.length > 20) {
-                    return label.substring(0, 17) + '...';
-                }
-                return label;
-            });
-            
             paretoClientChartInstance = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: truncatedLabels,
+                    labels: labels,
                     datasets: [
                         {
                             type: 'line',
@@ -1732,7 +1742,7 @@
                         legend: { 
                             position: 'bottom', 
                             labels: { 
-                                color: '#ffffff', // ALTERADO: Cor branca para a legenda
+                                color: '#ffffff', // CORRIGIDO: Cor branca para a legenda
                                 boxWidth: 12, 
                                 padding: 15,
                                 // Não truncar labels dos motivos
