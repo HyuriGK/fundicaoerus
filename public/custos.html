@@ -605,6 +605,8 @@
             font-family: var(--font-ui); 
             font-size: 1rem;
             transition: 0.2s;
+            /* Ajuste para setas dos dropdowns */
+            padding-right: 30px;
         }
         
         .form-input:focus { 
@@ -901,6 +903,73 @@
             overflow: hidden;
             min-height: 0;
         }
+
+        /* Mês de Referência - Botões */
+        .month-ref-container {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .month-ref-year {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .month-ref-buttons {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 4px;
+        }
+        
+        .btn-month-ref {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-muted);
+            font-size: 0.7rem;
+            font-weight: 600;
+            padding: 6px 4px;
+            border-radius: 4px;
+            cursor: pointer;
+            text-transform: lowercase;
+            transition: all 0.2s;
+        }
+        
+        .btn-month-ref:hover {
+            background: rgba(255,255,255,0.1);
+            color: #fff;
+        }
+        
+        .btn-month-ref.active {
+            background: var(--success);
+            color: #000;
+            border-color: var(--success);
+        }
+
+        /* Ajustes para selects com setas */
+        select {
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right 8px center;
+            background-size: 14px;
+            padding-right: 30px !important;
+        }
+        
+        /* Ajuste específico para filtros do histórico */
+        #historyMonthFilter, #historyYearFilter {
+            width: auto !important;
+            min-width: 120px;
+            padding: 8px 28px 8px 12px !important;
+        }
+        
+        /* Ajuste para select do setor no RH */
+        #empSector {
+            padding-right: 28px !important;
+        }
     </style>
 </head>
 <body>
@@ -1095,10 +1164,21 @@
                             </div>
                             
                             <div class="input-grid">
+                                <!-- Mês de Referência com botões -->
                                 <div class="form-group span-4">
                                     <label>Mês de Referência</label>
-                                    <input type="month" id="formMonth" class="form-input">
+                                    <div class="month-ref-container">
+                                        <div class="month-ref-year">
+                                            <select id="formYearSelect" class="form-input" style="flex:1;">
+                                                <!-- Populated by JS -->
+                                            </select>
+                                        </div>
+                                        <div class="month-ref-buttons" id="formMonthButtons">
+                                            <!-- JS will generate buttons -->
+                                        </div>
+                                    </div>
                                 </div>
+                                
                                 <div class="form-group span-4">
                                     <label>Valor (R$)</label>
                                     <input type="number" id="formValue" class="form-input" placeholder="0,00" step="0.01">
@@ -1108,7 +1188,7 @@
                                     <select id="formCategory" class="form-input">
                                         <option value="MATERIA PRIMA">Matéria Prima</option>
                                         <option value="ENERGIA">Energia Elétrica</option>
-                                        <option value="MAO DE OBRA">Mão de Obra</option>
+                                        <!-- Removido MAO DE OBRA -->
                                         <option value="INSUMOS">Insumos</option>
                                         <option value="MANUTENCAO">Manutenção</option>
                                         <option value="GERAL">Geral/Admin</option>
@@ -1240,6 +1320,7 @@
                                             <option value="MOLDAGEM">Moldagem</option>
                                             <option value="MACHARIA">Macharia</option>
                                             <option value="ACABAMENTO">Acabamento</option>
+                                            <option value="EXPEDICAO">Expedição</option>
                                             <option value="MANUTENCAO">Manutenção</option>
                                             <option value="ADM">Administrativo</option>
                                             <option value="VENDAS">Vendas</option>
@@ -1330,6 +1411,7 @@
                                         <tr>
                                             <th style="padding:8px; color:var(--text-muted);">Mês</th>
                                             <th style="padding:8px; color:var(--text-muted); text-align:right;">Valor</th>
+                                            <th style="padding:8px; color:var(--text-muted); width:30px;"></th>
                                         </tr>
                                     </thead>
                                     <tbody id="payrollHistory"></tbody>
@@ -1389,7 +1471,8 @@
         };
         
         const SECTOR_COLORS = ['#06b6d4', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#6366f1', '#84cc16', '#64748b'];
-        const MONTH_NAMES = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
+        const MONTH_NAMES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+        const MONTH_NAMES_FULL = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
         let costData = JSON.parse(localStorage.getItem('erus_custos')) || [];
         let employeeData = JSON.parse(localStorage.getItem('erus_funcionarios')) || [];
@@ -1403,6 +1486,10 @@
         // Global Selection State
         let selectedYear = new Date().getFullYear();
         let selectedMonthIndex = new Date().getMonth(); // 0-11
+
+        // Form month reference state
+        let formSelectedYear = new Date().getFullYear();
+        let formSelectedMonthIndex = new Date().getMonth(); // 0-11
 
         // --- NOTIFICATION SYSTEM ---
         function showNotification(message, type = 'info', duration = 4000) {
@@ -1450,7 +1537,6 @@
             // Set input defaults
             const now = new Date();
             const nowIso = now.toISOString().slice(0, 7);
-            document.getElementById('formMonth').value = nowIso;
             document.getElementById('rhMonthPost').value = nowIso;
             
             // Initialize preview calculation
@@ -1506,6 +1592,48 @@
             selectedYear = parseInt(document.getElementById('yearSelect').value);
             
             updateDashboard();
+        }
+
+        // --- FORM MONTH REFERENCE BUTTONS ---
+        function setupFormMonthButtons() {
+            const yearSelect = document.getElementById('formYearSelect');
+            const monthButtonsContainer = document.getElementById('formMonthButtons');
+            
+            // Clear existing
+            yearSelect.innerHTML = '';
+            monthButtonsContainer.innerHTML = '';
+            
+            // Populate years (current - 1 to current + 2)
+            const currentYear = new Date().getFullYear();
+            for(let y = currentYear - 1; y <= currentYear + 2; y++) {
+                const opt = document.createElement('option');
+                opt.value = y;
+                opt.innerText = y;
+                if(y === formSelectedYear) opt.selected = true;
+                yearSelect.appendChild(opt);
+            }
+            
+            // Populate month buttons
+            MONTH_NAMES.forEach((name, idx) => {
+                const btn = document.createElement('button');
+                btn.className = `btn-month-ref ${idx === formSelectedMonthIndex ? 'active' : ''}`;
+                btn.innerText = name;
+                btn.onclick = () => selectFormMonth(idx);
+                monthButtonsContainer.appendChild(btn);
+            });
+            
+            // Year change handler
+            yearSelect.onchange = function() {
+                formSelectedYear = parseInt(this.value);
+            };
+        }
+        
+        function selectFormMonth(idx) {
+            formSelectedMonthIndex = idx;
+            // Update UI buttons
+            document.querySelectorAll('.btn-month-ref').forEach((btn, i) => {
+                btn.classList.toggle('active', i === idx);
+            });
         }
 
         // --- CORE DATA LOGIC ---
@@ -1763,9 +1891,9 @@
         // --- ENTRY MANAGEMENT ---
 
         function openEntryModal() { 
-            // Default to dashboard selected month
-            const mStr = String(selectedMonthIndex + 1).padStart(2,'0');
-            document.getElementById('formMonth').value = `${selectedYear}-${mStr}`;
+            // Setup form month buttons
+            setupFormMonthButtons();
+            
             document.getElementById('entryModal').style.display = 'flex'; 
             loadCostsHistory();
             populateHistoryFilters();
@@ -1776,15 +1904,8 @@
         }
 
         function submitEntry() {
-            const monthInput = document.getElementById('formMonth').value; // YYYY-MM
-            if(!monthInput) { 
-                showNotification("Mês de referência obrigatório", "danger");
-                return; 
-            }
-            
-            const [y, m] = monthInput.split('-');
-            // Always use day 01 for storage
-            const dateFmt = `01/${m}/${y}`;
+            const monthStr = String(formSelectedMonthIndex + 1).padStart(2,'0');
+            const dateFmt = `01/${monthStr}/${formSelectedYear}`;
 
             const entry = {
                 id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
@@ -1806,10 +1927,10 @@
             saveData();
             
             // If entry is for current view, update. If not, notify
-            if(parseInt(m) === selectedMonthIndex + 1 && parseInt(y) === selectedYear) {
+            if(formSelectedMonthIndex === selectedMonthIndex && formSelectedYear === selectedYear) {
                 updateDashboard();
             } else {
-                showNotification(`Lançamento salvo em ${m}/${y}.`, "info");
+                showNotification(`Lançamento salvo em ${monthStr}/${formSelectedYear}.`, "info");
             }
 
             // Reset fields
@@ -1897,7 +2018,7 @@
             // Populate month filter
             const monthFilter = document.getElementById('historyMonthFilter');
             monthFilter.innerHTML = '<option value="all">Todos os meses</option>';
-            MONTH_NAMES.forEach((month, index) => {
+            MONTH_NAMES_FULL.forEach((month, index) => {
                 const option = document.createElement('option');
                 option.value = index + 1;
                 option.textContent = month;
@@ -2062,6 +2183,7 @@
                 
                 // Save to payroll history
                 payrollHistory.push({
+                    id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
                     month: `${m}/${y}`,
                     value: totalPayroll,
                     employees: employeeData.length,
@@ -2093,14 +2215,29 @@
                 tr.innerHTML = `
                     <td style="padding:8px; color:var(--text-muted);">${entry.month}</td>
                     <td style="padding:8px; text-align:right; color:#fff; font-weight:600;">R$ ${entry.value.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
+                    <td style="padding:8px; text-align:center;">
+                        <button class="action-btn" onclick="deletePayrollEntry('${entry.id}')" title="Excluir" style="padding:4px; font-size:0.7rem;">
+                            <i class="fa-solid fa-trash"></i>
+                        </button>
+                    </td>
                 `;
                 tbody.appendChild(tr);
             });
             
             if (recentHistory.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="2" style="padding:12px; text-align:center; color:var(--text-muted); font-size:0.85rem;">
+                tbody.innerHTML = `<tr><td colspan="3" style="padding:12px; text-align:center; color:var(--text-muted); font-size:0.85rem;">
                     Nenhum lançamento de folha registrado.
                 </td></tr>`;
+            }
+        }
+        
+        function deletePayrollEntry(id) {
+            const idx = payrollHistory.findIndex(e => e.id === id);
+            if (idx > -1 && confirm("Excluir este registro do histórico de folhas?")) {
+                payrollHistory.splice(idx, 1);
+                localStorage.setItem('erus_payroll_history', JSON.stringify(payrollHistory));
+                updatePayrollHistory();
+                showNotification("Registro excluído do histórico!", "success");
             }
         }
 
@@ -2225,7 +2362,7 @@
             // Generate filename
             let filename = "Custos_Exportados.xlsx";
             if (monthFilter !== 'all' && yearFilter !== 'all') {
-                const monthName = MONTH_NAMES[parseInt(monthFilter) - 1];
+                const monthName = MONTH_NAMES_FULL[parseInt(monthFilter) - 1];
                 filename = `Custos_${monthName}_${yearFilter}.xlsx`;
             }
             
