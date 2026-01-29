@@ -439,13 +439,28 @@
                 let subLabel = "Mês Vigente";
 
                 if (link.id === 'producaosetor') {
+                    // CORREÇÃO 1: Aplicar correção de pesos (igual ao producao_apontada.html)
+                    const productWeights = JSON.parse(localStorage.getItem('producao_product_weights')) || {};
+                    
                     if (data.length > 1) {
                         const monthRows = data.slice(1).filter(r => {
                             const dateStr = String(r[0]);
                             return dateStr.includes(`${curYear}-${curMonth}`) || dateStr.includes(`/${curMonth}/${curYear}`);
                         });
                         
+                        let totalFusaoKg = 0;
+                        let totalMoldagemKg = 0;
+                        
                         monthRows.forEach(r => {
+                            // Aplicar correção de pesos
+                            let pu = parseFloat(r[4] || 0);
+                            const code = String(r[2]);
+                            if (pu === 0 && productWeights[code]) {
+                                pu = parseFloat(productWeights[code]);
+                            }
+                            const q = parseFloat(r[5] || 0);
+                            const totalRow = pu * q; // Total corrigido em kg
+
                             const dateStr = String(r[0]);
                             let day = 0;
                             
@@ -456,21 +471,19 @@
                             }
 
                             const setor = String(r[1]).toUpperCase();
-                            const kg = parseFloat(r[6] || 0);
 
                             if(day > 0 && day <= daysInMonth) {
                                 if (setor.includes("FUS")) { 
-                                    chartData.fusao[day-1] += (kg / 1000);
+                                    chartData.fusao[day-1] += (totalRow / 1000); // Converter para ton
+                                    totalFusaoKg += totalRow;
                                 }
                                 if (setor.includes("MOLDAGEM") || setor.includes("LEVE") || setor.includes("PESADA") || setor.includes("ROLLOVER")) {
-                                    chartData.moldagem[day-1] += (kg / 1000);
+                                    chartData.moldagem[day-1] += (totalRow / 1000);
+                                    totalMoldagemKg += totalRow;
                                 }
                             }
                         });
 
-                        const totalFusaoKg = monthRows.filter(r => String(r[1]).toUpperCase().includes("FUS"))
-                                                    .reduce((acc, r) => acc + parseFloat(r[6] || 0), 0);
-                        
                         mainValue = (totalFusaoKg / 1000).toFixed(2) + " Ton";
                         subLabel = `Produção Apontada no Mês`;
                         
@@ -537,14 +550,61 @@
                     subLabel = "Total em Carteira";
                 }
                 else if (link.id === 'refugo') {
+                    // CORREÇÃO 2: Mudar para mostrar porcentagem em vez de tonelagem
                     const listaRefugo = data.refugoRawData || [];
                     const monthData = listaRefugo.filter(r => {
                         const d = r.data || ""; 
                         return d.includes(`${curYear}-${curMonth}`);
                     });
-                    const totalKg = monthData.reduce((acc, r) => acc + parseFloat(r.peso_total || 0), 0);
-                    mainValue = (totalKg / 1000).toFixed(2) + " Ton";
-                    subLabel = `${monthData.length} Ocorrências no Mês`;
+                    
+                    const totalRefugoKg = monthData.reduce((acc, r) => acc + parseFloat(r.peso_total || 0), 0);
+                    
+                    // Calcular produção total (fusão) do mesmo mês para calcular a porcentagem
+                    try {
+                        const producaoResponse = await fetch('/api/producao-apontada');
+                        const producaoData = await producaoResponse.json();
+                        const productWeights = JSON.parse(localStorage.getItem('producao_product_weights')) || {};
+                        
+                        if (producaoData.length > 1) {
+                            const monthRows = producaoData.slice(1).filter(r => {
+                                const dateStr = String(r[0]);
+                                return dateStr.includes(`${curYear}-${curMonth}`) || dateStr.includes(`/${curMonth}/${curYear}`);
+                            });
+                            
+                            let totalProducaoKg = 0;
+                            
+                            monthRows.forEach(r => {
+                                let pu = parseFloat(r[4] || 0);
+                                const code = String(r[2]);
+                                if (pu === 0 && productWeights[code]) {
+                                    pu = parseFloat(productWeights[code]);
+                                }
+                                const q = parseFloat(r[5] || 0);
+                                const totalRow = pu * q;
+
+                                const setor = String(r[1]).toUpperCase();
+                                if (setor.includes("FUS")) { 
+                                    totalProducaoKg += totalRow;
+                                }
+                            });
+                            
+                            // Calcular porcentagem
+                            let porcentagem = 0;
+                            if (totalProducaoKg > 0) {
+                                porcentagem = (totalRefugoKg / totalProducaoKg) * 100;
+                            }
+                            
+                            mainValue = porcentagem.toFixed(2) + " %";
+                            subLabel = `${monthData.length} Ocorrências no Mês`;
+                        } else {
+                            mainValue = "0.00 %";
+                            subLabel = `${monthData.length} Ocorrências no Mês`;
+                        }
+                    } catch (e) {
+                        // Em caso de erro, mostrar apenas o total em toneladas como fallback
+                        mainValue = (totalRefugoKg / 1000).toFixed(2) + " Ton";
+                        subLabel = `${monthData.length} Ocorrências no Mês`;
+                    }
                 }
 
                 container.querySelector('.live-value').innerText = mainValue;
