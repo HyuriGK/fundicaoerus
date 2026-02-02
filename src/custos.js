@@ -151,30 +151,45 @@ router.post('/', async (req, res) => {
 
         // 9. Salvar Meta (Upsert)
         if (action === 'save-meta') {
-            const { mes_referencia, tipo, valor } = req.body; 
-            // tipo: 'producao' ou 'faturamento'
-            
-            // Verifica se já existe registro para o mês
-            const check = await client.query('SELECT * FROM custos_metas WHERE mes_referencia = $1', [mes_referencia]);
-            
-            if (check.rows.length === 0) {
-                // Insert inicial (se for produção salva prod, fat=0, e vice versa)
-                const prodVal = tipo === 'producao' ? valor : 0;
-                const fatVal = tipo === 'faturamento' ? valor : 0;
-                await client.query(
-                    'INSERT INTO custos_metas (mes_referencia, producao_kg, faturamento_kg) VALUES ($1, $2, $3)',
-                    [mes_referencia, prodVal, fatVal]
-                );
+    const { mes_referencia, tipo, valor } = req.body; 
+    console.log('📝 Recebendo meta:', { mes_referencia, tipo, valor });
+    // tipo: 'producao' ou 'faturamento'
+    
+    try {
+        // Verifica se já existe registro para o mês
+        const check = await client.query('SELECT * FROM custos_metas WHERE mes_referencia = $1', [mes_referencia]);
+        
+        if (check.rows.length === 0) {
+            console.log('➕ Criando novo registro para:', mes_referencia);
+            // Insert inicial (se for produção salva prod, fat=0, e vice versa)
+            const prodVal = tipo === 'producao' ? valor : 0;
+            const fatVal = tipo === 'faturamento' ? valor : 0;
+            await client.query(
+                'INSERT INTO custos_metas (mes_referencia, producao_kg, faturamento_kg) VALUES ($1, $2, $3)',
+                [mes_referencia, prodVal, fatVal]
+            );
+        } else {
+            console.log('✏️ Atualizando registro existente:', mes_referencia);
+            // Update
+            if (tipo === 'producao') {
+                await client.query('UPDATE custos_metas SET producao_kg = $1 WHERE mes_referencia = $2', [valor, mes_referencia]);
             } else {
-                // Update
-                if (tipo === 'producao') {
-                    await client.query('UPDATE custos_metas SET producao_kg = $1 WHERE mes_referencia = $2', [valor, mes_referencia]);
-                } else {
-                    await client.query('UPDATE custos_metas SET faturamento_kg = $1 WHERE mes_referencia = $2', [valor, mes_referencia]);
-                }
+                await client.query('UPDATE custos_metas SET faturamento_kg = $1 WHERE mes_referencia = $2', [valor, mes_referencia]);
             }
-            return res.json({ success: true });
         }
+        
+        console.log('✅ Meta salva com sucesso');
+        return res.json({ success: true, message: 'Meta salva' });
+        
+    } catch (error) {
+        console.error('❌ Erro ao salvar meta:', error);
+        return res.status(500).json({ 
+            success: false, 
+            error: error.message,
+            details: 'Verifique se a tabela custos_metas existe'
+        });
+    }
+}
 
         return res.status(400).json({ error: 'Ação inválida' });
 

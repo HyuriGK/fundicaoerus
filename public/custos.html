@@ -849,51 +849,75 @@
         }
 
         async function handleMetaInput(event, type) {
-            if (event.key !== 'Enter') return;
-            
-            const value = event.target.value;
-            event.target.blur(); // Remove focus
-            
-            const monthName = MONTH_NAMES[selectedMonthIndex].toUpperCase();
-            const year = selectedYear;
-            
-            if(!confirm(`Deseja salvar a nova meta de ${type.toUpperCase()} para ${monthName}/${year}?\n\nValor: ${value}`)) {
-                updateDashboard(); // Revert to original
-                return;
-            }
-            
-            await saveMeta(type, value);
-        }
+    if (event.key !== 'Enter') return;
+    
+    const value = parseFloat(event.target.value) || 0;
+    event.target.blur(); // Remove focus
+    
+    const monthName = MONTH_NAMES[selectedMonthIndex].toUpperCase();
+    const year = selectedYear;
+    const tipoNome = type === 'producao' ? 'PRODUÇÃO' : 'FATURAMENTO';
+    
+    if(!confirm(`Deseja salvar a nova meta de ${tipoNome} para ${monthName}/${year}?\n\nValor: ${value.toLocaleString('pt-BR')} kg`)) {
+        // Reverte o valor no input para o anterior
+        const m = String(selectedMonthIndex + 1).padStart(2,'0');
+        const key = `${m}/${selectedYear}`;
+        const meta = productionMap[key] || { producao: 0, faturamento: 0 };
+        event.target.value = meta[type] || 0;
+        return;
+    }
+    
+    console.log(`Salvando ${type}: ${value} para ${monthName}/${year}`);
+    await saveMeta(type, value);
+}
 
         async function saveMeta(type, value) {
-            const m = String(selectedMonthIndex + 1).padStart(2,'0');
-            const key = `${m}/${selectedYear}`;
-            
-            // Update Local
-            if(!productionMap[key]) productionMap[key] = { producao: 0, faturamento: 0 };
-            productionMap[key][type] = parseFloat(value) || 0;
-            
-            // Update Backend
-            try {
-                showLoading();
-                const res = await fetch('/api/custos?action=save-meta', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ mes_referencia: key, tipo, valor: parseFloat(value) || 0 })
-                });
-                
-                if (!res.ok) throw new Error("Erro ao salvar");
-                
-                updateDashboard(); // Recalculate KPIs
-                showNotification("Meta atualizada!", "success");
-            } catch(e) { 
-                showNotification("Erro ao salvar meta", "danger"); 
-                // Revert on error
-                loadDataFromServer();
-            } finally {
-                hideLoading();
-            }
+    const m = String(selectedMonthIndex + 1).padStart(2,'0');
+    const key = `${m}/${selectedYear}`;
+    
+    // Update Local
+    if(!productionMap[key]) productionMap[key] = { producao: 0, faturamento: 0 };
+    productionMap[key][type] = parseFloat(value) || 0;
+    
+    // Update Backend
+    try {
+        showLoading();
+        console.log('Enviando meta:', { mes_referencia: key, tipo: type, valor: parseFloat(value) || 0 });
+        
+        const res = await fetch('/api/custos?action=save-meta', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ 
+                mes_referencia: key, 
+                tipo: type,  // CORREÇÃO: usar 'type' ao invés de 'tipo'
+                valor: parseFloat(value) || 0 
+            })
+        });
+        
+        console.log('Resposta status:', res.status);
+        
+        if (!res.ok) {
+            const errorText = await res.text();
+            console.error('Erro na resposta:', errorText);
+            throw new Error(`Erro ${res.status}: ${errorText}`);
         }
+        
+        const result = await res.json();
+        console.log('Meta salva com sucesso:', result);
+        
+        updateDashboard(); // Recalculate KPIs
+        showNotification("Meta atualizada com sucesso!", "success");
+    } catch(e) { 
+        console.error('Erro completo ao salvar meta:', e);
+        showNotification(`Erro ao salvar meta: ${e.message}`, "danger"); 
+        
+        // Revert local changes on error
+        productionMap[key][type] = 0;
+        updateDashboard();
+    } finally {
+        hideLoading();
+    }
+}
 
         async function clearAllCosts() {
             if(!confirm("Tem certeza? Isso apagará TODOS os lançamentos de custos.")) return;
