@@ -1,94 +1,134 @@
-// src/custos.js
+// routes/custos.js
 const express = require('express');
 const router = express.Router();
 const pool = require('../lib/db');
+
+// Middleware de Log
+router.use((req, res, next) => {
+    console.log(`${new Date().toISOString()} - [CUSTOS] ${req.method} ${req.originalUrl}`);
+    next();
+});
 
 // --- LEITURA (GET) ---
 router.get('/', async (req, res) => {
     const client = await pool.connect();
     try {
-        // Busca os dados formatados para DD/MM/YYYY para facilitar o frontend existente
-        const query = `
-            SELECT 
-                to_char(data, 'DD/MM/YYYY') as data_formatada,
-                categoria, 
-                descricao, 
-                centro_custo, 
-                valor 
-            FROM custos 
-            ORDER BY data DESC
-        `;
-        const result = await client.query(query);
-        
-        // Retorna os dados
-        res.status(200).json(result.rows);
+        // Buscar Custos
+        const custosRes = await client.query(`
+            SELECT id, data_formatada, categoria, descricao, centro, valor 
+            FROM custos_lancamentos 
+            ORDER BY data_iso DESC
+        `);
+
+        // Buscar Funcionários
+        const funcRes = await client.query(`
+            SELECT id, nome as name, setor as sector, salario as salary 
+            FROM rh_funcionarios 
+            ORDER BY nome ASC
+        `);
+
+        // Buscar Histórico Folha
+        const histRes = await client.query(`
+            SELECT id, mes_referencia as month, valor_total as value, qtd_funcionarios as employees 
+            FROM rh_historico_folha 
+            ORDER BY created_at DESC
+        `);
+
+        res.json({
+            costs: custosRes.rows,
+            employees: funcRes.rows,
+            history: histRes.rows
+        });
+
     } catch (e) {
-        console.error(e);
+        console.error('Erro ao buscar dados de custos:', e);
         res.status(500).json({ error: e.message });
     } finally {
         client.release();
     }
 });
 
-// --- CRIAÇÃO (POST) ---
-// Espera receber um array de arrays: [[data, categoria, desc, centro, valor], ...]
+// --- ESCRITA (POST) ---
 router.post('/', async (req, res) => {
-    const novosDados = req.body; // O array enviado pelo front
-    
-    if (!Array.isArray(novosDados) || novosDados.length === 0) {
-        return res.status(400).json({ error: "Nenhum dado enviado." });
-    }
-
+    const { action } = req.query;
     const client = await pool.connect();
+
     try {
-        await client.query('BEGIN');
-
-        const queryText = `
-            INSERT INTO custos (data, categoria, descricao, centro_custo, valor)
-            VALUES ($1, $2, $3, $4, $5)
-        `;
-
-        for (const row of novosDados) {
-            // row = [dataString, categoria, descricao, centro, valor]
-            // Precisamos converter 'DD/MM/YYYY' para 'YYYY-MM-DD' para o banco aceitar
-            const dataParts = row[0].split('/'); // Ex: 02/01/2026 -> [02, 01, 2026]
+        // 1. Adicionar Custo
+        if (action === 'add-cost') {
+            const { data_formatada, categoria, descricao, centro, valor } = req.body;
             
-            // Validação simples de data
-            let dataBanco = null;
-            if (dataParts.length === 3) {
-                dataBanco = `${dataParts[2]}-${dataParts[1]}-${dataParts[0]}`;
-            } else {
-                continue; // Pula linha se data inválida
-            }
+            // Converter DD/MM/YYYY para YYYY-MM-DD para salvar no campo data_iso
+            const [d, m, y] = data_formatada.split('/');
+            const data_iso = `${y}-${m}-${d}`;
 
-            const categoria = row[1];
-            const descricao = row[2];
-            const centro = row[3];
-            const valor = parseFloat(row[4]);
-
-            await client.query(queryText, [dataBanco, categoria, descricao, centro, valor]);
+            const result = await client.query(`
+                INSERT INTO custos_lancamentos (data_formatada, data_iso, categoria, descricao, centro, valor)
+                VALUES ($1, $2, $3, $4, $5, $6)
+                RETURNING id
+            `, [data_formatada, data_iso, categoria, descricao, centro, valor]);
+            
+            return res.json({ success: true, id: result.rows[0].id });
         }
 
-        await client.query('COMMIT');
-        res.status(200).json({ success: true, message: "Custos importados com sucesso." });
+        // 2. Deletar Custo
+        if (action === 'delete-cost') {
+            const { id } = req.body;
+            await client.query('DELETE FROM custos_lancamentos WHERE id = $1', [id]);
+            return res.json({ success: true });
+        }
+
+        // 3. Adicionar Funcionário
+        if (action === 'add-employee') {
+            const { name, sector, salary } = req.body;
+            const result = await client.query(`
+                INSERT INTO rh_funcionarios (nome, setor, salario)
+                VALUES ($1, $2, $3)
+                RETURNING id
+            `, [name, sector, salary]);
+            return res.json({ success: true, id: result.rows[0].id });
+        }
+
+        // 4. Deletar Funcionário
+        if (action === 'delete-employee') {
+            const { id } = req.body;
+            await client.query('DELETE FROM rh_funcionarios WHERE id = $1', [id]);
+            return res.json({ success: true });
+        }
+
+        // 5. Adicionar Histórico de Folha
+        if (action === 'add-history') {
+            const { month, value, employees } = req.body;
+            const result = await client.query(`
+                INSERT INTO rh_historico_folha (mes_referencia, valor_total, qtd_funcionarios)
+                VALUES ($1, $2, $3)
+                RETURNING id
+            `, [month, value, employees]);
+            return res.json({ success: true, id: result.rows[0].id });
+        }
+
+        // 6. Deletar Histórico
+        if (action === 'delete-history') {
+            const { id } = req.body;
+            await client.query('DELETE FROM rh_historico_folha WHERE id = $1', [id]);
+            return res.json({ success: true });
+        }
+
+        // 7. Limpar Banco (Cuidado!)
+        if (action === 'clear-database') {
+            await client.query('BEGIN');
+            await client.query('TRUNCATE TABLE custos_lancamentos RESTART IDENTITY');
+            await client.query('TRUNCATE TABLE rh_funcionarios RESTART IDENTITY');
+            await client.query('TRUNCATE TABLE rh_historico_folha RESTART IDENTITY');
+            await client.query('COMMIT');
+            return res.json({ success: true });
+        }
+
+        return res.status(400).json({ error: 'Ação inválida' });
 
     } catch (e) {
         await client.query('ROLLBACK');
-        console.error(e);
-        res.status(500).json({ error: e.message });
-    } finally {
-        client.release();
-    }
-});
-
-// --- LIMPEZA (DELETE) ---
-router.delete('/', async (req, res) => {
-    const client = await pool.connect();
-    try {
-        await client.query('TRUNCATE TABLE custos RESTART IDENTITY');
-        res.status(200).json({ success: true, message: "Banco de custos limpo." });
-    } catch (e) {
-        console.error(e);
+        console.error('Erro na rota POST /custos:', e);
         res.status(500).json({ error: e.message });
     } finally {
         client.release();
