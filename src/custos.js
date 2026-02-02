@@ -1,4 +1,4 @@
-// routes/custos.js
+// src/custos.js
 const express = require('express');
 const router = express.Router();
 const pool = require('../lib/db');
@@ -13,31 +13,48 @@ router.use((req, res, next) => {
 router.get('/', async (req, res) => {
     const client = await pool.connect();
     try {
-        // Buscar Custos
+        // 1. Buscar Custos
         const custosRes = await client.query(`
             SELECT id, data_formatada, categoria, descricao, centro, valor 
             FROM custos_lancamentos 
             ORDER BY data_iso DESC
         `);
 
-        // Buscar Funcionários
+        // 2. Buscar Funcionários
         const funcRes = await client.query(`
             SELECT id, nome as name, setor as sector, salario as salary 
             FROM rh_funcionarios 
             ORDER BY nome ASC
         `);
 
-        // Buscar Histórico Folha
+        // 3. Buscar Histórico Folha
         const histRes = await client.query(`
             SELECT id, mes_referencia as month, valor_total as value, qtd_funcionarios as employees 
             FROM rh_historico_folha 
             ORDER BY created_at DESC
         `);
 
+        // 4. Buscar Metas (Produção/Faturamento por mês)
+        const metasRes = await client.query(`
+            SELECT mes_referencia, producao_kg, faturamento_kg 
+            FROM custos_metas
+        `);
+
+        // Transformar array de metas em Objeto para facilitar o frontend
+        // Ex: { "05/2024": { producao: 10000, faturamento: 8000 } }
+        const metasMap = {};
+        metasRes.rows.forEach(row => {
+            metasMap[row.mes_referencia] = {
+                producao: parseFloat(row.producao_kg),
+                faturamento: parseFloat(row.faturamento_kg)
+            };
+        });
+
         res.json({
             costs: custosRes.rows,
             employees: funcRes.rows,
-            history: histRes.rows
+            history: histRes.rows,
+            metas: metasMap
         });
 
     } catch (e) {
@@ -54,11 +71,11 @@ router.post('/', async (req, res) => {
     const client = await pool.connect();
 
     try {
+        // --- CUSTOS GERAIS ---
+
         // 1. Adicionar Custo
         if (action === 'add-cost') {
             const { data_formatada, categoria, descricao, centro, valor } = req.body;
-            
-            // Converter DD/MM/YYYY para YYYY-MM-DD para salvar no campo data_iso
             const [d, m, y] = data_formatada.split('/');
             const data_iso = `${y}-${m}-${d}`;
 
@@ -71,14 +88,22 @@ router.post('/', async (req, res) => {
             return res.json({ success: true, id: result.rows[0].id });
         }
 
-        // 2. Deletar Custo
+        // 2. Deletar Custo Individual
         if (action === 'delete-cost') {
             const { id } = req.body;
             await client.query('DELETE FROM custos_lancamentos WHERE id = $1', [id]);
             return res.json({ success: true });
         }
 
-        // 3. Adicionar Funcionário
+        // 3. Limpar TODOS os Custos (Ação do novo modal)
+        if (action === 'clear-all-costs') {
+            await client.query('TRUNCATE TABLE custos_lancamentos RESTART IDENTITY');
+            return res.json({ success: true });
+        }
+
+        // --- RH / FUNCIONÁRIOS ---
+
+        // 4. Adicionar Funcionário
         if (action === 'add-employee') {
             const { name, sector, salary } = req.body;
             const result = await client.query(`
@@ -89,14 +114,22 @@ router.post('/', async (req, res) => {
             return res.json({ success: true, id: result.rows[0].id });
         }
 
-        // 4. Deletar Funcionário
+        // 5. Deletar Funcionário Individual
         if (action === 'delete-employee') {
             const { id } = req.body;
             await client.query('DELETE FROM rh_funcionarios WHERE id = $1', [id]);
             return res.json({ success: true });
         }
 
-        // 5. Adicionar Histórico de Folha
+        // 6. Limpar TODOS os Funcionários
+        if (action === 'clear-all-employees') {
+            await client.query('TRUNCATE TABLE rh_funcionarios RESTART IDENTITY');
+            return res.json({ success: true });
+        }
+
+        // --- HISTÓRICO FOLHA ---
+
+        // 7. Adicionar Histórico
         if (action === 'add-history') {
             const { month, value, employees } = req.body;
             const result = await client.query(`
@@ -107,27 +140,45 @@ router.post('/', async (req, res) => {
             return res.json({ success: true, id: result.rows[0].id });
         }
 
-        // 6. Deletar Histórico
+        // 8. Deletar Histórico Individual
         if (action === 'delete-history') {
             const { id } = req.body;
             await client.query('DELETE FROM rh_historico_folha WHERE id = $1', [id]);
             return res.json({ success: true });
         }
 
-        // 7. Limpar Banco (Cuidado!)
-        if (action === 'clear-database') {
-            await client.query('BEGIN');
-            await client.query('TRUNCATE TABLE custos_lancamentos RESTART IDENTITY');
-            await client.query('TRUNCATE TABLE rh_funcionarios RESTART IDENTITY');
-            await client.query('TRUNCATE TABLE rh_historico_folha RESTART IDENTITY');
-            await client.query('COMMIT');
+        // --- METAS (PRODUÇÃO E FATURAMENTO) ---
+
+        // 9. Salvar Meta (Upsert)
+        if (action === 'save-meta') {
+            const { mes_referencia, tipo, valor } = req.body; 
+            // tipo: 'producao' ou 'faturamento'
+            
+            // Verifica se já existe registro para o mês
+            const check = await client.query('SELECT * FROM custos_metas WHERE mes_referencia = $1', [mes_referencia]);
+            
+            if (check.rows.length === 0) {
+                // Insert inicial (se for produção salva prod, fat=0, e vice versa)
+                const prodVal = tipo === 'producao' ? valor : 0;
+                const fatVal = tipo === 'faturamento' ? valor : 0;
+                await client.query(
+                    'INSERT INTO custos_metas (mes_referencia, producao_kg, faturamento_kg) VALUES ($1, $2, $3)',
+                    [mes_referencia, prodVal, fatVal]
+                );
+            } else {
+                // Update
+                if (tipo === 'producao') {
+                    await client.query('UPDATE custos_metas SET producao_kg = $1 WHERE mes_referencia = $2', [valor, mes_referencia]);
+                } else {
+                    await client.query('UPDATE custos_metas SET faturamento_kg = $1 WHERE mes_referencia = $2', [valor, mes_referencia]);
+                }
+            }
             return res.json({ success: true });
         }
 
         return res.status(400).json({ error: 'Ação inválida' });
 
     } catch (e) {
-        await client.query('ROLLBACK');
         console.error('Erro na rota POST /custos:', e);
         res.status(500).json({ error: e.message });
     } finally {
