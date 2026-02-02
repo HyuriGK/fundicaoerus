@@ -1505,10 +1505,25 @@ Fundição Erus`;
             const itemsByClient = {};
 
             newItems.forEach(item => {
-                const totalItem = parseFloat(String(item.total).replace(/\./g, '').replace(',', '.'));
-                const qtyItem = parseFloat(String(item.saldo).replace(/\./g, '').replace(',', '.'));
-                totalNewWeight += isNaN(totalItem) ? 0 : totalItem;
-                totalNewQty += isNaN(qtyItem) ? 0 : qtyItem;
+                // CALCULATION LOGIC (Same as renderTable / importExcel)
+                const saldo = item.saldoOriginal || 0;
+                const qtdPed = item.qtdOriginal || 0;
+                // Rule: If saldo is 0 but qtdPed > 0, use qtdPed. Otherwise use saldo.
+                const effectiveQty = (saldo === 0 && qtdPed > 0) ? qtdPed : saldo;
+
+                // Rule: Use server cached weight if available, otherwise excel weight
+                const rawWeight = item.pesoUn || 0;
+                const effectiveWeight = serverWeightsCache[item.codigo] !== undefined ? serverWeightsCache[item.codigo] : rawWeight;
+
+                const totalWeight = effectiveQty * effectiveWeight;
+
+                // Store calculated values on item for easier access in loop below (temporary)
+                item._calcQty = effectiveQty;
+                item._calcWeight = effectiveWeight;
+                item._calcTotal = totalWeight;
+
+                totalNewWeight += totalWeight;
+                totalNewQty += effectiveQty;
 
                 if (!itemsByClient[item.cliente]) {
                     itemsByClient[item.cliente] = [];
@@ -1543,14 +1558,19 @@ Fundição Erus`;
 
                 itemsFiltered.forEach(item => {
                     const truncatedProduct = truncateText(item.produto, 40); // Limite de 25
-                    const material = item.material || 'N/A'; // Se vier vazio, colocagit add N/A
-                    const codigo = item.codigo || 'N/A'; // Se vier vazio, coloca N/A
-                    const entrega = item.entrega || 'N/A'; // Data de entrega (nova adição)
+                    const material = item.material || 'N/A';
+                    const codigo = item.codigo || 'N/A';
+                    const entrega = item.entrega || 'N/A';
 
-                    listString += `• Ped: ${item.pedido} | Cód: ${codigo} | Entrega: ${entrega}\n`; // Adicionado Entrega
+                    // Use calculated values
+                    const qtyDisp = item._calcQty;
+                    const weightDisp = formatNumber(item._calcWeight);
+                    const totalDisp = item._calcTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+                    listString += `• Ped: ${item.pedido} | Cód: ${codigo} | Entrega: ${entrega}\n`;
                     listString += `  Desc: ${truncatedProduct}\n`;
-                    // Incluído Peso Unitário na exibição do email
-                    listString += `  Mat: ${material} | Qtd: ${item.saldo} | Peso Un: ${formatNumber(item.peso_un)} | Total: ${item.total} kg\n\n`;
+                    // Updated display string
+                    listString += `  Mat: ${material} | Qtd: ${qtyDisp} | Peso Un: ${weightDisp} | Total: ${totalDisp} kg\n\n`;
                 });
             }
 
