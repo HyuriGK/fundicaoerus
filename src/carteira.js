@@ -7,7 +7,7 @@ const pool = require('../lib/db');
 const nodemailer = require('nodemailer');
 const xlsx = require('xlsx');
 
-// --- DEBUG ENVIRONMENT VARIABLES ---
+// --- DEBUG ENVIRONMENT VARIABLE ---
 console.log('=== DEBUG EMAIL CONFIG ===');
 console.log('EMAIL_USER:', process.env.EMAIL_USER ? 'Definido' : 'Ausente');
 console.log('EMAIL_PASS:', process.env.EMAIL_PASS ? 'Definido' : 'Ausente');
