@@ -1356,7 +1356,7 @@
         // ENDPOINTS API
         const API_URL_FATURAMENTO = '/api/faturamento-clientes-detalhado';
         const API_URL_METAS = '/api/metas';
-        const API_URL_TOGGLE_EXCLUSION = '/api/faturamento/toggle-exclusion';
+        const API_URL_TOGGLE_EXCLUSION = '/api/faturamento-clientes-detalhado/toggle-preference';
 
         // =========================================================
         // INICIALIZAÇÃO
@@ -1599,86 +1599,20 @@
             return `${dataVal}_${pedido}_${codigo}_${quant}`;
         }
 
-        // Salva as preferências de exclusão no LocalStorage antes de limpar
-        function saveExclusionPreferences() {
-            const exclusionMap = {};
-
-            // Carrega mapa existente para não perder exclusões de arquivos anteriores que não estão na tela agora
-            const existingSaved = localStorage.getItem('erus_excluded_items');
-            if (existingSaved) {
-                try {
-                    Object.assign(exclusionMap, JSON.parse(existingSaved));
-                } catch (e) { console.error('Erro ao ler cache antigo', e); }
-            }
-
-            // Atualiza com o estado atual da tela
-            globalDataArray.forEach((row, index) => {
-                if (index === 0) return; // Pula cabeçalho
-
-                const key = getRowKey(row);
-                if (!key) return;
-
-                // Lógica de exclusão: Coluna 14 (EXCLUIDO_MANUALMENTE)
-                // Se for 1, está EXCLUÍDO (Checkbox desmarcado)
-                const excludedValue = row[COL_INDEX.EXCLUIDO_MANUALMENTE];
-                const isExcluded = (excludedValue === 1 || excludedValue === true || excludedValue === '1');
-
-                if (isExcluded) {
-                    exclusionMap[key] = true;
-                } else {
-                    // Se o usuário incluiu novamente, removemos da lista negra
-                    delete exclusionMap[key];
-                }
-            });
-
-            localStorage.setItem('erus_excluded_items', JSON.stringify(exclusionMap));
-        }
-
-        // Aplica as preferências de exclusão aos novos dados importados
-        function applyExclusionPreferences(newDataArray) {
-            const saved = localStorage.getItem('erus_excluded_items');
-            if (!saved) return newDataArray;
-
-            let exclusionMap = {};
-            try {
-                exclusionMap = JSON.parse(saved);
-            } catch (e) { return newDataArray; }
-
-            // Percorre os novos dados (exceto header)
-            for (let i = 1; i < newDataArray.length; i++) {
-                const row = newDataArray[i];
-                const key = getRowKey(row);
-
-                if (key && exclusionMap[key]) {
-                    // Se estiver na lista negra, marca como excluído (Valor 1)
-                    // Garante que o array tenha a coluna de exclusão
-                    while (row.length <= COL_INDEX.EXCLUIDO_MANUALMENTE) {
-                        row.push(null);
-                    }
-                    row[COL_INDEX.EXCLUIDO_MANUALMENTE] = 1;
-                }
-            }
-
-            return newDataArray;
-        }
-
         async function clearDataFromDatabase() {
-            if (window.confirm('Deseja limpar todos os registros do banco de dados? (Suas preferências de INCL. serão salvas localmente para futuras importações)')) {
+            if (window.confirm('Deseja limpar todos os registros do banco de dados? (Suas preferências de INCL. serão lembradas automaticamente)')) {
                 showSpinner();
                 try {
-                    // 1. Salva o estado atual de exclusão no LocalStorage
-                    saveExclusionPreferences();
-
-                    // 2. Obtém os dados atuais para pegar o cabeçalho
+                    // 1. Obtém os dados atuais para pegar o cabeçalho
                     const response = await fetch(API_URL_FATURAMENTO);
                     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
                     const currentData = await response.json();
 
-                    // 3. Prepara apenas o cabeçalho para salvar (Deletando efetivamente os dados)
+                    // 2. Prepara apenas o cabeçalho para salvar (Deletando efetivamente os dados)
                     // Mantemos apenas a linha 0 (cabeçalho)
                     const newData = [currentData[0]];
 
-                    // 4. Envia para o servidor
+                    // 3. Envia para o servidor
                     const saveResponse = await fetch(API_URL_FATURAMENTO, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -1808,44 +1742,40 @@
             const isChecked = checkboxElement.checked;
             const row = checkboxElement.closest('tr');
 
-            // MODIFICAÇÃO: Agora a lógica está invertida - marcar IGN significa INCLUIR
+            // Atualiza Visualmente
             if (isChecked) {
                 row.classList.remove('row-ignored');
-                row.setAttribute('data-manual-include', 'true'); // MODIFICAÇÃO: Mudado para data-manual-include
+                row.setAttribute('data-manual-include', 'true');
             } else {
                 row.classList.add('row-ignored');
-                row.setAttribute('data-manual-include', 'false'); // MODIFICAÇÃO: Mudado para data-manual-include
+                row.setAttribute('data-manual-include', 'false');
             }
 
             filterTable();
 
-            // MODIFICAÇÃO: Invertido o valor enviado para a API
-            const rowData = {
-                id: dbId,
-                excluded: !isChecked, // Se está marcado (INCLUIR), então excluded é false
-                data: row.getAttribute('data-raw-date'),
-                cod_cliente: row.cells[4].textContent.trim(),
-                codigo: row.cells[6].textContent.trim(),
-                quant: row.getAttribute('data-raw-quant')
-            };
-
             try {
-                await fetch(API_URL_TOGGLE_EXCLUSION, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(rowData)
-                });
+                // Recupera a linha global para gerar a chave correta
                 const globalRow = globalDataArray.find(r => r[COL_INDEX.ID] == dbId);
                 if (globalRow) {
-                    // MODIFICAÇÃO: Invertida a lógica de armazenamento
-                    // Se está marcado (INCLUIR), então EXCLUIDO_MANUALMENTE = 0
-                    // Se não está marcado (NÃO INCLUIR), então EXCLUIDO_MANUALMENTE = 1
-                    globalRow[COL_INDEX.EXCLUIDO_MANUALMENTE] = isChecked ? 0 : 1;
+                    // Lógica Invertida: Se Checked -> Incluido -> Excluded=False
+                    const isExcluded = !isChecked;
 
-                    // ATUALIZAÇÃO: Também salva no LocalStorage imediatamente para garantir sincronia
-                    saveExclusionPreferences();
+                    // 1. Atualiza visualmente o array global
+                    globalRow[COL_INDEX.EXCLUIDO_MANUALMENTE] = isExcluded ? 1 : 0;
+
+                    // 2. Gera chave
+                    const key = getRowKey(globalRow);
+
+                    if (key) {
+                        // 3. Envia para o Backend salva na tabela de preferências
+                        await fetch(API_URL_TOGGLE_EXCLUSION, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ key: key, excluded: isExcluded })
+                        });
+                    }
                 }
-            } catch (e) { console.log('Erro ao salvar inclusão/exclusão.'); }
+            } catch (e) { console.log('Erro ao salvar inclusão/exclusão (API).', e); }
         }
 
         // NOVA FUNÇÃO: Marcar/Desmarcar todos os registros visíveis
@@ -2573,9 +2503,8 @@
                     const json = XLSX.utils.sheet_to_json(ws, { header: 1 });
 
                     // APLICA AS PREFERÊNCIAS SALVAS ANTES DE ENVIAR AO SERVIDOR
-                    const processedData = applyExclusionPreferences(json);
-
-                    saveDataToDatabase(processedData);
+                    // ATUALIZAÇÃO: Removido applyExclusionPreferences local. O Backend faz isso agora.
+                    saveDataToDatabase(json);
                 } catch (error) {
                     alert("Erro ao processar arquivo.");
                     hideSpinner();

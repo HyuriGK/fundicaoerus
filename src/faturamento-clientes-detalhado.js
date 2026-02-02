@@ -64,6 +64,69 @@ router.get('/', async (req, res) => {
     }
 });
 
+
+// --- INICIALIZAÇÃO DA TABELA DE PREFERÊNCIAS ---
+(async () => {
+    const client = await pool.connect();
+    try {
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS faturamento_preferencias (
+                chave_unica TEXT PRIMARY KEY, 
+                excluido BOOLEAN DEFAULT FALSE,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+        console.log("✅ Tabela 'faturamento_preferencias' verificada.");
+    } catch (e) {
+        console.error("❌ Erro ao criar tabela faturamento_preferencias:", e);
+    } finally {
+        client.release();
+    }
+})();
+
+// Helper para gerar chave única consistente
+function generateKey(dateStr, pedido, codigo, quant) {
+    if (!pedido && !codigo) return null;
+    
+    // Normaliza Data para YYYY-MM-DD
+    let cleanDate = dateStr;
+    if (dateStr && dateStr.includes('T')) cleanDate = dateStr.split('T')[0];
+    
+    const p = String(pedido || '').trim();
+    const c = String(codigo || '').trim();
+    const q = String(quant || '').trim();
+    
+    return `${cleanDate}_${p}_${c}_${q}`;
+}
+
+// --- ROTA POST: Toggle Preferência (Chamada pelo Frontend ao clicar no checkbox) ---
+router.post('/toggle-preference', async (req, res) => {
+    const { key, excluded } = req.body;
+    
+    if (!key) return res.status(400).json({ error: "Chave inválida" });
+
+    const client = await pool.connect();
+    try {
+        await client.query(`
+            INSERT INTO faturamento_preferencias (chave_unica, excluido)
+            VALUES ($1, $2)
+            ON CONFLICT (chave_unica) 
+            DO UPDATE SET excluido = EXCLUDED.excluido, updated_at = CURRENT_TIMESTAMP
+        `, [key, excluded]);
+        
+        // Opcional: Atualiza também a tabela atual se o registro existir lá (para consistência imediata)
+        // Isso é complexo pois precisaríamos reconstruir a chave no SQL ou fazer match. 
+        // Como o Frontend já atualiza visualmente, focamos na persistência futura.
+        
+        return res.json({ success: true });
+    } catch (error) {
+        console.error("Erro ao salvar preferência:", error);
+        return res.status(500).json({ error: error.message });
+    } finally {
+        client.release();
+    }
+});
+
 // --- ROTA POST: Importar Excel ---
 router.post('/', async (req, res) => {
     const data = req.body; // Dados do Excel (Array de Arrays)
@@ -75,6 +138,11 @@ router.post('/', async (req, res) => {
             await client.query('TRUNCATE TABLE faturamento_detalhado RESTART IDENTITY');
             return res.status(200).json({ success: true, message: 'Tabela limpa' });
         }
+        
+        // 1. Carregar TODAS as preferências salvas
+        const prefsResult = await client.query('SELECT chave_unica, excluido FROM faturamento_preferencias');
+        const prefsMap = new Map();
+        prefsResult.rows.forEach(r => prefsMap.set(r.chave_unica, r.excluido));
 
         await client.query('BEGIN');
         await client.query('TRUNCATE TABLE faturamento_detalhado RESTART IDENTITY');
@@ -102,8 +170,17 @@ router.post('/', async (req, res) => {
                 if (parts.length === 3) dateVal = `${parts[2]}-${parts[1]}-${parts[0]}`;
                 else dateVal = rawDate; // Tenta ISO direto se falhar
             }
+            
+            // 2. Gerar Chave e Verificar Preferência
+            const pedido = row[1];
+            const codigo = row[5];
+            const quant = parseNumeric(row[7]);
+            
+            const key = generateKey(dateVal, pedido, codigo, quant);
+            
+            // Se existir preferência salva, usa ela. Se não, false (INCLUÍDO padrão)
+            const isExcluded = prefsMap.has(key) ? prefsMap.get(key) : false;
 
-            // MODIFICAÇÃO: Ao importar dados, todas as linhas começam como INCLUÍDAS (excluido_manualmente = false)
             await client.query(insertQuery, [
                 dateVal,                // $1  - Data (Excel Col 0)
                 row[1],                 // $2  - Pedido (Excel Col 1)
@@ -112,13 +189,13 @@ router.post('/', async (req, res) => {
                 row[4],                 // $5  - Cliente (Excel Col 4)
                 row[5],                 // $6  - Cod Produto (Excel Col 5)
                 row[6],                 // $7  - Descrição Produto (Excel Col 6)
-                parseNumeric(row[7]),   // $8  - Quantidade (Excel Col 7)
+                quant,                  // $8  - Quantidade (Excel Col 7)
                 parseNumeric(row[8]),   // $9  - Valor Un (Excel Col 8)
                 row[9],                 // $10 - Material (Excel Col 9 - TEXTO)
                 parseNumeric(row[10]),  // $11 - Peso Un (Excel Col 10)
                 parseNumeric(row[11]),  // $12 - Peso Total (Excel Col 11)
                 parseNumeric(row[12]),  // $13 - Valor Total (Excel Col 12)
-                false                   // $14 - Excluido (inicia como false = INCLUÍDO)
+                isExcluded              // $14 - Usa preferência salva!
             ]);
         }
 
