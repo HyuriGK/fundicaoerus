@@ -1331,6 +1331,7 @@
 
         let isModelosHidden = true, monthlyChart = null, paretoChart = null, activeMonthFilter = null, activeClientFilter = null;
         let serverWeightsCache = {}, serverQuantitiesCache = {}, previousCellValue = "";
+        let globalCarteiraData = []; // Store full dataset globally for access by modals
 
         // --- NOVOS ITENS DETECTADOS NA IMPORTAÇÃO ---
         const STORAGE_KEY_NEW_ITEMS = 'erus_new_items_cache';
@@ -1457,9 +1458,9 @@ Fundição Erus`;
 
         // 2. Novo Email (Apenas Novos Pedidos)
         function openNewOrdersEmailModal() {
-            // Recupera os itens novos do cache local
-            const newItemsJson = localStorage.getItem(STORAGE_KEY_NEW_ITEMS);
-            const newItems = newItemsJson ? JSON.parse(newItemsJson) : [];
+            // Retrieve new items from the GLOBAL DATASET, filtering by is_new flag
+            // This is robust against page reloads because globalCarteiraData is populated from DB on load
+            const newItems = globalCarteiraData.filter(i => i.is_new === true);
 
             if (newItems.length === 0) {
                 showToast('Sem novos pedidos', 'Não há registros novos detectados na última importação.', 'info');
@@ -1801,7 +1802,10 @@ Fundição Erus`;
                     pu = Number(r.peso_un); qp = Number(r.qtd_pedido || 0); sal = Number(r.saldo);
                 }
                 const key = generateGroupingKey(p, cod, e, oc);
-                if (!map[key]) map[key] = { uniqueKey: key, pedido: p, oc, entrega: e, cliente: cl, codigo: cod, produto: prod, material: mat, pesoUn: pu, qtdOriginal: 0, saldoOriginal: 0 };
+                // Correctly propagate is_new flag from DB or existing objects
+                const isNewFlag = (isExcel === false) ? (r.is_new === true) : false;
+
+                if (!map[key]) map[key] = { uniqueKey: key, pedido: p, oc, entrega: e, cliente: cl, codigo: cod, produto: prod, material: mat, pesoUn: pu, qtdOriginal: 0, saldoOriginal: 0, is_new: isNewFlag };
                 map[key].qtdOriginal += qp; map[key].saldoOriginal += sal;
             });
             return Object.values(map);
@@ -1917,10 +1921,7 @@ Fundição Erus`;
                 const r = await fetch('/api/carteira');
                 if (r.ok) {
                     const data = normalizeAndGroupData(await r.json(), false);
-
-                    // Verifica se temos itens novos "em cache" da sessão anterior (localstorage) -> REMOVIDO, AGORA USA DB
-                    // const cachedNewItemsJson = localStorage.getItem(STORAGE_KEY_NEW_ITEMS);
-
+                    globalCarteiraData = data; // Update global data
                     renderTable(data, []);
                 }
             } catch (e) { } finally { hideLoadingScreen(); }
@@ -1989,6 +1990,9 @@ Fundição Erus`;
                         // Então, se eu passo `item.is_new = false` aqui, ele vai salvar como false.
                     }
                 });
+
+                // Update global data
+                globalCarteiraData = normalizedData;
 
                 // 4. Salvar lista de novos itens no LocalStorage (Para o modal de email usar)
                 if (newItemsDetected.length > 0) {
