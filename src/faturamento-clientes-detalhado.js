@@ -7,9 +7,9 @@ const pool = require('../lib/db');
 function parseNumeric(value) {
     if (typeof value === 'number') return value;
     if (!value) return 0;
-    
+
     let cleanStr = String(value).trim();
-    
+
     // Se tiver letras (ex: "BS 30" caindo em campo errado), retorna 0 para não travar
     if (/[a-zA-Z]/.test(cleanStr)) return 0;
 
@@ -87,39 +87,49 @@ router.get('/', async (req, res) => {
 // Helper para gerar chave única consistente
 function generateKey(dateStr, pedido, codigo, quant) {
     if (!pedido && !codigo) return null;
-    
+
     // Normaliza Data para YYYY-MM-DD
     let cleanDate = dateStr;
     if (dateStr && dateStr.includes('T')) cleanDate = dateStr.split('T')[0];
-    
+
     const p = String(pedido || '').trim();
     const c = String(codigo || '').trim();
     const q = String(quant || '').trim();
-    
+
     return `${cleanDate}_${p}_${c}_${q}`;
 }
 
 // --- ROTA POST: Toggle Preferência (Chamada pelo Frontend ao clicar no checkbox) ---
 router.post('/toggle-preference', async (req, res) => {
-    const { key, excluded } = req.body;
-    
+    const { key, excluded, id } = req.body;
+
     if (!key) return res.status(400).json({ error: "Chave inválida" });
 
     const client = await pool.connect();
     try {
+        await client.query('BEGIN'); // Transaction for safety
+
+        // 1. Atualiza a tabela de MEMÓRIA (futuras importações)
         await client.query(`
             INSERT INTO faturamento_preferencias (chave_unica, excluido)
             VALUES ($1, $2)
             ON CONFLICT (chave_unica) 
             DO UPDATE SET excluido = EXCLUDED.excluido, updated_at = CURRENT_TIMESTAMP
         `, [key, excluded]);
-        
-        // Opcional: Atualiza também a tabela atual se o registro existir lá (para consistência imediata)
-        // Isso é complexo pois precisaríamos reconstruir a chave no SQL ou fazer match. 
-        // Como o Frontend já atualiza visualmente, focamos na persistência futura.
-        
+
+        // 2. Atualiza a tabela ATUAL (para refletir no F5 imediatamente)
+        if (id) {
+            await client.query(`
+                UPDATE faturamento_detalhado 
+                SET excluido_manualmente = $1 
+                WHERE id = $2
+            `, [excluded, id]);
+        }
+
+        await client.query('COMMIT');
         return res.json({ success: true });
     } catch (error) {
+        await client.query('ROLLBACK');
         console.error("Erro ao salvar preferência:", error);
         return res.status(500).json({ error: error.message });
     } finally {
@@ -138,7 +148,7 @@ router.post('/', async (req, res) => {
             await client.query('TRUNCATE TABLE faturamento_detalhado RESTART IDENTITY');
             return res.status(200).json({ success: true, message: 'Tabela limpa' });
         }
-        
+
         // 1. Carregar TODAS as preferências salvas
         const prefsResult = await client.query('SELECT chave_unica, excluido FROM faturamento_preferencias');
         const prefsMap = new Map();
@@ -156,11 +166,11 @@ router.post('/', async (req, res) => {
         // Começa do 1 para pular o cabeçalho
         for (let i = 1; i < data.length; i++) {
             const row = data[i];
-            
+
             // Tratamento da Data (Coluna 0)
             let dateVal = null;
-            const rawDate = row[0]; 
-            
+            const rawDate = row[0];
+
             if (typeof rawDate === 'number') {
                 // Excel Serial Date
                 dateVal = new Date((rawDate - (25567 + 2)) * 86400 * 1000).toISOString().split('T')[0];
@@ -170,14 +180,14 @@ router.post('/', async (req, res) => {
                 if (parts.length === 3) dateVal = `${parts[2]}-${parts[1]}-${parts[0]}`;
                 else dateVal = rawDate; // Tenta ISO direto se falhar
             }
-            
+
             // 2. Gerar Chave e Verificar Preferência
             const pedido = row[1];
             const codigo = row[5];
             const quant = parseNumeric(row[7]);
-            
+
             const key = generateKey(dateVal, pedido, codigo, quant);
-            
+
             // Se existir preferência salva, usa ela. Se não, false (INCLUÍDO padrão)
             const isExcluded = prefsMap.has(key) ? prefsMap.get(key) : false;
 
