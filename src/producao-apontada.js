@@ -38,7 +38,30 @@ router.get('/', async (req, res) => { // O "async" aqui é obrigatório!
         }
 
         // 3. Ler Produção Apontada (Padrão)
-        const result = await client.query("SELECT to_char(data_producao, 'DD/MM/YYYY') as data, setor, produto, liga, peso_un, quantidade, peso_total FROM producao_apontada ORDER BY data_producao DESC");
+        // Garantir que a tabela de pesos existe para evitar erro no LEFT JOIN
+        await client.query('CREATE TABLE IF NOT EXISTS pesos_produtos (produto TEXT PRIMARY KEY, peso_un NUMERIC(10,3))');
+
+        const query = `
+            SELECT 
+                to_char(pa.data_producao, 'DD/MM/YYYY') as data, 
+                pa.setor, 
+                pa.produto, 
+                pa.liga, 
+                CASE 
+                    WHEN pa.peso_un > 0 THEN pa.peso_un 
+                    ELSE COALESCE(pp.peso_un, 0) 
+                END as peso_un, 
+                pa.quantidade, 
+                CASE 
+                    WHEN pa.peso_un > 0 THEN pa.peso_total 
+                    ELSE (COALESCE(pp.peso_un, 0) * pa.quantidade) 
+                END as peso_total
+            FROM producao_apontada pa
+            LEFT JOIN pesos_produtos pp ON pa.produto = pp.produto
+            ORDER BY pa.data_producao DESC
+        `;
+
+        const result = await client.query(query);
         
         const formattedData = result.rows.map(row => [
             row.data, row.setor, row.produto, row.liga, row.peso_un, row.quantidade, row.peso_total
