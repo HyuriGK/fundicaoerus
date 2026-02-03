@@ -2090,21 +2090,19 @@
 
             if (barChartInstance) barChartInstance.destroy();
 
-            // Preparar labels e das
             let finalLabels = [];
             let fRefugo = [];
-            let fProducao = [];
+            let fProducaoResto = []; // Fundido - Refugo
+            let fProducaoTotal = []; // Para cálculo de %
 
             if (selectedMonthIndex === -1 || selectedYear === 0) {
                 if (selectedYear === 0) {
-                    // MODO: TODOS OS ANOS (Agrupado por Mês/Ano)
-                    // Usar as chaves do dataObj que já devem vir numa ordem razoável
+                    // Modo Todas Data (Agrupado por Mes)
                     finalLabels = Object.keys(dataObj);
-                    fRefugo = Object.values(dataObj);
+                    const valuesRefugo = Object.values(dataObj);
 
-                    // Tentar preencher produção
-                    finalLabels.forEach(lbl => {
-                        // lbl ex: "JAN/2023" ou "JAN" dependendo do processData
+                    finalLabels.forEach((lbl, idx) => {
+                        let totalProd = 0;
                         try {
                             const parts = lbl.split('/');
                             if (parts.length === 2) {
@@ -2113,37 +2111,48 @@
                                 const mIdx = MONTHS_SHORT.indexOf(mName);
                                 if (mIdx >= 0) {
                                     const key = `${yStr}-${String(mIdx + 1).padStart(2, '0')}`;
-                                    fProducao.push(monthlyProduction[key] || 0);
-                                    return;
+                                    totalProd = monthlyProduction[key] || 0;
                                 }
                             }
-                            fProducao.push(0);
-                        } catch (e) { fProducao.push(0); }
+                        } catch (e) { }
+
+                        const ref = valuesRefugo[idx] || 0;
+                        fRefugo.push(ref);
+                        fProducaoTotal.push(totalProd);
+                        // Se Produção < Refugo (erro de dados), assumimos resto 0
+                        fProducaoResto.push(Math.max(0, totalProd - ref));
                     });
 
                 } else {
-                    // MODO: UM ANO ESPECÍFICO (Todos os meses: JAN, FEV...)
+                    // Modo Ano Específico
                     finalLabels = MONTHS_SHORT;
-
                     finalLabels.forEach((mName, idx) => {
-                        fRefugo.push(dataObj[mName] || 0);
+                        const ref = dataObj[mName] || 0;
                         const key = `${selectedYear}-${String(idx + 1).padStart(2, '0')}`;
-                        fProducao.push(monthlyProduction[key] || 0);
+                        const totalProd = monthlyProduction[key] || 0;
+
+                        fRefugo.push(ref);
+                        fProducaoTotal.push(totalProd);
+                        fProducaoResto.push(Math.max(0, totalProd - ref));
                     });
                 }
             } else {
-                // MODO: MÊS ESPECÍFICO (Dias: 1..31)
+                // Modo Mês Específico (Dias)
                 const daysInMonth = new Date(selectedYear, selectedMonthIndex + 1, 0).getDate();
                 for (let d = 1; d <= daysInMonth; d++) {
                     finalLabels.push(d.toString());
-                    fRefugo.push(dataObj[d.toString()] || 0);
+                    const ref = dataObj[d.toString()] || 0;
 
                     const dd = String(d).padStart(2, '0');
                     const mm = String(selectedMonthIndex + 1).padStart(2, '0');
                     const yyyy = selectedYear;
                     const dateKey = `${dd}/${mm}/${yyyy}`;
 
-                    fProducao.push(dailyProductionMap[dateKey] || 0);
+                    const totalProd = dailyProductionMap[dateKey] || 0;
+
+                    fRefugo.push(ref);
+                    fProducaoTotal.push(totalProd);
+                    fProducaoResto.push(Math.max(0, totalProd - ref));
                 }
             }
 
@@ -2153,36 +2162,34 @@
                     labels: finalLabels,
                     datasets: [
                         {
-                            label: 'Refugo (kg)',
+                            label: 'Refugo',
                             data: fRefugo,
                             backgroundColor: '#ef4444',
                             borderRadius: 4,
-                            order: 2,
-                            yAxisID: 'y'
+                            order: 1, // Refugo embaixo ou em cima? Usually bad on top is clearer, or bad on bottom foundation? 
+                            // User said: "occupy same bar". 
+                            // Let's put Refugo on Bottom (Red base) or Top? 
+                            // Standard: Good Base, Bad Top.
+                            // Chart.js stacks by order.
                         },
                         {
-                            label: 'Fundido (kg)',
-                            data: fProducao,
-                            type: 'line',
-                            borderColor: '#fbbf24',
-                            backgroundColor: 'rgba(251, 191, 36, 0.1)',
-                            borderWidth: 2,
-                            pointRadius: 2,
-                            tension: 0.3,
-                            yAxisID: 'y1',
-                            order: 1
+                            label: 'Produção OK (Est.)',
+                            data: fProducaoResto,
+                            backgroundColor: '#fbbf24',
+                            borderRadius: 4,
+                            order: 2
                         }
                     ]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    interaction: {
-                        mode: 'index',
-                        intersect: false,
-                    },
+                    interaction: { mode: 'index', intersect: false },
                     plugins: {
-                        legend: { display: true, labels: { color: '#a1a1aa' } },
+                        legend: {
+                            display: true,
+                            labels: { color: '#ffffff' } // Contraste branco
+                        },
                         tooltip: {
                             callbacks: {
                                 label: function (context) {
@@ -2191,35 +2198,39 @@
                                     if (context.parsed.y !== null) {
                                         label += context.parsed.y.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) + ' kg';
                                     }
-                                    if (context.dataset.yAxisID === 'y' && fProducao[context.dataIndex] > 0) {
-                                        const pct = (context.parsed.y / fProducao[context.dataIndex]) * 100;
-                                        label += ` (${pct.toFixed(2)}%)`;
-                                    }
                                     return label;
+                                },
+                                afterBody: function (context) {
+                                    // Adicionar % de refugo no final do tooltip
+                                    // O tooltip recebe array de items (Refugo e Prod)
+                                    // Vamos pegar o index do dado e calcular
+                                    const dataIndex = context[0].dataIndex;
+                                    const ref = fRefugo[dataIndex];
+                                    const total = fProducaoTotal[dataIndex]; // Total Real (Fundido)
+
+                                    if (total > 0) {
+                                        const pct = (ref / total) * 100;
+                                        return `\n% Refugo: ${pct.toFixed(2)}%`; // Quebra de linha
+                                    }
+                                    return '';
                                 }
                             }
                         },
                         datalabels: { display: false }
                     },
                     scales: {
-                        y: {
-                            type: 'linear',
-                            display: true,
-                            position: 'left',
-                            title: { display: true, text: 'Refugo (kg)', color: '#ef4444' },
-                            grid: { color: 'rgba(255,255,255,0.05)' }
-                        },
-                        y1: {
-                            type: 'linear',
-                            display: true,
-                            position: 'right',
-                            title: { display: true, text: 'Fundido (kg)', color: '#fbbf24' },
-                            grid: { drawOnChartArea: false }
-                        },
                         x: {
+                            stacked: true, // Empilhar
                             grid: { display: false },
                             ticks: { color: '#a1a1aa' }
-                        }
+                        },
+                        y: {
+                            stacked: true, // Empilhar
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            title: { display: true, text: 'Fundido Total (kg)', color: '#fbbf24' },
+                            ticks: { color: '#a1a1aa' }
+                        },
+                        // Remover eixo y1 pois agora é tudo no y
                     }
                 }
             });
@@ -2251,7 +2262,8 @@
                                 display: true,
                                 text: 'Peso (kg)',
                                 color: '#a1a1aa'
-                            }
+                            },
+                            ticks: { color: '#a1a1aa' }
                         },
                         y: {
                             grid: { display: false },
@@ -2259,7 +2271,8 @@
                                 display: true,
                                 text: 'Setor',
                                 color: '#a1a1aa'
-                            }
+                            },
+                            ticks: { color: '#a1a1aa' }
                         }
                     }
                 }
