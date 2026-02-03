@@ -5,8 +5,8 @@ const cors = require('cors'); // Adicionar CORS para requisições do frontend
 
 // Configuração do CORS (importante para requisições do frontend)
 app.use(cors({
-    origin: process.env.NODE_ENV === 'production' 
-        ? ['https://fundicaoerus.vercel.app', 'https://seusite.com.br'] 
+    origin: process.env.NODE_ENV === 'production'
+        ? ['https://fundicaoerus.vercel.app', 'https://seusite.com.br']
         : ['http://localhost:3000', 'http://localhost:5500', 'http://127.0.0.1:5500'],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -58,13 +58,13 @@ app.use('/api/faturamento-clientes-detalhado', fatDetalhado);
 app.use('/api/metas', metas);
 app.use('/api/producao-apontada', producaoApontada);
 app.use('/api/refugo', refugo);
-app.use('/api/register', register); 
+app.use('/api/register', register);
 app.use('/api/custos', custosRoutes);
 
 // Rota de teste para ver se a API está de pé
 app.get('/api', (req, res) => {
-    res.json({ 
-        status: 'API Online', 
+    res.json({
+        status: 'API Online',
         version: '1.0.0',
         timestamp: new Date().toISOString(),
         environment: process.env.NODE_ENV || 'development',
@@ -117,7 +117,7 @@ app.get('/api/health', async (req, res) => {
 if (process.env.NODE_ENV !== 'production') {
     app.get('/api/debug/env', (req, res) => {
         const safeEnv = { ...process.env };
-        
+
         // Ocultar informações sensíveis
         if (safeEnv.SMTP_PASS) safeEnv.SMTP_PASS = '***hidden***';
         if (safeEnv.DATABASE_URL) {
@@ -125,7 +125,7 @@ if (process.env.NODE_ENV !== 'production') {
             const dbUrl = safeEnv.DATABASE_URL;
             safeEnv.DATABASE_URL = dbUrl.substring(0, 30) + '...';
         }
-        
+
         res.json({
             node_env: process.env.NODE_ENV,
             env_vars: Object.keys(safeEnv),
@@ -164,7 +164,7 @@ app.use('/api/*', (req, res) => {
 // Middleware de Tratamento de Erros Global
 app.use((err, req, res, next) => {
     console.error("ERRO NO SERVIDOR:", err); // Mostra no terminal/logs da Vercel
-    
+
     // Log detalhado do erro
     console.error('Error details:', {
         message: err.message,
@@ -173,14 +173,14 @@ app.use((err, req, res, next) => {
         method: req.method,
         body: req.body
     });
-    
+
     // Determinar o status code apropriado
     const statusCode = err.statusCode || err.status || 500;
-    
-    res.status(statusCode).json({ 
-        success: false, 
-        message: process.env.NODE_ENV === 'production' 
-            ? "Erro interno no servidor" 
+
+    res.status(statusCode).json({
+        success: false,
+        message: process.env.NODE_ENV === 'production'
+            ? "Erro interno no servidor"
             : err.message,
         error: process.env.NODE_ENV === 'production' ? undefined : err.stack,
         timestamp: new Date().toISOString()
@@ -198,3 +198,14 @@ process.on('uncaughtException', (error) => {
 
 // Exporta o app para a Vercel rodar
 module.exports = app;
+
+// --- INICIALIZAÇÃO LOCAL ---
+// Se este arquivo for executado diretamente (node api/index.js), iniciamos o servidor
+if (require.main === module) {
+    const PORT = process.env.PORT || 3000;
+    app.listen(PORT, () => {
+        console.log(`\n🚀 Servidor rodando localmente!`);
+        console.log(`📡 URL: http://localhost:${PORT}`);
+        console.log(`📝 Ambiente: ${process.env.NODE_ENV || 'development'}\n`);
+    });
+}
