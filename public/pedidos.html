@@ -289,13 +289,27 @@
             border-color: var(--color-primary);
         }
 
-        .tag-year {
-            background: rgba(14, 165, 233, 0.15);
+        .filter-row th {
+            padding: 5px 16px 10px 16px;
+            background: #18181b;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .filter-input {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-subtle);
             color: var(--color-primary);
-            padding: 2px 8px;
-            border-radius: 99px;
-            font-size: 0.7rem;
-            font-weight: 700;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+        }
+
+        .filter-input:focus {
+            outline: none;
+            border-color: var(--color-primary);
+            background: rgba(14, 165, 233, 0.1);
         }
     </style>
 </head>
@@ -338,18 +352,30 @@
                     <thead>
                         <tr>
                             <th class="text-center">Pedido</th>
-                            <th class="text-center">Empresa</th>
                             <th class="text-center">Cód. Prod</th>
                             <th>Produto</th>
-                            <th class="text-center">Ano</th>
                             <th class="text-right">Qtd</th>
                             <th class="text-right">Peso (Kg)</th>
                             <th>Entrega</th>
                         </tr>
+                        <tr class="filter-row">
+                            <th><input type="text" class="filter-input" data-col="CODIGO_PPR" placeholder="Filtro...">
+                            </th>
+                            <th><input type="text" class="filter-input" data-col="PRODUTO_PPR" placeholder="Filtro...">
+                            </th>
+                            <th><input type="text" class="filter-input" data-col="NOME_PRODUTO_PPR"
+                                    placeholder="Filtro..."></th>
+                            <th><input type="text" class="filter-input" data-col="QUANTIDADE_PPR"
+                                    placeholder="Filtro..."></th>
+                            <th><input type="text" class="filter-input" data-col="PESO_LIQUIDO_NPR"
+                                    placeholder="Filtro..."></th>
+                            <th><input type="text" class="filter-input" data-col="ENTREGA_PETR" placeholder="Filtro...">
+                            </th>
+                        </tr>
                     </thead>
                     <tbody id="table-body">
                         <tr>
-                            <td colspan="8" style="text-align: center; padding: 40px; color: var(--text-muted);">
+                            <td colspan="6" style="text-align: center; padding: 40px; color: var(--text-muted);">
                                 <i class="fa-solid fa-circle-notch fa-spin"></i> Carregando dados...
                             </td>
                         </tr>
@@ -363,6 +389,7 @@
         const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
         const number = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2 });
         let allData = [];
+        let filters = {};
 
         async function init() {
             try {
@@ -371,10 +398,11 @@
                 allData = await res.json();
                 render(allData);
                 updateKPIs(allData);
+                setupFilters();
             } catch (err) {
                 console.error(err);
                 document.getElementById('table-body').innerHTML = `
-                    <tr><td colspan="8" style="text-align:center; color:#ef4444; padding:20px;">
+                    <tr><td colspan="6" style="text-align:center; color:#ef4444; padding:20px;">
                         Erro ao carregar dados. Verifique a conexão.
                     </td></tr>
                 `;
@@ -384,17 +412,15 @@
         function render(list) {
             const tbody = document.getElementById('table-body');
             if (list.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:20px;">Nenhum registro.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px;">Nenhum registro.</td></tr>';
                 return;
             }
 
             tbody.innerHTML = list.map(item => `
                 <tr>
                     <td class="text-center" style="font-weight:700; color:var(--color-primary);">#${item.CODIGO_PPR}</td>
-                    <td class="text-center">${item.EMPRESA_PPR}</td>
                     <td class="text-center" style="font-family:var(--font-mono); color:var(--text-muted);">${item.PRODUTO_PPR}</td>
                     <td>${item.NOME_PRODUTO_PPR || item.PRODUTO_PPR}</td>
-                    <td class="text-center"><span class="tag-year">${item.ANO_PPR}</span></td>
                     <td class="text-right">${item.QUANTIDADE_PPR}</td>
                     <td class="text-right">${number.format(item.PESO_LIQUIDO_NPR || 0)}</td>
                     <td>
@@ -412,16 +438,35 @@
             document.getElementById('kpi-weight').innerText = number.format(totalWeight) + ' kg';
         }
 
-        document.getElementById('searchInput').addEventListener('input', (e) => {
-            const term = e.target.value.toLowerCase();
-            const filtered = allData.filter(i =>
-                String(i.CODIGO_PPR).includes(term) ||
-                String(i.NOME_PRODUTO_PPR || '').toLowerCase().includes(term) ||
-                String(i.PRODUTO_PPR || '').toLowerCase().includes(term)
-            );
+        function setupFilters() {
+            document.querySelectorAll('.filter-input').forEach(input => {
+                input.addEventListener('input', (e) => {
+                    const field = e.target.dataset.col;
+                    const value = e.target.value.toLowerCase();
+                    filters[field] = value;
+                    applyFilters();
+                });
+            });
+        }
+
+        function applyFilters() {
+            const filtered = allData.filter(item => {
+                return Object.entries(filters).every(([key, value]) => {
+                    if (!value) return true;
+                    // Handle special logic if needed, simplify mainly string matching
+                    let itemVal = String(item[key] || '');
+
+                    // Special case for formatted dates if needed, but keeping raw match simple
+                    if (key === 'ENTREGA_PETR' && item.ENTREGA_PETR) {
+                        itemVal += ' ' + new Date(item.ENTREGA_PETR).toLocaleDateString();
+                    }
+
+                    return itemVal.toLowerCase().includes(value);
+                });
+            });
             render(filtered);
             updateKPIs(filtered);
-        });
+        }
 
         init();
     </script>
