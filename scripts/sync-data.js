@@ -56,10 +56,29 @@ async function syncData() {
         }
         console.log('✅ Conectado ao Firebird');
 
-        // 3. Ler dados (Apenas ANO_PPR = 2026)
-        console.log('📥 Lendo PEDIDO_PRODUTO (ANO_PPR = 2026)...');
+        // 3. Ler dados (JOIN entre PEDIDO_PRODUTO e PEDIDO_PRODUTO_ENTREGA)
+        console.log('📥 Lendo dados com JOIN (ANO 2026)...');
 
-        db.query('SELECT * FROM PEDIDO_PRODUTO WHERE ANO_PPR = 2026', async function (err, results) {
+        const query = `
+            SELECT 
+                P.CODIGO_PPR,
+                P.PRODUTO_PPR,
+                P.NOME_PRODUTO_PPR,
+                P.QUANTIDADE_PPR,
+                P.PESO_LIQUIDO_NPR,
+                P.EMPRESA_PPR,
+                P.ANO_PPR,
+                P.ITEM_PPR,
+                E.ENTREGA_PETR
+            FROM PEDIDO_PRODUTO P
+            INNER JOIN PEDIDO_PRODUTO_ENTREGA E 
+                ON P.CODIGO_PPR = E.PPR_CODIGO_PETR 
+                AND P.ANO_PPR = E.PPR_ANO_PETR
+                AND P.ITEM_PPR = E.PPR_ITEM_PETR
+            WHERE P.ANO_PPR = 2026
+        `;
+
+        db.query(query, async function (err, results) {
             if (err) {
                 console.error('Erro na query Firebird:', err);
                 db.detach();
