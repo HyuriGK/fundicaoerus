@@ -60,6 +60,7 @@ app.use('/api/producao-apontada', producaoApontada);
 app.use('/api/refugo', refugo);
 app.use('/api/register', register);
 app.use('/api/custos', custosRoutes);
+app.use('/api/pedidos-sync', require('../src/pedidos-sync'));
 
 // Rota de teste para ver se a API está de pé
 app.get('/api', (req, res) => {
