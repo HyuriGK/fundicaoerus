@@ -76,6 +76,7 @@ async function syncData() {
                 AND P.ANO_PPR = E.PPR_ANO_PETR
                 AND P.ITEM_PPR = E.PPR_ITEM_PETR
             WHERE P.ANO_PPR IN (2025, 2026)
+            AND (P.FATURADO_PPR <> 'T' OR P.FATURADO_PPR IS NULL)
         `;
 
         db.query(query, async function (err, results) {
