@@ -1024,13 +1024,14 @@
                 </div>
             </div>
 
+            <!-- Toolbar: Filtros e Switcher -->
             <div class="toolbar-row">
                 <div class="month-selector-container">
                     <div style="color: var(--text-muted); font-size:0.9rem; margin-right: 5px;">
                         <i class="fa-solid fa-calendar"></i> Período:
                     </div>
 
-                    <!-- Filtro de Ano com opção "Todos" -->
+                    <!-- Filtro de Ano -->
                     <select id="yearSelector" class="year-select" onchange="onYearChange()">
                         <option value="0">Todos</option>
                         <option value="2023">2023</option>
@@ -1042,40 +1043,20 @@
                     <div class="months-group" id="monthButtons"></div>
                 </div>
 
-                <!-- Botão de alternar gráficos movido para toolbar -->
-                <button class="toggle-charts-btn-toolbar" id="toggleChartsBtnToolbar" onclick="toggleCharts()">
-                    <i class="fa-solid fa-chart-pie" id="toggleChartsIcon"></i>
-                    <span id="toggleChartsTextToolbar">Detalhados</span>
-                </button>
+                <!-- Switcher de Visualização -->
+                <div class="months-group">
+                    <button class="month-btn active" id="btnViewClient" onclick="switchView('client')">Cliente</button>
+                    <button class="month-btn" id="btnViewDay" onclick="switchView('day')">Dia</button>
+                    <button class="month-btn" id="btnViewSector" onclick="switchView('sector')">Setor</button>
+                    <button class="month-btn" id="btnViewReason" onclick="switchView('reason')">Motivo</button>
+                </div>
             </div>
 
-            <!-- CONTAINER DOS GRÁFICOS -->
+            <!-- CONTAINER DOS GRÁFICOS (4 Telas Independentes) -->
             <div class="charts-container">
 
-                <!-- CONJUNTO 1: TRÊS GRÁFICOS PEQUENOS (inicialmente oculto) -->
-                <div class="charts-row" id="chartsRow" style="display: none;">
-                    <div class="chart-panel">
-                        <div class="chart-title" id="barChartTitle">Refugo por Dia (kg)</div>
-                        <div class="chart-container-inner">
-                            <canvas id="barChart"></canvas>
-                        </div>
-                    </div>
-                    <div class="chart-panel">
-                        <div class="chart-title">Refugo por Setor (kg)</div>
-                        <div class="chart-container-inner">
-                            <canvas id="sectorChart"></canvas>
-                        </div>
-                    </div>
-                    <div class="chart-panel">
-                        <div class="chart-title">Top 5 Motivos (Peso)</div>
-                        <div class="chart-container-inner">
-                            <canvas id="pieChart"></canvas>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- CONJUNTO 2: GRÁFICO PARETO CLIENTE (inicialmente visível) -->
-                <div class="pareto-client-full" id="paretoClientFull">
+                <!-- 1. PARETO CLIENTE -->
+                <div class="pareto-client-full" id="viewClient">
                     <div class="pareto-header">
                         <div class="pareto-title">
                             <i class="fa-solid fa-chart-bar" style="color: var(--status-info);"></i>
@@ -1095,6 +1076,46 @@
                     </div>
                     <div class="pareto-chart-container">
                         <canvas id="paretoClientChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- 2. REFUGO POR DIA -->
+                <div class="pareto-client-full" id="viewDay" style="display: none;">
+                    <div class="pareto-header">
+                        <div class="pareto-title">
+                            <i class="fa-regular fa-calendar-days" style="color: var(--status-danger);"></i>
+                            <span id="barChartTitle">Refugo por Dia (kg)</span>
+                        </div>
+                    </div>
+                    <div class="pareto-chart-container">
+                        <canvas id="barChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- 3. REFUGO POR SETOR -->
+                <div class="pareto-client-full" id="viewSector" style="display: none;">
+                    <div class="pareto-header">
+                        <div class="pareto-title">
+                            <i class="fa-solid fa-industry" style="color: var(--status-purple);"></i>
+                            <span>Refugo por Setor (kg)</span>
+                        </div>
+                    </div>
+                    <div class="pareto-chart-container">
+                        <canvas id="sectorChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- 4. REFUGO POR MOTIVO -->
+                <div class="pareto-client-full" id="viewReason" style="display: none;">
+                    <div class="pareto-header">
+                        <div class="pareto-title">
+                            <i class="fa-solid fa-chart-pie" style="color: var(--status-warning);"></i>
+                            <span>Top 5 Motivos (Peso)</span>
+                        </div>
+                    </div>
+                    <div class="pareto-chart-container" style="padding: 0 100px;">
+                        <!-- Padding extra para pie chart não ficar gigante -->
+                        <canvas id="pieChart"></canvas>
                     </div>
                 </div>
 
@@ -1211,42 +1232,7 @@
 
         // Função para alternar entre os conjuntos de gráficos
         function toggleCharts() {
-            const chartsRow = document.getElementById('chartsRow');
-            const paretoClientFull = document.getElementById('paretoClientFull');
-            const toggleBtn = document.getElementById('toggleChartsBtnToolbar');
-            const toggleText = document.getElementById('toggleChartsTextToolbar');
-            const toggleIcon = document.getElementById('toggleChartsIcon');
-
-            showingPareto = !showingPareto;
-
-            if (showingPareto) {
-                chartsRow.style.display = 'none';
-                paretoClientFull.style.display = 'flex';
-                toggleText.textContent = 'Detalhados';
-                toggleIcon.className = 'fa-solid fa-chart-pie';
-
-                // Atualizar o gráfico de Pareto se necessário
-                updateParetoClientChart();
-
-                // Redimensionar o gráfico para preencher o espaço
-                setTimeout(() => {
-                    if (paretoClientChartInstance) {
-                        paretoClientChartInstance.resize();
-                    }
-                }, 100);
-            } else {
-                chartsRow.style.display = 'flex';
-                paretoClientFull.style.display = 'none';
-                toggleText.textContent = 'Pareto';
-                toggleIcon.className = 'fa-solid fa-chart-bar';
-
-                // Redimensionar os gráficos pequenos
-                setTimeout(() => {
-                    if (barChartInstance) barChartInstance.resize();
-                    if (sectorChartInstance) sectorChartInstance.resize();
-                    if (pieChartInstance) pieChartInstance.resize();
-                }, 100);
-            }
+            // Função obsoleta removida pelo novo sistema de abas
         }
 
         // ==========================================================================
@@ -2236,6 +2222,39 @@
             });
         }
 
+        // Variável de controle de visualização
+        let currentView = 'client'; // client, day, sector, reason
+
+        // Função de troca de aba
+        function switchView(viewName) {
+            currentView = viewName;
+
+            // Atualizar botões
+            document.querySelectorAll('.month-btn').forEach(btn => {
+                if (btn.id.startsWith('btnView')) btn.classList.remove('active');
+            });
+            const btn = document.getElementById('btnView' + viewName.charAt(0).toUpperCase() + viewName.slice(1));
+            if (btn) btn.classList.add('active');
+
+            // Esconder todos
+            document.getElementById('viewClient').style.display = 'none';
+            document.getElementById('viewDay').style.display = 'none';
+            document.getElementById('viewSector').style.display = 'none';
+            document.getElementById('viewReason').style.display = 'none';
+
+            // Mostrar selecionado
+            const targetId = 'view' + viewName.charAt(0).toUpperCase() + viewName.slice(1);
+            document.getElementById(targetId).style.display = 'flex';
+
+            // Redimensionar gráficos para garantir renderização correta
+            setTimeout(() => {
+                if (viewName === 'client' && paretoClientChartInstance) paretoClientChartInstance.resize();
+                if (viewName === 'day' && barChartInstance) barChartInstance.resize();
+                if (viewName === 'sector' && sectorChartInstance) sectorChartInstance.resize();
+                if (viewName === 'reason' && pieChartInstance) pieChartInstance.resize();
+            }, 50);
+        }
+
         function renderSectorChart(data) {
             const sorted = Object.entries(data).sort((a, b) => b[1] - a[1]);
             const labels = sorted.map(e => e[0]);
@@ -2248,7 +2267,8 @@
                 type: 'bar',
                 data: { labels, datasets: [{ label: 'Kg', data: values, backgroundColor: bgColors, borderRadius: 4 }] },
                 options: {
-                    indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+                    indexAxis: 'x', // MUDANÇA: Vertical
+                    responsive: true, maintainAspectRatio: false,
                     onClick: (e, els) => {
                         if (els.length > 0) activeChartFilters.sector = (activeChartFilters.sector === labels[els[0].index]) ? null : labels[els[0].index];
                         else activeChartFilters.sector = null;
@@ -2256,7 +2276,7 @@
                     },
                     plugins: { legend: { display: false }, datalabels: { display: false } },
                     scales: {
-                        x: {
+                        y: {
                             grid: { color: 'rgba(255,255,255,0.05)' },
                             title: {
                                 display: true,
@@ -2265,7 +2285,7 @@
                             },
                             ticks: { color: '#a1a1aa' }
                         },
-                        y: {
+                        x: {
                             grid: { display: false },
                             title: {
                                 display: true,
@@ -2278,6 +2298,9 @@
                 }
             });
         }
+
+        // ... (resto do arquivo, manter funções auxiliares)
+
 
         function renderPieChart(data) {
             const sorted = Object.entries(data).sort((a, b) => b[1] - a[1]);
