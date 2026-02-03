@@ -1182,8 +1182,8 @@
         <!-- DASHBOARD CONTENT -->
         <main class="dashboard-content">
 
-            <!-- STATUS BAR (HIDDEN TO KEEP JS WORKING) -->
-            <div class="status-bar-container-hidden" style="display: none;">
+            <!-- STATUS BAR -->
+            <div class="status-bar-container-hidden" style="display: flex; margin-bottom: 10px;">
                 <span id="status-message" class="status-text normal">Carregando sistema...</span>
                 <span id="error-message" class="status-text error"></span>
             </div>
@@ -2673,7 +2673,15 @@
             await loadGoals();
             try {
                 const res = await fetch('/api/producao-apontada');
+                if (!res.ok) {
+                    const errJson = await res.json();
+                    throw new Error(errJson.error || 'Erro ao carregar dados do servidor');
+                }
                 const d = await res.json();
+
+                if (!Array.isArray(d)) {
+                    throw new Error("Formato de dados inválido recebido do servidor");
+                }
 
                 allData = d.slice(1).map(r => {
                     let pu = parseFloat(r[4]) || 0;
@@ -2696,6 +2704,8 @@
                     ];
                 });
 
+                console.log(`Carregados ${allData.length} registros.`);
+
                 populateYearFilter();
 
                 const currentYear = new Date().getFullYear().toString();
@@ -2715,15 +2725,19 @@
 
                 setFilterMode('month');
                 applyBaseFilters();
+
                 statusMessage.textContent = 'Sistema pronto.';
+                statusMessage.className = 'status-text success';
 
                 // Atribui o evento ao botão de relatório após o carregamento
-                document.getElementById('generate-complete-report-button').onclick = generateCompleteReport;
+                const genRepBtn = document.getElementById('generate-complete-report-button');
+                if (genRepBtn) genRepBtn.onclick = generateCompleteReport;
 
             } catch (e) {
                 console.error("Erro ao carregar:", e);
                 allData = [];
-                errorMessage.textContent = 'Falha ao conectar ao servidor.';
+                errorMessage.textContent = 'Falha: ' + e.message;
+                showToast('Erro de Carregamento', e.message, 'danger');
             } finally { hideLoading(); }
         }
 
