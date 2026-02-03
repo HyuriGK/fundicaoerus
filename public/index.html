@@ -78,6 +78,11 @@
             grid-template-columns: var(--sidebar-width) 1fr;
             grid-template-rows: 1fr var(--footer-height);
             height: 100vh;
+            transition: grid-template-columns 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .app-layout.collapsed {
+            --sidebar-width: 80px;
         }
 
         /* SIDEBAR */
@@ -519,60 +524,59 @@
     <style>
         /* --- COLLAPSIBLE SIDEBAR CSS --- */
         .sidebar {
-            transition: width 0.3s cubic-bezier(0.16, 1, 0.3, 1), padding 0.3s ease;
-            width: var(--sidebar-width);
+            /* Width controlled by grid column sizing now */
             overflow: hidden;
             /* Hide content when shrinking */
             white-space: nowrap;
             /* Prevent text wrap */
+            width: 100%;
+            /* Fill the grid cell */
         }
 
-        .sidebar.collapsed {
-            width: 80px;
-            /* Mini sidebar width */
-        }
+        /* Note: .sidebar.collapsed styles are mainly for children visibility control now,
+           as width is controlled by .app-layout.collapsed variable override. */
 
         /* Hide text elements in collapsed mode */
-        .sidebar.collapsed .brand-text,
-        .sidebar.collapsed .nav-link span,
-        .sidebar.collapsed .nav-group-label,
-        .sidebar.collapsed .nav-group-line,
-        .sidebar.collapsed .fa-plus {
+        .app-layout.collapsed .sidebar .brand-text,
+        .app-layout.collapsed .sidebar .nav-link span,
+        .app-layout.collapsed .sidebar .nav-group-label,
+        .app-layout.collapsed .sidebar .nav-group-line,
+        .app-layout.collapsed .sidebar .fa-plus {
             opacity: 0;
             pointer-events: none;
             display: none;
         }
 
         /* Center icons in collapsed mode */
-        .sidebar.collapsed .nav-link {
+        .app-layout.collapsed .sidebar .nav-link {
             justify-content: center;
             padding-left: 0;
             padding-right: 0;
         }
 
-        .sidebar.collapsed .nav-link i {
+        .app-layout.collapsed .sidebar .nav-link i {
             margin-right: 0;
             font-size: 1.25rem;
         }
 
-        .sidebar.collapsed .brand {
+        .app-layout.collapsed .sidebar .brand {
             padding: 0 0 24px 0;
             justify-content: center;
         }
 
-        .sidebar.collapsed .brand-icon {
+        .app-layout.collapsed .sidebar .brand-icon {
             width: 45px;
             height: 45px;
             margin: 0;
         }
 
         /* Adjust separators in collapsed mode */
-        .sidebar.collapsed .nav-group-separator {
+        .app-layout.collapsed .sidebar .nav-group-separator {
             justify-content: center;
             padding: 12px 0;
         }
 
-        .sidebar.collapsed .nav-group-separator::after {
+        .app-layout.collapsed .sidebar .nav-group-separator::after {
             content: '';
             display: block;
             width: 25px;
@@ -581,8 +585,9 @@
             border-radius: 2px;
         }
 
-        /* Visual hint for pinned state logic (optional, mainly behavioral) */
-        .sidebar:not(.collapsed) {
+        /* Visual hint for pinned state logic */
+        /* If wrapper is NOT collapsed, show border highlight */
+        .app-layout:not(.collapsed) .sidebar {
             border-right-color: var(--border-highlight);
         }
     </style>
@@ -803,18 +808,15 @@
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const sidebar = document.querySelector('.sidebar');
+            const appLayout = document.querySelector('.app-layout');
             const toastContainer = document.getElementById('toast-container');
 
-            // Carregar estado salvo (PADRÃO: FIXADO = FALSE => COLLAPSED se mouse fora)
-            // Se o usuário nunca configurou, vamos assumir Fixado para primeira experiência ou Não?
-            // Vamos assumir FIXADO por padrão para não assustar, ou o contrário?
-            // "ao recolher deve aparecer só o logo" implica que inicia recolhido? 
-            // Vamos iniciar FIXO (true) como o comportamento original.
-            let isSidebarPinned = localStorage.getItem('sidebar_pinned') !== 'false'; // Default to true
+            // Carregar estado salvo (PADRÃO: FIXADO = TRUE)
+            let isSidebarPinned = localStorage.getItem('sidebar_pinned') !== 'false';
 
             // Aplica estado inicial
             if (!isSidebarPinned) {
-                sidebar.classList.add('collapsed');
+                appLayout.classList.add('collapsed');
             }
 
             // Funções de Toast Rápido
@@ -834,29 +836,26 @@
             // EVENTOS
             sidebar.addEventListener('mouseenter', () => {
                 if (!isSidebarPinned) {
-                    sidebar.classList.remove('collapsed');
+                    appLayout.classList.remove('collapsed');
                 }
             });
 
             sidebar.addEventListener('mouseleave', () => {
                 if (!isSidebarPinned) {
-                    sidebar.classList.add('collapsed');
-                    // Opcional: Fechar grupos abertos? Não, mantém estado.
+                    appLayout.classList.add('collapsed');
                 }
             });
 
             // Toggle Pin com Botão Direito
             sidebar.addEventListener('contextmenu', (e) => {
-                e.preventDefault(); // Inibe menu do navegador
+                e.preventDefault();
                 isSidebarPinned = !isSidebarPinned;
                 localStorage.setItem('sidebar_pinned', isSidebarPinned);
 
                 if (isSidebarPinned) {
-                    sidebar.classList.remove('collapsed');
+                    appLayout.classList.remove('collapsed');
                     showStateToast("Menu Lateral: FIXADO");
                 } else {
-                    // Se o mouse estiver fora (improvável no click), colapsa
-                    // Se estiver dentro, mantem aberto até sair
                     showStateToast("Menu Lateral: AUTOMÁTICO");
                 }
             });
