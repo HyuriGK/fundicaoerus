@@ -1358,36 +1358,38 @@
         </div>
     </div>
 
-    <!-- MODAL CLEAR SPECIFIC MONTH -->
-    <div id="month-selector-modal" class="modal-overlay">
+    <!-- MODAL DATE RANGE SELECTOR -->
+    <div id="date-range-modal" class="modal-overlay">
         <div class="modal-card">
-            <h3 class="modal-title" style="font-size: 1.2rem;">Limpar Mês Específico</h3>
-            <p style="color: var(--text-muted);">Selecione o mês e ano para apagar permanentemente.</p>
-            <input type="month" id="month-to-clear-input" style="width: 100%; font-size: 1.2rem; padding: 10px;">
-            <div style="display: flex; gap: 10px; margin-top: 20px;">
-                <button class="btn-modern" style="background: #333; color: #fff; flex: 1;"
-                    onclick="closeClearSpecificMonthModal()">Cancelar</button>
-                <button class="btn-modern" style="background: var(--status-danger); color: #fff; flex: 1;"
-                    onclick="executeClearSpecificMonth()">Apagar</button>
+            <h3 class="modal-title" style="font-size: 1.2rem; text-align: center;">Definir Período</h3>
+            <p style="color: var(--text-muted); text-align: center; margin-bottom: 20px;">Selecione as datas de início e
+                fim</p>
+
+            <div style="display: flex; gap: 15px; justify-content: center; margin-bottom: 20px;">
+                <div style="text-align: left;">
+                    <label
+                        style="display: block; font-size: 0.8rem; margin-bottom: 5px; color: var(--text-muted);">De:</label>
+                    <input type="date" id="modal-date-start" style="width: 150px; padding: 8px;">
+                </div>
+                <div style="text-align: left;">
+                    <label
+                        style="display: block; font-size: 0.8rem; margin-bottom: 5px; color: var(--text-muted);">Até:</label>
+                    <input type="date" id="modal-date-end" style="width: 150px; padding: 8px;">
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 10px; margin-top: 10px;">
+                <button class="btn-modern" style="background: rgba(255,255,255,0.1); color: #fff; flex: 1;"
+                    onclick="closeDateRangeModal()">Cancelar</button>
+                <button class="btn-modern" style="background: var(--color-primary); color: #000; flex: 1;"
+                    onclick="applyDateRange()">Confirmar</button>
             </div>
         </div>
     </div>
 
-    <!-- Hidden Container for PDF Rendering -->
-    <div id="pdf-temp-container" class="pdf-light-theme" style="position: absolute; left: -9999px;"></div>
-
-    <!-- Container temporário para cálculo semanal (invisível) -->
-    <div id="weekly-table-container-hidden" style="display: none;">
-        <table id="weekly-table">
-            <thead>
-                <tr>
-                    <th>Semana</th>
-                    <th>Total Semanal</th>
-                </tr>
-            </thead>
-            <tbody id="weeklyTableBody"></tbody>
-        </table>
-    </div>
+    <!-- Hidden Inputs for actual filter logic compliance -->
+    <input type="date" id="filter-date-start" style="display:none">
+    <input type="date" id="filter-date-end" style="display:none">
 
     <script>
         // =========================================================
@@ -1575,21 +1577,17 @@
             "FE-22-C": ""
         };
 
+        // --- AUTH & DOM ELEMENTS ---
         const ADMIN_PASSWORD_HASH = 'ADMIN';
 
         const fileInput = document.getElementById('excelFileInput');
-        // A tabela de base completa foi removida, então não referenciamos mais tableBody/columnFilters antigos
         const filteredTableBody = document.getElementById('producaoMonthTableBody');
         const statusMessage = document.getElementById('status-message');
         const errorMessage = document.getElementById('error-message');
 
-        // Filtros Tabela Filtrada (Dinâmica)
         const monthColumnFilters = document.querySelectorAll('.month-column-filter');
-
         const functionsDropdown = document.getElementById('functionsDropdown');
-
         const weeklyTableBody = document.getElementById('weeklyTableBody');
-        const weeklyTable = document.getElementById('weekly-table');
 
         // Chart Controls & Filters
         const sectorChartSelect = document.getElementById('sector-chart-select');
@@ -1600,15 +1598,21 @@
         // New Filter Date Controls
         const filterDateStart = document.getElementById('filter-date-start');
         const filterDateEnd = document.getElementById('filter-date-end');
-        const dateRangeContainer = document.getElementById('date-range-container');
-        const monthFilterContainer = document.getElementById('month-filter-container');
+        const modalDateStart = document.getElementById('modal-date-start');
+        const modalDateEnd = document.getElementById('modal-date-end');
+
+        // Using "month-buttons-container" wrapper for visual logic instead of old wrappers
+        const monthButtonsContainer = document.querySelector('.month-buttons-container');
+        const btnCustomPeriod = document.getElementById('btn-custom-period');
 
         let currentFilterMode = 'month';
         let currentMonthFilterIndex = new Date().getMonth() + 1;
 
         const monthButtons = document.querySelectorAll('.btn-month');
 
+        // ... (Charts elements) ...
         const dailyChartCanvas = document.getElementById('dailyProductionChart');
+        // ... (KPI elements) ...
         const sectorTotalDisplay = document.getElementById('sector-total-display');
         const sectorAverageDisplay = document.getElementById('sector-average-display');
         const sectorMonthlyAverageDisplay = document.getElementById('sector-monthly-average-display');
@@ -1617,6 +1621,7 @@
         const sectorAvgPieceWeightDisplay = document.getElementById('sector-avg-piece-weight-display');
         let dailyChart = null;
 
+        // ... (Column Map) ...
         const COLUMN_MAP = { DATA: 0, SETOR: 1, PRODUTO: 2, LIGA: 3, PESO_UN: 4, QUANT: 5, PESO_TOTAL: 6 };
         const WEEKLY_GOAL = 30000;
         const MOLDAGEM_SECTORS = ['moldagem leve', 'moldagem rollover', 'moldagem pesada'];
@@ -1629,47 +1634,11 @@
         let sectorGoals = {};
         let productWeights = {};
 
-        const pdfTempContainer = document.getElementById('pdf-temp-container');
-
-        // Modal Registros Vars
+        // ... (Modals) ...
         const recordsModal = document.getElementById('records-modal');
-
         const monthSelectorModal = document.getElementById('month-selector-modal');
         const monthToClearInput = document.getElementById('month-to-clear-input');
-
-        // --- TOAST FUNCTION (igual ao carteira.html) ---
-        function showToast(title, subtitle, type = 'info') {
-            let container = document.getElementById('toast-container');
-            if (!container) {
-                container = document.createElement('div');
-                container.id = 'toast-container';
-                container.className = 'toast-container';
-                document.body.appendChild(container);
-            }
-
-            const toast = document.createElement('div');
-            toast.className = `toast ${type}`;
-
-            const icon = type === 'danger' ? '<i class="fa-solid fa-ban toast-icon"></i>' : '<i class="fa-solid fa-circle-info toast-icon"></i>';
-
-            toast.innerHTML = `
-                ${icon} 
-                <div class="toast-content">
-                    <span class="toast-title">${title}</span>
-                    <span class="toast-subtitle">${subtitle}</span>
-                </div>
-            `;
-
-            container.appendChild(toast);
-
-            // Remove após 4 segundos
-            setTimeout(() => {
-                toast.style.animation = 'fadeOut 0.5s ease-out forwards';
-                setTimeout(() => {
-                    if (toast.parentNode) toast.parentNode.removeChild(toast);
-                }, 500);
-            }, 4000);
-        }
+        const dateRangeModal = document.getElementById('date-range-modal');
 
         // --- UI Interactions ---
         function showLoading() { document.getElementById('loading-screen').style.display = 'flex'; document.getElementById('loading-screen').style.opacity = '1'; }
@@ -1679,39 +1648,54 @@
             setTimeout(() => { ls.style.display = 'none'; }, 500);
         }
 
-        function toggleFilterPanel() {
-            const panel = document.getElementById('filter-panel');
-            const chevron = document.getElementById('filter-chevron');
-            // Logic for chart resizing is now handled by CSS Flexbox
+        // --- DATE RANGE MODAL LOGIC ---
+        function openDateRangeModal() {
+            dateRangeModal.style.display = 'flex'; // Uses flex for centering from .modal-overlay
+            // Pre-fill with existing inputs if valid
+            if (filterDateStart.value) modalDateStart.value = filterDateStart.value;
+            if (filterDateEnd.value) modalDateEnd.value = filterDateEnd.value;
+        }
 
-            panel.classList.toggle('expanded');
+        function closeDateRangeModal() {
+            dateRangeModal.style.display = 'none';
+        }
 
-            if (panel.classList.contains('expanded')) {
-                chevron.classList.remove('fa-chevron-down');
-                chevron.classList.add('fa-chevron-up');
-            } else {
-                chevron.classList.remove('fa-chevron-up');
-                chevron.classList.add('fa-chevron-down');
+        function applyDateRange() {
+            const start = modalDateStart.value;
+            const end = modalDateEnd.value;
+
+            if (!start || !end) {
+                alert("Por favor, selecione ambas as datas.");
+                return;
             }
 
-            // Força redimensionamento do gráfico para caber no novo espaço
-            setTimeout(() => {
-                if (dailyChart) dailyChart.resize();
-            }, 350);
+            // Set hidden inputs
+            filterDateStart.value = start;
+            filterDateEnd.value = end;
+
+            setFilterMode('range');
+            closeDateRangeModal();
         }
 
         // --- FILTER MODE LOGIC ---
         function setFilterMode(mode) {
             currentFilterMode = mode;
             if (mode === 'month') {
-                dateRangeContainer.classList.add('filter-obsolete');
-                monthFilterContainer.classList.remove('filter-obsolete');
+                // UI Updates
+                monthButtonsContainer.style.opacity = '1';
+                monthButtonsContainer.style.pointerEvents = 'auto';
+
+                btnCustomPeriod.classList.remove('active'); // Calendar inactive
+
                 filterDateStart.value = '';
                 filterDateEnd.value = '';
             } else {
-                monthFilterContainer.classList.add('filter-obsolete');
-                dateRangeContainer.classList.remove('filter-obsolete');
-                monthButtons.forEach(b => b.classList.remove('active'));
+                // Range Mode
+                monthButtonsContainer.style.opacity = '0.5'; // Dim month buttons
+                monthButtonsContainer.style.pointerEvents = 'none'; // Disable clicking
+
+                monthButtons.forEach(b => b.classList.remove('active')); // Deselect all months
+                btnCustomPeriod.classList.add('active'); // Calendar active
             }
             updateDailyProductionChartFromSelection();
         }
@@ -1725,10 +1709,6 @@
             });
         });
 
-        filterDateStart.addEventListener('input', () => { if (filterDateStart.value) setFilterMode('range'); });
-        filterDateEnd.addEventListener('input', () => { if (filterDateEnd.value) setFilterMode('range'); });
-        filterDateStart.addEventListener('focus', () => setFilterMode('range'));
-        filterDateEnd.addEventListener('focus', () => setFilterMode('range'));
 
         function toggleDropdown() {
             // Verifica se o usuário tem permissão (igual ao carteira.html)
