@@ -2288,7 +2288,7 @@
                         x: {
                             grid: { display: false },
                             title: {
-                                display: true,
+                                display: false, // REMOVIDO TÍTULO "Setor"
                                 text: 'Setor',
                                 color: '#a1a1aa'
                             },
@@ -2312,7 +2312,7 @@
             if (pieChartInstance) pieChartInstance.destroy();
             const ctx = document.getElementById('pieChart').getContext('2d');
             pieChartInstance = new Chart(ctx, {
-                type: 'doughnut',
+                type: 'pie', // MUDANÇA: 'pie' em vez de 'doughnut'
                 data: {
                     labels, datasets: [{
                         data: values, backgroundColor: PIE_COLORS, borderColor: '#18181b', borderWidth: 2
@@ -2331,19 +2331,23 @@
                         legend: {
                             position: 'bottom',
                             labels: {
-                                color: '#ffffff', // CORRIGIDO: Cor branca para a legenda
+                                color: '#ffffff', // Forçando cor branca
                                 boxWidth: 12,
                                 padding: 15,
-                                // Não truncar labels dos motivos
+                                font: {
+                                    size: 12
+                                },
+                                // Garantir que a cor seja aplicada mesmo com generateLabels
                                 generateLabels: function (chart) {
                                     const data = chart.data;
                                     if (data.labels.length && data.datasets.length) {
                                         return data.labels.map(function (label, i) {
                                             return {
-                                                text: label, // Nome completo do motivo
+                                                text: label,
                                                 fillStyle: data.datasets[0].backgroundColor[i],
                                                 hidden: false,
-                                                index: i
+                                                index: i,
+                                                fontColor: '#ffffff' // Tentar propriedade direta se suportada (Chart.js 2 legacy, mas mal não faz)
                                             };
                                         });
                                     }
@@ -2351,7 +2355,18 @@
                                 }
                             }
                         },
-                        datalabels: { display: false }
+                        datalabels: {
+                            color: '#fff',
+                            font: { weight: 'bold' },
+                            formatter: (val, ctx) => {
+                                let sum = 0;
+                                let dataArr = ctx.chart.data.datasets[0].data;
+                                dataArr.map(data => { sum += data; });
+                                let percentage = (val * 100 / sum).toFixed(1) + "%";
+                                if ((val * 100 / sum) < 5) return "";
+                                return percentage;
+                            }
+                        }
                     },
                     // Ajustar layout para labels completos
                     layout: {
