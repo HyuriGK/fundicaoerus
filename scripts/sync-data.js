@@ -75,7 +75,7 @@ async function syncData() {
                 ON P.CODIGO_PPR = E.PPR_CODIGO_PETR 
                 AND P.ANO_PPR = E.PPR_ANO_PETR
                 AND P.ITEM_PPR = E.PPR_ITEM_PETR
-            WHERE P.ANO_PPR = 2026
+            WHERE P.ANO_PPR IN (2025, 2026)
         `;
 
         db.query(query, async function (err, results) {
