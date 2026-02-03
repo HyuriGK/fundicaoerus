@@ -71,7 +71,7 @@ async function syncData() {
                 P.ITEM_PPR,
                 E.ENTREGA_PETR
             FROM PEDIDO_PRODUTO P
-            INNER JOIN PEDIDO_PRODUTO_ENTREGA E 
+            LEFT JOIN PEDIDO_PRODUTO_ENTREGA E 
                 ON P.CODIGO_PPR = E.PPR_CODIGO_PETR 
                 AND P.ANO_PPR = E.PPR_ANO_PETR
                 AND P.ITEM_PPR = E.PPR_ITEM_PETR
