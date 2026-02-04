@@ -46,11 +46,13 @@ const register = require('../src/register');
 const custosRoutes = require('../src/custos');
 const weightsRoutes = require('../src/weights');
 const faturamentoFirebird = require('../src/faturamento-firebird');
+const faturamentoNeon = require('../src/faturamento-neon');
 
 // --- DEFINIÇÃO DAS ROTAS ---
 // Aqui definimos qual URL chama qual arquivo
 app.use('/api/weights', weightsRoutes);
 app.use('/api/faturamento-firebird', faturamentoFirebird);
+app.use('/api/faturamento-neon', faturamentoNeon);
 app.use('/api/acabamento-externo', acabamentoExterno);
 app.use('/api/acabamento-interno', acabamentoInterno);
 app.use('/api/aderencia', aderencia);
