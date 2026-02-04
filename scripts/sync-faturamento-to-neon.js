@@ -37,6 +37,7 @@ async function syncFaturamento() {
                 data_faturamento DATE,
                 nota_fiscal INTEGER,
                 cliente_codigo INTEGER,
+                cliente_nome VARCHAR(500),
                 codigo_item BIGINT,
                 descricao VARCHAR(500),
                 quantidade NUMERIC(15, 2),
@@ -74,6 +75,7 @@ async function syncFaturamento() {
                     nf.EMISSAO_NOT as DATA_FATURAMENTO,
                     nf.NUMERO_NOT as NOTA_FISCAL,
                     nf.DESTINATARIO_NOT as CLIENTE_CODIGO,
+                    nf.RAZAO_SOCIAL_NOT as CLIENTE_NOME,
                     nfp.PRODUTO_NPR as CODIGO_ITEM,
                     nfp.NOME_PRODUTO_NPR as DESCRICAO,
                     nfp.QUANTIDADE_NPR as QUANTIDADE,
@@ -107,12 +109,13 @@ async function syncFaturamento() {
             try {
                 await pgClient.query(`
                     INSERT INTO faturamento_firebird (
-                        data_faturamento, nota_fiscal, cliente_codigo, codigo_item,
+                        data_faturamento, nota_fiscal, cliente_codigo, cliente_nome, codigo_item,
                         descricao, quantidade, valor_unitario, valor_total, serie, status
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
                     ON CONFLICT (nota_fiscal, codigo_item, serie) DO UPDATE SET
                         data_faturamento = EXCLUDED.data_faturamento,
                         cliente_codigo = EXCLUDED.cliente_codigo,
+                        cliente_nome = EXCLUDED.cliente_nome,
                         descricao = EXCLUDED.descricao,
                         quantidade = EXCLUDED.quantidade,
                         valor_unitario = EXCLUDED.valor_unitario,
@@ -123,6 +126,7 @@ async function syncFaturamento() {
                     row.DATA_FATURAMENTO,
                     row.NOTA_FISCAL,
                     row.CLIENTE_CODIGO,
+                    row.CLIENTE_NOME ? (typeof row.CLIENTE_NOME === 'string' ? row.CLIENTE_NOME.trim() : String(row.CLIENTE_NOME)) : null,
                     row.CODIGO_ITEM,
                     row.DESCRICAO ? (typeof row.DESCRICAO === 'string' ? row.DESCRICAO.trim() : String(row.DESCRICAO)) : null,
                     (row.QUANTIDADE || 0),
