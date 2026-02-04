@@ -71,6 +71,7 @@ async function syncData() {
                 P.EMPRESA_PPR,
                 P.ANO_PPR,
                 P.ITEM_PPR,
+                P.ORDEM_COMPRA_PPR,
                 E.ENTREGA_PETR
             FROM PEDIDO_PRODUTO P
             LEFT JOIN PEDIDO_PRODUTO_ENTREGA E 

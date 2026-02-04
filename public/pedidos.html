@@ -811,9 +811,7 @@
 
             <div class="toolbar-row">
                 <div class="toolbar-group">
-                    <label style="color:var(--text-muted); font-size:0.9rem;">Filtro Rápido:</label>
-                    <input class="search-input" style="width: 300px;" type="text" id="globalSearch"
-                        placeholder="Pesquisar em todas as colunas...">
+                    <!-- Global Search Removed -->
                 </div>
                 <div class="toolbar-group">
                     <button id="toggleModelosBtn" class="btn-modern btn-toggle" onclick="toggleModelosFilter()"
@@ -999,171 +997,180 @@
         // ==========================================================================
 
         function setupFilters() {
-            document.querySelectorAll('.filter-input-table').forEach(input => {
-                input.addEventListener('input', applyColumnFilters);
-            });
-            document.getElementById('globalSearch').addEventListener('input', applyColumnFilters);
-        }
-
-        function applyColumnFilters() {
-            const inputs = document.querySelectorAll('.filter-input-table');
-            const globalSearch = document.getElementById('globalSearch').value.toLowerCase();
-
-            // Collect individual column filters
-            const filters = {};
-            inputs.forEach(inp => {
-                filters[inp.dataset.col] = inp.value.trim().toLowerCase();
-            });
-
-            const filtered = allData.filter(item => {
-                // 0. Filter Modelos (Ends with '1' AND Starts with 'MODELO')
-                if (isModelosHidden) {
-                    const prodCode = String(item.PRODUTO_PPR || '').trim();
-                    const prodName = String(item.NOME_PRODUTO_PPR || item.PRODUTO_PPR || '').trim().toUpperCase();
-
-                    // User Rule: CÓD. PROD ends with 1 AND PRODUTO starts with MODELO
-                    if (prodCode.endsWith('1') && prodName.startsWith('MODELO')) {
-                        return false;
-                    }
-                }
-
-                // 1. Global Filter (if exists)
-                if (globalSearch) {
-                    const rowStr = Object.values(item).join(' ').toLowerCase();
-                    if (!rowStr.includes(globalSearch)) return false;
-                }
-
-                // 2. Col Filters
-                return Object.entries(filters).every(([key, value]) => {
-                    if (!value) return true;
-
-                    // Lógica de Filtro Exato
-                    if (key === 'CODIGO_PPR') {
-                        if (value === 'block') {
-                            // Filter for blocked items (no delivery date)
-                            return !item.ENTREGA_PETR && !item.DATA_ENTREGA_PPR;
-                        }
-                        return String(item[key]) === value;
-                    }
-
-                    if (key === 'PESO_LIQUIDO_NPR') {
-                        // Permite user digitar 10,5 e converter para 10.5
-                        const cleanValue = value.replace(',', '.');
-                        return item[key] == cleanValue;
-                    }
-
-                    // Defaults
-                    let itemVal = String(item[key] || '');
-
-                    if (key === 'ENTREGA_PETR' && item.ENTREGA_PETR) {
-                        itemVal += ' ' + new Date(item.ENTREGA_PETR).toLocaleDateString();
-                    }
-
-                    return itemVal.toLowerCase().includes(value);
+            function setupFilters() {
+                document.querySelectorAll('.filter-input-table').forEach(input => {
+                    input.addEventListener('input', applyColumnFilters);
                 });
-            });
-
-            renderTable(filtered);
-            updateTotals(filtered);
-            updateCharts(filtered);
-        }
-
-        function updateCharts(list) {
-            updateMonthlyChart(list);
-            updateParetoChart(list);
-        }
-
-        function updateMonthlyChart(list) {
-            const mData = Array(12).fill(0);
-
-            list.forEach(item => {
-                let d = item.ENTREGA_PETR ? new Date(item.ENTREGA_PETR) : null;
-                if (d && d.getFullYear() >= 2000) {
-                    mData[d.getMonth()] += (Number(item.PESO_LIQUIDO_NPR) || 0);
-                }
-            });
-
-            const monthLabels = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-
-            if (monthlyChart) monthlyChart.destroy();
-            monthlyChart = new Chart(document.getElementById('monthlyChart').getContext('2d'), {
-                type: 'bar',
-                data: {
-                    labels: monthLabels,
-                    datasets: [{
-                        label: 'kg',
-                        data: mData,
-                        backgroundColor: chartColorAmber
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: { y: { beginAtZero: true } },
-                    plugins: { legend: { display: false } }
-                }
-            });
-        }
-
-        function updateParetoChart(list) {
-            // Group by EMPRESA_PPR (CLIENT ID) since we don't have name
-            // Actually, let's treat EMPRESA_PPR as string ID
-            const cMap = {};
-            list.forEach(item => {
-                const name = "Cliente " + item.EMPRESA_PPR; // Generic Name since we only have ID
-                cMap[name] = (cMap[name] || 0) + (Number(item.PESO_LIQUIDO_NPR) || 0);
-            });
-
-            const sorted = Object.entries(cMap).sort((a, b) => b[1] - a[1]).slice(0, 10);
-            let total = sorted.reduce((a, b) => a + b[1], 0), acc = 0;
-            const accData = sorted.map(x => { acc += x[1]; return total > 0 ? (acc / total) * 100 : 0; });
-
-            if (paretoChart) paretoChart.destroy();
-            paretoChart = new Chart(document.getElementById('paretoChart').getContext('2d'), {
-                type: 'bar',
-                data: {
-                    labels: sorted.map(x => x[0]),
-                    datasets: [
-                        { type: 'line', label: '%', data: accData, borderColor: '#fff', yAxisID: 'y1' },
-                        {
-                            type: 'bar',
-                            label: 'kg',
-                            data: sorted.map(x => x[1]),
-                            backgroundColor: chartColorAmber,
-                            yAxisID: 'y'
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
-                    scales: { y: { beginAtZero: true }, y1: { position: 'right', min: 0, max: 100 } }
-                }
-            });
-        }
-
-        function exportToExcel() {
-            const table = document.getElementById('dataTable');
-            const wb = XLSX.utils.table_to_book(table, { sheet: "Pedidos" });
-            XLSX.writeFile(wb, `Pedidos_2025_2026_${new Date().toISOString().slice(0, 10)}.xlsx`);
-        }
-
-        function showToast(title, subtitle, type = 'info') {
-            let container = document.getElementById('toast-container');
-            if (!container) {
-                container = document.createElement('div');
-                container.id = 'toast-container';
-                container.className = 'toast-container';
-                document.body.appendChild(container);
             }
 
-            const toast = document.createElement('div');
-            toast.className = `toast ${type}`;
+            function applyColumnFilters() {
+                const inputs = document.querySelectorAll('.filter-input-table');
 
-            const icon = type === 'danger' ? '<i class="fa-solid fa-ban toast-icon"></i>' : '<i class="fa-solid fa-circle-info toast-icon"></i>';
+                // Map numeric data-col to field names
+                const fieldMap = {
+                    '0': 'CODIGO_PPR',
+                    '1': 'ORDEM_COMPRA_PPR',
+                    '2': 'PRODUTO_PPR',
+                    '3': 'NOME_PRODUTO_PPR',
+                    '4': 'QUANTIDADE_PPR',
+                    '5': 'PESO_LIQUIDO_NPR',
+                    '6': 'ENTREGA_PETR'
+                };
 
-            toast.innerHTML = `
+                // Collect individual column filters
+                const filters = {};
+                inputs.forEach(inp => {
+                    const fieldName = fieldMap[inp.dataset.col];
+                    if (fieldName) {
+                        filters[fieldName] = inp.value.trim().toLowerCase();
+                    }
+                });
+
+                const filtered = allData.filter(item => {
+                    // 0. Filter Modelos (Ends with '1' AND Starts with 'MODELO')
+                    if (isModelosHidden) {
+                        const prodCode = String(item.PRODUTO_PPR || '').trim();
+                        const prodName = String(item.NOME_PRODUTO_PPR || item.PRODUTO_PPR || '').trim().toUpperCase();
+
+                        // User Rule: CÓD. PROD ends with 1 AND PRODUTO starts with MODELO
+                        if (prodCode.endsWith('1') && prodName.startsWith('MODELO')) {
+                            return false;
+                        }
+                    }
+
+                    // 1. Global Filter Removed
+
+                    // 2. Col Filters
+                    return Object.entries(filters).every(([key, value]) => {
+                        if (!value) return true;
+
+                        // Lógica de Filtro Exato
+                        if (key === 'CODIGO_PPR') {
+                            if (value === 'block') {
+                                // Filter for blocked items (no delivery date)
+                                return !item.ENTREGA_PETR && !item.DATA_ENTREGA_PPR;
+                            }
+                            return String(item[key]) === value;
+                        }
+
+                        if (key === 'PESO_LIQUIDO_NPR') {
+                            // Permite user digitar 10,5 e converter para 10.5
+                            const cleanValue = value.replace(',', '.');
+                            return item[key] == cleanValue;
+                        }
+
+                        // Defaults
+                        let itemVal = String(item[key] || '');
+
+                        if (key === 'ENTREGA_PETR' && item.ENTREGA_PETR) {
+                            itemVal += ' ' + new Date(item.ENTREGA_PETR).toLocaleDateString();
+                        }
+
+                        return itemVal.toLowerCase().includes(value);
+                    });
+                });
+
+                renderTable(filtered);
+                updateTotals(filtered);
+                updateCharts(filtered);
+            }
+
+            function updateCharts(list) {
+                updateMonthlyChart(list);
+                updateParetoChart(list);
+            }
+
+            function updateMonthlyChart(list) {
+                const mData = Array(12).fill(0);
+
+                list.forEach(item => {
+                    let d = item.ENTREGA_PETR ? new Date(item.ENTREGA_PETR) : null;
+                    if (d && d.getFullYear() >= 2000) {
+                        mData[d.getMonth()] += (Number(item.PESO_LIQUIDO_NPR) || 0);
+                    }
+                });
+
+                const monthLabels = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+
+                if (monthlyChart) monthlyChart.destroy();
+                monthlyChart = new Chart(document.getElementById('monthlyChart').getContext('2d'), {
+                    type: 'bar',
+                    data: {
+                        labels: monthLabels,
+                        datasets: [{
+                            label: 'kg',
+                            data: mData,
+                            backgroundColor: chartColorAmber
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: { y: { beginAtZero: true } },
+                        plugins: { legend: { display: false } }
+                    }
+                });
+            }
+
+            function updateParetoChart(list) {
+                // Group by EMPRESA_PPR (CLIENT ID) since we don't have name
+                // Actually, let's treat EMPRESA_PPR as string ID
+                const cMap = {};
+                list.forEach(item => {
+                    const name = "Cliente " + item.EMPRESA_PPR; // Generic Name since we only have ID
+                    cMap[name] = (cMap[name] || 0) + (Number(item.PESO_LIQUIDO_NPR) || 0);
+                });
+
+                const sorted = Object.entries(cMap).sort((a, b) => b[1] - a[1]).slice(0, 10);
+                let total = sorted.reduce((a, b) => a + b[1], 0), acc = 0;
+                const accData = sorted.map(x => { acc += x[1]; return total > 0 ? (acc / total) * 100 : 0; });
+
+                if (paretoChart) paretoChart.destroy();
+                paretoChart = new Chart(document.getElementById('paretoChart').getContext('2d'), {
+                    type: 'bar',
+                    data: {
+                        labels: sorted.map(x => x[0]),
+                        datasets: [
+                            { type: 'line', label: '%', data: accData, borderColor: '#fff', yAxisID: 'y1' },
+                            {
+                                type: 'bar',
+                                label: 'kg',
+                                data: sorted.map(x => x[1]),
+                                backgroundColor: chartColorAmber,
+                                yAxisID: 'y'
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: { y: { beginAtZero: true }, y1: { position: 'right', min: 0, max: 100 } }
+                    }
+                });
+            }
+
+            function exportToExcel() {
+                const table = document.getElementById('dataTable');
+                const wb = XLSX.utils.table_to_book(table, { sheet: "Pedidos" });
+                XLSX.writeFile(wb, `Pedidos_2025_2026_${new Date().toISOString().slice(0, 10)}.xlsx`);
+            }
+
+            function showToast(title, subtitle, type = 'info') {
+                let container = document.getElementById('toast-container');
+                if (!container) {
+                    container = document.createElement('div');
+                    container.id = 'toast-container';
+                    container.className = 'toast-container';
+                    document.body.appendChild(container);
+                }
+
+                const toast = document.createElement('div');
+                toast.className = `toast ${type}`;
+
+                const icon = type === 'danger' ? '<i class="fa-solid fa-ban toast-icon"></i>' : '<i class="fa-solid fa-circle-info toast-icon"></i>';
+
+                toast.innerHTML = `
                 ${icon} 
                 <div class="toast-content">
                     <span class="toast-title">${title}</span>
@@ -1171,27 +1178,27 @@
                 </div>
             `;
 
-            container.appendChild(toast);
+                container.appendChild(toast);
 
-            setTimeout(() => {
-                toast.style.animation = 'fadeOut 0.5s ease-out forwards';
                 setTimeout(() => {
-                    if (toast.parentNode) toast.parentNode.removeChild(toast);
-                }, 500);
-            }, 4000);
-        }
+                    toast.style.animation = 'fadeOut 0.5s ease-out forwards';
+                    setTimeout(() => {
+                        if (toast.parentNode) toast.parentNode.removeChild(toast);
+                    }, 500);
+                }, 4000);
+            }
 
-        window.addEventListener('keydown', (e) => {
-            if (e.key === "Escape") closeModal();
-        });
+            window.addEventListener('keydown', (e) => {
+                if (e.key === "Escape") closeModal();
+            });
 
-        // ==========================================================================
-        // INICIALIZAÇÃO
-        // ==========================================================================
-        document.addEventListener('DOMContentLoaded', async () => {
-            setupFilters();
-            await loadDataFromServer();
-        });
+            // ==========================================================================
+            // INICIALIZAÇÃO
+            // ==========================================================================
+            document.addEventListener('DOMContentLoaded', async () => {
+                setupFilters();
+                await loadDataFromServer();
+            });
 
     </script>
 </body>
