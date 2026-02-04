@@ -43,9 +43,11 @@ const producaoApontada = require('../src/producao-apontada');
 const refugo = require('../src/refugo');
 const register = require('../src/register');
 const custosRoutes = require('../src/custos');
+const weightsRoutes = require('../src/weights');
 
 // --- DEFINIÇÃO DAS ROTAS ---
 // Aqui definimos qual URL chama qual arquivo
+app.use('/api/weights', weightsRoutes);
 app.use('/api/acabamento-externo', acabamentoExterno);
 app.use('/api/acabamento-interno', acabamentoInterno);
 app.use('/api/aderencia', aderencia);

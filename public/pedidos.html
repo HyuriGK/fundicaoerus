@@ -718,6 +718,28 @@
                 transform: rotate(360deg);
             }
         }
+
+        .weight-edit-input {
+            width: 80px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-subtle);
+            border-radius: 4px;
+            color: #fff;
+            /* Valor destacado */
+            text-align: center;
+            padding: 4px;
+            font-family: var(--font-mono);
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+
+        .weight-edit-input:focus {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: var(--color-primary);
+            outline: none;
+            box-shadow: 0 0 5px rgba(14, 165, 233, 0.3);
+            /* Sky Blue glow */
+        }
     </style>
 </head>
 
@@ -895,9 +917,10 @@
         Chart.defaults.borderColor = 'rgba(255,255,255,0.05)';
         Chart.defaults.font.family = "'JetBrains Mono', monospace";
 
-        const chartColorAmber = '#fbbf24'; // Usando Amber
+        const chartColorAmber = '#0ea5e9'; // Usando Sky
 
         let allData = [];
+        let customWeights = {}; // Armazena pesos customizados
         let monthlyChart = null, paretoChart = null;
         let activeMonthFilter = null, activeClientFilter = null;
         let isModelosHidden = true; // Inicia OCULTO por padrão
@@ -958,6 +981,13 @@
         // ==========================================================================
         async function loadDataFromServer() {
             try {
+                // 1. Fetch Custom Weights
+                try {
+                    const wRes = await fetch('/api/weights/list');
+                    if (wRes.ok) customWeights = await wRes.json();
+                } catch (err) { console.warn('Falha ao carregar pesos customizados', err); }
+
+                // 2. Fetch Pedidos
                 const res = await fetch('/api/pedidos-sync');
                 if (!res.ok) throw new Error('Erro na API');
                 allData = await res.json();
@@ -969,6 +999,50 @@
                 showToast("Erro", "Falha ao carregar dados do servidor.", "danger");
             } finally {
                 hideLoadingScreen();
+            }
+        }
+
+        // Função para salvar peso customizado
+        async function saveWeight(event, prodCode) {
+            if (event.key !== 'Enter') return;
+
+            const input = event.target;
+            const newWeight = parseFloat(input.value.replace(',', '.'));
+
+            if (isNaN(newWeight) || newWeight <= 0) {
+                showToast("Atenção", "Digite um peso válido maior que zero.", "warning");
+                return;
+            }
+
+            if (!confirm(`Deseja definir o peso unitário de ${newWeight}kg para o produto ${prodCode}? Isso afetará todos os itens deste produto que estão sem peso.`)) {
+                return; // Cancelado pelo usuário
+            }
+
+            // Lock input
+            input.disabled = true;
+
+            try {
+                const res = await fetch('/api/weights/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ codigo: prodCode, peso: newWeight })
+                });
+
+                if (!res.ok) throw new Error('Falha ao salvar');
+
+                // Atualiza local
+                customWeights[prodCode] = newWeight;
+
+                // Recalcula totais na tela
+                applyColumnFilters();
+
+                showToast("Sucesso", "Peso salvo e aplicado!", "success");
+
+            } catch (err) {
+                console.error(err);
+                showToast("Erro", "Erro ao salvar peso.", "danger");
+                input.disabled = false;
+                input.focus();
             }
         }
 
@@ -992,8 +1066,43 @@
                 }
 
                 const qtd = Number(item.QUANTIDADE_PPR) || 0;
-                const totalWeight = Number(item.PESO_LIQUIDO_NPR) || 0;
-                const unitWeight = qtd > 0 ? (totalWeight / qtd) : 0;
+                let totalWeight = Number(item.PESO_LIQUIDO_NPR) || 0;
+                let unitWeight = qtd > 0 ? (totalWeight / qtd) : 0;
+
+                // Lógica de Peso Customizado:
+                // Se o peso original for zero (ou muito próximo) E tivermos um peso salvo
+                const isZeroWeight = totalWeight === 0;
+                let customVal = null;
+
+                if (isZeroWeight && customWeights[item.PRODUTO_PPR]) {
+                    customVal = customWeights[item.PRODUTO_PPR];
+                    unitWeight = customVal;
+                    totalWeight = unitWeight * qtd; // Recalcula total visualmente
+                }
+
+                // Input HTML
+                // Se veio do banco (isZeroWeight = false), mostramos fixo (ou input disabled).
+                // O usuário pediu "para as linhas que estão zeradas".
+
+                let weightInputHtml = '';
+                if (!isZeroWeight) {
+                    // Peso real do Firebird -> Apenas exibe (ou input disabled style)
+                    weightInputHtml = `<span style="opacity:0.8">${formatNumber(unitWeight)}</span>`;
+                } else {
+                    // Peso zero -> Editável
+                    // Se tiver customVal, joga no value
+                    const valStr = customVal ? formatNumber(customVal) : '';
+                    weightInputHtml = `
+                        <input 
+                            type="text" 
+                            class="weight-edit-input" 
+                            value="${valStr}" 
+                            placeholder="0,00"
+                            onkeydown="saveWeight(event, '${item.PRODUTO_PPR}')"
+                            onclick="this.select()"
+                        />
+                    `;
+                }
 
                 return `
                 <tr>
@@ -1004,8 +1113,8 @@
                         ${item.NOME_PRODUTO_PPR || item.PRODUTO_PPR}
                     </td>
                     <td style="text-align:center;">${item.QUANTIDADE_PPR}</td>
-                    <td style="text-align:center;">${formatNumber(unitWeight)}</td>
-                    <td style="text-align:center;">${formatNumber(item.PESO_LIQUIDO_NPR)}</td>
+                    <td style="text-align:center;">${weightInputHtml}</td>
+                    <td style="text-align:center;">${formatNumber(totalWeight)}</td>
                     <td style="text-align:center;">${entrega}</td>
                 </tr>
                 `;
