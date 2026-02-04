@@ -779,6 +779,9 @@
                         placeholder="Pesquisar em todas as colunas...">
                 </div>
                 <div class="toolbar-group">
+                    <button id="toggleModelosBtn" class="btn-modern btn-toggle active" onclick="toggleModelosFilter()">
+                        <span id="toggleModelosText"><i class="fa-solid fa-eye-slash"></i> Ocultar Modelos</span>
+                    </button>
                     <button class="btn-modern btn-export" onclick="exportToExcel()">
                         <i class="fa-solid fa-download"></i> Exportar Lista
                     </button>
@@ -831,10 +834,29 @@
         let allData = [];
         let monthlyChart = null, paretoChart = null;
         let activeMonthFilter = null, activeClientFilter = null;
+        let isModelosHidden = false; // Começa mostrando tudo, ou ocultando se preferir? User pediu "botão para mostrar e ocultar". Vamos começar oculto se for padrão, ou visível. User não especificou padrão. Vou iniciar FALSE (mostrar tudo) e o botão "Ocultar".
 
         // --- FUNÇÕES MODAL ---
         function openModal() { document.getElementById('recordsModal').style.display = 'flex'; }
         function closeModal() { document.getElementById('recordsModal').style.display = 'none'; }
+
+        // --- FILTRO DE MODELOS ---
+        function toggleModelosFilter() {
+            isModelosHidden = !isModelosHidden;
+            const btn = document.getElementById('toggleModelosBtn');
+            const txt = document.getElementById('toggleModelosText');
+
+            if (isModelosHidden) {
+                // Estado: Modelos OCULTOS -> Botão diz "Mostrar"
+                btn.style.backgroundColor = '#3f3f46'; // Inativo/Darker
+                txt.innerHTML = '<i class="fa-solid fa-eye"></i> Mostrar Modelos';
+            } else {
+                // Estado: Modelos VISÍVEIS -> Botão diz "Ocultar"
+                btn.style.backgroundColor = ''; // Default style
+                txt.innerHTML = '<i class="fa-solid fa-eye-slash"></i> Ocultar Modelos';
+            }
+            applyColumnFilters();
+        }
 
         // ==========================================================================
         // UTILITÁRIOS
@@ -951,6 +973,12 @@
             });
 
             const filtered = allData.filter(item => {
+                // 0. Filter Modelos (Ends with '1')
+                if (isModelosHidden) {
+                    const codigo = String(item.CODIGO_PPR || '').trim();
+                    if (codigo.endsWith('1')) return false;
+                }
+
                 // 1. Global Filter (if exists)
                 if (globalSearch) {
                     const rowStr = Object.values(item).join(' ').toLowerCase();
