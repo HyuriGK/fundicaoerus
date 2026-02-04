@@ -868,6 +868,14 @@
                     <!-- Global Search Removed -->
                 </div>
                 <div class="toolbar-group">
+                    <button id="btnDivergencias" class="btn-modern"
+                        style="background-color: #ef4444; color: white; display: none; gap: 8px;"
+                        onclick="openDivergenciasModal()">
+                        <i class="fa-solid fa-triangle-exclamation"></i>
+                        Divergências
+                        <span class="badge-count"
+                            style="background: rgba(0,0,0,0.2); padding: 2px 6px; border-radius: 4px; font-size: 0.8em;">0</span>
+                    </button>
                     <button id="toggleModelosBtn" class="btn-modern btn-toggle" onclick="toggleModelosFilter()"
                         style="background-color: #3f3f46;">
                         <span id="toggleModelosText"><i class="fa-solid fa-eye"></i> Mostrar Modelos</span>
@@ -916,6 +924,37 @@
                 ESC para fechar</div>
         </div>
     </div>
+    </div>
+
+    <!-- DIVERGENCIAS MODAL -->
+    <div id="divergenciasModal" class="modal-overlay">
+        <div class="modal-card" style="max-width: 800px; height: 80vh;">
+            <div class="modal-header">
+                <h2 class="modal-title" style="font-size: 1.2rem; color: #ef4444;">Itens na Carteira (Ausentes Aqui)
+                </h2>
+                <i class="fa-solid fa-times modal-close" onclick="closeDivergenciasModal()"></i>
+            </div>
+
+            <div class="table-container" style="flex: 1; overflow: auto;">
+                <table style="width: 100%; border-collapse: collapse;">
+                    <thead style="position: sticky; top: 0; background: var(--bg-card); z-index: 10;">
+                        <tr style="border-bottom: 1px solid var(--border-subtle);">
+                            <th style="padding: 10px; text-align: left;">Pedido</th>
+                            <th style="padding: 10px; text-align: left;">Cliente</th>
+                            <th style="padding: 10px; text-align: left;">Código</th>
+                            <th style="padding: 10px; text-align: left;">Produto</th>
+                        </tr>
+                    </thead>
+                    <tbody id="divergenciasBody">
+                        <!-- Content -->
+                    </tbody>
+                </table>
+            </div>
+            <div style="margin-top: 15px; text-align: right;">
+                <button class="btn-modern" onclick="closeDivergenciasModal()">Fechar</button>
+            </div>
+        </div>
+    </div>
 
     <script>
         // ==========================================================================
@@ -937,6 +976,28 @@
         // --- FUNÇÕES MODAL ---
         function openModal() { document.getElementById('recordsModal').style.display = 'flex'; }
         function closeModal() { document.getElementById('recordsModal').style.display = 'none'; }
+
+        function openDivergenciasModal() {
+            renderDivergenciasTable();
+            document.getElementById('divergenciasModal').style.display = 'flex';
+        }
+        function closeDivergenciasModal() { document.getElementById('divergenciasModal').style.display = 'none'; }
+
+        function renderDivergenciasTable() {
+            const tbody = document.getElementById('divergenciasBody');
+            if (discrepancies.missing.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding: 20px;">Nenhuma divergência.</td></tr>';
+                return;
+            }
+            tbody.innerHTML = discrepancies.missing.map(item => `
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                    <td style="padding: 10px;">${item.pedido || '-'}</td>
+                    <td style="padding: 10px;">${item.razao_social || item.cliente || '-'}</td>
+                    <td style="padding: 10px; font-family: var(--font-mono);">${item.codigo || '-'}</td>
+                    <td style="padding: 10px;">${item.nome_produto || item.produto || '-'}</td>
+                </tr>
+            `).join('');
+        }
 
         // --- FILTRO DE MODELOS ---
         function toggleModelosFilter() {
@@ -1000,6 +1061,9 @@
             return w;
         }
 
+        let carteiraData = []; // Store carteira data for comparison
+        let discrepancies = { orphans: new Set(), missing: [] };
+
         async function loadDataFromServer() {
             try {
                 // 1. Fetch Custom Weights
@@ -1008,10 +1072,19 @@
                     if (wRes.ok) customWeights = await wRes.json();
                 } catch (err) { console.warn('Falha ao carregar pesos customizados', err); }
 
-                // 2. Fetch Pedidos
-                const res = await fetch('/api/pedidos-sync');
-                if (!res.ok) throw new Error('Erro na API');
-                allData = await res.json();
+                // 2. Fetch Pedidos AND Carteira in parallel
+                const [resPedidos, resCarteira] = await Promise.all([
+                    fetch('/api/pedidos-sync'),
+                    fetch('/api/carteira')
+                ]);
+
+                if (!resPedidos.ok) throw new Error('Erro na API Pedidos');
+                allData = await resPedidos.json();
+
+                if (resCarteira.ok) {
+                    carteiraData = await resCarteira.json();
+                    analyzeDiscrepancies();
+                }
 
                 // Apply filters immediately to respect "isModelosHidden" default
                 applyColumnFilters();
@@ -1020,6 +1093,74 @@
                 showToast("Erro", "Falha ao carregar dados do servidor.", "danger");
             } finally {
                 hideLoadingScreen();
+            }
+        }
+
+        function analyzeDiscrepancies() {
+            // Build Set of Keys from Carteira
+            // Carteira Key: pedido (Order) + codigo (Product Code)
+            const carteiraSet = new Set();
+            carteiraData.forEach(c => {
+                // Ensure we handle the nested structure if api/carteira returns grouped data, 
+                // but typically it returns a flat array of items or normalized. 
+                // Based on carteira.html, it seems to flatten it. 
+                // Let's assume the API returns the raw list or we need to normalize matches.
+                // Actually, /api/carteira returns the raw JSON list.
+
+                // Normalization helper (similar to generateGroupingKey in carteira)
+                const p = String(c.pedido || '').trim();
+                const cod = String(c.codigo || '').trim();
+                if (p && cod) {
+                    carteiraSet.add(`${p}_${cod}`);
+                }
+            });
+
+            discrepancies.orphans.clear();
+            discrepancies.missing = []; // Tasks in Carteira but not in Pedidos
+
+            // 1. Find Orphans (In Pedidos, NOT in Carteira)
+            // We do this check during render usually, but pre-calculating is fine.
+            // Key: CODIGO_PPR (Order) + PRODUTO_PPR (Product Code)
+
+            // 2. Find Missing (In Carteira, NOT in Pedidos)
+            // We need a set of Pedidos Keys first
+            const pedidosSet = new Set();
+            allData.forEach(p => {
+                const order = String(p.CODIGO_PPR || '').trim();
+                const prod = String(p.PRODUTO_PPR || '').trim();
+                if (order && prod) pedidosSet.add(`${order}_${prod}`);
+            });
+
+            carteiraData.forEach(c => {
+                const p = String(c.pedido || '').trim();
+                const cod = String(c.codigo || '').trim();
+                const key = `${p}_${cod}`;
+
+                if (p && cod && !pedidosSet.has(key)) {
+                    discrepancies.missing.push(c);
+                }
+            });
+
+            // Find Orphans for highlighting (will be used in renderTable)
+            allData.forEach(p => {
+                const order = String(p.CODIGO_PPR || '').trim();
+                const prod = String(p.PRODUTO_PPR || '').trim();
+                const key = `${order}_${prod}`;
+                if (order && prod && !carteiraSet.has(key)) {
+                    discrepancies.orphans.add(key);
+                }
+            });
+
+            updateDiscrepancyUI();
+        }
+
+        function updateDiscrepancyUI() {
+            const btn = document.getElementById('btnDivergencias');
+            if (discrepancies.missing.length > 0) {
+                btn.style.display = 'flex';
+                btn.querySelector('.badge-count').innerText = discrepancies.missing.length;
+            } else {
+                btn.style.display = 'none';
             }
         }
 
@@ -1118,8 +1259,15 @@
                     />
                 `;
 
+                // Check Reconciliation Orphan
+                const itemKey = `${String(item.CODIGO_PPR || '').trim()}_${String(item.PRODUTO_PPR || '').trim()}`;
+                const isOrphan = discrepancies.orphans.has(itemKey);
+
+                const trStyle = isOrphan ? 'background-color: rgba(220, 38, 38, 0.15); box-shadow: inset 2px 0 0 #ef4444;' : '';
+                const orphanTitle = isOrphan ? 'title="Este item consta no Pedidos mas NÃO consta na Carteira (Orfão)"' : '';
+
                 return `
-                <tr>
+                <tr style="${trStyle}" ${orphanTitle}>
                     <td style="text-align:center;">${pedidoHtml}</td>
                     <td style="text-align:center; font-family:var(--font-mono); color:var(--text-muted);">${item.ORDEM_COMPRA_PPR || '-'}</td>
                     <td style="text-align:center;">${entrega}</td>
