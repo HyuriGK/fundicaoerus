@@ -40,7 +40,9 @@ async function syncData() {
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
-        console.log('✅ Tabela Postgres verificada.');
+        // Limpar tabela para garantir que registros excluídos no filtro (Cancelados/Faturados) não permaneçam
+        await client.query('DELETE FROM firebird_sync_pedidos');
+        console.log('✅ Tabela Postgres verificada e limpa.');
     } catch (e) {
         console.error('Erro ao criar tabela Postgres:', e);
         return;
