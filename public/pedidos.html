@@ -1052,13 +1052,18 @@
 
         // Helper global para cálculo de peso corrigido
         function getCorrectedWeight(item) {
-            let w = Number(item.PESO_LIQUIDO_NPR) || 0;
-            // Se tiver custom weight, recalculamos: Custom * Qtd
+            const qtdOriginal = Number(item.QUANTIDADE_PPR) || 0;
+            const qtdFaturada = Number(item.QUANTIDADE_FATURADA_PPR) || 0;
+            const saldoReal = Math.max(0, qtdOriginal - qtdFaturada);
+
+            let pesoUnitario = qtdOriginal > 0 ? (Number(item.PESO_LIQUIDO_NPR) || 0) / qtdOriginal : 0;
+
+            // Se tiver custom weight, usamos ele
             if (customWeights[item.PRODUTO_PPR]) {
-                const q = Number(item.QUANTIDADE_PPR) || 0;
-                w = customWeights[item.PRODUTO_PPR] * q;
+                pesoUnitario = customWeights[item.PRODUTO_PPR];
             }
-            return w;
+
+            return pesoUnitario * saldoReal;
         }
 
         let carteiraData = []; // Store carteira data for comparison
@@ -1227,20 +1232,19 @@
                     pedidoHtml += ` <span class="badge-block">BLOCK</span>`;
                 }
 
-                const qtd = Number(item.QUANTIDADE_PPR) || 0;
-                let totalWeight = Number(item.PESO_LIQUIDO_NPR) || 0;
-                let unitWeight = qtd > 0 ? (totalWeight / qtd) : 0;
+                const qtdOriginal = Number(item.QUANTIDADE_PPR) || 0;
+                const qtdFaturada = Number(item.QUANTIDADE_FATURADA_PPR) || 0;
+                const saldoReal = Math.max(0, qtdOriginal - qtdFaturada);
+
+                let totalWeightOriginal = Number(item.PESO_LIQUIDO_NPR) || 0;
+                let unitWeight = qtdOriginal > 0 ? (totalWeightOriginal / qtdOriginal) : 0;
 
                 // Lógica de Peso Customizado:
-                // Se o peso original for zero (ou muito próximo) E tivermos um peso salvo
-                const isZeroWeight = totalWeight === 0;
-                let customVal = null;
-
-                if (isZeroWeight && customWeights[item.PRODUTO_PPR]) {
-                    customVal = customWeights[item.PRODUTO_PPR];
-                    unitWeight = customVal;
-                    totalWeight = unitWeight * qtd; // Recalcula total visualmente
+                if (customWeights[item.PRODUTO_PPR]) {
+                    unitWeight = customWeights[item.PRODUTO_PPR];
                 }
+
+                const totalWeightReal = unitWeight * saldoReal;
 
                 // Input HTML
                 // O usuário pediu: "todas devem ser editaveis, não somente as que vieram editadas já"
@@ -1271,16 +1275,16 @@
                     <td style="text-align:center;">${pedidoHtml}</td>
                     <td style="text-align:center; font-family:var(--font-mono); color:var(--text-muted);">${item.ORDEM_COMPRA_PPR || '-'}</td>
                     <td style="text-align:center;">${entrega}</td>
-                    <td style="color:var(--text-muted); text-align:left;" title="Cliente">-</td> <!-- CLIENTE (Auto truncate via TD CSS + Fixed Layout) -->
+                    <td style="color:var(--text-muted); text-align:left;" title="Cliente">-</td> <!-- CLIENTE -->
                     <td style="text-align:center; font-family:var(--font-mono); color:var(--text-muted);">${item.PRODUTO_PPR}</td>
-                    <td title="${item.NOME_PRODUTO_PPR || ''}"> <!-- PRODUTO (Auto truncate via TD CSS + Fixed Layout) -->
+                    <td title="${item.NOME_PRODUTO_PPR || ''}">
                         ${item.NOME_PRODUTO_PPR || item.PRODUTO_PPR}
                     </td>
                     <td style="text-align:center; color:var(--text-muted);">-</td> <!-- MAT -->
-                    <td style="text-align:center;">${item.QUANTIDADE_PPR}</td> <!-- SALDO moved left -->
-                    <td style="text-align:center;">${weightInputHtml}</td> <!-- PESO UN moved right -->
-                    <td style="display:none;">${item.QUANTIDADE_PPR}</td>
-                    <td style="text-align:center;">${formatNumber(totalWeight)}</td>
+                    <td style="text-align:center;">${saldoReal}</td> <!-- SALDO REAL (Qtd Original - Fat) -->
+                    <td style="text-align:center;">${weightInputHtml}</td> <!-- PESO UN -->
+                    <td style="display:none;">${saldoReal}</td>
+                    <td style="text-align:center;">${formatNumber(totalWeightReal)}</td>
                 </tr>
                 `;
             }).join('');
@@ -1305,7 +1309,11 @@
             const releasedWeight = totalWeight - blockedWeight;
 
             // 5. Peso Médio (Peso Total / Quantidade Total de Peças)
-            const totalQty = list.reduce((acc, i) => acc + (Number(i.QUANTIDADE_PPR) || 0), 0);
+            const totalQty = list.reduce((acc, i) => {
+                const qOrig = Number(i.QUANTIDADE_PPR) || 0;
+                const qFat = Number(i.QUANTIDADE_FATURADA_PPR) || 0;
+                return acc + Math.max(0, qOrig - qFat);
+            }, 0);
             const avgWeight = totalQty > 0 ? (totalWeight / totalQty) : 0;
 
             // Update Header/Footer (Mantemos alguns gerais no footer)
