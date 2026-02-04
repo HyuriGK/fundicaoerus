@@ -985,18 +985,56 @@
 
         function renderDivergenciasTable() {
             const tbody = document.getElementById('divergenciasBody');
-            if (discrepancies.missing.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding: 20px;">Nenhuma divergência.</td></tr>';
+            const totalDiv = discrepancies.missing.length + discrepancies.mismatches.length;
+
+            if (totalDiv === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding: 20px;">Nenhuma divergência encontrada.</td></tr>';
                 return;
             }
-            tbody.innerHTML = discrepancies.missing.map(item => `
-                <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
-                    <td style="padding: 10px;">${item.pedido || '-'}</td>
-                    <td style="padding: 10px;">${item.razao_social || item.cliente || '-'}</td>
-                    <td style="padding: 10px; font-family: var(--font-mono);">${item.codigo || '-'}</td>
-                    <td style="padding: 10px;">${item.nome_produto || item.produto || '-'}</td>
-                </tr>
-            `).join('');
+
+            let html = '';
+
+            // 1. Missing (Orphans in Carteira)
+            if (discrepancies.missing.length > 0) {
+                html += `<tr style="background: rgba(239, 68, 68, 0.1);"><td colspan="4" style="padding: 10px; font-weight: 700; color: #ef4444;">Ausentes no Pedidos (Só no Excel)</td></tr>`;
+                html += discrepancies.missing.map(item => `
+                    <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                        <td style="padding: 10px;">${item.pedido || '-'}</td>
+                        <td style="padding: 10px;">${item.razao_social || item.cliente || '-'}</td>
+                        <td style="padding: 10px; font-family: var(--font-mono);">${item.codigo || '-'}</td>
+                        <td style="padding: 10px;">${item.nome_produto || item.produto || '-'} <span style="color: var(--status-danger); float: right;">[NÃO ENCONTRADO]</span></td>
+                    </tr>
+                `).join('');
+            }
+
+            // 2. Mismatches (Qty difference)
+            if (discrepancies.mismatches.length > 0) {
+                html += `<tr style="background: rgba(245, 158, 11, 0.1);"><td colspan="4" style="padding: 10px; font-weight: 700; color: #f59e0b;">Divergência de Saldo (ERP vs Excel)</td></tr>`;
+                html += discrepancies.mismatches.map(m => {
+                    // Find name from allData
+                    const ped = allData.find(p => `${p.CODIGO_PPR}_${p.PRODUTO_PPR}` === m.key);
+                    const name = ped ? ped.NOME_PRODUTO_PPR : 'Produto';
+                    const [orderVal, prodVal] = m.key.split('_');
+
+                    return `
+                    <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                        <td style="padding: 10px;">${orderVal}</td>
+                        <td style="padding: 10px; color: var(--text-muted);">Ver registros</td>
+                        <td style="padding: 10px; font-family: var(--font-mono);">${prodVal}</td>
+                        <td style="padding: 10px;">
+                            ${name}
+                            <div style="font-size: 0.8rem; margin-top: 4px;">
+                                <span style="color: var(--color-primary);">ERP: ${m.ped}</span> | 
+                                <span style="color: #f59e0b;">Excel: ${m.cart}</span>
+                                <strong style="float: right; color: #ef4444;">Dif: ${(m.ped - m.cart).toFixed(2)}</strong>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+                }).join('');
+            }
+
+            tbody.innerHTML = html;
         }
 
         // --- FILTRO DE MODELOS ---
@@ -1067,7 +1105,7 @@
         }
 
         let carteiraData = []; // Store carteira data for comparison
-        let discrepancies = { orphans: new Set(), missing: [] };
+        let discrepancies = { orphans: new Set(), missing: [], mismatches: [] };
 
         async function loadDataFromServer() {
             try {
@@ -1121,38 +1159,63 @@
             });
 
             discrepancies.orphans.clear();
-            discrepancies.missing = []; // Tasks in Carteira but not in Pedidos
+            discrepancies.missing = []; // In Carteira but not in Pedidos
+            discrepancies.mismatches = []; // In both, but different quantity
 
-            // 1. Find Orphans (In Pedidos, NOT in Carteira)
-            // We do this check during render usually, but pre-calculating is fine.
-            // Key: CODIGO_PPR (Order) + PRODUTO_PPR (Product Code)
+            // Map for quick quantity check (Key: order_prod -> saldo)
+            const carteiraQtyMap = new Map();
+            carteiraData.forEach(c => {
+                const p = String(c.pedido || '').trim();
+                const cod = String(c.codigo || '').trim();
+                const key = `${p}_${cod}`;
+                if (p && cod) {
+                    const currentVal = carteiraQtyMap.get(key) || 0;
+                    carteiraQtyMap.set(key, currentVal + (Number(c.saldo) || 0));
+                    carteiraSet.add(key);
+                }
+            });
 
-            // 2. Find Missing (In Carteira, NOT in Pedidos)
-            // We need a set of Pedidos Keys first
-            const pedidosSet = new Set();
+            // 1. Find Orphans & Mismatches
+            // We need to group Pedidos by Key first because Pedidos might have multiple rows for same Key
+            const pedidosGropued = new Map();
             allData.forEach(p => {
                 const order = String(p.CODIGO_PPR || '').trim();
                 const prod = String(p.PRODUTO_PPR || '').trim();
-                if (order && prod) pedidosSet.add(`${order}_${prod}`);
+                const key = `${order}_${prod}`;
+                if (order && prod) {
+                    const qOrig = Number(p.QUANTIDADE_PPR) || 0;
+                    const qFat = Number(p.QUANTIDADE_FATURADA_PPR) || 0;
+                    const saldo = Math.max(0, qOrig - qFat);
+
+                    const current = pedidosGropued.get(key) || 0;
+                    pedidosGropued.set(key, current + saldo);
+                }
             });
 
+            // Check mismatches
+            pedidosGropued.forEach((saldoPed, key) => {
+                if (carteiraSet.has(key)) {
+                    const saldoCart = carteiraQtyMap.get(key);
+                    if (Math.abs(saldoPed - saldoCart) > 0.01) {
+                        discrepancies.mismatches.push({
+                            key: key,
+                            ped: saldoPed,
+                            cart: saldoCart
+                        });
+                    }
+                } else {
+                    discrepancies.orphans.add(key);
+                }
+            });
+
+            // 2. Find Missing (In Carteira, NOT in Pedidos)
             carteiraData.forEach(c => {
                 const p = String(c.pedido || '').trim();
                 const cod = String(c.codigo || '').trim();
                 const key = `${p}_${cod}`;
 
-                if (p && cod && !pedidosSet.has(key)) {
+                if (p && cod && !pedidosGropued.has(key)) {
                     discrepancies.missing.push(c);
-                }
-            });
-
-            // Find Orphans for highlighting (will be used in renderTable)
-            allData.forEach(p => {
-                const order = String(p.CODIGO_PPR || '').trim();
-                const prod = String(p.PRODUTO_PPR || '').trim();
-                const key = `${order}_${prod}`;
-                if (order && prod && !carteiraSet.has(key)) {
-                    discrepancies.orphans.add(key);
                 }
             });
 
@@ -1161,9 +1224,10 @@
 
         function updateDiscrepancyUI() {
             const btn = document.getElementById('btnDivergencias');
-            if (discrepancies.missing.length > 0) {
+            const totalDiv = discrepancies.missing.length + discrepancies.mismatches.length;
+            if (totalDiv > 0) {
                 btn.style.display = 'flex';
-                btn.querySelector('.badge-count').innerText = discrepancies.missing.length;
+                btn.querySelector('.badge-count').innerText = totalDiv;
             } else {
                 btn.style.display = 'none';
             }
@@ -1263,12 +1327,16 @@
                     />
                 `;
 
-                // Check Reconciliation Orphan
+                // Check Reconciliation Orphan/Mismatch
                 const itemKey = `${String(item.CODIGO_PPR || '').trim()}_${String(item.PRODUTO_PPR || '').trim()}`;
                 const isOrphan = discrepancies.orphans.has(itemKey);
+                const isMismatch = discrepancies.mismatches.some(m => m.key === itemKey);
 
-                const trStyle = isOrphan ? 'background-color: rgba(220, 38, 38, 0.15); box-shadow: inset 2px 0 0 #ef4444;' : '';
+                let trStyle = isOrphan ? 'background-color: rgba(220, 38, 38, 0.15); box-shadow: inset 2px 0 0 #ef4444;' : '';
                 const orphanTitle = isOrphan ? 'title="Este item consta no Pedidos mas NÃO consta na Carteira (Orfão)"' : '';
+
+                const qStyle = isMismatch ? 'background: rgba(245, 158, 11, 0.2); color: #f59e0b; font-weight: 700; border-radius: 4px;' : '';
+                const qTitle = isMismatch ? `title="Divergência de Quantidade! No ERP: ${saldoReal} | No Excel: ${discrepancies.mismatches.find(m => m.key === itemKey)?.cart || 0}"` : '';
 
                 return `
                 <tr style="${trStyle}" ${orphanTitle}>
@@ -1281,7 +1349,7 @@
                         ${item.NOME_PRODUTO_PPR || item.PRODUTO_PPR}
                     </td>
                     <td style="text-align:center; color:var(--text-muted);">-</td> <!-- MAT -->
-                    <td style="text-align:center;">${saldoReal}</td> <!-- SALDO REAL (Qtd Original - Fat) -->
+                    <td style="text-align:center; ${qStyle}" ${qTitle}>${saldoReal}</td> <!-- SALDO REAL -->
                     <td style="text-align:center;">${weightInputHtml}</td> <!-- PESO UN -->
                     <td style="display:none;">${saldoReal}</td>
                     <td style="text-align:center;">${formatNumber(totalWeightReal)}</td>
