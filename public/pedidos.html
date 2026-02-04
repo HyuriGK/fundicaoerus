@@ -988,6 +988,18 @@
         // ==========================================================================
         // DADOS E SERVIDOR
         // ==========================================================================
+
+        // Helper global para cálculo de peso corrigido
+        function getCorrectedWeight(item) {
+            let w = Number(item.PESO_LIQUIDO_NPR) || 0;
+            // Se tiver custom weight, recalculamos: Custom * Qtd
+            if (customWeights[item.PRODUTO_PPR]) {
+                const q = Number(item.QUANTIDADE_PPR) || 0;
+                w = customWeights[item.PRODUTO_PPR] * q;
+            }
+            return w;
+        }
+
         async function loadDataFromServer() {
             try {
                 // 1. Fetch Custom Weights
@@ -1130,17 +1142,7 @@
             // 1. Pedidos Únicos
             const uniqueOrders = new Set(list.map(i => i.CODIGO_PPR)).size;
 
-            // Função helper para calcular peso corrigido do item
-            const getCorrectedWeight = (i) => {
-                let w = Number(i.PESO_LIQUIDO_NPR) || 0;
-                // Se tiver custom weight, recalculamos: Custom * Qtd
-                // O usuário disse: "se o peso está corrigido ele deve ser contabilizado nos KPI"
-                if (customWeights[i.PRODUTO_PPR]) {
-                    const q = Number(i.QUANTIDADE_PPR) || 0;
-                    w = customWeights[i.PRODUTO_PPR] * q;
-                }
-                return w;
-            };
+
 
             // 2. Peso Total (Corrigido)
             const totalWeight = list.reduce((acc, i) => acc + getCorrectedWeight(i), 0);
@@ -1315,7 +1317,7 @@
             list.forEach(item => {
                 let d = item.ENTREGA_PETR ? new Date(item.ENTREGA_PETR) : null;
                 if (d && d.getFullYear() >= 2000) {
-                    mData[d.getMonth()] += (Number(item.PESO_LIQUIDO_NPR) || 0);
+                    mData[d.getMonth()] += getCorrectedWeight(item);
                 }
             });
 
@@ -1374,7 +1376,7 @@
                 const id = item.EMPRESA_PPR || 'N/A';
                 const name = item.NOME_CLIENTE || `Cliente ${id}`;
                 if (!cMap[id]) cMap[id] = { val: 0, name: name };
-                cMap[id].val += (Number(item.PESO_LIQUIDO_NPR) || 0);
+                cMap[id].val += getCorrectedWeight(item);
             });
 
             // Sort top 10
