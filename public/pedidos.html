@@ -721,11 +721,11 @@
 
         .weight-edit-input {
             width: 80px;
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid var(--border-subtle);
+            background: transparent;
+            border: 1px dotted var(--text-muted);
+            /* Pontilhado */
             border-radius: 4px;
             color: #fff;
-            /* Valor destacado */
             text-align: center;
             padding: 4px;
             font-family: var(--font-mono);
@@ -735,10 +735,11 @@
 
         .weight-edit-input:focus {
             background: rgba(255, 255, 255, 0.1);
+            border-style: solid;
+            /* Muda para sólido ao focar */
             border-color: var(--color-primary);
             outline: none;
             box-shadow: 0 0 5px rgba(14, 165, 233, 0.3);
-            /* Sky Blue glow */
         }
     </style>
 </head>
@@ -1081,28 +1082,21 @@
                 }
 
                 // Input HTML
-                // Se veio do banco (isZeroWeight = false), mostramos fixo (ou input disabled).
-                // O usuário pediu "para as linhas que estão zeradas".
+                // O usuário pediu: "todas devem ser editaveis, não somente as que vieram editadas já"
+                // E pediu "contorno pontilhado".
 
-                let weightInputHtml = '';
-                if (!isZeroWeight) {
-                    // Peso real do Firebird -> Apenas exibe (ou input disabled style)
-                    weightInputHtml = `<span style="opacity:0.8">${formatNumber(unitWeight)}</span>`;
-                } else {
-                    // Peso zero -> Editável
-                    // Se tiver customVal, joga no value
-                    const valStr = customVal ? formatNumber(customVal) : '';
-                    weightInputHtml = `
-                        <input 
-                            type="text" 
-                            class="weight-edit-input" 
-                            value="${valStr}" 
-                            placeholder="0,00"
-                            onkeydown="saveWeight(event, '${item.PRODUTO_PPR}')"
-                            onclick="this.select()"
-                        />
-                    `;
-                }
+                const valStr = unitWeight > 0 ? formatNumber(unitWeight) : '';
+
+                let weightInputHtml = `
+                    <input 
+                        type="text" 
+                        class="weight-edit-input" 
+                        value="${valStr}" 
+                        placeholder="-"
+                        onkeydown="saveWeight(event, '${item.PRODUTO_PPR}')"
+                        onclick="this.select()"
+                    />
+                `;
 
                 return `
                 <tr>
@@ -1125,20 +1119,31 @@
             // 1. Pedidos Únicos
             const uniqueOrders = new Set(list.map(i => i.CODIGO_PPR)).size;
 
-            // 2. Peso Total
-            const totalWeight = list.reduce((acc, i) => acc + (Number(i.PESO_LIQUIDO_NPR) || 0), 0);
+            // Função helper para calcular peso corrigido do item
+            const getCorrectedWeight = (i) => {
+                let w = Number(i.PESO_LIQUIDO_NPR) || 0;
+                // Se tiver custom weight, recalculamos: Custom * Qtd
+                // O usuário disse: "se o peso está corrigido ele deve ser contabilizado nos KPI"
+                if (customWeights[i.PRODUTO_PPR]) {
+                    const q = Number(i.QUANTIDADE_PPR) || 0;
+                    w = customWeights[i.PRODUTO_PPR] * q;
+                }
+                return w;
+            };
+
+            // 2. Peso Total (Corrigido)
+            const totalWeight = list.reduce((acc, i) => acc + getCorrectedWeight(i), 0);
 
             // 3. Peso Bloqueado (Sem data)
             const blockedWeight = list.reduce((acc, i) => {
                 const isBlocked = !i.ENTREGA_PETR && !i.DATA_ENTREGA_PPR;
-                return acc + (isBlocked ? (Number(i.PESO_LIQUIDO_NPR) || 0) : 0);
+                return acc + (isBlocked ? getCorrectedWeight(i) : 0);
             }, 0);
 
             // 4. Peso Liberado (Total - Bloqueado)
             const releasedWeight = totalWeight - blockedWeight;
 
             // 5. Peso Médio (Peso Total / Quantidade Total de Peças)
-            // Pedido antigo: (Peso Total / Pedidos Únicos) -> Alterado para por peça.
             const totalQty = list.reduce((acc, i) => acc + (Number(i.QUANTIDADE_PPR) || 0), 0);
             const avgWeight = totalQty > 0 ? (totalWeight / totalQty) : 0;
 
@@ -1234,13 +1239,31 @@
                             // Filter for blocked items (no delivery date)
                             return !item.ENTREGA_PETR && !item.DATA_ENTREGA_PPR;
                         }
+                        // O usuário pediu "filtrar os registros que estão exatamente escritos"
                         return String(item[key]) === value;
                     }
 
                     if (key === 'PESO_LIQUIDO_NPR') {
                         // Permite user digitar 10,5 e converter para 10.5
                         const cleanValue = value.replace(',', '.');
+                        // O usuário pediu "filtrar os registros que estão exatamente escritos"
                         return item[key] == cleanValue;
+                    }
+
+                    // For PESO_UNIT, we need to calculate it first
+                    if (key === 'PESO_UNIT') {
+                        const qtd = Number(item.QUANTIDADE_PPR) || 0;
+                        let totalWeight = Number(item.PESO_LIQUIDO_NPR) || 0;
+                        let uW = qtd > 0 ? (totalWeight / qtd) : 0;
+
+                        if (totalWeight === 0 && customWeights[item.PRODUTO_PPR]) {
+                            uW = customWeights[item.PRODUTO_PPR];
+                        }
+                        const valStr = formatNumber(uW); // ex: "0,00" ou "1.234,56"
+
+                        // O usuário pediu "filtrar os registros que estão exatamente escritos"
+                        // Comparar strings exatas
+                        return valStr === value;
                     }
 
                     // Defaults
@@ -1250,7 +1273,8 @@
                         itemVal += ' ' + new Date(item.ENTREGA_PETR).toLocaleDateString();
                     }
 
-                    return itemVal.toLowerCase().includes(value);
+                    // O usuário pediu "filtrar os registros que estão exatamente escritos"
+                    return itemVal.toLowerCase() === value;
                 });
             });
 
