@@ -1412,11 +1412,8 @@
         }
 
         function updateParetoChart(list) {
-            // Group by EMPRESA_PPR (CLIENT ID)
             const cMap = {};
-            // Also keep map of Name to ID for filtering if needed, 
-            // but here we use the Key directly if key is ID.
-            // Wait, we need the NAME for the label, but ID for filtering.
+            const totalWeightAll = list.reduce((acc, item) => acc + getCorrectedWeight(item), 0);
 
             list.forEach(item => {
                 const id = item.EMPRESA_PPR || 'N/A';
@@ -1425,14 +1422,19 @@
                 cMap[id].val += getCorrectedWeight(item);
             });
 
-            // Sort top 10
             const sorted = Object.entries(cMap)
                 .sort((a, b) => b[1].val - a[1].val)
                 .slice(0, 10);
 
             const labels = sorted.map(s => s[1].name);
-            const data = sorted.map(s => s[1].val);
-            const ids = sorted.map(s => s[0]); // Keep IDs for filtering
+            const dataKg = sorted.map(s => s[1].val);
+            const ids = sorted.map(s => s[0]);
+
+            let cumulative = 0;
+            const dataPercent = sorted.map(s => {
+                cumulative += s[1].val;
+                return totalWeightAll > 0 ? (cumulative / totalWeightAll) * 100 : 0;
+            });
 
             const bgColors = ids.map(id =>
                 activeChartFilters.client == id ? '#fff' : chartColorAmber
@@ -1440,35 +1442,76 @@
 
             if (paretoChart) paretoChart.destroy();
             paretoChart = new Chart(document.getElementById('paretoChart').getContext('2d'), {
-                type: 'bar', // Horizontal bar is better for names
-                indexAxis: 'y',
                 data: {
                     labels: labels,
-                    datasets: [{
-                        label: 'kg',
-                        data: data,
-                        backgroundColor: bgColors,
-                        borderRadius: 4
-                    }]
+                    datasets: [
+                        {
+                            type: 'line',
+                            label: '% Acumulada',
+                            data: dataPercent,
+                            borderColor: '#fff',
+                            backgroundColor: 'rgba(255,255,255,0.1)',
+                            borderWidth: 2,
+                            pointRadius: 3,
+                            tension: 0.3,
+                            yAxisID: 'yPercent'
+                        },
+                        {
+                            type: 'bar',
+                            label: 'Peso (kg)',
+                            data: dataKg,
+                            backgroundColor: bgColors,
+                            borderRadius: 4,
+                            yAxisID: 'y'
+                        }
+                    ]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
                     scales: {
-                        x: {
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
                             beginAtZero: true,
-                            grid: {
-                                display: true,
-                                color: 'rgba(255,255,255,0.05)'
+                            title: { display: true, text: 'kg', color: '#a1a1aa' },
+                            grid: { color: 'rgba(255,255,255,0.05)' }
+                        },
+                        yPercent: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            beginAtZero: true,
+                            max: 100,
+                            title: { display: true, text: '%', color: '#a1a1aa' },
+                            grid: { drawOnChartArea: false }
+                        },
+                        x: {
+                            grid: { display: false }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function (context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) label += ': ';
+                                    if (context.dataset.yAxisID === 'yPercent') {
+                                        label += context.parsed.y.toFixed(1) + '%';
+                                    } else {
+                                        label += formatNumber(context.parsed.y) + ' kg';
+                                    }
+                                    return label;
+                                }
                             }
                         }
                     },
-                    plugins: { legend: { display: false } },
                     onClick: (e, elements) => {
                         if (elements.length > 0) {
                             const idx = elements[0].index;
                             const clickedId = ids[idx];
-                            // Toggle
                             activeChartFilters.client = (activeChartFilters.client == clickedId) ? null : clickedId;
                         } else {
                             activeChartFilters.client = null;
