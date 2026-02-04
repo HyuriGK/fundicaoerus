@@ -923,7 +923,8 @@
         let allData = [];
         let customWeights = {}; // Armazena pesos customizados
         let monthlyChart = null, paretoChart = null;
-        let activeMonthFilter = null, activeClientFilter = null;
+        let activeMonthFilter = null, activeClientFilter = null; // Legacy vars, replacing with object below
+        let activeChartFilters = { month: null, client: null }; // New PowerBI-style filters
         let isModelosHidden = true; // Inicia OCULTO por padrão
 
         // --- FUNÇÕES MODAL ---
@@ -1220,14 +1221,21 @@
                 if (isModelosHidden) {
                     const prodCode = String(item.PRODUTO_PPR || '').trim();
                     const prodName = String(item.NOME_PRODUTO_PPR || item.PRODUTO_PPR || '').trim().toUpperCase();
-
-                    // User Rule: CÓD. PROD ends with 1 AND PRODUTO starts with MODELO
-                    if (prodCode.endsWith('1') && prodName.startsWith('MODELO')) {
-                        return false;
-                    }
+                    if (prodCode.endsWith('1') && prodName.startsWith('MODELO')) return false;
                 }
 
-                // 1. Global Filter Removed
+                // 1. Chart Filters (PowerBI Style)
+                if (activeChartFilters.month !== null) {
+                    const d = item.ENTREGA_PETR ? new Date(item.ENTREGA_PETR) : null;
+                    // activeChartFilters.month is 0-11 index
+                    if (!d || d.getMonth() !== activeChartFilters.month) return false;
+                }
+
+                if (activeChartFilters.client !== null) {
+                    // We mapped client by EMPRESA_PPR ID in chart
+                    // activeChartFilters.client is the EMPRESA_PPR ID (string/number)
+                    if (item.EMPRESA_PPR != activeChartFilters.client) return false;
+                }
 
                 // 2. Col Filters
                 return Object.entries(filters).every(([key, value]) => {
@@ -1300,62 +1308,135 @@
 
             const monthLabels = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
-            if (monthlyChart) monthlyChart.destroy();
-            monthlyChart = new Chart(document.getElementById('monthlyChart').getContext('2d'), {
-                type: 'bar',
+        });
+
+        // Highlight selected bar
+        const bgColors = monthLabels.map((_, idx) =>
+            activeChartFilters.month === idx ? '#fff' : chartColorAmber
+        );
+
+        if (monthlyChart) monthlyChart.destroy();
+        monthlyChart = new Chart(document.getElementById('monthlyChart').getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: monthLabels,
+                datasets: [{
+                    label: 'kg',
+                    data: mData,
+                    backgroundColor: bgColors,
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' } },
+                    x: { grid: { display: false } }
+                },
+                plugins: { legend: { display: false } },
+                onClick: (e, elements) => {
+                    if (elements.length > 0) {
+                        const idx = elements[0].index;
+                        // Toggle: if clicked same, clear it. Else set it.
+                        activeChartFilters.month = (activeChartFilters.month === idx) ? null : idx;
+                    } else {
+                        // Click background -> clear
+                        activeChartFilters.month = null;
+                    }
+                    applyColumnFilters();
+                }
+            }
+        });
+        }
+
+        function updateParetoChart(list) {
+            // Group by EMPRESA_PPR (CLIENT ID)
+            const cMap = {};
+            // Also keep map of Name to ID for filtering if needed, 
+            // but here we use the Key directly if key is ID.
+            // Wait, we need the NAME for the label, but ID for filtering.
+
+            list.forEach(item => {
+                const id = item.EMPRESA_PPR || 'N/A';
+                const name = item.NOME_CLIENTE || `Cliente ${id}`;
+                if (!cMap[id]) cMap[id] = { val: 0, name: name };
+                cMap[id].val += (Number(item.PESO_LIQUIDO_NPR) || 0);
+            });
+
+            // Sort top 10
+            const sorted = Object.entries(cMap)
+                .sort((a, b) => b[1].val - a[1].val)
+                .slice(0, 10);
+
+            const labels = sorted.map(s => s[1].name);
+            const data = sorted.map(s => s[1].val);
+            const ids = sorted.map(s => s[0]); // Keep IDs for filtering
+
+            const bgColors = ids.map(id =>
+                activeChartFilters.client == id ? '#fff' : chartColorAmber
+            );
+
+            if (paretoChart) paretoChart.destroy();
+            paretoChart = new Chart(document.getElementById('paretoChart').getContext('2d'), {
+                type: 'bar', // Horizontal bar is better for names
+                indexAxis: 'y',
                 data: {
-                    labels: monthLabels,
+                    labels: labels,
                     datasets: [{
                         label: 'kg',
-                        data: mData,
-                        backgroundColor: chartColorAmber
+                        data: data,
+                        backgroundColor: bgColors,
+                        borderRadius: 4
                     }]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    scales: { y: { beginAtZero: true } },
-                    plugins: { legend: { display: false } }
+                    scales: { x: { beginAtZero: true } },
+                    plugins: { legend: { display: false } },
+                    onClick: (e, elements) => {
+                        if (elements.length > 0) {
+                            const idx = elements[0].index;
+                            const clickedId = ids[idx];
+                            // Toggle
+                            activeChartFilters.client = (activeChartFilters.client == clickedId) ? null : clickedId;
+                        } else {
+                            activeChartFilters.client = null;
+                        }
+                        applyColumnFilters();
+                    }
                 }
             });
         }
 
-        function updateParetoChart(list) {
-            // Group by EMPRESA_PPR (CLIENT ID) since we don't have name
-            // Actually, let's treat EMPRESA_PPR as string ID
-            const cMap = {};
-            list.forEach(item => {
-                const name = "Cliente " + item.EMPRESA_PPR; // Generic Name since we only have ID
-                cMap[name] = (cMap[name] || 0) + (Number(item.PESO_LIQUIDO_NPR) || 0);
-            });
+        const sorted = Object.entries(cMap).sort((a, b) => b[1] - a[1]).slice(0, 10);
+        let total = sorted.reduce((a, b) => a + b[1], 0), acc = 0;
+        const accData = sorted.map(x => { acc += x[1]; return total > 0 ? (acc / total) * 100 : 0; });
 
-            const sorted = Object.entries(cMap).sort((a, b) => b[1] - a[1]).slice(0, 10);
-            let total = sorted.reduce((a, b) => a + b[1], 0), acc = 0;
-            const accData = sorted.map(x => { acc += x[1]; return total > 0 ? (acc / total) * 100 : 0; });
-
-            if (paretoChart) paretoChart.destroy();
-            paretoChart = new Chart(document.getElementById('paretoChart').getContext('2d'), {
-                type: 'bar',
-                data: {
-                    labels: sorted.map(x => x[0]),
-                    datasets: [
-                        { type: 'line', label: '%', data: accData, borderColor: '#fff', yAxisID: 'y1' },
-                        {
-                            type: 'bar',
-                            label: 'kg',
-                            data: sorted.map(x => x[1]),
-                            backgroundColor: chartColorAmber,
-                            yAxisID: 'y'
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
-                    scales: { y: { beginAtZero: true }, y1: { position: 'right', min: 0, max: 100 } }
-                }
-            });
+        if (paretoChart) paretoChart.destroy();
+        paretoChart = new Chart(document.getElementById('paretoChart').getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: sorted.map(x => x[0]),
+                datasets: [
+                    { type: 'line', label: '%', data: accData, borderColor: '#fff', yAxisID: 'y1' },
+                    {
+                        type: 'bar',
+                        label: 'kg',
+                        data: sorted.map(x => x[1]),
+                        backgroundColor: chartColorAmber,
+                        yAxisID: 'y'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: { y: { beginAtZero: true }, y1: { position: 'right', min: 0, max: 100 } }
+            }
+        });
         }
 
         function exportToExcel() {
