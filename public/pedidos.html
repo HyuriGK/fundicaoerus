@@ -1011,22 +1011,22 @@
             if (discrepancies.mismatches.length > 0) {
                 html += `<tr style="background: rgba(245, 158, 11, 0.1);"><td colspan="4" style="padding: 10px; font-weight: 700; color: #f59e0b;">Divergência de Saldo (ERP vs Excel)</td></tr>`;
                 html += discrepancies.mismatches.map(m => {
-                    // Find name from allData
-                    const ped = allData.find(p => `${p.CODIGO_PPR}_${p.PRODUTO_PPR}` === m.key);
+                    // Find name/oc from allData
+                    const ped = allData.find(p => getCleanKey(p.CODIGO_PPR, p.PRODUTO_PPR, p.ORDEM_COMPRA_PPR) === m.key);
                     const name = ped ? ped.NOME_PRODUTO_PPR : 'Produto';
-                    const [orderVal, prodVal] = m.key.split('_');
+                    const [orderVal, prodVal, ocVal] = m.key.split('_');
 
                     return `
                     <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
                         <td style="padding: 10px;">${orderVal}</td>
-                        <td style="padding: 10px; color: var(--text-muted);">Ver registros</td>
+                        <td style="padding: 10px; color: var(--text-muted);">OC: ${ocVal || '-'}</td>
                         <td style="padding: 10px; font-family: var(--font-mono);">${prodVal}</td>
                         <td style="padding: 10px;">
                             ${name}
                             <div style="font-size: 0.8rem; margin-top: 4px;">
-                                <span style="color: var(--color-primary);">ERP: ${m.ped}</span> | 
-                                <span style="color: #f59e0b;">Excel: ${m.cart}</span>
-                                <strong style="float: right; color: #ef4444;">Dif: ${(m.ped - m.cart).toFixed(2)}</strong>
+                                <span style="color: var(--color-primary);">ERP: ${formatNumber(m.ped, 1)}</span> | 
+                                <span style="color: #f59e0b;">Excel: ${formatNumber(m.cart, 1)}</span>
+                                <strong style="float: right; color: #ef4444;">Dif: ${formatNumber(m.ped - m.cart, 1)}</strong>
                             </div>
                         </td>
                     </tr>
@@ -1082,6 +1082,23 @@
             // ISO completo com T
             if (s.includes('T')) return new Date(s);
             return new Date(0);
+        }
+
+        // Helper para normalização de chaves (Evita falsas divergências)
+        function getCleanKey(pedido, codigo, oc) {
+            const clean = (val) => String(val || '')
+                .toUpperCase()
+                .replace(/\s+/g, '') // Remove todos os espaços
+                .replace(/BLOCK/g, '') // Remove sufixos como BLOCK
+                .replace(/[^A-Z0-9]/g, '') // Remove caracteres especiais
+                .trim();
+
+            const p = clean(pedido);
+            const c = clean(codigo);
+            const o = clean(oc);
+
+            // Chave composta: Pedido_Produto_OC
+            return `${p}_${c}_${o}`;
         }
 
         // ==========================================================================
