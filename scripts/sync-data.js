@@ -74,12 +74,20 @@ async function syncData() {
                 P.ANO_PPR,
                 P.ITEM_PPR,
                 P.ORDEM_COMPRA_PPR,
-                E.ENTREGA_PETR
+                E.ENTREGA_PETR,
+                C.RAZAO_SOCIAL_CLI AS NOME_CLIENTE
             FROM PEDIDO_PRODUTO P
             LEFT JOIN PEDIDO_PRODUTO_ENTREGA E 
                 ON P.CODIGO_PPR = E.PPR_CODIGO_PETR 
                 AND P.ANO_PPR = E.PPR_ANO_PETR
                 AND P.ITEM_PPR = E.PPR_ITEM_PETR
+            LEFT JOIN PEDIDO D
+                ON P.CODIGO_PPR = D.CODIGO_PED
+                AND P.ANO_PPR = D.ANO_PED
+                AND P.EMPRESA_PPR = D.EMPRESA_PED
+            LEFT JOIN CLIENTE C
+                ON D.CLIENTE_PED = C.CODIGO_CLI
+                AND D.CLI_EMPRESA_PED = C.EMPRESA_CLI
             WHERE P.ANO_PPR IN (2025, 2026)
             AND (P.FATURADO_PPR <> 'T' OR P.FATURADO_PPR IS NULL)
             AND (P.STATUS_PPR <> 'C' OR P.STATUS_PPR IS NULL)
