@@ -75,6 +75,7 @@ async function syncData() {
                 P.ITEM_PPR,
                 P.ORDEM_COMPRA_PPR,
                 E.ENTREGA_PETR,
+                D.CLIENTE_PED AS ID_CLIENTE_CORE,
                 C.RAZAO_SOCIAL_CLI AS NOME_CLIENTE,
                 M.MATERIAL_MAT AS NOME_MATERIAL
             FROM PEDIDO_PRODUTO P
