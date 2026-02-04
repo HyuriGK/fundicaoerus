@@ -378,8 +378,8 @@
             background: var(--status-success);
         }
 
-        .kpi-card.kpi-danger::before {
-            background: var(--status-danger);
+        .kpi-card.kpi-danger .kpi-value {
+            color: var(--status-danger) !important;
         }
 
         .kpi-title {
@@ -741,48 +741,6 @@
             outline: none;
             box-shadow: 0 0 5px rgba(14, 165, 233, 0.3);
         }
-
-        /* --- ESTILOS PARA AGRUPAMENTO DE PEDIDOS --- */
-        .order-group-header {
-            background: rgba(251, 191, 36, 0.05) !important;
-            cursor: pointer;
-            transition: background 0.2s;
-        }
-
-        .order-group-header:hover {
-            background: rgba(251, 191, 36, 0.1) !important;
-        }
-
-        .order-group-header td {
-            font-weight: 700;
-            color: var(--color-primary) !important;
-            border-bottom: 2px solid rgba(251, 191, 36, 0.2);
-        }
-
-        .order-item-row {
-            background: transparent;
-        }
-
-        .order-item-row td {
-            padding-left: 20px;
-            border-left: 2px solid rgba(251, 191, 36, 0.1);
-        }
-
-        .expand-icon {
-            width: 20px;
-            display: inline-block;
-            text-align: center;
-            transition: transform 0.2s;
-            margin-right: 8px;
-        }
-
-        .collapsed .expand-icon {
-            transform: rotate(-90deg);
-        }
-
-        .hidden-row {
-            display: none;
-        }
     </style>
 </head>
 
@@ -980,29 +938,9 @@
         let activeChartFilters = { month: null, client: null }; // New PowerBI-style filters
         let isModelosHidden = true; // Inicia OCULTO por padrão
 
-        let expandedOrders = new Set();
-
         // --- FUNÇÕES MODAL ---
         function openModal() { document.getElementById('recordsModal').style.display = 'flex'; }
         function closeModal() { document.getElementById('recordsModal').style.display = 'none'; }
-
-        function toggleOrderExpansion(orderId) {
-            if (expandedOrders.has(orderId)) {
-                expandedOrders.delete(orderId);
-            } else {
-                expandedOrders.add(orderId);
-            }
-            const header = document.querySelector(`.order-group-header[data-order="${orderId}"]`);
-            const items = document.querySelectorAll(`.order-item-row[data-order="${orderId}"]`);
-
-            if (header) {
-                header.classList.toggle('collapsed');
-            }
-
-            items.forEach(row => {
-                row.classList.toggle('hidden-row');
-            });
-        }
 
 
 
@@ -1175,99 +1113,69 @@
         function renderTable(list) {
             const tbody = document.getElementById('table-body');
             if (list.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="11" style="text-align:center; padding:20px;">Nenhum registro encontrado.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding:20px;">Nenhum registro encontrado.</td></tr>';
                 return;
             }
 
-            // Agrupar por Pedido (CODIGO_PPR)
-            const grouped = list.reduce((acc, item) => {
-                const key = item.CODIGO_PPR || 'SEM_PEDIDO';
-                if (!acc[key]) acc[key] = [];
-                acc[key].push(item);
-                return acc;
-            }, {});
+            tbody.innerHTML = list.map(item => {
+                const entrega = item.ENTREGA_PETR ? new Date(item.ENTREGA_PETR).toLocaleDateString() :
+                    (item.DATA_ENTREGA_PPR ? new Date(item.DATA_ENTREGA_PPR).toLocaleDateString() : '-');
 
-            let html = '';
+                let pedidoHtml = `<span style="font-weight:700; color:var(--color-primary);">${item.CODIGO_PPR}</span>`;
+                if (entrega === '-') {
+                    pedidoHtml += ` <span class="badge-block">BLOCK</span>`;
+                }
 
-            Object.entries(grouped).forEach(([orderId, items]) => {
-                const firstItem = items[0];
-                const isExpanded = expandedOrders.has(orderId);
-                const isBlocked = !items.some(i => i.ENTREGA_PETR || i.DATA_ENTREGA_PPR);
-                const totalWeight = items.reduce((acc, i) => acc + getCorrectedWeight(i), 0);
-                const oc = items.map(i => i.ORDEM_COMPRA_PPR).filter((v, i, a) => v && a.indexOf(v) === i).join(', ') || '-';
-                const entrega = items.map(i => i.ENTREGA_PETR ? new Date(i.ENTREGA_PETR).toLocaleDateString() : (i.DATA_ENTREGA_PPR ? new Date(i.DATA_ENTREGA_PPR).toLocaleDateString() : '-'))
-                    .filter((v, i, a) => v !== '-' && a.indexOf(v) === i).join(', ') || '-';
-                const cliente = firstItem.NOME_CLIENTE || '-';
+                const saldoLiberado = Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0;
+                const qtdOriginal = Number(item.QUANTIDADE_PPR) || 0;
+                const saldoReal = saldoLiberado > 0 ? saldoLiberado : qtdOriginal;
 
-                // Header do Grupo
-                html += `
-                    <tr class="order-group-header ${isExpanded ? '' : 'collapsed'}" data-order="${orderId}" onclick="toggleOrderExpansion('${orderId}')">
-                        <td style="text-align:center;">
-                            <span class="expand-icon"><i class="fa-solid fa-chevron-down"></i></span>
-                            ${orderId}${isBlocked ? ' <span class="badge-block">BLOCK</span>' : ''}
-                        </td>
-                        <td style="text-align:center;">${oc}</td>
-                        <td style="text-align:center;">${entrega}</td>
-                        <td style="text-align:left;">${cliente}</td>
-                        <td colspan="6" style="text-align:right; padding-right: 20px;">
-                            <span style="color: var(--text-muted); font-size: 0.7rem; margin-right: 10px;">${items.length} item(ns)</span>
-                            Total: ${formatNumber(totalWeight)} kg
-                        </td>
-                        <td style="display:none"></td> <!-- Hidden for alignment if needed -->
-                    </tr>
+                let totalWeightOriginal = Number(item.PESO_LIQUIDO_NPR) || 0;
+                let unitWeight = qtdOriginal > 0 ? (totalWeightOriginal / qtdOriginal) : 0;
+
+                if (customWeights[item.PRODUTO_PPR]) {
+                    unitWeight = customWeights[item.PRODUTO_PPR];
+                }
+
+                const totalWeightReal = unitWeight * saldoReal;
+
+                // Input HTML
+                // O usuário pediu: "todas devem ser editaveis, não somente as que vieram editadas já"
+                // E pediu "contorno pontilhado".
+
+                const valStr = unitWeight > 0 ? formatNumber(unitWeight) : '';
+
+                let weightInputHtml = `
+                    <input 
+                        type="text" 
+                        class="weight-edit-input" 
+                        value="${valStr}" 
+                        placeholder="-"
+                        onkeydown="saveWeight(event, '${item.PRODUTO_PPR}')"
+                        onclick="this.select()"
+                    />
                 `;
 
-                // Itens do Grupo
-                items.forEach(item => {
-                    const itemEntrega = item.ENTREGA_PETR ? new Date(item.ENTREGA_PETR).toLocaleDateString() :
-                        (item.DATA_ENTREGA_PPR ? new Date(item.DATA_ENTREGA_PPR).toLocaleDateString() : '-');
 
-                    const saldoLiberado = Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0;
-                    const qtdOriginal = Number(item.QUANTIDADE_PPR) || 0;
-                    const saldoReal = saldoLiberado > 0 ? saldoLiberado : qtdOriginal;
 
-                    let totalWeightOriginal = Number(item.PESO_LIQUIDO_NPR) || 0;
-                    let unitWeight = qtdOriginal > 0 ? (totalWeightOriginal / qtdOriginal) : 0;
-
-                    if (customWeights[item.PRODUTO_PPR]) {
-                        unitWeight = customWeights[item.PRODUTO_PPR];
-                    }
-
-                    const totalWeightReal = unitWeight * saldoReal;
-                    const valStr = unitWeight > 0 ? formatNumber(unitWeight) : '';
-
-                    let weightInputHtml = `
-                        <input 
-                            type="text" 
-                            class="weight-edit-input" 
-                            value="${valStr}" 
-                            placeholder="-"
-                            onkeydown="saveWeight(event, '${item.PRODUTO_PPR}')"
-                            onclick="event.stopPropagation(); this.select()"
-                        />
-                    `;
-
-                    html += `
-                        <tr class="order-item-row ${isExpanded ? '' : 'hidden-row'}" data-order="${orderId}">
-                            <td style="text-align:center; color: var(--text-muted); font-size: 0.7rem;">(item)</td>
-                            <td style="text-align:center; font-family:var(--font-mono); color:var(--text-muted);">${item.ORDEM_COMPRA_PPR || '-'}</td>
-                            <td style="text-align:center;">${itemEntrega}</td>
-                            <td style="color:var(--text-muted); text-align:left;">-</td>
-                            <td style="text-align:center; font-family:var(--font-mono); color:var(--text-muted);">${item.PRODUTO_PPR}</td>
-                            <td title="${item.NOME_PRODUTO_PPR || ''}">
-                                ${item.NOME_PRODUTO_PPR || item.PRODUTO_PPR}
-                            </td>
-                            <td style="text-align:center; color:var(--text-muted);">-</td>
-                            <td style="text-align:center;">${saldoReal}</td>
-                            <td style="text-align:center;">${weightInputHtml}</td>
-                            <td style="display:none;">${saldoReal}</td>
-                            <td style="text-align:center;">${formatNumber(totalWeightReal)}</td>
-                        </tr>
-                    `;
-                });
-            });
-
-            tbody.innerHTML = html;
+                return `
+                <tr style="">
+                    <td style="text-align:center;">${pedidoHtml}</td>
+                    <td style="text-align:center; font-family:var(--font-mono); color:var(--text-muted);">${item.ORDEM_COMPRA_PPR || '-'}</td>
+                    <td style="text-align:center;">${entrega}</td>
+                    <td style="color:var(--text-muted); text-align:left;" title="Cliente">-</td> <!-- CLIENTE -->
+                    <td style="text-align:center; font-family:var(--font-mono); color:var(--text-muted);">${item.PRODUTO_PPR}</td>
+                    <td title="${item.NOME_PRODUTO_PPR || ''}">
+                        ${item.NOME_PRODUTO_PPR || item.PRODUTO_PPR}
+                    </td>
+                    <td style="text-align:center; color:var(--text-muted);">-</td> <!-- MAT -->
+                    <td style="text-align:center;">${saldoReal}</td> <!-- SALDO REAL -->
+                    <td style="text-align:center;">${weightInputHtml}</td> <!-- PESO UN -->
+                    <td style="display:none;">${saldoReal}</td>
+                    <td style="text-align:center;">${formatNumber(totalWeightReal)}</td>
+                </tr>
+                `;
+            }).join('');
         }
 
         function updateTotals(list) {
@@ -1483,7 +1391,7 @@
                     maintainAspectRatio: false,
                     scales: {
                         y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' } },
-                        x: { grid: { display: false } }
+                        x: { grid: { display: true, color: 'rgba(255,255,255,0.05)' } }
                     },
                     plugins: { legend: { display: false } },
                     onClick: (e, elements) => {
@@ -1544,7 +1452,15 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    scales: { x: { beginAtZero: true } },
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            grid: {
+                                display: true,
+                                color: 'rgba(255,255,255,0.05)'
+                            }
+                        }
+                    },
                     plugins: { legend: { display: false } },
                     onClick: (e, elements) => {
                         if (elements.length > 0) {
