@@ -374,6 +374,14 @@
             background: var(--status-purple);
         }
 
+        .kpi-card.kpi-success::before {
+            background: var(--status-success);
+        }
+
+        .kpi-card.kpi-danger::before {
+            background: var(--status-danger);
+        }
+
         .kpi-title {
             font-size: 0.75rem;
             color: var(--text-muted);
@@ -747,28 +755,39 @@
 
             <!-- KPIs -->
             <div class="kpi-row">
+                <!-- 1. Total Pedidos (Únicos) -->
                 <div class="kpi-card kpi-default">
                     <div class="kpi-title">Pedidos (Únicos)</div>
                     <div id="totalOrdersCard" class="kpi-value">0</div>
                     <div class="kpi-subtext">Qtd. de Pedidos na Carteira</div>
                 </div>
 
-                <div class="kpi-card kpi-info">
-                    <div class="kpi-title">Qtd. Total (Peças)</div>
-                    <div id="totalQtyCard" class="kpi-value">0</div>
-                    <div class="kpi-subtext">Total de peças em aberto</div>
-                </div>
-
+                <!-- 2. Peso Total -->
                 <div class="kpi-card kpi-purple">
                     <div class="kpi-title">Peso Total (kg)</div>
                     <div id="totalWeightCard" class="kpi-value">0,00</div>
-                    <div class="kpi-subtext">Peso total em aberto</div>
+                    <div class="kpi-subtext">Total geral</div>
                 </div>
 
-                <div class="kpi-card kpi-default">
-                    <div class="kpi-title">Tickets Faturados</div>
-                    <div class="kpi-value">-</div>
-                    <div class="kpi-subtext">Fora do relatório</div>
+                <!-- 3. Peso Liberado -->
+                <div class="kpi-card kpi-success">
+                    <div class="kpi-title">Peso Liberado (kg)</div>
+                    <div id="totalReleasedWeightCard" class="kpi-value">0,00</div>
+                    <div class="kpi-subtext">Com data de entrega</div>
+                </div>
+
+                <!-- 4. Peso Bloqueado -->
+                <div class="kpi-card kpi-danger">
+                    <div class="kpi-title">Peso Bloqueado (kg)</div>
+                    <div id="totalBlockedWeightCard" class="kpi-value">0,00</div>
+                    <div class="kpi-subtext">Sem data (BLOCK)</div>
+                </div>
+
+                <!-- 5. Peso Médio -->
+                <div class="kpi-card kpi-info">
+                    <div class="kpi-title">Peso Médio (kg)</div>
+                    <div id="avgWeightCard" class="kpi-value">0,00</div>
+                    <div class="kpi-subtext">Por pedido</div>
                 </div>
             </div>
 
@@ -982,19 +1001,44 @@
         }
 
         function updateTotals(list) {
+            // 1. Pedidos Únicos
             const uniqueOrders = new Set(list.map(i => i.CODIGO_PPR)).size;
-            const totalQty = list.reduce((acc, i) => acc + (Number(i.QUANTIDADE_PPR) || 0), 0);
+
+            // 2. Peso Total
             const totalWeight = list.reduce((acc, i) => acc + (Number(i.PESO_LIQUIDO_NPR) || 0), 0);
 
-            // Update Header/Footer
+            // 3. Peso Bloqueado (Sem data)
+            const blockedWeight = list.reduce((acc, i) => {
+                const isBlocked = !i.ENTREGA_PETR && !i.DATA_ENTREGA_PPR;
+                return acc + (isBlocked ? (Number(i.PESO_LIQUIDO_NPR) || 0) : 0);
+            }, 0);
+
+            // 4. Peso Liberado (Total - Bloqueado)
+            const releasedWeight = totalWeight - blockedWeight;
+
+            // 5. Peso Médio (Peso Total / Pedidos Únicos)
+            const avgWeight = uniqueOrders > 0 ? (totalWeight / uniqueOrders) : 0;
+
+            const totalQty = list.reduce((acc, i) => acc + (Number(i.QUANTIDADE_PPR) || 0), 0);
+
+            // Update Header/Footer (Mantemos alguns gerais no footer)
             document.getElementById('totalOrders').innerText = uniqueOrders;
             document.getElementById('totalQuantity').innerText = totalQty.toLocaleString('pt-BR');
             document.getElementById('totalWeight').innerText = formatNumber(totalWeight);
 
             // Update KPI Cards
             document.getElementById('totalOrdersCard').innerText = uniqueOrders;
-            document.getElementById('totalQtyCard').innerText = totalQty.toLocaleString('pt-BR');
             document.getElementById('totalWeightCard').innerText = formatNumber(totalWeight);
+
+            // New KPI updates
+            if (document.getElementById('totalReleasedWeightCard'))
+                document.getElementById('totalReleasedWeightCard').innerText = formatNumber(releasedWeight);
+
+            if (document.getElementById('totalBlockedWeightCard'))
+                document.getElementById('totalBlockedWeightCard').innerText = formatNumber(blockedWeight);
+
+            if (document.getElementById('avgWeightCard'))
+                document.getElementById('avgWeightCard').innerText = formatNumber(avgWeight);
         }
 
         // ==========================================================================
