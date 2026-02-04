@@ -868,14 +868,7 @@
                     <!-- Global Search Removed -->
                 </div>
                 <div class="toolbar-group">
-                    <button id="btnDivergencias" class="btn-modern"
-                        style="background-color: #ef4444; color: white; display: none; gap: 8px;"
-                        onclick="openDivergenciasModal()">
-                        <i class="fa-solid fa-triangle-exclamation"></i>
-                        Divergências
-                        <span class="badge-count"
-                            style="background: rgba(0,0,0,0.2); padding: 2px 6px; border-radius: 4px; font-size: 0.8em;">0</span>
-                    </button>
+
                     <button id="toggleModelosBtn" class="btn-modern btn-toggle" onclick="toggleModelosFilter()"
                         style="background-color: #3f3f46;">
                         <span id="toggleModelosText"><i class="fa-solid fa-eye"></i> Mostrar Modelos</span>
@@ -926,35 +919,7 @@
     </div>
     </div>
 
-    <!-- DIVERGENCIAS MODAL -->
-    <div id="divergenciasModal" class="modal-overlay">
-        <div class="modal-card" style="max-width: 800px; height: 80vh;">
-            <div class="modal-header">
-                <h2 class="modal-title" style="font-size: 1.2rem; color: #ef4444;">Itens na Carteira (Ausentes Aqui)
-                </h2>
-                <i class="fa-solid fa-times modal-close" onclick="closeDivergenciasModal()"></i>
-            </div>
 
-            <div class="table-container" style="flex: 1; overflow: auto;">
-                <table style="width: 100%; border-collapse: collapse;">
-                    <thead style="position: sticky; top: 0; background: var(--bg-card); z-index: 10;">
-                        <tr style="border-bottom: 1px solid var(--border-subtle);">
-                            <th style="padding: 10px; text-align: left;">Pedido</th>
-                            <th style="padding: 10px; text-align: left;">Cliente</th>
-                            <th style="padding: 10px; text-align: left;">Código</th>
-                            <th style="padding: 10px; text-align: left;">Produto</th>
-                        </tr>
-                    </thead>
-                    <tbody id="divergenciasBody">
-                        <!-- Content -->
-                    </tbody>
-                </table>
-            </div>
-            <div style="margin-top: 15px; text-align: right;">
-                <button class="btn-modern" onclick="closeDivergenciasModal()">Fechar</button>
-            </div>
-        </div>
-    </div>
 
     <script>
         // ==========================================================================
@@ -977,65 +942,7 @@
         function openModal() { document.getElementById('recordsModal').style.display = 'flex'; }
         function closeModal() { document.getElementById('recordsModal').style.display = 'none'; }
 
-        function openDivergenciasModal() {
-            renderDivergenciasTable();
-            document.getElementById('divergenciasModal').style.display = 'flex';
-        }
-        function closeDivergenciasModal() { document.getElementById('divergenciasModal').style.display = 'none'; }
 
-        function renderDivergenciasTable() {
-            const tbody = document.getElementById('divergenciasBody');
-            const totalDiv = discrepancies.missing.length + discrepancies.mismatches.length;
-
-            if (totalDiv === 0) {
-                tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding: 20px;">Nenhuma divergência encontrada.</td></tr>';
-                return;
-            }
-
-            let html = '';
-
-            // 1. Missing (Orphans in Carteira)
-            if (discrepancies.missing.length > 0) {
-                html += `<tr style="background: rgba(239, 68, 68, 0.1);"><td colspan="4" style="padding: 10px; font-weight: 700; color: #ef4444;">Ausentes no Pedidos (Só no Excel)</td></tr>`;
-                html += discrepancies.missing.map(item => `
-                    <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
-                        <td style="padding: 10px;">${item.pedido || '-'}</td>
-                        <td style="padding: 10px;">${item.razao_social || item.cliente || '-'}</td>
-                        <td style="padding: 10px; font-family: var(--font-mono);">${item.codigo || '-'}</td>
-                        <td style="padding: 10px;">${item.nome_produto || item.produto || '-'} <span style="color: var(--status-danger); float: right;">[NÃO ENCONTRADO]</span></td>
-                    </tr>
-                `).join('');
-            }
-
-            // 2. Mismatches (Qty difference)
-            if (discrepancies.mismatches.length > 0) {
-                html += `<tr style="background: rgba(245, 158, 11, 0.1);"><td colspan="4" style="padding: 10px; font-weight: 700; color: #f59e0b;">Divergência de Saldo (ERP vs Excel)</td></tr>`;
-                html += discrepancies.mismatches.map(m => {
-                    // Find name/oc from allData
-                    const ped = allData.find(p => getCleanKey(p.CODIGO_PPR, p.PRODUTO_PPR, p.ORDEM_COMPRA_PPR) === m.key);
-                    const name = ped ? ped.NOME_PRODUTO_PPR : 'Produto';
-                    const [orderVal, prodVal, ocVal] = m.key.split('_');
-
-                    return `
-                    <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
-                        <td style="padding: 10px;">${orderVal}</td>
-                        <td style="padding: 10px; color: var(--text-muted);">OC: ${ocVal || '-'}</td>
-                        <td style="padding: 10px; font-family: var(--font-mono);">${prodVal}</td>
-                        <td style="padding: 10px;">
-                            ${name}
-                            <div style="font-size: 0.8rem; margin-top: 4px;">
-                                <span style="color: var(--color-primary);">ERP: ${formatNumber(m.ped, 1)}</span> | 
-                                <span style="color: #f59e0b;">Excel: ${formatNumber(m.cart, 1)}</span>
-                                <strong style="float: right; color: #ef4444;">Dif: ${formatNumber(m.ped - m.cart, 1)}</strong>
-                            </div>
-                        </td>
-                    </tr>
-                `;
-                }).join('');
-            }
-
-            tbody.innerHTML = html;
-        }
 
         // --- FILTRO DE MODELOS ---
         function toggleModelosFilter() {
@@ -1107,13 +1014,13 @@
 
         // Helper global para cálculo de peso corrigido
         function getCorrectedWeight(item) {
+            const saldoLiberado = Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0;
             const qtdOriginal = Number(item.QUANTIDADE_PPR) || 0;
-            const qtdFaturada = Number(item.QUANTIDADE_FATURADA_PPR) || 0;
-            const saldoReal = Math.max(0, qtdOriginal - qtdFaturada);
+            // Regra: se liberado > 0 usa ele, senão usa original (bloqueado)
+            const saldoReal = saldoLiberado > 0 ? saldoLiberado : qtdOriginal;
 
             let pesoUnitario = qtdOriginal > 0 ? (Number(item.PESO_LIQUIDO_NPR) || 0) / qtdOriginal : 0;
 
-            // Se tiver custom weight, usamos ele
             if (customWeights[item.PRODUTO_PPR]) {
                 pesoUnitario = customWeights[item.PRODUTO_PPR];
             }
@@ -1122,7 +1029,6 @@
         }
 
         let carteiraData = []; // Store carteira data for comparison
-        let discrepancies = { orphans: new Set(), missing: [], mismatches: [] };
 
         async function loadDataFromServer() {
             try {
@@ -1143,7 +1049,6 @@
 
                 if (resCarteira.ok) {
                     carteiraData = await resCarteira.json();
-                    analyzeDiscrepancies();
                 }
 
                 // Apply filters immediately to respect "isModelosHidden" default
@@ -1156,99 +1061,7 @@
             }
         }
 
-        function analyzeDiscrepancies() {
-            // Build Set of Keys from Carteira
-            // Carteira Key: pedido (Order) + codigo (Product Code)
-            const carteiraSet = new Set();
-            carteiraData.forEach(c => {
-                // Ensure we handle the nested structure if api/carteira returns grouped data, 
-                // but typically it returns a flat array of items or normalized. 
-                // Based on carteira.html, it seems to flatten it. 
-                // Let's assume the API returns the raw list or we need to normalize matches.
-                // Actually, /api/carteira returns the raw JSON list.
 
-                // Normalization helper (similar to generateGroupingKey in carteira)
-                const p = String(c.pedido || '').trim();
-                const cod = String(c.codigo || '').trim();
-                if (p && cod) {
-                    carteiraSet.add(`${p}_${cod}`);
-                }
-            });
-
-            discrepancies.orphans.clear();
-            discrepancies.missing = []; // In Carteira but not in Pedidos
-            discrepancies.mismatches = []; // In both, but different quantity
-
-            // Map for quick quantity check (Key: order_prod -> saldo)
-            const carteiraQtyMap = new Map();
-            carteiraData.forEach(c => {
-                const p = String(c.pedido || '').trim();
-                const cod = String(c.codigo || '').trim();
-                const key = `${p}_${cod}`;
-                if (p && cod) {
-                    const currentVal = carteiraQtyMap.get(key) || 0;
-                    carteiraQtyMap.set(key, currentVal + (Number(c.saldo) || 0));
-                    carteiraSet.add(key);
-                }
-            });
-
-            // 1. Find Orphans & Mismatches
-            // We need to group Pedidos by Key first because Pedidos might have multiple rows for same Key
-            const pedidosGropued = new Map();
-            allData.forEach(p => {
-                const order = String(p.CODIGO_PPR || '').trim();
-                const prod = String(p.PRODUTO_PPR || '').trim();
-                const key = `${order}_${prod}`;
-                if (order && prod) {
-                    const qOrig = Number(p.QUANTIDADE_PPR) || 0;
-                    const qFat = Number(p.QUANTIDADE_FATURADA_PPR) || 0;
-                    const saldo = Math.max(0, qOrig - qFat);
-
-                    const current = pedidosGropued.get(key) || 0;
-                    pedidosGropued.set(key, current + saldo);
-                }
-            });
-
-            // Check mismatches
-            pedidosGropued.forEach((saldoPed, key) => {
-                if (carteiraSet.has(key)) {
-                    const saldoCart = carteiraQtyMap.get(key);
-                    if (Math.abs(saldoPed - saldoCart) > 0.01) {
-                        discrepancies.mismatches.push({
-                            key: key,
-                            ped: saldoPed,
-                            cart: saldoCart
-                        });
-                    }
-                } else {
-                    discrepancies.orphans.add(key);
-                }
-            });
-
-            // 2. Find Missing (In Carteira, NOT in Pedidos)
-            carteiraData.forEach(c => {
-                const p = String(c.pedido || '').trim();
-                const cod = String(c.codigo || '').trim();
-                const key = `${p}_${cod}`;
-
-                if (p && cod && !pedidosGropued.has(key)) {
-                    discrepancies.missing.push(c);
-                }
-            });
-
-            updateDiscrepancyUI();
-        }
-
-        function updateDiscrepancyUI() {
-            const btn = document.getElementById('btnDivergencias');
-            const totalDiv = discrepancies.missing.length + discrepancies.mismatches.length;
-            if (totalDiv > 0) {
-                btn.style.display = 'flex';
-                btn.querySelector('.badge-count').innerText = totalDiv;
-            } else {
-                btn.style.display = 'none';
-            }
-        }
 
         // Função para salvar peso customizado
         async function saveWeight(event, prodCode) {
@@ -1313,14 +1126,13 @@
                     pedidoHtml += ` <span class="badge-block">BLOCK</span>`;
                 }
 
+                const saldoLiberado = Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0;
                 const qtdOriginal = Number(item.QUANTIDADE_PPR) || 0;
-                const qtdFaturada = Number(item.QUANTIDADE_FATURADA_PPR) || 0;
-                const saldoReal = Math.max(0, qtdOriginal - qtdFaturada);
+                const saldoReal = saldoLiberado > 0 ? saldoLiberado : qtdOriginal;
 
                 let totalWeightOriginal = Number(item.PESO_LIQUIDO_NPR) || 0;
                 let unitWeight = qtdOriginal > 0 ? (totalWeightOriginal / qtdOriginal) : 0;
 
-                // Lógica de Peso Customizado:
                 if (customWeights[item.PRODUTO_PPR]) {
                     unitWeight = customWeights[item.PRODUTO_PPR];
                 }
@@ -1344,16 +1156,7 @@
                     />
                 `;
 
-                // Check Reconciliation Orphan/Mismatch
-                const itemKey = `${String(item.CODIGO_PPR || '').trim()}_${String(item.PRODUTO_PPR || '').trim()}`;
-                const isOrphan = discrepancies.orphans.has(itemKey);
-                const isMismatch = discrepancies.mismatches.some(m => m.key === itemKey);
 
-                let trStyle = isOrphan ? 'background-color: rgba(220, 38, 38, 0.15); box-shadow: inset 2px 0 0 #ef4444;' : '';
-                const orphanTitle = isOrphan ? 'title="Este item consta no Pedidos mas NÃO consta na Carteira (Orfão)"' : '';
-
-                const qStyle = isMismatch ? 'background: rgba(245, 158, 11, 0.2); color: #f59e0b; font-weight: 700; border-radius: 4px;' : '';
-                const qTitle = isMismatch ? `title="Divergência de Quantidade! No ERP: ${saldoReal} | No Excel: ${discrepancies.mismatches.find(m => m.key === itemKey)?.cart || 0}"` : '';
 
                 return `
                 <tr style="${trStyle}" ${orphanTitle}>
@@ -1366,7 +1169,7 @@
                         ${item.NOME_PRODUTO_PPR || item.PRODUTO_PPR}
                     </td>
                     <td style="text-align:center; color:var(--text-muted);">-</td> <!-- MAT -->
-                    <td style="text-align:center; ${qStyle}" ${qTitle}>${saldoReal}</td> <!-- SALDO REAL -->
+                    <td style="text-align:center;">${saldoReal}</td> <!-- SALDO REAL -->
                     <td style="text-align:center;">${weightInputHtml}</td> <!-- PESO UN -->
                     <td style="display:none;">${saldoReal}</td>
                     <td style="text-align:center;">${formatNumber(totalWeightReal)}</td>
@@ -1395,9 +1198,9 @@
 
             // 5. Peso Médio (Peso Total / Quantidade Total de Peças)
             const totalQty = list.reduce((acc, i) => {
+                const sLib = Number(i.SALDO_LIBERADO_FATURAR_PPR) || 0;
                 const qOrig = Number(i.QUANTIDADE_PPR) || 0;
-                const qFat = Number(i.QUANTIDADE_FATURADA_PPR) || 0;
-                return acc + Math.max(0, qOrig - qFat);
+                return acc + (sLib > 0 ? sLib : qOrig);
             }, 0);
             const avgWeight = totalQty > 0 ? (totalWeight / totalQty) : 0;
 
