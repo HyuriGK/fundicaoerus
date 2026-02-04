@@ -11,21 +11,24 @@ router.get('/', async (req, res) => {
         // Query para buscar faturamento de 2026
         const query = `
             SELECT 
-                data_faturamento,
-                nota_fiscal,
-                cliente_codigo,
-                cliente_nome,
-                codigo_item,
-                descricao,
-                quantidade,
-                valor_unitario,
-                valor_total,
-                serie,
-                status
-            FROM faturamento_firebird
-            WHERE data_faturamento >= '2026-01-01'
-                AND data_faturamento < '2027-01-01'
-            ORDER BY data_faturamento DESC, nota_fiscal DESC
+                f.data_faturamento,
+                f.nota_fiscal,
+                f.cliente_codigo,
+                f.cliente_nome,
+                f.codigo_item,
+                f.descricao,
+                f.quantidade,
+                f.valor_unitario,
+                f.valor_total,
+                f.serie,
+                f.status
+            FROM faturamento_firebird f
+            LEFT JOIN faturamento_clientes_ocultos o 
+                ON f.cliente_codigo = o.cliente_codigo
+            WHERE f.data_faturamento >= '2026-01-01'
+                AND f.data_faturamento < '2027-01-01'
+                AND o.cliente_codigo IS NULL
+            ORDER BY f.data_faturamento DESC, f.nota_fiscal DESC
             LIMIT 1000
         `;
 
