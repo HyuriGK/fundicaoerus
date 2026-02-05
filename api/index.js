@@ -46,6 +46,7 @@ const register = require('../src/register');
 const custosRoutes = require('../src/custos');
 const weightsRoutes = require('../src/weights');
 const faturamentoFirebird = require('../src/faturamento-firebird');
+const faturamentoPostgres = require('../src/faturamento-postgres'); // NOVO: API PostgreSQL
 const faturamentoNeon = require('../src/faturamento-neon');
 const faturamentoFiltros = require('../src/faturamento-filtros');
 
@@ -53,6 +54,7 @@ const faturamentoFiltros = require('../src/faturamento-filtros');
 // Aqui definimos qual URL chama qual arquivo
 app.use('/api/weights', weightsRoutes);
 app.use('/api/faturamento-firebird', faturamentoFirebird);
+app.use('/api/faturamento-postgres', faturamentoPostgres); // NOVO: Dados sincronizados do Firebird
 app.use('/api/faturamento-neon', faturamentoNeon);
 app.use('/api/faturamento-filtros', faturamentoFiltros);
 app.use('/api/acabamento-externo', acabamentoExterno);

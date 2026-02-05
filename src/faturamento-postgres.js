@@ -1,0 +1,164 @@
+// src/faturamento-postgres.js
+// API para servir dados de faturamento do PostgreSQL (sincronizados do Firebird)
+const express = require('express');
+const router = express.Router();
+const pool = require('../lib/db');
+
+// GET /api/faturamento-postgres/diario - Faturamento agrupado por dia
+router.get('/diario', async (req, res) => {
+    try {
+        console.log('📊 Consultando faturamento diário do PostgreSQL...');
+
+        const { limit = 90 } = req.query;
+
+        const query = `
+            SELECT 
+                data,
+                total_notas,
+                total_itens,
+                quantidade_total,
+                valor_total,
+                atualizado_em
+            FROM faturamento_diario
+            ORDER BY data DESC
+            LIMIT $1
+        `;
+
+        const result = await pool.query(query, [parseInt(limit)]);
+
+        console.log(`✅ ${result.rows.length} dias encontrados`);
+
+        res.json({
+            success: true,
+            data: result.rows.map(row => ({
+                data: row.data,
+                totalNotas: parseInt(row.total_notas),
+                totalItens: parseInt(row.total_itens),
+                quantidadeTotal: parseFloat(row.quantidade_total),
+                valorTotal: parseFloat(row.valor_total)
+            }))
+        });
+
+    } catch (error) {
+        console.error('❌ Erro:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erro ao buscar faturamento diário',
+            error: error.message
+        });
+    }
+});
+
+// GET /api/faturamento-postgres/top-produtos - Top produtos mais vendidos
+router.get('/top-produtos', async (req, res) => {
+    try {
+        console.log('🏆 Consultando top produtos do PostgreSQL...');
+
+        const { limit = 10 } = req.query;
+
+        const query = `
+            SELECT 
+                codigo_produto,
+                descricao,
+                total_vendas,
+                quantidade_total,
+                valor_total,
+                atualizado_em
+            FROM faturamento_top_produtos
+            ORDER BY valor_total DESC
+            LIMIT $1
+        `;
+
+        const result = await pool.query(query, [parseInt(limit)]);
+
+        console.log(`✅ ${result.rows.length} produtos encontrados`);
+
+        res.json({
+            success: true,
+            data: result.rows.map(row => ({
+                codigoProduto: row.codigo_produto,
+                descricao: row.descricao,
+                totalVendas: parseInt(row.total_vendas),
+                quantidadeTotal: parseFloat(row.quantidade_total),
+                valorTotal: parseFloat(row.valor_total)
+            }))
+        });
+
+    } catch (error) {
+        console.error('❌ Erro:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erro ao buscar top produtos',
+            error: error.message
+        });
+    }
+});
+
+// GET /api/faturamento-postgres/estatisticas - Estatísticas gerais
+router.get('/estatisticas', async (req, res) => {
+    try {
+        console.log('📈 Consultando estatísticas do PostgreSQL...');
+
+        const query = `
+            SELECT 
+                total_notas,
+                total_clientes,
+                total_itens,
+                quantidade_total,
+                valor_total,
+                ticket_medio,
+                primeira_nota,
+                ultima_nota,
+                atualizado_em
+            FROM faturamento_estatisticas
+            WHERE periodo = 'ultimos_90_dias'
+            LIMIT 1
+        `;
+
+        const result = await pool.query(query);
+
+        if (result.rows.length === 0) {
+            return res.json({
+                success: true,
+                data: {
+                    totalNotas: 0,
+                    totalClientes: 0,
+                    totalItens: 0,
+                    quantidadeTotal: 0,
+                    valorTotal: 0,
+                    ticketMedio: 0,
+                    primeiraNota: null,
+                    ultimaNota: null
+                }
+            });
+        }
+
+        const stats = result.rows[0];
+
+        console.log(`✅ Estatísticas: R$ ${parseFloat(stats.valor_total).toFixed(2)}`);
+
+        res.json({
+            success: true,
+            data: {
+                totalNotas: parseInt(stats.total_notas),
+                totalClientes: parseInt(stats.total_clientes),
+                totalItens: parseInt(stats.total_itens),
+                quantidadeTotal: parseFloat(stats.quantidade_total),
+                valorTotal: parseFloat(stats.valor_total),
+                ticketMedio: parseFloat(stats.ticket_medio),
+                primeiraNota: stats.primeira_nota,
+                ultimaNota: stats.ultima_nota
+            }
+        });
+
+    } catch (error) {
+        console.error('❌ Erro:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erro ao buscar estatísticas',
+            error: error.message
+        });
+    }
+});
+
+module.exports = router;
