@@ -303,9 +303,10 @@ async function sincronizarDetalhado(fbDb) {
 
             console.log(`📦 ${result.length} itens de nota encontrados`);
 
-            // Limpar dados (estratégia simples: delete all e reinsert os filtrados, ou usar upsert. Upsert é mais seguro para não perder histórico se mudarmos a janela)
-            // Para garantir performance e limpeza, vamos deletar apenas os da janela de tempo ou truncar se for full load.
-            // Aqui faremos UPSERT
+            // Limpar dados anteriores para evitar duplicidade ou registros órfãos
+            // Como sincronizamos a partir de 2026, limpamos esses registros antes de reinserir
+            console.log('  🗑️ Limpando registros de faturamento detalhado...');
+            await pool.query("DELETE FROM faturamento_firebird WHERE data_faturamento >= '2026-01-01' OR data_faturamento IS NULL");
 
             let inserted = 0;
             let errors = 0;
