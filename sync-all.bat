@@ -49,7 +49,7 @@ echo ┌────────────────────────
 echo │ [2/2] Sincronizando FATURAMENTO (2026)...              │
 echo └─────────────────────────────────────────────────────────┘
 echo.
-node scripts/sync-faturamento-to-neon.js
+node scripts/sync-firebird-to-postgres.js
 if %ERRORLEVEL% NEQ 0 (
     echo   ❌ Erro ao sincronizar faturamento
     pause

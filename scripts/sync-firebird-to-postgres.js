@@ -264,10 +264,11 @@ async function sincronizarDetalhado(fbDb) {
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_fat_fb_data ON faturamento_firebird(data_faturamento DESC)`);
 
     const dataInicio = new Date();
-    dataInicio.setFullYear(2025, 0, 1); // Desde 01/01/2025 (Segurança para pegar ano passado e atual)
+    dataInicio.setFullYear(2026, 0, 1); // Faturamento de 2026 conforme objetivo do projeto
 
     const query = `
         SELECT 
+            nf.CODIGO_NOT,
             nf.NUMERO_NOT,
             nf.SERIE_NOT,
             CAST(nf.EMISSAO_NOT AS DATE) as DATA_FATURAMENTO,
@@ -307,45 +308,63 @@ async function sincronizarDetalhado(fbDb) {
             // Aqui faremos UPSERT
 
             let inserted = 0;
+            let errors = 0;
             for (const row of result) {
-                const pesoUn = row.PESO_UNITARIO || 0;
-                const quantidade = row.QUANTIDADE_NPR || 0;
-                const pesoTotal = pesoUn * quantidade;
+                try {
+                    // Usar CODIGO_NOT como número da nota, pois em 2026 NUMERO_NOT está vindo nulo no banco
+                    // Verificado que o CODIGO_NOT bate com o número na CHAVE_NOT
+                    const notaFiscal = parseInt(row.CODIGO_NOT);
+                    if (isNaN(notaFiscal)) {
+                        console.warn(`  ⚠️  Nota Fiscal inválida (${row.NUMERO_NOT}), pulando item.`);
+                        errors++;
+                        continue;
+                    }
 
-                await pool.query(`
-                    INSERT INTO faturamento_firebird 
-                    (nota_fiscal, serie, data_faturamento, cliente_codigo, cliente_nome, 
-                     codigo_item, descricao, quantidade, valor_unitario, valor_total, 
-                     peso_un, peso_total, status)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-                    ON CONFLICT (nota_fiscal, serie, codigo_item) DO UPDATE SET
-                        data_faturamento = EXCLUDED.data_faturamento,
-                        cliente_nome = EXCLUDED.cliente_nome,
-                        descricao = EXCLUDED.descricao,
-                        quantidade = EXCLUDED.quantidade,
-                        valor_unitario = EXCLUDED.valor_unitario,
-                        valor_total = EXCLUDED.valor_total,
-                        peso_un = EXCLUDED.peso_un,
-                        peso_total = EXCLUDED.peso_total,
-                        status = EXCLUDED.status,
-                        atualizado_em = CURRENT_TIMESTAMP
-                `, [
-                    row.NUMERO_NOT,
-                    row.SERIE_NOT ? String(row.SERIE_NOT).trim() : null,
-                    formatarData(row.DATA_FATURAMENTO),
-                    row.COD_CLIENTE_NOT,
-                    row.CLIENTE_NOME_NOT,
-                    row.PRODUTO_NPR,
-                    row.NOME_PRODUTO_NPR,
-                    quantidade,
-                    centavosParaReais(row.UNITARIO_NPR),
-                    centavosParaReais(row.TOTAL_NPR),
-                    pesoUn,
-                    pesoTotal,
-                    row.STATUS_NOT
-                ]);
-                inserted++;
-                if (inserted % 500 === 0) process.stdout.write('.');
+                    const pesoUn = parseFloat(row.PESO_UNITARIO) || 0;
+                    const quantidade = parseFloat(row.QUANTIDADE_NPR) || 0;
+                    const pesoTotal = pesoUn * quantidade;
+
+                    await pool.query(`
+                        INSERT INTO faturamento_firebird 
+                        (nota_fiscal, serie, data_faturamento, cliente_codigo, cliente_nome, 
+                         codigo_item, descricao, quantidade, valor_unitario, valor_total, 
+                         peso_un, peso_total, status)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                        ON CONFLICT (nota_fiscal, serie, codigo_item) DO UPDATE SET
+                            data_faturamento = EXCLUDED.data_faturamento,
+                            cliente_nome = EXCLUDED.cliente_nome,
+                            descricao = EXCLUDED.descricao,
+                            quantidade = EXCLUDED.quantidade,
+                            valor_unitario = EXCLUDED.valor_unitario,
+                            valor_total = EXCLUDED.valor_total,
+                            peso_un = EXCLUDED.peso_un,
+                            peso_total = EXCLUDED.peso_total,
+                            status = EXCLUDED.status,
+                            atualizado_em = CURRENT_TIMESTAMP
+                    `, [
+                        notaFiscal,
+                        row.SERIE_NOT ? String(row.SERIE_NOT).trim() : null,
+                        formatarData(row.DATA_FATURAMENTO),
+                        row.COD_CLIENTE_NOT,
+                        row.CLIENTE_NOME_NOT,
+                        row.PRODUTO_NPR,
+                        row.NOME_PRODUTO_NPR,
+                        quantidade,
+                        centavosParaReais(row.UNITARIO_NPR),
+                        centavosParaReais(row.TOTAL_NPR),
+                        pesoUn,
+                        pesoTotal,
+                        row.STATUS_NOT
+                    ]);
+
+                    inserted++;
+                    if (inserted % 100 === 0) {
+                        console.log(`  ⏳ ${inserted}/${result.length} itens sincronizados...`);
+                    }
+                } catch (rowErr) {
+                    console.error(`  ❌ Erro no item NF ${row.NUMERO_NOT}:`, rowErr.message);
+                    errors++;
+                }
             }
 
             console.log('\n✅ Faturamento detalhado sincronizado!');

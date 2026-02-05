@@ -14,19 +14,19 @@ Firebird.attach(options, function (err, db) {
         process.exit(1);
     }
 
-    // List columns containing PRECO or UNITARIO in NOTA_FISCAL_PRODUTO
+    // List all columns for NOTA_FISCAL
     const query = `
         SELECT RDB$FIELD_NAME AS FIELD_NAME
         FROM RDB$RELATION_FIELDS 
-        WHERE RDB$RELATION_NAME = 'NOTA_FISCAL_PRODUTO'
-        AND (RDB$FIELD_NAME LIKE '%PRECO%' OR RDB$FIELD_NAME LIKE '%UNITARIO%')
+        WHERE RDB$RELATION_NAME = 'NOTA_FISCAL'
+        ORDER BY RDB$FIELD_ID
     `;
 
     db.query(query, function (err, result) {
         if (err) {
             console.error('Error querying columns:', err);
         } else {
-            console.log('Price/Unit columns of NOTA_FISCAL_PRODUTO:');
+            console.log('Columns of NOTA_FISCAL:');
             result.forEach(row => {
                 console.log(String(row.FIELD_NAME).trim());
             });
