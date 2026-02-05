@@ -1603,7 +1603,7 @@
                 row.setAttribute('data-manual-include', 'false');
             }
 
-            filterTable();
+            // filterTable();
 
             try {
                 // Recupera a linha global para gerar a chave correta
@@ -1649,24 +1649,12 @@
             });
 
             // Atualiza a tabela após marcar/desmarcar todos
-            filterTable();
+            // filterTable();
         }
 
-        function toggleServiceExclusion() {
-            const button = document.getElementById('toggleServiceButton');
-            const isActive = button.getAttribute('data-active') === 'true';
-            const newState = !isActive;
-            button.setAttribute('data-active', newState);
-
-            if (newState) {
-                button.classList.add('active');
-                button.innerHTML = '<i class="fa-solid fa-wrench"></i> Mostrar Serviços';
-            } else {
-                button.classList.remove('active');
-                button.innerHTML = '<i class="fa-solid fa-eye"></i> Ocultar Serviços';
-            }
-            filterTable();
-        }
+        // =========================================================
+        // DATA & FILTER UTILS (Simplificado)
+        // =========================================================
 
         function togglePeriodFilter(modeOverride) {
             const button = document.getElementById('togglePeriodFilterButton');
@@ -1676,7 +1664,7 @@
             if (newMode === 'month') {
                 button.innerHTML = '<i class="fa-solid fa-calendar-days"></i> Mostrar Todos';
                 button.setAttribute('data-mode', 'month');
-                resetFiltersToCurrentMonth(newMode === 'initial_load');
+                resetFiltersToCurrentMonth();
             } else {
                 button.innerHTML = '<i class="fa-solid fa-filter"></i> Filtrar Mês Atual';
                 button.setAttribute('data-mode', 'all');
@@ -1685,12 +1673,8 @@
             activeDateFilter = null;
         }
 
-        // =========================================================
-        // DATA & FILTER UTILS
-        // =========================================================
-
-        function resetFiltersToCurrentMonth(isInitialLoad = false) {
-            if (!isInitialLoad) showSpinner();
+        function resetFiltersToCurrentMonth() {
+            // Removido showSpinner pois não estamos fazendo fetch demorado aqui
             const today = new Date();
             const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
             const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
@@ -1699,29 +1683,48 @@
             activeFromDate = firstDayOfMonth;
             activeToDate = nextMonth;
 
-            document.getElementById('filterFromDate').value = formatDateToInput(firstDayOfMonth);
-            document.getElementById('filterToDate').value = formatDateToInput(lastDayOfMonth);
+            const fromEl = document.getElementById('filterFromDate');
+            const toEl = document.getElementById('filterToDate');
+            if (fromEl) fromEl.value = formatDateToInput(firstDayOfMonth);
+            if (toEl) toEl.value = formatDateToInput(lastDayOfMonth);
 
             activeMonthFilter = null;
             clearColumnFilters();
 
+            // filterTable usa globalDataArray que pode estar vazio ou com dados legados
+            // se o objetivo é filtrar SOMENTE o Firebird, essas funções de filtro precisam ser adaptadas
+            // ou removidas se o Firebird já traz filtrado. 
+            // O Firebird traz 90 dias. Vamos manter filterTable se ela agir sobre o DOM ou globalDataArray
+
+            // ATENÇÃO: globalDataArray agora é populado por quem? 
+            // Pelo legacy loadDataFromDatabase que removemos. 
+            // Então filterTable não vai funcionar com os dados do PostgreSQL novos se eles não estiverem em globalDataArray.
+
+            // Mas o usuário pediu SOMENTE Firebird. E o Firebird é exibido via 'updateFirebirdChart' etc.
+            // A tabela antiga ('dataTable') deve ser escondida ou reutilizada?
+            // O usuário disse: "somente do faturamento_firebird"
+
+            // Se a tabela principal (dataTable) deve mostrar os dados detalhados do Firebird,
+            // então devemos popular globalDataArray com os dados de "detalhado".
+
+            // POR ENQUANTO: Apenas removemos o spinner para não travar
             setTimeout(() => {
-                filterTable();
+                //             // filterTable(); // Se globalDataArray estiver vazio, isso zera a tabela
                 updatePeriodAnalyzedForDetail(firstDayOfMonth, lastDayOfMonth);
-                if (!isInitialLoad) hideSpinner();
             }, 0);
         }
 
         function resetAllFilters() {
-            showSpinner();
             activeFromDate = null; activeToDate = null;
-            document.getElementById('filterFromDate').value = '';
-            document.getElementById('filterToDate').value = '';
+            const fromEl = document.getElementById('filterFromDate');
+            const toEl = document.getElementById('filterToDate');
+            if (fromEl) fromEl.value = '';
+            if (toEl) toEl.value = '';
 
             activeMonthFilter = null; activeDateFilter = null;
             clearColumnFilters();
             updatePeriodAnalyzedForDetail(null, null);
-            setTimeout(() => { filterTable(); hideSpinner(); }, 0);
+            // setTimeout(() => {             // filterTable(); }, 0);
         }
 
         function applyDateRangeFilter(resetMonthChart = true) {
@@ -1748,7 +1751,7 @@
 
             if (resetMonthChart) activeMonthFilter = null;
             clearColumnFilters();
-            filterTable();
+            // filterTable();
 
             const displayTo = activeToDate ? new Date(activeToDate.getTime() - 86400000) : null;
             updatePeriodAnalyzedForDetail(activeFromDate, displayTo);
@@ -2202,7 +2205,7 @@
 
         function filterByChartDate(key) {
             activeDateFilter = (activeDateFilter === key) ? null : key;
-            filterTable();
+            // filterTable();
         }
 
         // =========================================================
