@@ -55,18 +55,6 @@ async function criarTabelasPostgres() {
             atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )`,
 
-        // Tabela de produtos mais vendidos
-        `CREATE TABLE IF NOT EXISTS faturamento_top_produtos (
-            id SERIAL PRIMARY KEY,
-            codigo_produto VARCHAR(50) NOT NULL,
-            descricao VARCHAR(255),
-            total_vendas INTEGER DEFAULT 0,
-            quantidade_total DECIMAL(15,3) DEFAULT 0,
-            valor_total DECIMAL(15,2) DEFAULT 0,
-            atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(codigo_produto)
-        )`,
-
         // Tabela de estatísticas gerais
         `CREATE TABLE IF NOT EXISTS faturamento_estatisticas (
             id SERIAL PRIMARY KEY,
@@ -83,8 +71,7 @@ async function criarTabelasPostgres() {
         )`,
 
         // Índices para performance
-        `CREATE INDEX IF NOT EXISTS idx_faturamento_diario_data ON faturamento_diario(data DESC)`,
-        `CREATE INDEX IF NOT EXISTS idx_top_produtos_valor ON faturamento_top_produtos(valor_total DESC)`
+        `CREATE INDEX IF NOT EXISTS idx_faturamento_diario_data ON faturamento_diario(data DESC)`
     ];
 
     for (const query of queries) {
@@ -163,73 +150,7 @@ async function sincronizarFaturamentoDiario(fbDb) {
     });
 }
 
-// =========================================================
-// SINCRONIZAR TOP PRODUTOS
-// =========================================================
-
-async function sincronizarTopProdutos(fbDb) {
-    console.log('\n🏆 Sincronizando top produtos...');
-
-    const dataInicio = new Date();
-    dataInicio.setDate(dataInicio.getDate() - 90);
-
-    const query = `
-        SELECT FIRST 50
-            nfp.PRODUTO_NPR as CODIGO_PRODUTO,
-            nfp.NOME_PRODUTO_NPR as DESCRICAO,
-            COUNT(DISTINCT nf.CODIGO_NOT) as TOTAL_VENDAS,
-            SUM(nfp.QUANTIDADE_NPR) as QUANTIDADE_TOTAL,
-            SUM(nfp.TOTAL_NPR) as VALOR_TOTAL_CENTAVOS
-        FROM NOTA_FISCAL nf
-        INNER JOIN NOTA_FISCAL_PRODUTO nfp 
-            ON nf.EMPRESA_NOT = nfp.EMPRESA_NPR 
-            AND nf.SERIE_NOT = nfp.SERIE_NPR
-            AND nf.CODIGO_NOT = nfp.CODIGO_NPR
-        WHERE nf.EMISSAO_NOT >= ?
-            AND nf.TIPO_NOT = 'S'
-            AND nf.STATUS_NOT = 'A'
-        GROUP BY nfp.PRODUTO_NPR, nfp.NOME_PRODUTO_NPR
-        ORDER BY VALOR_TOTAL_CENTAVOS DESC
-    `;
-
-    return new Promise((resolve, reject) => {
-        fbDb.query(query, [dataInicio], async (err, result) => {
-            if (err) {
-                console.error('❌ Erro ao buscar produtos do Firebird:', err);
-                return reject(err);
-            }
-
-            console.log(`📦 ${result.length} produtos encontrados`);
-
-            // Limpar dados antigos
-            await pool.query('DELETE FROM faturamento_top_produtos');
-
-            // Inserir novos dados
-            for (const row of result) {
-                await pool.query(`
-                    INSERT INTO faturamento_top_produtos 
-                    (codigo_produto, descricao, total_vendas, quantidade_total, valor_total)
-                    VALUES ($1, $2, $3, $4, $5)
-                    ON CONFLICT (codigo_produto) DO UPDATE SET
-                        descricao = EXCLUDED.descricao,
-                        total_vendas = EXCLUDED.total_vendas,
-                        quantidade_total = EXCLUDED.quantidade_total,
-                        valor_total = EXCLUDED.valor_total,
-                        atualizado_em = CURRENT_TIMESTAMP
-                `, [
-                    row.CODIGO_PRODUTO,
-                    row.DESCRICAO,
-                    row.TOTAL_VENDAS || 0,
-                    row.QUANTIDADE_TOTAL || 0,
-                    centavosParaReais(row.VALOR_TOTAL_CENTAVOS)
-                ]);
-            }
-
-            console.log('✅ Top produtos sincronizado!');
-            resolve();
-        });
-    });
-}
+// Sincronização de Top Produtos Removida a pedido do usuário
 
 // =========================================================
 // SINCRONIZAR DETALHADO (Para Modal de Registros)
@@ -368,7 +289,7 @@ async function sincronizarDetalhado(fbDb) {
                 }
             }
 
-            console.log('\n✅ Faturamento detalhado sincronizado!');
+            console.log(`\n✅ Faturamento detalhado sincronizado! Total: ${inserted} registros.`);
             resolve();
         });
     });
@@ -474,11 +395,10 @@ async function sincronizar() {
             console.log('✅ Conectado ao Firebird!');
 
             try {
-                // Sincronizar todos os dados
-                await sincronizarFaturamentoDiario(fbDb);
-                await sincronizarTopProdutos(fbDb);
-                await sincronizarEstatisticas(fbDb);
+                // Sincronizar todos os dados - Prioridade para o Detalhado (faturamentos.html)
                 await sincronizarDetalhado(fbDb);
+                await sincronizarFaturamentoDiario(fbDb);
+                await sincronizarEstatisticas(fbDb);
 
                 console.log('\n' + '='.repeat(60));
                 console.log('✅ SINCRONIZAÇÃO CONCLUÍDA COM SUCESSO!');
