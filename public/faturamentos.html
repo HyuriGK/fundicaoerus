@@ -644,7 +644,15 @@
                 const json = await res.json();
                 if (json.success && json.data && Array.isArray(json.data)) {
                     excludedClients = new Set(json.data);
-                    console.log('Preferências carregadas:', excludedClients.size, 'clientes excluídos.');
+                    console.log(`✅ Preferências carregadas: ${excludedClients.size} clientes.`);
+
+                    // Force update UI if modal is open
+                    const modal = document.getElementById('clientModal');
+                    if (modal && modal.style.display === 'flex') {
+                        renderClientList();
+                    }
+                } else {
+                    console.log('ℹ️ Nenhuma preferência salva ou formato inválido.');
                 }
             } catch (e) {
                 console.warn('Falha ao carregar preferências', e);
@@ -654,12 +662,15 @@
         async function savePreferences() {
             try {
                 const arrayData = Array.from(excludedClients);
-                console.log('Salvando preferências...', arrayData.length, 'clientes.');
-                await fetch('/api/preferences/excluded_clients', {
+                console.log(`💾 Tentando salvar ${arrayData.length} clientes...`, arrayData);
+
+                const res = await fetch('/api/preferences/excluded_clients', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ value: arrayData })
                 });
+                const json = await res.json();
+                console.log('📤 Resposta salvamento:', json);
             } catch (e) {
                 console.error('Erro ao salvar preferências', e);
             }
@@ -722,6 +733,7 @@
             const rows = visibleData.map(item => `
                 <tr>
                     <td title="${formatDate(item.data)}">${formatDate(item.data)}</td>
+                    <!-- NF Removed -->
                     <td title="${item.serie}">${item.serie || ''}</td>
                     <td title="${item.clienteCodigo}">${item.clienteCodigo || ''}</td>
                     <td title="${item.clienteNome}">${item.clienteNome || ''}</td>
