@@ -166,9 +166,9 @@ router.get('/detalhado', async (req, res) => {
     try {
         console.log('📝 Consultando faturamento detalhado do PostgreSQL...');
 
-        const { limit = 2000 } = req.query;
+        const { limit = 2000, startDate, endDate } = req.query;
 
-        const query = `
+        let query = `
             SELECT 
                 data_faturamento,
                 nota_fiscal,
@@ -182,11 +182,28 @@ router.get('/detalhado', async (req, res) => {
                 valor_total,
                 status
             FROM faturamento_firebird
-            ORDER BY data_faturamento DESC, nota_fiscal DESC
-            LIMIT $1
+            WHERE 1=1
         `;
 
-        const result = await pool.query(query, [parseInt(limit)]);
+        const params = [];
+        let paramIndex = 1;
+
+        if (startDate) {
+            query += ` AND data_faturamento >= $${paramIndex}`;
+            params.push(startDate);
+            paramIndex++;
+        }
+
+        if (endDate) {
+            query += ` AND data_faturamento <= $${paramIndex}`;
+            params.push(endDate);
+            paramIndex++;
+        }
+
+        query += ` ORDER BY data_faturamento DESC, nota_fiscal DESC LIMIT $${paramIndex}`;
+        params.push(parseInt(limit));
+
+        const result = await pool.query(query, params);
 
         console.log(`✅ ${result.rows.length} registros detalhados encontrados`);
 
