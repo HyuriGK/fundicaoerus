@@ -52,6 +52,7 @@ async function criarTabelasPostgres() {
             total_itens INTEGER DEFAULT 0,
             quantidade_total DECIMAL(15,3) DEFAULT 0,
             valor_total DECIMAL(15,2) DEFAULT 0,
+            peso_total DECIMAL(15,3) DEFAULT 0,
             atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )`,
 
@@ -98,12 +99,15 @@ async function sincronizarFaturamentoDiario(fbDb) {
             COUNT(DISTINCT nf.CODIGO_NOT) as TOTAL_NOTAS,
             COUNT(nfp.PRODUTO_NPR) as TOTAL_ITENS,
             SUM(nfp.QUANTIDADE_NPR) as QUANTIDADE_TOTAL,
-            SUM(nfp.TOTAL_NPR) as VALOR_TOTAL_CENTAVOS
+            SUM(nfp.TOTAL_NPR) as VALOR_TOTAL_CENTAVOS,
+            SUM(nfp.QUANTIDADE_NPR * COALESCE(p.PESO_LIQUIDO_PRO, 0)) as PESO_TOTAL
         FROM NOTA_FISCAL nf
         INNER JOIN NOTA_FISCAL_PRODUTO nfp 
             ON nf.EMPRESA_NOT = nfp.EMPRESA_NPR 
             AND nf.SERIE_NOT = nfp.SERIE_NPR
             AND nf.CODIGO_NOT = nfp.CODIGO_NPR
+        LEFT JOIN PRODUTO p
+            ON nfp.PRODUTO_NPR = p.CODIGO_PRO
         WHERE nf.EMISSAO_NOT >= ?
             AND nf.TIPO_NOT = 'S'
             AND nf.STATUS_NOT = 'A'
@@ -127,20 +131,22 @@ async function sincronizarFaturamentoDiario(fbDb) {
             for (const row of result) {
                 await pool.query(`
                     INSERT INTO faturamento_diario 
-                    (data, total_notas, total_itens, quantidade_total, valor_total)
-                    VALUES ($1, $2, $3, $4, $5)
+                    (data, total_notas, total_itens, quantidade_total, valor_total, peso_total)
+                    VALUES ($1, $2, $3, $4, $5, $6)
                     ON CONFLICT (data) DO UPDATE SET
                         total_notas = EXCLUDED.total_notas,
                         total_itens = EXCLUDED.total_itens,
                         quantidade_total = EXCLUDED.quantidade_total,
                         valor_total = EXCLUDED.valor_total,
+                        peso_total = EXCLUDED.peso_total,
                         atualizado_em = CURRENT_TIMESTAMP
                 `, [
                     formatarData(row.DATA_FATURAMENTO),
                     row.TOTAL_NOTAS || 0,
                     row.TOTAL_ITENS || 0,
                     row.QUANTIDADE_TOTAL || 0,
-                    centavosParaReais(row.VALOR_TOTAL_CENTAVOS)
+                    centavosParaReais(row.VALOR_TOTAL_CENTAVOS),
+                    row.PESO_TOTAL || 0
                 ]);
             }
 
@@ -164,23 +170,42 @@ async function sincronizarDetalhado(fbDb) {
         id SERIAL PRIMARY KEY,
         nota_fiscal INTEGER NOT NULL,
         serie VARCHAR(10),
+        item_nota INTEGER NOT NULL,
         data_faturamento DATE,
         cliente_codigo VARCHAR(20),
         cliente_nome VARCHAR(255),
         codigo_item VARCHAR(50),
         descricao VARCHAR(255),
-        quantidade DECIMAL(15,3),
-        valor_unitario DECIMAL(15,2),
-        valor_total DECIMAL(15,2),
+        quantidade DECIMAL(15, 3),
+        valor_unitario DECIMAL(15, 2),
+        valor_total DECIMAL(15, 2),
         status VARCHAR(10),
         atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(nota_fiscal, serie, codigo_item)
+        UNIQUE(nota_fiscal, serie, item_nota, codigo_item)
     )`);
 
     // Garanir que as colunas existem
-    await pool.query(`ALTER TABLE faturamento_firebird ADD COLUMN IF NOT EXISTS peso_un DECIMAL(15,3) DEFAULT 0`);
-    await pool.query(`ALTER TABLE faturamento_firebird ADD COLUMN IF NOT EXISTS peso_total DECIMAL(15,3) DEFAULT 0`);
+    await pool.query(`ALTER TABLE faturamento_firebird ADD COLUMN IF NOT EXISTS item_nota INTEGER DEFAULT 0`);
+    await pool.query(`ALTER TABLE faturamento_firebird ADD COLUMN IF NOT EXISTS peso_un DECIMAL(15, 3) DEFAULT 0`);
+    await pool.query(`ALTER TABLE faturamento_firebird ADD COLUMN IF NOT EXISTS peso_total DECIMAL(15, 3) DEFAULT 0`);
     await pool.query(`ALTER TABLE faturamento_firebird ADD COLUMN IF NOT EXISTS atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP`);
+
+    // Atualizar constraint se necessário
+    try {
+        // Drop antiga se existir
+        await pool.query(`ALTER TABLE faturamento_firebird DROP CONSTRAINT IF EXISTS faturamento_firebird_nota_fiscal_serie_codigo_item_key`);
+        // Adicionar nova se não existir
+        await pool.query(`
+            DO $$ 
+            BEGIN 
+                IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'faturamento_firebird_nf_serie_item_prod_key') THEN
+                    ALTER TABLE faturamento_firebird ADD CONSTRAINT faturamento_firebird_nf_serie_item_prod_key UNIQUE(nota_fiscal, serie, item_nota, codigo_item);
+                END IF;
+            END $$;
+        `);
+    } catch (e) {
+        console.warn('⚠️  Aviso ao atualizar constraints:', e.message);
+    }
 
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_fat_fb_data ON faturamento_firebird(data_faturamento DESC)`);
 
@@ -188,20 +213,21 @@ async function sincronizarDetalhado(fbDb) {
     dataInicio.setFullYear(2026, 0, 1); // Faturamento de 2026 conforme objetivo do projeto
 
     const query = `
-        SELECT 
-            nf.CODIGO_NOT,
-            nf.NUMERO_NOT,
-            nf.SERIE_NOT,
-            CAST(nf.EMISSAO_NOT AS DATE) as DATA_FATURAMENTO,
-            nf.DESTINATARIO_NOT as COD_CLIENTE_NOT,
-            nf.RAZAO_SOCIAL_NOT as CLIENTE_NOME_NOT,
-            nf.STATUS_NOT,
-            nfp.PRODUTO_NPR,
-            nfp.NOME_PRODUTO_NPR,
-            nfp.QUANTIDADE_NPR,
-            nfp.PRECO_NPR as UNITARIO_NPR,
-            nfp.TOTAL_NPR,
-            p.PESO_LIQUIDO_PRO as PESO_UNITARIO
+    SELECT
+    nf.CODIGO_NOT,
+        nf.NUMERO_NOT,
+        nf.SERIE_NOT,
+        CAST(nf.EMISSAO_NOT AS DATE) as DATA_FATURAMENTO,
+        nf.DESTINATARIO_NOT as COD_CLIENTE_NOT,
+        nf.RAZAO_SOCIAL_NOT as CLIENTE_NOME_NOT,
+        nf.STATUS_NOT,
+        nfp.ITEM_NPR,
+        nfp.PRODUTO_NPR,
+        nfp.NOME_PRODUTO_NPR,
+        nfp.QUANTIDADE_NPR,
+        nfp.PRECO_NPR as UNITARIO_NPR,
+        nfp.TOTAL_NPR,
+        p.PESO_LIQUIDO_PRO as PESO_UNITARIO
         FROM NOTA_FISCAL nf
         INNER JOIN NOTA_FISCAL_PRODUTO nfp 
             ON nf.EMPRESA_NOT = nfp.EMPRESA_NPR 
@@ -210,7 +236,7 @@ async function sincronizarDetalhado(fbDb) {
         LEFT JOIN PRODUTO p
             ON nfp.PRODUTO_NPR = p.CODIGO_PRO
         WHERE nf.EMISSAO_NOT >= ?
-            AND nf.TIPO_NOT = 'S'
+        AND nf.TIPO_NOT = 'S'
             AND nf.STATUS_NOT = 'A'
         ORDER BY nf.EMISSAO_NOT DESC
     `;
@@ -237,7 +263,7 @@ async function sincronizarDetalhado(fbDb) {
                     // Verificado que o CODIGO_NOT bate com o número na CHAVE_NOT
                     const notaFiscal = parseInt(row.CODIGO_NOT);
                     if (isNaN(notaFiscal)) {
-                        console.warn(`  ⚠️  Nota Fiscal inválida (Cód: ${row.CODIGO_NOT}), pulando item.`);
+                        console.warn(`  ⚠️  Nota Fiscal inválida(Cód: ${row.CODIGO_NOT}), pulando item.`);
                         errors++;
                         continue;
                     }
@@ -245,14 +271,13 @@ async function sincronizarDetalhado(fbDb) {
                     const pesoUn = parseFloat(row.PESO_UNITARIO) || 0;
                     const quantidade = parseFloat(row.QUANTIDADE_NPR) || 0;
                     const pesoTotal = pesoUn * quantidade;
-
                     await pool.query(`
                         INSERT INTO faturamento_firebird 
-                        (nota_fiscal, serie, data_faturamento, cliente_codigo, cliente_nome, 
+                        (nota_fiscal, serie, item_nota, data_faturamento, cliente_codigo, cliente_nome, 
                          codigo_item, descricao, quantidade, valor_unitario, valor_total, 
                          peso_un, peso_total, status)
-                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-                        ON CONFLICT (nota_fiscal, serie, codigo_item) DO UPDATE SET
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                        ON CONFLICT ON CONSTRAINT faturamento_firebird_nf_serie_item_prod_key DO UPDATE SET
                             data_faturamento = EXCLUDED.data_faturamento,
                             cliente_nome = EXCLUDED.cliente_nome,
                             descricao = EXCLUDED.descricao,
@@ -266,6 +291,7 @@ async function sincronizarDetalhado(fbDb) {
                     `, [
                         notaFiscal,
                         row.SERIE_NOT ? String(row.SERIE_NOT).trim() : null,
+                        parseInt(row.ITEM_NPR) || 0,
                         formatarData(row.DATA_FATURAMENTO),
                         row.COD_CLIENTE_NOT,
                         row.CLIENTE_NOME_NOT,

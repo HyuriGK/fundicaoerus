@@ -18,6 +18,7 @@ router.get('/diario', async (req, res) => {
                 total_itens,
                 quantidade_total,
                 valor_total,
+                peso_total,
                 atualizado_em
             FROM faturamento_diario
             ORDER BY data DESC
@@ -35,7 +36,8 @@ router.get('/diario', async (req, res) => {
                 totalNotas: parseInt(row.total_notas),
                 totalItens: parseInt(row.total_itens),
                 quantidadeTotal: parseFloat(row.quantidade_total),
-                valorTotal: parseFloat(row.valor_total)
+                valorTotal: parseFloat(row.valor_total),
+                pesoTotal: parseFloat(row.peso_total || 0)
             }))
         });
 
@@ -231,7 +233,8 @@ router.get('/detalhado', async (req, res) => {
             data: dataFormatted,
             summary: {
                 totalRegistros: result.rows.length,
-                totalFaturado: dataFormatted.reduce((acc, curr) => acc + curr.valorTotal, 0)
+                totalFaturado: dataFormatted.reduce((acc, curr) => acc + curr.valorTotal, 0),
+                totalPeso: dataFormatted.reduce((acc, curr) => acc + curr.pesoTotal, 0)
             }
         });
 
@@ -240,6 +243,56 @@ router.get('/detalhado', async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Erro ao buscar faturamento detalhado',
+            error: error.message
+        });
+    }
+});
+
+// GET /api/faturamento-postgres/evolucao-mensal - Evolução anual em peso
+router.get('/evolucao-mensal', async (req, res) => {
+    try {
+        console.log('📅 Consultando evolução mensal (Peso) do PostgreSQL...');
+
+        const currentYear = new Date().getFullYear();
+
+        // Query que gera todos os 12 meses do ano e faz o join com as somas
+        const query = `
+            WITH meses AS (
+                SELECT generate_series(
+                    DATE_TRUNC('year', CURRENT_DATE),
+                    DATE_TRUNC('year', CURRENT_DATE) + INTERVAL '11 months',
+                    INTERVAL '1 month'
+                )::DATE as mes
+            )
+            SELECT 
+                m.mes,
+                COALESCE(SUM(f.peso_total), 0) as peso_total,
+                COALESCE(SUM(f.valor_total), 0) as valor_total
+            FROM meses m
+            LEFT JOIN faturamento_firebird f 
+                ON DATE_TRUNC('month', f.data_faturamento) = m.mes
+                AND f.status = 'A'
+            GROUP BY m.mes
+            ORDER BY m.mes
+        `;
+
+        const result = await pool.query(query);
+
+        res.json({
+            success: true,
+            data: result.rows.map(row => ({
+                mes: row.mes,
+                mesNome: row.mes.toLocaleString('pt-BR', { month: 'long' }),
+                pesoTotal: parseFloat(row.peso_total),
+                valorTotal: parseFloat(row.valor_total)
+            }))
+        });
+
+    } catch (error) {
+        console.error('❌ Erro:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erro ao buscar evolução mensal',
             error: error.message
         });
     }

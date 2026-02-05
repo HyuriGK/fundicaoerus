@@ -12,6 +12,8 @@
     <link
         href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap"
         rel="stylesheet">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <style>
         /* CSS Variables - Burnt Orange Theme */
@@ -542,6 +544,113 @@
             color: var(--text-muted);
             font-size: 0.9rem;
         }
+
+        /* Charts Layout */
+        .charts-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+            margin-bottom: 24px;
+            flex-shrink: 0;
+        }
+
+        .chart-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            padding: 20px;
+            height: 350px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: var(--shadow-card);
+        }
+
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .chart-title {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .chart-body {
+            flex: 1;
+            position: relative;
+        }
+
+        /* Full Screen Records Modal */
+        #recordsModal.modal-overlay {
+            background: #09090b;
+            /* Solid black background for full screen */
+            backdrop-filter: none;
+        }
+
+        #recordsModal .modal {
+            width: 100vw;
+            height: 100vh;
+            max-width: none;
+            max-height: none;
+            border-radius: 0;
+            border: none;
+        }
+
+        #recordsModal .modal-header {
+            background: #18181b;
+            padding: 12px 32px;
+        }
+
+        #recordsModal .modal-body {
+            padding: 0;
+            /* Table will handle padding */
+            background: #09090b;
+        }
+
+        .records-content {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            padding: 24px;
+        }
+
+        /* Adjustments for Charts */
+        .primary-stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .stat-value {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: var(--color-primary);
+            font-family: var(--font-mono);
+        }
     </style>
 </head>
 
@@ -553,7 +662,7 @@
         <div style="color: var(--text-muted);">Carregando dados do ERP...</div>
     </div>
 
-    <!-- Client Filter Modal -->
+    <!-- Client Filter Modal (Kept as is) -->
     <div id="clientModal" class="modal-overlay">
         <div class="modal">
             <div class="modal-header">
@@ -568,8 +677,96 @@
                     onkeyup="filterClientList()">
                 <div class="client-list" id="clientListContainer"></div>
             </div>
-            <div class="modal-header" style="justify-content: flex-end; border-top: 1px solid var(--border-subtle);">
-                <button onclick="closeClientModal()">Fechar</button>
+            <div class="modal-footer"
+                style="padding: 15px 24px; display: flex; justify-content: flex-end; border-top: 1px solid var(--border-subtle);">
+                <button class="btn-glass" onclick="closeClientModal()">Fechar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Full Screen Records Modal -->
+    <div id="recordsModal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-title"><i class="fa-solid fa-table-list" style="color: var(--color-primary);"></i>
+                    Detalhamento de Registros</div>
+                <div style="display: flex; gap: 15px; align-items: center;">
+                    <button class="btn-glass" onclick="openClientModal()">
+                        <i class="fa-solid fa-filter"></i> Filtrar Clientes
+                    </button>
+                    <button class="close-modal" onclick="closeRecordsModal()" style="font-size: 1.5rem;"><i
+                            class="fa-solid fa-xmark"></i></button>
+                </div>
+            </div>
+            <div class="modal-body">
+                <div class="records-content">
+                    <!-- Filter Bar moved inside records content -->
+                    <div class="filter-bar"
+                        style="margin-bottom: 16px; border-radius: 8px; border: 1px solid var(--border-subtle);">
+                        <div class="filter-group">
+                            <label class="filter-label">Período Fiscal:</label>
+                            <input type="date" id="startDate" class="filter-input">
+                            <span style="color: var(--text-muted);">-</span>
+                            <input type="date" id="endDate" class="filter-input">
+                        </div>
+                        <button class="btn-glass"
+                            style="background: var(--color-primary); color: #000; border: none; padding: 6px 20px;"
+                            onclick="loadRecordsData()">
+                            <i class="fa-solid fa-sync"></i> Atualizar Tabela
+                        </button>
+                    </div>
+
+                    <div class="table-wrapper">
+                        <div class="table-scroll">
+                            <table id="dataTable">
+                                <thead>
+                                    <tr>
+                                        <th style="min-width: 100px;">Data</th>
+                                        <th style="min-width: 80px;">Cód. Cli</th>
+                                        <th style="min-width: 250px;">Cliente</th>
+                                        <th style="min-width: 100px;">Cód. Item</th>
+                                        <th style="min-width: 300px;">Descrição</th>
+                                        <th class="text-right" style="min-width: 80px;">Qtd</th>
+                                        <th class="text-right" style="min-width: 100px;">Valor Unit.</th>
+                                        <th class="text-right" style="min-width: 100px;">Peso Unit.</th>
+                                        <th class="text-right" style="min-width: 100px;">Peso Total</th>
+                                        <th class="text-right" style="min-width: 110px;">Valor Total</th>
+                                    </tr>
+                                    <tr>
+                                        <th><input type="text" class="col-filter-input" placeholder="📅"
+                                                onkeyup="filterColumn(0, this.value)"></th>
+                                        <th><input type="text" class="col-filter-input" placeholder="🆔"
+                                                onkeyup="filterColumn(1, this.value)"></th>
+                                        <th><input type="text" class="col-filter-input" placeholder="👤"
+                                                onkeyup="filterColumn(2, this.value)"></th>
+                                        <th><input type="text" class="col-filter-input" placeholder="📦"
+                                                onkeyup="filterColumn(3, this.value)"></th>
+                                        <th><input type="text" class="col-filter-input" placeholder="📝"
+                                                onkeyup="filterColumn(4, this.value)"></th>
+                                        <th><input type="text" class="col-filter-input text-right" placeholder="🔢"
+                                                onkeyup="filterColumn(5, this.value)"></th>
+                                        <th><input type="text" class="col-filter-input text-right" placeholder="💲"
+                                                onkeyup="filterColumn(6, this.value)"></th>
+                                        <th><input type="text" class="col-filter-input text-right" placeholder="⚖️"
+                                                onkeyup="filterColumn(7, this.value)"></th>
+                                        <th><input type="text" class="col-filter-input text-right" placeholder="⚖️"
+                                                onkeyup="filterColumn(8, this.value)"></th>
+                                        <th><input type="text" class="col-filter-input text-right" placeholder="💰"
+                                                onkeyup="filterColumn(9, this.value)"></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tableBody"></tbody>
+                            </table>
+                        </div>
+                        <div class="table-footer">
+                            <div class="footer-info">
+                                <span>Registros:</span> <b id="totalRecords">0</b>
+                                <span style="margin-left: 20px;">Peso Total:</span> <b id="totalWeight">0.000 kg</b>
+                            </div>
+                            <div class="footer-total">Valor Total: <span id="totalValue">R$ 0,00</span></div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -584,9 +781,11 @@
             </div>
         </div>
         <div class="header-actions">
-            <!-- Glass Styles -->
-            <button class="btn-glass" onclick="openClientModal()">
-                <i class="fa-solid fa-filter" style="color: var(--color-primary);"></i> Filtrar Clientes
+            <!-- Registros Button -->
+            <button class="btn-glass"
+                style="background: rgba(245, 158, 11, 0.1); border-color: rgba(245, 158, 11, 0.3);"
+                onclick="openRecordsModal()">
+                <i class="fa-solid fa-table-list" style="color: var(--color-primary);"></i> Registros
             </button>
             <div class="separator-vertical"></div>
             <a href="index.html" class="btn-back">
@@ -595,69 +794,48 @@
         </div>
     </header>
 
-    <!-- Filter Bar for Date Range -->
-    <div class="filter-bar">
-        <div class="filter-group">
-            <label class="filter-label">Período:</label>
-            <input type="date" id="startDate" class="filter-input">
-            <span style="color: var(--text-muted);">-</span>
-            <input type="date" id="endDate" class="filter-input">
-        </div>
-        <button class="primary" style="padding: 4px 12px; font-size: 0.85rem;" onclick="loadData()">Filtrar</button>
-    </div>
-
-    <!-- Main -->
+    <!-- Main Dashboard -->
     <main>
-        <div class="table-wrapper">
-            <div class="table-scroll">
-                <table id="dataTable">
-                    <thead>
-                        <tr>
-                            <th style="min-width: 100px;">Data</th>
-                            <th style="min-width: 80px;">Cód. Cli</th>
-                            <th style="min-width: 250px;">Cliente</th>
-                            <th style="min-width: 100px;">Cód. Item</th>
-                            <th style="min-width: 300px;">Descrição</th>
-                            <th class="text-right" style="min-width: 80px;">Qtd</th>
-                            <th class="text-right" style="min-width: 100px;">Valor Unit.</th>
-                            <th class="text-right" style="min-width: 100px;">Peso Unit.</th>
-                            <th class="text-right" style="min-width: 100px;">Peso Total</th>
-                            <th class="text-right" style="min-width: 110px;">Valor Total</th>
-                        </tr>
-                        <tr>
-                            <!-- Row 2 for Filter Inputs -->
-                            <th><input type="text" class="col-filter-input" placeholder="📅"
-                                    onkeyup="filterColumn(0, this.value)"></th>
-                            <th><input type="text" class="col-filter-input" placeholder="🆔"
-                                    onkeyup="filterColumn(1, this.value)"></th>
-                            <th><input type="text" class="col-filter-input" placeholder="👤"
-                                    onkeyup="filterColumn(2, this.value)"></th>
-                            <th><input type="text" class="col-filter-input" placeholder="📦"
-                                    onkeyup="filterColumn(3, this.value)"></th>
-                            <th><input type="text" class="col-filter-input" placeholder="📝"
-                                    onkeyup="filterColumn(4, this.value)"></th>
-                            <th><input type="text" class="col-filter-input text-right" placeholder="🔢"
-                                    onkeyup="filterColumn(5, this.value)"></th>
-                            <th><input type="text" class="col-filter-input text-right" placeholder="💲"
-                                    onkeyup="filterColumn(6, this.value)"></th>
-                            <th><input type="text" class="col-filter-input text-right" placeholder="⚖️"
-                                    onkeyup="filterColumn(7, this.value)"></th>
-                            <th><input type="text" class="col-filter-input text-right" placeholder="⚖️"
-                                    onkeyup="filterColumn(8, this.value)"></th>
-                            <th><input type="text" class="col-filter-input text-right" placeholder="💰"
-                                    onkeyup="filterColumn(9, this.value)"></th>
-                        </tr>
-                    </thead>
-                    <tbody id="tableBody"> <!-- Rows via JS --> </tbody>
-                </table>
+        <!-- Primary Stats Cards -->
+        <div class="primary-stats">
+            <div class="stat-card">
+                <span class="stat-label">Faturamento Hoje</span>
+                <span class="stat-value" id="stat-today-value">R$ 0,00</span>
             </div>
-            <!-- Footer (Internal Summary) -->
-            <div class="table-footer">
-                <div class="footer-info">
-                    <span>Registros:</span> <b id="totalRecords">0</b>
-                    <span style="margin-left: 20px;">Peso Total:</span> <b id="totalWeight">0.000 kg</b>
+            <div class="stat-card">
+                <span class="stat-label">Peso Hoje</span>
+                <span class="stat-value" id="stat-today-weight">0,0 kg</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-label">Meta Diária (Est.)</span>
+                <span class="stat-value">---</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-label">Sincronização</span>
+                <span class="stat-value" style="font-size: 0.8rem; color: var(--status-success);">Banco em Nuvem
+                    (Neon)</span>
+            </div>
+        </div>
+
+        <!-- Charts Row -->
+        <div class="charts-container">
+            <div class="chart-card">
+                <div class="chart-header">
+                    <div class="chart-title"><i class="fa-solid fa-chart-bar" style="color: var(--color-primary);"></i>
+                        Faturamento Diário (Peso)</div>
                 </div>
-                <div class="footer-total">Valor Total: <span id="totalValue">R$ 0,00</span></div>
+                <div class="chart-body">
+                    <canvas id="dailyChart"></canvas>
+                </div>
+            </div>
+            <div class="chart-card">
+                <div class="chart-header">
+                    <div class="chart-title"><i class="fa-solid fa-chart-line" style="color: var(--color-primary);"></i>
+                        Evolução Anual (Peso)</div>
+                </div>
+                <div class="chart-body">
+                    <canvas id="annualChart"></canvas>
+                </div>
             </div>
         </div>
     </main>
@@ -678,31 +856,159 @@
         let clientStats = {};
         let colFilters = {};
 
+        // Chart Instances
+        let dailyChart = null;
+        let annualChart = null;
+
         // Formatting Helpers
         const formatCurrency = (val) => val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
         const formatNumber = (val) => val.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+        const formatWeight = (val) => val.toLocaleString('pt-BR', { minimumFractionDigits: 1 }) + ' kg';
         const formatDate = (dateStr) => {
             if (!dateStr) return '';
             const [y, m, d] = dateStr.split('-');
             return `${d}/${m}/${y}`;
         };
 
-        // --- LOAD DATA & PREFERENCES ---
-        async function loadData() {
-            const spinner = document.getElementById('loading-screen');
-            const tbody = document.getElementById('tableBody');
+        // --- DASHBOARD DATA (Charts & Stats) ---
+        async function loadDashboardData() {
+            try {
+                // 1. Stats and Daily Chart Data
+                const resDiario = await fetch('/api/faturamento-postgres/diario?limit=30');
+                const jsonDiario = await resDiario.json();
 
+                if (jsonDiario.success && jsonDiario.data.length > 0) {
+                    const latest = jsonDiario.data[0];
+                    // Update stats
+                    document.getElementById('stat-today-value').textContent = formatCurrency(latest.valorTotal);
+                    document.getElementById('stat-today-weight').textContent = formatWeight(latest.pesoTotal);
+
+                    renderDailyChart(jsonDiario.data.reverse());
+                }
+
+                // 2. Monthly Evolution Data
+                const resAnual = await fetch('/api/faturamento-postgres/evolucao-mensal');
+                const jsonAnual = await resAnual.json();
+
+                if (jsonAnual.success) {
+                    renderAnnualChart(jsonAnual.data);
+                }
+
+            } catch (error) {
+                console.error('Erro ao carregar dashboard:', error);
+            }
+        }
+
+        function renderDailyChart(data) {
+            const ctx = document.getElementById('dailyChart').getContext('2d');
+
+            if (dailyChart) dailyChart.destroy();
+
+            dailyChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.map(d => formatDate(d.data.split('T')[0])),
+                    datasets: [{
+                        label: 'Peso (kg)',
+                        data: data.map(d => d.pesoTotal),
+                        backgroundColor: '#f59e0b',
+                        borderColor: '#ea580c',
+                        borderWidth: 1,
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: (context) => `Peso: ${context.raw.toLocaleString('pt-BR')} kg`
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                            ticks: { color: '#a1a1aa' }
+                        },
+                        x: {
+                            grid: { display: false },
+                            ticks: { color: '#a1a1aa', maxRotation: 45, minRotation: 45 }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderAnnualChart(data) {
+            const ctx = document.getElementById('annualChart').getContext('2d');
+
+            if (annualChart) annualChart.destroy();
+
+            // Nomes reduzidos dos meses para o gráfico
+            const mesesAbrev = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+
+            annualChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: mesesAbrev,
+                    datasets: [{
+                        label: 'Peso (kg)',
+                        data: data.map(d => d.pesoTotal),
+                        backgroundColor: 'rgba(245, 158, 11, 0.2)',
+                        borderColor: '#f59e0b',
+                        borderWidth: 2,
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                            ticks: { color: '#a1a1aa' }
+                        },
+                        x: {
+                            grid: { display: false },
+                            ticks: { color: '#a1a1aa' }
+                        }
+                    }
+                }
+            });
+        }
+
+        // --- RECORDS MODAL LOGIC (TABLE) ---
+        async function openRecordsModal() {
+            document.getElementById('recordsModal').style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+            if (allData.length === 0) {
+                await loadRecordsData();
+            }
+        }
+
+        function closeRecordsModal() {
+            document.getElementById('recordsModal').style.display = 'none';
+            document.body.style.overflow = '';
+        }
+
+        async function loadRecordsData() {
+            const spinner = document.getElementById('loading-screen');
             spinner.style.display = 'flex';
 
-            // Get Dates
             const startDate = document.getElementById('startDate').value;
             const endDate = document.getElementById('endDate').value;
 
             try {
-                // 1. Load Preferences First
                 await loadPreferences();
 
-                // 2. Load Data with Filters
                 let url = '/api/faturamento-postgres/detalhado?limit=5000';
                 if (startDate) url += `&startDate=${startDate}`;
                 if (endDate) url += `&endDate=${endDate}`;
@@ -716,7 +1022,6 @@
                     renderTable();
                 } else {
                     alert('Erro ao carregar dados: ' + (result.message || 'Desconhecido'));
-                    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding: 20px; color: var(--status-danger);">Erro ao carregar dados.</td></tr>';
                 }
             } catch (error) {
                 console.error(error);
@@ -733,15 +1038,6 @@
                 const json = await res.json();
                 if (json.success && json.data && Array.isArray(json.data)) {
                     excludedClients = new Set(json.data);
-                    console.log(`✅ Preferências carregadas: ${excludedClients.size} clientes.`);
-
-                    // Force update UI if modal is open
-                    const modal = document.getElementById('clientModal');
-                    if (modal && modal.style.display === 'flex') {
-                        renderClientList();
-                    }
-                } else {
-                    console.log('ℹ️ Nenhuma preferência salva ou formato inválido.');
                 }
             } catch (e) {
                 console.warn('Falha ao carregar preferências', e);
@@ -751,15 +1047,11 @@
         async function savePreferences() {
             try {
                 const arrayData = Array.from(excludedClients);
-                console.log(`💾 Tentando salvar ${arrayData.length} clientes...`, arrayData);
-
-                const res = await fetch('/api/preferences/excluded_clients', {
+                await fetch('/api/preferences/excluded_clients', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ value: arrayData })
                 });
-                const json = await res.json();
-                console.log('📤 Resposta salvamento:', json);
             } catch (e) {
                 console.error('Erro ao salvar preferências', e);
             }
@@ -783,18 +1075,13 @@
             const tbody = document.getElementById('tableBody');
             tbody.innerHTML = '';
 
-            // 1. Filter by Excluded Clients
             let visibleData = allData.filter(item => {
                 const name = (item.clienteNome || 'Desconhecido').trim();
                 return !excludedClients.has(name);
             });
 
-            // 2. Filter by Columns
             if (Object.keys(colFilters).length > 0) {
                 visibleData = visibleData.filter(item => {
-                    // Map item properties to column indices (matching render order)
-                    // REMOVED NF & SERIE to match removed header
-                    // 0:Data, 1:CodCli, 2:Cliente, 3:CodItem, 4:Desc, 5:Qtd, 6:V.Unit, 7:V.Total
                     const rowValues = [
                         formatDate(item.data),
                         String(item.clienteCodigo || ''),
@@ -805,7 +1092,7 @@
                         formatNumber(item.valorUnitario),
                         formatNumber(item.pesoUn),
                         formatNumber(item.pesoTotal),
-                        formatCurrency(item.valorUnitario * item.quantidade * 100)
+                        formatCurrency(item.valorTotal)
                     ];
 
                     return Object.entries(colFilters).every(([idx, term]) => {
@@ -817,7 +1104,7 @@
 
             if (visibleData.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding: 20px; color: var(--text-muted);">Nenhum registro encontrado.</td></tr>';
-                updateSummary({ totalRegistros: 0, totalFaturado: 0, totalPeso: 0 });
+                updateSummary({ totalRegistros: 0, totalPeso: 0, totalFaturado: 0 });
                 return;
             }
 
@@ -832,7 +1119,7 @@
                     <td class="text-right">${formatNumber(item.valorUnitario)}</td>
                     <td class="text-right">${item.pesoUn.toLocaleString('pt-BR', { minimumFractionDigits: 3 })}</td>
                     <td class="text-right">${item.pesoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 3 })}</td>
-                    <td class="text-right" style="color: var(--color-primary); font-weight:600;">${formatCurrency(item.valorUnitario * item.quantidade * 100)}</td>
+                    <td class="text-right" style="color: var(--color-primary); font-weight:600;">${formatCurrency(item.valorTotal)}</td>
                 </tr>
             `).join('');
 
@@ -844,7 +1131,7 @@
             return {
                 totalRegistros: data.length,
                 totalPeso: data.reduce((acc, curr) => acc + (curr.pesoTotal || 0), 0),
-                totalFaturado: data.reduce((acc, curr) => acc + (curr.valorUnitario * curr.quantidade * 100), 0)
+                totalFaturado: data.reduce((acc, curr) => acc + (curr.valorTotal || 0), 0)
             };
         }
 
@@ -854,7 +1141,7 @@
             document.getElementById('totalValue').textContent = formatCurrency(summary.totalFaturado);
         }
 
-        // --- CLIENT MODAL LOGIC (UPDATED WITH PERSISTENCE) ---
+        // --- CLIENT MODAL LOGIC ---
         function openClientModal() {
             document.getElementById('clientModal').style.display = 'flex';
             renderClientList();
@@ -891,16 +1178,22 @@
 
             renderClientList();
             renderTable();
-            savePreferences(); // SAVE TO DB
+            savePreferences();
         }
 
-        // Window Events (Close Modal)
-        window.onclick = function (e) { if (e.target === document.getElementById('clientModal')) closeClientModal(); }
-        window.onkeydown = function (e) { if (e.key === 'Escape') closeClientModal(); }
+        // Window Events
+        window.onkeydown = function (e) {
+            if (e.key === 'Escape') {
+                if (document.getElementById('clientModal').style.display === 'flex') {
+                    closeClientModal();
+                } else if (document.getElementById('recordsModal').style.display === 'flex') {
+                    closeRecordsModal();
+                }
+            }
+        }
 
         // Start
         document.addEventListener('DOMContentLoaded', () => {
-            // Set default Date (e.g., current month)
             const now = new Date();
             const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
             const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
@@ -908,18 +1201,17 @@
             document.getElementById('startDate').valueAsDate = firstDay;
             document.getElementById('endDate').valueAsDate = lastDay;
 
-            loadData();
+            loadDashboardData();
         });
 
-        // RELÓGIO DO FOOTER
+        // Relógio
         setInterval(() => {
-            const clockTime = document.getElementById('clock-time');
-            const clockDate = document.getElementById('clock-date');
-            if (!clockTime || !clockDate) return;
-
+            const ct = document.getElementById('clock-time');
+            const cd = document.getElementById('clock-date');
+            if (!ct || !cd) return;
             const now = new Date();
-            clockTime.innerText = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-            clockDate.innerText = now.toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric', month: 'short' }).toUpperCase();
+            ct.innerText = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+            cd.innerText = now.toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric', month: 'short' }).toUpperCase();
         }, 1000);
     </script>
 </body>
