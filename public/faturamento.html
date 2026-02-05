@@ -2700,26 +2700,19 @@
             }
         }
 
-        // Carregar dados do Firebird
+        // Carregar dados dos API PostgreSQL (Sincronizado do Firebird)
         async function loadFirebirdData() {
             const statusEl = document.getElementById('firebirdStatus');
             statusEl.textContent = 'Carregando dados...';
             statusEl.style.color = 'var(--color-primary)';
 
             try {
-                // Definir período (últimos 30 dias)
-                const dataFim = new Date();
-                const dataInicio = new Date();
-                dataInicio.setDate(dataInicio.getDate() - 30);
-
-                const inicio = dataInicio.toISOString().split('T')[0];
-                const fim = dataFim.toISOString().split('T')[0];
-
-                // Buscar dados em paralelo
+                // Buscar dados em paralelo do PostgreSQL
+                // Não precisamos mais passar datas, pois a API do Postgres já filtra ou retorna os dados sincronizados
                 const [estatisticas, diario, topProdutos] = await Promise.all([
-                    fetch(`/api/faturamento-firebird/estatisticas?dataInicio=${inicio}&dataFim=${fim}`).then(r => r.json()),
-                    fetch(`/api/faturamento-firebird/diario?dataInicio=${inicio}&dataFim=${fim}`).then(r => r.json()),
-                    fetch(`/api/faturamento-firebird/top-produtos?dataInicio=${inicio}&dataFim=${fim}&limit=10`).then(r => r.json())
+                    fetch('/api/faturamento-postgres/estatisticas').then(r => r.json()),
+                    fetch('/api/faturamento-postgres/diario?limit=90').then(r => r.json()),
+                    fetch('/api/faturamento-postgres/top-produtos?limit=10').then(r => r.json())
                 ]);
 
                 // Armazenar em cache
@@ -2739,7 +2732,7 @@
                 statusEl.style.color = 'var(--status-success)';
 
             } catch (error) {
-                console.error('Erro ao carregar dados do Firebird:', error);
+                console.error('Erro ao carregar dados do PostgreSQL:', error);
                 statusEl.textContent = 'Erro ao carregar';
                 statusEl.style.color = 'var(--status-danger)';
             }
@@ -2851,6 +2844,22 @@
                 </tr>
             `).join('');
         }
+
+        // CARREGAR DADOS AUTOMATICAMENTE AO ABRIR A PÁGINA
+        window.addEventListener('load', function () {
+            setTimeout(() => {
+                console.log('🚀 Carregando dados do ERP automaticamente...');
+                // Expandir seção automaticamente
+                const content = document.getElementById('firebirdContent');
+                const chevron = document.getElementById('firebirdChevron');
+                if (content && chevron) {
+                    content.style.display = 'block';
+                    chevron.style.transform = 'rotate(180deg)';
+                }
+                // Carregar dados
+                loadFirebirdData();
+            }, 1000); // Pequeno delay para garantir carregamento da DOM
+        });
     </script>
 </body>
 
