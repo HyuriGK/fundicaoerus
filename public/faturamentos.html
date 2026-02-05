@@ -254,6 +254,172 @@
                 transform: rotate(360deg);
             }
         }
+
+        /* Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(4px);
+            z-index: 1000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal {
+            background: #18181b;
+            border: 1px solid var(--border-highlight);
+            border-radius: 12px;
+            width: 500px;
+            max-width: 90%;
+            max-height: 80vh;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+            animation: fadeIn 0.2s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: scale(0.95);
+            }
+
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        .modal-header {
+            padding: 16px 24px;
+            border-bottom: 1px solid var(--border-subtle);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-title {
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+
+        .close-modal {
+            background: none;
+            border: none;
+            font-size: 1.2rem;
+            padding: 4px;
+            color: var(--text-muted);
+        }
+
+        .close-modal:hover {
+            color: #fff;
+            background: none;
+            border: none;
+        }
+
+        .modal-body {
+            padding: 16px 24px;
+            flex: 1;
+            overflow-y: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .search-box {
+            width: 100%;
+            padding: 10px 12px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border-subtle);
+            border-radius: 6px;
+            color: var(--text-main);
+            font-family: var(--font-main);
+            margin-bottom: 12px;
+        }
+
+        .search-box:focus {
+            outline: none;
+            border-color: var(--color-primary-dim);
+        }
+
+        .client-list {
+            flex: 1;
+            overflow-y: auto;
+            border: 1px solid var(--border-subtle);
+            border-radius: 6px;
+            background: rgba(0, 0, 0, 0.2);
+        }
+
+        .client-item {
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border-separator);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+
+        .client-item:last-child {
+            border-bottom: none;
+        }
+
+        .client-item:hover {
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        .client-item.excluded {
+            background: rgba(239, 68, 68, 0.1);
+        }
+
+        .client-item.excluded .client-name {
+            text-decoration: line-through;
+            color: var(--text-muted);
+            opacity: 0.7;
+        }
+
+        .client-checkbox {
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border: 2px solid var(--text-muted);
+            border-radius: 4px;
+            position: relative;
+            cursor: pointer;
+        }
+
+        .client-checkbox:checked {
+            background: var(--status-danger);
+            border-color: var(--status-danger);
+        }
+
+        .client-checkbox:checked::after {
+            content: '×';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -55%);
+            color: white;
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        .client-name {
+            font-size: 0.9rem;
+            flex: 1;
+        }
+
+        .client-count {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            background: rgba(255, 255, 255, 0.05);
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
     </style>
 </head>
 
@@ -265,6 +431,29 @@
         <div style="color: var(--text-muted);">Carregando dados do ERP...</div>
     </div>
 
+    <!-- Client Filter Modal -->
+    <div id="clientModal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-title">Filtrar Clientes (Ocultar)</div>
+                <button class="close-modal" onclick="closeClientModal()">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <input type="text" class="search-box" id="clientSearch" placeholder="Buscar cliente..."
+                    onkeyup="filterClientList()">
+                <div class="client-list" id="clientListContainer">
+                    <!-- Items populated via JS -->
+                </div>
+            </div>
+            <div class="modal-header"
+                style="justify-content: flex-end; border-top: 1px solid var(--border-subtle); border-bottom: none;">
+                <button onclick="closeClientModal()">Fechar</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Header -->
     <header>
         <div class="app-title">
@@ -272,7 +461,11 @@
             Relatório de Faturamento (ERP)
         </div>
         <div class="header-actions">
-            <!-- Back to dashboard index -->
+            <!-- Filter Button -->
+            <button onclick="openClientModal()">
+                <i class="fa-solid fa-filter"></i> Filtrar Clientes
+            </button>
+
             <button onclick="window.location.href='index.html'">
                 <i class="fa-solid fa-arrow-left"></i> Voltar
             </button>
@@ -319,6 +512,11 @@
     </main>
 
     <script>
+        // Global Data Stores
+        let allData = [];
+        let excludedClients = new Set();
+        let clientStats = {}; // { "Client Name": count }
+
         // formatting helpers
         const formatCurrency = (val) => val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
         const formatNumber = (val) => val.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
@@ -340,9 +538,9 @@
                 const result = await response.json();
 
                 if (result.success) {
-                    renderTable(result.data);
-                    // Use server summary if available, otherwise calculate client-side
-                    updateSummary(result.summary || calculateSummary(result.data));
+                    allData = result.data;
+                    processClients(allData);
+                    renderTable();
                 } else {
                     alert('Erro ao carregar dados: ' + (result.message || 'Desconhecido'));
                     tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding: 20px; color: var(--status-danger);">Erro ao carregar dados.</td></tr>';
@@ -356,16 +554,33 @@
             }
         }
 
-        function renderTable(data) {
+        function processClients(data) {
+            clientStats = {};
+            data.forEach(item => {
+                const name = (item.clienteNome || 'Desconhecido').trim();
+                clientStats[name] = (clientStats[name] || 0) + 1;
+            });
+        }
+
+        function renderTable() {
             const tbody = document.getElementById('tableBody');
             tbody.innerHTML = '';
 
-            if (!data || data.length === 0) {
+            // Filter Data based on exclusions
+            const visibleData = allData.filter(item => {
+                const name = (item.clienteNome || 'Desconhecido').trim();
+                return !excludedClients.has(name);
+            });
+
+            if (!visibleData || visibleData.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding: 20px; color: var(--text-muted);">Nenhum registro encontrado.</td></tr>';
+                updateSummary({ totalRegistros: 0, totalFaturado: 0 });
                 return;
             }
 
-            const rows = data.map(item => `
+            // Limit render to avoid freezing if massive (though pagination would be better)
+            // For now, render all (virtual scrolling would be ideal for 5000 rows but simple render is ok for modern browsers)
+            const rows = visibleData.map(item => `
                 <tr>
                     <td>${formatDate(item.data)}</td>
                     <td>${item.notaFiscal || ''}</td>
@@ -381,10 +596,10 @@
             `).join('');
 
             tbody.innerHTML = rows;
+            updateSummary(calculateSummary(visibleData));
         }
 
         function calculateSummary(data) {
-            if (!data) return { totalRegistros: 0, totalFaturado: 0 };
             return {
                 totalRegistros: data.length,
                 totalFaturado: data.reduce((acc, curr) => acc + (curr.valorTotal || 0), 0)
@@ -394,6 +609,70 @@
         function updateSummary(summary) {
             document.getElementById('totalRecords').textContent = summary.totalRegistros.toLocaleString('pt-BR');
             document.getElementById('totalValue').textContent = formatCurrency(summary.totalFaturado);
+        }
+
+        // ============================================
+        // CLIENT FILTER LOGIC
+        // ============================================
+
+        function openClientModal() {
+            document.getElementById('clientModal').style.display = 'flex';
+            renderClientList();
+            document.getElementById('clientSearch').focus();
+        }
+
+        function closeClientModal() {
+            document.getElementById('clientModal').style.display = 'none';
+        }
+
+        function renderClientList() {
+            const container = document.getElementById('clientListContainer');
+            const searchTerm = document.getElementById('clientSearch').value.toLowerCase();
+            const clients = Object.keys(clientStats).sort();
+
+            container.innerHTML = clients.map(client => {
+                if (searchTerm && !client.toLowerCase().includes(searchTerm)) return '';
+
+                const isExcluded = excludedClients.has(client);
+                const itemClass = isExcluded ? 'client-item excluded' : 'client-item';
+
+                return `
+                    <div class="${itemClass}" onclick="toggleClientExclusion('${client.replace(/'/g, "\\'")}')">
+                        <input type="checkbox" class="client-checkbox"
+                            ${isExcluded ? 'checked' : ''}
+                            onclick="event.stopPropagation(); toggleClientExclusion('${client.replace(/'/g, "\\'")}')">
+                        <span class="client-name">${client}</span>
+                        <span class="client-count">${clientStats[client]}</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function filterClientList() {
+            renderClientList();
+        }
+
+        function toggleClientExclusion(clientName) {
+            if (excludedClients.has(clientName)) {
+                excludedClients.delete(clientName);
+            } else {
+                excludedClients.add(clientName);
+            }
+            // Re-render list to show crossed out style
+            renderClientList();
+            // Re-render table behind modal (live update)
+            renderTable();
+        }
+
+        // Close modal on escape or click outside
+        window.onclick = function (event) {
+            const modal = document.getElementById('clientModal');
+            if (event.target === modal) {
+                closeClientModal();
+            }
+        }
+        window.onkeydown = function (event) {
+            if (event.key === 'Escape') closeClientModal();
         }
 
         // Init
