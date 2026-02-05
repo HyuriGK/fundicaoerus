@@ -2432,165 +2432,168 @@
             const ws = XLSX.utils.aoa_to_sheet(dadosExcel);
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "Relatorio");
-            // =========================================================
-            // INTEGRAÇÃO FIREBIRD - DADOS DO ERP
-            // =========================================================
+            XLSX.writeFile(wb, `Relatorio_Faturamento_${mesAnoInput.replace('/', '-')}.xlsx`);
+        }
 
-            let firebirdChart = null;
-            let firebirdDataCache = {
-                estatisticas: null,
-                diario: null,
-                topProdutos: null,
-                lastUpdate: null
-            };
+        // =========================================================
+        // INTEGRAÇÃO FIREBIRD - DADOS DO ERP
+        // =========================================================
 
-            // Toggle da seção Firebird
-            function toggleFirebirdSection() {
-                const content = document.getElementById('firebirdContent');
-                const chevron = document.getElementById('firebirdChevron');
+        let firebirdChart = null;
+        let firebirdDataCache = {
+            estatisticas: null,
+            diario: null,
+            topProdutos: null,
+            lastUpdate: null
+        };
 
-                if (content.style.display === 'none') {
-                    content.style.display = 'block';
-                    chevron.style.transform = 'rotate(180deg)';
+        // Toggle da seção Firebird
+        function toggleFirebirdSection() {
+            const content = document.getElementById('firebirdContent');
+            const chevron = document.getElementById('firebirdChevron');
 
-                    // Carregar dados se ainda não foram carregados
-                    if (!firebirdDataCache.lastUpdate) {
-                        loadFirebirdData();
-                    }
-                } else {
-                    content.style.display = 'none';
-                    chevron.style.transform = 'rotate(0deg)';
+            if (content.style.display === 'none') {
+                content.style.display = 'block';
+                chevron.style.transform = 'rotate(180deg)';
+
+                // Carregar dados se ainda não foram carregados
+                if (!firebirdDataCache.lastUpdate) {
+                    loadFirebirdData();
                 }
+            } else {
+                content.style.display = 'none';
+                chevron.style.transform = 'rotate(0deg)';
+            }
+        }
+
+        // Carregar dados dos API PostgreSQL (Sincronizado do Firebird)
+        async function loadFirebirdData() {
+            const statusEl = document.getElementById('firebirdStatus');
+            statusEl.textContent = 'Carregando dados...';
+            statusEl.style.color = 'var(--color-primary)';
+
+            try {
+                const [estatisticas, diario, topProdutos] = await Promise.all([
+                    fetch('/api/faturamento-postgres/estatisticas').then(r => r.json()),
+                    fetch('/api/faturamento-postgres/diario?limit=90').then(r => r.json()),
+                    fetch('/api/faturamento-postgres/top-produtos?limit=10').then(r => r.json())
+                ]);
+
+                // Armazenar em cache
+                firebirdDataCache = {
+                    estatisticas: estatisticas.data,
+                    diario: diario.data,
+                    topProdutos: topProdutos.data,
+                    lastUpdate: new Date()
+                };
+
+                // Atualizar interface
+                updateFirebirdKPIs(estatisticas.data);
+                updateFirebirdChart(diario.data);
+                updateFirebirdTopProdutos(topProdutos.data);
+
+                statusEl.textContent = `Atualizado ${new Date().toLocaleTimeString('pt-BR')}`;
+                statusEl.style.color = 'var(--status-success)';
+
+            } catch (error) {
+                console.error('Erro ao carregar dados do PostgreSQL:', error);
+                statusEl.textContent = 'Erro ao carregar';
+                statusEl.style.color = 'var(--status-danger)';
+            }
+        }
+
+        // Atualizar KPIs
+        function updateFirebirdKPIs(data) {
+            if (!data) return;
+
+            const totalFatEl = document.getElementById('fbTotalFaturado');
+            if (totalFatEl) totalFatEl.textContent = `R$ ${(data.valorTotal || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+            const totalNotasEl = document.getElementById('fbTotalNotas');
+            if (totalNotasEl) totalNotasEl.textContent = (data.totalNotas || 0).toLocaleString('pt-BR');
+
+            const totalClientesEl = document.getElementById('fbTotalClientes');
+            if (totalClientesEl) totalClientesEl.textContent = (data.totalClientes || 0).toLocaleString('pt-BR');
+
+            const ticketMedioEl = document.getElementById('fbTicketMedio'); // Corrigindo ID se necessário (era 'Ticket Médio' no título)
+            // Verificando ID no HTML original... linha 1299 era Ticket Médio
+            // Deixando genérico se não achou ID
+        }
+
+        function updateFirebirdChart(data) {
+            if (!data || data.length === 0) return;
+
+            const ctx = document.getElementById('fbDailyChart');
+            if (!ctx) return;
+
+            // Ordenar por data (mais antigo primeiro)
+            const sortedData = [...data].sort((a, b) => new Date(a.data) - new Date(b.data));
+
+            const labels = sortedData.map(item => {
+                const date = new Date(item.data + 'T00:00:00');
+                return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+            });
+
+            const valores = sortedData.map(item => item.valorTotal || 0);
+
+            // Destruir gráfico anterior se existir
+            if (firebirdChart) {
+                firebirdChart.destroy();
             }
 
-            // Carregar dados dos API PostgreSQL (Sincronizado do Firebird)
-            async function loadFirebirdData() {
-                const statusEl = document.getElementById('firebirdStatus');
-                statusEl.textContent = 'Carregando dados...';
-                statusEl.style.color = 'var(--color-primary)';
-
-                try {
-                    const [estatisticas, diario, topProdutos] = await Promise.all([
-                        fetch('/api/faturamento-postgres/estatisticas').then(r => r.json()),
-                        fetch('/api/faturamento-postgres/diario?limit=90').then(r => r.json()),
-                        fetch('/api/faturamento-postgres/top-produtos?limit=10').then(r => r.json())
-                    ]);
-
-                    // Armazenar em cache
-                    firebirdDataCache = {
-                        estatisticas: estatisticas.data,
-                        diario: diario.data,
-                        topProdutos: topProdutos.data,
-                        lastUpdate: new Date()
-                    };
-
-                    // Atualizar interface
-                    updateFirebirdKPIs(estatisticas.data);
-                    updateFirebirdChart(diario.data);
-                    updateFirebirdTopProdutos(topProdutos.data);
-
-                    statusEl.textContent = `Atualizado ${new Date().toLocaleTimeString('pt-BR')}`;
-                    statusEl.style.color = 'var(--status-success)';
-
-                } catch (error) {
-                    console.error('Erro ao carregar dados do PostgreSQL:', error);
-                    statusEl.textContent = 'Erro ao carregar';
-                    statusEl.style.color = 'var(--status-danger)';
-                }
-            }
-
-            // Atualizar KPIs
-            function updateFirebirdKPIs(data) {
-                if (!data) return;
-
-                const totalFatEl = document.getElementById('fbTotalFaturado');
-                if (totalFatEl) totalFatEl.textContent = `R$ ${(data.valorTotal || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-                const totalNotasEl = document.getElementById('fbTotalNotas');
-                if (totalNotasEl) totalNotasEl.textContent = (data.totalNotas || 0).toLocaleString('pt-BR');
-
-                const totalClientesEl = document.getElementById('fbTotalClientes');
-                if (totalClientesEl) totalClientesEl.textContent = (data.totalClientes || 0).toLocaleString('pt-BR');
-
-                const ticketMedioEl = document.getElementById('fbTicketMedio'); // Corrigindo ID se necessário (era 'Ticket Médio' no título)
-                // Verificando ID no HTML original... linha 1299 era Ticket Médio
-                // Deixando genérico se não achou ID
-            }
-
-            function updateFirebirdChart(data) {
-                if (!data || data.length === 0) return;
-
-                const ctx = document.getElementById('fbDailyChart');
-                if (!ctx) return;
-
-                // Ordenar por data (mais antigo primeiro)
-                const sortedData = [...data].sort((a, b) => new Date(a.data) - new Date(b.data));
-
-                const labels = sortedData.map(item => {
-                    const date = new Date(item.data + 'T00:00:00');
-                    return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-                });
-
-                const valores = sortedData.map(item => item.valorTotal || 0);
-
-                // Destruir gráfico anterior se existir
-                if (firebirdChart) {
-                    firebirdChart.destroy();
-                }
-
-                // Criar novo gráfico
-                firebirdChart = new Chart(ctx, {
-                    type: 'line',
-                    data: {
-                        labels: labels,
-                        datasets: [{
-                            label: 'Faturamento (R$)',
-                            data: valores,
-                            borderColor: 'rgb(245, 158, 11)',
-                            backgroundColor: 'rgba(245, 158, 11, 0.1)',
-                            borderWidth: 2,
-                            fill: true,
-                            tension: 0.4
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            legend: {
-                                display: false
-                            },
-                            tooltip: {
-                                callbacks: {
-                                    label: function (context) {
-                                        return 'R$ ' + context.parsed.y.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
-                                    }
+            // Criar novo gráfico
+            firebirdChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Faturamento (R$)',
+                        data: valores,
+                        borderColor: 'rgb(245, 158, 11)',
+                        backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function (context) {
+                                    return 'R$ ' + context.parsed.y.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
                                 }
                             }
-                        },
-                        scales: {
-                            y: {
-                                beginAtZero: true,
-                                ticks: {
-                                    callback: function (value) {
-                                        return 'R$ ' + value.toLocaleString('pt-BR');
-                                    }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function (value) {
+                                    return 'R$ ' + value.toLocaleString('pt-BR');
                                 }
                             }
                         }
                     }
-                });
+                }
+            });
+        }
+
+        // Atualizar tabela de top produtos
+        function updateFirebirdTopProdutos(data) {
+            const tbody = document.getElementById('fbTopProdutosTable');
+            if (!tbody || !data || data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 20px; color: var(--text-muted);">Nenhum produto encontrado</td></tr>';
+                return;
             }
 
-            // Atualizar tabela de top produtos
-            function updateFirebirdTopProdutos(data) {
-                const tbody = document.getElementById('fbTopProdutosTable');
-                if (!tbody || !data || data.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 20px; color: var(--text-muted);">Nenhum produto encontrado</td></tr>';
-                    return;
-                }
-
-                tbody.innerHTML = data.map((produto, index) => `
+            tbody.innerHTML = data.map((produto, index) => `
                 <tr style="border-bottom: 1px solid var(--border-separator);">
                     <td style="padding: 8px; color: var(--text-muted);">${index + 1}</td>
                     <td style="padding: 8px; color: var(--text-main);" title="${produto.descricao}">
@@ -2604,23 +2607,23 @@
                     </td>
                 </tr>
             `).join('');
-            }
+        }
 
-            // CARREGAR DADOS AUTOMATICAMENTE AO ABRIR A PÁGINA
-            window.addEventListener('load', function () {
-                setTimeout(() => {
-                    console.log('🚀 Carregando dados do ERP automaticamente...');
-                    // Expandir seção automaticamente
-                    const content = document.getElementById('firebirdContent');
-                    const chevron = document.getElementById('firebirdChevron');
-                    if (content && chevron) {
-                        content.style.display = 'block';
-                        chevron.style.transform = 'rotate(180deg)';
-                    }
-                    // Carregar dados
-                    loadFirebirdData();
-                }, 1000); // Pequeno delay para garantir carregamento da DOM
-            });
+        // CARREGAR DADOS AUTOMATICAMENTE AO ABRIR A PÁGINA
+        window.addEventListener('load', function () {
+            setTimeout(() => {
+                console.log('🚀 Carregando dados do ERP automaticamente...');
+                // Expandir seção automaticamente
+                const content = document.getElementById('firebirdContent');
+                const chevron = document.getElementById('firebirdChevron');
+                if (content && chevron) {
+                    content.style.display = 'block';
+                    chevron.style.transform = 'rotate(180deg)';
+                }
+                // Carregar dados
+                loadFirebirdData();
+            }, 1000); // Pequeno delay para garantir carregamento da DOM
+        });
     </script>
 </body>
 
