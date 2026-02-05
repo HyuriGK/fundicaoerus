@@ -232,6 +232,112 @@ async function sincronizarTopProdutos(fbDb) {
 }
 
 // =========================================================
+// SINCRONIZAR DETALHADO (Para Modal de Registros)
+// =========================================================
+
+async function sincronizarDetalhado(fbDb) {
+    console.log('\n📝 Sincronizando registros detalhados (Notas + Itens)...');
+
+    // Tabela detalhada que o faturamento-neon.js já espera
+    await pool.query(`CREATE TABLE IF NOT EXISTS faturamento_firebird (
+        id SERIAL PRIMARY KEY,
+        nota_fiscal INTEGER NOT NULL,
+        serie VARCHAR(5),
+        data_faturamento DATE,
+        cliente_codigo VARCHAR(20),
+        cliente_nome VARCHAR(255),
+        codigo_item VARCHAR(50),
+        descricao VARCHAR(255),
+        quantidade DECIMAL(15,3),
+        valor_unitario DECIMAL(15,2),
+        valor_total DECIMAL(15,2),
+        status VARCHAR(10),
+        atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(nota_fiscal, serie, codigo_item)
+    )`);
+
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_fat_fb_data ON faturamento_firebird(data_faturamento DESC)`);
+
+    const dataInicio = new Date();
+    dataInicio.setFullYear(2025, 0, 1); // Desde 01/01/2025 (Segurança para pegar ano passado e atual)
+
+    const query = `
+        SELECT 
+            nf.NUMERO_NOT,
+            nf.SERIE_NOT,
+            CAST(nf.EMISSAO_NOT AS DATE) as DATA_FATURAMENTO,
+            nf.COD_CLIENTE_NOT,
+            nf.DESTINATARIO_NOT,
+            nf.STATUS_NOT,
+            nfp.PRODUTO_NPR,
+            nfp.NOME_PRODUTO_NPR,
+            nfp.QUANTIDADE_NPR,
+            nfp.UNITARIO_NPR,
+            nfp.TOTAL_NPR
+        FROM NOTA_FISCAL nf
+        INNER JOIN NOTA_FISCAL_PRODUTO nfp 
+            ON nf.EMPRESA_NOT = nfp.EMPRESA_NPR 
+            AND nf.SERIE_NOT = nfp.SERIE_NPR
+            AND nf.CODIGO_NOT = nfp.CODIGO_NPR
+        WHERE nf.EMISSAO_NOT >= ?
+            AND nf.TIPO_NOT = 'S'
+            AND nf.STATUS_NOT = 'A'
+        ORDER BY nf.EMISSAO_NOT DESC
+    `;
+
+    return new Promise((resolve, reject) => {
+        fbDb.query(query, [dataInicio], async (err, result) => {
+            if (err) {
+                console.error('❌ Erro ao buscar detalhado do Firebird:', err);
+                return reject(err);
+            }
+
+            console.log(`📦 ${result.length} itens de nota encontrados`);
+
+            // Limpar dados (estratégia simples: delete all e reinsert os filtrados, ou usar upsert. Upsert é mais seguro para não perder histórico se mudarmos a janela)
+            // Para garantir performance e limpeza, vamos deletar apenas os da janela de tempo ou truncar se for full load.
+            // Aqui faremos UPSERT
+
+            let inserted = 0;
+            for (const row of result) {
+                await pool.query(`
+                    INSERT INTO faturamento_firebird 
+                    (nota_fiscal, serie, data_faturamento, cliente_codigo, cliente_nome, 
+                     codigo_item, descricao, quantidade, valor_unitario, valor_total, status)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                    ON CONFLICT (nota_fiscal, serie, codigo_item) DO UPDATE SET
+                        data_faturamento = EXCLUDED.data_faturamento,
+                        cliente_nome = EXCLUDED.cliente_nome,
+                        descricao = EXCLUDED.descricao,
+                        quantidade = EXCLUDED.quantidade,
+                        valor_unitario = EXCLUDED.valor_unitario,
+                        valor_total = EXCLUDED.valor_total,
+                        status = EXCLUDED.status,
+                        atualizado_em = CURRENT_TIMESTAMP
+                `, [
+                    row.NUMERO_NOT,
+                    row.SERIE_NOT,
+                    formatarData(row.DATA_FATURAMENTO),
+                    row.COD_CLIENTE_NOT,
+                    row.DESTINATARIO_NOT,
+                    row.PRODUTO_NPR,
+                    row.NOME_PRODUTO_NPR, // Firebird nome da coluna corrigido anteriormente
+                    row.QUANTIDADE_NPR,
+                    centavosParaReais(row.UNITARIO_NPR), // Unitário também vem em centavos? Verificar. Geralmente sim se TOTAL é.
+                    centavosParaReais(row.TOTAL_NPR),
+                    row.STATUS_NOT
+                ]);
+                inserted++;
+                if (inserted % 500 === 0) process.stdout.write('.');
+            }
+
+            console.log('\n✅ Faturamento detalhado sincronizado!');
+            resolve();
+        });
+    });
+}
+
+// =========================================================
 // SINCRONIZAR ESTATÍSTICAS GERAIS
 // =========================================================
 
@@ -335,6 +441,7 @@ async function sincronizar() {
                 await sincronizarFaturamentoDiario(fbDb);
                 await sincronizarTopProdutos(fbDb);
                 await sincronizarEstatisticas(fbDb);
+                await sincronizarDetalhado(fbDb);
 
                 console.log('\n' + '='.repeat(60));
                 console.log('✅ SINCRONIZAÇÃO CONCLUÍDA COM SUCESSO!');

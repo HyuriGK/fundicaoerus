@@ -161,4 +161,67 @@ router.get('/estatisticas', async (req, res) => {
     }
 });
 
+// GET /api/faturamento-postgres/detalhado - Dados detalhados (Notas + Itens)
+router.get('/detalhado', async (req, res) => {
+    try {
+        console.log('📝 Consultando faturamento detalhado do PostgreSQL...');
+
+        const { limit = 2000 } = req.query;
+
+        const query = `
+            SELECT 
+                data_faturamento,
+                nota_fiscal,
+                serie,
+                cliente_codigo,
+                cliente_nome,
+                codigo_item,
+                descricao,
+                quantidade,
+                valor_unitario,
+                valor_total,
+                status
+            FROM faturamento_firebird
+            ORDER BY data_faturamento DESC, nota_fiscal DESC
+            LIMIT $1
+        `;
+
+        const result = await pool.query(query, [parseInt(limit)]);
+
+        console.log(`✅ ${result.rows.length} registros detalhados encontrados`);
+
+        // Formatar para o frontend
+        const dataFormatted = result.rows.map(row => ({
+            data: row.data_faturamento ? row.data_faturamento.toISOString().split('T')[0] : null,
+            notaFiscal: row.nota_fiscal,
+            serie: row.serie,
+            clienteCodigo: row.cliente_codigo,
+            clienteNome: row.cliente_nome,
+            codigoItem: row.codigo_item,
+            descricao: row.descricao,
+            quantidade: parseFloat(row.quantidade || 0),
+            valorUnitario: parseFloat(row.valor_unitario || 0),
+            valorTotal: parseFloat(row.valor_total || 0),
+            status: row.status
+        }));
+
+        res.json({
+            success: true,
+            data: dataFormatted,
+            summary: {
+                totalRegistros: result.rows.length,
+                totalFaturado: dataFormatted.reduce((acc, curr) => acc + curr.valorTotal, 0)
+            }
+        });
+
+    } catch (error) {
+        console.error('❌ Erro:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erro ao buscar faturamento detalhado',
+            error: error.message
+        });
+    }
+});
+
 module.exports = router;
