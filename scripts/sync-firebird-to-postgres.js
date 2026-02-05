@@ -72,7 +72,10 @@ async function criarTabelasPostgres() {
         )`,
 
         // Índices para performance
-        `CREATE INDEX IF NOT EXISTS idx_faturamento_diario_data ON faturamento_diario(data DESC)`
+        `CREATE INDEX IF NOT EXISTS idx_faturamento_diario_data ON faturamento_diario(data DESC)`,
+
+        // Garantir que peso_total existe para instalações existentes
+        `ALTER TABLE faturamento_diario ADD COLUMN IF NOT EXISTS peso_total DECIMAL(15,3) DEFAULT 0`
     ];
 
     for (const query of queries) {
