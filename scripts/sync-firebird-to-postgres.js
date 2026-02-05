@@ -108,7 +108,7 @@ async function sincronizarFaturamentoDiario(fbDb) {
     const query = `
         SELECT 
             CAST(nf.EMISSAO_NOT AS DATE) as DATA_FATURAMENTO,
-            COUNT(DISTINCT nf.NUMERO_NOT) as TOTAL_NOTAS,
+            COUNT(DISTINCT nf.CODIGO_NOT) as TOTAL_NOTAS,
             COUNT(nfp.PRODUTO_NPR) as TOTAL_ITENS,
             SUM(nfp.QUANTIDADE_NPR) as QUANTIDADE_TOTAL,
             SUM(nfp.TOTAL_NPR) as VALOR_TOTAL_CENTAVOS
@@ -177,7 +177,7 @@ async function sincronizarTopProdutos(fbDb) {
         SELECT FIRST 50
             nfp.PRODUTO_NPR as CODIGO_PRODUTO,
             nfp.NOME_PRODUTO_NPR as DESCRICAO,
-            COUNT(DISTINCT nf.NUMERO_NOT) as TOTAL_VENDAS,
+            COUNT(DISTINCT nf.CODIGO_NOT) as TOTAL_VENDAS,
             SUM(nfp.QUANTIDADE_NPR) as QUANTIDADE_TOTAL,
             SUM(nfp.TOTAL_NPR) as VALOR_TOTAL_CENTAVOS
         FROM NOTA_FISCAL nf
@@ -315,7 +315,7 @@ async function sincronizarDetalhado(fbDb) {
                     // Verificado que o CODIGO_NOT bate com o número na CHAVE_NOT
                     const notaFiscal = parseInt(row.CODIGO_NOT);
                     if (isNaN(notaFiscal)) {
-                        console.warn(`  ⚠️  Nota Fiscal inválida (${row.NUMERO_NOT}), pulando item.`);
+                        console.warn(`  ⚠️  Nota Fiscal inválida (Cód: ${row.CODIGO_NOT}), pulando item.`);
                         errors++;
                         continue;
                     }
@@ -385,7 +385,7 @@ async function sincronizarEstatisticas(fbDb) {
 
     const query = `
         SELECT 
-            COUNT(DISTINCT nf.NUMERO_NOT) as TOTAL_NOTAS,
+            COUNT(DISTINCT nf.CODIGO_NOT) as TOTAL_NOTAS,
             COUNT(DISTINCT nf.DESTINATARIO_NOT) as TOTAL_CLIENTES,
             COUNT(nfp.PRODUTO_NPR) as TOTAL_ITENS,
             SUM(nfp.QUANTIDADE_NPR) as QUANTIDADE_TOTAL,
