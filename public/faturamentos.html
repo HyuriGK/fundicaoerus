@@ -620,26 +620,32 @@
                             <th style="min-width: 300px;">Descrição</th>
                             <th class="text-right" style="min-width: 80px;">Qtd</th>
                             <th class="text-right" style="min-width: 100px;">Valor Unit.</th>
+                            <th class="text-right" style="min-width: 100px;">Peso Unit.</th>
+                            <th class="text-right" style="min-width: 100px;">Peso Total</th>
                             <th class="text-right" style="min-width: 110px;">Valor Total</th>
                         </tr>
                         <tr>
                             <!-- Row 2 for Filter Inputs -->
-                            <th><input type="text" class="col-filter-input" placeholder="🛒 Data..."
+                            <th><input type="text" class="col-filter-input" placeholder="📅"
                                     onkeyup="filterColumn(0, this.value)"></th>
-                            <th><input type="text" class="col-filter-input" placeholder="🆔 Cód..."
+                            <th><input type="text" class="col-filter-input" placeholder="🆔"
                                     onkeyup="filterColumn(1, this.value)"></th>
-                            <th><input type="text" class="col-filter-input" placeholder="👤 Cliente..."
+                            <th><input type="text" class="col-filter-input" placeholder="👤"
                                     onkeyup="filterColumn(2, this.value)"></th>
-                            <th><input type="text" class="col-filter-input" placeholder="📦 Item..."
+                            <th><input type="text" class="col-filter-input" placeholder="📦"
                                     onkeyup="filterColumn(3, this.value)"></th>
-                            <th><input type="text" class="col-filter-input" placeholder="📝 Descrição..."
+                            <th><input type="text" class="col-filter-input" placeholder="📝"
                                     onkeyup="filterColumn(4, this.value)"></th>
                             <th><input type="text" class="col-filter-input text-right" placeholder="🔢"
                                     onkeyup="filterColumn(5, this.value)"></th>
                             <th><input type="text" class="col-filter-input text-right" placeholder="💲"
                                     onkeyup="filterColumn(6, this.value)"></th>
-                            <th><input type="text" class="col-filter-input text-right" placeholder="💰"
+                            <th><input type="text" class="col-filter-input text-right" placeholder="⚖️"
                                     onkeyup="filterColumn(7, this.value)"></th>
+                            <th><input type="text" class="col-filter-input text-right" placeholder="⚖️"
+                                    onkeyup="filterColumn(8, this.value)"></th>
+                            <th><input type="text" class="col-filter-input text-right" placeholder="💰"
+                                    onkeyup="filterColumn(9, this.value)"></th>
                         </tr>
                     </thead>
                     <tbody id="tableBody"> <!-- Rows via JS --> </tbody>
@@ -647,8 +653,11 @@
             </div>
             <!-- Footer (Internal Summary) -->
             <div class="table-footer">
-                <div class="footer-info"><span>Registros:</span> <b id="totalRecords">0</b></div>
-                <div class="footer-total">Total: <span id="totalValue">R$ 0,00</span></div>
+                <div class="footer-info">
+                    <span>Registros:</span> <b id="totalRecords">0</b>
+                    <span style="margin-left: 20px;">Peso Total:</span> <b id="totalWeight">0.000 kg</b>
+                </div>
+                <div class="footer-total">Valor Total: <span id="totalValue">R$ 0,00</span></div>
             </div>
         </div>
     </main>
@@ -707,7 +716,7 @@
                     renderTable();
                 } else {
                     alert('Erro ao carregar dados: ' + (result.message || 'Desconhecido'));
-                    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding: 20px; color: var(--status-danger);">Erro ao carregar dados.</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding: 20px; color: var(--status-danger);">Erro ao carregar dados.</td></tr>';
                 }
             } catch (error) {
                 console.error(error);
@@ -788,14 +797,14 @@
                     // 0:Data, 1:CodCli, 2:Cliente, 3:CodItem, 4:Desc, 5:Qtd, 6:V.Unit, 7:V.Total
                     const rowValues = [
                         formatDate(item.data),
-                        // String(item.notaFiscal || ''), // REMOVED
-                        // String(item.serie || ''), // REMOVED
                         String(item.clienteCodigo || ''),
                         String(item.clienteNome || ''),
                         String(item.codigoItem || ''),
                         String(item.descricao || ''),
                         formatNumber(item.quantidade),
                         formatNumber(item.valorUnitario),
+                        formatNumber(item.pesoUn),
+                        formatNumber(item.pesoTotal),
                         formatCurrency(item.valorTotal)
                     ];
 
@@ -807,21 +816,22 @@
             }
 
             if (visibleData.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding: 20px; color: var(--text-muted);">Nenhum registro encontrado.</td></tr>';
-                updateSummary({ totalRegistros: 0, totalFaturado: 0 });
+                tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding: 20px; color: var(--text-muted);">Nenhum registro encontrado.</td></tr>';
+                updateSummary({ totalRegistros: 0, totalFaturado: 0, totalPeso: 0 });
                 return;
             }
 
             const rows = visibleData.map(item => `
                 <tr>
-                    <td title="${formatDate(item.data)}">${formatDate(item.data)}</td>
-                    <!-- NF & SERIE Removed -->
-                    <td title="${item.clienteCodigo}">${item.clienteCodigo || ''}</td>
-                    <td title="${item.clienteNome}">${item.clienteNome || ''}</td>
-                    <td title="${item.codigoItem}">${item.codigoItem || ''}</td>
-                    <td title="${item.descricao}">${item.descricao || ''}</td>
-                    <td class="text-right">${formatNumber(item.quantidade)}</td>
+                    <td>${formatDate(item.data)}</td>
+                    <td>${item.clienteCodigo || ''}</td>
+                    <td>${item.clienteNome || ''}</td>
+                    <td>${item.codigoItem || ''}</td>
+                    <td>${item.descricao || ''}</td>
+                    <td class="text-right">${item.quantidade.toLocaleString('pt-BR', { minimumFractionDigits: 3 })}</td>
                     <td class="text-right">${formatNumber(item.valorUnitario)}</td>
+                    <td class="text-right">${item.pesoUn.toLocaleString('pt-BR', { minimumFractionDigits: 3 })}</td>
+                    <td class="text-right">${item.pesoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 3 })}</td>
                     <td class="text-right" style="color: var(--color-primary); font-weight:600;">${formatCurrency(item.valorTotal)}</td>
                 </tr>
             `).join('');
@@ -833,12 +843,14 @@
         function calculateSummary(data) {
             return {
                 totalRegistros: data.length,
+                totalPeso: data.reduce((acc, curr) => acc + (curr.pesoTotal || 0), 0),
                 totalFaturado: data.reduce((acc, curr) => acc + (curr.valorTotal || 0), 0)
             };
         }
 
         function updateSummary(summary) {
             document.getElementById('totalRecords').textContent = summary.totalRegistros.toLocaleString('pt-BR');
+            document.getElementById('totalWeight').textContent = summary.totalPeso.toLocaleString('pt-BR', { minimumFractionDigits: 3 }) + ' kg';
             document.getElementById('totalValue').textContent = formatCurrency(summary.totalFaturado);
         }
 

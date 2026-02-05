@@ -242,7 +242,7 @@ async function sincronizarDetalhado(fbDb) {
     await pool.query(`CREATE TABLE IF NOT EXISTS faturamento_firebird (
         id SERIAL PRIMARY KEY,
         nota_fiscal INTEGER NOT NULL,
-        serie VARCHAR(5),
+        serie VARCHAR(10),
         data_faturamento DATE,
         cliente_codigo VARCHAR(20),
         cliente_nome VARCHAR(255),
@@ -256,6 +256,11 @@ async function sincronizarDetalhado(fbDb) {
         UNIQUE(nota_fiscal, serie, codigo_item)
     )`);
 
+    // Garanir que as colunas existem
+    await pool.query(`ALTER TABLE faturamento_firebird ADD COLUMN IF NOT EXISTS peso_un DECIMAL(15,3) DEFAULT 0`);
+    await pool.query(`ALTER TABLE faturamento_firebird ADD COLUMN IF NOT EXISTS peso_total DECIMAL(15,3) DEFAULT 0`);
+    await pool.query(`ALTER TABLE faturamento_firebird ADD COLUMN IF NOT EXISTS atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP`);
+
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_fat_fb_data ON faturamento_firebird(data_faturamento DESC)`);
 
     const dataInicio = new Date();
@@ -266,19 +271,22 @@ async function sincronizarDetalhado(fbDb) {
             nf.NUMERO_NOT,
             nf.SERIE_NOT,
             CAST(nf.EMISSAO_NOT AS DATE) as DATA_FATURAMENTO,
-            nf.COD_CLIENTE_NOT,
-            nf.DESTINATARIO_NOT,
+            nf.DESTINATARIO_NOT as COD_CLIENTE_NOT,
+            nf.RAZAO_SOCIAL_NOT as CLIENTE_NOME_NOT,
             nf.STATUS_NOT,
             nfp.PRODUTO_NPR,
             nfp.NOME_PRODUTO_NPR,
             nfp.QUANTIDADE_NPR,
-            nfp.UNITARIO_NPR,
-            nfp.TOTAL_NPR
+            nfp.PRECO_NPR as UNITARIO_NPR,
+            nfp.TOTAL_NPR,
+            p.PESO_LIQUIDO_PRO as PESO_UNITARIO
         FROM NOTA_FISCAL nf
         INNER JOIN NOTA_FISCAL_PRODUTO nfp 
             ON nf.EMPRESA_NOT = nfp.EMPRESA_NPR 
             AND nf.SERIE_NOT = nfp.SERIE_NPR
             AND nf.CODIGO_NOT = nfp.CODIGO_NPR
+        LEFT JOIN PRODUTO p
+            ON nfp.PRODUTO_NPR = p.CODIGO_PRO
         WHERE nf.EMISSAO_NOT >= ?
             AND nf.TIPO_NOT = 'S'
             AND nf.STATUS_NOT = 'A'
@@ -300,11 +308,16 @@ async function sincronizarDetalhado(fbDb) {
 
             let inserted = 0;
             for (const row of result) {
+                const pesoUn = row.PESO_UNITARIO || 0;
+                const quantidade = row.QUANTIDADE_NPR || 0;
+                const pesoTotal = pesoUn * quantidade;
+
                 await pool.query(`
                     INSERT INTO faturamento_firebird 
                     (nota_fiscal, serie, data_faturamento, cliente_codigo, cliente_nome, 
-                     codigo_item, descricao, quantidade, valor_unitario, valor_total, status)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                     codigo_item, descricao, quantidade, valor_unitario, valor_total, 
+                     peso_un, peso_total, status)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
                     ON CONFLICT (nota_fiscal, serie, codigo_item) DO UPDATE SET
                         data_faturamento = EXCLUDED.data_faturamento,
                         cliente_nome = EXCLUDED.cliente_nome,
@@ -312,19 +325,23 @@ async function sincronizarDetalhado(fbDb) {
                         quantidade = EXCLUDED.quantidade,
                         valor_unitario = EXCLUDED.valor_unitario,
                         valor_total = EXCLUDED.valor_total,
+                        peso_un = EXCLUDED.peso_un,
+                        peso_total = EXCLUDED.peso_total,
                         status = EXCLUDED.status,
                         atualizado_em = CURRENT_TIMESTAMP
                 `, [
                     row.NUMERO_NOT,
-                    row.SERIE_NOT,
+                    row.SERIE_NOT ? String(row.SERIE_NOT).trim() : null,
                     formatarData(row.DATA_FATURAMENTO),
                     row.COD_CLIENTE_NOT,
-                    row.DESTINATARIO_NOT,
+                    row.CLIENTE_NOME_NOT,
                     row.PRODUTO_NPR,
-                    row.NOME_PRODUTO_NPR, // Firebird nome da coluna corrigido anteriormente
-                    row.QUANTIDADE_NPR,
-                    centavosParaReais(row.UNITARIO_NPR), // Unitário também vem em centavos? Verificar. Geralmente sim se TOTAL é.
+                    row.NOME_PRODUTO_NPR,
+                    quantidade,
+                    centavosParaReais(row.UNITARIO_NPR),
                     centavosParaReais(row.TOTAL_NPR),
+                    pesoUn,
+                    pesoTotal,
                     row.STATUS_NOT
                 ]);
                 inserted++;

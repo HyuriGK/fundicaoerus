@@ -180,6 +180,8 @@ router.get('/detalhado', async (req, res) => {
                 quantidade,
                 valor_unitario,
                 valor_total,
+                peso_un,
+                peso_total,
                 status
             FROM faturamento_firebird
             WHERE 1=1
@@ -219,6 +221,8 @@ router.get('/detalhado', async (req, res) => {
             quantidade: parseFloat(row.quantidade || 0),
             valorUnitario: parseFloat(row.valor_unitario || 0),
             valorTotal: parseFloat(row.valor_total || 0),
+            pesoUn: parseFloat(row.peso_un || 0),
+            pesoTotal: parseFloat(row.peso_total || 0),
             status: row.status
         }));
 
