@@ -4,6 +4,7 @@ const router = express.Router();
 const Firebird = require('node-firebird');
 
 // Configuração do Firebird
+// TODO: Mover para .env se possível, mas mantendo hardcoded conforme padrão do projeto atual
 const firebirdOptions = {
     host: '10.1.1.100',
     port: 3050,
@@ -30,29 +31,36 @@ router.get('/', async (req, res) => {
                 });
             }
 
-            // Query otimizada para buscar faturamento de 2026
+            // Query baseada no script de extração validado (scripts/extrair-faturamento.js)
+            // Busca dados de 2025 em diante para carregar o ano atual/recente
             const query = `
-                SELECT FIRST 1000
-                    nf.EMISSAO_NOT as DATA_FATURAMENTO,
-                    nf.NUMERO_NOT as NOTA_FISCAL,
-                    nf.DESTINATARIO_NOT as CLIENTE_CODIGO,
+                SELECT 
+                    nf.DATA_EMISSAO_NOT as DATA_FATURAMENTO,
+                    nf.NUMERO_NOT as PEDIDO,
+                    nf.ORDEM_COMPRA_NOT as OC,
+                    nf.DESTINATARIO_NOT as COD_CLIENTE,
+                    c.RAZAO_SOCIAL_CLI as CLIENTE,
                     nfp.PRODUTO_NPR as CODIGO_ITEM,
                     nfp.NOME_PRODUTO_NPR as DESCRICAO,
                     nfp.QUANTIDADE_NPR as QUANTIDADE,
                     nfp.PRECO_NPR as VALOR_UNITARIO,
                     nfp.TOTAL_NPR as VALOR_TOTAL,
-                    nf.SERIE_NOT as SERIE,
-                    nf.STATUS_NOT as STATUS
+                    -- Tentar buscar material e peso se disponível em joins futuros, por enquanto placeholders
+                    NULL as MATERIAL,
+                    0 as PESO_UN, 
+                    0 as PESO_TOTAL
                 FROM NOTA_FISCAL nf
                 INNER JOIN NOTA_FISCAL_PRODUTO nfp 
                     ON nf.EMPRESA_NOT = nfp.EMPRESA_NPR 
                     AND nf.SERIE_NOT = nfp.SERIE_NPR
                     AND nf.CODIGO_NOT = nfp.CODIGO_NPR
-                WHERE nf.EMISSAO_NOT >= '2026-01-01'
-                    AND nf.EMISSAO_NOT < '2027-01-01'
+                LEFT JOIN CLIENTE c 
+                    ON nf.CLI_EMPRESA_NOT = c.EMPRESA_CLI 
+                    AND nf.CLIFOR_NOT = c.CODIGO_CLI
+                WHERE nf.DATA_EMISSAO_NOT >= '2025-01-01'
                     AND nf.TIPO_NOT = 'S'
                     AND nfp.PRODUTO_NPR IS NOT NULL
-                ORDER BY nf.EMISSAO_NOT DESC, nf.NUMERO_NOT DESC
+                ORDER BY nf.DATA_EMISSAO_NOT DESC, nf.NUMERO_NOT DESC
             `;
 
             db.query(query, function (err, result) {
@@ -68,35 +76,35 @@ router.get('/', async (req, res) => {
 
                 console.log(`✅ ${result.length} registros encontrados`);
 
-                // Formatar dados
-                const dataFormatted = result.map(row => ({
-                    data: row.DATA_FATURAMENTO ? row.DATA_FATURAMENTO.toISOString().split('T')[0] : null,
-                    notaFiscal: row.NOTA_FISCAL,
-                    clienteCodigo: row.CLIENTE_CODIGO,
-                    codigoItem: row.CODIGO_ITEM,
-                    descricao: row.DESCRICAO ? row.DESCRICAO.trim() : null,
-                    quantidade: row.QUANTIDADE || 0,
-                    valorUnitario: (row.VALOR_UNITARIO || 0) / 100,
-                    valorTotal: (row.VALOR_TOTAL || 0) / 100,
-                    serie: row.SERIE ? row.SERIE.trim() : null,
-                    status: row.STATUS ? row.STATUS.trim() : null
-                }));
+                // Formatar dados para o padrão esperado pelo frontend (Array de Arrays)
+                // Padrão: [ID, DATA, PEDIDO, OC, COD_CLI, CLI, COD, DESC, QTD, PRECO, MAT, PESO_UN, PESO_TOT, VALOR, EXCLUIDO]
+                const formattedData = result.map((row, index) => {
+                    const data = row.DATA_FATURAMENTO ? row.DATA_FATURAMENTO.toISOString().split('T')[0] : '';
 
-                // Calcular totais
-                const totalFaturado = dataFormatted.reduce((sum, row) => sum + row.valorTotal, 0);
-                const totalItens = dataFormatted.length;
+                    return [
+                        index + 1, // ID Fake
+                        data,
+                        row.PEDIDO,
+                        row.OC ? row.OC.trim() : '',
+                        row.COD_CLIENTE,
+                        row.CLIENTE ? row.CLIENTE.trim() : '',
+                        row.CODIGO_ITEM,
+                        row.DESCRICAO ? row.DESCRICAO.trim() : '',
+                        row.QUANTIDADE || 0,
+                        (row.VALOR_UNITARIO || 0) / 100, // Firebird salva sem vírgula
+                        row.MATERIAL || '',
+                        Number(row.PESO_UN || 0),
+                        Number(row.PESO_TOTAL || 0),
+                        (row.VALOR_TOTAL || 0) / 100, // Firebird salva sem vírgula
+                        0 // Excluído (Padrão 0)
+                    ];
+                });
+
+                // Adiciona o cabeçalho fake para compatibilidade com o frontend
+                formattedData.unshift(["HEADER", "DATA", "PEDIDO", "OC", "COD", "CLI", "COD", "DESC", "QTD", "PRE", "MAT", "PESO", "PESOT", "VAL", "IGN"]);
 
                 db.detach();
-
-                res.json({
-                    success: true,
-                    data: dataFormatted,
-                    summary: {
-                        totalRegistros: totalItens,
-                        totalFaturado: totalFaturado,
-                        dataConsulta: new Date().toISOString()
-                    }
-                });
+                res.json(formattedData);
             });
         });
 
