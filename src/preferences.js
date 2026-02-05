@@ -11,6 +11,55 @@ const CREATE_TABLE_SQL = `
     )
 `;
 
+// GET /api/preferences/debug
+router.get('/debug', async (req, res) => {
+    const report = {
+        connection: 'pending',
+        tableExists: 'pending',
+        rows: 0,
+        error: null,
+        env: {
+            hasDbUrl: !!process.env.DATABASE_URL
+        }
+    };
+
+    try {
+        // 1. Test basic connection
+        await pool.query('SELECT 1');
+        report.connection = 'success';
+
+        // 2. Test table existence
+        try {
+            const countResult = await pool.query('SELECT COUNT(*) FROM app_preferences');
+            report.tableExists = 'yes';
+            report.rows = countResult.rows[0].count;
+        } catch (tableErr) {
+            report.tableExists = 'no';
+            report.tableError = tableErr.message;
+            report.tableErrorCode = tableErr.code;
+
+            // Try to create if missing
+            if (tableErr.code === '42P01') {
+                try {
+                    await pool.query(CREATE_TABLE_SQL);
+                    report.createdTable = 'success';
+                } catch (createErr) {
+                    report.createdTable = 'failed';
+                    report.createError = createErr.message;
+                }
+            }
+        }
+
+        res.json(report);
+
+    } catch (err) {
+        report.connection = 'failed';
+        report.error = err.message;
+        report.stack = err.stack;
+        res.status(500).json(report);
+    }
+});
+
 // GET /api/preferences/:key
 router.get('/:key', async (req, res) => {
     const { key } = req.params;
