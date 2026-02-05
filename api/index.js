@@ -57,6 +57,7 @@ app.use('/api/faturamento-firebird', faturamentoFirebird);
 app.use('/api/faturamento-postgres', faturamentoPostgres); // NOVO: Dados sincronizados do Firebird
 app.use('/api/faturamento-neon', faturamentoNeon);
 app.use('/api/faturamento-filtros', faturamentoFiltros);
+app.use('/api/preferences', require('../src/preferences')); // NOVO: Preferências de usuário
 app.use('/api/acabamento-externo', acabamentoExterno);
 app.use('/api/acabamento-interno', acabamentoInterno);
 app.use('/api/aderencia', aderencia);

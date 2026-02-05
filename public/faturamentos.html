@@ -420,6 +420,56 @@
             padding: 2px 6px;
             border-radius: 4px;
         }
+
+        /* NEW: Date Filter Styles */
+        .filter-bar {
+            background: var(--bg-card);
+            padding: 12px 24px;
+            border-bottom: 1px solid var(--border-subtle);
+            display: flex;
+            gap: 16px;
+            align-items: center;
+        }
+
+        .filter-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .filter-label {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .filter-input {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-main);
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-family: var(--font-main);
+        }
+
+        /* NEW: Column Filters & Truncation */
+        .col-filter-input {
+            width: 100%;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-main);
+            padding: 4px 8px;
+            font-size: 0.75rem;
+            border-radius: 4px;
+            margin-top: 4px;
+        }
+
+        td {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 180px;
+            /* Adjust as needed */
+        }
     </style>
 </head>
 
@@ -447,8 +497,7 @@
                     <!-- Items populated via JS -->
                 </div>
             </div>
-            <div class="modal-header"
-                style="justify-content: flex-end; border-top: 1px solid var(--border-subtle); border-bottom: none;">
+            <div class="modal-header" style="justify-content: flex-end; border-top: 1px solid var(--border-subtle);">
                 <button onclick="closeClientModal()">Fechar</button>
             </div>
         </div>
@@ -475,6 +524,17 @@
         </div>
     </header>
 
+    <!-- NEW: Filter Bar for Date Range -->
+    <div class="filter-bar">
+        <div class="filter-group">
+            <label class="filter-label">Período:</label>
+            <input type="date" id="startDate" class="filter-input">
+            <span style="color: var(--text-muted);">-</span>
+            <input type="date" id="endDate" class="filter-input">
+        </div>
+        <button class="primary" style="padding: 4px 12px; font-size: 0.85rem;" onclick="loadData()">Filtrar</button>
+    </div>
+
     <!-- Main -->
     <main>
         <div class="table-wrapper">
@@ -482,31 +542,36 @@
                 <table id="dataTable">
                     <thead>
                         <tr>
-                            <th>Data</th>
-                            <th>NF</th>
-                            <th>Série</th>
-                            <th>Cód. Cli</th>
-                            <th>Cliente</th>
-                            <th>Cód. Item</th>
-                            <th>Descrição</th>
-                            <th class="text-right">Qtd</th>
-                            <th class="text-right">Valor Unit.</th>
-                            <th class="text-right">Valor Total</th>
+                            <!-- Column Headers with Filter Inputs -->
+                            <th style="min-width: 100px;">Data <input type="text" class="col-filter-input"
+                                    onkeyup="filterColumn(0, this.value)"></th>
+                            <th style="min-width: 80px;">NF <input type="text" class="col-filter-input"
+                                    onkeyup="filterColumn(1, this.value)"></th>
+                            <th style="min-width: 60px;">Série <input type="text" class="col-filter-input"
+                                    onkeyup="filterColumn(2, this.value)"></th>
+                            <th style="min-width: 80px;">Cód. Cli <input type="text" class="col-filter-input"
+                                    onkeyup="filterColumn(3, this.value)"></th>
+                            <th style="min-width: 150px;">Cliente <input type="text" class="col-filter-input"
+                                    onkeyup="filterColumn(4, this.value)"></th>
+                            <th style="min-width: 80px;">Cód. Item <input type="text" class="col-filter-input"
+                                    onkeyup="filterColumn(5, this.value)"></th>
+                            <th style="min-width: 150px;">Descrição <input type="text" class="col-filter-input"
+                                    onkeyup="filterColumn(6, this.value)"></th>
+                            <th class="text-right" style="min-width: 80px;">Qtd <input type="text"
+                                    class="col-filter-input" onkeyup="filterColumn(7, this.value)"></th>
+                            <th class="text-right" style="min-width: 100px;">Valor Unit. <input type="text"
+                                    class="col-filter-input" onkeyup="filterColumn(8, this.value)"></th>
+                            <th class="text-right" style="min-width: 100px;">Valor Total <input type="text"
+                                    class="col-filter-input" onkeyup="filterColumn(9, this.value)"></th>
                         </tr>
                     </thead>
-                    <tbody id="tableBody">
-                        <!-- Rows injected via JS -->
-                    </tbody>
+                    <tbody id="tableBody"> <!-- Rows via JS --> </tbody>
                 </table>
             </div>
-
+            <!-- Footer -->
             <div class="table-footer">
-                <div class="footer-info">
-                    <span>Registros:</span> <b id="totalRecords">0</b>
-                </div>
-                <div class="footer-total">
-                    Total: <span id="totalValue">R$ 0,00</span>
-                </div>
+                <div class="footer-info"><span>Registros:</span> <b id="totalRecords">0</b></div>
+                <div class="footer-total">Total: <span id="totalValue">R$ 0,00</span></div>
             </div>
         </div>
     </main>
@@ -516,8 +581,9 @@
         let allData = [];
         let excludedClients = new Set();
         let clientStats = {}; // { "Client Name": count }
+        let colFilters = {}; // { colIndex: 'searchTerm' }
 
-        // formatting helpers
+        // Formatting Helpers
         const formatCurrency = (val) => val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
         const formatNumber = (val) => val.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
         const formatDate = (dateStr) => {
@@ -526,15 +592,29 @@
             return `${d}/${m}/${y}`;
         };
 
+        // --- LOAD DATA & PREFERENCES ---
         async function loadData() {
             const spinner = document.getElementById('loading-screen');
             const tbody = document.getElementById('tableBody');
 
             spinner.style.display = 'flex';
 
+            // Get Dates
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+
             try {
-                // Fetching from the endpoint that connects to Firebird/Postgres
-                const response = await fetch('/api/faturamento-postgres/detalhado?limit=5000');
+                // 1. Load Preferences First (if empty)
+                if (excludedClients.size === 0) {
+                    await loadPreferences();
+                }
+
+                // 2. Load Data with Filters
+                let url = '/api/faturamento-postgres/detalhado?limit=5000';
+                if (startDate) url += `&startDate=${startDate}`;
+                if (endDate) url += `&endDate=${endDate}`;
+
+                const response = await fetch(url);
                 const result = await response.json();
 
                 if (result.success) {
@@ -548,9 +628,34 @@
             } catch (error) {
                 console.error(error);
                 alert('Erro de conexão com o servidor.');
-                tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding: 20px; color: var(--status-danger);">Erro de conexão.</td></tr>';
             } finally {
                 spinner.style.display = 'none';
+            }
+        }
+
+        // --- PREFERENCES LOGIC ---
+        async function loadPreferences() {
+            try {
+                const res = await fetch('/api/preferences/excluded_clients');
+                const json = await res.json();
+                if (json.success && json.data) {
+                    // Assuming data is array of strings
+                    excludedClients = new Set(json.data);
+                }
+            } catch (e) {
+                console.warn('Falha ao carregar preferências', e);
+            }
+        }
+
+        async function savePreferences() {
+            try {
+                await fetch('/api/preferences/excluded_clients', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ value: Array.from(excludedClients) })
+                });
+            } catch (e) {
+                console.error('Erro ao salvar preferências', e);
             }
         }
 
@@ -562,33 +667,62 @@
             });
         }
 
+        // --- FILTERING LOGIC ---
+        function filterColumn(colIndex, value) {
+            colFilters[colIndex] = value.toLowerCase();
+            renderTable();
+        }
+
         function renderTable() {
             const tbody = document.getElementById('tableBody');
             tbody.innerHTML = '';
 
-            // Filter Data based on exclusions
-            const visibleData = allData.filter(item => {
+            // 1. Filter by Excluded Clients
+            let visibleData = allData.filter(item => {
                 const name = (item.clienteNome || 'Desconhecido').trim();
                 return !excludedClients.has(name);
             });
 
-            if (!visibleData || visibleData.length === 0) {
+            // 2. Filter by Columns
+            if (Object.keys(colFilters).length > 0) {
+                visibleData = visibleData.filter(item => {
+                    // Map item properties to column indices (matching render order)
+                    // 0:Data, 1:NF, 2:Serie, 3:CodCli, 4:Cliente, 5:CodItem, 6:Desc, 7:Qtd, 8:V.Unit, 9:V.Total
+                    const rowValues = [
+                        formatDate(item.data),
+                        String(item.notaFiscal || ''),
+                        String(item.serie || ''),
+                        String(item.clienteCodigo || ''),
+                        String(item.clienteNome || ''),
+                        String(item.codigoItem || ''),
+                        String(item.descricao || ''),
+                        formatNumber(item.quantidade),
+                        formatNumber(item.valorUnitario),
+                        formatCurrency(item.valorTotal)
+                    ];
+
+                    return Object.entries(colFilters).every(([idx, term]) => {
+                        if (!term) return true;
+                        return rowValues[idx].toLowerCase().includes(term);
+                    });
+                });
+            }
+
+            if (visibleData.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding: 20px; color: var(--text-muted);">Nenhum registro encontrado.</td></tr>';
                 updateSummary({ totalRegistros: 0, totalFaturado: 0 });
                 return;
             }
 
-            // Limit render to avoid freezing if massive (though pagination would be better)
-            // For now, render all (virtual scrolling would be ideal for 5000 rows but simple render is ok for modern browsers)
             const rows = visibleData.map(item => `
                 <tr>
-                    <td>${formatDate(item.data)}</td>
-                    <td>${item.notaFiscal || ''}</td>
-                    <td>${item.serie || ''}</td>
-                    <td>${item.clienteCodigo || ''}</td>
-                    <td>${item.clienteNome || ''}</td>
-                    <td>${item.codigoItem || ''}</td>
-                    <td>${item.descricao || ''}</td>
+                    <td title="${formatDate(item.data)}">${formatDate(item.data)}</td>
+                    <td title="${item.notaFiscal}">${item.notaFiscal || ''}</td>
+                    <td title="${item.serie}">${item.serie || ''}</td>
+                    <td title="${item.clienteCodigo}">${item.clienteCodigo || ''}</td>
+                    <td title="${item.clienteNome}">${item.clienteNome || ''}</td>
+                    <td title="${item.codigoItem}">${item.codigoItem || ''}</td>
+                    <td title="${item.descricao}">${item.descricao || ''}</td>
                     <td class="text-right">${formatNumber(item.quantidade)}</td>
                     <td class="text-right">${formatNumber(item.valorUnitario)}</td>
                     <td class="text-right" style="color: var(--color-primary); font-weight:600;">${formatCurrency(item.valorTotal)}</td>
@@ -611,10 +745,7 @@
             document.getElementById('totalValue').textContent = formatCurrency(summary.totalFaturado);
         }
 
-        // ============================================
-        // CLIENT FILTER LOGIC
-        // ============================================
-
+        // --- CLIENT MODAL LOGIC (UPDATED WITH PERSISTENCE) ---
         function openClientModal() {
             document.getElementById('clientModal').style.display = 'flex';
             renderClientList();
@@ -632,15 +763,10 @@
 
             container.innerHTML = clients.map(client => {
                 if (searchTerm && !client.toLowerCase().includes(searchTerm)) return '';
-
                 const isExcluded = excludedClients.has(client);
-                const itemClass = isExcluded ? 'client-item excluded' : 'client-item';
-
                 return `
-                    <div class="${itemClass}" onclick="toggleClientExclusion('${client.replace(/'/g, "\\'")}')">
-                        <input type="checkbox" class="client-checkbox"
-                            ${isExcluded ? 'checked' : ''}
-                            onclick="event.stopPropagation(); toggleClientExclusion('${client.replace(/'/g, "\\'")}')">
+                    <div class="client-item ${isExcluded ? 'excluded' : ''}" onclick="toggleClientExclusion('${client.replace(/'/g, "\\'")}')">
+                        <input type="checkbox" class="client-checkbox" ${isExcluded ? 'checked' : ''} onclick="event.stopPropagation(); toggleClientExclusion('${client.replace(/'/g, "\\'")}')">
                         <span class="client-name">${client}</span>
                         <span class="client-count">${clientStats[client]}</span>
                     </div>
@@ -648,35 +774,33 @@
             }).join('');
         }
 
-        function filterClientList() {
-            renderClientList();
-        }
+        function filterClientList() { renderClientList(); }
 
         function toggleClientExclusion(clientName) {
-            if (excludedClients.has(clientName)) {
-                excludedClients.delete(clientName);
-            } else {
-                excludedClients.add(clientName);
-            }
-            // Re-render list to show crossed out style
+            if (excludedClients.has(clientName)) { excludedClients.delete(clientName); }
+            else { excludedClients.add(clientName); }
+
             renderClientList();
-            // Re-render table behind modal (live update)
             renderTable();
+            savePreferences(); // SAVE TO DB
         }
 
-        // Close modal on escape or click outside
-        window.onclick = function (event) {
-            const modal = document.getElementById('clientModal');
-            if (event.target === modal) {
-                closeClientModal();
-            }
-        }
-        window.onkeydown = function (event) {
-            if (event.key === 'Escape') closeClientModal();
-        }
+        // Window Events (Close Modal)
+        window.onclick = function (e) { if (e.target === document.getElementById('clientModal')) closeClientModal(); }
+        window.onkeydown = function (e) { if (e.key === 'Escape') closeClientModal(); }
 
-        // Init
-        document.addEventListener('DOMContentLoaded', loadData);
+        // Start
+        document.addEventListener('DOMContentLoaded', () => {
+            // Set default Date (e.g., current month)
+            const now = new Date();
+            const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+            const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
+            document.getElementById('startDate').valueAsDate = firstDay;
+            document.getElementById('endDate').valueAsDate = lastDay;
+
+            loadData();
+        });
     </script>
 </body>
 
