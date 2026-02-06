@@ -700,21 +700,7 @@
             </div>
             <div class="modal-body">
                 <div class="records-content">
-                    <!-- Filter Bar moved inside records content -->
-                    <div class="filter-bar"
-                        style="margin-bottom: 16px; border-radius: 8px; border: 1px solid var(--border-subtle);">
-                        <div class="filter-group">
-                            <label class="filter-label">Período Fiscal:</label>
-                            <input type="date" id="startDate" class="filter-input">
-                            <span style="color: var(--text-muted);">-</span>
-                            <input type="date" id="endDate" class="filter-input">
-                        </div>
-                        <button class="btn-glass"
-                            style="background: var(--color-primary); color: #000; border: none; padding: 6px 20px;"
-                            onclick="loadRecordsData()">
-                            <i class="fa-solid fa-sync"></i> Atualizar Tabela
-                        </button>
-                    </div>
+                    <!-- Filter Bar removed to header -->
 
                     <div class="table-wrapper">
                         <div class="table-scroll">
@@ -781,6 +767,19 @@
             </div>
         </div>
         <div class="header-actions">
+            <!-- Period Filter in Header -->
+            <div class="filter-group" style="margin-right: 20px;">
+                <label class="filter-label">Período:</label>
+                <input type="date" id="startDate" class="filter-input">
+                <span style="color: var(--text-muted);">-</span>
+                <input type="date" id="endDate" class="filter-input">
+                <button class="btn-glass"
+                    style="background: var(--color-primary); color: #000; border: none; padding: 6px 12px; margin-left: 8px;"
+                    onclick="refreshAll()">
+                    <i class="fa-solid fa-sync"></i>
+                </button>
+            </div>
+
             <!-- Registros Button -->
             <button class="btn-glass"
                 style="background: rgba(245, 158, 11, 0.1); border-color: rgba(245, 158, 11, 0.3);"
@@ -871,36 +870,50 @@
         };
 
         // --- DASHBOARD DATA (Charts & Stats) ---
-        async function loadDashboardData() {
-            const spinner = document.getElementById('loading-screen');
-            spinner.style.display = 'flex';
+        async function refreshAll() {
+            await loadRecordsData();
+            loadAnnualEvolution();
+        }
+
+        async function loadAnnualEvolution() {
             try {
-                // 1. Stats and Daily Chart Data
-                const resDiario = await fetch('/api/faturamento-postgres/diario?limit=30');
-                const jsonDiario = await resDiario.json();
-
-                if (jsonDiario.success && jsonDiario.data.length > 0) {
-                    const latest = jsonDiario.data[0];
-                    // Update stats
-                    document.getElementById('stat-today-value').textContent = formatCurrency(latest.valorTotal);
-                    document.getElementById('stat-today-weight').textContent = formatWeight(latest.pesoTotal);
-
-                    renderDailyChart(jsonDiario.data.reverse());
-                }
-
-                // 2. Monthly Evolution Data
                 const resAnual = await fetch('/api/faturamento-postgres/evolucao-mensal');
                 const jsonAnual = await resAnual.json();
-
                 if (jsonAnual.success) {
                     renderAnnualChart(jsonAnual.data);
                 }
-
-            } catch (error) {
-                console.error('Erro ao carregar dashboard:', error);
-            } finally {
-                spinner.style.display = 'none';
+            } catch (e) {
+                console.error('Erro ao carregar evolução anual:', e);
             }
+        }
+
+        function updateDashboardfromRecords(data) {
+            // Filtrar excluídos
+            const filtered = data.filter(item => {
+                const name = (item.clienteNome || 'Desconhecido').trim();
+                return !excludedClients.has(name);
+            });
+
+            // 1. Calcular Stats Hoje
+            const todayStr = new Date().toISOString().split('T')[0];
+            const recordsToday = filtered.filter(item => item.data === todayStr);
+            const totalFaturadoHoje = recordsToday.reduce((acc, curr) => acc + (curr.valorTotal || 0), 0);
+            const totalPesoHoje = recordsToday.reduce((acc, curr) => acc + (curr.pesoTotal || 0), 0);
+
+            document.getElementById('stat-today-value').textContent = formatCurrency(totalFaturadoHoje);
+            document.getElementById('stat-today-weight').textContent = formatWeight(totalPesoHoje);
+
+            // 2. Agrupar por dia para Gráfico Diário
+            const dailyMap = {};
+            filtered.forEach(item => {
+                if (!dailyMap[item.data]) {
+                    dailyMap[item.data] = { data: item.data, pesoTotal: 0 };
+                }
+                dailyMap[item.data].pesoTotal += (item.pesoTotal || 0);
+            });
+
+            const dailyData = Object.values(dailyMap).sort((a, b) => a.data.localeCompare(b.data));
+            renderDailyChart(dailyData);
         }
 
         function renderDailyChart(data) {
@@ -1024,6 +1037,7 @@
                     allData = result.data;
                     processClients(allData);
                     renderTable();
+                    updateDashboardfromRecords(allData);
                 } else {
                     alert('Erro ao carregar dados: ' + (result.message || 'Desconhecido'));
                 }
@@ -1129,6 +1143,7 @@
 
             tbody.innerHTML = rows;
             updateSummary(calculateSummary(visibleData));
+            updateDashboardfromRecords(allData);
         }
 
         function calculateSummary(data) {
@@ -1205,7 +1220,7 @@
             document.getElementById('startDate').valueAsDate = firstDay;
             document.getElementById('endDate').valueAsDate = lastDay;
 
-            loadDashboardData();
+            refreshAll();
         });
 
         // Relógio

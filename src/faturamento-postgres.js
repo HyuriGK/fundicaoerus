@@ -168,7 +168,7 @@ router.get('/detalhado', async (req, res) => {
     try {
         console.log('📝 Consultando faturamento detalhado do PostgreSQL...');
 
-        const { limit = 2000, startDate, endDate } = req.query;
+        const { limit = 5000, startDate, endDate } = req.query;
 
         let query = `
             SELECT 
