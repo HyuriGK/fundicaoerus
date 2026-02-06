@@ -24,7 +24,7 @@ Firebird.attach(options, function (err, db) {
         SELECT R.RDB$RELATION_NAME as TABLE_NAME, F.RDB$FIELD_NAME as FIELD_NAME
         FROM RDB$RELATION_FIELDS F
         JOIN RDB$RELATIONS R ON F.RDB$RELATION_NAME = R.RDB$RELATION_NAME
-        WHERE F.RDB$FIELD_NAME LIKE '%ANO_PPR%'
+        WHERE F.RDB$FIELD_NAME LIKE '%PEDIDO%'
     `;
 
     db.query(query, function (err, result) {

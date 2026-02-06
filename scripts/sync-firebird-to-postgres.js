@@ -172,6 +172,7 @@ async function sincronizarDetalhado(fbDb) {
     await pool.query(`CREATE TABLE IF NOT EXISTS faturamento_firebird (
         id SERIAL PRIMARY KEY,
         nota_fiscal INTEGER NOT NULL,
+        pedido VARCHAR(50),
         serie VARCHAR(10),
         item_nota INTEGER NOT NULL,
         data_faturamento DATE,
@@ -189,6 +190,7 @@ async function sincronizarDetalhado(fbDb) {
     )`);
 
     // Garanir que as colunas existem
+    await pool.query(`ALTER TABLE faturamento_firebird ADD COLUMN IF NOT EXISTS pedido VARCHAR(50)`);
     await pool.query(`ALTER TABLE faturamento_firebird ADD COLUMN IF NOT EXISTS item_nota INTEGER DEFAULT 0`);
     await pool.query(`ALTER TABLE faturamento_firebird ADD COLUMN IF NOT EXISTS peso_un DECIMAL(15, 3) DEFAULT 0`);
     await pool.query(`ALTER TABLE faturamento_firebird ADD COLUMN IF NOT EXISTS peso_total DECIMAL(15, 3) DEFAULT 0`);
@@ -227,6 +229,7 @@ async function sincronizarDetalhado(fbDb) {
         nf.RAZAO_SOCIAL_NOT as CLIENTE_NOME_NOT,
         nf.STATUS_NOT,
         nfp.ITEM_NPR,
+        nfp.PEDIDO_NPR,
         nfp.PRODUTO_NPR,
         nfp.NOME_PRODUTO_NPR,
         nfp.QUANTIDADE_NPR,
@@ -297,8 +300,8 @@ async function sincronizarDetalhado(fbDb) {
                         INSERT INTO faturamento_firebird 
                         (nota_fiscal, serie, item_nota, data_faturamento, cliente_codigo, cliente_nome, 
                          codigo_item, descricao, quantidade, valor_unitario, valor_total, 
-                         peso_un, peso_total, status, excluido_manualmente)
-                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+                         peso_un, peso_total, status, excluido_manualmente, pedido)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
                         ON CONFLICT ON CONSTRAINT faturamento_firebird_nf_serie_item_prod_key DO UPDATE SET
                             data_faturamento = EXCLUDED.data_faturamento,
                             cliente_nome = EXCLUDED.cliente_nome,
@@ -310,6 +313,7 @@ async function sincronizarDetalhado(fbDb) {
                             peso_total = EXCLUDED.peso_total,
                             status = EXCLUDED.status,
                             excluido_manualmente = EXCLUDED.excluido_manualmente,
+                            pedido = EXCLUDED.pedido,
                             atualizado_em = CURRENT_TIMESTAMP
                     `, [
                         notaFiscal,
@@ -326,7 +330,8 @@ async function sincronizarDetalhado(fbDb) {
                         pesoUn,
                         pesoTotal,
                         row.STATUS_NOT,
-                        isExcluded
+                        isExcluded,
+                        row.PEDIDO_NPR || null
                     ]);
 
                     inserted++;

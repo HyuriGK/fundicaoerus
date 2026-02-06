@@ -204,6 +204,7 @@ router.get('/detalhado', async (req, res) => {
                 f.peso_un,
                 f.peso_total,
                 f.status,
+                f.pedido,
                 -- Priority: Preference Table > Current Table
                 COALESCE(p.excluido, f.excluido_manualmente, false) as excluido_manualmente
             FROM faturamento_firebird f
@@ -253,6 +254,7 @@ router.get('/detalhado', async (req, res) => {
             pesoUn: parseFloat(row.peso_un || 0),
             pesoTotal: parseFloat(row.peso_total || 0),
             status: row.status,
+            pedido: row.pedido,
             excluidoManualmente: row.excluido_manualmente
         }));
 
