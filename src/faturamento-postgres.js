@@ -212,6 +212,8 @@ router.get('/detalhado', async (req, res) => {
                 ON p.nota_fiscal = f.nota_fiscal
                 AND p.codigo_item IS NOT DISTINCT FROM CAST(TRIM(f.codigo_item) AS VARCHAR)
                 AND COALESCE(p.pedido, '') = COALESCE(TRIM(f.pedido), '')
+                AND p.data_faturamento = f.data_faturamento
+                AND p.quantidade = f.quantidade
             WHERE 1=1
         `;
 
@@ -230,47 +232,39 @@ router.get('/detalhado', async (req, res) => {
             paramIndex++;
         }
 
-        query += ` ORDER BY data_faturamento DESC, nota_fiscal DESC LIMIT $${paramIndex}`;
-        params.push(parseInt(limit));
+        if (req.query.search) {
+            const search = req.query.search.toLowerCase();
+            query += ` AND (
+                LOWER(f.cliente_nome) LIKE $${paramIndex} OR 
+                LOWER(f.descricao) LIKE $${paramIndex} OR
+                CAST(f.nota_fiscal AS TEXT) LIKE $${paramIndex}
+            )`;
+            params.push(`%${search}%`);
+            paramIndex++;
+        }
+
+        query += ` ORDER BY data_faturamento DESC, nota_fiscal DESC`;
+
+        // Apply limit if provided (and safe)
+        if (limit) {
+            query += ` LIMIT $${paramIndex}`;
+            params.push(parseInt(limit));
+        }
 
         const result = await pool.query(query, params);
 
         console.log(`✅ ${result.rows.length} registros detalhados encontrados`);
 
-        // Formatar para o frontend
-        const dataFormatted = result.rows.map(row => ({
-            data: row.data_faturamento ? row.data_faturamento.toISOString().split('T')[0] : null,
-            notaFiscal: row.nota_fiscal,
-            serie: row.serie,
-            clienteCodigo: row.cliente_codigo,
-            clienteNome: row.cliente_nome,
-            codigoItem: row.codigo_item,
-            descricao: row.descricao,
-            quantidade: parseFloat(row.quantidade || 0),
-            valorUnitario: parseFloat(row.valor_unitario || 0),
-            valorTotal: parseFloat(row.valor_total || 0),
-            pesoUn: parseFloat(row.peso_un || 0),
-            pesoTotal: parseFloat(row.peso_total || 0),
-            status: row.status,
-            pedido: row.pedido,
-            excluidoManualmente: row.excluido_manualmente
-        }));
-
         res.json({
             success: true,
-            data: dataFormatted,
-            summary: {
-                totalRegistros: result.rows.length,
-                totalFaturado: dataFormatted.reduce((acc, curr) => acc + curr.valorTotal, 0),
-                totalPeso: dataFormatted.reduce((acc, curr) => acc + curr.pesoTotal, 0)
-            }
+            data: result.rows
         });
 
     } catch (error) {
         console.error('❌ Erro:', error);
         res.status(500).json({
             success: false,
-            message: 'Erro ao buscar faturamento detalhado',
+            message: 'Erro ao buscar dados detalhados',
             error: error.message
         });
     }
