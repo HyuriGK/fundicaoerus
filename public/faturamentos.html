@@ -1017,9 +1017,11 @@
             const startDate = document.getElementById('startDate').value;
             if (startDate) { const [y, m] = startDate.split('-'); document.getElementById('currentMonthTab').textContent = `${m}/${y}`; }
 
+            // UPDATED NEC LOGIC: (Meta - CurTotal) / DaysRemainingThisMonth
             const metaRestante = Math.max(0, currentMeta - totalPeso);
-            const bizDays = calculateRemainingBusinessDays();
-            const necDiario = bizDays > 0 ? metaRestante / bizDays : 0;
+            const bizDays = calcValidDaysRemaining(); // Use new calc function
+            const necDiario = bizDays > 0 ? metaRestante / bizDays : 0; // If 0 days, cannot achieve, allow 0 or maybe infinity? 0 for cleanliness.
+
             document.getElementById('businessDaysTab').textContent = `${bizDays} Dias Restantes`;
             document.getElementById('pesoDiarioNecessario').textContent = formatWeight(necDiario);
             document.getElementById('metaProgressPercent').textContent = (currentMeta > 0 ? (totalPeso / currentMeta) * 100 : 0).toFixed(1) + '%';
@@ -1045,8 +1047,9 @@
 
         // Renamed and logic changed to use frontend data
         function updateAnnualEvolutionDynamic(filteredData) {
-            // Aggregate by month
-            const monthlyData = {};
+            // Aggregate by month. Initialize all 12 months to 0 to ensure chart shows all months.
+            const monthlyData = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0, 11: 0 };
+
             filteredData.forEach(item => {
                 if (!item.data) return;
                 const d = new Date(item.data);
@@ -1061,16 +1064,38 @@
             renderAnnualChart(dataValues);
         }
 
-        function calculateRemainingBusinessDays() {
+        // CORRECTED: Calculate business days from NOW until the end of the filtered month
+        function calcValidDaysRemaining() {
             const now = new Date();
-            const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-            let count = 0, current = new Date(now);
-            const startVal = document.getElementById('startDate').value;
-            if (!startVal) return 0;
-            const filterDate = new Date(startVal);
-            if (filterDate.getMonth() < now.getMonth() || filterDate.getFullYear() < now.getFullYear()) return 0;
-            while (current <= lastDay) {
-                if (current.getDay() !== 0 && current.getDay() !== 6) count++;
+            // Start counting from TODAY (if today is in range) or StartDate
+            let startCount = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+            // Get selected range end
+            const strEndDate = document.getElementById('endDate').value;
+            if (!strEndDate) return 0;
+            const filterEnd = new Date(strEndDate);
+
+            // If the filtered period is in the past, days remaining is 0?
+            // "Quantos dias uteis temos até o final do mês": implies current month. 
+            // If user views last month, 0 days remaining.
+            // Check if filterEnd is in the past
+            if (filterEnd < startCount) return 0;
+
+            // Loop from max(today, filterStart) to filterEnd
+            // Usually we care effectively about "From Today until End of This Month" if we are in this month.
+            // If we are viewing future month, it is start to end.
+
+            // Just iterate from startCount (Today) to filterEnd (End of Month)
+            // But if startCount > filterEnd, loop wont run, returns 0. Correct.
+
+            let count = 0;
+            let current = new Date(startCount);
+
+            while (current <= filterEnd) {
+                // If not Sunday(0) and not Saturday(6) -> Business Day
+                if (current.getDay() !== 0 && current.getDay() !== 6) {
+                    count++;
+                }
                 current.setDate(current.getDate() + 1);
             }
             return count;
