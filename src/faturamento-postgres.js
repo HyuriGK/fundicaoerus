@@ -188,7 +188,7 @@ router.get('/detalhado', async (req, res) => {
                 -- Priority: Preference Table > Current Table
                 COALESCE(p.excluido, f.excluido_manualmente, false) as excluido_manualmente
             FROM faturamento_firebird f
-            LEFT JOIN faturamento_preferencias p 
+            LEFT JOIN faturamento_firebird_preferencias p 
                 ON p.chave_unica = (
                     CAST(f.nota_fiscal AS TEXT) || '-' || 
                     COALESCE(TRIM(f.serie), '') || '-' || 
@@ -320,7 +320,7 @@ router.post('/toggle-exclusion', async (req, res) => {
 
         // 1. Salva na tabela global de memórias (PREFERÊNCIAS)
         await client.query(`
-            INSERT INTO faturamento_preferencias (chave_unica, excluido)
+            INSERT INTO faturamento_firebird_preferencias (chave_unica, excluido)
             VALUES ($1, $2)
             ON CONFLICT (chave_unica) 
             DO UPDATE SET excluido = EXCLUDED.excluido, updated_at = CURRENT_TIMESTAMP
