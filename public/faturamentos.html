@@ -848,7 +848,7 @@
                         </div>
                         <div class="table-footer">
                             <div class="footer-info">
-                                <span>Registros:</span> <b id="totalRecords">0</b>
+                                <span>Registros (Filtrados):</span> <b id="totalRecords">0</b>
                                 <span style="margin-left: 20px;">Peso Total:</span> <b id="totalWeight">0.00 kg</b>
                             </div>
                             <div class="footer-total">Valor Total: <span id="totalValue">R$ 0,00</span></div>
@@ -996,17 +996,29 @@
             } catch (e) { console.error(e); }
         }
 
-        // Logic to calculate values as requested: Unit * Qtd * 100
         function calculateCalculatedTotal(item) {
             return (item.valorUnitario || 0) * (item.quantidade || 0) * 100;
         }
 
         function updateDashboardfromRecords(data) {
-            const filtered = data.filter(item => !excludedClients.has((item.clienteNome || 'Desconhecido').trim()) && !item.excluido_manualmente);
+            // "data" here IS allData (Full Year).
+            // kpisData: Data filtered by Exclusions AND Date Range
+            const startInput = document.getElementById('startDate').value;
+            const endInput = document.getElementById('endDate').value;
 
-            // Calculate totals using the requested formula for value
-            const totalFaturado = filtered.reduce((acc, curr) => acc + calculateCalculatedTotal(curr), 0);
-            const totalPeso = filtered.reduce((acc, curr) => acc + (curr.pesoTotal || 0), 0);
+            // 1. Exclude Clients & Rows (Global)
+            const globalValid = data.filter(item => !excludedClients.has((item.clienteNome || 'Desconhecido').trim()) && !item.excluido_manualmente);
+
+            // 2. Filter for Range (for KPIs)
+            const rangeData = globalValid.filter(item => {
+                if (startInput && item.data < startInput) return false;
+                if (endInput && item.data > endInput) return false;
+                return true;
+            });
+
+            // Update KPIs with Range Data
+            const totalFaturado = rangeData.reduce((acc, curr) => acc + calculateCalculatedTotal(curr), 0);
+            const totalPeso = rangeData.reduce((acc, curr) => acc + (curr.pesoTotal || 0), 0);
 
             document.getElementById('totalValor').textContent = formatCurrency(totalFaturado);
             document.getElementById('totalWeightValue').textContent = formatWeight(totalPeso);
@@ -1014,85 +1026,70 @@
             const avgPrice = totalPeso > 0 ? totalFaturado / totalPeso : 0;
             document.getElementById('avgPriceTab').textContent = `R$ ${avgPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} / kg`;
 
-            const startDate = document.getElementById('startDate').value;
-            if (startDate) { const [y, m] = startDate.split('-'); document.getElementById('currentMonthTab').textContent = `${m}/${y}`; }
+            if (startInput) { const [y, m] = startInput.split('-'); document.getElementById('currentMonthTab').textContent = `${m}/${y}`; }
 
-            // UPDATED NEC LOGIC: (Meta - CurTotal) / DaysRemainingThisMonth
+            // Update Meta Progress
             const metaRestante = Math.max(0, currentMeta - totalPeso);
-            const bizDays = calcValidDaysRemaining(); // Use new calc function
-            const necDiario = bizDays > 0 ? metaRestante / bizDays : 0; // If 0 days, cannot achieve, allow 0 or maybe infinity? 0 for cleanliness.
+            const bizDays = calcValidDaysRemaining();
+            const necDiario = bizDays > 0 ? metaRestante / bizDays : 0;
 
             document.getElementById('businessDaysTab').textContent = `${bizDays} Dias Restantes`;
             document.getElementById('pesoDiarioNecessario').textContent = formatWeight(necDiario);
             document.getElementById('metaProgressPercent').textContent = (currentMeta > 0 ? (totalPeso / currentMeta) * 100 : 0).toFixed(1) + '%';
 
-            const totalQtd = filtered.reduce((acc, curr) => acc + (curr.quantidade || 0), 0);
+            const totalQtd = rangeData.reduce((acc, curr) => acc + (curr.quantidade || 0), 0);
             document.getElementById('avgWeightPerPiece').textContent = formatWeight(totalQtd > 0 ? totalPeso / totalQtd : 0);
 
+            // Daily Chart
             const dailyMap = {};
-            filtered.forEach(item => {
+            rangeData.forEach(item => {
                 const k = (item.data || '').split('T')[0];
                 if (!k) return;
                 dailyMap[k] = (dailyMap[k] || 0) + (item.weightTotal || item.pesoTotal || 0);
             });
-            const dailyData = Object.keys(dailyMap).sort().map(k => ({ data: k, pesoTotal: dailyMap[k] }));
-            renderDailyChart(dailyData);
-
-            // Generate Annual Evolution dynamically from filtered data instead of backend
-            updateAnnualEvolutionDynamic(filtered); // Passing filtered data to respect exclusions
+            const dailyChartData = Object.keys(dailyMap).sort().map(k => ({ data: k, pesoTotal: dailyMap[k] }));
+            renderDailyChart(dailyChartData);
 
             const diasFaturados = Object.keys(dailyMap).length;
             document.getElementById('avgDailyWeight').textContent = formatWeight(diasFaturados > 0 ? totalPeso / diasFaturados : 0);
+
+            // --- ANNUAL CHART ---
+            // Use globalValid (All Year, but w/ Exclusions)
+            updateAnnualEvolutionDynamic(globalValid);
         }
 
-        // Renamed and logic changed to use frontend data
         function updateAnnualEvolutionDynamic(filteredData) {
-            // Aggregate by month. Initialize all 12 months to 0 to ensure chart shows all months.
             const monthlyData = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0, 11: 0 };
 
             filteredData.forEach(item => {
                 if (!item.data) return;
-                const d = new Date(item.data);
-                const monthKey = d.getMonth(); // 0-11
-                monthlyData[monthKey] = (monthlyData[monthKey] || 0) + (item.pesoTotal || 0);
+                const [y, m, d] = item.data.split('-').map(Number);
+                const monthKey = m - 1;
+                if (monthlyData[monthKey] !== undefined) {
+                    monthlyData[monthKey] += (item.pesoTotal || 0);
+                }
             });
 
-            // Prepare chart data for 12 months (Jan-Dec)
             const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
             const dataValues = months.map((_, idx) => monthlyData[idx] || 0);
-
             renderAnnualChart(dataValues);
         }
 
-        // CORRECTED: Calculate business days from NOW until the end of the filtered month
         function calcValidDaysRemaining() {
             const now = new Date();
-            // Start counting from TODAY (if today is in range) or StartDate
             let startCount = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-            // Get selected range end
             const strEndDate = document.getElementById('endDate').value;
             if (!strEndDate) return 0;
-            const filterEnd = new Date(strEndDate);
+            const [y, m, d] = strEndDate.split('-').map(Number);
+            const filterEnd = new Date(y, m - 1, d); // Local
 
-            // If the filtered period is in the past, days remaining is 0?
-            // "Quantos dias uteis temos até o final do mês": implies current month. 
-            // If user views last month, 0 days remaining.
-            // Check if filterEnd is in the past
             if (filterEnd < startCount) return 0;
-
-            // Loop from max(today, filterStart) to filterEnd
-            // Usually we care effectively about "From Today until End of This Month" if we are in this month.
-            // If we are viewing future month, it is start to end.
-
-            // Just iterate from startCount (Today) to filterEnd (End of Month)
-            // But if startCount > filterEnd, loop wont run, returns 0. Correct.
 
             let count = 0;
             let current = new Date(startCount);
 
             while (current <= filterEnd) {
-                // If not Sunday(0) and not Saturday(6) -> Business Day
                 if (current.getDay() !== 0 && current.getDay() !== 6) {
                     count++;
                 }
@@ -1136,20 +1133,24 @@
 
         async function loadRecordsData() {
             showSpinner();
-            const start = document.getElementById('startDate').value, end = document.getElementById('endDate').value;
+            const startInput = document.getElementById('startDate').value;
+            const endInput = document.getElementById('endDate').value;
+            const year = startInput ? startInput.substring(0, 4) : new Date().getFullYear();
+            const fullStart = `${year}-01-01`;
+            const fullEnd = `${year}-12-31`;
+
             try {
                 await Promise.all([loadPreferences(), loadMeta()]);
-                // Fetch ALL data for the year or a large range to populate annual chart correctly if needed, 
-                // BUT user usually filters by month. 
-                // CRITICAL: If the user filters by a single month (e.g. Feb), the "Annual Evolution" will only show Feb.
-                // To show the whole year dynamic evolution, we would need to load the whole year's data.
-                // However, based on the user's request "soma os valores para cada mês nos registros de faturamento diario",
-                // if they are viewing the "Detailed" view, they usually filter by a month.
-                // Assuming standard behavior: The charts reflect the LOADED data.
-
-                let url = `/api/faturamento-postgres/detalhado?limit=10000${start ? '&startDate=' + start : ''}${end ? '&endDate=' + end : ''}`;
+                // Fetch full year data
+                let url = `/api/faturamento-postgres/detalhado?limit=100000&startDate=${fullStart}&endDate=${fullEnd}`;
                 const res = await (await fetch(url)).json();
-                if (res.success) { allData = res.data; processClients(allData); renderTable(); updateDashboardfromRecords(allData); }
+                if (res.success) {
+                    allData = res.data;
+                    processClients(allData);
+
+                    renderTable(); // Filters inside
+                    updateDashboardfromRecords(allData);
+                }
             } catch (e) { console.error(e); } finally { hideSpinner(); }
         }
 
@@ -1157,16 +1158,25 @@
         async function saveClientExclusion() { await fetch('/api/preferences/excluded_clients', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ value: Array.from(excludedClients) }) }); }
 
         async function toggleRowExclusion(idx) {
+            // idx is index in allData because I pass allData.indexOf(item) in renderTable
             const item = allData[idx];
             const newState = !item.excluido_manualmente;
-            const key = `${item.notaFiscal}-${item.serie}-${item.itemNota || 0}-${item.codigoItem}`;
+
+            // Fixed Key Generation to match Backend
+            const serieClean = item.serie ? String(item.serie).trim() : '';
+            const key = `${item.notaFiscal}-${serieClean}-${item.itemNota || 0}-${item.codigoItem}`;
+
             try {
                 const res = await fetch('/api/faturamento-postgres/toggle-exclusion', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ key, excluded: newState, nota_fiscal: item.notaFiscal, serie: item.serie, item_nota: item.itemNota || 0, codigo_item: item.codigoItem })
                 });
-                if (res.ok) { item.excluido_manualmente = newState; renderTable(); updateDashboardfromRecords(allData); }
+                if (res.ok) {
+                    item.excluido_manualmente = newState;
+                    renderTable();
+                    updateDashboardfromRecords(allData);
+                }
             } catch (e) { console.error(e); }
         }
 
@@ -1180,17 +1190,31 @@
             } catch (e) { console.error(e); }
         }
 
-        function handleMetaInputKey(e, el) { if (e.key === 'Enter') { e.preventDefault(); el.blur(); } }
-
         function renderTable() {
             const tbody = document.getElementById('tableBody');
-            tbody.innerHTML = '';
-            const filteredClients = allData.filter(item => !excludedClients.has((item.clienteNome || 'Desconhecido').trim()));
-            tbody.innerHTML = filteredClients.map((item, idx) => {
+            const startInput = document.getElementById('startDate').value;
+            const endInput = document.getElementById('endDate').value;
+
+            // Filter for display
+            const filteredClients = allData.filter(item => {
+                if (excludedClients.has((item.clienteNome || 'Desconhecido').trim())) return false;
+                // Client-side date filtering
+                if (startInput && item.data < startInput) return false;
+                if (endInput && item.data > endInput) return false;
+
+                // Also check column text filters
+                // (Optimized: we could do column filters here too, but they are done in filterColumn separately usually.
+                // But wait, the existing code called filterColumn on keyup. 
+                // Here we just render. filterColumn hides rows via style.display.
+                return true;
+            });
+
+            tbody.innerHTML = filteredClients.map((item) => {
+                const globalIdx = allData.indexOf(item);
                 const calculatedTotal = calculateCalculatedTotal(item);
                 return `
                 <tr class="${item.excluido_manualmente ? 'row-ignored' : ''}">
-                    <td class="checkbox-cell"><input type="checkbox" ${!item.excluido_manualmente ? 'checked' : ''} onclick="toggleRowExclusion(${allData.indexOf(item)})"></td>
+                    <td class="checkbox-cell"><input type="checkbox" ${!item.excluido_manualmente ? 'checked' : ''} onclick="toggleRowExclusion(${globalIdx})"></td>
                     <td>${formatDate(item.data)}</td>
                     <td>${item.clienteCodigo || ''}</td>
                     <td>${item.clienteNome || ''}</td>
@@ -1204,11 +1228,13 @@
                 </tr>
             `}).join('') || '<tr><td colspan="11" style="text-align:center; padding: 20px;">Nenhum registro.</td></tr>';
 
+            // Re-apply column filters if any exist? 
+            // The existing filterColumn() uses DOM. It's fine.
+
+            // Summary for Title/Footer (of Valid displayed rows)
             const incl = filteredClients.filter(i => !i.excluido_manualmente);
             document.getElementById('totalRecords').textContent = incl.length;
             document.getElementById('totalWeight').textContent = formatWeight(incl.reduce((a, b) => a + (b.pesoTotal || 0), 0));
-
-            // Sum calculated totals
             document.getElementById('totalValue').textContent = formatCurrency(incl.reduce((a, b) => a + calculateCalculatedTotal(b), 0));
         }
 
@@ -1250,7 +1276,7 @@
         }
 
         function filterClientList() { renderClientList(); }
-        function toggleClientExclusion(c) { if (excludedClients.has(c)) excludedClients.delete(c); else excludedClients.add(c); renderClientList(); renderTable(); saveClientExclusion(); }
+        function toggleClientExclusion(c) { if (excludedClients.has(c)) excludedClients.delete(c); else excludedClients.add(c); renderClientList(); renderTable(); updateDashboardfromRecords(allData); saveClientExclusion(); }
 
         document.addEventListener('DOMContentLoaded', () => {
             const now = new Date();
