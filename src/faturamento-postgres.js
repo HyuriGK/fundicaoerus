@@ -211,43 +211,10 @@ router.get('/detalhado', async (req, res) => {
                 ON p.chave_unica = (
                     CAST(f.nota_fiscal AS TEXT) || '-' || 
                     COALESCE(TRIM(f.serie), '') || '-' || 
-                    CAST(COALESCE(TRIM(f.codigo_item), '') AS TEXT)
-                )
-                    CAST(COALESCE(TRIM(f.codigo_item), '') AS TEXT)
+                    COALESCE(TRIM(CAST(f.codigo_item AS TEXT)), '')
                 )
             WHERE 1=1
         `;
-
-        // DEBUG: Check what keys are being generated vs what is in preferences
-
-        const debugQuery = `
-            SELECT 
-                f.nota_fiscal, 
-                f.serie, 
-                f.codigo_item,
-                (CAST(f.nota_fiscal AS TEXT) || '-' || COALESCE(TRIM(f.serie), '') || '-' || CAST(COALESCE(TRIM(f.codigo_item), '') AS TEXT)) as generated_key,
-                p.chave_unica as pref_key,
-                p.excluido
-            FROM faturamento_firebird f
-            LEFT JOIN faturamento_firebird_preferencias p 
-            ON p.chave_unica = (CAST(f.nota_fiscal AS TEXT) || '-' || COALESCE(TRIM(f.serie), '') || '-' || CAST(COALESCE(TRIM(f.codigo_item), '') AS TEXT))
-            WHERE p.chave_unica IS NOT NULL
-            LIMIT 5;
-        `;
-        try {
-            const debugRes = await pool.query(debugQuery);
-            if (debugRes.rows.length > 0) {
-                console.log("🐛 DEBUG CHECK MATCHES:", debugRes.rows);
-            } else {
-                console.log("🐛 DEBUG CHECK: No matches found in JOIN yet.");
-                // Check content of preferences table
-                const prefCount = await pool.query('SELECT count(*) FROM faturamento_firebird_preferencias');
-                console.log("🐛 PREFS TABLE COUNT:", prefCount.rows[0].count);
-            }
-        } catch (e) {
-            console.error("🐛 DEBUG ERROR:", e);
-        }
-
 
         const params = [];
         let paramIndex = 1;
