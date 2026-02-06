@@ -47,6 +47,7 @@
         }
 
         /* Prevent text selection for specific dashboard elements */
+        .top-header,
         .kpi-row,
         .chart-title,
         .chart-header-kpi {
@@ -254,6 +255,12 @@
             padding: 20px;
             display: flex;
             flex-direction: column;
+            align-items: center;
+            /* Centered */
+            justify-content: center;
+            /* Centered */
+            text-align: center;
+            /* Centered */
             gap: 4px;
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             position: relative;
@@ -607,13 +614,83 @@
         }
 
         .search-box {
-            width: 100%;
-            padding: 10px 14px;
-            background: rgba(0, 0, 0, 0.2);
-            border: 1px solid var(--border-subtle);
-            border-radius: 6px;
             color: #fff;
             font-family: var(--font-main);
+        }
+
+        /* --- TOAST NOTIFICATION (Replicated from Detalhado) --- */
+        .toast-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 5000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .toast {
+            background: #18181b;
+            border: 1px solid var(--border-subtle);
+            border-left: 4px solid var(--color-primary);
+            color: #fff;
+            padding: 16px 20px;
+            border-radius: 6px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+            font-family: var(--font-main);
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            animation: slideIn 0.3s ease-out forwards;
+            min-width: 350px;
+        }
+
+        .toast.danger {
+            border-left-color: var(--status-danger);
+        }
+
+        .toast-icon {
+            font-size: 1.2rem;
+        }
+
+        .toast.danger .toast-icon {
+            color: var(--status-danger);
+        }
+
+        .toast-content {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .toast-title {
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+
+        .toast-subtitle {
+            font-size: 0.75rem;
+            color: #a1a1aa;
+            margin-top: 4px;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        @keyframes fadeOut {
+            to {
+                opacity: 0;
+                transform: translateY(10px);
+            }
         }
 
         .client-list {
@@ -904,8 +981,8 @@
             <div class="kpi-stack-container">
                 <div class="kpi-top-tab tab-success" id="avgPriceTab">R$ -- / kg</div>
                 <div class="kpi-card attached-top kpi-success" id="cardValorTotal"
-                    onclick="toggleValorTotalVisibility()" data-visible="true" style="cursor: pointer;">
-                    <div class="kpi-title">Valor Faturado <i class="fa-solid fa-eye"></i></div>
+                    onclick="toggleValorTotalVisibility()" data-visible="false" style="cursor: pointer;">
+                    <div class="kpi-title">Valor Faturado <i class="fa-solid fa-eye-slash" id="valorEyeIcon"></i></div>
                     <div class="kpi-value" id="totalValor">R$ -----</div>
                 </div>
             </div>
@@ -980,10 +1057,35 @@
         let currentMeta = 0;
         let dailyChart = null, annualChart = null;
 
-        const formatCurrency = (val) => val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-        const formatNumber = (val) => val.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
-        const formatWeight = (val) => val.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) + ' kg';
+        const formatCurrency = (val) => (val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const formatNumber = (val) => (val || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const formatWeight = (val) => (val || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kg';
         const formatDate = (dateStr) => { if (!dateStr) return ''; const [y, m, d] = dateStr.split('-'); return `${d}/${m}/${y}`; };
+
+        function showToast(title, subtitle, type = 'info') {
+            let container = document.getElementById('toast-container');
+            if (!container) {
+                container = document.createElement('div');
+                container.id = 'toast-container';
+                container.className = 'toast-container';
+                document.body.appendChild(container);
+            }
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            const icon = type === 'danger' ? '<i class="fa-solid fa-ban toast-icon"></i>' : '<i class="fa-solid fa-circle-info toast-icon"></i>';
+            toast.innerHTML = `
+                ${icon} 
+                <div class="toast-content">
+                    <span class="toast-title">${title}</span>
+                    <span class="toast-subtitle">${subtitle}</span>
+                </div>
+            `;
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.style.animation = 'fadeOut 0.5s ease-out forwards';
+                setTimeout(() => { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 500);
+            }, 4000);
+        }
 
         async function refreshAll() { await loadRecordsData(); }
 
@@ -1021,11 +1123,18 @@
             const totalFaturado = rangeData.reduce((acc, curr) => acc + calculateCalculatedTotal(curr), 0);
             const totalPeso = rangeData.reduce((acc, curr) => acc + (curr.pesoTotal || 0), 0);
 
-            document.getElementById('totalValor').textContent = formatCurrency(totalFaturado);
             document.getElementById('totalWeightValue').textContent = formatWeight(totalPeso);
 
-            const avgPrice = totalPeso > 0 ? totalFaturado / totalPeso : 0;
-            document.getElementById('avgPriceTab').textContent = `R$ ${avgPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} / kg`;
+            const isVisible = document.getElementById('cardValorTotal').getAttribute('data-visible') === 'true';
+            const avgPrice = totalPeso > 0 ? (totalFaturado / 100) / totalPeso : 0;
+
+            if (isVisible) {
+                document.getElementById('totalValor').textContent = formatCurrency(totalFaturado / 100);
+                document.getElementById('avgPriceTab').textContent = `R$ ${avgPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / kg`;
+            } else {
+                document.getElementById('totalValor').textContent = 'R$ -----';
+                document.getElementById('avgPriceTab').textContent = 'R$ -- / kg';
+            }
 
             if (startInput) { const [y, m] = startInput.split('-'); document.getElementById('currentMonthTab').textContent = `${m}/${y}`; }
 
@@ -1348,9 +1457,15 @@
                 return true;
             });
 
+            const isVisible = document.getElementById('cardValorTotal').getAttribute('data-visible') === 'true';
+
             tbody.innerHTML = filteredClients.map((item) => {
                 const globalIdx = allData.indexOf(item);
                 const calculatedTotal = calculateCalculatedTotal(item);
+
+                const valorUnit = isVisible ? formatCurrency(item.valorUnitario || 0) : 'R$ ---';
+                const valorTotal = isVisible ? formatCurrency(calculatedTotal / 100) : 'R$ ---';
+
                 return `
                 <tr class="${item.excluido_manualmente ? 'row-ignored' : ''}">
                     <td class="checkbox-cell"><input type="checkbox" ${!item.excluido_manualmente ? 'checked' : ''} onclick="toggleRowExclusion(${globalIdx})"></td>
@@ -1360,18 +1475,23 @@
                     <td>${item.clienteNome || ''}</td>
                     <td>${item.codigoItem || ''}</td>
                     <td>${item.descricao || ''}</td>
-                    <td class="text-right">${item.quantidade.toLocaleString('pt-BR', { minimumFractionDigits: 3 })}</td>
-                    <td class="text-right">${formatNumber(item.valorUnitario)}</td>
-                    <td class="text-right">${item.pesoUn.toLocaleString('pt-BR', { minimumFractionDigits: 3 })}</td>
-                    <td class="text-right">${item.pesoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 3 })}</td>
-                    <td class="text-right" style="color:var(--color-primary); font-weight:600;">${formatCurrency(calculatedTotal)}</td>
+                    <td class="text-right">${formatNumber(item.quantidade)}</td>
+                    <td class="text-right">${valorUnit}</td>
+                    <td class="text-right">${formatNumber(item.pesoUn)}</td>
+                    <td class="text-right">${formatNumber(item.pesoTotal)}</td>
+                    <td class="text-right" style="color:var(--color-primary); font-weight:600;">${valorTotal}</td>
                 </tr>
             `}).join('') || '<tr><td colspan="12" style="text-align:center; padding: 20px;">Nenhum registro.</td></tr>';
 
             const incl = filteredClients.filter(i => !i.excluido_manualmente);
             document.getElementById('totalRecords').textContent = incl.length;
             document.getElementById('totalWeight').textContent = formatWeight(incl.reduce((a, b) => a + (b.pesoTotal || 0), 0));
-            document.getElementById('totalValue').textContent = formatCurrency(incl.reduce((a, b) => a + calculateCalculatedTotal(b), 0));
+
+            if (isVisible) {
+                document.getElementById('totalValue').textContent = formatCurrency(incl.reduce((a, b) => a + calculateCalculatedTotal(b), 0) / 100);
+            } else {
+                document.getElementById('totalValue').textContent = 'R$ ---';
+            }
         }
 
         function processClients(data) { clientStats = {}; data.forEach(item => { const n = (item.clienteNome || 'Desconhecido').trim(); clientStats[n] = (clientStats[n] || 0) + 1; }); }
@@ -1389,11 +1509,22 @@
         function hideSpinner() { document.getElementById('loading-screen').style.display = 'none'; }
 
         function toggleValorTotalVisibility() {
-            const card = document.getElementById('cardValorTotal'), val = document.getElementById('totalValor');
-            const visible = card.dataset.visible === 'true';
-            card.dataset.visible = !visible;
-            val.style.filter = !visible ? 'none' : 'blur(8px)';
-            card.querySelector('i').className = !visible ? 'fa-solid fa-eye' : 'fa-solid fa-eye-slash';
+            const userRole = (localStorage.getItem('erus_role') || 'Visitante').toLowerCase();
+            if (userRole === 'visitante') {
+                showToast("Você não tem permissão comercial", "Se necessário, entre em contato com o administrador do sistema", "danger");
+                return;
+            }
+
+            const card = document.getElementById('cardValorTotal');
+            const eye = document.getElementById('valorEyeIcon');
+            const isVisible = card.getAttribute('data-visible') === 'true';
+            const newState = !isVisible;
+
+            card.setAttribute('data-visible', newState);
+            eye.className = newState ? 'fa-solid fa-eye' : 'fa-solid fa-eye-slash';
+
+            updateDashboardfromRecords(allData);
+            renderTable();
         }
 
         function openClientModal() { document.getElementById('clientModal').style.display = 'flex'; renderClientList(); document.getElementById('clientSearch').focus(); }
