@@ -266,10 +266,15 @@ async function sincronizarDetalhado(fbDb) {
             // Como sincronizamos a partir de 2026, limpamos esses registros antes de reinserir
             console.log('  🗑️ Limpando registros de faturamento detalhado...');
 
-            // BUSCAR PREFERÊNCIAS DE EXCLUSÃO
-            const prefsResult = await pool.query('SELECT chave_unica, excluido FROM faturamento_preferencias');
+            // BUSCAR PREFERÊNCIAS DE EXCLUSÃO (Tabela correta: faturamento_firebird_preferencias)
+            const prefsResult = await pool.query('SELECT nota_fiscal, codigo_item, pedido, data_faturamento, quantidade, excluido FROM faturamento_firebird_preferencias');
             const prefsMap = new Map();
-            prefsResult.rows.forEach(r => prefsMap.set(r.chave_unica, r.excluido));
+            prefsResult.rows.forEach(r => {
+                const dateStr = r.data_faturamento ? r.data_faturamento.toISOString().split('T')[0] : '';
+                const qStr = parseFloat(r.quantidade || 0).toFixed(3);
+                const key = `${r.nota_fiscal}-${String(r.codigo_item).trim()}-${String(r.pedido || '').trim()}-${dateStr}-${qStr}`;
+                prefsMap.set(key, r.excluido);
+            });
 
             await pool.query("DELETE FROM faturamento_firebird WHERE data_faturamento >= '2026-01-01' OR data_faturamento IS NULL");
 
@@ -293,11 +298,10 @@ async function sincronizarDetalhado(fbDb) {
                     const codigoItem = row.PRODUTO_NPR;
                     const itemNota = parseInt(row.ITEM_NPR) || 0;
 
-                    // Gerar chave única para conferir preferência
-                    // Formato compatível com faturamentos.html (Frontend)
-                    // Nota-Serie-ItemNota-CodigoItem
-                    const serieClean = row.SERIE_NOT ? String(row.SERIE_NOT).trim() : '';
-                    const keyForPref = `${notaFiscal}-${serieClean}-${itemNota}-${codigoItem}`;
+                    // Gerar chave única para conferir preferência (Lógica C: Nota-Item-Pedido-Data-Quant)
+                    const pedidoFinal = String(row.PEDIDO_LINK || row.PEDIDO_NPR || '').trim();
+                    const qStr = parseFloat(quantidade).toFixed(3);
+                    const keyForPref = `${notaFiscal}-${String(codigoItem).trim()}-${pedidoFinal}-${dataFat}-${qStr}`;
                     const isExcluded = prefsMap.has(keyForPref) ? prefsMap.get(keyForPref) : false;
 
                     await pool.query(`
@@ -335,7 +339,7 @@ async function sincronizarDetalhado(fbDb) {
                         pesoTotal,
                         row.STATUS_NOT,
                         isExcluded,
-                        row.PEDIDO_LINK || row.PEDIDO_NPR || null
+                        pedidoFinal
                     ]);
 
                     inserted++;
