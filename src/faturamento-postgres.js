@@ -211,7 +211,6 @@ router.get('/detalhado', async (req, res) => {
                 ON p.chave_unica = (
                     CAST(f.nota_fiscal AS TEXT) || '-' || 
                     COALESCE(TRIM(f.serie), '') || '-' || 
-                    CAST(COALESCE(f.item_nota, 0) AS TEXT) || '-' || 
                     CAST(COALESCE(f.codigo_item, '') AS TEXT)
                 )
             WHERE 1=1
