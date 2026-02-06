@@ -875,22 +875,7 @@
                 <i class="fa-solid fa-table-list" style="color: var(--color-primary);"></i> Registros
             </button>
 
-            <div class="separator-vertical"></div>
-
-            <div class="dropdown" id="functionsDropdown" style="position: relative;">
-                <button class="btn-glass" onclick="toggleFunctionsDropdown()">
-                    <i class="fa-solid fa-gear" style="color: #f59e0b;"></i> Funções <i class="fa-solid fa-chevron-down"
-                        style="font-size: 0.7rem; margin-left: 5px;"></i>
-                </button>
-                <div class="dropdown-content" id="functionsDropdownContent">
-                    <div style="padding: 12px 16px; cursor: pointer; display: flex; align-items: center; gap: 10px; color: var(--text-main); font-size: 0.9rem;"
-                        onclick="location.reload()">
-                        <i class="fa-solid fa-sync" style="color: var(--color-primary);"></i> Recarregar
-                    </div>
-                </div>
-            </div>
-
-            <div class="separator-vertical"></div>
+            <!-- Funções button removed -->
             <a href="index.html" class="btn-back"><i class="fa-solid fa-arrow-right-from-bracket"></i> Voltar</a>
         </div>
     </header>
@@ -1101,7 +1086,28 @@
             dailyChart = new Chart(ctx, {
                 type: 'bar',
                 data: { labels: data.map(d => formatDate(d.data)), datasets: [{ label: 'Peso (kg)', data: data.map(d => d.pesoTotal), backgroundColor: '#f59e0b', borderRadius: 4 }] },
-                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#a1a1aa' } }, x: { grid: { display: false }, ticks: { color: '#a1a1aa' } } } }
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: { y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#a1a1aa' } }, x: { grid: { display: false }, ticks: { color: '#a1a1aa' } } },
+                    onClick: (e, elements) => {
+                        if (elements.length > 0) {
+                            const index = elements[0].index;
+                            const clickedDate = data[index].data; // YYYY-MM-DD
+                            // Filter to this specific day
+                            const [y, m, d] = clickedDate.split('-');
+                            document.getElementById('startDate').value = clickedDate;
+                            document.getElementById('endDate').value = clickedDate;
+                            // Update View
+                            renderTable();
+                            updateDashboardfromRecords(allData);
+                        }
+                    },
+                    onHover: (event, chartElement) => {
+                        event.native.target.style.cursor = chartElement[0] ? 'pointer' : 'default';
+                    }
+                }
             });
         }
 
@@ -1115,13 +1121,44 @@
                     datasets: [{
                         label: 'Peso (kg)',
                         data: dataValues,
-                        backgroundColor: 'rgba(245, 158, 11, 0.2)',
-                        borderColor: '#f59e0b',
-                        borderWidth: 2,
+                        backgroundColor: '#f59e0b', // Solid color matching Daily Chart
                         borderRadius: 4
                     }]
                 },
-                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#a1a1aa' } }, x: { grid: { display: false }, ticks: { color: '#a1a1aa' } } } }
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: { y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#a1a1aa' } }, x: { grid: { display: false }, ticks: { color: '#a1a1aa' } } },
+                    onClick: (e, elements) => {
+                        if (elements.length > 0) {
+                            const index = elements[0].index; // 0 = Jan, 1 = Feb...
+                            const year = new Date().getFullYear(); // Assuming current year
+
+                            // Set Range to Full Month
+                            const firstDay = new Date(year, index, 1);
+                            const lastDay = new Date(year, index + 1, 0); // Last day of month
+
+                            // Format YYYY-MM-DD manually to avoid timezone shifts
+                            const fmt = (d) => {
+                                const y = d.getFullYear();
+                                const m = String(d.getMonth() + 1).padStart(2, '0');
+                                const day = String(d.getDate()).padStart(2, '0');
+                                return `${y}-${m}-${day}`;
+                            };
+
+                            document.getElementById('startDate').value = fmt(firstDay);
+                            document.getElementById('endDate').value = fmt(lastDay);
+
+                            // Update View
+                            renderTable();
+                            updateDashboardfromRecords(allData);
+                        }
+                    },
+                    onHover: (event, chartElement) => {
+                        event.native.target.style.cursor = chartElement[0] ? 'pointer' : 'default';
+                    }
+                }
             });
         }
 
