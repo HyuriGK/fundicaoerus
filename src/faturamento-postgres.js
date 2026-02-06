@@ -211,8 +211,8 @@ router.get('/detalhado', async (req, res) => {
             LEFT JOIN faturamento_firebird_preferencias p 
                 ON p.chave_unica = (
                     CAST(f.nota_fiscal AS TEXT) || '-' || 
-                    COALESCE(TRIM(f.serie), '') || '-' || 
-                    COALESCE(TRIM(CAST(f.codigo_item AS TEXT)), '')
+                    COALESCE(TRIM(CAST(f.codigo_item AS TEXT)), '') || '-' ||
+                    COALESCE(TRIM(f.pedido), '')
                 )
             WHERE 1=1
         `;
@@ -343,11 +343,11 @@ router.post('/toggle-exclusion', async (req, res) => {
 
         // 1. Salva na tabela global de memórias (PREFERÊNCIAS)
         await client.query(`
-            INSERT INTO faturamento_firebird_preferencias (chave_unica, excluido)
-            VALUES ($1, $2)
+            INSERT INTO faturamento_firebird_preferencias (chave_unica, excluido, pedido)
+            VALUES ($1, $2, $3)
             ON CONFLICT (chave_unica) 
-            DO UPDATE SET excluido = EXCLUDED.excluido, updated_at = CURRENT_TIMESTAMP
-        `, [key, excluded]);
+            DO UPDATE SET excluido = EXCLUDED.excluido, pedido = EXCLUDED.pedido, updated_at = CURRENT_TIMESTAMP
+        `, [key, excluded, req.body.pedido || null]);
 
         // 2. Atualiza a tabela sincronizada local se os dados forem passados
         if (nota_fiscal !== undefined) {
@@ -355,11 +355,15 @@ router.post('/toggle-exclusion', async (req, res) => {
                 UPDATE faturamento_firebird 
                 SET excluido_manualmente = $1 
                 WHERE nota_fiscal = $2 
-                  AND serie IS NOT DISTINCT FROM $3 
-                  AND item_nota = $4 
-                  AND codigo_item = $5
+                  AND codigo_item = $3
             `;
-            const params = [excluded, nota_fiscal, serie, item_nota, codigo_item];
+            const params = [excluded, nota_fiscal, codigo_item];
+
+            // FORCE Pedido matching (treat null as empty string to match Key Generation logic)
+            // Key = Nota-Code-Pedido(or empty)
+            const pedidoValid = req.body.pedido || '';
+            updateQuery += ` AND COALESCE(pedido, '') = $${params.length + 1}`;
+            params.push(pedidoValid);
 
             if (cliente_codigo) {
                 updateQuery += ` AND cliente_codigo = $${params.length + 1}`;

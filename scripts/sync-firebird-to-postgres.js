@@ -230,6 +230,10 @@ async function sincronizarDetalhado(fbDb) {
         nf.STATUS_NOT,
         nfp.ITEM_NPR,
         nfp.PEDIDO_NPR,
+        (SELECT FIRST 1 npe.PEDIDO_NPE FROM NOTA_FISCAL_PEDIDO npe 
+         WHERE npe.EMPRESA_NPE = nf.EMPRESA_NOT 
+         AND npe.SERIE_NPE = nf.SERIE_NOT 
+         AND npe.CODIGO_NPE = nf.CODIGO_NOT) as PEDIDO_LINK,
         nfp.PRODUTO_NPR,
         nfp.NOME_PRODUTO_NPR,
         nfp.QUANTIDADE_NPR,
@@ -331,7 +335,7 @@ async function sincronizarDetalhado(fbDb) {
                         pesoTotal,
                         row.STATUS_NOT,
                         isExcluded,
-                        row.PEDIDO_NPR || null
+                        row.PEDIDO_LINK || row.PEDIDO_NPR || null
                     ]);
 
                     inserted++;
