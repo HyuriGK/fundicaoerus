@@ -184,7 +184,8 @@ router.get('/detalhado', async (req, res) => {
                 valor_total,
                 peso_un,
                 peso_total,
-                status
+                status,
+                excluido_manualmente
             FROM faturamento_firebird
             WHERE 1=1
         `;
@@ -225,7 +226,8 @@ router.get('/detalhado', async (req, res) => {
             valorTotal: parseFloat(row.valor_total || 0),
             pesoUn: parseFloat(row.peso_un || 0),
             pesoTotal: parseFloat(row.peso_total || 0),
-            status: row.status
+            status: row.status,
+            excluidoManualmente: row.excluido_manualmente
         }));
 
         res.json({
@@ -295,6 +297,44 @@ router.get('/evolucao-mensal', async (req, res) => {
             message: 'Erro ao buscar evolução mensal',
             error: error.message
         });
+    }
+});
+
+// --- ROTA POST: Toggle Exclusão (Sincronizado) ---
+router.post('/toggle-exclusion', async (req, res) => {
+    const { key, excluded, nota_fiscal, serie, item_nota, codigo_item } = req.body;
+
+    if (!key) return res.status(400).json({ error: "Chave inválida" });
+
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        // 1. Salva na tabela global de memórias
+        await client.query(`
+            INSERT INTO faturamento_preferencias (chave_unica, excluido)
+            VALUES ($1, $2)
+            ON CONFLICT (chave_unica) 
+            DO UPDATE SET excluido = EXCLUDED.excluido, updated_at = CURRENT_TIMESTAMP
+        `, [key, excluded]);
+
+        // 2. Atualiza a tabela sincronizada local se os dados forem passados
+        if (nota_fiscal !== undefined) {
+            await client.query(`
+                UPDATE faturamento_firebird 
+                SET excluido_manualmente = $1 
+                WHERE nota_fiscal = $2 AND serie = $3 AND item_nota = $4 AND codigo_item = $5
+            `, [excluded, nota_fiscal, serie, item_nota, codigo_item]);
+        }
+
+        await client.query('COMMIT');
+        return res.json({ success: true });
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error("Erro ao salvar exclusão sincronizada:", error);
+        return res.status(500).json({ error: error.message });
+    } finally {
+        client.release();
     }
 });
 

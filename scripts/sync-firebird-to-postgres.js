@@ -183,6 +183,7 @@ async function sincronizarDetalhado(fbDb) {
         valor_unitario DECIMAL(15, 2),
         valor_total DECIMAL(15, 2),
         status VARCHAR(10),
+        excluido_manualmente BOOLEAN DEFAULT FALSE,
         atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(nota_fiscal, serie, item_nota, codigo_item)
     )`);
@@ -191,6 +192,7 @@ async function sincronizarDetalhado(fbDb) {
     await pool.query(`ALTER TABLE faturamento_firebird ADD COLUMN IF NOT EXISTS item_nota INTEGER DEFAULT 0`);
     await pool.query(`ALTER TABLE faturamento_firebird ADD COLUMN IF NOT EXISTS peso_un DECIMAL(15, 3) DEFAULT 0`);
     await pool.query(`ALTER TABLE faturamento_firebird ADD COLUMN IF NOT EXISTS peso_total DECIMAL(15, 3) DEFAULT 0`);
+    await pool.query(`ALTER TABLE faturamento_firebird ADD COLUMN IF NOT EXISTS excluido_manualmente BOOLEAN DEFAULT FALSE`);
     await pool.query(`ALTER TABLE faturamento_firebird ADD COLUMN IF NOT EXISTS atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP`);
 
     // Atualizar constraint se necessário
@@ -256,6 +258,12 @@ async function sincronizarDetalhado(fbDb) {
             // Limpar dados anteriores para evitar duplicidade ou registros órfãos
             // Como sincronizamos a partir de 2026, limpamos esses registros antes de reinserir
             console.log('  🗑️ Limpando registros de faturamento detalhado...');
+
+            // BUSCAR PREFERÊNCIAS DE EXCLUSÃO
+            const prefsResult = await pool.query('SELECT chave_unica, excluido FROM faturamento_preferencias');
+            const prefsMap = new Map();
+            prefsResult.rows.forEach(r => prefsMap.set(r.chave_unica, r.excluido));
+
             await pool.query("DELETE FROM faturamento_firebird WHERE data_faturamento >= '2026-01-01' OR data_faturamento IS NULL");
 
             let inserted = 0;
@@ -274,12 +282,21 @@ async function sincronizarDetalhado(fbDb) {
                     const pesoUn = parseFloat(row.PESO_UNITARIO) || 0;
                     const quantidade = parseFloat(row.QUANTIDADE_NPR) || 0;
                     const pesoTotal = pesoUn * quantidade;
+                    const dataFat = formatarData(row.DATA_FATURAMENTO);
+                    const codigoItem = row.PRODUTO_NPR;
+                    const itemNota = parseInt(row.ITEM_NPR) || 0;
+
+                    // Gerar chave única para conferir preferência
+                    // Formato compatível com faturamento-neon.js
+                    const keyForPref = `${dataFat}_${notaFiscal}_${codigoItem}_${quantidade}`;
+                    const isExcluded = prefsMap.has(keyForPref) ? prefsMap.get(keyForPref) : false;
+
                     await pool.query(`
                         INSERT INTO faturamento_firebird 
                         (nota_fiscal, serie, item_nota, data_faturamento, cliente_codigo, cliente_nome, 
                          codigo_item, descricao, quantidade, valor_unitario, valor_total, 
-                         peso_un, peso_total, status)
-                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                         peso_un, peso_total, status, excluido_manualmente)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
                         ON CONFLICT ON CONSTRAINT faturamento_firebird_nf_serie_item_prod_key DO UPDATE SET
                             data_faturamento = EXCLUDED.data_faturamento,
                             cliente_nome = EXCLUDED.cliente_nome,
@@ -290,22 +307,24 @@ async function sincronizarDetalhado(fbDb) {
                             peso_un = EXCLUDED.peso_un,
                             peso_total = EXCLUDED.peso_total,
                             status = EXCLUDED.status,
+                            excluido_manualmente = EXCLUDED.excluido_manualmente,
                             atualizado_em = CURRENT_TIMESTAMP
                     `, [
                         notaFiscal,
                         row.SERIE_NOT ? String(row.SERIE_NOT).trim() : null,
-                        parseInt(row.ITEM_NPR) || 0,
-                        formatarData(row.DATA_FATURAMENTO),
+                        itemNota,
+                        dataFat,
                         row.COD_CLIENTE_NOT,
                         row.CLIENTE_NOME_NOT,
-                        row.PRODUTO_NPR,
+                        codigoItem,
                         row.NOME_PRODUTO_NPR,
                         quantidade,
                         centavosParaReais(row.UNITARIO_NPR),
                         centavosParaReais(row.TOTAL_NPR),
                         pesoUn,
                         pesoTotal,
-                        row.STATUS_NOT
+                        row.STATUS_NOT,
+                        isExcluded
                     ]);
 
                     inserted++;
