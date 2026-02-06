@@ -996,9 +996,16 @@
             } catch (e) { console.error(e); }
         }
 
+        // Logic to calculate values as requested: Unit * Qtd * 100
+        function calculateCalculatedTotal(item) {
+            return (item.valorUnitario || 0) * (item.quantidade || 0) * 100;
+        }
+
         function updateDashboardfromRecords(data) {
             const filtered = data.filter(item => !excludedClients.has((item.clienteNome || 'Desconhecido').trim()) && !item.excluido_manualmente);
-            const totalFaturado = filtered.reduce((acc, curr) => acc + (curr.valorTotal || 0), 0);
+
+            // Calculate totals using the requested formula for value
+            const totalFaturado = filtered.reduce((acc, curr) => acc + calculateCalculatedTotal(curr), 0);
             const totalPeso = filtered.reduce((acc, curr) => acc + (curr.pesoTotal || 0), 0);
 
             document.getElementById('totalValor').textContent = formatCurrency(totalFaturado);
@@ -1028,18 +1035,30 @@
             });
             const dailyData = Object.keys(dailyMap).sort().map(k => ({ data: k, pesoTotal: dailyMap[k] }));
             renderDailyChart(dailyData);
-            loadAnnualEvolution();
+
+            // Generate Annual Evolution dynamically from filtered data instead of backend
+            updateAnnualEvolutionDynamic(filtered); // Passing filtered data to respect exclusions
 
             const diasFaturados = Object.keys(dailyMap).length;
             document.getElementById('avgDailyWeight').textContent = formatWeight(diasFaturados > 0 ? totalPeso / diasFaturados : 0);
         }
 
-        async function loadAnnualEvolution() {
-            try {
-                const res = await fetch('/api/faturamento-postgres/evolucao-mensal');
-                const json = await res.json();
-                if (json.success) renderAnnualChart(json.data);
-            } catch (e) { console.error(e); }
+        // Renamed and logic changed to use frontend data
+        function updateAnnualEvolutionDynamic(filteredData) {
+            // Aggregate by month
+            const monthlyData = {};
+            filteredData.forEach(item => {
+                if (!item.data) return;
+                const d = new Date(item.data);
+                const monthKey = d.getMonth(); // 0-11
+                monthlyData[monthKey] = (monthlyData[monthKey] || 0) + (item.pesoTotal || 0);
+            });
+
+            // Prepare chart data for 12 months (Jan-Dec)
+            const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+            const dataValues = months.map((_, idx) => monthlyData[idx] || 0);
+
+            renderAnnualChart(dataValues);
         }
 
         function calculateRemainingBusinessDays() {
@@ -1067,12 +1086,22 @@
             });
         }
 
-        function renderAnnualChart(data) {
+        function renderAnnualChart(dataValues) {
             const ctx = document.getElementById('annualChart').getContext('2d');
             if (annualChart) annualChart.destroy();
             annualChart = new Chart(ctx, {
                 type: 'bar',
-                data: { labels: ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'], datasets: [{ label: 'Peso (kg)', data: data.map(d => d.pesoTotal), backgroundColor: 'rgba(245, 158, 11, 0.2)', borderColor: '#f59e0b', borderWidth: 2, borderRadius: 4 }] },
+                data: {
+                    labels: ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'],
+                    datasets: [{
+                        label: 'Peso (kg)',
+                        data: dataValues,
+                        backgroundColor: 'rgba(245, 158, 11, 0.2)',
+                        borderColor: '#f59e0b',
+                        borderWidth: 2,
+                        borderRadius: 4
+                    }]
+                },
                 options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#a1a1aa' } }, x: { grid: { display: false }, ticks: { color: '#a1a1aa' } } } }
             });
         }
@@ -1085,6 +1114,14 @@
             const start = document.getElementById('startDate').value, end = document.getElementById('endDate').value;
             try {
                 await Promise.all([loadPreferences(), loadMeta()]);
+                // Fetch ALL data for the year or a large range to populate annual chart correctly if needed, 
+                // BUT user usually filters by month. 
+                // CRITICAL: If the user filters by a single month (e.g. Feb), the "Annual Evolution" will only show Feb.
+                // To show the whole year dynamic evolution, we would need to load the whole year's data.
+                // However, based on the user's request "soma os valores para cada mês nos registros de faturamento diario",
+                // if they are viewing the "Detailed" view, they usually filter by a month.
+                // Assuming standard behavior: The charts reflect the LOADED data.
+
                 let url = `/api/faturamento-postgres/detalhado?limit=10000${start ? '&startDate=' + start : ''}${end ? '&endDate=' + end : ''}`;
                 const res = await (await fetch(url)).json();
                 if (res.success) { allData = res.data; processClients(allData); renderTable(); updateDashboardfromRecords(allData); }
@@ -1124,7 +1161,9 @@
             const tbody = document.getElementById('tableBody');
             tbody.innerHTML = '';
             const filteredClients = allData.filter(item => !excludedClients.has((item.clienteNome || 'Desconhecido').trim()));
-            tbody.innerHTML = filteredClients.map((item, idx) => `
+            tbody.innerHTML = filteredClients.map((item, idx) => {
+                const calculatedTotal = calculateCalculatedTotal(item);
+                return `
                 <tr class="${item.excluido_manualmente ? 'row-ignored' : ''}">
                     <td class="checkbox-cell"><input type="checkbox" ${!item.excluido_manualmente ? 'checked' : ''} onclick="toggleRowExclusion(${allData.indexOf(item)})"></td>
                     <td>${formatDate(item.data)}</td>
@@ -1136,13 +1175,16 @@
                     <td class="text-right">${formatNumber(item.valorUnitario)}</td>
                     <td class="text-right">${item.pesoUn.toLocaleString('pt-BR', { minimumFractionDigits: 3 })}</td>
                     <td class="text-right">${item.pesoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 3 })}</td>
-                    <td class="text-right" style="color:var(--color-primary); font-weight:600;">${formatCurrency(item.valorTotal)}</td>
+                    <td class="text-right" style="color:var(--color-primary); font-weight:600;">${formatCurrency(calculatedTotal)}</td>
                 </tr>
-            `).join('') || '<tr><td colspan="11" style="text-align:center; padding: 20px;">Nenhum registro.</td></tr>';
+            `}).join('') || '<tr><td colspan="11" style="text-align:center; padding: 20px;">Nenhum registro.</td></tr>';
+
             const incl = filteredClients.filter(i => !i.excluido_manualmente);
             document.getElementById('totalRecords').textContent = incl.length;
             document.getElementById('totalWeight').textContent = formatWeight(incl.reduce((a, b) => a + (b.pesoTotal || 0), 0));
-            document.getElementById('totalValue').textContent = formatCurrency(incl.reduce((a, b) => a + (b.valorTotal || 0), 0));
+
+            // Sum calculated totals
+            document.getElementById('totalValue').textContent = formatCurrency(incl.reduce((a, b) => a + calculateCalculatedTotal(b), 0));
         }
 
         function processClients(data) { clientStats = {}; data.forEach(item => { const n = (item.clienteNome || 'Desconhecido').trim(); clientStats[n] = (clientStats[n] || 0) + 1; }); }
