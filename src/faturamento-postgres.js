@@ -302,7 +302,7 @@ router.get('/evolucao-mensal', async (req, res) => {
 
 // --- ROTA POST: Toggle Exclusão (Sincronizado) ---
 router.post('/toggle-exclusion', async (req, res) => {
-    const { key, excluded, nota_fiscal, serie, item_nota, codigo_item } = req.body;
+    const { key, excluded, nota_fiscal, serie, item_nota, codigo_item, cliente_codigo } = req.body;
 
     if (!key) return res.status(400).json({ error: "Chave inválida" });
 
@@ -320,11 +320,24 @@ router.post('/toggle-exclusion', async (req, res) => {
 
         // 2. Atualiza a tabela sincronizada local se os dados forem passados
         if (nota_fiscal !== undefined) {
-            await client.query(`
+            // Include cliente_codigo for extra safety if provided
+            // And handle serie being NULL properly
+            let updateQuery = `
                 UPDATE faturamento_firebird 
                 SET excluido_manualmente = $1 
-                WHERE nota_fiscal = $2 AND serie = $3 AND item_nota = $4 AND codigo_item = $5
-            `, [excluded, nota_fiscal, serie, item_nota, codigo_item]);
+                WHERE nota_fiscal = $2 
+                  AND serie IS NOT DISTINCT FROM $3 
+                  AND item_nota = $4 
+                  AND codigo_item = $5
+            `;
+            const params = [excluded, nota_fiscal, serie, item_nota, codigo_item];
+
+            if (cliente_codigo) {
+                updateQuery += ` AND cliente_codigo = $${params.length + 1}`;
+                params.push(cliente_codigo);
+            }
+
+            await client.query(updateQuery, params);
         }
 
         await client.query('COMMIT');

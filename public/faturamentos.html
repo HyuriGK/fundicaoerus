@@ -1001,8 +1001,6 @@
         }
 
         function updateDashboardfromRecords(data) {
-            // "data" here IS allData (Full Year).
-            // kpisData: Data filtered by Exclusions AND Date Range
             const startInput = document.getElementById('startDate').value;
             const endInput = document.getElementById('endDate').value;
 
@@ -1053,8 +1051,7 @@
             const diasFaturados = Object.keys(dailyMap).length;
             document.getElementById('avgDailyWeight').textContent = formatWeight(diasFaturados > 0 ? totalPeso / diasFaturados : 0);
 
-            // --- ANNUAL CHART ---
-            // Use globalValid (All Year, but w/ Exclusions)
+            // --- ANNUAL CHART (Global Valid) ---
             updateAnnualEvolutionDynamic(globalValid);
         }
 
@@ -1148,7 +1145,7 @@
                     allData = res.data;
                     processClients(allData);
 
-                    renderTable(); // Filters inside
+                    renderTable();
                     updateDashboardfromRecords(allData);
                 }
             } catch (e) { console.error(e); } finally { hideSpinner(); }
@@ -1158,19 +1155,29 @@
         async function saveClientExclusion() { await fetch('/api/preferences/excluded_clients', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ value: Array.from(excludedClients) }) }); }
 
         async function toggleRowExclusion(idx) {
-            // idx is index in allData because I pass allData.indexOf(item) in renderTable
             const item = allData[idx];
             const newState = !item.excluido_manualmente;
 
-            // Fixed Key Generation to match Backend
+            // Fixed Key Generation
             const serieClean = item.serie ? String(item.serie).trim() : '';
             const key = `${item.notaFiscal}-${serieClean}-${item.itemNota || 0}-${item.codigoItem}`;
 
             try {
+                // EXPLICIT null for empty series + Added cliente_codigo for extra safety
+                const serieParam = item.serie ? item.serie : null;
+
                 const res = await fetch('/api/faturamento-postgres/toggle-exclusion', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ key, excluded: newState, nota_fiscal: item.notaFiscal, serie: item.serie, item_nota: item.itemNota || 0, codigo_item: item.codigoItem })
+                    body: JSON.stringify({
+                        key,
+                        excluded: newState,
+                        nota_fiscal: item.notaFiscal,
+                        serie: serieParam,
+                        item_nota: item.itemNota || 0,
+                        codigo_item: item.codigoItem,
+                        cliente_codigo: item.clienteCodigo
+                    })
                 });
                 if (res.ok) {
                     item.excluido_manualmente = newState;
@@ -1198,14 +1205,8 @@
             // Filter for display
             const filteredClients = allData.filter(item => {
                 if (excludedClients.has((item.clienteNome || 'Desconhecido').trim())) return false;
-                // Client-side date filtering
                 if (startInput && item.data < startInput) return false;
                 if (endInput && item.data > endInput) return false;
-
-                // Also check column text filters
-                // (Optimized: we could do column filters here too, but they are done in filterColumn separately usually.
-                // But wait, the existing code called filterColumn on keyup. 
-                // Here we just render. filterColumn hides rows via style.display.
                 return true;
             });
 
@@ -1228,10 +1229,6 @@
                 </tr>
             `}).join('') || '<tr><td colspan="11" style="text-align:center; padding: 20px;">Nenhum registro.</td></tr>';
 
-            // Re-apply column filters if any exist? 
-            // The existing filterColumn() uses DOM. It's fine.
-
-            // Summary for Title/Footer (of Valid displayed rows)
             const incl = filteredClients.filter(i => !i.excluido_manualmente);
             document.getElementById('totalRecords').textContent = incl.length;
             document.getElementById('totalWeight').textContent = formatWeight(incl.reduce((a, b) => a + (b.pesoTotal || 0), 0));
