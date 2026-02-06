@@ -4,6 +4,25 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../lib/db');
 
+// --- INIT PREFERENCES TABLE ---
+(async () => {
+    const client = await pool.connect();
+    try {
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS faturamento_firebird_preferencias (
+                chave_unica TEXT PRIMARY KEY, 
+                excluido BOOLEAN DEFAULT FALSE,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+        console.log("✅ Tabela 'faturamento_firebird_preferencias' verificada.");
+    } catch (e) {
+        console.error("❌ Erro ao criar tabela faturamento_firebird_preferencias:", e);
+    } finally {
+        client.release();
+    }
+})();
+
 // GET /api/faturamento-postgres/diario - Faturamento agrupado por dia
 router.get('/diario', async (req, res) => {
     try {
