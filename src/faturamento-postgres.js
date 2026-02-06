@@ -258,6 +258,7 @@ router.get('/evolucao-mensal', async (req, res) => {
         const currentYear = new Date().getFullYear();
 
         // Query que gera todos os 12 meses do ano e faz o join com as somas
+        // UPDATE: Agora usa faturamento_diario para garantir consistência
         const query = `
             WITH meses AS (
                 SELECT generate_series(
@@ -268,12 +269,11 @@ router.get('/evolucao-mensal', async (req, res) => {
             )
             SELECT 
                 m.mes,
-                COALESCE(SUM(f.peso_total), 0) as peso_total,
-                COALESCE(SUM(f.valor_total), 0) as valor_total
+                COALESCE(SUM(d.peso_total), 0) as peso_total,
+                COALESCE(SUM(d.valor_total), 0) as valor_total
             FROM meses m
-            LEFT JOIN faturamento_firebird f 
-                ON DATE_TRUNC('month', f.data_faturamento) = m.mes
-                AND f.status = 'A'
+            LEFT JOIN faturamento_diario d
+                ON DATE_TRUNC('month', d.data) = m.mes
             GROUP BY m.mes
             ORDER BY m.mes
         `;

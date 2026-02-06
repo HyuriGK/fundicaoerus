@@ -287,8 +287,10 @@ async function sincronizarDetalhado(fbDb) {
                     const itemNota = parseInt(row.ITEM_NPR) || 0;
 
                     // Gerar chave única para conferir preferência
-                    // Formato compatível com faturamento-neon.js
-                    const keyForPref = `${dataFat}_${notaFiscal}_${codigoItem}_${quantidade}`;
+                    // Formato compatível com faturamentos.html (Frontend)
+                    // Nota-Serie-ItemNota-CodigoItem
+                    const serieClean = row.SERIE_NOT ? String(row.SERIE_NOT).trim() : '';
+                    const keyForPref = `${notaFiscal}-${serieClean}-${itemNota}-${codigoItem}`;
                     const isExcluded = prefsMap.has(keyForPref) ? prefsMap.get(keyForPref) : false;
 
                     await pool.query(`
