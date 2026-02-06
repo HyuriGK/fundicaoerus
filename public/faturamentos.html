@@ -989,17 +989,17 @@
             const startInput = document.getElementById('startDate').value;
             const endInput = document.getElementById('endDate').value;
 
-            // 1. Exclude Clients & Rows (Global)
+            // 1. Base Data (Global Valid - Year Context)
             const globalValid = data.filter(item => !excludedClients.has((item.clienteNome || 'Desconhecido').trim()) && !item.excluido_manualmente);
 
-            // 2. Filter for Range (for KPIs)
+            // 2. Filter for Range (Drivers Table & KPIs)
             const rangeData = globalValid.filter(item => {
                 if (startInput && item.data < startInput) return false;
                 if (endInput && item.data > endInput) return false;
                 return true;
             });
 
-            // Update KPIs with Range Data
+            // 3. Update KPIs with Range Data
             const totalFaturado = rangeData.reduce((acc, curr) => acc + calculateCalculatedTotal(curr), 0);
             const totalPeso = rangeData.reduce((acc, curr) => acc + (curr.pesoTotal || 0), 0);
 
@@ -1023,24 +1023,63 @@
             const totalQtd = rangeData.reduce((acc, curr) => acc + (curr.quantidade || 0), 0);
             document.getElementById('avgWeightPerPiece').textContent = formatWeight(totalQtd > 0 ? totalPeso / totalQtd : 0);
 
-            // Daily Chart
+            // 4. CHART CONTEXT LOGIC
+            let sDate = startInput ? new Date(startInput + 'T00:00:00') : new Date();
+            let eDate = endInput ? new Date(endInput + 'T00:00:00') : new Date();
+
+            // Determine Active Selections
+            const isSingleDay = startInput === endInput;
+            const highlightedDay = isSingleDay ? startInput : null;
+
+            const startMonth = sDate.getMonth();
+            const endMonth = eDate.getMonth();
+            const isSingleMonth = startMonth === endMonth && sDate.getFullYear() === eDate.getFullYear();
+            const highlightedMonthIndex = isSingleMonth ? startMonth : null;
+
+            // --- ANNUAL CHART UPDATE ---
+            // Always show full year data, highlight selected month if applicable
+            updateAnnualEvolutionDynamic(globalValid, highlightedMonthIndex);
+
+            // --- DAILY CHART UPDATE ---
+            // Show data for the WHOLE MONTH of the start date (Context)
+            // Filter globalValid to this month
+            const year = sDate.getFullYear();
+            const month = sDate.getMonth(); // 0-indexed
+            const monthStart = new Date(year, month, 1);
+            const monthEnd = new Date(year, month + 1, 0); // Last day of month
+            // Adjust to get YYYY-MM-DD correctly
+            const fmt = (d) => {
+                const y = d.getFullYear();
+                const m = String(d.getMonth() + 1).padStart(2, '0');
+                const day = String(d.getDate()).padStart(2, '0');
+                return `${y}-${m}-${day}`;
+            };
+            const monthStartStr = fmt(monthStart);
+            const monthEndStr = fmt(monthEnd);
+
+            const dailyContextData = globalValid.filter(item => {
+                return item.data >= monthStartStr && item.data <= monthEndStr;
+            });
+
             const dailyMap = {};
-            rangeData.forEach(item => {
+            // Initialize all days of month with 0 to ensure full axis? 
+            // Optional, but better for "context". Let's stick to data-driven for now but sort keys.
+            dailyContextData.forEach(item => {
                 const k = (item.data || '').split('T')[0];
                 if (!k) return;
                 dailyMap[k] = (dailyMap[k] || 0) + (item.weightTotal || item.pesoTotal || 0);
             });
             const dailyChartData = Object.keys(dailyMap).sort().map(k => ({ data: k, pesoTotal: dailyMap[k] }));
-            renderDailyChart(dailyChartData);
 
-            const diasFaturados = Object.keys(dailyMap).length;
-            document.getElementById('avgDailyWeight').textContent = formatWeight(diasFaturados > 0 ? totalPeso / diasFaturados : 0);
+            // Calculate KPI for Chart Header (Avg Daily within Context)
+            const diasComFaturamento = Object.keys(dailyMap).length;
+            const totalPesoContext = dailyContextData.reduce((a, b) => a + (b.pesoTotal || 0), 0);
+            document.getElementById('avgDailyWeight').textContent = formatWeight(diasComFaturamento > 0 ? totalPesoContext / diasComFaturamento : 0);
 
-            // --- ANNUAL CHART (Global Valid) ---
-            updateAnnualEvolutionDynamic(globalValid);
+            renderDailyChart(dailyChartData, highlightedDay, monthStartStr, monthEndStr);
         }
 
-        function updateAnnualEvolutionDynamic(filteredData) {
+        function updateAnnualEvolutionDynamic(filteredData, highlightIndex) {
             const monthlyData = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0, 11: 0 };
 
             filteredData.forEach(item => {
@@ -1054,7 +1093,7 @@
 
             const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
             const dataValues = months.map((_, idx) => monthlyData[idx] || 0);
-            renderAnnualChart(dataValues);
+            renderAnnualChart(dataValues, highlightIndex);
         }
 
         function calcValidDaysRemaining() {
@@ -1080,12 +1119,28 @@
             return count;
         }
 
-        function renderDailyChart(data) {
+        function renderDailyChart(data, highlightedDay, contextStart, contextEnd) {
             const ctx = document.getElementById('dailyChart').getContext('2d');
             if (dailyChart) dailyChart.destroy();
+
+            // Generate Colors: Highlighted gets Primary, others get reduced opacity/gray
+            // If no highlight, all primary
+            const bgColors = data.map(d => {
+                if (!highlightedDay) return '#f59e0b';
+                return d.data === highlightedDay ? '#f59e0b' : 'rgba(245, 158, 11, 0.3)';
+            });
+
             dailyChart = new Chart(ctx, {
                 type: 'bar',
-                data: { labels: data.map(d => formatDate(d.data)), datasets: [{ label: 'Peso (kg)', data: data.map(d => d.pesoTotal), backgroundColor: '#f59e0b', borderRadius: 4 }] },
+                data: {
+                    labels: data.map(d => formatDate(d.data)),
+                    datasets: [{
+                        label: 'Peso (kg)',
+                        data: data.map(d => d.pesoTotal),
+                        backgroundColor: bgColors,
+                        borderRadius: 4
+                    }]
+                },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
@@ -1095,10 +1150,18 @@
                         if (elements.length > 0) {
                             const index = elements[0].index;
                             const clickedDate = data[index].data; // YYYY-MM-DD
-                            // Filter to this specific day
-                            const [y, m, d] = clickedDate.split('-');
-                            document.getElementById('startDate').value = clickedDate;
-                            document.getElementById('endDate').value = clickedDate;
+
+                            // Toggle Logic: If clicking the already highlighted day -> Reset to Month View
+                            // Use contextStart/End passed to function to define "Full View"
+                            if (clickedDate === highlightedDay) {
+                                document.getElementById('startDate').value = contextStart;
+                                document.getElementById('endDate').value = contextEnd;
+                            } else {
+                                // Filter to this specific day
+                                document.getElementById('startDate').value = clickedDate;
+                                document.getElementById('endDate').value = clickedDate;
+                            }
+
                             // Update View
                             renderTable();
                             updateDashboardfromRecords(allData);
@@ -1111,9 +1174,16 @@
             });
         }
 
-        function renderAnnualChart(dataValues) {
+        function renderAnnualChart(dataValues, highlightIndex) {
             const ctx = document.getElementById('annualChart').getContext('2d');
             if (annualChart) annualChart.destroy();
+
+            // Generate Colors
+            const bgColors = dataValues.map((_, idx) => {
+                if (highlightIndex === null) return '#f59e0b';
+                return idx === highlightIndex ? '#f59e0b' : 'rgba(245, 158, 11, 0.3)';
+            });
+
             annualChart = new Chart(ctx, {
                 type: 'bar',
                 data: {
@@ -1121,7 +1191,7 @@
                     datasets: [{
                         label: 'Peso (kg)',
                         data: dataValues,
-                        backgroundColor: '#f59e0b', // Solid color matching Daily Chart
+                        backgroundColor: bgColors, // Dynamic Colors
                         borderRadius: 4
                     }]
                 },
@@ -1133,22 +1203,29 @@
                     onClick: (e, elements) => {
                         if (elements.length > 0) {
                             const index = elements[0].index; // 0 = Jan, 1 = Feb...
-                            const year = new Date().getFullYear(); // Assuming current year
 
-                            // Set Range to Full Month
-                            const firstDay = new Date(year, index, 1);
-                            const lastDay = new Date(year, index + 1, 0); // Last day of month
+                            // Toggle Logic
+                            if (index === highlightIndex) {
+                                // Reset to Full Year
+                                const year = new Date().getFullYear();
+                                document.getElementById('startDate').value = `${year}-01-01`;
+                                document.getElementById('endDate').value = `${year}-12-31`;
+                            } else {
+                                // Filter to Month
+                                const year = new Date().getFullYear(); // Assuming current year
+                                const firstDay = new Date(year, index, 1);
+                                const lastDay = new Date(year, index + 1, 0); // Last day of month
 
-                            // Format YYYY-MM-DD manually to avoid timezone shifts
-                            const fmt = (d) => {
-                                const y = d.getFullYear();
-                                const m = String(d.getMonth() + 1).padStart(2, '0');
-                                const day = String(d.getDate()).padStart(2, '0');
-                                return `${y}-${m}-${day}`;
-                            };
+                                const fmt = (d) => {
+                                    const y = d.getFullYear();
+                                    const m = String(d.getMonth() + 1).padStart(2, '0');
+                                    const day = String(d.getDate()).padStart(2, '0');
+                                    return `${y}-${m}-${day}`;
+                                };
 
-                            document.getElementById('startDate').value = fmt(firstDay);
-                            document.getElementById('endDate').value = fmt(lastDay);
+                                document.getElementById('startDate').value = fmt(firstDay);
+                                document.getElementById('endDate').value = fmt(lastDay);
+                            }
 
                             // Update View
                             renderTable();

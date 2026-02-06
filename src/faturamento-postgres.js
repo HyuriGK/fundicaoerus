@@ -172,21 +172,29 @@ router.get('/detalhado', async (req, res) => {
 
         let query = `
             SELECT 
-                data_faturamento,
-                nota_fiscal,
-                serie,
-                cliente_codigo,
-                cliente_nome,
-                codigo_item,
-                descricao,
-                quantidade,
-                valor_unitario,
-                valor_total,
-                peso_un,
-                peso_total,
-                status,
-                excluido_manualmente
-            FROM faturamento_firebird
+                f.data_faturamento,
+                f.nota_fiscal,
+                f.serie,
+                f.cliente_codigo,
+                f.cliente_nome,
+                f.codigo_item,
+                f.descricao,
+                f.quantidade,
+                f.valor_unitario,
+                f.valor_total,
+                f.peso_un,
+                f.peso_total,
+                f.status,
+                -- Priority: Preference Table > Current Table
+                COALESCE(p.excluido, f.excluido_manualmente, false) as excluido_manualmente
+            FROM faturamento_firebird f
+            LEFT JOIN faturamento_preferencias p 
+                ON p.chave_unica = (
+                    CAST(f.nota_fiscal AS TEXT) || '-' || 
+                    COALESCE(TRIM(f.serie), '') || '-' || 
+                    CAST(COALESCE(f.item_nota, 0) AS TEXT) || '-' || 
+                    CAST(COALESCE(f.codigo_item, '') AS TEXT)
+                )
             WHERE 1=1
         `;
 
@@ -310,7 +318,7 @@ router.post('/toggle-exclusion', async (req, res) => {
     try {
         await client.query('BEGIN');
 
-        // 1. Salva na tabela global de memórias
+        // 1. Salva na tabela global de memórias (PREFERÊNCIAS)
         await client.query(`
             INSERT INTO faturamento_preferencias (chave_unica, excluido)
             VALUES ($1, $2)
@@ -320,8 +328,6 @@ router.post('/toggle-exclusion', async (req, res) => {
 
         // 2. Atualiza a tabela sincronizada local se os dados forem passados
         if (nota_fiscal !== undefined) {
-            // Include cliente_codigo for extra safety if provided
-            // And handle serie being NULL properly
             let updateQuery = `
                 UPDATE faturamento_firebird 
                 SET excluido_manualmente = $1 
