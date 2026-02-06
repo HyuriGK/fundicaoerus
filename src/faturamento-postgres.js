@@ -221,13 +221,13 @@ router.get('/detalhado', async (req, res) => {
         let paramIndex = 1;
 
         if (startDate) {
-            query += ` AND data_faturamento >= $${paramIndex}`;
+            query += ` AND f.data_faturamento >= $${paramIndex}`;
             params.push(startDate);
             paramIndex++;
         }
 
         if (endDate) {
-            query += ` AND data_faturamento <= $${paramIndex}`;
+            query += ` AND f.data_faturamento <= $${paramIndex}`;
             params.push(endDate);
             paramIndex++;
         }
@@ -243,7 +243,7 @@ router.get('/detalhado', async (req, res) => {
             paramIndex++;
         }
 
-        query += ` ORDER BY data_faturamento DESC, nota_fiscal DESC`;
+        query += ` ORDER BY f.data_faturamento DESC, f.nota_fiscal DESC`;
 
         // Apply limit if provided (and safe)
         if (limit) {
@@ -255,9 +255,28 @@ router.get('/detalhado', async (req, res) => {
 
         console.log(`✅ ${result.rows.length} registros detalhados encontrados`);
 
+        // Formatar para o frontend (camelCase)
+        const dataFormatted = result.rows.map(row => ({
+            data: row.data_faturamento ? row.data_faturamento.toISOString().split('T')[0] : null,
+            notaFiscal: row.nota_fiscal,
+            serie: row.serie,
+            clienteCodigo: row.cliente_codigo,
+            clienteNome: row.cliente_nome,
+            codigoItem: row.codigo_item,
+            descricao: row.descricao,
+            quantidade: parseFloat(row.quantidade || 0),
+            valorUnitario: parseFloat(row.valor_unitario || 0),
+            valorTotal: parseFloat(row.valor_total || 0),
+            pesoUn: parseFloat(row.peso_un || 0),
+            pesoTotal: parseFloat(row.peso_total || 0),
+            status: row.status,
+            pedido: row.pedido,
+            excluido_manualmente: row.excluido_manualmente // Mantemos snake case aqui para compatibilidade com o frontend
+        }));
+
         res.json({
             success: true,
-            data: result.rows
+            data: dataFormatted
         });
 
     } catch (error) {
