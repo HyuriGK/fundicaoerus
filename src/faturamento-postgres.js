@@ -208,12 +208,9 @@ router.get('/detalhado', async (req, res) => {
                 -- Priority: Preference Table > Current Table
                 COALESCE(p.excluido, f.excluido_manualmente, false) as excluido_manualmente
             FROM faturamento_firebird f
-            LEFT JOIN faturamento_firebird_preferencias p 
-                ON p.chave_unica = (
-                    CAST(f.nota_fiscal AS TEXT) || '-' || 
-                    COALESCE(TRIM(CAST(f.codigo_item AS TEXT)), '') || '-' ||
-                    COALESCE(TRIM(f.pedido), '')
-                )
+                ON p.nota_fiscal = f.nota_fiscal
+                AND p.codigo_item IS NOT DISTINCT FROM CAST(f.codigo_item AS VARCHAR)
+                AND COALESCE(p.pedido, '') = COALESCE(f.pedido, '')
             WHERE 1=1
         `;
 
@@ -342,12 +339,18 @@ router.post('/toggle-exclusion', async (req, res) => {
         await client.query('BEGIN');
 
         // 1. Salva na tabela global de memórias (PREFERÊNCIAS)
+        // Nova Lógica (B): Usa colunas estruturadas em vez de chave string
         await client.query(`
-            INSERT INTO faturamento_firebird_preferencias (chave_unica, excluido, pedido)
-            VALUES ($1, $2, $3)
+            INSERT INTO faturamento_firebird_preferencias (chave_unica, excluido, pedido, nota_fiscal, codigo_item)
+            VALUES ($1, $2, $3, $4, $5)
             ON CONFLICT (chave_unica) 
-            DO UPDATE SET excluido = EXCLUDED.excluido, pedido = EXCLUDED.pedido, updated_at = CURRENT_TIMESTAMP
-        `, [key, excluded, req.body.pedido || null]);
+            DO UPDATE SET 
+                excluido = EXCLUDED.excluido, 
+                pedido = EXCLUDED.pedido, 
+                nota_fiscal = EXCLUDED.nota_fiscal,
+                codigo_item = EXCLUDED.codigo_item,
+                updated_at = CURRENT_TIMESTAMP
+        `, [key, excluded, req.body.pedido || null, nota_fiscal, codigo_item]);
 
         // 2. Atualiza a tabela sincronizada local se os dados forem passados
         if (nota_fiscal !== undefined) {
