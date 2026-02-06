@@ -208,6 +208,7 @@ router.get('/detalhado', async (req, res) => {
                 -- Priority: Preference Table > Current Table
                 COALESCE(p.excluido, f.excluido_manualmente, false) as excluido_manualmente
             FROM faturamento_firebird f
+            LEFT JOIN faturamento_firebird_preferencias p 
                 ON p.nota_fiscal = f.nota_fiscal
                 AND p.codigo_item IS NOT DISTINCT FROM CAST(f.codigo_item AS VARCHAR)
                 AND COALESCE(p.pedido, '') = COALESCE(f.pedido, '')
