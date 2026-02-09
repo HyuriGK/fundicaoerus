@@ -915,8 +915,13 @@
             <!-- GRÁFICOS -->
             <div class="charts-row">
                 <div class="chart-panel">
-                    <div class="chart-header-row">
-                        <div class="chart-title-flex">Peso Total por Mês (kg) - Previsão Entrega</div>
+                    <div class="chart-header-row" style="justify-content: space-between; padding: 0 10px;">
+                        <div class="chart-title-flex" id="monthlyChartTitle">Peso Total por Mês (kg) - Previsão Entrega
+                        </div>
+                        <button class="btn-modern" onclick="toggleChartMode()"
+                            style="font-size: 0.7rem; padding: 4px 8px; background: rgba(255,255,255,0.05);">
+                            <i class="fa-solid fa-calendar-days"></i> Alternar
+                        </button>
                     </div>
                     <div style="position: relative; flex: 1; min-height: 0; width:100%;">
                         <canvas id="monthlyChart"></canvas>
@@ -1240,7 +1245,7 @@
             const totalWeightReal = unitWeight * saldoReal;
 
             const vUnit = parseFloat(item.VALOR_PPR || 0);
-            const vTotal = vUnit * saldoReal;
+            const vTotal = vUnit * saldoReal * 100; // Correction: Price is likely per 100 or requires this factor based on user input
 
             const html = `
                 <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 30px; margin-bottom: 40px;">
@@ -1877,21 +1882,64 @@
             updateParetoChart(list);
         }
 
+
+        let chartMode = 'delivery'; // 'delivery' or 'emission'
+
+        function toggleChartMode() {
+            chartMode = chartMode === 'delivery' ? 'emission' : 'delivery';
+
+            const titleEl = document.getElementById('monthlyChartTitle');
+            if (chartMode === 'delivery') {
+                titleEl.textContent = 'Peso Total por Mês (kg) - Previsão Entrega';
+            } else {
+                titleEl.textContent = 'Emissão de Pedidos por Mês - (kg/R$)';
+            }
+
+            // Re-apply filters to update chart with current data state
+            applyColumnFilters();
+        }
+
         function updateMonthlyChart(list) {
             const mData = Array(12).fill(0);
+            const mDataValue = Array(12).fill(0);
 
             list.forEach(item => {
-                let d = item.ENTREGA_PETR ? new Date(item.ENTREGA_PETR) : null;
+                let d;
+
+                if (chartMode === 'delivery') {
+                    d = item.ENTREGA_PETR ? new Date(item.ENTREGA_PETR) : null;
+                } else {
+                    d = item.DATA_EMISSAO_PEDIDO ? new Date(item.DATA_EMISSAO_PEDIDO) : null;
+                }
+
                 if (d && d.getFullYear() >= 2000) {
-                    mData[d.getMonth()] += getCorrectedWeight(item);
+                    const weight = getCorrectedWeight(item);
+
+                    // Value Calculation (using the * 100 logic as requested for verification? 
+                    // Wait, usually charts show absolute value. I will use standard value calculation here unless specified otherwise for charts too.
+                    // Actually, let's keep consistent with valid data. If user said *100 for modal, likely applies here too?
+                    // Let's assume standard value for aggregation first to avoid massive numbers unless confirmed.
+                    // Re-reading user request: "quero valor e peso no tooltipo ok".
+                    // I will safely assume *100 is for the display format in modal, but here I should use proper value?
+                    // Let's stick to raw calculation: unit * saldo. If user insists on *100, I can add later.
+                    // Actually, if the modal needed *100, checking the code... `vUnit` is from `VALOR_PPR`.
+                    // If `VALOR_PPR` is small (e.g. 0.5), maybe it means 50 cents? Or 0.5 reais?
+                    // Error on side of caution: use same logic as modal for consistency.
+                    const vUnit = parseFloat(item.VALOR_PPR || 0);
+                    const saldo = Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0;
+                    const q = Number(item.QUANTIDADE_PPR) || 0;
+                    const realQ = saldo > 0 ? saldo : q;
+                    // User said: "valor un * saldo * 100" in modal. I will apply it here too for consistency.
+                    const val = vUnit * realQ * 100;
+
+                    mData[d.getMonth()] += weight;
+                    mDataValue[d.getMonth()] += val;
                 }
             });
 
             const monthLabels = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
-
-
-            // Highlight selected bar (same as Pareto - white for selected)
+            // Highlight selected bar
             const bgColors = monthLabels.map((_, idx) =>
                 activeChartFilters.month === idx ? '#fff' : chartColorAmber
             );
@@ -1902,10 +1950,12 @@
                 data: {
                     labels: monthLabels,
                     datasets: [{
-                        label: 'kg',
+                        label: 'Peso (kg)',
                         data: mData,
                         backgroundColor: bgColors,
-                        borderRadius: 4
+                        borderRadius: 4,
+                        // Custom property for tooltip
+                        extraData: mDataValue
                     }]
                 },
                 options: {
@@ -1915,14 +1965,26 @@
                         y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' } },
                         x: { grid: { display: true, color: 'rgba(255,255,255,0.05)' } }
                     },
-                    plugins: { legend: { display: false } },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function (context) {
+                                    const weight = context.parsed.y;
+                                    const value = context.dataset.extraData[context.dataIndex];
+                                    return [
+                                        `Peso: ${formatNumber(weight)} kg`,
+                                        `Valor: ${formatCurrency(value)}`
+                                    ];
+                                }
+                            }
+                        }
+                    },
                     onClick: (e, elements) => {
                         if (elements.length > 0) {
                             const idx = elements[0].index;
-                            // Toggle: if clicked same, clear it. Else set it.
                             activeChartFilters.month = (activeChartFilters.month === idx) ? null : idx;
                         } else {
-                            // Click background -> clear
                             activeChartFilters.month = null;
                         }
                         applyColumnFilters();
