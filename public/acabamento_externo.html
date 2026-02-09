@@ -1003,6 +1003,20 @@
         </div>
     </div>
 
+    <!-- Novo Modal de Detalhes do Item -->
+    <div id="itemDetailsModal" class="modal-overlay" style="z-index: 10001;"> <!-- Z-index maior que cargaModal -->
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2 class="modal-title" id="itemDetailsTitle">Detalhes do Item</h2>
+                <span class="modal-close" onclick="document.getElementById('itemDetailsModal').style.display='none'"><i
+                        class="fa-solid fa-xmark"></i></span>
+            </div>
+            <div class="modal-body" id="itemDetailsBody" style="padding: 20px; color: #fff;">
+                <!-- Conteúdo preenchido via JS -->
+            </div>
+        </div>
+    </div>
+
     <div id="itensModal" class="modal-overlay">
         <div class="modal-content" style="max-width: 800px;">
             <div class="modal-header">
@@ -1605,10 +1619,11 @@
             }
 
             const its = registros.filter(r => r.carga === carga);
-            let h = `<table><thead><tr><th>DATA</th><th>CÓDIGO</th><th>DESCRIÇÃO</th><th>CLIENTE</th><th>PESO UN.</th><th>QTD</th>`;
+            // Updated header: Removed DATA and PREÇO VENDA (UNIT), added OBS.
+            let h = `<table><thead><tr><th>CÓDIGO</th><th>DESCRIÇÃO</th><th>CLIENTE</th><th>PESO UN.</th><th>QTD</th>`;
 
             // Show columns for everyone
-            h += `<th>PREÇO VENDA (UNIT)</th><th>TOTAL VENDA (R$)</th><th>CUSTO SERV.</th>`;
+            h += `<th>TOTAL VENDA (R$)</th><th>CUSTO SERV.</th><th>OBS.</th>`;
 
             h += `<th>OK</th>`;
 
@@ -1620,17 +1635,19 @@
 
             its.forEach(r => {
                 const isRec = recebidos[r.carga]?.some(i => i.id === r.id);
-                h += `<tr><td>${formatDate(r.data)}</td><td>${r.codigo}</td><td>${r.descricao}</td><td>${r.cliente || '-'}</td><td>${formatNumber(r.peso)}</td><td>${r.quant}</td>`;
+                // Updated row: clickable code, removed data/unit price, added observation
+                h += `<tr>`;
+                h += `<td><a href="#" onclick="showItemDetails(${r.id}); return false;" style="color:var(--color-primary); text-decoration:none; font-weight:bold;">${r.codigo}</a></td>`;
+                h += `<td>${r.descricao}</td><td>${r.cliente || '-'}</td><td>${formatNumber(r.peso)}</td><td>${r.quant}</td>`;
 
                 // Show values for everyone
                 const vCost = parseFloat(r.valor || 0);
                 const qtd = parseInt(r.quant || 0);
-                const vUnitMsg = r.valor_unit ? formatCurrency(parseFloat(r.valor_unit)) : '-';
                 const vTotalSales = r.valor_unit ? formatCurrency(parseFloat(r.valor_unit) * qtd) : '-';
 
-                h += `<td>${vUnitMsg}</td>`;
                 h += `<td>${vTotalSales}</td>`;
                 h += `<td style="color:#ef4444;">${formatCurrency(vCost)}</td>`;
+                h += `<td>${r.observacoes || '-'}</td>`;
 
 
                 // Verificar permissão para mostrar checkbox
@@ -1707,6 +1724,47 @@
             const ids = registros.filter(r => r.carga === c && !recebidos[c]?.some(re => re.id === r.id)).map(r => r.id);
             if (ids.length === 0) return;
             try { await Promise.all(ids.map(id => apiRequest('recebidos', 'POST', { id, carga: c, checked: true }))); await carregarRegistrosERecebidos(); renderTable(); showCargaDetails(c); } catch (e) { }
+        }
+
+        function showItemDetails(id) {
+            const item = registros.find(r => r.id === id);
+            if (!item) return;
+
+            const vUnit = item.valor_unit ? formatCurrency(parseFloat(item.valor_unit)) : '-';
+            const vTotalSales = item.valor_unit ? formatCurrency(parseFloat(item.valor_unit) * (item.quant || 0)) : '-';
+            const vCost = formatCurrency(parseFloat(item.valor || 0));
+
+            const html = `
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px; margin-bottom:15px;">
+                    <div><small style="color:#a1a1aa; display:block;">CÓDIGO</small><strong style="font-size:1.1rem;">${item.codigo}</strong></div>
+                     <div><small style="color:#a1a1aa; display:block;">DATA</small><strong>${formatDate(item.data)}</strong></div>
+                </div>
+                <div style="margin-bottom:15px;"><small style="color:#a1a1aa; display:block;">DESCRIÇÃO</small><strong>${item.descricao}</strong></div>
+                <div style="margin-bottom:15px;"><small style="color:#a1a1aa; display:block;">CLIENTE</small><strong>${item.cliente || '-'}</strong></div>
+                
+                <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px; margin-bottom:15px; background:rgba(255,255,255,0.05); padding:10px; border-radius:6px;">
+                    <div><small style="color:#a1a1aa; display:block;">QTD TOTAL</small><strong>${item.quant}</strong></div>
+                    <div><small style="color:#a1a1aa; display:block;">ESCARIAÇÃO</small><strong>${item.quant_escariar || 0}</strong></div>
+                    <div><small style="color:#a1a1aa; display:block;">REBARBA</small><strong>${item.quant_rebarba || 0}</strong></div>
+                </div>
+
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:15px; background:rgba(255,255,255,0.05); padding:10px; border-radius:6px;">
+                    <div><small style="color:#a1a1aa; display:block;">PREÇO VENDA (UN)</small><strong>${vUnit}</strong></div>
+                    <div><small style="color:#a1a1aa; display:block;">TOTAL VENDA</small><strong style="color:var(--status-purple);">${vTotalSales}</strong></div>
+                </div>
+                 <div style="margin-bottom:15px; background:#ef444420; padding:10px; border-radius:6px; border:1px solid #ef444450;">
+                    <small style="color:#ef4444; display:block;">CUSTO SERVIÇO (TOTAL)</small><strong style="color:#ef4444; font-size:1.1rem;">${vCost}</strong>
+                </div>
+
+                <div style="margin-top:10px;">
+                    <small style="color:#a1a1aa; display:block;">OBSERVAÇÕES</small>
+                    <div style="background:rgba(0,0,0,0.2); padding:8px; border-radius:4px; min-height:40px;">${item.observacoes || 'Nenhuma observação.'}</div>
+                </div>
+            `;
+
+            document.getElementById('itemDetailsBody').innerHTML = html;
+            document.getElementById('itemDetailsTitle').innerText = `Detalhes do Item`;
+            document.getElementById('itemDetailsModal').style.display = 'flex';
         }
 
         function generateCargaPDF(carga) {
