@@ -34,8 +34,8 @@ router.post('/', async (req, res) => {
         // 1. ADICIONAR REGISTRO
         if (action === 'add-registro') {
             const query = `INSERT INTO acabamento_externo_registros 
-                (carga, data, terceiro, codigo, descricao, cliente, peso, quant, quant_escariar, quant_rebarba, valor, observacoes) 
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id`;
+                (carga, data, terceiro, codigo, descricao, cliente, peso, quant, quant_escariar, quant_rebarba, valor_unit, valor, observacoes) 
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id`;
             
             const values = [
                 data.carga, 
@@ -48,6 +48,7 @@ router.post('/', async (req, res) => {
                 data.quant, 
                 data.quant_escariar, 
                 data.quant_rebarba, 
+                data.valor_unit, 
                 data.valor, 
                 data.observacoes
             ];
@@ -131,8 +132,8 @@ router.post('/', async (req, res) => {
             // Importar registros
             if (data.registros && data.registros.length > 0) {
                 for (const r of data.registros) {
-                    await client.query(`INSERT INTO acabamento_externo_registros (id, carga, data, terceiro, codigo, descricao, cliente, peso, quant, quant_escariar, quant_rebarba, valor, observacoes) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`, 
-                    [r.id, r.carga, r.data, r.terceiro, r.codigo, r.descricao, r.cliente, r.peso, r.quant, r.quant_escariar, r.quant_rebarba, r.valor, r.observacoes]);
+                    await client.query(`INSERT INTO acabamento_externo_registros (id, carga, data, terceiro, codigo, descricao, cliente, peso, quant, quant_escariar, quant_rebarba, valor_unit, valor, observacoes) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`, 
+                    [r.id, r.carga, r.data, r.terceiro, r.codigo, r.descricao, r.cliente, r.peso, r.quant, r.quant_escariar, r.quant_rebarba, r.valor_unit || null, r.valor, r.observacoes]);
                 }
             }
 
