@@ -82,7 +82,15 @@ async function syncData() {
                 D.CLIENTE_PED AS ID_CLIENTE_CORE,
                 D.EMISSAO_PED AS DATA_EMISSAO_PEDIDO,
                 C.RAZAO_SOCIAL_CLI AS NOME_CLIENTE,
-                M.MATERIAL_MAT AS NOME_MATERIAL
+                D.EMISSAO_PED AS DATA_EMISSAO_PEDIDO,
+                C.RAZAO_SOCIAL_CLI AS NOME_CLIENTE,
+                M.MATERIAL_MAT AS NOME_MATERIAL,
+                (
+                    SELECT FIRST 1 PS.SEQUENCIA_PCS
+                    FROM PRODUCAO_SETOR PS
+                    WHERE PS.ID_CODIGO_PCS = P.ID_PPR
+                    ORDER BY PS.ID_PCS DESC
+                ) AS ANDAMENTO_PCS
             FROM PEDIDO_PRODUTO P
             LEFT JOIN PEDIDO_PRODUTO_ENTREGA E 
                 ON P.CODIGO_PPR = E.PPR_CODIGO_PETR 
