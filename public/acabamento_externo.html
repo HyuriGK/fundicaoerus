@@ -1274,7 +1274,6 @@
 
         async function adicionarRegistro() {
             // Removed isDev check for adding records
-            /*
             // Removed isDev check for adding records
             /*
             const role = checkUserRole();
@@ -1282,7 +1281,6 @@
                 showToast("Você não tem permissão para adicionar", "Apenas desenvolvedores podem adicionar registros", "danger");
                 return;
             }
-            */
             */
 
             const t = parseInt(document.getElementById('inputQuantidade').value) || 0, e = parseInt(document.getElementById('inputQtdEscariar').value) || 0, r = parseInt(document.getElementById('inputQtdRebarba').value) || 0;
@@ -1381,7 +1379,12 @@
                 let rowHTML = `<td>${c}</td><td>${formatDate(p.data)}</td><td>${p.terceiro}</td><td>${formatNumber(tP)}</td><td>${tQ}</td>`;
 
                 // Removed isDev check - allow everyone to see values
-                const vSales = its.reduce((s, i) => s + (i.valor_unit ? parseFloat(i.valor_unit) * parseFloat(i.quant || 0) : 0), 0);
+                // Only sum Sales Value for pending items (not received)
+                const vSales = its.reduce((s, i) => {
+                    const isItemRec = recebidos[c]?.some(rec => rec.id === i.id);
+                    return s + (!isItemRec && i.valor_unit ? parseFloat(i.valor_unit) * parseFloat(i.quant || 0) : 0);
+                }, 0);
+
                 const vCost = its.reduce((s, i) => s + parseFloat(i.valor || 0), 0);
 
                 rowHTML += `<td>${vSales > 0 ? formatCurrency(vSales) : '-'}</td>`;
@@ -1420,13 +1423,20 @@
             const fM = document.getElementById('filterMes').value;
             const fA = document.getElementById('filterAno').value;
             const filtrados = registros.filter(r => { if (!r.data) return false; const p = r.data.split('T')[0].split('-'); return (!fM || p[1] === fM) && (!fA || p[0] === fA); });
-            let tV = 0, tP = 0;
-            filtrados.forEach(r => { tV += parseFloat(r.valor || 0); tP += (parseFloat(r.quant || 0) * parseFloat(r.peso || 0)); });
+
+            // Calculate Sales Value only for pending items
+            const tVenda = filtrados.reduce((acc, r) => {
+                const isItemRec = recebidos[r.carga]?.some(rec => rec.id === r.id);
+                return acc + (!isItemRec && r.valor_unit ? parseFloat(r.quant || 0) * parseFloat(r.valor_unit) : 0);
+            }, 0);
+
+            let tP = 0;
+            filtrados.forEach(r => { tP += (parseFloat(r.quant || 0) * parseFloat(r.peso || 0)); });
 
             const isDev = checkUserRole() === 'desenvolvedor';
             // Allow everyone to see values
             const showValue = true;
-            const valorDisplay = formatCurrency(tV);
+            const valorDisplay = formatCurrency(tVenda);
 
             let kpiHtml = '';
 
