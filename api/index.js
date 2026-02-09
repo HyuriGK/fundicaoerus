@@ -49,6 +49,7 @@ const faturamentoFirebird = require('../src/faturamento-firebird');
 const faturamentoPostgres = require('../src/faturamento-postgres'); // NOVO: API PostgreSQL
 const faturamentoNeon = require('../src/faturamento-neon');
 const faturamentoFiltros = require('../src/faturamento-filtros');
+const usinagemExterno = require('../src/usinagem-externo'); // NOVO: Usinagem Externa
 
 // --- DEFINIÇÃO DAS ROTAS ---
 // Aqui definimos qual URL chama qual arquivo
@@ -73,6 +74,7 @@ app.use('/api/refugo', refugo);
 app.use('/api/register', register);
 app.use('/api/custos', custosRoutes);
 app.use('/api/pedidos-sync', require('../src/pedidos-sync'));
+app.use('/api/usinagem-externo', usinagemExterno); // NOVO: Usinagem Externa
 
 // Rota de teste para ver se a API está de pé
 app.get('/api', (req, res) => {
