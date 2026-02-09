@@ -933,6 +933,24 @@
             });
         }
 
+        let customWeightsMap = {};
+        let excludedClientsSet = new Set();
+
+        // Helper para cálculo de peso corrigido (Igual ao pedidos.html)
+        function getCorrectedWeight(item) {
+            const saldoLiberado = Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0;
+            const qtdOriginal = Number(item.QUANTIDADE_PPR) || 0;
+            const saldoReal = saldoLiberado > 0 ? saldoLiberado : qtdOriginal;
+
+            let pesoUnitario = qtdOriginal > 0 ? (Number(item.PESO_LIQUIDO_NPR) || 0) / qtdOriginal : 0;
+
+            if (customWeightsMap[item.PRODUTO_PPR]) {
+                pesoUnitario = customWeightsMap[item.PRODUTO_PPR];
+            }
+
+            return pesoUnitario * saldoReal;
+        }
+
         async function fetchLiveData(link) {
             try {
                 const response = await fetch(link.api);
@@ -1020,36 +1038,66 @@
                     subLabel = `${uniqueCargas} Cargas no Mês`;
                 }
                 else if (link.id === 'faturamento') {
-                    if (data.length > 1) {
-                        const CLIENTES_EXCLUIDOS = ['2020', '257', '316'];
+                    // Fetch PREFERENCES first (Exclusions)
+                    try {
+                        const prefsRes = await fetch('/api/preferences/excluded_clients');
+                        const prefsJson = await prefsRes.json();
+                        if (prefsJson.success) excludedClientsSet = new Set(prefsJson.data || []);
+                    } catch (e) { console.error('Erro loading prefs', e); }
 
-                        const monthRows = data.slice(1).filter(r => {
-                            const d = String(r[1]);
-                            const codCliente = String(r[4] || '').trim();
-                            const isManualExcluded = r[14] === 1 || r[14] === true;
-                            const isClientExcluded = CLIENTES_EXCLUIDOS.includes(codCliente);
-                            return !isManualExcluded && !isClientExcluded &&
-                                (d.includes(`${curYear}-${curMonth}`) || d.includes(`/${curMonth}/${curYear}`));
+                    // Fetch DATA (Current Month)
+                    const now = new Date();
+                    const y = now.getFullYear();
+                    const m = now.getMonth();
+                    const start = new Date(y, m, 1);
+                    const end = new Date(y, m + 1, 0);
+                    const fmt = (d) => d.toISOString().split('T')[0];
+
+                    const url = `/api/faturamento-postgres/detalhado?limit=100000&startDate=${fmt(start)}&endDate=${fmt(end)}`;
+                    const res = await fetch(url);
+                    const json = await res.json();
+
+                    if (json.success) {
+                        const validItems = json.data.filter(item => {
+                            const cName = (item.clienteNome || 'Desconhecido').trim();
+                            const isExcluded = excludedClientsSet.has(cName);
+                            // Also check manual exclusion
+                            const isManual = item.excluido_manualmente === true || item.excluido_manualmente === 1;
+                            return !isExcluded && !isManual;
                         });
 
-                        monthRows.forEach(r => {
-                            const d = String(r[1]);
-                            let day = 0;
-                            if (d.includes('-')) day = parseInt(d.split('-')[2]);
-                            else if (d.includes('/')) day = parseInt(d.split('/')[0]);
+                        // Sum Weight
+                        const totalKg = validItems.reduce((acc, item) => acc + (Number(item.pesoTotal) || 0), 0);
+                        mainValue = (totalKg / 1000).toFixed(2) + " Ton";
+                        subLabel = `Produção Faturada no Mês`;
 
-                            if (day > 0 && day <= daysInMonth) {
-                                chartData.faturado[day - 1] += (parseFloat(r[12] || 0) / 1000);
+                        // Populate Chart Data (Faturado)
+                        // Reset current month data
+                        chartData.faturado.fill(0);
+                        validItems.forEach(item => {
+                            if (item.data) {
+                                const d = parseInt(item.data.split('-')[2]);
+                                if (d > 0 && d <= daysInMonth) {
+                                    chartData.faturado[d - 1] += (Number(item.pesoTotal) || 0) / 1000;
+                                }
                             }
                         });
-
-                        const totalTon = monthRows.reduce((acc, r) => acc + (parseFloat(r[12] || 0) / 1000), 0);
-                        mainValue = totalTon.toFixed(2) + " Ton";
-                        subLabel = `Produção Faturada no Mês`;
                     }
                 }
                 else if (link.id === 'carteira') {
-                    const totalKg = data.reduce((acc, r) => acc + parseFloat(r.peso_total || 0), 0);
+                    // Fetch Custom Weights first
+                    try {
+                        const wRes = await fetch('/api/weights/list');
+                        if (wRes.ok) customWeightsMap = await wRes.json();
+                    } catch (e) { console.error('Erro loading weights', e); }
+
+                    // Fetch Pedidos Sync (User specific route? No, general sync)
+                    // The link.api is already /api/carteira, but user wants pedidos logic.
+                    // We will fetch /api/pedidos-sync manually here to ensure we get the full sync data
+                    const pRes = await fetch('/api/pedidos-sync');
+                    const pData = await pRes.json();
+
+                    const totalKg = pData.reduce((acc, item) => acc + getCorrectedWeight(item), 0);
                     mainValue = (totalKg / 1000).toFixed(1) + " Ton";
                     subLabel = "Total em Carteira";
                 }
