@@ -1532,20 +1532,20 @@
                 const entrega = item.ENTREGA_PETR ? new Date(item.ENTREGA_PETR).toLocaleDateString() :
                     (item.DATA_ENTREGA_PPR ? new Date(item.DATA_ENTREGA_PPR).toLocaleDateString() : '-');
 
-                // let pedidoHtml = ... (Removed, moving click to Product Code)
-
                 const saldoLiberado = Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0;
                 const qtdOriginal = Number(item.QUANTIDADE_PPR) || 0;
                 const saldoReal = saldoLiberado > 0 ? saldoLiberado : qtdOriginal;
 
                 let totalWeightOriginal = Number(item.PESO_LIQUIDO_NPR) || 0;
                 let unitWeight = qtdOriginal > 0 ? (totalWeightOriginal / qtdOriginal) : 0;
-
                 if (customWeights[item.PRODUTO_PPR]) {
                     unitWeight = customWeights[item.PRODUTO_PPR];
                 }
-
                 const totalWeightReal = unitWeight * saldoReal;
+
+                // VALOR Logic
+                const valorUnit = parseFloat(item.VALOR_PPR || 0);
+                const valorTotal = valorUnit * saldoReal;
 
                 const valStr = unitWeight > 0 ? formatNumber(unitWeight) : '';
 
@@ -1562,17 +1562,22 @@
 
                 return `
                 <tr style="">
-                    <td style="text-align:center;">${pedidoHtml}</td>
+                    <td style="text-align:center;">${item.CODIGO_PPR}</td>
                     <td style="text-align:center;">${entrega}</td>
                     <td style="color:var(--text-muted); text-align:left;" title="Cliente">${item.NOME_CLIENTE || '-'}</td>
-                    <td style="text-align:center; font-family:var(--font-mono); color:var(--text-muted);">${item.PRODUTO_PPR}</td>
+                    <td style="text-align:center;">
+                         <span class="clickable-id" onclick="showItemDetails(this)" data-json='${JSON.stringify(item).replace(/'/g, "&#39;")}' >
+                            ${item.PRODUTO_PPR}
+                        </span>
+                    </td>
                     <td title="${item.NOME_PRODUTO_PPR || ''}">
                         ${item.NOME_PRODUTO_PPR || item.PRODUTO_PPR}
                     </td>
                     <td style="text-align:center;">${saldoReal}</td>
                     <td style="text-align:center;">${weightInputHtml}</td>
-                    <td style="display:none;">${saldoReal}</td>
                     <td style="text-align:center;">${formatNumber(totalWeightReal)}</td>
+                    <td style="text-align:center;">${formatCurrency(valorUnit)}</td>
+                    <td style="text-align:center; color:var(--status-purple); font-weight:bold;">${formatCurrency(valorTotal)}</td>
                 </tr>
                 `;
             }).join('');
@@ -1616,6 +1621,14 @@
             }, 0);
             const avgWeight = totalQty > 0 ? (totalWeight / totalQty) : 0;
 
+            // 6. Valor Total em Carteira
+            const totalCarteiraValue = list.reduce((acc, i) => {
+                const s = Number(i.SALDO_LIBERADO_FATURAR_PPR) || 0;
+                const q = Number(i.QUANTIDADE_PPR) || 0;
+                const realQ = s > 0 ? s : q;
+                return acc + (realQ * (parseFloat(i.VALOR_PPR || 0)));
+            }, 0);
+
             // Update Header/Footer (Mantemos alguns gerais no footer)
             document.getElementById('totalOrders').innerText = uniqueOrders;
             // ...
@@ -1629,6 +1642,14 @@
                 kpiBlocked.style.color = blockedWeight > 0 ? '#ef4444' : 'var(--text-muted)';
                 kpiBlocked.style.fontWeight = blockedWeight > 0 ? '800' : 'normal';
             }
+
+            // 6. Valor Total em Carteira
+            const totalCarteiraValue = list.reduce((acc, i) => {
+                const s = Number(i.SALDO_LIBERADO_FATURAR_PPR) || 0;
+                const q = Number(i.QUANTIDADE_PPR) || 0;
+                const realQ = s > 0 ? s : q;
+                return acc + (realQ * (parseFloat(i.VALOR_PPR || 0)));
+            }, 0);
 
             // Update Header/Footer (Mantemos alguns gerais no footer)
             document.getElementById('totalOrders').innerText = uniqueOrders;
