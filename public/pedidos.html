@@ -678,61 +678,75 @@
             }
         }
 
-        /* Espaçamento colunas customizado para Pedidos (8 Colunas) */
+        /* Espaçamento colunas customizado para Pedidos (10 Colunas) */
 
         /* 1. PEDIDO */
         th:nth-child(1),
         td:nth-child(1) {
-            width: 8%;
+            width: 7%;
             text-align: center;
         }
 
         /* 2. OC */
         th:nth-child(2),
         td:nth-child(2) {
-            width: 9%;
+            width: 8%;
             text-align: center;
         }
 
-        /* 3. CÓD. PROD (Centralizado) */
+        /* 3. CÓD. PROD */
         th:nth-child(3),
         td:nth-child(3) {
-            width: 9%;
+            width: 8%;
             text-align: center;
         }
 
         /* 4. PRODUTO */
         th:nth-child(4),
         td:nth-child(4) {
-            width: 30%;
+            width: 20%;
             text-align: left;
         }
 
-        /* 5. QTD */
+        /* 5. SALDO/QTD */
         th:nth-child(5),
         td:nth-child(5) {
-            width: 7%;
+            width: 6%;
             text-align: center;
         }
 
         /* 6. PESO UNIT */
         th:nth-child(6),
         td:nth-child(6) {
-            width: 9%;
+            width: 7%;
             text-align: center;
         }
 
         /* 7. PESO TOTAL */
         th:nth-child(7),
         td:nth-child(7) {
-            width: 13%;
+            width: 9%;
             text-align: center;
         }
 
-        /* 8. ENTREGA */
+        /* 8. VALOR UNIT */
         th:nth-child(8),
         td:nth-child(8) {
-            width: 15%;
+            width: 8%;
+            text-align: center;
+        }
+
+        /* 9. TOTAL (R$) */
+        th:nth-child(9),
+        td:nth-child(9) {
+            width: 10%;
+            text-align: center;
+        }
+
+        /* 10. ENTREGA */
+        th:nth-child(10),
+        td:nth-child(10) {
+            width: 17%;
             text-align: center;
         }
 
@@ -862,8 +876,15 @@
                     <div class="kpi-subtext">Qtd. de Pedidos na Carteira</div>
                 </div>
 
-                <!-- 2. Peso Total -->
+                <!-- NEW: Valor Total em Carteira -->
                 <div class="kpi-card kpi-purple">
+                    <div class="kpi-title">Valor Total em Carteira</div>
+                    <div id="totalValueCard" class="kpi-value">R$ 0,00</div>
+                    <div class="kpi-subtext">Soma do valor total dos pedidos</div>
+                </div>
+
+                <!-- 2. Peso Total -->
+                <div class="kpi-card kpi-blue">
                     <div class="kpi-title">Peso Total (kg)</div>
                     <div id="totalWeightCard" class="kpi-value">0,00</div>
                     <div class="kpi-subtext">Peso total em carteira</div>
@@ -957,15 +978,16 @@
                 <table id="dataTable">
                     <thead>
                         <tr>
-                            <th style="width: 80px;">PEDIDO</th>
-                            <th style="width: 100px;">ENTREGA</th>
-                            <th style="width: 25%;">CLIENTE</th>
-                            <th style="width: 100px;">CÓDIGO</th>
-                            <th style="width: 35%;">PRODUTO</th>
-                            <th style="width: 70px;">SALDO</th>
-                            <th style="width: 90px;">PESO UN</th>
-                            <th style="display:none">QTD PED.</th>
-                            <th style="width: 100px;">TOTAL</th>
+                            <th style="width: 7%;">PEDIDO</th>
+                            <th style="width: 8%;">ENTREGA</th>
+                            <th style="width: 20%;">CLIENTE</th>
+                            <th style="width: 8%;">CÓDIGO</th>
+                            <th style="width: 25%;">PRODUTO</th>
+                            <th style="width: 6%;">SALDO</th>
+                            <th style="width: 7%;">PESO UN</th>
+                            <th style="width: 9%;">PESO TOTAL</th>
+                            <th style="width: 8%;">VALOR UN.</th>
+                            <th style="width: 10%;">TOTAL (R$)</th>
                         </tr>
                         <tr id="filterRow">
                             <th><input class="filter-input-table" data-col="0" placeholder="..."></th>
@@ -975,9 +997,11 @@
                             <th><input class="filter-input-table" data-col="5" placeholder="..."></th>
                             <th><input class="filter-input-table" data-col="9" placeholder="..."></th>
                             <th><input class="filter-input-table" data-col="7" placeholder="..."></th>
-                            <th style="display:none"><input class="filter-input-table" data-col="8" placeholder="...">
-                            </th>
                             <th><input class="filter-input-table" data-col="10" placeholder="..."></th>
+                            <th><input class="filter-input-table" data-col="11" placeholder="..."></th>
+                            <!-- Valor Un -->
+                            <th><input class="filter-input-table" data-col="12" placeholder="..."></th>
+                            <!-- Total R$ -->
                         </tr>
                     </thead>
                     <tbody id="table-body"></tbody>
@@ -1194,6 +1218,82 @@
                     <div class="detail-item">
                         <div class="detail-label">Peso Total (kg)</div>
                         <div class="detail-value detail-value-highlight">${formatNumber(totalWeightReal)}</div>
+                    </div>
+                </div>
+            `;
+
+        }
+
+        function showItemDetails(element) {
+            const item = JSON.parse(element.getAttribute('data-json'));
+
+            // Format values
+            const dataEmissao = item.DATA_EMISSAO_PEDIDO ? new Date(item.DATA_EMISSAO_PEDIDO).toLocaleDateString() : '-';
+            const entrega = item.ENTREGA_PETR ? new Date(item.ENTREGA_PETR).toLocaleDateString() : (item.DATA_ENTREGA_PPR ? new Date(item.DATA_ENTREGA_PPR).toLocaleDateString() : '-');
+
+            const saldoLiberado = Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0;
+            const qtdOriginal = Number(item.QUANTIDADE_PPR) || 0;
+            const saldoReal = saldoLiberado > 0 ? saldoLiberado : qtdOriginal;
+
+            const unitWeight = getCorrectedWeight(item) / saldoReal; // Approx if customized
+            const totalWeightReal = unitWeight * saldoReal;
+
+            const vUnit = parseFloat(item.VALOR_PPR || 0);
+            const vTotal = vUnit * saldoReal;
+
+            const html = `
+                <div class="detail-row">
+                    <div class="detail-item">
+                        <div class="detail-label">Pedido / OC</div>
+                        <div class="detail-value-highlight">${item.CODIGO_PPR} <small style="color:var(--text-muted); font-size:0.8rem;">/ ${item.ORDEM_COMPRA_PPR || '-'}</small></div>
+                    </div>
+                     <div class="detail-item">
+                        <div class="detail-label">Cliente</div>
+                        <div class="detail-value">${item.NOME_CLIENTE || '-'}</div>
+                    </div>
+                </div>
+
+                <div class="detail-row">
+                    <div class="detail-item">
+                        <div class="detail-label">Produto</div>
+                        <div class="detail-value">${item.PRODUTO_PPR} - ${item.NOME_PRODUTO_PPR}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Material</div>
+                        <div class="detail-value">${item.NOME_MATERIAL || '-'}</div>
+                    </div>
+                </div>
+
+                <div class="detail-row">
+                    <div class="detail-item">
+                        <div class="detail-label">Quantidade (Saldo)</div>
+                        <div class="detail-value">${saldoReal} <small style="color:var(--text-muted);">de ${qtdOriginal}</small></div>
+                    </div>
+                     <div class="detail-item">
+                        <div class="detail-label">Datas</div>
+                        <div class="detail-value"><small>Emissão:</small> ${dataEmissao} <br> <small>Entrega:</small> ${entrega}</div>
+                    </div>
+                </div>
+
+                <div class="detail-row" style="background: rgba(251, 191, 36, 0.05); border-color: var(--color-primary);">
+                     <div class="detail-item">
+                        <div class="detail-label">Peso Unit.</div>
+                        <div class="detail-value">${formatNumber(unitWeight)} kg</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Peso Total</div>
+                        <div class="detail-value">${formatNumber(totalWeightReal)} kg</div>
+                    </div>
+                </div>
+
+                <div class="detail-row" style="background: rgba(168, 85, 247, 0.05); border-color: var(--status-purple);">
+                     <div class="detail-item">
+                        <div class="detail-label">Valor Unit.</div>
+                        <div class="detail-value">${formatCurrency(vUnit)}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Valor Total</div>
+                        <div class="detail-value detail-value-highlight" style="color:var(--status-purple);">${formatCurrency(vTotal)}</div>
                     </div>
                 </div>
             `;
@@ -1432,10 +1532,7 @@
                 const entrega = item.ENTREGA_PETR ? new Date(item.ENTREGA_PETR).toLocaleDateString() :
                     (item.DATA_ENTREGA_PPR ? new Date(item.DATA_ENTREGA_PPR).toLocaleDateString() : '-');
 
-                let pedidoHtml = `<span class="clickable-id" data-pedido="${item.CODIGO_PPR}" data-produto="${item.PRODUTO_PPR}">${item.CODIGO_PPR}</span>`;
-                if (entrega === '-') {
-                    pedidoHtml += ` <span class="badge-block">BLOCK</span>`;
-                }
+                // let pedidoHtml = ... (Removed, moving click to Product Code)
 
                 const saldoLiberado = Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0;
                 const qtdOriginal = Number(item.QUANTIDADE_PPR) || 0;
@@ -1541,6 +1638,9 @@
             // Update KPI Cards
             document.getElementById('totalOrdersCard').innerText = uniqueOrders;
             document.getElementById('totalWeightCard').innerText = formatNumber(totalWeight);
+            if (document.getElementById('totalValueCard')) {
+                document.getElementById('totalValueCard').innerText = formatCurrency(totalCarteiraValue);
+            }
 
             // New KPI updates
             if (document.getElementById('totalReleasedWeightCard'))
@@ -1574,9 +1674,9 @@
                 '4': 'PRODUTO_PPR',
                 '5': 'NOME_PRODUTO_PPR',
                 '7': 'PESO_UNIT', // Virtual
-                '8': 'QTD_PED', // Virtual/Hidden
-                '9': 'QUANTIDADE_PPR', // Mapped to SALDO
-                '10': 'PESO_LIQUIDO_NPR'
+                '8': 'PESO_LIQUIDO_NPR', // PESO TOTAL
+                '9': 'VALOR_PPR',
+                '10': 'VALOR_TOTAL' // Virtual
             };
 
             // Collect individual column filters

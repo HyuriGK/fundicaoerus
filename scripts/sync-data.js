@@ -66,6 +66,7 @@ async function syncData() {
                 P.CODIGO_PPR,
                 P.PRODUTO_PPR,
                 P.NOME_PRODUTO_PPR,
+                P.VALOR_PPR,
                 P.QUANTIDADE_PPR,
                 P.QUANTIDADE_FATURADA_PPR,
                 P.SALDO_LIBERADO_FATURAR_PPR,
