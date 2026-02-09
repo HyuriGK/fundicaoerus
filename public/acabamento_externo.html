@@ -1176,7 +1176,7 @@
             const peso = parseFloat(reg.peso || 0);
             const qEsc = parseInt(reg.quant_escariar || 0);
             const qReb = parseInt(reg.quant_rebarba || 0);
-            if (terc === 'BSP REBARBAÇÃO') return (qEsc * peso * 1.10) + (qReb * peso * 0.90);
+            if (terc === 'BSP REBARBAÇÃO') return (qEsc * peso * 1.20) + (qReb * peso * 1.10);
             if (terc === 'VG REBARBAÇÃO') return (qEsc + qReb) * peso * 1.00;
             if (terc === 'JM REBARBAÇÃO') return (qEsc * peso * 1.10) + (qReb * peso * 1.00);
             return 0;
@@ -1291,9 +1291,9 @@
             // Ler valor unitário antes de compor o registro
             const valorUnit = parseNumberSafe(document.getElementById('inputValorUnit')?.value);
             const reg = { carga: c, ...item, quant: t, quant_escariar: e, quant_rebarba: r, terceiro: document.getElementById('inputTerceiro').value.toUpperCase(), observacoes: document.getElementById('inputObservacoes').value.toUpperCase(), data: document.getElementById('inputData').value || new Date().toISOString().split('T')[0], tipo: "terceiro", valor_unit: valorUnit > 0 ? valorUnit : null };
-            // Se usuário informou um valor unitário, usar para calcular o total; caso contrário, usar regra antiga
-            if (valorUnit > 0) reg.valor = valorUnit * (reg.quant || 0);
-            else reg.valor = calcularValorItem(reg);
+
+            // Custo do Serviço (Calculado automaticamente sempre)
+            reg.valor = calcularValorItem(reg);
             try { const res = await apiRequest('registros', 'POST', reg); if (res.success) { reg.id = res.id; registros.unshift(reg); renderTable(); updateDashboardAndCharts(); limparFormularioParcialmente(); showToast("Registro adicionado", "O item foi adicionado com sucesso", "info"); } } catch (err) { }
         }
 
@@ -1378,7 +1378,11 @@
                 let rowHTML = `<td>${c}</td><td>${formatDate(p.data)}</td><td>${p.terceiro}</td><td>${formatNumber(tP)}</td><td>${tQ}</td>`;
 
                 // Removed isDev check - allow everyone to see values
-                rowHTML += `<td>${formatCurrency(tV)}</td>`;
+                const vSales = its.reduce((s, i) => s + (i.valor_unit ? parseFloat(i.valor_unit) * parseFloat(i.quant || 0) : 0), 0);
+                const vCost = its.reduce((s, i) => s + parseFloat(i.valor || 0), 0);
+
+                rowHTML += `<td>${vSales > 0 ? formatCurrency(vSales) : '-'}</td>`;
+                rowHTML += `<td style="color:#ef4444;">${formatCurrency(vCost)}</td>`;
 
                 rowHTML += `<td>${(totC > 0 && recC >= totC) ? '<span class="badge badge-success">Recebido</span>' : `<span class="badge badge-pending">${recC}/${totC} Pendente</span>`}</td>`;
 
@@ -1425,8 +1429,12 @@
 
             kpiHtml = `
             <div class="kpi-card kpi-purple">
-                <div class="kpi-title">Valor Total Terceirizado</div>
+                <div class="kpi-title">Valor Total em Peças (Venda)</div>
                 <div class="kpi-value">${valorDisplay}</div>
+            </div>
+            <div class="kpi-card kpi-info">
+                 <div class="kpi-title">Custo Total Serviços</div>
+                 <div class="kpi-value">${formatCurrency(filtrados.reduce((acc, r) => acc + parseFloat(r.valor || 0), 0))}</div>
             </div>`;
 
             kpiHtml += `
@@ -1585,7 +1593,7 @@
             let h = `<table><thead><tr><th>DATA</th><th>CÓDIGO</th><th>DESCRIÇÃO</th><th>CLIENTE</th><th>PESO UN.</th><th>QTD</th>`;
 
             // Show columns for everyone
-            h += `<th>R$ UNIT</th><th>TOTAL</th>`;
+            h += `<th>PREÇO VENDA</th><th>TOTAL VENDA</th><th>CUSTO SERV.</th>`;
 
             h += `<th>OK</th>`;
 
@@ -1600,13 +1608,14 @@
                 h += `<tr><td>${formatDate(r.data)}</td><td>${r.codigo}</td><td>${r.descricao}</td><td>${r.cliente || '-'}</td><td>${formatNumber(r.peso)}</td><td>${r.quant}</td>`;
 
                 // Show values for everyone
-                const vTotal = parseFloat(r.valor || 0);
+                const vCost = parseFloat(r.valor || 0);
                 const qtd = parseInt(r.quant || 0);
-                const pUn = parseFloat(r.peso || 0);
-                // Use valor_unit from record if available, otherwise calculate
-                const vUnit = r.valor_unit ? parseFloat(r.valor_unit) : (qtd > 0 ? vTotal / qtd : 0);
-                h += `<td>${formatCurrency(vUnit)}</td>`;
-                h += `<td>${formatCurrency(vTotal)}</td>`;
+                const vUnitMsg = r.valor_unit ? formatCurrency(parseFloat(r.valor_unit)) : '-';
+                const vTotalSales = r.valor_unit ? formatCurrency(parseFloat(r.valor_unit) * qtd) : '-';
+
+                h += `<td>${vUnitMsg}</td>`;
+                h += `<td>${vTotalSales}</td>`;
+                h += `<td style="color:#ef4444;">${formatCurrency(vCost)}</td>`;
 
 
                 // Verificar permissão para mostrar checkbox
