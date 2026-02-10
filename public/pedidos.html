@@ -895,8 +895,8 @@
                     <div class="kpi-subtext">Qtd. de Pedidos na Carteira</div>
                 </div>
 
-                <!-- NEW: Valor Total em Carteira -->
-                <div class="kpi-card kpi-purple">
+                <!-- NEW: Valor Total em Carteira (hidden by default, role-gated) -->
+                <div id="valorTotalCard" class="kpi-card kpi-purple" style="display: none;">
                     <div class="kpi-title">Valor Total em Carteira</div>
                     <div id="totalValueCard" class="kpi-value">R$ 0,00</div>
                     <div class="kpi-subtext">Valor total em carteira</div>
@@ -2418,7 +2418,53 @@
         document.addEventListener('DOMContentLoaded', async () => {
             setupFilters();
             await loadDataFromServer();
+
+            // Role-gated KPI: Show 'Valor Total' only for non-visitors
+            const userRole = localStorage.getItem('erus_role');
+            if (userRole && userRole !== 'visitante') {
+                const valorCard = document.getElementById('valorTotalCard');
+                if (valorCard) valorCard.style.display = '';
+            }
         });
+
+        // --- TOAST NOTIFICATIONS ---
+        function showToast(title, subtitle, type = 'info') {
+            let container = document.getElementById('toast-container');
+            if (!container) {
+                container = document.createElement('div');
+                container.id = 'toast-container';
+                Object.assign(container.style, {
+                    position: 'fixed', top: '20px', right: '20px', zIndex: '9999',
+                    display: 'flex', flexDirection: 'column', gap: '10px'
+                });
+                document.body.appendChild(container);
+            }
+
+            const toast = document.createElement('div');
+            const bg = type === 'danger' ? 'rgba(239,68,68,0.15)' : 'rgba(59,130,246,0.15)';
+            const border = type === 'danger' ? 'rgba(239,68,68,0.4)' : 'rgba(59,130,246,0.4)';
+            const icon = type === 'danger' ? 'fa-ban' : 'fa-circle-info';
+            Object.assign(toast.style, {
+                background: bg, border: '1px solid ' + border, borderRadius: '8px',
+                padding: '12px 18px', display: 'flex', alignItems: 'center', gap: '12px',
+                color: '#fff', fontFamily: 'var(--font-mono)', fontSize: '0.8rem',
+                backdropFilter: 'blur(10px)', animation: 'fadeIn 0.3s ease-out',
+                minWidth: '300px', boxShadow: '0 4px 15px rgba(0,0,0,0.3)'
+            });
+            toast.innerHTML = `
+                <i class="fa-solid ${icon}" style="font-size: 1.1rem;"></i>
+                <div style="display:flex; flex-direction:column; gap:2px;">
+                    <span style="font-weight:700;">${title}</span>
+                    <span style="color: rgba(255,255,255,0.6); font-size: 0.75rem;">${subtitle}</span>
+                </div>
+            `;
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transition = 'opacity 0.5s';
+                setTimeout(() => { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 500);
+            }, 4000);
+        }
 
     </script>
 </body>
