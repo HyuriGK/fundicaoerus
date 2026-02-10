@@ -243,7 +243,7 @@
             color: #fff;
         }
 
-        /* TOAST NOTIFICATION */
+        /* --- TOAST NOTIFICATION STYLES --- */
         .toast-container {
             position: fixed;
             bottom: 20px;
@@ -270,6 +270,8 @@
             animation: slideIn 0.3s ease-out forwards;
             min-width: 350px;
         }
+
+
 
         .toast.danger {
             border-left-color: var(--status-danger);
@@ -941,7 +943,7 @@
                     <!-- KPI: Aguardando Moldagem -->
                     <div id="cardAguardando" class="kpi-card kpi-clickable" onclick="filterByStage('aguardando')"
                         style="background: linear-gradient(135deg, rgba(234, 179, 8, 0.1) 0%, rgba(0,0,0,0) 100%); border: 1px solid rgba(234, 179, 8, 0.2);">
-                        <div class="kpi-title" style="color: var(--status-warning);">Aguardando Moldagem</div>
+                        <div class="kpi-title" style="color: var(--status-warning);">Total "Aguardando Moldagem"</div>
                         <div class="kpi-value" id="kpiAguardandoWeight">0 kg</div>
                         <div class="kpi-subtext">
                             <span id="kpiAguardandoQty" style="color: #fff; font-weight: bold;">0</span> pçs • <span
@@ -954,7 +956,7 @@
                     <!-- KPI: Moldado -->
                     <div id="cardMoldado" class="kpi-card kpi-clickable" onclick="filterByStage('moldagem')"
                         style="background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(0,0,0,0) 100%); border: 1px solid rgba(59, 130, 246, 0.2);">
-                        <div class="kpi-title" style="color: #60a5fa;">Apenas Moldado</div>
+                        <div class="kpi-title" style="color: #60a5fa;">Total "Apenas Moldado"</div>
                         <div class="kpi-value" id="kpiMoldagemWeight">0 kg</div>
                         <div class="kpi-subtext">
                             <span id="kpiMoldagemQty" style="color: #fff; font-weight: bold;">0</span> pçs • <span
@@ -967,7 +969,7 @@
                     <!-- KPI: Fundidos -->
                     <div id="cardFundido" class="kpi-card kpi-clickable" onclick="filterByStage('fundido')"
                         style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(0,0,0,0) 100%); border: 1px solid rgba(16, 185, 129, 0.2);">
-                        <div class="kpi-title" style="color: var(--status-success);">Fundidos</div>
+                        <div class="kpi-title" style="color: var(--status-success);">Total "Fundido"</div>
                         <div class="kpi-value" id="kpiFundidoWeight">0 kg</div>
                         <div class="kpi-subtext">
                             <span id="kpiFundidoQty" style="color: #fff; font-weight: bold;">0</span> pçs • <span
@@ -1339,8 +1341,11 @@
 
         }
 
+        let currentSelectedItem = null;
+
         function showItemDetails(element) {
             const item = JSON.parse(element.getAttribute('data-json'));
+            currentSelectedItem = item;
 
             // Format values
             const dataEmissao = item.DATA_EMISSAO_PEDIDO ? new Date(item.DATA_EMISSAO_PEDIDO).toLocaleDateString() : '-';
@@ -1433,11 +1438,11 @@
                         </div>
                         <div>
                             <div class="detail-label" style="color: var(--status-success);">Valor Unitário (R$)</div>
-                            <div class="detail-value" style="color: var(--status-success); font-weight: bold; font-size: 1.2rem;">${isVisitor ? '-----' : formatCurrency(vUnit)}</div>
+                            <div class="detail-value" style="color: var(--status-success); font-weight: bold; font-size: 1.2rem;">${valorVisible ? formatCurrency(vUnit) : '-----'}</div>
                         </div>
                         <div style="background: rgba(168, 85, 247, 0.1); padding: 10px 15px; border-radius: 8px; border: 1px solid rgba(168, 85, 247, 0.2);">
                             <div class="detail-label" style="color: var(--status-purple); margin-bottom: 2px;">Valor Total (R$)</div>
-                            <div class="detail-value" style="color: var(--status-purple); font-weight: bold; font-size: 1.3rem;">${isVisitor ? '-----' : formatCurrency(vTotal)}</div>
+                            <div class="detail-value" style="color: var(--status-purple); font-weight: bold; font-size: 1.3rem;">${valorVisible ? formatCurrency(vTotal) : '-----'}</div>
                         </div>
                     </div>
 
@@ -1452,6 +1457,15 @@
 
             document.getElementById('orderDetailsContent').innerHTML = html;
             document.getElementById('orderDetailsModal').style.display = 'flex';
+        }
+
+        function refreshOrderDetails() {
+            if (currentSelectedItem) {
+                // We need a dummy element with data-json to reuse showItemDetails
+                const dummy = document.createElement('div');
+                dummy.setAttribute('data-json', JSON.stringify(currentSelectedItem));
+                showItemDetails(dummy);
+            }
         }
 
         function closeOrderDetails() {
@@ -1681,7 +1695,6 @@
         // ==========================================================================
         function renderTable(list) {
             const tbody = document.getElementById('table-body');
-            const isVisitor = localStorage.getItem('erus_role') === 'visitante';
             if (list.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="11" style="text-align:center; padding:20px;">Nenhum registro encontrado.</td></tr>';
                 return;
@@ -1754,7 +1767,7 @@
                     <td style="text-align:center;">${weightInputHtml}</td>
                     <td style="text-align:center;">${formatNumber(totalWeightReal)}</td>
 
-                    <td style="text-align:center; color:var(--status-purple); font-weight:bold;">${isVisitor ? '-----' : formatCurrency(valorTotal)}</td>
+                    <td style="text-align:center; color:var(--status-purple); font-weight:bold;">${valorVisible ? formatCurrency(valorTotal) : '-----'}</td>
                     <td style="text-align:center; font-size: 0.8rem; color:var(--accent-color); font-weight:bold;">${item.OP_PCS || '-'}</td>
                     <td style="text-align:center; color:var(--text-muted); font-size: 0.8rem;">${item.ANDAMENTO_PCS || '-'}</td>
                 </tr>
@@ -1878,7 +1891,7 @@
 
             if (elQty) elQty.innerText = formatNumber(data.qtd, 0);
             if (elWeight) elWeight.innerText = formatNumber(data.peso, 0) + ' kg';
-            if (elValue) elValue.innerText = formatCurrency(data.valor);
+            if (elValue) elValue.innerText = valorVisible ? formatCurrency(data.valor) : '-----';
             if (elPct) {
                 const pct = totalWeight > 0 ? ((data.peso / totalWeight) * 100) : 0;
                 elPct.innerText = pct.toFixed(1) + '%';
@@ -2416,28 +2429,21 @@
             setupFilters();
             await loadDataFromServer();
 
-            // Role-gated: Hide monetary info for visitors
-            const userRole = localStorage.getItem('erus_role');
-            if (userRole === 'visitante') {
-                // Hide stage KPI monetary values for visitors
-                document.querySelectorAll('[id$="Value"]').forEach(el => {
-                    if (el.id.startsWith('kpiAguardando') || el.id.startsWith('kpiMoldagem') || el.id.startsWith('kpiFundido')) {
-                        el.style.display = 'none';
-                    }
-                });
-            }
+            // Role-gated: Initial Masking for Stage KPIs (Handled by calculateKPIs respecting valorVisible)
+            // No longer hiding elements, just managing text via valorVisible
         });
 
         // --- VALOR VISIBILITY TOGGLE ---
         let valorVisible = false;
 
         function toggleValorVisibility() {
-            const userRole = localStorage.getItem('erus_role');
-            if (userRole === 'visitante') {
+            const userRole = localStorage.getItem('erus_role') || '';
+            // Design and Error message aligned with producao_apontada.html
+            if (userRole === 'visitante' || (userRole !== 'administrador' && userRole !== 'desenvolvedor')) {
                 showToast(
-                    'Acesso restrito',
-                    'Você precisa ser administrador ou desenvolvedor para visualizar valores monetários.',
-                    'danger'
+                    "Você não tem permissão de desenvolvedor",
+                    "Se necessário, entre em contato com o administrador do sistema",
+                    "danger"
                 );
                 return;
             }
@@ -2455,44 +2461,52 @@
                 icon.className = 'fa-solid fa-eye-slash';
                 icon.style.opacity = '0.6';
             }
+
+            // Sync Table
+            applyColumnFilters();
+
+            // Sync Stage KPIs
+            const filtered = allData; // Actually we should use currently filtered list, but applyColumnFilters handles it
+
+            // If Modal is open, refresh it
+            const detailModal = document.getElementById('orderDetailsModal');
+            if (detailModal && detailModal.style.display === 'flex' && currentSelectedItem) {
+                refreshOrderDetails();
+            }
         }
 
         // --- TOAST NOTIFICATIONS ---
+        // --- TOAST FUNCTION (igual ao producao_apontada.html) ---
         function showToast(title, subtitle, type = 'info') {
             let container = document.getElementById('toast-container');
             if (!container) {
                 container = document.createElement('div');
                 container.id = 'toast-container';
-                Object.assign(container.style, {
-                    position: 'fixed', top: '20px', right: '20px', zIndex: '9999',
-                    display: 'flex', flexDirection: 'column', gap: '10px'
-                });
+                container.className = 'toast-container';
                 document.body.appendChild(container);
             }
 
             const toast = document.createElement('div');
-            const bg = type === 'danger' ? 'rgba(239,68,68,0.15)' : 'rgba(59,130,246,0.15)';
-            const border = type === 'danger' ? 'rgba(239,68,68,0.4)' : 'rgba(59,130,246,0.4)';
-            const icon = type === 'danger' ? 'fa-ban' : 'fa-circle-info';
-            Object.assign(toast.style, {
-                background: bg, border: '1px solid ' + border, borderRadius: '8px',
-                padding: '12px 18px', display: 'flex', alignItems: 'center', gap: '12px',
-                color: '#fff', fontFamily: 'var(--font-mono)', fontSize: '0.8rem',
-                backdropFilter: 'blur(10px)', animation: 'fadeIn 0.3s ease-out',
-                minWidth: '300px', boxShadow: '0 4px 15px rgba(0,0,0,0.3)'
-            });
+            toast.className = `toast ${type}`;
+
+            const icon = type === 'danger' ? '<i class="fa-solid fa-ban toast-icon"></i>' : '<i class="fa-solid fa-circle-info toast-icon"></i>';
+
             toast.innerHTML = `
-                <i class="fa-solid ${icon}" style="font-size: 1.1rem;"></i>
-                <div style="display:flex; flex-direction:column; gap:2px;">
-                    <span style="font-weight:700;">${title}</span>
-                    <span style="color: rgba(255,255,255,0.6); font-size: 0.75rem;">${subtitle}</span>
+                ${icon} 
+                <div class="toast-content">
+                    <span class="toast-title">${title}</span>
+                    <span class="toast-subtitle">${subtitle}</span>
                 </div>
             `;
+
             container.appendChild(toast);
+
+            // Remove após 4 segundos
             setTimeout(() => {
-                toast.style.opacity = '0';
-                toast.style.transition = 'opacity 0.5s';
-                setTimeout(() => { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 500);
+                toast.style.animation = 'fadeOut 0.5s ease-out forwards';
+                setTimeout(() => {
+                    if (toast.parentNode) toast.parentNode.removeChild(toast);
+                }, 500);
             }, 4000);
         }
 
