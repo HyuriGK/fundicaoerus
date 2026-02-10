@@ -12,6 +12,11 @@ const pool = require('../lib/db');
             CREATE TABLE IF NOT EXISTS faturamento_firebird_preferencias (
                 chave_unica TEXT PRIMARY KEY, 
                 excluido BOOLEAN DEFAULT FALSE,
+                pedido VARCHAR(50),
+                nota_fiscal INTEGER,
+                codigo_item VARCHAR(50),
+                data_faturamento DATE,
+                quantidade DECIMAL(15,3),
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
@@ -355,16 +360,19 @@ router.post('/toggle-exclusion', async (req, res) => {
         // 1. Salva na tabela global de memórias (PREFERÊNCIAS)
         // Nova Lógica (B): Usa colunas estruturadas em vez de chave string
         await client.query(`
-            INSERT INTO faturamento_firebird_preferencias (chave_unica, excluido, pedido, nota_fiscal, codigo_item)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO faturamento_firebird_preferencias 
+                (chave_unica, excluido, pedido, nota_fiscal, codigo_item, data_faturamento, quantidade)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             ON CONFLICT (chave_unica) 
             DO UPDATE SET 
                 excluido = EXCLUDED.excluido, 
                 pedido = EXCLUDED.pedido, 
                 nota_fiscal = EXCLUDED.nota_fiscal,
                 codigo_item = EXCLUDED.codigo_item,
+                data_faturamento = EXCLUDED.data_faturamento,
+                quantidade = EXCLUDED.quantidade,
                 updated_at = CURRENT_TIMESTAMP
-        `, [key, excluded, req.body.pedido || null, nota_fiscal, codigo_item]);
+        `, [key, excluded, req.body.pedido || null, nota_fiscal, codigo_item, req.body.data_faturamento, req.body.quantidade]);
 
         // 2. Atualiza a tabela sincronizada local se os dados forem passados
         if (nota_fiscal !== undefined) {
