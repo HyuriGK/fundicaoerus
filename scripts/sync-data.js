@@ -82,13 +82,12 @@ async function syncData() {
                 D.CLIENTE_PED AS ID_CLIENTE_CORE,
                 D.EMISSAO_PED AS DATA_EMISSAO_PEDIDO,
                 C.RAZAO_SOCIAL_CLI AS NOME_CLIENTE,
-                D.EMISSAO_PED AS DATA_EMISSAO_PEDIDO,
-                C.RAZAO_SOCIAL_CLI AS NOME_CLIENTE,
                 M.MATERIAL_MAT AS NOME_MATERIAL,
                 (
-                    SELECT FIRST 1 PS.SEQUENCIA_PCS
+                    SELECT FIRST 1 PS.SETOR_PCS
                     FROM PRODUCAO_SETOR PS
                     WHERE PS.ID_CODIGO_PCS = P.ID_PPR
+                        AND PS.STATUS_PCS NOT IN ('T', 'C')
                     ORDER BY PS.ID_PCS DESC
                 ) AS ANDAMENTO_PCS
             FROM PEDIDO_PRODUTO P
