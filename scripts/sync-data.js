@@ -91,9 +91,12 @@ async function syncData() {
                     ORDER BY PS.ID_PCS DESC
                 ) AS ANDAMENTO_PCS,
                 (
-                    SELECT FIRST 1 PS2.CODIGO_PCS
+                    SELECT FIRST 1 PC.CODIGO_PCP
                     FROM PRODUCAO_SETOR PS2
+                    JOIN PRODUCAO PC ON PS2.CODIGO_PCS = PC.CODIGO_PCP
+                        AND PS2.EMPRESA_PCS = PC.EMPRESA_PCP
                     WHERE PS2.ID_CODIGO_PCS = P.ID_PPR
+                        AND PC.PRODUTO_PCP = P.PRODUTO_PPR
                         AND PS2.STATUS_PCS NOT IN ('T', 'C')
                     ORDER BY
                         CASE WHEN PS2.STATUS_PCS = 'E' THEN 0 ELSE 1 END,
