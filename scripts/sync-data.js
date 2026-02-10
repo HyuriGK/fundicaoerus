@@ -85,22 +85,24 @@ async function syncData() {
                 M.MATERIAL_MAT AS NOME_MATERIAL,
                 (
                     SELECT FIRST 1 PS.SETOR_PCS
-                    FROM PRODUCAO_SETOR PS
-                    WHERE PS.ID_CODIGO_PCS = P.ID_PPR
+                    FROM PRODUCAO_PEDIDO PP
+                    JOIN PRODUCAO_SETOR PS 
+                        ON PS.CODIGO_PCS = PP.PCP_CODIGO_PCPR
+                        AND PS.EMPRESA_PCS = PP.PCP_EMPRESA_PCPR
+                    WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR
+                        AND PP.PPR_ANO_PCPR = P.ANO_PPR
+                        AND PP.PPR_ITEM_PCPR = P.ITEM_PPR
+                        AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR
                         AND PS.STATUS_PCS NOT IN ('T', 'C')
                     ORDER BY PS.ID_PCS DESC
                 ) AS ANDAMENTO_PCS,
                 (
-                    SELECT FIRST 1 PC.CODIGO_PCP
-                    FROM PRODUCAO_SETOR PS2
-                    JOIN PRODUCAO PC ON PS2.CODIGO_PCS = PC.CODIGO_PCP
-                        AND PS2.EMPRESA_PCS = PC.EMPRESA_PCP
-                    WHERE PS2.ID_CODIGO_PCS = P.ID_PPR
-                        AND PC.PRODUTO_PCP = P.PRODUTO_PPR
-                        AND PS2.STATUS_PCS NOT IN ('T', 'C')
-                    ORDER BY
-                        CASE WHEN PS2.STATUS_PCS = 'E' THEN 0 ELSE 1 END,
-                        PS2.ID_PCS DESC
+                    SELECT FIRST 1 PP.PCP_CODIGO_PCPR
+                    FROM PRODUCAO_PEDIDO PP
+                    WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR
+                        AND PP.PPR_ANO_PCPR = P.ANO_PPR
+                        AND PP.PPR_ITEM_PCPR = P.ITEM_PPR
+                        AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR
                 ) AS OP_PCS
             FROM PEDIDO_PRODUTO P
             LEFT JOIN PEDIDO_PRODUTO_ENTREGA E 
