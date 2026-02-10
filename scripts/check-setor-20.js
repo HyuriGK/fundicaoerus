@@ -19,11 +19,7 @@ Firebird.attach(options, function (err, db) {
     }
 
     const query = `
-        SELECT RDB$RELATION_NAME 
-        FROM RDB$RELATIONS 
-        WHERE RDB$SYSTEM_FLAG = 0 
-        AND RDB$VIEW_BLR IS NULL
-        ORDER BY RDB$RELATION_NAME
+        SELECT * FROM SETOR WHERE CODIGO_SET = 20
     `;
 
     db.query(query, function (err, result) {
@@ -33,16 +29,7 @@ Firebird.attach(options, function (err, db) {
             return;
         }
 
-        console.log('Tables found:', result.length);
-        const tables = result.map(row => row.RDB$RELATION_NAME.trim());
-
-        // Filter for terms like 'SETOR'
-        const setorTables = tables.filter(t => t.includes('SETOR'));
-        console.log('Tables with "SETOR":', setorTables);
-
-        // Also print first 50 tables just in case
-        // console.log('All Tables:', tables.slice(0, 50)); 
-
+        console.log('Setor 20:', result);
         db.detach();
     });
 });

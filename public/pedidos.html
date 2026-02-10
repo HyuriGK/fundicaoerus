@@ -1681,78 +1681,104 @@
 
         }
 
-        function updateTotals(list) {
-            // 1. Pedidos Únicos
+        function calculateKPIs(list) {
+            // Initial Totals
+            let totalWeight = 0;
+            let totalValue = 0;
+            let totalQty = 0;
+            let blockedWeight = 0;
+
+            // Stage KPIs
+            let kpiAguardando = { qtd: 0, peso: 0, valor: 0 };
+            let kpiMoldagem = { qtd: 0, peso: 0, valor: 0 };
+            let kpiFundido = { qtd: 0, peso: 0, valor: 0 };
+
+            const fundidoStages = ['FUSAO', 'FUSÃO', 'ACABAMENTO', 'USINAGEM', 'TRATAMENTO', 'EXPEDICAO', 'EXPEDIÇÃO', 'FATURAMENTO', 'REBARBA', 'REBARBAÇÃO', 'VIBRO'];
+
+            list.forEach(item => {
+                const weight = Number(item.PESO_LIQUIDO_NPR) || 0;
+
+                // Saldo vs Original Logic
+                const saldo = Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0;
+                const qtdOriginal = Number(item.QUANTIDADE_PPR) || 0;
+                const realQty = saldo > 0 ? saldo : qtdOriginal;
+
+                const itemTotalWeight = weight * realQty;
+                const unitPrice = Number(item.VALOR_PPR) || 0;
+                const itemTotalValue = unitPrice * realQty;
+
+                // Main Accumulators
+                totalWeight += itemTotalWeight;
+                totalValue += itemTotalValue;
+                totalQty += realQty;
+
+                // Blocked Logic
+                // If it's blocked, add to blocked weight
+                const isBlocked = (
+                    item.STATUS_PED === 'B' ||
+                    item.STATUS_PPR === 'B' ||
+                    (item.STATUS_DESC_PED && String(item.STATUS_DESC_PED).toUpperCase().includes('BLOQ'))
+                );
+                // Note: Blocked weight logic usually implies looking at specific flags.
+                // Assuming "Blocked Weight" is just weight of blocked items relative to total.
+                if (isBlocked) blockedWeight += itemTotalWeight;
+
+
+                // --- STAGE CATEGORIZATION ---
+                const andamento = (item.ANDAMENTO_PCS || '').toUpperCase().trim();
+
+                if (!andamento || andamento === '-' || andamento === '') {
+                    // 1. Aguardando Moldagem
+                    kpiAguardando.qtd += realQty;
+                    kpiAguardando.peso += itemTotalWeight;
+                    kpiAguardando.valor += itemTotalValue;
+                } else if (andamento.startsWith('MOLDAGEM')) {
+                    // 2. Em Moldagem
+                    kpiMoldagem.qtd += realQty;
+                    kpiMoldagem.peso += itemTotalWeight;
+                    kpiMoldagem.valor += itemTotalValue;
+                } else {
+                    // 3. Fundidos (Matches list or fallback)
+                    kpiFundido.qtd += realQty;
+                    kpiFundido.peso += itemTotalWeight;
+                    kpiFundido.valor += itemTotalValue;
+                }
+            });
+
+            // --- UPDATE DOM ---
+
+            // 1. Header/Footer General Stats
             const uniqueOrders = new Set(list.map(i => i.CODIGO_PPR)).size;
+            if (document.getElementById('totalOrders')) document.getElementById('totalOrders').innerText = uniqueOrders;
+            if (document.getElementById('kpiTotalWeight')) document.getElementById('kpiTotalWeight').innerText = formatNumber(totalWeight, 0);
+            if (document.getElementById('kpiTotalValue')) document.getElementById('kpiTotalValue').innerText = formatCurrency(totalValue);
 
+            // 2. Stage KPIs
+            updateStageCard('kpiAguardando', kpiAguardando);
+            updateStageCard('kpiMoldagem', kpiMoldagem);
+            updateStageCard('kpiFundido', kpiFundido);
 
-
-            // 2. Peso Total (Corrigido)
-            const totalWeight = list.reduce((acc, i) => acc + getCorrectedWeight(i), 0);
-
-            // 3. Peso Bloqueado (Sem data)
-            const blockedWeight = list.reduce((acc, i) => {
-                const isBlocked = !i.ENTREGA_PETR && !i.DATA_ENTREGA_PPR;
-                return acc + (isBlocked ? getCorrectedWeight(i) : 0);
-            }, 0);
-
-            // 4. Peso Liberado (Total - Bloqueado)
-            const releasedWeight = totalWeight - blockedWeight;
-
-            // 5. Peso Médio (Peso Total / Quantidade Total de Peças)
-            const totalQty = list.reduce((acc, i) => {
-                const sLib = Number(i.SALDO_LIBERADO_FATURAR_PPR) || 0;
-                const qOrig = Number(i.QUANTIDADE_PPR) || 0;
-                return acc + (sLib > 0 ? sLib : qOrig);
-            }, 0);
-            const avgWeight = totalQty > 0 ? (totalWeight / totalQty) : 0;
-
-            // 6. Valor Total em Carteira
-            const totalCarteiraValue = list.reduce((acc, i) => {
-                const s = Number(i.SALDO_LIBERADO_FATURAR_PPR) || 0;
-                const q = Number(i.QUANTIDADE_PPR) || 0;
-                const realQ = s > 0 ? s : q;
-                return acc + (realQ * (parseFloat(i.VALOR_PPR || 0)));
-            }, 0);
-
-            // Update Header/Footer (Mantemos alguns gerais no footer)
-            document.getElementById('totalOrders').innerText = uniqueOrders;
-            // ...
-
-            // Update KPI Cards
-            // ... (Card 4: Peso Bloqueado - Mais vermelho)
-            const kpiBlocked = document.getElementById('kpiBlockedWeight');
-            if (kpiBlocked) {
-                kpiBlocked.innerText = formatNumber(blockedWeight) + ' kg';
-                // Força cor vermelha intensa se houver bloqueio
-                kpiBlocked.style.color = blockedWeight > 0 ? '#ef4444' : 'var(--text-muted)';
-                kpiBlocked.style.fontWeight = blockedWeight > 0 ? '800' : 'normal';
-            }
-
-
-
-            // Update Header/Footer (Mantemos alguns gerais no footer)
-            document.getElementById('totalOrders').innerText = uniqueOrders;
-            document.getElementById('totalQuantity').innerText = totalQty.toLocaleString('pt-BR');
-            document.getElementById('totalWeight').innerText = formatNumber(totalWeight);
-
-            // Update KPI Cards
-            document.getElementById('totalOrdersCard').innerText = uniqueOrders;
-            document.getElementById('totalWeightCard').innerText = formatNumber(totalWeight);
-            if (document.getElementById('totalValueCard')) {
-                document.getElementById('totalValueCard').innerText = formatCurrency(totalCarteiraValue);
-            }
-
-            // New KPI updates
-            if (document.getElementById('totalReleasedWeightCard'))
-                document.getElementById('totalReleasedWeightCard').innerText = formatNumber(releasedWeight);
-
-            if (document.getElementById('totalBlockedWeightCard'))
-                document.getElementById('totalBlockedWeightCard').innerText = formatNumber(blockedWeight);
-
-            if (document.getElementById('avgWeightCard'))
-                document.getElementById('avgWeightCard').innerText = formatNumber(avgWeight);
+            // 3. Blocked Indicator (Optional reuse of existing logic if needed)
+            // If you had a specific blocked card, update it here.
         }
+
+        function updateTotals(list) {
+            // Legacy function kept if called elsewhere, but we moved logic to calculateKPIs
+            // to avoid double iteration.
+            calculateKPIs(list);
+        }
+
+        function updateStageCard(idPrefix, data) {
+            const elQty = document.getElementById(`${idPrefix}Qty`);
+            const elWeight = document.getElementById(`${idPrefix}Weight`);
+            const elValue = document.getElementById(`${idPrefix}Value`);
+
+            if (elQty) elQty.innerText = formatNumber(data.qtd, 0);
+            if (elWeight) elWeight.innerText = formatNumber(data.peso, 0) + ' kg';
+            if (elValue) elValue.innerText = formatCurrency(data.valor);
+        }
+
+
 
         // ==========================================================================
         // FILTROS E GRÁFICOS

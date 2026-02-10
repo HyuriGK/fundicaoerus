@@ -84,11 +84,14 @@ async function syncData() {
                 C.RAZAO_SOCIAL_CLI AS NOME_CLIENTE,
                 M.MATERIAL_MAT AS NOME_MATERIAL,
                 (
-                    SELECT FIRST 1 PS.SETOR_PCS
+                    SELECT FIRST 1 COALESCE(S.NOME_SET, CAST(PS.SETOR_PCS AS VARCHAR(20)))
                     FROM PRODUCAO_PEDIDO PP
                     JOIN PRODUCAO_SETOR PS 
                         ON PS.CODIGO_PCS = PP.PCP_CODIGO_PCPR
                         AND PS.EMPRESA_PCS = PP.PCP_EMPRESA_PCPR
+                    LEFT JOIN SETOR S
+                        ON S.CODIGO_SET = PS.SETOR_PCS
+                        AND S.EMPRESA_SET = PS.SET_EMPRESA_PCS
                     WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR
                         AND PP.PPR_ANO_PCPR = P.ANO_PPR
                         AND PP.PPR_ITEM_PCPR = P.ITEM_PPR

@@ -18,12 +18,18 @@ Firebird.attach(options, function (err, db) {
         return;
     }
 
+    // Select first 5 rows from PRODUCAO_SETOR and try to join with SETOR
+    // We check both SETOR_PCS and PCS_SETOR_PCS candidates
     const query = `
-        SELECT RDB$RELATION_NAME 
-        FROM RDB$RELATIONS 
-        WHERE RDB$SYSTEM_FLAG = 0 
-        AND RDB$VIEW_BLR IS NULL
-        ORDER BY RDB$RELATION_NAME
+        SELECT FIRST 5 
+            PS.ID_PCS,
+            PS.SETOR_PCS, 
+            S1.NOME_SET AS NOME_VIA_SETOR_PCS,
+            PS.PCS_SETOR_PCS,
+            S2.NOME_SET AS NOME_VIA_PCS_SETOR_PCS
+        FROM PRODUCAO_SETOR PS
+        LEFT JOIN SETOR S1 ON S1.CODIGO_SET = PS.SETOR_PCS AND S1.EMPRESA_SET = PS.SET_EMPRESA_PCS
+        LEFT JOIN SETOR S2 ON S2.CODIGO_SET = PS.PCS_SETOR_PCS AND S2.EMPRESA_SET = PS.PCS_EMPRESA_PCS
     `;
 
     db.query(query, function (err, result) {
@@ -33,16 +39,7 @@ Firebird.attach(options, function (err, db) {
             return;
         }
 
-        console.log('Tables found:', result.length);
-        const tables = result.map(row => row.RDB$RELATION_NAME.trim());
-
-        // Filter for terms like 'SETOR'
-        const setorTables = tables.filter(t => t.includes('SETOR'));
-        console.log('Tables with "SETOR":', setorTables);
-
-        // Also print first 50 tables just in case
-        // console.log('All Tables:', tables.slice(0, 50)); 
-
+        console.log('Join Results:', result);
         db.detach();
     });
 });
