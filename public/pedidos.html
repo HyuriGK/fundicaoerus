@@ -912,6 +912,43 @@
                 </div>
             </div>
 
+            <!-- KPI Cards Row 2 (Estágios de Produção) -->
+            <div class="kpi-row" style="margin-top: 10px;">
+
+                <!-- KPI: Aguardando Moldagem -->
+                <div class="kpi-card"
+                    style="background: linear-gradient(135deg, rgba(234, 179, 8, 0.1) 0%, rgba(0,0,0,0) 100%); border: 1px solid rgba(234, 179, 8, 0.2);">
+                    <div class="kpi-title" style="color: var(--status-warning);">Aguardando Moldagem</div>
+                    <div class="kpi-value" id="kpiAguardandoWeight">0 kg</div>
+                    <div class="kpi-subtext">
+                        <span id="kpiAguardandoQty" style="color: #fff; font-weight: bold;">0</span> pçs • <span
+                            id="kpiAguardandoValue" style="color: var(--status-warning);">R$ 0,00</span>
+                    </div>
+                </div>
+
+                <!-- KPI: Em Moldagem -->
+                <div class="kpi-card"
+                    style="background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(0,0,0,0) 100%); border: 1px solid rgba(59, 130, 246, 0.2);">
+                    <div class="kpi-title" style="color: #60a5fa;">Em Moldagem</div>
+                    <div class="kpi-value" id="kpiMoldagemWeight">0 kg</div>
+                    <div class="kpi-subtext">
+                        <span id="kpiMoldagemQty" style="color: #fff; font-weight: bold;">0</span> pçs • <span
+                            id="kpiMoldagemValue" style="color: #60a5fa;">R$ 0,00</span>
+                    </div>
+                </div>
+
+                <!-- KPI: Fundidos -->
+                <div class="kpi-card"
+                    style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(0,0,0,0) 100%); border: 1px solid rgba(16, 185, 129, 0.2);">
+                    <div class="kpi-title" style="color: var(--status-success);">Fundidos</div>
+                    <div class="kpi-value" id="kpiFundidoWeight">0 kg</div>
+                    <div class="kpi-subtext">
+                        <span id="kpiFundidoQty" style="color: #fff; font-weight: bold;">0</span> pçs • <span
+                            id="kpiFundidoValue" style="color: var(--status-success);">R$ 0,00</span>
+                    </div>
+                </div>
+            </div>
+
             <!-- GRÁFICOS -->
             <div class="charts-row">
                 <div class="chart-panel">
@@ -1686,25 +1723,23 @@
             let totalWeight = 0;
             let totalValue = 0;
             let totalQty = 0;
-            let blockedWeight = 0;
+            let releasedWeight = 0; // Com data de entrega
 
             // Stage KPIs
             let kpiAguardando = { qtd: 0, peso: 0, valor: 0 };
             let kpiMoldagem = { qtd: 0, peso: 0, valor: 0 };
             let kpiFundido = { qtd: 0, peso: 0, valor: 0 };
 
-            const fundidoStages = ['FUSAO', 'FUSÃO', 'ACABAMENTO', 'USINAGEM', 'TRATAMENTO', 'EXPEDICAO', 'EXPEDIÇÃO', 'FATURAMENTO', 'REBARBA', 'REBARBAÇÃO', 'VIBRO'];
-
             list.forEach(item => {
-                const weight = Number(item.PESO_LIQUIDO_NPR) || 0;
+                // Use helper for weight to respect custom weights and unit logic
+                const itemTotalWeight = getCorrectedWeight(item);
 
-                // Saldo vs Original Logic
+                // Saldo vs Original Logic (needed for Qty and Value)
                 const saldo = Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0;
                 const qtdOriginal = Number(item.QUANTIDADE_PPR) || 0;
                 const realQty = saldo > 0 ? saldo : qtdOriginal;
 
-                const itemTotalWeight = weight * realQty;
-                const unitPrice = Number(item.VALOR_PPR) || 0;
+                const unitPrice = parseFloat(item.VALOR_PPR || 0);
                 const itemTotalValue = unitPrice * realQty;
 
                 // Main Accumulators
@@ -1712,17 +1747,11 @@
                 totalValue += itemTotalValue;
                 totalQty += realQty;
 
-                // Blocked Logic
-                // If it's blocked, add to blocked weight
-                const isBlocked = (
-                    item.STATUS_PED === 'B' ||
-                    item.STATUS_PPR === 'B' ||
-                    (item.STATUS_DESC_PED && String(item.STATUS_DESC_PED).toUpperCase().includes('BLOQ'))
-                );
-                // Note: Blocked weight logic usually implies looking at specific flags.
-                // Assuming "Blocked Weight" is just weight of blocked items relative to total.
-                if (isBlocked) blockedWeight += itemTotalWeight;
-
+                // Released Info (Has Delivery Date)
+                const hasDate = item.ENTREGA_PETR || item.DATA_ENTREGA_PPR;
+                if (hasDate) {
+                    releasedWeight += itemTotalWeight;
+                }
 
                 // --- STAGE CATEGORIZATION ---
                 const andamento = (item.ANDAMENTO_PCS || '').toUpperCase().trim();
@@ -1738,28 +1767,48 @@
                     kpiMoldagem.peso += itemTotalWeight;
                     kpiMoldagem.valor += itemTotalValue;
                 } else {
-                    // 3. Fundidos (Matches list or fallback)
+                    // 3. Fundidos (Everything else)
                     kpiFundido.qtd += realQty;
                     kpiFundido.peso += itemTotalWeight;
                     kpiFundido.valor += itemTotalValue;
                 }
             });
 
+            // "Blocked" Weight = Total - Released (Items without delivery date)
+            const blockedWeight = totalWeight - releasedWeight;
+
             // --- UPDATE DOM ---
 
             // 1. Header/Footer General Stats
             const uniqueOrders = new Set(list.map(i => i.CODIGO_PPR)).size;
             if (document.getElementById('totalOrders')) document.getElementById('totalOrders').innerText = uniqueOrders;
-            if (document.getElementById('kpiTotalWeight')) document.getElementById('kpiTotalWeight').innerText = formatNumber(totalWeight, 0);
-            if (document.getElementById('kpiTotalValue')) document.getElementById('kpiTotalValue').innerText = formatCurrency(totalValue);
+            if (document.getElementById('totalQuantity')) document.getElementById('totalQuantity').innerText = totalQty.toLocaleString('pt-BR');
+            if (document.getElementById('kpiTotalWeight')) document.getElementById('kpiTotalWeight').innerText = formatNumber(totalWeight, 0); // Old ID
+            if (document.getElementById('totalWeight')) document.getElementById('totalWeight').innerText = formatNumber(totalWeight); // New ID
+            if (document.getElementById('kpiTotalValue')) document.getElementById('kpiTotalValue').innerText = formatCurrency(totalValue); // Old ID
 
-            // 2. Stage KPIs
+            // 2. Main Dashboard Cards
+            if (document.getElementById('totalOrdersCard')) document.getElementById('totalOrdersCard').innerText = uniqueOrders;
+            if (document.getElementById('totalWeightCard')) document.getElementById('totalWeightCard').innerText = formatNumber(totalWeight);
+            if (document.getElementById('totalValueCard')) document.getElementById('totalValueCard').innerText = formatCurrency(totalValue);
+
+            if (document.getElementById('totalReleasedWeightCard')) document.getElementById('totalReleasedWeightCard').innerText = formatNumber(releasedWeight);
+
+            if (document.getElementById('totalBlockedWeightCard')) {
+                document.getElementById('totalBlockedWeightCard').innerText = formatNumber(blockedWeight);
+                // Style adjustment for visual alert
+                document.getElementById('totalBlockedWeightCard').style.color = blockedWeight > 0 ? '#ef4444' : '#fff';
+            }
+
+            // Avg Weight
+            const avgWeight = totalQty > 0 ? (totalWeight / totalQty) : 0;
+            if (document.getElementById('avgWeightCard')) document.getElementById('avgWeightCard').innerText = formatNumber(avgWeight);
+
+
+            // 3. Stage KPIs (New Cards)
             updateStageCard('kpiAguardando', kpiAguardando);
             updateStageCard('kpiMoldagem', kpiMoldagem);
             updateStageCard('kpiFundido', kpiFundido);
-
-            // 3. Blocked Indicator (Optional reuse of existing logic if needed)
-            // If you had a specific blocked card, update it here.
         }
 
         function updateTotals(list) {
