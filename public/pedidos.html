@@ -895,11 +895,15 @@
                     <div class="kpi-subtext">Qtd. de Pedidos na Carteira</div>
                 </div>
 
-                <!-- NEW: Valor Total em Carteira (hidden by default, role-gated) -->
-                <div id="valorTotalCard" class="kpi-card kpi-purple" style="display: none;">
+                <!-- NEW: Valor Total em Carteira (value masked by default) -->
+                <div id="valorTotalCard" class="kpi-card kpi-purple" style="cursor: pointer;"
+                    onclick="toggleValorVisibility()">
                     <div class="kpi-title">Valor Total em Carteira</div>
-                    <div id="totalValueCard" class="kpi-value">R$ 0,00</div>
-                    <div class="kpi-subtext">Valor total em carteira</div>
+                    <div class="kpi-value" style="display: flex; align-items: center; gap: 8px;">
+                        <i id="valorEyeIcon" class="fa-solid fa-eye-slash" style="font-size: 0.9rem; opacity: 0.6;"></i>
+                        <span id="totalValueCard" data-real-value="R$ 0,00">-----</span>
+                    </div>
+                    <div class="kpi-subtext">Clique para visualizar</div>
                 </div>
 
                 <!-- 2. Peso Total -->
@@ -1843,7 +1847,11 @@
             // 2. Main Dashboard Cards
             if (document.getElementById('totalOrdersCard')) document.getElementById('totalOrdersCard').innerText = uniqueOrders;
             if (document.getElementById('totalWeightCard')) document.getElementById('totalWeightCard').innerText = formatNumber(totalWeight);
-            if (document.getElementById('totalValueCard')) document.getElementById('totalValueCard').innerText = formatCurrency(totalValue);
+            if (document.getElementById('totalValueCard')) {
+                const valEl = document.getElementById('totalValueCard');
+                valEl.setAttribute('data-real-value', formatCurrency(totalValue));
+                if (valorVisible) valEl.innerText = formatCurrency(totalValue);
+            }
 
             if (document.getElementById('totalReleasedWeightCard')) document.getElementById('totalReleasedWeightCard').innerText = formatNumber(releasedWeight);
 
@@ -2419,13 +2427,46 @@
             setupFilters();
             await loadDataFromServer();
 
-            // Role-gated KPI: Show 'Valor Total' only for non-visitors
+            // Role-gated: Hide monetary info for visitors
             const userRole = localStorage.getItem('erus_role');
-            if (userRole && userRole !== 'visitante') {
-                const valorCard = document.getElementById('valorTotalCard');
-                if (valorCard) valorCard.style.display = '';
+            if (userRole === 'visitante') {
+                // Hide stage KPI monetary values for visitors
+                document.querySelectorAll('[id$="Value"]').forEach(el => {
+                    if (el.id.startsWith('kpiAguardando') || el.id.startsWith('kpiMoldagem') || el.id.startsWith('kpiFundido')) {
+                        el.style.display = 'none';
+                    }
+                });
             }
         });
+
+        // --- VALOR VISIBILITY TOGGLE ---
+        let valorVisible = false;
+
+        function toggleValorVisibility() {
+            const userRole = localStorage.getItem('erus_role');
+            if (userRole === 'visitante') {
+                showToast(
+                    'Acesso restrito',
+                    'Você precisa ser administrador ou desenvolvedor para visualizar valores monetários.',
+                    'danger'
+                );
+                return;
+            }
+
+            const el = document.getElementById('totalValueCard');
+            const icon = document.getElementById('valorEyeIcon');
+            valorVisible = !valorVisible;
+
+            if (valorVisible) {
+                el.textContent = el.getAttribute('data-real-value') || 'R$ 0,00';
+                icon.className = 'fa-solid fa-eye';
+                icon.style.opacity = '1';
+            } else {
+                el.textContent = '-----';
+                icon.className = 'fa-solid fa-eye-slash';
+                icon.style.opacity = '0.6';
+            }
+        }
 
         // --- TOAST NOTIFICATIONS ---
         function showToast(title, subtitle, type = 'info') {
