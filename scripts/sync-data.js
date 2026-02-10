@@ -97,6 +97,19 @@ async function syncData() {
                     ORDER BY PS.ID_PCS DESC
                 ) AS ANDAMENTO_PCS,
                 (
+                    SELECT FIRST 1 PS.LOTE_PCS
+                    FROM PRODUCAO_PEDIDO PP
+                    JOIN PRODUCAO_SETOR PS 
+                        ON PS.CODIGO_PCS = PP.PCP_CODIGO_PCPR
+                        AND PS.EMPRESA_PCS = PP.PCP_EMPRESA_PCPR
+                    WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR
+                        AND PP.PPR_ANO_PCPR = P.ANO_PPR
+                        AND PP.PPR_ITEM_PCPR = P.ITEM_PPR
+                        AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR
+                        AND PS.STATUS_PCS NOT IN ('T', 'C')
+                    ORDER BY PS.ID_PCS DESC
+                ) AS LOTE_PCS,
+                (
                     SELECT FIRST 1 PP.PCP_CODIGO_PCPR
                     FROM PRODUCAO_PEDIDO PP
                     WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR
