@@ -89,7 +89,16 @@ async function syncData() {
                     WHERE PS.ID_CODIGO_PCS = P.ID_PPR
                         AND PS.STATUS_PCS NOT IN ('T', 'C')
                     ORDER BY PS.ID_PCS DESC
-                ) AS ANDAMENTO_PCS
+                ) AS ANDAMENTO_PCS,
+                (
+                    SELECT FIRST 1 PS2.CODIGO_PCS
+                    FROM PRODUCAO_SETOR PS2
+                    WHERE PS2.ID_CODIGO_PCS = P.ID_PPR
+                        AND PS2.STATUS_PCS NOT IN ('T', 'C')
+                    ORDER BY
+                        CASE WHEN PS2.STATUS_PCS = 'E' THEN 0 ELSE 1 END,
+                        PS2.ID_PCS DESC
+                ) AS OP_PCS
             FROM PEDIDO_PRODUTO P
             LEFT JOIN PEDIDO_PRODUTO_ENTREGA E 
                 ON P.CODIGO_PPR = E.PPR_CODIGO_PETR 
