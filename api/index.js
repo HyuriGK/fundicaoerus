@@ -75,6 +75,7 @@ app.use('/api/register', register);
 app.use('/api/custos', custosRoutes);
 app.use('/api/pedidos-sync', require('../src/pedidos-sync'));
 app.use('/api/usinagem-externo', usinagemExterno); // NOVO: Usinagem Externa
+app.use('/api/producao-postgres', require('../src/producao-postgres')); // NOVO: Produção Sincronizada
 
 // Rota de teste para ver se a API está de pé
 app.get('/api', (req, res) => {

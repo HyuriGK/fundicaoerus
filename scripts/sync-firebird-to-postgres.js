@@ -231,9 +231,7 @@ async function sincronizarDetalhado(fbDb) {
         nfp.ITEM_NPR,
         nfp.PEDIDO_NPR,
         (SELECT FIRST 1 npe.PEDIDO_NPE FROM NOTA_FISCAL_PEDIDO npe 
-         WHERE npe.EMPRESA_NPE = nf.EMPRESA_NOT 
-         AND npe.SERIE_NPE = nf.SERIE_NOT 
-         AND npe.CODIGO_NPE = nf.CODIGO_NOT) as PEDIDO_LINK,
+         WHERE npe.NOT_ID_NPE = nf.ID_NOT) as PEDIDO_LINK,
         nfp.PRODUTO_NPR,
         nfp.NOME_PRODUTO_NPR,
         nfp.QUANTIDADE_NPR,
