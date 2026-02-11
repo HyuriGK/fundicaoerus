@@ -62,6 +62,11 @@ function chunkArray(myArray, chunk_size) {
         `);
         console.log('✅ Postgres ready.');
 
+        // Wipe table before sync as requested
+        console.log('🧹 Clearing existing data...');
+        await pool.query('TRUNCATE TABLE producao_apontada_sincronizada');
+        console.log('✅ Table cleared.');
+
         // Add columns if they don't exist (migration for existing table)
         await pool.query(`
             DO $$ 
@@ -86,66 +91,54 @@ function chunkArray(myArray, chunk_size) {
             }
             console.log('✅ Firebird attached. Fetching Movements...');
 
-            // 1. Fetch Movements (Base)
-            // No joins, just raw data. Should be fast.
-            const queryPMV = `
+            // 1. Fetch PRODUCAO_SETOR (Base Table as per user request)
+            // User restriction: "se baseie em PRODUCAO_SETOR SOMENTE COM AS COLUNAS QUE EU TE MANDEI"
+            // Columns: CODIGO_PCS, DATA_PCS, QUANTIDADE_PCS, LOTE_PCS, SETOR_PCS
+            const queryPCS = `
                 SELECT 
-                    CODIGO_PMV,
-                    DATA_PMV,
-                    QUANTIDADE_PMV,
-                    CODIGO_PRODUCAO_PMV,
-                    SETOR_PRODUCAO_PMV,
-                    PRODUTO_PMV
-                FROM PRODUTO_MOVIMENTACAO
-                WHERE DATA_PMV >= '2026-01-01'
-                AND CODIGO_PRODUCAO_PMV IS NOT NULL
-                ORDER BY DATA_PMV DESC
+                    CODIGO_PCS,
+                    DATA_PCS,
+                    QUANTIDADE_PCS,
+                    LOTE_PCS,
+                    SETOR_PCS
+                FROM PRODUCAO_SETOR
+                WHERE DATA_PCS >= '2026-01-01'
+                ORDER BY DATA_PCS DESC
             `;
 
-            db.query(queryPMV, async (err, movements) => {
+            db.query(queryPCS, async (err, productionRows) => {
                 if (err) {
-                    console.error('❌ Query PMV Error:', err);
+                    console.error('❌ Query PCS Error:', err);
                     db.detach();
                     return;
                 }
-                console.log(`📦 Movements fetched: ${movements.length}`);
+                console.log(`📦 Production records (PCS) fetched: ${productionRows.length}`);
 
-                if (movements.length === 0) {
-                    console.log('No movements found.');
+                if (productionRows.length === 0) {
+                    console.log('No production records found.');
                     db.detach();
                     process.exit(0);
                 }
 
-                // 2. Collect IDs
-                const pcsIds = [...new Set(movements.map(m => m.CODIGO_PRODUCAO_PMV).filter(id => id))];
-                const setIds = [...new Set(movements.map(m => m.SETOR_PRODUCAO_PMV).filter(id => id))];
-                const proIds = [...new Set(movements.map(m => m.PRODUTO_PMV).filter(id => id))];
+                // 2. Collect IDs (Only Setor ID needed for name lookup)
+                const setIds = [...new Set(productionRows.map(p => p.SETOR_PCS).filter(id => id))];
+                console.log(`ℹ️ Unique IDs - SET: ${setIds.length}`);
 
-                console.log(`ℹ️ Unique IDs - PCS: ${pcsIds.length}, SET: ${setIds.length}, PRO: ${proIds.length}`);
-
-                // 3. Fetch Lookup Data (Batched)
-                const lookupPCS = {};
+                // 3. Fetch Lookup Data
                 const lookupSET = {};
-                const lookupPRO = {};
 
                 // Helper to fetch and map
                 const fetchMap = (ids, table, pk, cols, targetMap) => {
                     return new Promise((resolve, reject) => {
                         if (ids.length === 0) return resolve();
-
-                        // Chunk IDs to avoid query limit
                         const chunks = chunkArray(ids, 500);
                         let processed = 0;
-
                         chunks.forEach(chunk => {
                             const idList = chunk.join(',');
                             const q = `SELECT ${pk}, ${cols} FROM ${table} WHERE ${pk} IN (${idList})`;
-
                             db.query(q, (err, rows) => {
                                 if (err) return reject(err);
-                                rows.forEach(r => {
-                                    targetMap[r[pk]] = r;
-                                });
+                                rows.forEach(r => { targetMap[r[pk]] = r; });
                                 processed++;
                                 if (processed === chunks.length) resolve();
                             });
@@ -154,10 +147,7 @@ function chunkArray(myArray, chunk_size) {
                 };
 
                 try {
-                    // Execute sequentially to avoid Firebird driver concurrency issues on single attachment
-                    await fetchMap(pcsIds, 'PRODUCAO_SETOR', 'CODIGO_PCS', 'DATA_HORA_FIM_PCS, CODIGO_PCS', lookupPCS);
                     await fetchMap(setIds, 'SETOR', 'CODIGO_SET', 'NOME_SET', lookupSET);
-                    await fetchMap(proIds, 'PRODUTO', 'CODIGO_PRO', 'NOME_PRO, PESO_LIQUIDO_PRO, REFERENCIA_PRO, CODIGO_PRO', lookupPRO);
                 } catch (fetchErr) {
                     console.error('❌ Error fetching lookups:', fetchErr);
                     db.detach();
@@ -166,42 +156,33 @@ function chunkArray(myArray, chunk_size) {
 
                 console.log('✅ Lookups fetched. Syncing to Postgres...');
 
-                // 4. Join & Sync
+                // 4. Transform & Insert
                 let inserted = 0;
                 let errors = 0;
 
-                for (const pmv of movements) {
+                for (const pcs of productionRows) {
                     try {
-                        const pcs = lookupPCS[pmv.CODIGO_PRODUCAO_PMV] || {};
-                        const set = lookupSET[pmv.SETOR_PRODUCAO_PMV] || {};
-                        const pro = lookupPRO[pmv.PRODUTO_PMV] || {};
+                        const set = lookupSET[pcs.SETOR_PCS] || {};
 
-                        const dataProd = parseDate(pcs.DATA_HORA_FIM_PCS) || parseDate(pmv.DATA_PMV);
+                        const dataProd = parseDate(pcs.DATA_PCS);
                         if (!dataProd) continue;
 
-                        const chaveOrigem = `PMV-${pmv.CODIGO_PMV}`;
+                        const chaveOrigem = `PCS-${pcs.CODIGO_PCS}`;
                         const setor = cleanString(set.NOME_SET) || 'DESCONHECIDO';
-                        const produto = cleanString(pro.NOME_PRO) || 'PRODUTO DESCONHECIDO';
 
-                        // New Fields (Mapped directly from PRODUTO_MOVIMENTACAO as per user request)
-                        const op = pmv.CODIGO_PRODUCAO_PMV ? String(pmv.CODIGO_PRODUCAO_PMV) : null;
-                        const codigoPeca = pmv.PRODUTO_PMV ? String(pmv.PRODUTO_PMV) : null;
+                        // Strict conformance: Product info unavailable
+                        const produto = 'PRODUTO INDEFINIDO';
+                        const liga = null;
+                        const pesoUn = 0;
 
-                        // Fallback: If Code is purely numeric and we want the "Reference" instead, we could toggle this. 
-                        // But user explicitly said "o codigo da peça fica na ... coluna PRODUTO_PMV".
-                        // We will keep the alloy extraction from name.
+                        // Mapped Fields:
+                        const op = pcs.CODIGO_PCS ? String(pcs.CODIGO_PCS) : null;
+                        const quantidade = parseFloat(pcs.QUANTIDADE_PCS || 0);
+                        const codigoPeca = null;
+                        const pesoTotal = 0;
 
-                        let liga = null;
-                        if (produto.includes('/')) {
-                            const parts = produto.split('/');
-                            if (parts.length > 1) {
-                                liga = parts[parts.length - 1].trim();
-                            }
-                        }
-
-                        const pesoUn = parseFloat(pro.PESO_LIQUIDO_PRO || 0);
-                        const quantidade = parseFloat(pmv.QUANTIDADE_PMV || 0);
-                        const pesoTotal = pesoUn * quantidade;
+                        // Note: LOTE_PCS is available in 'pcs.LOTE_PCS' but we don't have a column for it in Postgres yet. 
+                        // User didn't ask to create a column, just to "use data from these columns".
 
                         await pool.query(`
                             INSERT INTO producao_apontada_sincronizada 
@@ -223,16 +204,13 @@ function chunkArray(myArray, chunk_size) {
                         inserted++;
                         if (inserted % 100 === 0) process.stdout.write('.');
 
-                    } catch (syncErr) {
-                        console.error(`Sync Error ID ${pmv.CODIGO_PMV}:`, syncErr.message);
+                    } catch (rowErr) {
+                        console.error('Row Error:', rowErr);
                         errors++;
                     }
                 }
 
-                console.log(`\n✅ Sync Complete.`);
-                console.log(`   Processed: ${inserted}`);
-                console.log(`   Errors: ${errors}`);
-
+                console.log(`\n✅ Sync Complete. \n   Processed: ${inserted} \n   Errors: ${errors}`);
                 db.detach();
                 await pool.end();
                 process.exit(0);
