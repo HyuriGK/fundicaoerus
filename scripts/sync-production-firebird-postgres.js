@@ -10,7 +10,7 @@ const fbOptions = {
     database: '/home/lm/LM-Sistemas/SIGE2.0/Dados/sige.fdb',
     user: 'SYSDBA',
     password: 'masterkey',
-    lowercase_keys: false, // Use uppercase for column names as per Firebird tradition
+    lowercase_keys: false,
     pageSize: 4096
 };
 
@@ -22,23 +22,32 @@ function cleanString(str) {
 
 function parseDate(dateVal) {
     if (!dateVal) return null;
-    // Firebird node driver returns Date objects usually
     if (dateVal instanceof Date) return dateVal;
     return new Date(dateVal);
+}
+
+function chunkArray(myArray, chunk_size) {
+    var index = 0;
+    var arrayLength = myArray.length;
+    var tempArray = [];
+
+    for (index = 0; index < arrayLength; index += chunk_size) {
+        myChunk = myArray.slice(index, index + chunk_size);
+        tempArray.push(myChunk);
+    }
+    return tempArray;
 }
 
 // --- Main Execution ---
 (async () => {
     try {
-        // 1. Verify Postgres Connection & Table
+        console.log('🔗 Connecting to Postgres...');
         await pool.query('SELECT NOW()');
-        console.log('✅ Connected to Postgres.');
 
-        // Ensure table exists (idempotent check)
         await pool.query(`
             CREATE TABLE IF NOT EXISTS producao_apontada_sincronizada (
                 id SERIAL PRIMARY KEY,
-                chave_origem VARCHAR(255) UNIQUE NOT NULL, -- Unique ID from Firebird (e.g. "PMV-12345")
+                chave_origem VARCHAR(255) UNIQUE NOT NULL,
                 data_producao TIMESTAMP NOT NULL,
                 setor VARCHAR(100),
                 produto VARCHAR(255),
@@ -49,70 +58,113 @@ function parseDate(dateVal) {
                 atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
-        console.log('✅ Postgres table verified.');
+        console.log('✅ Postgres ready.');
 
-        // 2. Clear old data? No, we upsert. 
-        // But if we want to full sync, we might want to delete old records not in source?
-        // For now, let's just upsert new/changed records to be safe.
-
-        // 3. Connect to Firebird
         Firebird.attach(fbOptions, function (err, db) {
             if (err) {
-                console.error('❌ Error connecting to Firebird:', err);
+                console.error('❌ Firebird Connection Error:', err);
                 process.exit(1);
             }
-            console.log('✅ Connected to Firebird.');
+            console.log('✅ Firebird attached. Fetching Movements...');
 
-            // 4. Query Data
-            // Join Strategy:
-            // PRODUTO_MOVIMENTACAO (pmv) is the source of truth for "what went into stock from production"
-            // PRODUCAO_SETOR (pcs) provides the sector context and production time
-            // SETOR (s) provides sector name
-            // PRODUTO (p) provides product name and weight
-
-            const query = `
+            // 1. Fetch Movements (Base)
+            // No joins, just raw data. Should be fast.
+            const queryPMV = `
                 SELECT 
-                    pmv.CODIGO_PMV,
-                    pmv.DATA_PMV,
-                    pmv.QUANTIDADE_PMV,
-                    pmv.CODIGO_PRODUCAO_PMV,
-                    pcs.DATA_HORA_FIM_PCS,
-                    s.NOME_SET,
-                    p.NOME_PRO,
-                    p.PESO_LIQUIDO_PRO
-                FROM PRODUTO_MOVIMENTACAO pmv
-                LEFT JOIN PRODUCAO_SETOR pcs ON pmv.CODIGO_PRODUCAO_PMV = pcs.CODIGO_PCS
-                LEFT JOIN SETOR s ON pmv.SETOR_PRODUCAO_PMV = s.CODIGO_SET
-                LEFT JOIN PRODUTO p ON pmv.PRODUTO_PMV = p.CODIGO_PRO
-                WHERE pmv.DATA_PMV >= '2024-01-01'
-                AND pmv.CODIGO_PRODUCAO_PMV IS NOT NULL
-                ORDER BY pmv.DATA_PMV DESC
+                    CODIGO_PMV,
+                    DATA_PMV,
+                    QUANTIDADE_PMV,
+                    CODIGO_PRODUCAO_PMV,
+                    SETOR_PRODUCAO_PMV,
+                    PRODUTO_PMV
+                FROM PRODUTO_MOVIMENTACAO
+                WHERE DATA_PMV >= '2026-01-01'
+                AND CODIGO_PRODUCAO_PMV IS NOT NULL
+                ORDER BY DATA_PMV DESC
             `;
 
-            db.query(query, async (err, results) => {
+            db.query(queryPMV, async (err, movements) => {
                 if (err) {
-                    console.error('❌ Firebird query error:', err);
+                    console.error('❌ Query PMV Error:', err);
                     db.detach();
-                    await pool.end();
-                    process.exit(1);
+                    return;
+                }
+                console.log(`📦 Movements fetched: ${movements.length}`);
+
+                if (movements.length === 0) {
+                    console.log('No movements found.');
+                    db.detach();
+                    process.exit(0);
                 }
 
-                console.log(`📦 Fetched ${results.length} records from Firebird. Syncing to Postgres...`);
+                // 2. Collect IDs
+                const pcsIds = [...new Set(movements.map(m => m.CODIGO_PRODUCAO_PMV).filter(id => id))];
+                const setIds = [...new Set(movements.map(m => m.SETOR_PRODUCAO_PMV).filter(id => id))];
+                const proIds = [...new Set(movements.map(m => m.PRODUTO_PMV).filter(id => id))];
 
+                console.log(`ℹ️ Unique IDs - PCS: ${pcsIds.length}, SET: ${setIds.length}, PRO: ${proIds.length}`);
+
+                // 3. Fetch Lookup Data (Batched)
+                const lookupPCS = {};
+                const lookupSET = {};
+                const lookupPRO = {};
+
+                // Helper to fetch and map
+                const fetchMap = (ids, table, pk, cols, targetMap) => {
+                    return new Promise((resolve, reject) => {
+                        if (ids.length === 0) return resolve();
+
+                        // Chunk IDs to avoid query limit
+                        const chunks = chunkArray(ids, 500);
+                        let processed = 0;
+
+                        chunks.forEach(chunk => {
+                            const idList = chunk.join(',');
+                            const q = `SELECT ${pk}, ${cols} FROM ${table} WHERE ${pk} IN (${idList})`;
+
+                            db.query(q, (err, rows) => {
+                                if (err) return reject(err);
+                                rows.forEach(r => {
+                                    targetMap[r[pk]] = r;
+                                });
+                                processed++;
+                                if (processed === chunks.length) resolve();
+                            });
+                        });
+                    });
+                };
+
+                try {
+                    await Promise.all([
+                        fetchMap(pcsIds, 'PRODUCAO_SETOR', 'CODIGO_PCS', 'DATA_HORA_FIM_PCS', lookupPCS),
+                        fetchMap(setIds, 'SETOR', 'CODIGO_SET', 'NOME_SET', lookupSET),
+                        fetchMap(proIds, 'PRODUTO', 'CODIGO_PRO', 'NOME_PRO, PESO_LIQUIDO_PRO', lookupPRO)
+                    ]);
+                } catch (fetchErr) {
+                    console.error('❌ Error fetching lookups:', fetchErr);
+                    db.detach();
+                    return;
+                }
+
+                console.log('✅ Lookups fetched. Syncing to Postgres...');
+
+                // 4. Join & Sync
                 let inserted = 0;
                 let errors = 0;
 
-                // Process in chunks if needed, but linear loop is fine for < 50k records usually
-                for (const row of results) {
+                for (const pmv of movements) {
                     try {
-                        const dataProd = parseDate(row.DATA_HORA_FIM_PCS) || parseDate(row.DATA_PMV);
+                        const pcs = lookupPCS[pmv.CODIGO_PRODUCAO_PMV] || {};
+                        const set = lookupSET[pmv.SETOR_PRODUCAO_PMV] || {};
+                        const pro = lookupPRO[pmv.PRODUTO_PMV] || {};
+
+                        const dataProd = parseDate(pcs.DATA_HORA_FIM_PCS) || parseDate(pmv.DATA_PMV);
                         if (!dataProd) continue;
 
-                        const chaveOrigem = `PMV-${row.CODIGO_PMV}`;
-                        const setor = cleanString(row.NOME_SET) || 'DESCONHECIDO';
-                        const produto = cleanString(row.NOME_PRO) || 'PRODUTO DESCONHECIDO';
+                        const chaveOrigem = `PMV-${pmv.CODIGO_PMV}`;
+                        const setor = cleanString(set.NOME_SET) || 'DESCONHECIDO';
+                        const produto = cleanString(pro.NOME_PRO) || 'PRODUTO DESCONHECIDO';
 
-                        // Extract Alloy (Liga) from Product Name if present (after last /)
                         let liga = null;
                         if (produto.includes('/')) {
                             const parts = produto.split('/');
@@ -121,11 +173,10 @@ function parseDate(dateVal) {
                             }
                         }
 
-                        const pesoUn = parseFloat(row.PESO_LIQUIDO_PRO || 0);
-                        const quantidade = parseFloat(row.QUANTIDADE_PMV || 0);
+                        const pesoUn = parseFloat(pro.PESO_LIQUIDO_PRO || 0);
+                        const quantidade = parseFloat(pmv.QUANTIDADE_PMV || 0);
                         const pesoTotal = pesoUn * quantidade;
 
-                        // Upsert
                         await pool.query(`
                             INSERT INTO producao_apontada_sincronizada 
                             (chave_origem, data_producao, setor, produto, liga, peso_un, quantidade, peso_total, atualizado_em)
@@ -142,9 +193,10 @@ function parseDate(dateVal) {
                         `, [chaveOrigem, dataProd, setor, produto, liga, pesoUn, quantidade, pesoTotal]);
 
                         inserted++;
-                        if (inserted % 500 === 0) process.stdout.write('.');
+                        if (inserted % 100 === 0) process.stdout.write('.');
+
                     } catch (syncErr) {
-                        console.error(`Error syncing row ${row.CODIGO_PMV}:`, syncErr.message);
+                        console.error(`Sync Error ID ${pmv.CODIGO_PMV}:`, syncErr.message);
                         errors++;
                     }
                 }

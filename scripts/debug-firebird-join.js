@@ -19,24 +19,17 @@ Firebird.attach(options, function (err, db) {
         return;
     }
 
-    const testId = 38222;
+    const query = `
+        SELECT COUNT(*) as CNT
+        FROM PRODUTO_MOVIMENTACAO pmv
+        WHERE pmv.DATA_PMV >= '2026-01-01'
+        AND pmv.CODIGO_PRODUCAO_PMV IS NOT NULL
+    `;
 
-    // 1. PRODUCAO_SETOR
-    db.query('SELECT * FROM PRODUCAO_SETOR WHERE CODIGO_PCS = ?', [testId], function (err, result1) {
-        if (err) console.error('Error 1:', err);
-        else {
-            console.log('PRODUCAO_SETOR (38222):');
-            console.log(result1);
-        }
-
-        // 2. PRODUTO_MOVIMENTACAO
-        db.query('SELECT * FROM PRODUTO_MOVIMENTACAO WHERE CODIGO_PRODUCAO_PMV = ?', [testId], function (err, result2) {
-            if (err) console.error('Error 2:', err);
-            else {
-                console.log('PRODUTO_MOVIMENTACAO (Linked to 38222):');
-                console.log(result2);
-            }
-            db.detach();
-        });
+    console.log('Running count query...');
+    db.query(query, function (err, result) {
+        if (err) console.error('Error:', err);
+        else console.log('Count 2026:', result);
+        db.detach();
     });
 });
