@@ -183,22 +183,13 @@ function chunkArray(myArray, chunk_size) {
                         const setor = cleanString(set.NOME_SET) || 'DESCONHECIDO';
                         const produto = cleanString(pro.NOME_PRO) || 'PRODUTO DESCONHECIDO';
 
-                        // New Fields
-                        const op = pcs.CODIGO_PCS ? String(pcs.CODIGO_PCS) : null;
+                        // New Fields (Mapped directly from PRODUTO_MOVIMENTACAO as per user request)
+                        const op = pmv.CODIGO_PRODUCAO_PMV ? String(pmv.CODIGO_PRODUCAO_PMV) : null;
+                        const codigoPeca = pmv.PRODUTO_PMV ? String(pmv.PRODUTO_PMV) : null;
 
-                        let codigoPeca = cleanString(pro.REFERENCIA_PRO);
-                        // If reference is empty, try to extract from name (often formatted like "NAME... 123-456 ...")
-                        if (!codigoPeca && produto) {
-                            // Look for patterns like X-X-X or XX.XX.XX
-                            const codeMatch = produto.match(/(\d{2,}[-.]\d{2,}[-.]\d{2,}[-.]\d{2,}[-.]\d{2,})|(\d{2,}[-.]\d{3,}[-.]\d{4,}[-.]\d{2,}[-.]\d{3,})|(\d{2,}[-.]\d{3,}[-.]\d{4,}[-.]\d{2,})/);
-                            if (codeMatch) {
-                                codigoPeca = codeMatch[0];
-                            } else {
-                                codigoPeca = String(pro.CODIGO_PRO || '');
-                            }
-                        } else if (!codigoPeca) {
-                            codigoPeca = String(pro.CODIGO_PRO || '');
-                        }
+                        // Fallback: If Code is purely numeric and we want the "Reference" instead, we could toggle this. 
+                        // But user explicitly said "o codigo da peça fica na ... coluna PRODUTO_PMV".
+                        // We will keep the alloy extraction from name.
 
                         let liga = null;
                         if (produto.includes('/')) {
