@@ -41,9 +41,13 @@ function chunkArray(myArray, chunk_size) {
 // --- Main Execution ---
 (async () => {
     try {
+        const syncStartTime = new Date(); // Capture start time for Mark & Sweep
+        console.log(`🕒 Sync Start Time: ${syncStartTime.toISOString()}`);
+
         console.log('🔗 Connecting to Postgres...');
         await pool.query('SELECT NOW()');
 
+        // 1. Prepare Postgres (Create Table & Indexes) - REMOVED TRUNCATE
         await pool.query(`
             CREATE TABLE IF NOT EXISTS producao_apontada_sincronizada (
                 id SERIAL PRIMARY KEY,
@@ -59,13 +63,14 @@ function chunkArray(myArray, chunk_size) {
                 peso_total NUMERIC(10,2),
                 atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
+            CREATE INDEX IF NOT EXISTS idx_producao_data ON producao_apontada_sincronizada(data_producao);
+            CREATE INDEX IF NOT EXISTS idx_producao_setor ON producao_apontada_sincronizada(setor);
         `);
         console.log('✅ Postgres ready.');
 
-        // Wipe table before sync as requested
-        console.log('🧹 Clearing existing data...');
-        await pool.query('TRUNCATE TABLE producao_apontada_sincronizada');
-        console.log('✅ Table cleared.');
+        // console.log('🧹 Clearing existing data...');
+        // await pool.query('TRUNCATE TABLE producao_apontada_sincronizada');
+        // console.log('✅ Table cleared.');
 
         // Add columns if they don't exist (migration for existing table)
         await pool.query(`
@@ -96,6 +101,7 @@ function chunkArray(myArray, chunk_size) {
             // Columns: CODIGO_PCS, DATA_PCS, QUANTIDADE_PCS, LOTE_PCS, SETOR_PCS
             const queryPCS = `
                 SELECT 
+                    ID_PCS,
                     CODIGO_PCS,
                     DATA_PCS,
                     QUANTIDADE_PCS,
@@ -193,14 +199,17 @@ function chunkArray(myArray, chunk_size) {
                         const set = lookupSET[pcs.SETOR_PCS] || {};
 
                         const dataProd = parseDate(pcs.DATA_PCS);
-                        if (!dataProd) continue;
+                        if (!dataProd || isNaN(dataProd.getTime())) {
+                            // console.warn('Skipping invalid date:', pcs.DATA_PCS);
+                            continue;
+                        }
 
-                        // Strict JS Filter for Year 2026
+                        // Strict year check (redundant but safe)
                         if (dataProd.getFullYear() !== 2026) {
                             continue;
                         }
 
-                        const chaveOrigem = `PCS-${pcs.CODIGO_PCS}`;
+                        const chaveOrigem = `PCS-${pcs.ID_PCS}`; // UPDATED: Use Unique ID from Table, not OP Code
                         const setor = cleanString(set.NOME_SET) || 'DESCONHECIDO';
 
                         // Product Details from Joined Tables
@@ -256,14 +265,17 @@ function chunkArray(myArray, chunk_size) {
                 console.log(`   Processed: ${inserted}`);
                 console.log(`   Errors: ${errors}`);
 
-                // Final Safeguard: Delete any records outside 2026 range that might have slipped through
-                // COMMENTED OUT: User reported valid records being deleted. 
-                // console.log('🧹 Enforcing 2026 range cleanup...');
-                // const cleanup = await pool.query(`
-                //     DELETE FROM producao_apontada_sincronizada 
-                //     WHERE data_producao < '2026-01-01' OR data_producao > '2026-12-31 23:59:59'
-                // `);
-                // console.log(`   Removed ${cleanup.rowCount} out-of-range records.`);
+                // Final Safeguard: Delete records that were NOT updated in this sync run
+                // This handles deletions: if a record exists in Postgres but was not fetched from Firebird (because it was deleted or moved),
+                // it won't have been updated, so its 'atualizado_em' will be older than 'syncStartTime'.
+                console.log('🧹 Clearing stale data (Mark & Sweep)...');
+                const cleanup = await pool.query(`
+                    DELETE FROM producao_apontada_sincronizada 
+                    WHERE data_producao >= '2026-01-01' 
+                      AND data_producao <= '2026-12-31'
+                      AND atualizado_em < $1
+                `, [syncStartTime]);
+                console.log(`   Removed ${cleanup.rowCount} stale records.`);
 
                 db.detach();
                 await pool.end();
