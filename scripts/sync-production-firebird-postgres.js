@@ -102,7 +102,7 @@ function chunkArray(myArray, chunk_size) {
                     LOTE_PCS,
                     SETOR_PCS
                 FROM PRODUCAO_SETOR
-                WHERE DATA_PCS >= '2026-01-01'
+                WHERE DATA_PCS >= '2026-01-01' AND DATA_PCS <= '2026-12-31'
                 ORDER BY DATA_PCS DESC
             `;
 
@@ -167,6 +167,11 @@ function chunkArray(myArray, chunk_size) {
                         const dataProd = parseDate(pcs.DATA_PCS);
                         if (!dataProd) continue;
 
+                        // Strict JS Filter for Year 2026
+                        if (dataProd.getFullYear() !== 2026) {
+                            continue;
+                        }
+
                         const chaveOrigem = `PCS-${pcs.CODIGO_PCS}`;
                         const setor = cleanString(set.NOME_SET) || 'DESCONHECIDO';
 
@@ -210,7 +215,18 @@ function chunkArray(myArray, chunk_size) {
                     }
                 }
 
-                console.log(`\n✅ Sync Complete. \n   Processed: ${inserted} \n   Errors: ${errors}`);
+                console.log(`\n✅ Sync Loop Complete.`);
+                console.log(`   Processed: ${inserted}`);
+                console.log(`   Errors: ${errors}`);
+
+                // Final Safeguard: Delete any records outside 2026 range that might have slipped through
+                console.log('🧹 Enforcing 2026 range cleanup...');
+                const cleanup = await pool.query(`
+                    DELETE FROM producao_apontada_sincronizada 
+                    WHERE data_producao < '2026-01-01' OR data_producao > '2026-12-31 23:59:59'
+                `);
+                console.log(`   Removed ${cleanup.rowCount} out-of-range records.`);
+
                 db.detach();
                 await pool.end();
                 process.exit(0);

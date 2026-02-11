@@ -22,6 +22,14 @@ const pool = require('../lib/db');
         `);
         console.log('Records with Unknown Sector/Product:', nullRes.rows[0].count);
 
+        // Check for out-of-range dates (Should be 0)
+        const rangeRes = await pool.query(`
+            SELECT COUNT(*) 
+            FROM producao_apontada_sincronizada 
+            WHERE data_producao < '2026-01-01' OR data_producao > '2026-12-31 23:59:59'
+        `);
+        console.log('Records outside 2026 range:', rangeRes.rows[0].count);
+
         await pool.end();
     } catch (err) {
         console.error('Error verifying:', err);
