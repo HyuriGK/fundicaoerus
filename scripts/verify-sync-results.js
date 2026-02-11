@@ -10,7 +10,7 @@ const pool = require('../lib/db');
         console.log('Total Records:', countRes.rows[0].count);
 
         // Sample records
-        const sampleRes = await pool.query('SELECT * FROM producao_apontada_sincronizada ORDER BY data_producao DESC LIMIT 5');
+        const sampleRes = await pool.query('SELECT data_producao, setor, produto, op, codigo_peca, quantidade FROM producao_apontada_sincronizada ORDER BY data_producao DESC LIMIT 5');
         console.log('Sample Data (Latest 5):');
         console.table(sampleRes.rows);
 
