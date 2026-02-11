@@ -185,7 +185,20 @@ function chunkArray(myArray, chunk_size) {
 
                         // New Fields
                         const op = pcs.CODIGO_PCS ? String(pcs.CODIGO_PCS) : null;
-                        const codigoPeca = cleanString(pro.REFERENCIA_PRO) || String(pro.CODIGO_PRO || '');
+
+                        let codigoPeca = cleanString(pro.REFERENCIA_PRO);
+                        // If reference is empty, try to extract from name (often formatted like "NAME... 123-456 ...")
+                        if (!codigoPeca && produto) {
+                            // Look for patterns like X-X-X or XX.XX.XX
+                            const codeMatch = produto.match(/(\d{2,}[-.]\d{2,}[-.]\d{2,}[-.]\d{2,}[-.]\d{2,})|(\d{2,}[-.]\d{3,}[-.]\d{4,}[-.]\d{2,}[-.]\d{3,})|(\d{2,}[-.]\d{3,}[-.]\d{4,}[-.]\d{2,})/);
+                            if (codeMatch) {
+                                codigoPeca = codeMatch[0];
+                            } else {
+                                codigoPeca = String(pro.CODIGO_PRO || '');
+                            }
+                        } else if (!codigoPeca) {
+                            codigoPeca = String(pro.CODIGO_PRO || '');
+                        }
 
                         let liga = null;
                         if (produto.includes('/')) {
