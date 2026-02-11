@@ -23,6 +23,23 @@ const pool = require('../lib/db');
         console.log('Records with Unknown Sector/Product:', nullRes.rows[0].count);
 
         // Check for out-of-range dates (Should be 0)
+        const res = await pool.query(`
+        SELECT 
+            id, 
+            chave_origem, 
+            data_producao, 
+            setor, 
+            produto, 
+            op, 
+            codigo_peca, 
+            peso_un, 
+            quantidade
+        FROM producao_apontada_sincronizada 
+        ORDER BY data_producao DESC 
+        LIMIT 5
+    `);
+        // Check for out-of-range dates (Should be 0)
+        console.table(res.rows);
         const rangeRes = await pool.query(`
             SELECT COUNT(*) 
             FROM producao_apontada_sincronizada 

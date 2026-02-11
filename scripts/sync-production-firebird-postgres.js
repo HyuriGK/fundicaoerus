@@ -147,7 +147,35 @@ function chunkArray(myArray, chunk_size) {
                 };
 
                 try {
+                    // 3.1 Fetch SETOR names
                     await fetchMap(setIds, 'SETOR', 'CODIGO_SET', 'NOME_SET', lookupSET);
+
+                    // 3.2 Fetch PRODUCAO (OP Details) to get Product ID
+                    // CODIGO_PCS in PRODUCAO_SETOR maps to CODIGO_PCP in PRODUCAO
+                    const opIds = [...new Set(productionRows.map(p => p.CODIGO_PCS).filter(id => id))];
+                    const lookupPRODUCAO = {};
+                    console.log(`ℹ️ Unique IDs - OP: ${opIds.length}`);
+
+                    if (opIds.length > 0) {
+                        await fetchMap(opIds, 'PRODUCAO', 'CODIGO_PCP', 'PRODUTO_PCP', lookupPRODUCAO);
+                    }
+
+                    // 3.3 Fetch PRODUTO (Product Details) using Product IDs from PRODUCAO
+                    // PRODUTO_PCP in PRODUCAO maps to CODIGO_PRO in PRODUTO
+                    const productIds = [...new Set(Object.values(lookupPRODUCAO).map(p => p.PRODUTO_PCP).filter(id => id))];
+                    const lookupPRODUTO = {};
+                    console.log(`ℹ️ Unique IDs - PRO: ${productIds.length}`);
+
+                    if (productIds.length > 0) {
+                        await fetchMap(productIds, 'PRODUTO', 'CODIGO_PRO', 'NOME_PRO, REFERENCIA_PRO, PESO_LIQUIDO_PRO', lookupPRODUTO);
+                    }
+
+                    // Attach lookups to main scope for the loop
+                    productionRows.forEach(row => {
+                        row._producao = lookupPRODUCAO[row.CODIGO_PCS];
+                        row._produto = row._producao ? lookupPRODUTO[row._producao.PRODUTO_PCP] : null;
+                    });
+
                 } catch (fetchErr) {
                     console.error('❌ Error fetching lookups:', fetchErr);
                     db.detach();
@@ -175,16 +203,25 @@ function chunkArray(myArray, chunk_size) {
                         const chaveOrigem = `PCS-${pcs.CODIGO_PCS}`;
                         const setor = cleanString(set.NOME_SET) || 'DESCONHECIDO';
 
-                        // Strict conformance: Product info unavailable
-                        const produto = 'PRODUTO INDEFINIDO';
-                        const liga = null;
-                        const pesoUn = 0;
+                        // Product Details from Joined Tables
+                        let produtoName = 'PRODUTO INDEFINIDO';
+                        let produtoCode = null; // Part Code (Referencia)
+                        let produtoWeight = 0;
+
+                        if (pcs._produto) {
+                            produtoName = cleanString(pcs._produto.NOME_PRO) || produtoName;
+                            produtoCode = cleanString(pcs._produto.REFERENCIA_PRO); // User requested Code
+                            produtoWeight = parseFloat(pcs._produto.PESO_LIQUIDO_PRO || 0);
+                        }
 
                         // Mapped Fields:
                         const op = pcs.CODIGO_PCS ? String(pcs.CODIGO_PCS) : null;
                         const quantidade = parseFloat(pcs.QUANTIDADE_PCS || 0);
-                        const codigoPeca = null;
-                        const pesoTotal = 0;
+                        const codigoPeca = produtoCode;
+                        const pesoTotal = quantidade * produtoWeight;
+                        const pesoUn = produtoWeight;
+                        const produto = produtoName;
+                        const liga = null; // Still not found in schema analysis
 
                         // Note: LOTE_PCS is available in 'pcs.LOTE_PCS' but we don't have a column for it in Postgres yet. 
                         // User didn't ask to create a column, just to "use data from these columns".
@@ -220,12 +257,13 @@ function chunkArray(myArray, chunk_size) {
                 console.log(`   Errors: ${errors}`);
 
                 // Final Safeguard: Delete any records outside 2026 range that might have slipped through
-                console.log('🧹 Enforcing 2026 range cleanup...');
-                const cleanup = await pool.query(`
-                    DELETE FROM producao_apontada_sincronizada 
-                    WHERE data_producao < '2026-01-01' OR data_producao > '2026-12-31 23:59:59'
-                `);
-                console.log(`   Removed ${cleanup.rowCount} out-of-range records.`);
+                // COMMENTED OUT: User reported valid records being deleted. 
+                // console.log('🧹 Enforcing 2026 range cleanup...');
+                // const cleanup = await pool.query(`
+                //     DELETE FROM producao_apontada_sincronizada 
+                //     WHERE data_producao < '2026-01-01' OR data_producao > '2026-12-31 23:59:59'
+                // `);
+                // console.log(`   Removed ${cleanup.rowCount} out-of-range records.`);
 
                 db.detach();
                 await pool.end();
