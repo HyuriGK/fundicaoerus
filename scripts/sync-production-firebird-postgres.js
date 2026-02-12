@@ -55,7 +55,7 @@ function chunkArray(myArray, chunk_size) {
                 data_producao TIMESTAMP NOT NULL,
                 setor VARCHAR(100),
                 produto VARCHAR(255),
-                liga VARCHAR(50),
+                liga VARCHAR(255),
                 op VARCHAR(50),
                 codigo_peca VARCHAR(50),
                 peso_un NUMERIC(10,4),
@@ -88,6 +88,9 @@ function chunkArray(myArray, chunk_size) {
                 END;
             END $$;
         `);
+
+        // Widen liga column if needed (was VARCHAR(50), now VARCHAR(255))
+        await pool.query(`ALTER TABLE producao_apontada_sincronizada ALTER COLUMN liga TYPE VARCHAR(255)`);
 
         Firebird.attach(fbOptions, function (err, db) {
             if (err) {
@@ -176,38 +179,43 @@ function chunkArray(myArray, chunk_size) {
                         await fetchMap(productIds, 'PRODUTO', 'CODIGO_PRO', 'NOME_PRO, REFERENCIA_PRO, PESO_LIQUIDO_PRO', lookupPRODUTO);
                     }
 
-                    // 3.4 Fetch FICHA_TECNICA (Material/Liga)
-                    // PRO_CODIGO_FIC in FICHA_TECNICA maps to CODIGO_PRO in PRODUTO
-                    const lookupFICHA = {};
-                    console.log(`ℹ️ Fetching FICHA_TECNICA...`);
+                    // 3.4 Fetch PRODUTO_MATERIAL (Product -> Material link)
+                    const lookupPRODUTO_MATERIAL = {};
+                    console.log(`ℹ️ Fetching PRODUTO_MATERIAL...`);
 
                     if (productIds.length > 0) {
-                        // We use fetchMap, assuming PRO_CODIGO_FIC is unique per product or we just take one valid record
-                        // It maps PRO_CODIGO_FIC -> { MAT_NOMENCLATURA_FIC, ... }
-                        await fetchMap(productIds, 'FICHA_TECNICA', 'PRO_CODIGO_FIC', 'MAT_NOMENCLATURA_FIC', lookupFICHA);
-                        console.log(`ℹ️ Lookup FICHA size: ${Object.keys(lookupFICHA).length}`);
-                        if (Object.keys(lookupFICHA).length > 0) {
-                            const sampleKey = Object.keys(lookupFICHA)[0];
-                            console.log(`ℹ️ Sample FICHA key:`, sampleKey, `Type:`, typeof sampleKey);
-                        }
+                        await fetchMap(productIds, 'PRODUTO_MATERIAL', 'PRODUTO_PMT', 'MAT_ID_PMT', lookupPRODUTO_MATERIAL);
+                        console.log(`ℹ️ Lookup PRODUTO_MATERIAL size: ${Object.keys(lookupPRODUTO_MATERIAL).length}`);
+                    }
+
+                    // 3.5 Fetch MATERIAL (Material details)
+                    const matIds = [...new Set(Object.values(lookupPRODUTO_MATERIAL).map(pm => pm.MAT_ID_PMT).filter(id => id))];
+                    const lookupMATERIAL = {};
+                    console.log(`ℹ️ Unique Material IDs: ${matIds.length}`);
+
+                    if (matIds.length > 0) {
+                        await fetchMap(matIds, 'MATERIAL', 'ID_MAT', 'MATERIAL_MAT', lookupMATERIAL);
+                        console.log(`ℹ️ Lookup MATERIAL size: ${Object.keys(lookupMATERIAL).length}`);
                     }
 
                     // Attach lookups to main scope for the loop
+                    let ligaCount = 0;
                     productionRows.forEach(row => {
                         row._producao = lookupPRODUCAO[row.CODIGO_PCS];
                         row._produto = row._producao ? lookupPRODUTO[row._producao.PRODUTO_PCP] : null;
+                        // Resolve material name now (while lookups are in scope)
                         if (row._produto && row._produto.CODIGO_PRO) {
-                            row._ficha = lookupFICHA[row._produto.CODIGO_PRO];
-                            // Debug only first one
-                            if (!global.debugFicha && row._ficha) {
-                                console.log('✅ Attached Ficha for', row._produto.CODIGO_PRO);
-                                global.debugFicha = true;
-                            } else if (!global.debugFicha && !row._ficha) {
-                                console.log('❌ Failed to attach Ficha for', row._produto.CODIGO_PRO);
-                                global.debugFicha = true;
+                            const pm = lookupPRODUTO_MATERIAL[row._produto.CODIGO_PRO];
+                            if (pm && pm.MAT_ID_PMT) {
+                                const mat = lookupMATERIAL[pm.MAT_ID_PMT];
+                                if (mat && mat.MATERIAL_MAT) {
+                                    row._materialName = mat.MATERIAL_MAT.trim();
+                                    ligaCount++;
+                                }
                             }
                         }
                     });
+                    console.log(`ℹ️ Rows with Liga/Material: ${ligaCount} / ${productionRows.length}`);
 
                 } catch (fetchErr) {
                     console.error('❌ Error fetching lookups:', fetchErr);
@@ -260,11 +268,7 @@ function chunkArray(myArray, chunk_size) {
                         const pesoUn = produtoWeight;
                         const produto = produtoName;
 
-                        let liga = null;
-                        if (pcs._ficha) {
-                            liga = cleanString(pcs._ficha.MAT_NOMENCLATURA_FIC);
-                            if (liga) console.log('DEBUG Liga:', liga);
-                        }
+                        const liga = pcs._materialName || null;
 
                         // Note: LOTE_PCS is available in 'pcs.LOTE_PCS' but we don't have a column for it in Postgres yet. 
                         // User didn't ask to create a column, just to "use data from these columns".
