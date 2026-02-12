@@ -2,7 +2,7 @@
 chcp 65001 > nul
 cls
 echo ╔════════════════════════════════════════════════════════════╗
-echo ║     SINCRONIZAÇÃO COMPLETA - FIREBIRD → NEON              ║
+echo ║         SERVER UPDATE - ATUALIZAÇÃO GERAL DO SISTEMA       ║
 echo ╚════════════════════════════════════════════════════════════╝
 echo.
 echo 🚀 Iniciando sincronização de dados...
@@ -59,6 +59,21 @@ echo.
 echo   ✅ Faturamento sincronizado com sucesso!
 echo.
 
+REM ===== SINCRONIZAÇÃO DE PRODUCAO =====
+echo ┌─────────────────────────────────────────────────────────┐
+echo │ [3/3] Sincronizando PRODUCAO (2026)...                 │
+echo └─────────────────────────────────────────────────────────┘
+echo.
+node scripts/sync-production-firebird-postgres.js
+if %ERRORLEVEL% NEQ 0 (
+    echo   ❌ Erro ao sincronizar producao
+    pause
+    exit /b 1
+)
+echo.
+echo   ✅ Producao sincronizada com sucesso!
+echo.
+
 REM ===== CONCLUSÃO =====
 echo.
 echo ╔════════════════════════════════════════════════════════════╗
@@ -68,10 +83,12 @@ echo.
 echo 📊 Dados sincronizados:
 echo    • Pedidos (2025-2026) → firebird_sync_pedidos
 echo    • Faturamento (2026)  → faturamento_firebird
+echo    • Producao (2026)     → producao_apontada_sincronizada
 echo.
 echo 🌐 Páginas disponíveis após deploy:
 echo    • /pedidos.html
 echo    • /faturamento.html
+echo    • /apontamentos_produtivos.html
 echo.
 echo 💡 Dica: Execute este script diariamente para manter os dados atualizados!
 echo.
