@@ -176,10 +176,37 @@ function chunkArray(myArray, chunk_size) {
                         await fetchMap(productIds, 'PRODUTO', 'CODIGO_PRO', 'NOME_PRO, REFERENCIA_PRO, PESO_LIQUIDO_PRO', lookupPRODUTO);
                     }
 
+                    // 3.4 Fetch FICHA_TECNICA (Material/Liga)
+                    // PRO_CODIGO_FIC in FICHA_TECNICA maps to CODIGO_PRO in PRODUTO
+                    const lookupFICHA = {};
+                    console.log(`ℹ️ Fetching FICHA_TECNICA...`);
+
+                    if (productIds.length > 0) {
+                        // We use fetchMap, assuming PRO_CODIGO_FIC is unique per product or we just take one valid record
+                        // It maps PRO_CODIGO_FIC -> { MAT_NOMENCLATURA_FIC, ... }
+                        await fetchMap(productIds, 'FICHA_TECNICA', 'PRO_CODIGO_FIC', 'MAT_NOMENCLATURA_FIC', lookupFICHA);
+                        console.log(`ℹ️ Lookup FICHA size: ${Object.keys(lookupFICHA).length}`);
+                        if (Object.keys(lookupFICHA).length > 0) {
+                            const sampleKey = Object.keys(lookupFICHA)[0];
+                            console.log(`ℹ️ Sample FICHA key:`, sampleKey, `Type:`, typeof sampleKey);
+                        }
+                    }
+
                     // Attach lookups to main scope for the loop
                     productionRows.forEach(row => {
                         row._producao = lookupPRODUCAO[row.CODIGO_PCS];
                         row._produto = row._producao ? lookupPRODUTO[row._producao.PRODUTO_PCP] : null;
+                        if (row._produto && row._produto.CODIGO_PRO) {
+                            row._ficha = lookupFICHA[row._produto.CODIGO_PRO];
+                            // Debug only first one
+                            if (!global.debugFicha && row._ficha) {
+                                console.log('✅ Attached Ficha for', row._produto.CODIGO_PRO);
+                                global.debugFicha = true;
+                            } else if (!global.debugFicha && !row._ficha) {
+                                console.log('❌ Failed to attach Ficha for', row._produto.CODIGO_PRO);
+                                global.debugFicha = true;
+                            }
+                        }
                     });
 
                 } catch (fetchErr) {
@@ -219,7 +246,9 @@ function chunkArray(myArray, chunk_size) {
 
                         if (pcs._produto) {
                             produtoName = cleanString(pcs._produto.NOME_PRO) || produtoName;
-                            produtoCode = cleanString(pcs._produto.REFERENCIA_PRO); // User requested Code
+                            // Ensure CODIGO_PRO is treated as a string before cleaning
+                            const rawCode = pcs._produto.CODIGO_PRO;
+                            produtoCode = rawCode ? cleanString(String(rawCode)) : null;
                             produtoWeight = parseFloat(pcs._produto.PESO_LIQUIDO_PRO || 0);
                         }
 
@@ -230,7 +259,12 @@ function chunkArray(myArray, chunk_size) {
                         const pesoTotal = quantidade * produtoWeight;
                         const pesoUn = produtoWeight;
                         const produto = produtoName;
-                        const liga = null; // Still not found in schema analysis
+
+                        let liga = null;
+                        if (pcs._ficha) {
+                            liga = cleanString(pcs._ficha.MAT_NOMENCLATURA_FIC);
+                            if (liga) console.log('DEBUG Liga:', liga);
+                        }
 
                         // Note: LOTE_PCS is available in 'pcs.LOTE_PCS' but we don't have a column for it in Postgres yet. 
                         // User didn't ask to create a column, just to "use data from these columns".
