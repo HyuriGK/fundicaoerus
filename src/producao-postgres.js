@@ -16,6 +16,8 @@ router.get('/', async (req, res) => {
                 setor,
                 produto,
                 liga,
+                op,
+                codigo_peca,
                 peso_un,
                 quantidade,
                 peso_total
@@ -63,6 +65,8 @@ router.get('/', async (req, res) => {
                 setor: row.setor,
                 produto: row.produto,
                 liga: row.liga || '',
+                op: row.op || '',
+                codigo_peca: row.codigo_peca || '',
                 pesoUn: parseFloat(row.peso_un),
                 quantidade: parseFloat(row.quantidade),
                 pesoTotal: parseFloat(row.peso_total)
