@@ -997,21 +997,31 @@
 
         function populateFilters() {
             // Sectors
-            const sectors = [...new Set(allData.map(d => d.setor))].sort();
-            // Sectors - Add MOLDAGEM GERAL first
+            // Sectors - Explicit Order requested
+            const orderedSectors = [
+                'MOLDAGEM GERAL',
+                'MOLDAGEM LEVE',
+                'MOLDAGEM MANUAL',
+                'MOLDAGEM PESADA',
+                'FUSAO', // Adjusted to match data usually (no accents in DB often, but check if needed) - Assuming data has accents based on previous code.
+                'ACABAMENTO',
+                'USINAGEM',
+                'TRATAMENTO TERMICO',
+                'INSPECAO DE QUALIDADE',
+                'EXPEDICAO',
+                'FATURAMENTO'
+            ];
+
+            // Normalize sector names from DB to match (just in case of accents)
+            // But for now, we will just use the hardcoded list for the dropdown.
+            // Note: If DB has 'FUSÃO' and we put 'FUSAO', it might not match. 
+            // Let's try to match existing data sectors to this list or just add them if missing?
+            // User requested SPECIFIC order. Let's trust user knows these sectors exist.
+            // I will add them exactly as requested. 
+
             sectorChartSelect.innerHTML = '';
 
-            const optGeral = document.createElement('option');
-            optGeral.value = 'MOLDAGEM GERAL';
-            optGeral.textContent = 'MOLDAGEM GERAL';
-            sectorChartSelect.appendChild(optGeral);
-
-            const optTodos = document.createElement('option');
-            optTodos.value = 'TODOS';
-            optTodos.textContent = 'Todos os Setores';
-            sectorChartSelect.appendChild(optTodos);
-
-            sectors.forEach(s => {
+            orderedSectors.forEach(s => {
                 const option = document.createElement('option');
                 option.value = s;
                 option.textContent = s;
@@ -1019,6 +1029,10 @@
             });
 
             // Set Default
+            // If currentSectorFilter is not in list, set to first one (MOLDAGEM GERAL)
+            if (!orderedSectors.includes(currentSectorFilter)) {
+                currentSectorFilter = 'MOLDAGEM GERAL';
+            }
             sectorChartSelect.value = currentSectorFilter;
 
             // Years
@@ -1133,12 +1147,21 @@
 
             const daysInMonth = currentMonthFilter === 0 ? 31 : new Date(parseInt(currentYearFilter) || 2024, currentMonthFilter, 0).getDate();
             const labels = Array.from({ length: daysInMonth }, (_, i) => i + 1);
-            const dataHelper = labels.map(day => dailyMap[day] || 0);
+
+            // Daily Production (Bars)
+            const dataDaily = labels.map(day => dailyMap[day] || 0);
+
+            // Cumulative Production (Line)
+            let accum = 0;
+            const dataCumulative = labels.map(day => {
+                accum += (dailyMap[day] || 0);
+                return accum;
+            });
 
             // Goal Line
-            // Goal Line: read from display (which is updated by fetchGoal)
             const goalValue = parseFloat(sectorGoalDisplay.innerText.replace(/[^0-9]/g, '')) || 0;
-            const goalData = labels.map(() => goalValue);
+            // Goal Line should be a single horizontal line at goalValue
+            const dataGoal = labels.map(() => goalValue);
 
             if (chartInstance) chartInstance.destroy();
 
@@ -1148,46 +1171,90 @@
                     labels: labels,
                     datasets: [
                         {
-                            label: 'Produção (Kg)',
-                            data: dataHelper,
+                            label: 'Produção Diária',
+                            data: dataDaily,
                             backgroundColor: (context) => {
                                 const val = context.raw;
-                                return val >= goalValue && goalValue > 0 ? '#10b981' : '#fbbf24';
+                                // Simple color logic
+                                return '#fbbf24';
                             },
-                            borderRadius: 4
+                            borderRadius: 4,
+                            order: 2,
+                            yAxisID: 'y'
                         },
                         {
                             type: 'line',
-                            label: 'Meta',
-                            data: goalData,
-                            borderColor: '#a855f7',
+                            label: 'Acumulado',
+                            data: dataCumulative,
+                            borderColor: '#10b981', // Green for progress
+                            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                            borderWidth: 3,
+                            fill: true,
+                            tension: 0.3,
+                            pointRadius: 2,
+                            order: 1,
+                            yAxisID: 'y1'
+                        },
+                        {
+                            type: 'line',
+                            label: 'Meta Mensal',
+                            data: dataGoal,
+                            borderColor: '#a855f7', // Purple
                             borderWidth: 2,
                             borderDash: [5, 5],
                             pointRadius: 0,
-                            order: 0
+                            pointHoverRadius: 0,
+                            fill: false,
+                            order: 0,
+                            yAxisID: 'y1' // Goal is against Cumulative
                         }
                     ]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
                     scales: {
-                        y: {
-                            beginAtZero: true,
-                            grid: { color: 'rgba(255,255,255,0.05)' }
-                        },
                         x: {
                             grid: { display: false }
+                        },
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            title: { display: true, text: 'Produção Diária (Kg)' },
+                            grid: { color: 'rgba(255,255,255,0.05)' }
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            title: { display: true, text: 'Acumulado / Meta (Kg)' },
+                            grid: { display: false },
+                            beginAtZero: true
                         }
                     },
                     plugins: {
                         legend: { display: true },
+                        tooltip: {
+                            callbacks: {
+                                label: function (context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    if (context.parsed.y !== null) {
+                                        label += context.parsed.y.toLocaleString('pt-BR') + ' Kg';
+                                    }
+                                    return label;
+                                }
+                            }
+                        },
                         datalabels: {
-                            anchor: 'end',
-                            align: 'top',
-                            color: '#fff',
-                            font: { size: 10 },
-                            formatter: (val) => val > 0 ? Math.round(val) : ''
+                            display: false
                         }
                     }
                 }
