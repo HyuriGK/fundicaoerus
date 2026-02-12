@@ -849,11 +849,13 @@
         // Default Month: Current Month
         let currentMonthFilter = new Date().getMonth() + 1;
         let currentYearFilter = 'TODOS';
-        // Default Sector: EXPEDICAO
-        let currentSectorFilter = 'EXPEDICAO';
+        // Default Sector: MOLDAGEM GERAL (Requested by User)
+        let currentSectorFilter = 'MOLDAGEM GERAL';
 
-        const sectorGoalsKey = 'erus_producao_metas_local';
-        let sectorGoals = JSON.parse(localStorage.getItem(sectorGoalsKey) || '{}');
+        // Constantes para Moldagem Geral
+        const MOLDAGEM_GERAL_TYPES = ['MOLDAGEM MANUAL', 'MOLDAGEM LEVE', 'MOLDAGEM PESADA'];
+
+        // let sectorGoals = JSON.parse(localStorage.getItem(sectorGoalsKey) || '{}'); // REMOVED: Using API now
 
         // Elements
         const sectorChartSelect = document.getElementById('sector-chart-select');
@@ -913,6 +915,7 @@
                     btn.classList.add('active');
                     currentMonthFilter = parseInt(btn.dataset.month);
                     applyFilters();
+                    fetchGoal(); // Fetch goal for new month
                 });
             });
 
@@ -920,22 +923,40 @@
             sectorChartSelect.addEventListener('change', (e) => {
                 currentSectorFilter = e.target.value;
                 applyFilters();
-                updateGoalDisplay();
+                // Meta is global per month, so no need to fetch again if sector changes, 
+                // but we might want to UI update? The user said "meta applies to that sector",
+                // but also "meta always same for all sectors". 
+                // Interpretation: One meta per month/year, displayed for whatever sector is selected.
             });
 
             // Year Select
             yearFilterSelect.addEventListener('change', (e) => {
                 currentYearFilter = e.target.value;
                 applyFilters();
+                fetchGoal(); // Fetch goal for new year
             });
 
-            // Goal Edit
-            sectorGoalDisplay.addEventListener('blur', (e) => {
+            // Goal Edit (Persist to API)
+            sectorGoalDisplay.addEventListener('blur', async (e) => {
                 const val = parseInt(e.target.innerText.replace(/[^0-9]/g, '')) || 0;
-                sectorGoals[currentSectorFilter || 'TODOS'] = val;
-                localStorage.setItem(sectorGoalsKey, JSON.stringify(sectorGoals));
-                e.target.innerText = val.toLocaleString('pt-BR');
-                renderChart(); // Redraw chart to update goal line
+
+                // Save to API
+                const mesAno = getMesAnoAsString();
+
+                try {
+                    await fetch('/api/producao-postgres/meta', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ mes_ano: mesAno, meta: val })
+                    });
+
+                    e.target.innerText = val.toLocaleString('pt-BR');
+                    renderChart(); // Redraw chart to update goal line
+
+                } catch (error) {
+                    console.error('Error saving meta:', error);
+                    alert('Erro ao salvar meta.');
+                }
             });
 
             // Table Column Filters
@@ -959,6 +980,9 @@
                     // UI Update must happen AFTER filters are populated
                     updateFilterUI();
 
+                    // Initial Goal Fetch
+                    await fetchGoal();
+
                     applyFilters();
                 } else {
                     alert('Erro ao carregar dados: ' + result.error);
@@ -974,7 +998,19 @@
         function populateFilters() {
             // Sectors
             const sectors = [...new Set(allData.map(d => d.setor))].sort();
-            sectorChartSelect.innerHTML = '<option value="TODOS">Todos os Setores</option>';
+            // Sectors - Add MOLDAGEM GERAL first
+            sectorChartSelect.innerHTML = '';
+
+            const optGeral = document.createElement('option');
+            optGeral.value = 'MOLDAGEM GERAL';
+            optGeral.textContent = 'MOLDAGEM GERAL';
+            sectorChartSelect.appendChild(optGeral);
+
+            const optTodos = document.createElement('option');
+            optTodos.value = 'TODOS';
+            optTodos.textContent = 'Todos os Setores';
+            sectorChartSelect.appendChild(optTodos);
+
             sectors.forEach(s => {
                 const option = document.createElement('option');
                 option.value = s;
@@ -982,13 +1018,8 @@
                 sectorChartSelect.appendChild(option);
             });
 
-            // Validate Default Sector
-            if (currentSectorFilter !== 'TODOS' && !sectors.includes(currentSectorFilter)) {
-                console.warn(`Default sector '${currentSectorFilter}' not found in data. Resetting to TODOS.`);
-                currentSectorFilter = 'TODOS';
-            } else if (currentSectorFilter !== 'TODOS') {
-                sectorChartSelect.value = currentSectorFilter;
-            }
+            // Set Default
+            sectorChartSelect.value = currentSectorFilter;
 
             // Years
             const years = [...new Set(allData.map(d => d.data.substring(0, 4)))].sort().reverse();
@@ -1016,7 +1047,15 @@
 
                 const matchMonth = currentMonthFilter === 0 || month === currentMonthFilter;
                 const matchYear = currentYearFilter === 'TODOS' || year === currentYearFilter;
-                const matchSector = currentSectorFilter === 'TODOS' || item.setor === currentSectorFilter;
+
+                let matchSector = false;
+                if (currentSectorFilter === 'TODOS') {
+                    matchSector = true;
+                } else if (currentSectorFilter === 'MOLDAGEM GERAL') {
+                    matchSector = MOLDAGEM_GERAL_TYPES.includes(item.setor);
+                } else {
+                    matchSector = item.setor === currentSectorFilter;
+                }
 
                 return matchMonth && matchYear && matchSector;
             });
@@ -1025,6 +1064,13 @@
             renderChart();
             renderTable();
         }
+
+        // Hook into month click to fetch new goal
+        const originalMonthClick = () => { }; // Placeholder
+        // We need to re-attach or modify the event listener logic in setupEventListeners
+        // The implementation in setupEventListeners calls applyFilters(), we should add fetchGoal() there?
+        // Let's modify applyFilters to NOT fetchGoal (async issue), but call it separately where needed.
+        // Or better: update setupEventListeners above to call fetchGoal() on month change.
 
         function updateKPIs() {
             const totalWeight = filteredData.reduce((sum, item) => sum + item.pesoTotal, 0);
@@ -1040,14 +1086,41 @@
             sectorAverageDisplay.innerText = avgDaily.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' Kg';
             sectorAvgPieceWeightDisplay.innerText = avgPerPiece.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' Kg';
             footerTotal.innerText = sectorTotalDisplay.innerText;
-
-            updateGoalDisplay();
         }
 
-        function updateGoalDisplay() {
-            const goal = sectorGoals[currentSectorFilter || 'TODOS'] || 0;
-            sectorGoalDisplay.innerText = goal.toLocaleString('pt-BR');
+        async function fetchGoal() {
+            const mesAno = getMesAnoAsString();
+            try {
+                const res = await fetch(`/api/producao-postgres/meta?mes_ano=${mesAno}`);
+                const data = await res.json();
+                if (data.success) {
+                    const meta = data.meta;
+                    sectorGoalDisplay.innerText = meta.toLocaleString('pt-BR');
+                    // Important: Update chart if goal changed
+                    if (chartInstance) renderChart();
+                }
+            } catch (err) {
+                console.error('Error fetching meta:', err);
+            }
         }
+
+        function getMesAnoAsString() {
+            // Format YYYY-MM based on current filters
+            // If currentMonthFilter is 0 (All), we might need a convention. 
+            // User said "todo mes/ano tem sua meta".
+            // If viewing "All Months", maybe show average or 0? 
+            // Let's assume for now we use the *current Actual Date* if filter is ALL, 
+            // OR simply require a month selection to set a goal.
+            // But typically "Meta" is per month. 
+            // Let's use the selected year and selected month.
+
+            let year = currentYearFilter === 'TODOS' ? new Date().getFullYear() : parseInt(currentYearFilter);
+            let month = currentMonthFilter === 0 ? new Date().getMonth() + 1 : currentMonthFilter;
+
+            return `${year}-${String(month).padStart(2, '0')}`;
+        }
+
+        // Removed updateGoalDisplay local function as we use fetchGoal now
 
         function renderChart() {
             // Group by Day
@@ -1063,7 +1136,8 @@
             const dataHelper = labels.map(day => dailyMap[day] || 0);
 
             // Goal Line
-            const goalValue = sectorGoals[currentSectorFilter || 'TODOS'] || 0;
+            // Goal Line: read from display (which is updated by fetchGoal)
+            const goalValue = parseFloat(sectorGoalDisplay.innerText.replace(/[^0-9]/g, '')) || 0;
             const goalData = labels.map(() => goalValue);
 
             if (chartInstance) chartInstance.destroy();

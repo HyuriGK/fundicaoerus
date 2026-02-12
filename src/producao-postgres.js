@@ -133,4 +133,59 @@ router.get('/stats', async (req, res) => {
     }
 });
 
+// GET /api/producao-postgres/meta
+// Returns the goal for a specific month/year (format YYYY-MM)
+router.get('/meta', async (req, res) => {
+    try {
+        const { mes_ano } = req.query; // Expected format: 'YYYY-MM'
+
+        if (!mes_ano) {
+            return res.status(400).json({ success: false, error: 'mes_ano is required' });
+        }
+
+        const result = await pool.query(
+            'SELECT meta_peso FROM producao_metas WHERE mes_ano = $1',
+            [mes_ano]
+        );
+
+        const meta = result.rows.length > 0 ? parseFloat(result.rows[0].meta_peso) : 0;
+
+        res.json({
+            success: true,
+            meta: meta
+        });
+
+    } catch (error) {
+        console.error('❌ Error fetching meta:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// POST /api/producao-postgres/meta
+// Sets or updates the goal for a specific month/year
+router.post('/meta', async (req, res) => {
+    try {
+        const { mes_ano, meta } = req.body;
+
+        if (!mes_ano || meta === undefined) {
+            return res.status(400).json({ success: false, error: 'mes_ano and meta are required' });
+        }
+
+        await pool.query(`
+            INSERT INTO producao_metas (mes_ano, meta_peso, atualizado_em)
+            VALUES ($1, $2, CURRENT_TIMESTAMP)
+            ON CONFLICT (mes_ano) 
+            DO UPDATE SET 
+                meta_peso = EXCLUDED.meta_peso,
+                atualizado_em = CURRENT_TIMESTAMP
+        `, [mes_ano, meta]);
+
+        res.json({ success: true });
+
+    } catch (error) {
+        console.error('❌ Error saving meta:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 module.exports = router;
