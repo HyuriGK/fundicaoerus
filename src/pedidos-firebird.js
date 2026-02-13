@@ -22,7 +22,9 @@ router.get('/emissao-mensal', async (req, res) => {
 
         // Pega data de início ou assume 2024 (para histórico relevante)
         const { anoInicio } = req.query;
-        const startYear = anoInicio || 2024;
+        const startYear = parseInt(anoInicio) || 2024;
+
+        console.log(`🔍 [Total Emission] Querying Firebird for orders since ${startYear}...`);
 
         Firebird.attach(firebirdOptions, function (err, db) {
             if (err) {
