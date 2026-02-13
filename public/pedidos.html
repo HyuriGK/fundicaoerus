@@ -1220,7 +1220,8 @@
             </div>
             <div class="modal-footer"
                 style="padding: 15px; border-top: 1px solid var(--border-subtle); display: flex; gap: 15px; justify-content: center;">
-                <button class="btn-modern" onclick="closeEmailModal()" style="background-color: #3f3f46; min-width: 150px;">
+                <button class="btn-modern" onclick="closeEmailModal()"
+                    style="background-color: #3f3f46; min-width: 150px;">
                     Fechar
                 </button>
                 <button class="btn-modern" onclick="copyEmailText()"
@@ -1532,12 +1533,31 @@
         let currentFilteredData = []; // Armazena a lista atual da tabela para o email
 
         function openEmailModal() {
-            if (!currentFilteredData || currentFilteredData.length === 0) {
-                showToast("Atenção", "Nenhum pedido listado para gerar email.", "warning");
+            // Logic: Filter orders with Emission Date = Yesterday
+            const today = new Date();
+            const yesterday = new Date(today);
+            yesterday.setDate(today.getDate() - 1);
+
+            // Format helper: Compare YYYY-MM-DD
+            // Assuming DATA_EMISSAO_PEDIDO is ISO or parseable by Date
+            const isSameDay = (d1, d2) => {
+                return d1.getFullYear() === d2.getFullYear() &&
+                    d1.getMonth() === d2.getMonth() &&
+                    d1.getDate() === d2.getDate();
+            };
+
+            const targetList = allData.filter(item => {
+                if (!item.DATA_EMISSAO_PEDIDO) return false;
+                const emissionDate = new Date(item.DATA_EMISSAO_PEDIDO);
+                return isSameDay(emissionDate, yesterday);
+            });
+
+            if (!targetList || targetList.length === 0) {
+                showToast("Atenção", "Nenhum pedido encontrado com data de emissão de ontem (" + yesterday.toLocaleDateString('pt-BR') + ").", "warning");
                 return;
             }
 
-            const text = generateEmailText(currentFilteredData);
+            const text = generateEmailText(targetList);
             document.getElementById('emailPreviewText').value = text;
             document.getElementById('emailModal').style.display = 'flex';
         }
