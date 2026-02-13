@@ -18,6 +18,8 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script
         src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
     <style>
         /* --- COPY OF STYLES FROM producao_apontada.html --- */
@@ -646,6 +648,134 @@
             font-family: var(--font-mono);
             font-size: 0.75rem;
         }
+
+        /* PDF Report Styles */
+        .pdf-content-wrapper {
+            padding: 40px;
+            background: #fff;
+            color: #333;
+            font-family: 'Inter', sans-serif;
+            position: relative;
+            width: 210mm;
+            min-height: 297mm;
+            box-sizing: border-box;
+        }
+
+        .pdf-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #fbbf24;
+            padding-bottom: 15px;
+        }
+
+        .pdf-header h3 {
+            margin: 0;
+            font-size: 24px;
+            color: #000;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .pdf-header p {
+            margin: 5px 0 0;
+            font-size: 12px;
+            color: #666;
+        }
+
+        .pdf-summary-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .pdf-summary-grid.with-moldagem {
+            grid-template-columns: repeat(5, 1fr);
+        }
+
+        .pdf-card {
+            background: #f8f9fa;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .pdf-card-label {
+            font-size: 10px;
+            text-transform: uppercase;
+            color: #666;
+            margin-bottom: 5px;
+            text-align: center;
+        }
+
+        .pdf-card-value {
+            font-size: 18px;
+            font-weight: 700;
+            color: #000;
+        }
+
+        .pdf-section-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: #000;
+            margin: 20px 0 10px;
+            text-transform: uppercase;
+            border-left: 4px solid #fbbf24;
+            padding-left: 10px;
+        }
+
+        .pdf-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 10px;
+            margin-bottom: 20px;
+        }
+
+        .pdf-table th {
+            background: #f3f4f6;
+            color: #000;
+            font-weight: 700;
+            text-transform: uppercase;
+            padding: 8px;
+            border-bottom: 2px solid #e5e7eb;
+            text-align: left;
+        }
+
+        .pdf-table td {
+            padding: 6px 8px;
+            border-bottom: 1px solid #e5e7eb;
+            color: #333;
+        }
+
+        .pdf-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .pdf-flex-tables {
+            display: flex;
+            gap: 20px;
+            align-items: flex-start;
+        }
+
+        .pdf-progress-container {
+            width: 100%;
+            height: 4px;
+            background: #e5e7eb;
+            border-radius: 2px;
+            margin-top: 5px;
+            overflow: hidden;
+        }
+
+        .pdf-progress-bar {
+            height: 100%;
+            border-radius: 2px;
+        }
     </style>
 </head>
 
@@ -670,8 +800,9 @@
                 </div>
             </div>
             <div class="header-actions">
-                <button class="btn-refresh" onclick="fetchData()" title="Atualizar Dados">
-                    <i class="fa-solid fa-sync"></i> Atualizar
+                <button class="btn-glass" id="generate-complete-report-button" onclick="generateCompleteReport()"
+                    title="Gerar Relatório PDF" style="border-color: var(--status-info); color: var(--status-info);">
+                    <i class="fa-solid fa-file-pdf"></i> <span style="margin-left:5px;">Relatório</span>
                 </button>
                 <div class="separator-vertical"></div>
 
@@ -834,6 +965,11 @@
             </div>
         </div>
     </div>
+    </div>
+    </div>
+
+    <!-- Hidden Container for PDF Rendering -->
+    <div id="pdf-temp-container" style="position: absolute; left: -9999px;"></div>
 
     <script>
         // =========================================================
@@ -854,6 +990,239 @@
 
         // Constantes para Moldagem Geral
         const MOLDAGEM_GERAL_TYPES = ['MOLDAGEM MANUAL', 'MOLDAGEM LEVE', 'MOLDAGEM PESADA'];
+        const WEEKLY_GOAL = 30000;
+        const MOLDAGEM_SECTORS = ['moldagem leve', 'moldagem rollover', 'moldagem pesada', 'moldagem manual'];
+        const PRIMARY_SECTORS = ['ACABAMENTO', 'EXPEDICAO', 'FUSAO', 'MOLDAGEM GERAL'];
+        const GENERAL_MOLDING_KEY = 'MOLDAGEM GERAL';
+        const TOTAL_MOLDAGEM_SECTOR_KEY = 'TOTAL MOLDAGEM';
+
+        // --- PDF HELPERS ---
+        function formatNumber(num, decimals = 2) {
+            if (isNaN(num) || num === null || num === '') return '';
+            const floatNum = parseFloat(num);
+            if (decimals === 0) return parseInt(floatNum).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+            return floatNum.toLocaleString('pt-BR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+        }
+
+        function parseDate(dateString) {
+            // dateString is YYYY-MM-DD from Postgres/API
+            if (!dateString) return null;
+            const [y, m, d] = dateString.split('-').map(Number);
+            return new Date(y, m - 1, d);
+        }
+
+        function isWorkDay(date) { const day = date.getDay(); return day !== 0 && day !== 6; }
+
+        function calculateWorkDaysExcludingLast(uniqueDatesStrings) {
+            const sortedDates = Array.from(uniqueDatesStrings).map(parseDate).filter(d => d).sort((a, b) => a - b);
+            if (sortedDates.length <= 1) return 0;
+            let workDays = 0;
+            // Iterate up to last but one
+            for (let i = 0; i < sortedDates.length - 1; i++) if (isWorkDay(sortedDates[i])) workDays++;
+            return workDays;
+        }
+
+        function getWeekInfo(d) {
+            d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+            d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+            const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+            const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+            return { sortKey: `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`, displayKey: `SEMANA ${String(weekNo).padStart(2, '0')}` };
+        }
+
+        // --- REPORT LOGIC (ADAPTED) ---
+        function aggregateSectorData(sector, sectorMeta, dataSource) {
+            const dataByWeek = {}, dataByDay = {}, uniqueDates = new Set();
+            let totalProduced = 0, totalMoldagem = 0;
+            const isGeneralMoldagem = sector === GENERAL_MOLDING_KEY;
+
+            // For general moldagem, we want all sub-types
+            const targetSectors = isGeneralMoldagem ? MOLDAGEM_GERAL_TYPES : [sector];
+
+            // 1. Calculate totals
+            dataSource.forEach(r => {
+                const ws = (r.setor || '').toUpperCase();
+                // Check if this row belongs to 'Moldagem' family for totalMoldagem calc
+                if (MOLDAGEM_GERAL_TYPES.includes(ws)) {
+                    totalMoldagem += (r.pesoTotal || 0);
+                }
+            });
+
+            // 2. Filter data for the specific sector report
+            const sectorData = dataSource.filter(r => targetSectors.includes((r.setor || '').toUpperCase()));
+
+            sectorData.forEach(r => {
+                const date = parseDate(r.data);
+                const peso = r.pesoTotal || 0;
+
+                if (date && peso > 0) {
+                    const { sortKey, displayKey } = getWeekInfo(date);
+                    if (!dataByWeek[sortKey]) dataByWeek[sortKey] = { total: 0, displayKey };
+                    dataByWeek[sortKey].total += peso;
+                    dataByDay[r.data] = (dataByDay[r.data] || 0) + peso;
+                    totalProduced += peso;
+                    uniqueDates.add(r.data);
+                }
+            });
+
+            const productionDays = Object.values(dataByDay).filter(v => v > 0).length;
+            const dailyAverage = productionDays > 0 ? (totalProduced / productionDays) : 0;
+            // Assuming uniqueDates are strings "YYYY-MM-DD"
+            const workDaysToCalc = calculateWorkDaysExcludingLast(uniqueDates);
+
+            // Tables HTML Generation
+            let dailyTableHTML = '<div class="pdf-section-title">Detalhamento Diário</div><div class="pdf-flex-tables">';
+            const sortedDays = Object.keys(dataByDay).sort();
+            const chunkSize = Math.ceil(sortedDays.length / 3);
+            for (let i = 0; i < 3; i++) {
+                const chunk = sortedDays.slice(i * chunkSize, (i + 1) * chunkSize);
+                if (chunk.length) {
+                    dailyTableHTML += '<div style="flex: 1;"><table class="pdf-table"><thead><tr><th>Data</th><th style="text-align:right;">Produção (Kg)</th></tr></thead><tbody>' +
+                        chunk.map(d => {
+                            const [y, m, da] = d.split('-');
+                            return `<tr><td>${da}/${m}/${y}</td><td style="text-align:right;">${formatNumber(dataByDay[d], 2)}</td></tr>`;
+                        }).join('') + '</tbody></table></div>';
+                }
+            }
+            dailyTableHTML += '</div>';
+
+            let weeklyTableHTML = '<div class="pdf-section-title">Desempenho Semanal</div><table class="pdf-table"><thead><tr><th>Semana</th><th style="text-align:right;">Produzido (Kg)</th><th style="text-align:right;">Meta Semanal</th><th style="text-align:right;">Saldo</th><th style="text-align:right;">Eficiência</th></tr></thead><tbody>';
+            Object.keys(dataByWeek).sort().forEach(k => {
+                const d = dataByWeek[k], bal = WEEKLY_GOAL - d.total, eff = (d.total / WEEKLY_GOAL) * 100;
+                const effColor = eff >= 100 ? '#27ae60' : (eff >= 80 ? '#f39c12' : '#c0392b');
+                weeklyTableHTML += `<tr><td>${d.displayKey}</td><td style="text-align:right; font-weight:bold;">${formatNumber(d.total, 2)}</td><td style="text-align:right;">${formatNumber(WEEKLY_GOAL, 0)}</td><td style="text-align:right; color:${bal < 0 ? '#c0392b' : '#27ae60'}">${formatNumber(bal, 2)}</td><td style="text-align:right; color:${effColor}; font-weight:bold;">${eff.toFixed(1)}%</td></tr>`;
+            });
+            weeklyTableHTML += '</tbody></table>';
+
+            const allDates = sectorData.map(d => parseDate(d.data)).filter(d => d);
+            const dateRange = allDates.length ? `${allDates.reduce((a, b) => a < b ? a : b).toLocaleDateString()} a ${allDates.reduce((a, b) => a > b ? a : b).toLocaleDateString()}` : 'N/A';
+
+            return { sector, dateRange, totalProduced, workDaysToCalc, dailyTableHTML, weeklyTableHTML, totalMoldagem, dataByDay, dailyAverage };
+        }
+
+        function generateSectorReport(sector, meta, dataSource) {
+            const d = aggregateSectorData(sector, meta, dataSource);
+            const isMold = sector === GENERAL_MOLDING_KEY;
+            const total = isMold ? d.totalMoldagem : d.totalProduced;
+
+            // If meta is yearly/monthly, we might strictly compare to 'totalProduced' for the period.
+            // Using logic from producao_apontada:
+            const bal = meta - total, pct = meta > 0 ? (total / meta) * 100 : 0;
+            const pctColor = pct >= 100 ? '#27ae60' : (pct >= 80 ? '#f39c12' : '#c0392b');
+
+            const summaryHTML = `
+                <div class="pdf-summary-grid ${isMold ? 'with-moldagem' : ''}">
+                    ${isMold ? `<div class="pdf-card"><span class="pdf-card-label">Moldagem Total</span><span class="pdf-card-value" style="color:#c0392b;">${formatNumber(d.totalMoldagem, 0)} Kg</span></div>` : ''}
+                    <div class="pdf-card"><span class="pdf-card-label">Produzido no Período</span><span class="pdf-card-value">${formatNumber(d.totalProduced, 0)} Kg</span></div>
+                    <div class="pdf-card"><span class="pdf-card-label">Meta Mensal</span><span class="pdf-card-value" style="color:#e67e22;">${formatNumber(meta, 0)} Kg</span></div>
+                    <div class="pdf-card"><span class="pdf-card-label">Saldo Meta</span><span class="pdf-card-value" style="color:${bal < 0 ? '#c0392b' : '#27ae60'}">${formatNumber(bal, 0)} Kg</span></div>
+                    <div class="pdf-card"><span class="pdf-card-label">Eficiência Global</span><span class="pdf-card-value" style="color:${pctColor};">${pct.toFixed(1)}%</span>
+                        <div class="pdf-progress-container"><div class="pdf-progress-bar" style="width:${Math.min(pct, 100)}%; background-color:${pctColor};"></div></div>
+                    </div>
+                </div>`;
+
+            return `<div class="pdf-content-wrapper"><div class="pdf-header"><h3>Relatório: ${sector}</h3><p>Período de Análise:<br><strong>${d.dateRange}</strong></p></div>${summaryHTML}${d.weeklyTableHTML}${d.dailyTableHTML}</div>`;
+        }
+
+        async function exportReportToPDF(name, contentId) {
+            const content = document.getElementById(contentId);
+            const pages = content.querySelectorAll('.pdf-content-wrapper');
+            if (!pages.length) throw new Error('Sem conteúdo.');
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF('p', 'mm', 'a4');
+            const margin = 10; const printWidth = 210 - (margin * 2);
+
+            for (let i = 0; i < pages.length; i++) {
+                const canvas = await html2canvas(pages[i], { scale: 2, useCORS: true, backgroundColor: 'white' });
+                if (i > 0) doc.addPage();
+                const imgProps = doc.getImageProperties(canvas.toDataURL('image/png'));
+                const pdfHeight = (imgProps.height * printWidth) / imgProps.width;
+                doc.addImage(canvas.toDataURL('image/png'), 'PNG', margin, margin, printWidth, pdfHeight);
+            }
+            doc.save(`Producao_${name}.pdf`);
+        }
+
+        async function generateCompleteReport() {
+            // Filter by Current Visible Month Filter
+            if (currentMonthFilter === 0) {
+                alert('Selecione um mês específico para gerar o relatório.');
+                return;
+            }
+
+            // We use filteredData which already respects Month/Year filters.
+            // But filteredData also respects SECTOR filter.
+            // The user button says "Relatório", implying "Relatório COMPLETO do Mês" likely?
+            // "apontamentos_produtivos.html gostaria que dentro ao invés do botão atualizar, fosse um botão relatório que extrai um relatório em pdf com a mesma estrutura do meu relatóri ogerado em producao_apontada.html"
+            // In producao_apontada.html, `generateCompleteReport` filters `allData` by *Current Calendar Month* (ignore UI filters).
+            // Code: `const reportData = allData.filter(r => ... d.getMonth() === currentMonth ...)` (lines 2410).
+            // The user wants "same structure". 
+            // I should probably follow the UI filters (Month/Year) because the user sets them in `apontamentos_produtivos`.
+            // In `producao_apontada`, the button was "Relatório Completo (Mês Atual)".
+            // Here, the UI has powerful filters.
+            // Let's assume we want to generate report for *ALL* sectors in the *SELECTED* month/year.
+
+            const year = currentYearFilter === 'TODOS' ? new Date().getFullYear() : parseInt(currentYearFilter);
+            const month = currentMonthFilter;
+
+            const reportData = allData.filter(item => {
+                const d = parseDate(item.data);
+                const itemYear = d.getFullYear();
+                const itemMonth = d.getMonth() + 1;
+                return itemYear === year && itemMonth === month;
+            });
+
+            if (reportData.length === 0) { alert('Sem dados no período selecionado.'); return; }
+
+            const uniqueSectors = new Set();
+            reportData.forEach(r => uniqueSectors.add(r.setor));
+            const sectorArray = Array.from(uniqueSectors).sort();
+            // Make sure Moldagem Geral is first if present or synthesized
+            if (sectorArray.some(s => MOLDAGEM_GERAL_TYPES.includes(s.toUpperCase()))) {
+                if (!sectorArray.includes(GENERAL_MOLDING_KEY)) sectorArray.unshift(GENERAL_MOLDING_KEY);
+            }
+
+            loadingScreen.style.display = 'flex';
+            const pdfTempContainer = document.getElementById('pdf-temp-container');
+            pdfTempContainer.innerHTML = '';
+
+            let fullReportHTML = '';
+
+            // We need goals for each sector. 
+            // In this page, we only fetch goal for the *current* view. 
+            // We might need to fetch goals for ALL sectors? 
+            // Or assume the same goal applies? 
+            // The user said "Todo mes/ano tem sua meta". "Meta (Local)". 
+            // It seems meta is per Month, not per Sector? 
+            // "Meta (Local)" in KPI card.
+            // In `producao_apontada.html`, `sectorGoals` was a map! `sectorGoals[sector]`.
+            // In `apontamentos_produtivos.html`, we have `fetchGoal` which gets a single meta.
+            // This is a discrepancy.
+            // If I generate a multi-page report for differnet sectors, using the SAME meta for all seems wrong if they vary.
+            // But if the system only supports one meta per month currently (as per `fetch` logic), I use that.
+            // Wait, `sectorGoalDisplay` logic in `apontamentos` gets valid int from `fetch`.
+            // Let's use the visible meta from the KPI card as the meta for ALL sectors for now, 
+            // or fetch it.
+            const metaVal = parseInt(sectorGoalDisplay.innerText.replace(/[^0-9]/g, '')) || 0;
+
+            for (const sector of sectorArray) {
+                // Generate report for this sector
+                // Note: aggregateSectorData handles filtering reportData by sector.
+                // We use metaVal for all.
+                fullReportHTML += generateSectorReport(sector, metaVal, reportData);
+            }
+
+            pdfTempContainer.innerHTML = fullReportHTML;
+
+            try {
+                const monthName = new Date(year, month - 1, 1).toLocaleString('pt-BR', { month: 'long' });
+                await exportReportToPDF(`Producao_${monthName}_${year}`, 'pdf-temp-container');
+            } catch (error) {
+                alert('Erro ao gerar PDF: ' + error.message);
+            } finally {
+                loadingScreen.style.display = 'none';
+                pdfTempContainer.innerHTML = '';
+            }
+        }
 
         // let sectorGoals = JSON.parse(localStorage.getItem(sectorGoalsKey) || '{}'); // REMOVED: Using API now
 
