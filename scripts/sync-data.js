@@ -137,7 +137,7 @@ async function syncData() {
             LEFT JOIN MATERIAL M 
                 ON PM.MAT_ID_PMT = M.ID_MAT
             WHERE P.ANO_PPR IN (2025, 2026)
-            AND (P.FATURADO_PPR <> 'T' OR P.FATURADO_PPR IS NULL)
+            /* AND (P.FATURADO_PPR <> 'T' OR P.FATURADO_PPR IS NULL) -- Removido para incluir histórico completo */
             AND (P.STATUS_PPR <> 'C' OR P.STATUS_PPR IS NULL)
         `;
 

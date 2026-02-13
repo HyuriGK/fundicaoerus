@@ -2260,6 +2260,61 @@
                     }
                 }
 
+                // 5. History Filter (By default, HIDE fully billed orders for the Table)
+                // Unless we are in a specific "History" mode for the table (not implemented yet)
+                // The 'Carteira' concept implies BACKLOG (Open Orders).
+                // FATURADO_PPR = 'T' means it's done. 
+                // However, we want them for CHARTS.
+                // The charts use `filtered` list? Yes `updateCharts(filtered)`.
+                // PROBLEM: If we filter them out here, the charts won't see them either!
+                // FIX: We need TWO lists? or we allow them in `filtered` but hide them in `renderTable`?
+                // `renderTable` iterates `list`. `updateCharts` iterates `list`.
+                // User wants "Total Emission Chart" to show everything.
+                // User wants "Carteira Table" to show only open.
+
+                // Let's change the strategy:
+                // 1. keep `filtered` as the "View Data".
+                // 2. If `chartMode === 'emission_total'`, we probably WANT history in the chart.
+                // 3. But the TABLE should probably only show what's filtered.
+
+                // Let's add a "Show Completed" toggle? Or just handle it visually?
+                // User said: "visto que eu quero ter um histórico mes a mês do quanto é emitido de pedido"
+
+                // If I include them in `filtered`, they appear in the table.
+                // I will add a check:
+                // If the item is fully billed ('T'), we generally exclude it from the default view
+                // UNLESS the user explicitly wants to see history.
+                // Given the user instructions, I'll exclude them from the *default* filter
+                // BUT I need to make sure the "Total Emission" chart attempts to fetch its own data or uses a separate dataset?
+                // The "Total Emission" chart in `pedidos.html` ALREADY fetches `api/pedidos-firebird/emissao-mensal` (Historical) separately!
+                // See line ~2327: `fetch('/api/pedidos-firebird/emissao-mensal?anoInicio='...)`
+                // AND it caches it in `totalEmissionCache`.
+                // AND `updateMonthlyChart` uses `totalEmissionCache` if `chartMode === 'emission_total'`.
+
+                // THEREFORE: The chart DOES NOT rely on the `filtered` table data for the "Total Emission" view!
+                // It relies on `totalEmissionCache`.
+
+                // HOWEVER, the user might want `emission_pending` or `delivery` charts to eventually reflect history?
+                // User said: "na tabela pedido_produto para o gráfico de emissão total... os registros devem trazer faturado_ppr T e P"
+                // The "Total Emission" chart ALREADY fetches from Firebird directly (via `pedidos-firebird.js`).
+                // So... why did the user ask to change `pedidos-sync`?
+                // Maybe they want to STOP using `pedidos-firebird.js` (direct access) and use the Sync table?
+                // Or maybe they want the "Pending" chart to also start showing history?
+
+                // To be safe and compliant with "Carteira" purpose:
+                // I will **Exclude** 'T' (Total Faturado) from the main list here.
+                // This keeps the Table and the "Pending/Delivery" charts focused on the Backlog.
+                // The "Total Emission" chart (which uses a separate API) is unaffected by this filter and works fine.
+                // Wait, if I change the Sync Script, `allData` (loaded from `/api/pedidos-sync`) will now have 'T' records.
+                // If I don't filter them here, they appear in the Table.
+                // So I MUST filter them here to keep the Table clean.
+
+                const isFullyBilled = item.FATURADO_PPR === 'T';
+                const isCancelled = item.STATUS_PPR === 'C'; // Already filtered in SQL but good to have
+
+                if (isFullyBilled) return false; // Hide completed orders from Carteira View
+                if (isCancelled) return false;
+
                 return true;
             });
 
