@@ -990,11 +990,22 @@
 
         // Constantes para Moldagem Geral
         const MOLDAGEM_GERAL_TYPES = ['MOLDAGEM MANUAL', 'MOLDAGEM LEVE', 'MOLDAGEM PESADA'];
-        const WEEKLY_GOAL = 30000;
+        // const WEEKLY_GOAL = 30000; // Calculated dynamically
         const MOLDAGEM_SECTORS = ['moldagem leve', 'moldagem rollover', 'moldagem pesada', 'moldagem manual'];
         const PRIMARY_SECTORS = ['ACABAMENTO', 'EXPEDICAO', 'FUSAO', 'MOLDAGEM GERAL'];
         const GENERAL_MOLDING_KEY = 'MOLDAGEM GERAL';
         const TOTAL_MOLDAGEM_SECTOR_KEY = 'TOTAL MOLDAGEM';
+
+        // Setores permitidos no relatório
+        const ALLOWED_REPORT_SECTORS = [
+            'MOLDAGEM GERAL',
+            'MOLDAGEM LEVE',
+            'MOLDAGEM MANUAL',
+            'MOLDAGEM PESADA',
+            'ACABAMENTO',
+            'FUSAO',
+            'EXPEDICAO'
+        ];
 
         // --- PDF HELPERS ---
         function formatNumber(num, decimals = 2) {
@@ -1035,6 +1046,9 @@
             const dataByWeek = {}, dataByDay = {}, uniqueDates = new Set();
             let totalProduced = 0, totalMoldagem = 0;
             const isGeneralMoldagem = sector === GENERAL_MOLDING_KEY;
+
+            // Weekly Goal Calculation: Meta Mensal / 4
+            const weeklyGoal = sectorMeta > 0 ? (sectorMeta / 4) : 0;
 
             // For general moldagem, we want all sub-types
             const targetSectors = isGeneralMoldagem ? MOLDAGEM_GERAL_TYPES : [sector];
@@ -1088,9 +1102,13 @@
 
             let weeklyTableHTML = '<div class="pdf-section-title">Desempenho Semanal</div><table class="pdf-table"><thead><tr><th>Semana</th><th style="text-align:right;">Produzido (Kg)</th><th style="text-align:right;">Meta Semanal</th><th style="text-align:right;">Saldo</th><th style="text-align:right;">Eficiência</th></tr></thead><tbody>';
             Object.keys(dataByWeek).sort().forEach(k => {
-                const d = dataByWeek[k], bal = WEEKLY_GOAL - d.total, eff = (d.total / WEEKLY_GOAL) * 100;
+                const d = dataByWeek[k];
+                const bal = d.total - weeklyGoal; // Saldo real vs meta (+ Sobrou, - Faltou)
+                const eff = weeklyGoal > 0 ? (d.total / weeklyGoal) * 100 : 0;
                 const effColor = eff >= 100 ? '#27ae60' : (eff >= 80 ? '#f39c12' : '#c0392b');
-                weeklyTableHTML += `<tr><td>${d.displayKey}</td><td style="text-align:right; font-weight:bold;">${formatNumber(d.total, 2)}</td><td style="text-align:right;">${formatNumber(WEEKLY_GOAL, 0)}</td><td style="text-align:right; color:${bal < 0 ? '#c0392b' : '#27ae60'}">${formatNumber(bal, 2)}</td><td style="text-align:right; color:${effColor}; font-weight:bold;">${eff.toFixed(1)}%</td></tr>`;
+                const balColor = bal >= 0 ? '#27ae60' : '#c0392b';
+
+                weeklyTableHTML += `<tr><td>${d.displayKey}</td><td style="text-align:right; font-weight:bold;">${formatNumber(d.total, 2)}</td><td style="text-align:right;">${formatNumber(weeklyGoal, 0)}</td><td style="text-align:right; color:${balColor}">${formatNumber(bal, 2)}</td><td style="text-align:right; color:${effColor}; font-weight:bold;">${eff.toFixed(1)}%</td></tr>`;
             });
             weeklyTableHTML += '</tbody></table>';
 
@@ -1173,13 +1191,38 @@
 
             if (reportData.length === 0) { alert('Sem dados no período selecionado.'); return; }
 
-            const uniqueSectors = new Set();
-            reportData.forEach(r => uniqueSectors.add(r.setor));
-            const sectorArray = Array.from(uniqueSectors).sort();
-            // Make sure Moldagem Geral is first if present or synthesized
-            if (sectorArray.some(s => MOLDAGEM_GERAL_TYPES.includes(s.toUpperCase()))) {
-                if (!sectorArray.includes(GENERAL_MOLDING_KEY)) sectorArray.unshift(GENERAL_MOLDING_KEY);
+            // AVAILABLE SECTORS IN DATA
+            const uniqueSectorsInData = new Set();
+            reportData.forEach(r => uniqueSectorsInData.add(r.setor));
+
+            // BUILD SECTOR LIST BASED ON ALLOWED LIST
+            const sectorArray = [];
+
+            // Always check for GENERAL_MOLDING first if data implies it
+            // Logic: If any MOLDAGEM_GERAL_TYPES exists in data, add GENERAL_MOLDING_KEY
+            if (ALLOWED_REPORT_SECTORS.includes(GENERAL_MOLDING_KEY)) {
+                if (reportData.some(r => MOLDAGEM_GERAL_TYPES.includes((r.setor || '').toUpperCase()))) {
+                    sectorArray.push(GENERAL_MOLDING_KEY);
+                }
             }
+
+            // ADD OTHER ALLOWED SECTORS IF IN DATA
+            ALLOWED_REPORT_SECTORS.forEach(allowed => {
+                if (allowed === GENERAL_MOLDING_KEY) return; // Already handled
+
+                // Check if this allowed sector exists in the dataset (normalized)
+                const exists = Array.from(uniqueSectorsInData).some(s => {
+                    const sNorm = s.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                    const aNorm = allowed.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                    return sNorm === aNorm;
+                });
+
+                if (exists) {
+                    sectorArray.push(allowed);
+                }
+            });
+
+            if (sectorArray.length === 0) { alert('Nenhum dos setores permitidos possui dados neste mês.'); return; }
 
             loadingScreen.style.display = 'flex';
             const pdfTempContainer = document.getElementById('pdf-temp-container');
