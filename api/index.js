@@ -78,6 +78,25 @@ app.use('/api/usinagem-externo', usinagemExterno); // NOVO: Usinagem Externa
 app.use('/api/producao-postgres', require('../src/producao-postgres')); // NOVO: Produção Sincronizada
 app.use('/api/pedidos-firebird', require('../src/pedidos-firebird')); // NOVO: Pedidos Histórico Firebird
 
+// Rota temporária de diagnóstico do Firebird
+app.get('/api/test-firebird', (req, res) => {
+    const Firebird = require('node-firebird');
+    const options = {
+        host: '10.1.1.100', port: 3050,
+        database: '/home/lm/LM-Sistemas/SIGE2.0/Dados/sige.fdb',
+        user: 'SYSDBA', password: 'masterkey'
+    };
+    Firebird.attach(options, (err, db) => {
+        if (err) return res.status(500).json({ error: 'Connection failed', details: err.message });
+        db.query('SELECT FIRST 1 * FROM PEDIDO', (err, result) => {
+            db.detach();
+            if (err) return res.status(500).json({ error: 'Query failed', details: err.message });
+            res.json({ status: 'OK', rows: result.length, sample: result[0] });
+        });
+    });
+});
+
+
 // Rota de teste para ver se a API está de pé
 app.get('/api', (req, res) => {
     res.json({
