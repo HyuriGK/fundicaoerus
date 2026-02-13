@@ -14,6 +14,9 @@ const firebirdOptions = {
     pageSize: 4096
 };
 
+// Configuração de Pool (Melhor para múltiplas requisições)
+const pool = Firebird.pool(5, firebirdOptions); // Max 5 conexões
+
 // GET /api/pedidos-firebird/emissao-mensal
 // Retorna o valor e peso total de pedidos emitidos por mês/ano
 router.get('/emissao-mensal', async (req, res) => {
@@ -26,14 +29,14 @@ router.get('/emissao-mensal', async (req, res) => {
 
         console.log(`🔍 [Total Emission] Querying Firebird for orders since ${startYear}...`);
 
-        Firebird.attach(firebirdOptions, function (err, db) {
+        // Usar pool.get() em vez de attach()
+        pool.get(function (err, db) {
             if (err) {
-                console.error('❌ Erro ao conectar no Firebird:', err);
+                console.error('❌ Erro ao obter conexão do pool Firebird:', err);
                 return res.status(500).json({ error: 'Erro de conexão com Firebird', details: err.message });
             }
 
             // Query para agrupar por Ano/Mês da emissão
-            // Usando EXTRACT(YEAR from EMISSAO_PED) e EXTRACT(MONTH from EMISSAO_PED)
             const query = `
                 SELECT 
                     EXTRACT(YEAR FROM p.EMISSAO_PED) as ANO,
@@ -49,10 +52,8 @@ router.get('/emissao-mensal', async (req, res) => {
                 ORDER BY 1 DESC, 2 DESC
             `;
 
-            // Nota: STATUS_PED <> 'C' geralmente exclui cancelados. Verificar se 'C' é cancelado mesmo.
-            // Assumindo 'C' como Cancelado padrão.
-
             db.query(query, function (err, result) {
+                // IMPORTANTE: Liberar conexão de volta para o pool
                 db.detach();
 
                 if (err) {
@@ -68,7 +69,7 @@ router.get('/emissao-mensal', async (req, res) => {
                     mes: row.MES,
                     totalPedidos: row.TOTAL_PEDIDOS,
                     totalValor: row.TOTAL_VALOR,
-                    totalPeso: row.TOTAL_PESO_LIQUIDO, // Usando líquido como padrão
+                    totalPeso: row.TOTAL_PESO_LIQUIDO,
                     totalPesoBruto: row.TOTAL_PESO_BRUTO
                 }));
 
