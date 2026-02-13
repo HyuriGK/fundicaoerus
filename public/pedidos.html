@@ -988,11 +988,21 @@
                         <div class="chart-title-flex" id="monthlyChartTitle">Peso Total por Mês (kg) - Previsão
                             Entrega
                         </div>
-                        <select id="chartSourceSelect" class="btn-modern" onchange="changeChartSource()"
-                            style="font-size: 0.7rem; padding: 5px 12px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-subtle); gap: 6px; white-space: nowrap; color: #a1a1aa; cursor: pointer; outline: none;">
-                            <option value="delivery" selected style="background: #18181b;">Previsão de Entrega</option>
-                            <option value="emission_pending" style="background: #18181b;">Emissão (Pendente)</option>
-                        </select>
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <select id="chartSourceSelect" onchange="changeChartSource()"
+                                style="font-size: 0.7rem; padding: 5px 12px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-subtle); gap: 6px; white-space: nowrap; color: #a1a1aa; cursor: pointer; outline: none;">
+                                <option value="delivery" selected style="background: #18181b;">Previsão de Entrega
+                                </option>
+                                <option value="emission_pending" style="background: #18181b;">Emissão (Pendente)
+                                </option>
+                            </select>
+
+                            <!-- Novo Filtro de Ano -->
+                            <select id="chartYearFilter" onchange="updateMonthlyChart(currentFilteredData)"
+                                style="font-size: 0.7rem; padding: 5px 12px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-subtle); gap: 6px; white-space: nowrap; color: #a1a1aa; cursor: pointer; outline: none;">
+                                <!-- Será populado via JS -->
+                            </select>
+                        </div>
                     </div>
                     <div style="position: relative; flex: 1; min-height: 0; width:100%;">
                         <canvas id="monthlyChart"></canvas>
@@ -2360,12 +2370,37 @@
             updateMonthlyChart(currentFilteredData);
         }
 
+        // Inicializar filtro de ano
+        function initYearFilter() {
+            const yearSelect = document.getElementById('chartYearFilter');
+            const currentYear = new Date().getFullYear();
+            // Mostrar ano anterior, atual e próximos 2 anos
+            const years = [currentYear - 1, currentYear, currentYear + 1, currentYear + 2];
+
+            yearSelect.innerHTML = '';
+            years.forEach(y => {
+                const opt = document.createElement('option');
+                opt.value = y;
+                opt.textContent = y;
+                opt.style.background = '#18181b';
+                if (y === currentYear) opt.selected = true;
+                yearSelect.appendChild(opt);
+            });
+        }
+
+        // Chamar na inicialização
+        initYearFilter();
+
         // Replaced logic for chart updates
         // function toggleChartMode() ... removed
 
         function updateMonthlyChart(list) {
             const mData = Array(12).fill(0);
             const mDataValue = Array(12).fill(0);
+
+            // Obter ano selecionado
+            const yearEl = document.getElementById('chartYearFilter');
+            const selectedYear = yearEl ? (parseInt(yearEl.value) || new Date().getFullYear()) : new Date().getFullYear();
 
             // CASE: Delivery or Pending Emission (From filtered list)
             list.forEach(item => {
@@ -2377,9 +2412,8 @@
                     d = item.DATA_EMISSAO_PEDIDO ? new Date(item.DATA_EMISSAO_PEDIDO) : null;
                 }
 
-                // For pending/delivery, we also need to decide if we filter by year?
-                // Original code: `if (d && d.getFullYear() >= 2000)`. It summed EVERYTHING into the buckets.
-                if (d && d.getFullYear() >= 2000) {
+                // Filtrar pelo ano selecionado (substitui a lógica antiga de >= 2000)
+                if (d && d.getFullYear() === selectedYear) {
                     const weight = getCorrectedWeight(item);
 
                     // Calculate Value
@@ -2411,13 +2445,20 @@
                         data: mData,
                         backgroundColor: bgColors,
                         borderRadius: 4,
-                        // Custom property for tooltip
-                        extraData: mDataValue
+                        extraData: mDataValue,
+                        // Barras mais largas para facilitar clique visual também
+                        barPercentage: 0.7,
+                        categoryPercentage: 0.8
                     }]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    // INTERAÇÃO MELHORADA: Click/Hover no Eixo X inteiro (Pilar)
+                    interaction: {
+                        mode: 'index',
+                        intersect: false, // Detecta hover mesmo sem tocar na barra
+                    },
                     scales: {
                         y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' } },
                         x: { grid: { display: true, color: 'rgba(255,255,255,0.05)' } }
@@ -2427,24 +2468,32 @@
                         tooltip: {
                             callbacks: {
                                 label: function (context) {
-                                    const weight = context.parsed.y;
-                                    const value = context.dataset.extraData[context.dataIndex];
+                                    let weight = context.raw || 0;
+                                    let val = context.dataset.extraData[context.dataIndex] || 0;
                                     return [
-                                        `Peso: ${formatNumber(weight)} kg`,
-                                        `Valor: ${valorVisible ? formatCurrency(value) : '-----'}`
+                                        `Peso: ${weight.toLocaleString('pt-BR')} kg`,
+                                        `Valor: R$ ${val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                                     ];
                                 }
                             }
                         }
                     },
-                    onClick: (e, elements) => {
-                        if (elements.length > 0) {
-                            const idx = elements[0].index;
-                            activeChartFilters.month = (activeChartFilters.month === idx) ? null : idx;
-                        } else {
-                            activeChartFilters.month = null;
+                    onClick: (e, activeEls, chart) => {
+                        // Com intersect: false, o activeEls deve retornar o elemento do eixo X mais próximo
+                        if (activeEls && activeEls.length > 0) {
+                            const idx = activeEls[0].index; // Mês index (0-11)
+
+                            if (activeChartFilters.month === idx) {
+                                activeChartFilters.month = null;
+                            } else {
+                                activeChartFilters.month = idx;
+                            }
+                            applyColumnFilters();
                         }
-                        applyColumnFilters();
+                    },
+                    onHover: (event, chartElement) => {
+                        // Muda cursor se estiver sobre área ativa (mesmo vazia com intersect: false)
+                        event.native.target.style.cursor = chartElement[0] ? 'pointer' : 'default';
                     }
                 }
             });
