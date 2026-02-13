@@ -1145,25 +1145,54 @@
 
         function generateSectorReport(sector, meta, dataSource) {
             const d = aggregateSectorData(sector, meta, dataSource);
-            const isMold = sector === GENERAL_MOLDING_KEY;
-            const total = isMold ? d.totalMoldagem : d.totalProduced;
+            const isGeneral = sector === GENERAL_MOLDING_KEY;
+            const isSubMolding = MOLDAGEM_GERAL_TYPES.includes(sector);
+            const isAnyMolding = isGeneral || isSubMolding;
 
-            // If meta is yearly/monthly, we might strictly compare to 'totalProduced' for the period.
-            // Using logic from producao_apontada:
-            const bal = meta - total, pct = meta > 0 ? (total / meta) * 100 : 0;
+            const total = isGeneral ? d.totalMoldagem : d.totalProduced;
+
+            const bal = total - meta;
+            const pct = meta > 0 ? (total / meta) * 100 : 0;
             const pctColor = pct >= 100 ? '#27ae60' : (pct >= 80 ? '#f39c12' : '#c0392b');
+            const balColor = bal >= 0 ? '#27ae60' : '#c0392b';
+
+            // VISIBILITY RULES
+            // 1. Moldagem Total: Show for General AND Sub-types (isAnyMolding)
+            // 2. Produzido: ALWAYS SHOW
+            // 3. Meta/Saldo/Eff: Show for General OR Non-Molding (Exclude Sub-types)
+            const showKPIGoals = !isSubMolding;
+
+            // Adjust grid columns
+            // If showing minimal KPIs (Sub-molding): Moldagem Total + Produzido = 2 cols
+            // If showing full (General/Other): Moldagem Total + Produzido + Meta + Saldo + Eff = 5 cols (or 4 if asking non-mold)
+
+            let gridClass = '';
+            if (isAnyMolding && showKPIGoals) gridClass = 'with-moldagem'; // 5 cols (General)
+            else if (isAnyMolding && !showKPIGoals) gridClass = 'minimal-molding'; // 2 cols (Sub-types)
+            else gridClass = ''; // 3 or 4 cols (Other sectors)
+
+            // Note: CSS for .minimal-molding needs to be added or inline style used.
+            // Let's use inline style for simplicity or assume grid auto-fit/fill if updated CSS.
+            // But strict grid count is used in CSS.
+            // Let's just override style="grid-template-columns: repeat(2, 1fr);" if minimal.
 
             const summaryHTML = `
-                <div class="pdf-summary-grid ${isMold ? 'with-moldagem' : ''}">
-                    ${isMold ? `<div class="pdf-card"><span class="pdf-card-label">Moldagem Total</span><span class="pdf-card-value" style="color:#c0392b;">${formatNumber(d.totalMoldagem, 0)} Kg</span></div>` : ''}
+                <div class="pdf-summary-grid ${isAnyMolding && showKPIGoals ? 'with-moldagem' : ''}" 
+                     style="${isAnyMolding && !showKPIGoals ? 'grid-template-columns: repeat(2, 1fr);' : ''}">
                     
-                    <div class="pdf-card"><span class="pdf-card-label">Eficiência Global</span><span class="pdf-card-value" style="color:${pctColor};">${pct.toFixed(1)}%</span>
-                        <div class="pdf-progress-container"><div class="pdf-progress-bar" style="width:${Math.min(pct, 100)}%; background-color:${pctColor};"></div></div>
-                    </div>
+                    ${isAnyMolding ? `<div class="pdf-card"><span class="pdf-card-label">Moldagem Total</span><span class="pdf-card-value" style="color:#c0392b;">${formatNumber(d.totalMoldagem, 0)} Kg</span></div>` : ''}
+                    
+                    <div class="pdf-card"><span class="pdf-card-label">Produzido no Período</span><span class="pdf-card-value">${formatNumber(d.totalProduced, 0)} Kg</span></div>
 
-                    <div class="pdf-card"><span class="pdf-card-label">Meta Mensal</span><span class="pdf-card-value" style="color:#e67e22;">${formatNumber(meta, 0)} Kg</span></div>
-                    
-                    <div class="pdf-card"><span class="pdf-card-label">Saldo Meta</span><span class="pdf-card-value" style="color:${bal < 0 ? '#c0392b' : '#27ae60'}">${formatNumber(bal, 0)} Kg</span></div>
+                    ${showKPIGoals ? `
+                        <div class="pdf-card"><span class="pdf-card-label">Eficiência Global</span><span class="pdf-card-value" style="color:${pctColor};">${pct.toFixed(1)}%</span>
+                            <div class="pdf-progress-container"><div class="pdf-progress-bar" style="width:${Math.min(pct, 100)}%; background-color:${pctColor};"></div></div>
+                        </div>
+
+                        <div class="pdf-card"><span class="pdf-card-label">Meta Mensal</span><span class="pdf-card-value" style="color:#e67e22;">${formatNumber(meta, 0)} Kg</span></div>
+                        
+                        <div class="pdf-card"><span class="pdf-card-label">Saldo Meta</span><span class="pdf-card-value" style="color:${balColor}">${formatNumber(bal, 0)} Kg</span></div>
+                    ` : ''}
                 </div>`;
 
             return `<div class="pdf-content-wrapper"><div class="pdf-header"><h3>Relatório: ${sector}</h3><p>Período de Análise:<br><strong>${d.dateRange}</strong></p></div>${summaryHTML}${d.weeklyTableHTML}${d.dailyTableHTML}</div>`;
