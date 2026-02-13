@@ -686,13 +686,13 @@
 
         .pdf-summary-grid {
             display: grid;
-            grid-template-columns: repeat(4, 1fr);
+            grid-template-columns: repeat(3, 1fr);
             gap: 15px;
             margin-bottom: 30px;
         }
 
         .pdf-summary-grid.with-moldagem {
-            grid-template-columns: repeat(5, 1fr);
+            grid-template-columns: repeat(4, 1fr);
         }
 
         .pdf-card {
@@ -1071,8 +1071,11 @@
 
                 if (date && peso > 0) {
                     const { sortKey, displayKey } = getWeekInfo(date);
-                    if (!dataByWeek[sortKey]) dataByWeek[sortKey] = { total: 0, displayKey };
+                    if (!dataByWeek[sortKey]) dataByWeek[sortKey] = { total: 0, displayKey, days: {} };
+
                     dataByWeek[sortKey].total += peso;
+                    dataByWeek[sortKey].days[r.data] = (dataByWeek[sortKey].days[r.data] || 0) + peso;
+
                     dataByDay[r.data] = (dataByDay[r.data] || 0) + peso;
                     totalProduced += peso;
                     uniqueDates.add(r.data);
@@ -1081,27 +1084,49 @@
 
             const productionDays = Object.values(dataByDay).filter(v => v > 0).length;
             const dailyAverage = productionDays > 0 ? (totalProduced / productionDays) : 0;
-            // Assuming uniqueDates are strings "YYYY-MM-DD"
             const workDaysToCalc = calculateWorkDaysExcludingLast(uniqueDates);
 
             // Tables HTML Generation
-            let dailyTableHTML = '<div class="pdf-section-title">Detalhamento Diário</div><div class="pdf-flex-tables">';
-            const sortedDays = Object.keys(dataByDay).sort();
-            const chunkSize = Math.ceil(sortedDays.length / 3);
-            for (let i = 0; i < 3; i++) {
-                const chunk = sortedDays.slice(i * chunkSize, (i + 1) * chunkSize);
-                if (chunk.length) {
-                    dailyTableHTML += '<div style="flex: 1;"><table class="pdf-table"><thead><tr><th>Data</th><th style="text-align:right;">Produção (Kg)</th></tr></thead><tbody>' +
-                        chunk.map(d => {
-                            const [y, m, da] = d.split('-');
-                            return `<tr><td>${da}/${m}/${y}</td><td style="text-align:right;">${formatNumber(dataByDay[d], 2)}</td></tr>`;
-                        }).join('') + '</tbody></table></div>';
-                }
-            }
+            let dailyTableHTML = '<div class="pdf-section-title">Detalhamento Semanal e Diário</div>';
+
+            const sortedWeeks = Object.keys(dataByWeek).sort();
+
+            dailyTableHTML += '<div class="pdf-flex-tables">';
+
+            sortedWeeks.forEach(weekKey => {
+                const weekData = dataByWeek[weekKey];
+                const sortedDaysInWeek = Object.keys(weekData.days).sort();
+
+                dailyTableHTML += `
+                <div style="flex: 1 1 200px; min-width: 250px; margin-bottom: 20px;">
+                    <table class="pdf-table">
+                        <thead>
+                            <tr>
+                                <th colspan="2" style="background-color: #fbbf24; color: #fff;">${weekData.displayKey}</th>
+                            </tr>
+                            <tr>
+                                <th>Data</th>
+                                <th style="text-align:right;">Produção (Kg)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${sortedDaysInWeek.map(d => {
+                    const [y, m, da] = d.split('-');
+                    return `<tr><td>${da}/${m}/${y}</td><td style="text-align:right;">${formatNumber(weekData.days[d], 2)}</td></tr>`;
+                }).join('')}
+                            <tr style="background-color: #f9fafb; font-weight: bold; border-top: 2px solid #e5e7eb;">
+                                <td>TOTAL SEMANA</td>
+                                <td style="text-align:right;">${formatNumber(weekData.total, 2)}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>`;
+            });
+
             dailyTableHTML += '</div>';
 
-            let weeklyTableHTML = '<div class="pdf-section-title">Desempenho Semanal</div><table class="pdf-table"><thead><tr><th>Semana</th><th style="text-align:right;">Produzido (Kg)</th><th style="text-align:right;">Meta Semanal</th><th style="text-align:right;">Saldo</th><th style="text-align:right;">Eficiência</th></tr></thead><tbody>';
-            Object.keys(dataByWeek).sort().forEach(k => {
+            let weeklyTableHTML = '<div class="pdf-section-title">Resumo de Desempenho Semanal</div><table class="pdf-table"><thead><tr><th>Semana</th><th style="text-align:right;">Produzido (Kg)</th><th style="text-align:right;">Meta Semanal</th><th style="text-align:right;">Saldo</th><th style="text-align:right;">Eficiência</th></tr></thead><tbody>';
+            sortedWeeks.forEach(k => {
                 const d = dataByWeek[k];
                 const bal = d.total - weeklyGoal; // Saldo real vs meta (+ Sobrou, - Faltou)
                 const eff = weeklyGoal > 0 ? (d.total / weeklyGoal) * 100 : 0;
@@ -1131,12 +1156,14 @@
             const summaryHTML = `
                 <div class="pdf-summary-grid ${isMold ? 'with-moldagem' : ''}">
                     ${isMold ? `<div class="pdf-card"><span class="pdf-card-label">Moldagem Total</span><span class="pdf-card-value" style="color:#c0392b;">${formatNumber(d.totalMoldagem, 0)} Kg</span></div>` : ''}
-                    <div class="pdf-card"><span class="pdf-card-label">Produzido no Período</span><span class="pdf-card-value">${formatNumber(d.totalProduced, 0)} Kg</span></div>
-                    <div class="pdf-card"><span class="pdf-card-label">Meta Mensal</span><span class="pdf-card-value" style="color:#e67e22;">${formatNumber(meta, 0)} Kg</span></div>
-                    <div class="pdf-card"><span class="pdf-card-label">Saldo Meta</span><span class="pdf-card-value" style="color:${bal < 0 ? '#c0392b' : '#27ae60'}">${formatNumber(bal, 0)} Kg</span></div>
+                    
                     <div class="pdf-card"><span class="pdf-card-label">Eficiência Global</span><span class="pdf-card-value" style="color:${pctColor};">${pct.toFixed(1)}%</span>
                         <div class="pdf-progress-container"><div class="pdf-progress-bar" style="width:${Math.min(pct, 100)}%; background-color:${pctColor};"></div></div>
                     </div>
+
+                    <div class="pdf-card"><span class="pdf-card-label">Meta Mensal</span><span class="pdf-card-value" style="color:#e67e22;">${formatNumber(meta, 0)} Kg</span></div>
+                    
+                    <div class="pdf-card"><span class="pdf-card-label">Saldo Meta</span><span class="pdf-card-value" style="color:${bal < 0 ? '#c0392b' : '#27ae60'}">${formatNumber(bal, 0)} Kg</span></div>
                 </div>`;
 
             return `<div class="pdf-content-wrapper"><div class="pdf-header"><h3>Relatório: ${sector}</h3><p>Período de Análise:<br><strong>${d.dateRange}</strong></p></div>${summaryHTML}${d.weeklyTableHTML}${d.dailyTableHTML}</div>`;
