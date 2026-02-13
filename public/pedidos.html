@@ -992,7 +992,6 @@
                             style="font-size: 0.7rem; padding: 5px 12px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-subtle); gap: 6px; white-space: nowrap; color: #a1a1aa; cursor: pointer; outline: none;">
                             <option value="delivery" selected style="background: #18181b;">Previsão de Entrega</option>
                             <option value="emission_pending" style="background: #18181b;">Emissão (Pendente)</option>
-                            <option value="emission_total" style="background: #18181b;">Emissão (Total)</option>
                         </select>
                     </div>
                     <div style="position: relative; flex: 1; min-height: 0; width:100%;">
@@ -2344,8 +2343,7 @@
         }
 
 
-        let chartMode = 'delivery'; // 'delivery', 'emission_pending', 'emission_total'
-        let totalEmissionCache = null; // Cache for historical data
+        let chartMode = 'delivery'; // 'delivery' or 'emission_pending'
 
         async function changeChartSource() {
             const select = document.getElementById('chartSourceSelect');
@@ -2356,42 +2354,10 @@
                 titleEl.textContent = 'Peso Total por Mês (kg) - Previsão Entrega';
             } else if (chartMode === 'emission_pending') {
                 titleEl.textContent = 'Emissão de Pedidos (Pendente) - kg/R$';
-            } else if (chartMode === 'emission_total') {
-                titleEl.textContent = 'Emissão de Pedidos (Total Histórico) - kg/R$';
-                if (!totalEmissionCache) {
-                    await fetchTotalEmissionHistory();
-                }
             }
 
-            // Update chart with current list (or cache)
+            // Update chart with current list
             updateMonthlyChart(currentFilteredData);
-        }
-
-        async function fetchTotalEmissionHistory() {
-            try {
-                // Show small loading on title or chart?
-                document.getElementById('monthlyChartTitle').textContent += ' (Carregando...)';
-
-                document.getElementById('monthlyChartTitle').textContent += ' (Carregando...)';
-
-                // Usando Micro-Serviço dedicado na porta 3006 para evitar erro 500 do servidor principal
-                const res = await fetch('http://localhost:3006/api/emissao-mensal?anoInicio=' + new Date().getFullYear());
-                if (res.ok) {
-                    totalEmissionCache = await res.json();
-                } else {
-                    console.error('Failed to fetch emission history');
-                    showToast("Erro", "Falha ao carregar histórico de emissão.", "danger");
-                }
-            } catch (e) {
-                console.error(e);
-            } finally {
-                // Restore title
-                const titleEl = document.getElementById('monthlyChartTitle');
-                if (titleEl.textContent.includes('(Carregando...)')) {
-                    titleEl.textContent = 'Emissão de Pedidos (Total Histórico) - kg/R$';
-                }
-                updateMonthlyChart(currentFilteredData);
-            }
         }
 
         // Replaced logic for chart updates
@@ -2401,72 +2367,32 @@
             const mData = Array(12).fill(0);
             const mDataValue = Array(12).fill(0);
 
-            // CASE 1: Total Emission (Historical from Cache)
-            if (chartMode === 'emission_total' && totalEmissionCache) {
-                totalEmissionCache.forEach(item => {
-                    // item: { ano, mes, totalPeso, totalValor }
-                    // Note: Backend returns MES 1-12. Array is 0-11
-                    // Filter for current year if chart is only for current year?
-                    // The chart labels are Jan-Dec. Usually implies current year or rolling?
-                    // Let's assume current year for the monthly chart, or if the view is "Filtered by year" it should match.
-                    // IMPORTANT: The backend returns ALL data from startYear. 
-                    // The Frontend chart usually displays data for the "viewed" year.
-                    // But here the chart labels are static Jan-Dec. 
-                    // Let's filter cache for the *Current Year* (2025/2026?)
-                    // Or better, let's just sum all years into the buckets (if valid) or just filtered year.
-                    // Given "Emissão Mensal" suggests checking the curve.
-                    // Let's stick to Current Year (2026 based on logs/context) or just match what `d.getFullYear() >= 2000` did.
-                    // Wait, the original code didn't filter year for the buckets, just `d.getFullYear() >= 2000`. 
-                    // So it aggregates ALL years into Jan-Dec buckets? That seems like a "Seasonality" chart if so.
-                    // BUT, `allData` usually contains active orders. Active orders are likely recent.
-                    // If I switch to Historical, I have data from 2024. If I sum 2024+2025+2026 Januaries, it's weird.
-                    // I should probably filter for the Current Year (e.g., 2026) or allow year selection.
-                    // For now, I will assume the user wants to see the CURRENT year's progression.
-                    // I'll filter by `new Date().getFullYear()`.
+            // CASE: Delivery or Pending Emission (From filtered list)
+            list.forEach(item => {
+                let d;
 
-                    const currentYear = new Date().getFullYear();
-                    if (item.ano === currentYear) {
-                        const idx = item.mes - 1;
-                        if (idx >= 0 && idx < 12) {
-                            mData[idx] += Number(item.totalPeso || 0);
-                            mDataValue[idx] += Number(item.totalValor || 0);
-                        }
-                    }
-                });
-            }
-            // CASE 2: Delivery or Pending Emission (From filtered list)
-            else {
-                list.forEach(item => {
-                    let d;
+                if (chartMode === 'delivery') {
+                    d = item.ENTREGA_PETR ? new Date(item.ENTREGA_PETR) : null;
+                } else if (chartMode === 'emission_pending') {
+                    d = item.DATA_EMISSAO_PEDIDO ? new Date(item.DATA_EMISSAO_PEDIDO) : null;
+                }
 
-                    if (chartMode === 'delivery') {
-                        d = item.ENTREGA_PETR ? new Date(item.ENTREGA_PETR) : null;
-                    } else if (chartMode === 'emission_pending') {
-                        d = item.DATA_EMISSAO_PEDIDO ? new Date(item.DATA_EMISSAO_PEDIDO) : null;
-                    }
+                // For pending/delivery, we also need to decide if we filter by year?
+                // Original code: `if (d && d.getFullYear() >= 2000)`. It summed EVERYTHING into the buckets.
+                if (d && d.getFullYear() >= 2000) {
+                    const weight = getCorrectedWeight(item);
 
-                    // For pending/delivery, we also need to decide if we filter by year?
-                    // Original code: `if (d && d.getFullYear() >= 2000)`. It summed EVERYTHING into the buckets.
-                    // This implies the chart shows "Future Demands" (Delivery) which can span years? 
-                    // Or "Backlog" (Emission) which is usually recent.
-                    // If I have orders for Jan 2027, they go into Jan bucket? Yes, with the original code.
-                    // I will Maintain original behavior for 'delivery' and 'emission_pending'.
+                    // Calculate Value
+                    const vUnit = parseFloat(item.VALOR_PPR || 0);
+                    const saldo = Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0;
+                    const q = Number(item.QUANTIDADE_PPR) || 0;
+                    const realQ = saldo > 0 ? saldo : q;
+                    const val = vUnit * realQ;
 
-                    if (d && d.getFullYear() >= 2000) {
-                        const weight = getCorrectedWeight(item);
-
-                        // Calculate Value
-                        const vUnit = parseFloat(item.VALOR_PPR || 0);
-                        const saldo = Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0;
-                        const q = Number(item.QUANTIDADE_PPR) || 0;
-                        const realQ = saldo > 0 ? saldo : q;
-                        const val = vUnit * realQ;
-
-                        mData[d.getMonth()] += weight;
-                        mDataValue[d.getMonth()] += val;
-                    }
-                });
-            }
+                    mData[d.getMonth()] += weight;
+                    mDataValue[d.getMonth()] += val;
+                }
+            });
 
             const monthLabels = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
