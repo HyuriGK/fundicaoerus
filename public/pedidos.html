@@ -1043,6 +1043,10 @@
                     </button>
                 </div>
                 <div class="toolbar-group" style="margin-left: auto;">
+                    <button class="btn-modern" onclick="openEmailModal()"
+                        style="background-color: #27272a; border: 1px solid var(--border-highlight); margin-right: 10px;">
+                        <i class="fa-solid fa-envelope"></i> Gerar Email
+                    </button>
                     <button id="toggleModelosBtn" class="btn-modern btn-toggle" onclick="toggleModelosFilter()"
                         style="background-color: #3f3f46;">
                         <span id="toggleModelosText"><i class="fa-solid fa-eye"></i> Mostrar Modelos</span>
@@ -1193,6 +1197,35 @@
                 <button class="btn-modern" onclick="closeFiltersModal()"
                     style="background-color: var(--color-primary); color: #000;">
                     <i class="fa-solid fa-check"></i> Aplicar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DE EMAIL (NOVO) -->
+    <div id="emailModal" class="modal-overlay" style="z-index: 3000;">
+        <div class="modal-card fullscreen" style="background: #09090b;">
+            <div class="modal-header">
+                <h2 class="modal-title"><i class="fa-solid fa-envelope" style="margin-right: 15px;"></i>Email de Novos
+                    Pedidos</h2>
+                <span class="modal-close" onclick="closeEmailModal()">&times;</span>
+            </div>
+            <div class="modal-body"
+                style="padding: 0 40px 30px 40px; display: flex; flex-direction: column; flex: 1; overflow: hidden;">
+                <p style="color: var(--text-muted); margin-bottom: 15px;">
+                    Copie o texto abaixo e cole no seu cliente de email.
+                </p>
+                <textarea id="emailPreviewText" spellcheck="false"
+                    style="flex: 1; background: #18181b; border: 1px solid var(--border-subtle); border-radius: 8px; color: #fff; font-family: 'JetBrains Mono', monospace; font-size: 0.9rem; padding: 20px; resize: none; line-height: 1.5; outline: none;"></textarea>
+            </div>
+            <div class="modal-footer"
+                style="padding: 15px; border-top: 1px solid var(--border-subtle); display: flex; gap: 15px; justify-content: center;">
+                <button class="btn-modern" onclick="closeEmailModal()" style="background-color: #3f3f46; min-width: 150px;">
+                    Fechar
+                </button>
+                <button class="btn-modern" onclick="copyEmailText()"
+                    style="background-color: var(--color-primary); color: #000; min-width: 200px;">
+                    <i class="fa-solid fa-copy"></i> Copiar Texto
                 </button>
             </div>
         </div>
@@ -1492,6 +1525,120 @@
 
             // Reaplicar filtros (agora vazios)
             applyColumnFilters();
+        }
+
+
+        // --- FUNÇÕES DE EMAIL (NOVO) ---
+        let currentFilteredData = []; // Armazena a lista atual da tabela para o email
+
+        function openEmailModal() {
+            if (!currentFilteredData || currentFilteredData.length === 0) {
+                showToast("Atenção", "Nenhum pedido listado para gerar email.", "warning");
+                return;
+            }
+
+            const text = generateEmailText(currentFilteredData);
+            document.getElementById('emailPreviewText').value = text;
+            document.getElementById('emailModal').style.display = 'flex';
+        }
+
+        function closeEmailModal() {
+            document.getElementById('emailModal').style.display = 'none';
+        }
+
+        function copyEmailText() {
+            const textarea = document.getElementById('emailPreviewText');
+            textarea.select();
+            textarea.setSelectionRange(0, 99999); // Mobile
+            navigator.clipboard.writeText(textarea.value).then(() => {
+                showToast("Sucesso", "Texto copiado para a área de transferência!", "success");
+            }).catch(err => {
+                showToast("Erro", "Falha ao copiar texto.", "danger");
+                console.error(err);
+            });
+        }
+
+        function generateEmailText(list) {
+            // 1. Totals
+            const totalPedidos = list.length;
+            let totalQtd = 0;
+            let totalPeso = 0;
+
+            // Group by Client
+            const byClient = {};
+
+            list.forEach(item => {
+                // Determine Qty
+                const saldo = Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0;
+                const qtdOriginal = Number(item.QUANTIDADE_PPR) || 0;
+                const qtd = saldo > 0 ? saldo : qtdOriginal;
+
+                // Determine Weight
+                const weight = getCorrectedWeight(item);
+
+                totalQtd += qtd;
+                totalPeso += weight;
+
+                // Group
+                const clientName = item.NOME_CLIENTE || 'CLIENTE DESCONHECIDO';
+                if (!byClient[clientName]) {
+                    byClient[clientName] = [];
+                }
+                byClient[clientName].push({ ...item, _qtd: qtd, _weight: weight });
+            });
+
+            // 2. Build Header
+            let text = `Prezados,\n\n`;
+            text += `Foram incluídos novos pedidos na carteira:\n\n`;
+            text += `• Total de Novos Pedidos: ${totalPedidos}\n`;
+            text += `• Quantidade Total: ${totalQtd} pçs\n`;
+            text += `• Peso Total Adicionado: ${formatNumber(totalPeso)} kg (Podem ter pesos zerados)\n\n`;
+            text += `Lista Detalhada:\n`;
+
+            // 3. Build Client Sections
+            // Sort clients alphabetically
+            const sortedClients = Object.keys(byClient).sort();
+
+            sortedClients.forEach(client => {
+                text += `--------------------------------------------------\n`;
+                text += `CLIENTE: ${client}\n`;
+                text += `--------------------------------------------------\n`;
+
+                const items = byClient[client];
+                // Sort items by date or code logic? Default to list order (usually date asc from DB, or ID asc)
+                // Let's sort by ID for consistency? Or Delivery? Code implies "Pedidos" so maybe Order Number.
+                // Original request list was: 107, 105, 106. No particular order.
+                // Keeping original order.
+
+                items.forEach(i => {
+                    const cod = i.CODIGO_PPR || '-'; // Ped
+                    const codProd = i.PRODUTO_PPR || '-'; // Cód
+                    const entrega = i.ENTREGA_PETR ? new Date(i.ENTREGA_PETR).toLocaleDateString('pt-BR') :
+                        (i.DATA_ENTREGA_PPR ? new Date(i.DATA_ENTREGA_PPR).toLocaleDateString('pt-BR') : 'Sem Data');
+
+                    const desc = i.NOME_PRODUTO_PPR || i.PRODUTO_PPR || 'SEM DESCRIÇÃO';
+                    // Truncate desc if too long? Request shows "..." but full desc is better unless huge.
+                    // Request: "TAMPA MANCAL LADO PORCA THOR 009 THEST O..."
+                    // I'll keep it full for now or truncate at 45 chars logic if needed. 
+                    // Let's truncate to 50 chars for neatness like the example.
+                    const truncDesc = desc.length > 50 ? desc.substring(0, 47) + '...' : desc;
+
+                    const mat = i.NOME_MATERIAL || '-';
+                    const qtd = i._qtd;
+                    const pesoTotal = i._weight;
+                    const pesoUn = qtd > 0 ? (pesoTotal / qtd) : 0;
+
+                    text += `• Ped: ${cod} | Cód: ${codProd} | Entrega: ${entrega}\n`;
+                    text += `Desc: ${truncDesc}\n`;
+                    text += `Mat: ${mat} | Qtd: ${qtd} | Peso Un: ${formatNumber(pesoUn)} | Total: ${formatNumber(pesoTotal)} kg\n\n`;
+                });
+            });
+
+            text += `\nAtenciosamente,\n`;
+            text += `Sistema de Gestão Comercial\n`;
+            text += `Fundição Erus\n`;
+
+            return text;
         }
 
 
@@ -2095,6 +2242,7 @@
                 return true;
             });
 
+            currentFilteredData = filtered; // Update global for email generation
             renderTable(filtered);
             updateTotals(filtered);
             updateCharts(filtered);
