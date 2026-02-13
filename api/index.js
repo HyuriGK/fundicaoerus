@@ -245,5 +245,20 @@ if (require.main === module) {
         console.log(`\n🚀 Servidor rodando localmente!`);
         console.log(`📡 URL: http://localhost:${PORT}`);
         console.log(`📝 Ambiente: ${process.env.NODE_ENV || 'development'}\n`);
+
+        // --- MICRO-SERVIÇOS AUXILIARES ---
+        // Iniciar servico de emissão isolado
+        const { spawn } = require('child_process');
+        const path = require('path');
+        const scriptPath = path.join(__dirname, '../scripts/server-emissao-mensal.js');
+
+        console.log(`🔄 Iniciando micro-serviço de Emissão em: ${scriptPath}`);
+
+        const child = spawn('node', [scriptPath], {
+            detached: true,
+            stdio: 'ignore'
+        });
+
+        child.unref();
     });
 }
