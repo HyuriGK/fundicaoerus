@@ -1158,31 +1158,32 @@
 
             // VISIBILITY RULES
             // 1. Moldagem Total: Show for General AND Sub-types (isAnyMolding)
-            // 2. Produzido: ALWAYS SHOW
+            // 2. Produzido no Período / Setor:
+            //    - General: REMOVE.
+            //    - Sub-types: 'Produzido no Setor'.
+            //    - Others: 'Produzido no Período'.
+            const showProduzido = !isGeneral;
+            const produzidoLabel = isSubMolding ? 'Produzido no Setor' : 'Produzido no Período';
+
             // 3. Meta/Saldo/Eff: Show for General OR Non-Molding (Exclude Sub-types)
             const showKPIGoals = !isSubMolding;
 
             // Adjust grid columns
-            // If showing minimal KPIs (Sub-molding): Moldagem Total + Produzido = 2 cols
-            // If showing full (General/Other): Moldagem Total + Produzido + Meta + Saldo + Eff = 5 cols (or 4 if asking non-mold)
+            // General: Moldagem Total + Meta + Saldo + Eff = 4 cols.
+            // Sub: Moldagem Total + Produzido no Setor = 2 cols.
+            // Other: Produzido + Meta + Saldo + Eff = 4 cols.
 
-            let gridClass = '';
-            if (isAnyMolding && showKPIGoals) gridClass = 'with-moldagem'; // 5 cols (General)
-            else if (isAnyMolding && !showKPIGoals) gridClass = 'minimal-molding'; // 2 cols (Sub-types)
-            else gridClass = ''; // 3 or 4 cols (Other sectors)
+            let gridCols = 4;
+            if (isSubMolding) gridCols = 2; // Only Moldagem Total + Produzido no Setor
 
-            // Note: CSS for .minimal-molding needs to be added or inline style used.
-            // Let's use inline style for simplicity or assume grid auto-fit/fill if updated CSS.
-            // But strict grid count is used in CSS.
-            // Let's just override style="grid-template-columns: repeat(2, 1fr);" if minimal.
+            const gridStyle = `grid-template-columns: repeat(${gridCols}, 1fr);`;
 
             const summaryHTML = `
-                <div class="pdf-summary-grid ${isAnyMolding && showKPIGoals ? 'with-moldagem' : ''}" 
-                     style="${isAnyMolding && !showKPIGoals ? 'grid-template-columns: repeat(2, 1fr);' : ''}">
+                <div class="pdf-summary-grid ${isAnyMolding ? 'with-moldagem' : ''}" style="${gridStyle}">
                     
                     ${isAnyMolding ? `<div class="pdf-card"><span class="pdf-card-label">Moldagem Total</span><span class="pdf-card-value" style="color:#c0392b;">${formatNumber(d.totalMoldagem, 0)} Kg</span></div>` : ''}
                     
-                    <div class="pdf-card"><span class="pdf-card-label">Produzido no Período</span><span class="pdf-card-value">${formatNumber(d.totalProduced, 0)} Kg</span></div>
+                    ${showProduzido ? `<div class="pdf-card"><span class="pdf-card-label">${produzidoLabel}</span><span class="pdf-card-value">${formatNumber(d.totalProduced, 0)} Kg</span></div>` : ''}
 
                     ${showKPIGoals ? `
                         <div class="pdf-card"><span class="pdf-card-label">Eficiência Global</span><span class="pdf-card-value" style="color:${pctColor};">${pct.toFixed(1)}%</span>
