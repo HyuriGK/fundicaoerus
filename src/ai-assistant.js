@@ -54,7 +54,8 @@ Use formatação Markdown para destacar números importantes.
         // 3. Call Gemini API
         // Re-initialize to ensure key is used
         const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        // User requested Gemini 3 Flash
+        const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
 
         const result = await model.generateContent(systemPrompt);
         const response = await result.response;
