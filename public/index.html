@@ -1154,8 +1154,13 @@
                     <div class="admin-grid">
                         <div class="admin-item-card" onclick="switchAdminView('users')">
                             <i class="fa-solid fa-users-gear admin-item-icon"></i>
-                            <div class="admin-item-title">Gestão de Usuários</div>
-                            <div class="admin-item-desc">Controle de acessos, roles e permissões do sistema.</div>
+                            <div class="admin-item-title">Usuários</div>
+                            <div class="admin-item-desc">Gerenciar acessos e permissões</div>
+                        </div>
+                        <div class="admin-item-card" onclick="switchAdminView('logs')">
+                            <i class="fa-solid fa-file-waveform admin-item-icon"></i>
+                            <div class="admin-item-title">Logs do Sistema</div>
+                            <div class="admin-item-desc">Auditoria de acessos e ações</div>
                         </div>
 
                         <div class="admin-item-card" onclick="switchAdminView('logs')">
@@ -1264,8 +1269,8 @@
                     } else if (view === 'logs') {
                         logsView.style.display = 'block';
                         backBtn.style.display = 'flex';
-                        title.innerText = 'Logs de Auditoria';
-                        icon.className = 'fa-solid fa-terminal';
+                        title.textContent = 'Logs do Sistema';
+                        icon.className = 'fa-solid fa-file-waveform';
                         loadAdminLogs();
                     }
                 }
@@ -1489,7 +1494,48 @@
                     // Carregar estado salvo (PADRÃO: FIXADO = TRUE)
                     let isSidebarPinned = localStorage.getItem('sidebar_pinned') !== 'false';
 
-                    // Aplica estado inicial
+                    async function loadAdminLogs() {
+                        try {
+                            const response = await fetch('/api/audit-logger/recent?limit=100');
+                            if (!response.ok) throw new Error('Falha ao buscar logs');
+                            const logs = await response.json();
+                            renderAdminLogs(logs);
+                        } catch (error) {
+                            console.error('Erro ao carregar logs:', error);
+                            showToast('Erro', 'Não foi possível carregar os logs.', 'danger');
+                        }
+                    }
+
+                    function renderAdminLogs(logs) {
+                        const tbody = document.getElementById('logs-table-body');
+                        if (!logs || logs.length === 0) {
+                            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 20px;">Nenhum registro encontrado.</td></tr>';
+                            return;
+                        }
+
+                        tbody.innerHTML = logs.map(log => {
+                            const date = new Date(log.created_at).toLocaleString('pt-BR');
+                            let detailsPretty = '-';
+                            if (log.details) {
+                                try {
+                                    const d = typeof log.details === 'string' ? JSON.parse(log.details) : log.details;
+                                    detailsPretty = Object.entries(d).map(([k, v]) => `${k}: ${v}`).join(', ');
+                                } catch (e) { detailsPretty = JSON.stringify(log.details); }
+                            }
+
+                            return `
+                            <tr>
+                                <td>${date}</td>
+                                <td style="font-weight: 500; color: var(--color-primary);">${log.user_name}</td>
+                                <td>${log.action}</td>
+                                <td>${log.table_name || '-'}</td>
+                                <td style="font-size: 0.9em; color: var(--text-muted);">${detailsPretty}</td>
+                            </tr>
+                        `;
+                        }).join('');
+                    }
+
+                    // Verifica status do login ao carregar
                     if (!isSidebarPinned) {
                         appLayout.classList.add('collapsed');
                     }

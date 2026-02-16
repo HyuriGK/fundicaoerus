@@ -2,7 +2,7 @@
 (function () {
     // Helper to get current user
     function getUserName() {
-        return localStorage.getItem('erus_username') || 'Visitante';
+        return localStorage.getItem('erus_user') || localStorage.getItem('erus_username') || 'Visitante';
     }
 
     // Helper to log activity
