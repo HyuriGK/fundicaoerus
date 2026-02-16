@@ -321,6 +321,51 @@
             margin-bottom: 4px;
         }
 
+        /* Role Badges for Admin Table */
+        .badge-role {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-weight: 700;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+        }
+
+        .badge-purple {
+            background: rgba(168, 85, 247, 0.2);
+            color: #a855f7;
+            border: 1px solid rgba(168, 85, 247, 0.3);
+        }
+
+        .badge-danger {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .badge-info {
+            background: rgba(59, 130, 246, 0.2);
+            color: #3b82f6;
+            border: 1px solid rgba(59, 130, 246, 0.3);
+        }
+
+        .badge-warning {
+            background: rgba(245, 158, 11, 0.2);
+            color: #f59e0b;
+            border: 1px solid rgba(245, 158, 11, 0.3);
+        }
+
+        .badge-secondary {
+            background: rgba(255, 255, 255, 0.1);
+            color: #a1a1aa;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .clickable-id {
+            font-size: 0.65rem;
+            color: var(--color-primary);
+            font-weight: 700;
+        }
+
         .live-label {
             font-size: 0.65rem;
             color: var(--color-primary);
@@ -737,9 +782,17 @@
 
             <!-- RODAPÉ DA SIDEBAR COM BOTÃO SAIR -->
             <div class="sidebar-footer">
-                <a href="#" onclick="logout()" class="nav-link logout-link">
-                    <i class="fa-solid fa-right-from-bracket"></i><span>Sair do Sistema</span>
-                </a>
+                <!-- ADMIN BUTTON (Visible only to Dev) -->
+                <div id="admin-menu-item" class="nav-item" onclick="openAdminModal()"
+                    style="display: none; margin-top: auto; margin-bottom: 10px;">
+                    <i class="fa-solid fa-users-gear"></i>
+                    <span>Sistema Admin</span>
+                </div>
+
+                <div class="nav-item" onclick="logout()">
+                    <i class="fa-solid fa-right-from-bracket"></i>
+                    <span>Sair do Sistema</span>
+                </div>
             </div>
         </aside>
 
@@ -809,7 +862,107 @@
 
     <!-- SCRIPT DA SIDEBAR -->
     <script>
+        // --- ADMIN SYSTEM ---
+        function checkAdminButtonVisibility() {
+            const role = localStorage.getItem('erus_role');
+            const adminBtn = document.getElementById('admin-menu-item');
+            if (role === 'desenvolvedor' && adminBtn) {
+                adminBtn.style.display = 'flex';
+            }
+        }
+
+        async function openAdminModal() {
+            document.getElementById('adminUserModal').style.display = 'flex';
+            await loadAdminUsers();
+        }
+
+        function closeAdminModal() {
+            document.getElementById('adminUserModal').style.display = 'none';
+        }
+
+        async function loadAdminUsers() {
+            try {
+                const response = await fetch('/api/admin/users', {
+                    headers: { 'x-role': localStorage.getItem('erus_role') }
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    renderAdminUsers(data.users);
+                } else {
+                    showToast("Erro", data.message || "Falha ao carregar usuários", "danger");
+                }
+            } catch (error) {
+                console.error(error);
+                showToast("Erro", "Erro de conexão ao buscar usuários", "danger");
+            }
+        }
+
+        function renderAdminUsers(users) {
+            const tbody = document.querySelector('#adminUserTable tbody');
+            tbody.innerHTML = '';
+
+            users.forEach(u => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td style="text-align: center;">${u.id}</td>
+                    <td>${u.username}</td>
+                    <td>${u.name}</td>
+                    <td>
+                        <span class="badge-role ${getRoleBadgeClass(u.role)}">${u.role}</span>
+                    </td>
+                    <td style="text-align: center;">${u.last_login ? new Date(u.last_login).toLocaleString() : '-'}</td>
+                    <td style="text-align: center;">
+                        <button class="btn-modern" onclick="editUserRole('${u.username}', '${u.role}')" style="padding: 4px 8px; font-size: 0.75rem;">
+                            <i class="fa-solid fa-pencil"></i> Alterar Role
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function getRoleBadgeClass(role) {
+            switch (role) {
+                case 'desenvolvedor': return 'badge-purple';
+                case 'admin': return 'badge-danger';
+                case 'comercial': return 'badge-info';
+                case 'visitante': return 'badge-warning';
+                default: return 'badge-secondary';
+            }
+        }
+
+        async function editUserRole(username, currentRole) {
+            const newRole = prompt(`Novo role para ${username}? (admin, desenvolvedor, comercial, analista, visitante)`, currentRole);
+
+            if (newRole && newRole !== currentRole) {
+                try {
+                    const response = await fetch(`/api/admin/users/${username}/role`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'x-role': localStorage.getItem('erus_role')
+                        },
+                        body: JSON.stringify({ role: newRole })
+                    });
+
+                    const data = await response.json();
+
+                    if (data.success) {
+                        showToast("Sucesso", `Role de ${username} alterado para ${newRole}`, "success");
+                        loadAdminUsers(); // Reload table
+                    } else {
+                        showToast("Erro", data.message || "Falha ao atualizar role", "danger");
+                    }
+                } catch (error) {
+                    console.error(error);
+                    showToast("Erro", "Erro ao conectar com servidor", "danger");
+                }
+            }
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
+            checkAdminButtonVisibility();
             const sidebar = document.querySelector('.sidebar');
             const appLayout = document.querySelector('.app-layout');
             const toastContainer = document.getElementById('toast-container');
