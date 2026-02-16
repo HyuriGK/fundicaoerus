@@ -2,18 +2,18 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../lib/db');
-// const { GoogleGenerativeAI } = require('@google/generative-ai'); // REMOVED
-const deepseekConfig = require('./deepseek_config');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
+const geminiConfig = require('./gemini_config');
 
 router.post('/chat', async (req, res) => {
     try {
         const userMessage = req.body.message;
-        const apiKey = deepseekConfig.DEEPSEEK_API_KEY;
+        const apiKey = geminiConfig.GEMINI_API_KEY;
 
-        console.log("Debugging DeepSeek Key:", apiKey ? "Presente" : "Ausente");
+        console.log("Debugging Gemini Key:", apiKey ? "Presente" : "Ausente");
 
         if (!apiKey) {
-            return res.status(500).json({ reply: "Erro: Chave de API do DeepSeek não configurada." });
+            return res.status(500).json({ reply: "Erro: Chave de API do Gemini não configurada no arquivo de config." });
         }
 
         // 1. Aggregate Data from Database
@@ -101,30 +101,14 @@ ${billingHistory}
 ${userMessage}
 `;
 
-        // 3. Call DeepSeek API
-        const response = await fetch('https://api.deepseek.com/chat/completions', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey}`
-            },
-            body: JSON.stringify({
-                model: "deepseek-chat",
-                messages: [
-                    { role: "system", content: systemPrompt },
-                    { role: "user", content: userMessage }
-                ],
-                stream: false
-            })
-        });
+        // 3. Call Gemini
+        const genAI = new GoogleGenerativeAI(apiKey);
+        // Using Gemini 3 Flash Preview as requested
+        const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
 
-        if (!response.ok) {
-            const errorData = await response.text();
-            throw new Error(`DeepSeek API Error: ${response.status} - ${errorData}`);
-        }
-
-        const data = await response.json();
-        const text = data.choices[0].message.content;
+        const result = await model.generateContent(systemPrompt);
+        const response = await result.response;
+        const text = response.text();
 
         res.json({ reply: text });
 
