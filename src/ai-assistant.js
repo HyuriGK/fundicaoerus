@@ -51,27 +51,27 @@ Seus dados vêm diretamente do banco de dados em tempo real.
 **DIRETRIZES:**
 - Seja direto, conciso e profissional.
 - Use **negrito** para destacar números críticos.
-- Se o valor for 0 ou muito baixo, alerte.
-- Responda apenas o que foi perguntado, mas pode dar um breve contexto se relevante.
+- Se o usuário pedir "faturamento dos últimos X dias", some os valores do histórico fornecido.
+- Responda apenas o que foi perguntado.
 
 ---
 **CONTEXTO DE DADOS (DASHBOARD):**
 
 📅 **DATA ATUAL:** ${new Date().toLocaleDateString('pt-BR')}
 
-🏭 **PRODUÇÃO POR SETOR (Hoje vs Mês Atual):**
+🏭 **PRODUÇÃO POR SETOR (Hoje vs Mês):**
 
-*   **FUSAO (KPI Principal):**
+*   **FUSAO:**
     *   Hoje: **${sectorStats['FUSAO'].today} kg**
     *   Mês: **${sectorStats['FUSAO'].month} Ton**
 
-*   **MOLDAGEM GERAL (Soma de todas):**
+*   **MOLDAGEM GERAL:**
     *   Hoje: **${moldingGeneralStats.today} kg**
     *   Mês: **${moldingGeneralStats.month} Ton**
-    *   *Detalhe:*
-        *   Leve: ${sectorStats['MOLDAGEM LEVE'].month} Ton
-        *   Manual: ${sectorStats['MOLDAGEM MANUAL'].month} Ton
-        *   Pesada: ${sectorStats['MOLDAGEM PESADA'].month} Ton
+    *   *Detalhamento:*
+        *   **Leve:** Hoje ${sectorStats['MOLDAGEM LEVE'].today} kg / Mês ${sectorStats['MOLDAGEM LEVE'].month} Ton
+        *   **Manual:** Hoje ${sectorStats['MOLDAGEM MANUAL'].today} kg / Mês ${sectorStats['MOLDAGEM MANUAL'].month} Ton
+        *   **Pesada:** Hoje ${sectorStats['MOLDAGEM PESADA'].today} kg / Mês ${sectorStats['MOLDAGEM PESADA'].month} Ton
 
 *   **ACABAMENTO INTERNO:**
     *   Hoje: **${sectorStats['ACABAMENTO'].today} kg**
@@ -81,23 +81,19 @@ Seus dados vêm diretamente do banco de dados em tempo real.
     *   Hoje: **${sectorStats['EXPEDICAO'].today} kg**
     *   Mês: **${sectorStats['EXPEDICAO'].month} Ton**
 
-🛠️ **ACABAMENTO EXTERNO (Terceirização - Mês):**
-- Total Enviado: ${extFinishingStats.weight} kg
-- Cargas: ${extFinishingStats.loads}
+🛠️ **ACABAMENTO EXTERNO (Mês):**
+- Total: ${extFinishingStats.weight} kg (${extFinishingStats.loads} Cargas)
 
-📊 **PRODUÇÃO GERAL (Todos os Setores - Hoje)**
-- **Peso Total:** ${dailyProd.weight} kg
-- **Quantidade:** ${dailyProd.qty} peças
-- **Setores Ativos:** ${dailyProd.sectors}
+💰 **FATURAMENTO (Hoje):**
+- Total: R$ ${dailyBilling.value} (${dailyBilling.weight} kg)
+- Ticket Médio: R$ ${dailyBilling.ticket}
 
-💰 **FATURAMENTO (Hoje)**
-- **Total:** R$ ${dailyBilling.value}
-- **Peso:** ${dailyBilling.weight} kg
-- **Ticket Médio:** R$ ${dailyBilling.ticket}
+📅 **HISTÓRICO RECENTE DE FATURAMENTO (Para cálculos):**
+${billingHistory}
 
-⚠️ **QUALIDADE (Refugo - 7 Dias)**
-- **Total Refugado:** ${scrapStats.rate}
-- **Top Motivos:** ${scrapStats.reasons}
+⚠️ **QUALIDADE (Refugo 7 Dias):**
+- Taxa: ${scrapStats.rate}
+- Motivos: ${scrapStats.reasons}
 
 ---
 **PERGUNTA DO USUÁRIO:**
@@ -122,6 +118,29 @@ ${userMessage}
 });
 
 // --- HELPER FUNCTIONS ---
+
+async function getBillingHistory() {
+    try {
+        const res = await pool.query(`
+            SELECT 
+                to_char(data, 'DD/MM') as day,
+                valor_total,
+                peso_total
+            FROM faturamento_diario
+            WHERE data >= CURRENT_DATE - INTERVAL '14 days'
+            ORDER BY data DESC
+        `);
+
+        if (res.rows.length === 0) return "Sem histórico recente.";
+
+        return res.rows.map(r =>
+            `- ${r.day}: R$ ${parseFloat(r.valor_total).toFixed(2)} (${parseFloat(r.peso_total).toFixed(2)} kg)`
+        ).join('\n');
+    } catch (e) {
+        console.error("Erro billing history:", e);
+        return "Erro ao buscar histórico.";
+    }
+}
 
 async function getSectorStats(sectorName, isLike = false) {
     try {
