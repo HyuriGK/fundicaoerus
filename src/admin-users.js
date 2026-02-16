@@ -44,6 +44,22 @@ router.put('/:username/role', checkDevRole, async (req, res) => {
         console.error('Erro ao atualizar role:', error);
         res.status(500).json({ success: false, message: 'Erro ao atualizar permissão.' });
     }
+}
+});
+
+// DELETAR USUÁRIO (BANIR)
+router.delete('/:username', checkDevRole, async (req, res) => {
+    const { username } = req.params;
+
+    try {
+        // Prevenir deletar a si mesmo ou usuários protegidos se necessário
+        // Aqui apenas deletamos direto
+        await pool.query('DELETE FROM users WHERE username = $1', [username]);
+        res.json({ success: true, message: 'Usuário banido com sucesso.' });
+    } catch (error) {
+        console.error('Erro ao deletar usuário:', error);
+        res.status(500).json({ success: false, message: 'Erro ao banir usuário.' });
+    }
 });
 
 module.exports = router;
