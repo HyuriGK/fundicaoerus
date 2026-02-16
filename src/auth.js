@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../lib/db'); // Importa o db convertido
 const bcrypt = require('bcryptjs');
+const { logActivity } = require('./lib/logger');
 
 // Rota: POST /api/auth (definido no index.js)
 router.post('/', async (req, res) => {
@@ -29,7 +30,8 @@ router.post('/', async (req, res) => {
 
             // 3. Atualiza o timestamp de último login (Fire & Forget)
             pool.query('UPDATE users SET last_login = NOW() WHERE username = $1', [user])
-                .catch(err => console.error('Erro ao atualizar last_login:', err));
+                .then(() => logActivity(user, 'LOGIN', 'users', { name: userData.name, role: userData.role }))
+                .catch(err => console.error('Erro ao atualizar last_login ou logar atividade:', err));
 
             // Retorna os dados
             return res.status(200).json({

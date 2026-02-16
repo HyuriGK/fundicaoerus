@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../lib/db');
+const { logActivity } = require('./lib/logger');
 
 // Middleware para verificar se é desenvolvedor
 const checkDevRole = async (req, res, next) => {
@@ -39,6 +40,8 @@ router.put('/:username/role', checkDevRole, async (req, res) => {
 
     try {
         await pool.query('UPDATE users SET role = $1 WHERE username = $2', [role.toLowerCase(), username]);
+        const adminUser = req.headers['x-user'] || 'Admin'; // Idealmente pegaríamos do req.user
+        logActivity(adminUser, 'UPDATE_ROLE', 'users', { affected_user: username, new_role: role });
         res.json({ success: true, message: 'Permissão atualizada com sucesso.' });
     } catch (error) {
         console.error('Erro ao atualizar role:', error);
@@ -54,10 +57,23 @@ router.delete('/:username', checkDevRole, async (req, res) => {
         // Prevenir deletar a si mesmo ou usuários protegidos se necessário
         // Aqui apenas deletamos direto
         await pool.query('DELETE FROM users WHERE username = $1', [username]);
+        const adminUser = req.headers['x-user'] || 'Admin';
+        logActivity(adminUser, 'BAN_USER', 'users', { affected_user: username });
         res.json({ success: true, message: 'Usuário banido com sucesso.' });
     } catch (error) {
         console.error('Erro ao deletar usuário:', error);
         res.status(500).json({ success: false, message: 'Erro ao banir usuário.' });
+    }
+});
+
+// LISTAR LOGS DE AUDITORIA
+router.get('/logs', checkDevRole, async (req, res) => {
+    try {
+        const result = await pool.query('SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 200');
+        res.json({ success: true, logs: result.rows });
+    } catch (error) {
+        console.error('Erro ao listar logs:', error);
+        res.status(500).json({ success: false, message: 'Erro ao buscar logs de auditoria.' });
     }
 });
 

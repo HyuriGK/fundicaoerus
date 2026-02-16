@@ -1091,10 +1091,11 @@
                             <div class="admin-item-desc">Controle de acessos, roles e permissões do sistema.</div>
                         </div>
 
-                        <div class="admin-item-card" style="opacity: 0.4; cursor: not-allowed;">
-                            <i class="fa-solid fa-terminal admin-item-icon" style="color: #71717a;"></i>
-                            <div class="admin-item-title" style="color: #71717a;">Auditoria / Logs</div>
-                            <div class="admin-item-desc">Rastreamento de alterações e atividades (Em breve).</div>
+                        <div class="admin-item-card" onclick="switchAdminView('logs')">
+                            <i class="fa-solid fa-terminal admin-item-icon"></i>
+                            <div class="admin-item-title">Auditoria / Logs</div>
+                            <div class="admin-item-desc">Rastreamento de todas as alterações e atividades no sistema.
+                            </div>
                         </div>
 
                         <div class="admin-item-card" style="opacity: 0.4; cursor: not-allowed;">
@@ -1130,327 +1131,373 @@
                             </tbody>
                         </table>
                     </div>
+                    <!-- AUDIT LOGS VIEW -->
+                    <div id="adminLogsView" class="admin-view-transition" style="display: none;">
+                        <div class="table-container" style="height: 100%;">
+                            <table id="adminLogsTable">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 180px;">Data/Hora</th>
+                                        <th style="width: 120px;">Usuário</th>
+                                        <th style="width: 120px;">Ação</th>
+                                        <th style="width: 150px;">Tabela</th>
+                                        <th>Detalhes</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <!-- Populated by JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
 
-    <!-- SCRIPT DA SIDEBAR -->
-    <script>
-        // --- ADMIN SYSTEM ---
-        function checkAdminButtonVisibility() {
-            const role = localStorage.getItem('erus_role');
-            const adminBtn = document.getElementById('admin-menu-item');
-            if (role === 'desenvolvedor' && adminBtn) {
-                adminBtn.style.display = 'flex';
+        <!-- SCRIPT DA SIDEBAR -->
+        <script>
+            // --- ADMIN SYSTEM ---
+            function checkAdminButtonVisibility() {
+                const role = localStorage.getItem('erus_role');
+                const adminBtn = document.getElementById('admin-menu-item');
+                if (role === 'desenvolvedor' && adminBtn) {
+                    adminBtn.style.display = 'flex';
+                }
             }
-        }
 
-        async function openAdminModal() {
-            document.getElementById('adminUserModal').style.display = 'flex';
-            switchAdminView('dashboard');
-        }
+            async function openAdminModal() {
+                document.getElementById('adminUserModal').style.display = 'flex';
+                switchAdminView('dashboard');
+            }
 
-        function switchAdminView(view) {
-            const dashboard = document.getElementById('adminDashboardView');
-            const userView = document.getElementById('adminUserManagementView');
-            const backBtn = document.getElementById('adminBackBtn');
-            const title = document.getElementById('adminModalTitle');
-            const icon = document.getElementById('adminModalIcon');
+            function switchAdminView(view) {
+                const dashboard = document.getElementById('adminDashboardView');
+                const userView = document.getElementById('adminUserManagementView');
+                const logsView = document.getElementById('adminLogsView');
+                const backBtn = document.getElementById('adminBackBtn');
+                const title = document.getElementById('adminModalTitle');
+                const icon = document.getElementById('adminModalIcon');
 
-            if (view === 'dashboard') {
-                dashboard.style.display = 'block';
-                userView.style.display = 'none';
-                backBtn.style.display = 'none';
-                title.innerText = 'Painel Administrativo';
-                icon.className = 'fa-solid fa-shield-halved';
-            } else if (view === 'users') {
+                // Reset displays
                 dashboard.style.display = 'none';
-                userView.style.display = 'block';
-                backBtn.style.display = 'flex';
-                title.innerText = 'Gestão de Usuários';
-                icon.className = 'fa-solid fa-users-gear';
-                loadAdminUsers();
-            }
-        }
+                userView.style.display = 'none';
+                logsView.style.display = 'none';
 
-        function closeAdminModal() {
-            document.getElementById('adminUserModal').style.display = 'none';
-        }
-
-        let adminUsersData = [];
-        let currentSort = { key: 'last_login', direction: 'desc' };
-
-        async function loadAdminUsers() {
-            try {
-                const response = await fetch('/api/admin/users', {
-                    headers: { 'x-role': localStorage.getItem('erus_role') }
-                });
-                const data = await response.json();
-
-                if (data.success) {
-                    adminUsersData = data.users;
-                    sortUsers(currentSort.key, false); // Re-sort with current settings
-                } else {
-                    showToast("Erro", data.message || "Falha ao carregar usuários", "danger");
-                }
-            } catch (error) {
-                console.error(error);
-                showToast("Erro", "Erro de conexão ao buscar usuários", "danger");
-            }
-        }
-
-        function sortUsers(key, toggle = true) {
-            if (toggle) {
-                if (currentSort.key === key) {
-                    currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
-                } else {
-                    currentSort.key = key;
-                    currentSort.direction = 'asc';
+                if (view === 'dashboard') {
+                    dashboard.style.display = 'block';
+                    backBtn.style.display = 'none';
+                    title.innerText = 'Painel Administrativo';
+                    icon.className = 'fa-solid fa-shield-halved';
+                } else if (view === 'users') {
+                    userView.style.display = 'block';
+                    backBtn.style.display = 'flex';
+                    title.innerText = 'Gestão de Usuários';
+                    icon.className = 'fa-solid fa-users-gear';
+                    loadAdminUsers();
+                } else if (view === 'logs') {
+                    logsView.style.display = 'block';
+                    backBtn.style.display = 'flex';
+                    title.innerText = 'Logs de Auditoria';
+                    icon.className = 'fa-solid fa-terminal';
+                    loadAdminLogs();
                 }
             }
 
-            adminUsersData.sort((a, b) => {
-                let valA = a[key] || '';
-                let valB = b[key] || '';
-
-                if (key === 'id') {
-                    valA = Number(valA);
-                    valB = Number(valB);
-                } else {
-                    valA = String(valA).toLowerCase();
-                    valB = String(valB).toLowerCase();
-                }
-
-                if (valA < valB) return currentSort.direction === 'asc' ? -1 : 1;
-                if (valA > valB) return currentSort.direction === 'asc' ? 1 : -1;
-                return 0;
-            });
-
-            renderAdminUsers(adminUsersData);
-        }
-
-        function renderAdminUsers(users) {
-            const tbody = document.querySelector('#adminUserTable tbody');
-            tbody.innerHTML = '';
-
-            users.forEach(u => {
-                const tr = document.createElement('tr');
-                tr.innerHTML = `
-                    <td style="text-align: center;">${u.id}</td>
-                    <td>${u.username}</td>
-                    <td>${u.name}</td>
-                    <td>
-                        <span class="badge-role ${getRoleBadgeClass(u.role)}">${u.role}</span>
-                    </td>
-                    <td style="text-align: center;">${u.last_login ? new Date(u.last_login).toLocaleString() : '-'}</td>
-                    <td style="text-align: center; display: flex; gap: 8px; justify-content: center;">
-                        <button class="btn-modern" onclick="editUserRole('${u.username}', '${u.role}')" title="Editar Role" style="padding: 4px 8px; font-size: 0.75rem;">
-                            <i class="fa-solid fa-pencil"></i>
-                        </button>
-                        <button class="btn-modern" onclick="deleteUser('${u.username}')" title="Banir Usuário" style="padding: 4px 8px; font-size: 0.75rem; background: rgba(239, 68, 68, 0.2); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3);">
-                            <i class="fa-solid fa-trash"></i>
-                        </button>
-                    </td>
-                `;
-                tbody.appendChild(tr);
-            });
-        }
-
-        function getRoleBadgeClass(role) {
-            switch (role) {
-                case 'desenvolvedor': return 'badge-danger'; // Vermelho
-                case 'admin': return 'badge-danger';
-                case 'comercial': return 'badge-info'; // Azul
-                case 'visitante': return 'badge-warning'; // Amarelo/Laranja
-                default: return 'badge-secondary';
+            function closeAdminModal() {
+                document.getElementById('adminUserModal').style.display = 'none';
             }
-        }
 
-        async function editUserRole(username, currentRole) {
-            const newRole = prompt(`Novo role para ${username}? (admin, desenvolvedor, comercial, analista, visitante)`, currentRole);
+            let adminUsersData = [];
+            let currentSort = { key: 'last_login', direction: 'desc' };
 
-            if (newRole && newRole !== currentRole) {
+            async function loadAdminUsers() {
                 try {
-                    const response = await fetch(`/api/admin/users/${username}/role`, {
-                        method: 'PUT',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'x-role': localStorage.getItem('erus_role')
-                        },
-                        body: JSON.stringify({ role: newRole })
-                    });
-
-                    const data = await response.json();
-
-                    if (data.success) {
-                        showToast("Sucesso", `Role de ${username} alterado para ${newRole}`, "success");
-                        loadAdminUsers(); // Reload table
-                    } else {
-                        showToast("Erro", data.message || "Falha ao atualizar role", "danger");
-                    }
-                } catch (error) {
-                    console.error(error);
-                    showToast("Erro", "Erro ao conectar com servidor", "danger");
-                }
-            }
-        }
-
-        async function deleteUser(username) {
-            if (confirm(`Tem certeza que deseja BANIR (excluir) o usuário: ${username}? Essa ação não pode ser desfeita.`)) {
-                try {
-                    const response = await fetch(`/api/admin/users/${username}`, {
-                        method: 'DELETE',
+                    const response = await fetch('/api/admin/users', {
                         headers: { 'x-role': localStorage.getItem('erus_role') }
                     });
-
                     const data = await response.json();
 
                     if (data.success) {
-                        showToast("Sucesso", `Usuário ${username} banido com sucesso.`, "success");
-                        loadAdminUsers(); // Reload table
+                        adminUsersData = data.users;
+                        sortUsers(currentSort.key, false); // Re-sort with current settings
                     } else {
-                        showToast("Erro", data.message || "Falha ao banir usuário", "danger");
+                        showToast("Erro", data.message || "Falha ao carregar usuários", "danger");
                     }
                 } catch (error) {
                     console.error(error);
-                    showToast("Erro", "Erro ao conectar com servidor", "danger");
+                    showToast("Erro", "Erro de conexão ao buscar usuários", "danger");
                 }
             }
-        }
 
-        document.addEventListener('DOMContentLoaded', () => {
-            checkAdminButtonVisibility();
-
-            // Close Modal on Esc key
-            document.addEventListener('keydown', (e) => {
-                if (e.key === 'Escape') {
-                    const modal = document.getElementById('adminUserModal');
-                    if (modal && modal.style.display === 'flex') {
-                        closeAdminModal();
+            function sortUsers(key, toggle = true) {
+                if (toggle) {
+                    if (currentSort.key === key) {
+                        currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+                    } else {
+                        currentSort.key = key;
+                        currentSort.direction = 'asc';
                     }
                 }
-            });
 
-            const sidebar = document.querySelector('.sidebar');
-            const appLayout = document.querySelector('.app-layout');
-            const toastContainer = document.getElementById('toast-container');
+                adminUsersData.sort((a, b) => {
+                    let valA = a[key] || '';
+                    let valB = b[key] || '';
 
-            // Carregar estado salvo (PADRÃO: FIXADO = TRUE)
-            let isSidebarPinned = localStorage.getItem('sidebar_pinned') !== 'false';
+                    if (key === 'id') {
+                        valA = Number(valA);
+                        valB = Number(valB);
+                    } else {
+                        valA = String(valA).toLowerCase();
+                        valB = String(valB).toLowerCase();
+                    }
 
-            // Aplica estado inicial
-            if (!isSidebarPinned) {
-                appLayout.classList.add('collapsed');
+                    if (valA < valB) return currentSort.direction === 'asc' ? -1 : 1;
+                    if (valA > valB) return currentSort.direction === 'asc' ? 1 : -1;
+                    return 0;
+                });
+
+                renderAdminUsers(adminUsersData);
             }
 
-            // Funções de Toast Rápido
-            function showStateToast(msg) {
-                const toast = document.createElement('div');
-                toast.className = 'toast info';
-                toast.style.padding = '10px 15px';
-                toast.style.minWidth = '200px';
-                toast.innerHTML = `<i class="fa-solid fa-info-circle"></i> <span style="font-weight:600">${msg}</span>`;
-                toastContainer.appendChild(toast);
-                setTimeout(() => {
-                    toast.style.animation = 'fadeOut 0.3s forwards';
-                    setTimeout(() => toast.remove(), 300);
-                }, 2000);
-            }
+            async function loadAdminLogs() {
+                try {
+                    const response = await fetch('/api/admin/users/logs', {
+                        headers: { 'x-role': localStorage.getItem('erus_role') }
+                    });
+                    const data = await response.json();
 
-            // EVENTOS
-            sidebar.addEventListener('mouseenter', () => {
-                if (!isSidebarPinned) {
-                    appLayout.classList.remove('collapsed');
+                    if (data.success) {
+                        renderAdminLogs(data.logs);
+                    } else {
+                        showToast("Erro", data.message || "Falha ao carregar logs", "danger");
+                    }
+                } catch (error) {
+                    console.error(error);
+                    showToast("Erro", "Erro de conexão ao buscar logs", "danger");
                 }
-            });
+            }
 
-            sidebar.addEventListener('mouseleave', () => {
+            function renderAdminLogs(logs) {
+                const tbody = document.querySelector('#adminLogsTable tbody');
+                tbody.innerHTML = '';
+
+                logs.forEach(l => {
+                    const tr = document.createElement('tr');
+                    const details = l.details ? JSON.stringify(l.details) : '-';
+                    const actionClass = l.action === 'DELETE' || l.action.includes('BAN') ? 'badge-danger' :
+                        l.action === 'LOGIN' ? 'badge-info' : 'badge-warning';
+
+                    tr.innerHTML = `
+                    <td style="font-size: 0.75rem; color: #a1a1aa;">${new Date(l.created_at).toLocaleString()}</td>
+                    <td style="font-weight: 600;">${l.user_name}</td>
+                    <td><span class="badge-role ${actionClass}">${l.action}</span></td>
+                    <td style="font-family: var(--font-mono); font-size: 0.7rem;">${l.table_name || '-'}</td>
+                    <td style="font-size: 0.75rem; color: #71717a; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title='${details}'>
+                        ${details}
+                    </td>
+                `;
+                    tbody.appendChild(tr);
+                });
+            }
+
+            function getRoleBadgeClass(role) {
+                switch (role) {
+                    case 'desenvolvedor': return 'badge-danger'; // Vermelho
+                    case 'admin': return 'badge-danger';
+                    case 'comercial': return 'badge-info'; // Azul
+                    case 'visitante': return 'badge-warning'; // Amarelo/Laranja
+                    default: return 'badge-secondary';
+                }
+            }
+
+            async function editUserRole(username, currentRole) {
+                const newRole = prompt(`Novo role para ${username}? (admin, desenvolvedor, comercial, analista, visitante)`, currentRole);
+
+                if (newRole && newRole !== currentRole) {
+                    try {
+                        const response = await fetch(`/api/admin/users/${username}/role`, {
+                            method: 'PUT',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'x-role': localStorage.getItem('erus_role'),
+                                'x-user': localStorage.getItem('erus_user')
+                            },
+                            body: JSON.stringify({ role: newRole })
+                        });
+
+                        const data = await response.json();
+
+                        if (data.success) {
+                            showToast("Sucesso", `Role de ${username} alterado para ${newRole}`, "success");
+                            loadAdminUsers(); // Reload table
+                        } else {
+                            showToast("Erro", data.message || "Falha ao atualizar role", "danger");
+                        }
+                    } catch (error) {
+                        console.error(error);
+                        showToast("Erro", "Erro ao conectar com servidor", "danger");
+                    }
+                }
+            }
+
+            async function deleteUser(username) {
+                if (confirm(`Tem certeza que deseja BANIR (excluir) o usuário: ${username}? Essa ação não pode ser desfeita.`)) {
+                    try {
+                        const response = await fetch(`/api/admin/users/${username}`, {
+                            method: 'DELETE',
+                            headers: {
+                                'x-role': localStorage.getItem('erus_role'),
+                                'x-user': localStorage.getItem('erus_user')
+                            }
+                        });
+
+                        const data = await response.json();
+
+                        if (data.success) {
+                            showToast("Sucesso", `Usuário ${username} banido com sucesso.`, "success");
+                            loadAdminUsers(); // Reload table
+                        } else {
+                            showToast("Erro", data.message || "Falha ao banir usuário", "danger");
+                        }
+                    } catch (error) {
+                        console.error(error);
+                        showToast("Erro", "Erro ao conectar com servidor", "danger");
+                    }
+                }
+            }
+
+            document.addEventListener('DOMContentLoaded', () => {
+                checkAdminButtonVisibility();
+
+                // Close Modal on Esc key
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === 'Escape') {
+                        const modal = document.getElementById('adminUserModal');
+                        if (modal && modal.style.display === 'flex') {
+                            closeAdminModal();
+                        }
+                    }
+                });
+
+                const sidebar = document.querySelector('.sidebar');
+                const appLayout = document.querySelector('.app-layout');
+                const toastContainer = document.getElementById('toast-container');
+
+                // Carregar estado salvo (PADRÃO: FIXADO = TRUE)
+                let isSidebarPinned = localStorage.getItem('sidebar_pinned') !== 'false';
+
+                // Aplica estado inicial
                 if (!isSidebarPinned) {
                     appLayout.classList.add('collapsed');
                 }
-            });
 
-            // Toggle Pin com Botão Direito
-            sidebar.addEventListener('contextmenu', (e) => {
-                e.preventDefault();
-                isSidebarPinned = !isSidebarPinned;
-                localStorage.setItem('sidebar_pinned', isSidebarPinned);
-
-                if (isSidebarPinned) {
-                    appLayout.classList.remove('collapsed');
-                    showStateToast("Menu Lateral: FIXADO");
-                } else {
-                    showStateToast("Menu Lateral: AUTOMÁTICO");
+                // Funções de Toast Rápido
+                function showStateToast(msg) {
+                    const toast = document.createElement('div');
+                    toast.className = 'toast info';
+                    toast.style.padding = '10px 15px';
+                    toast.style.minWidth = '200px';
+                    toast.innerHTML = `<i class="fa-solid fa-info-circle"></i> <span style="font-weight:600">${msg}</span>`;
+                    toastContainer.appendChild(toast);
+                    setTimeout(() => {
+                        toast.style.animation = 'fadeOut 0.3s forwards';
+                        setTimeout(() => toast.remove(), 300);
+                    }, 2000);
                 }
+
+                // EVENTOS
+                sidebar.addEventListener('mouseenter', () => {
+                    if (!isSidebarPinned) {
+                        appLayout.classList.remove('collapsed');
+                    }
+                });
+
+                sidebar.addEventListener('mouseleave', () => {
+                    if (!isSidebarPinned) {
+                        appLayout.classList.add('collapsed');
+                    }
+                });
+
+                // Toggle Pin com Botão Direito
+                sidebar.addEventListener('contextmenu', (e) => {
+                    e.preventDefault();
+                    isSidebarPinned = !isSidebarPinned;
+                    localStorage.setItem('sidebar_pinned', isSidebarPinned);
+
+                    if (isSidebarPinned) {
+                        appLayout.classList.remove('collapsed');
+                        showStateToast("Menu Lateral: FIXADO");
+                    } else {
+                        showStateToast("Menu Lateral: AUTOMÁTICO");
+                    }
+                });
             });
-        });
-    </script>
-    <script>
-        const now = new Date();
-        const curMonth = String(now.getMonth() + 1).padStart(2, '0');
-        const curYear = String(now.getFullYear());
-        const monthNames = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+        </script>
+        <script>
+            const now = new Date();
+            const curMonth = String(now.getMonth() + 1).padStart(2, '0');
+            const curYear = String(now.getFullYear());
+            const monthNames = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
-        const daysInMonth = new Date(curYear, now.getMonth() + 1, 0).getDate();
-        let chartData = {
-            labels: Array.from({ length: daysInMonth }, (_, i) => i + 1),
-            fusao: new Array(daysInMonth).fill(0),
-            moldagem: new Array(daysInMonth).fill(0),
-            terceiro: new Array(daysInMonth).fill(0),
-            faturado: new Array(daysInMonth).fill(0)
-        };
+            const daysInMonth = new Date(curYear, now.getMonth() + 1, 0).getDate();
+            let chartData = {
+                labels: Array.from({ length: daysInMonth }, (_, i) => i + 1),
+                fusao: new Array(daysInMonth).fill(0),
+                moldagem: new Array(daysInMonth).fill(0),
+                terceiro: new Array(daysInMonth).fill(0),
+                faturado: new Array(daysInMonth).fill(0)
+            };
 
-        let currentChartMode = 0; // 0: Fusão, 1: Moldagem, 2: Terceiro, 3: Faturado
-        let prodChartInstance = null;
-        let timeLeft = 10;
-        let isTransitioning = false; // Controle para evitar cliques repetidos rápidos
+            let currentChartMode = 0; // 0: Fusão, 1: Moldagem, 2: Terceiro, 3: Faturado
+            let prodChartInstance = null;
+            let timeLeft = 10;
+            let isTransitioning = false; // Controle para evitar cliques repetidos rápidos
 
-        document.getElementById('month-label').innerText = `${monthNames[now.getMonth()]} ${curYear}`;
-        document.getElementById('chart-month-name').innerText = `${monthNames[now.getMonth()]} ${curYear}`;
+            document.getElementById('month-label').innerText = `${monthNames[now.getMonth()]} ${curYear}`;
+            document.getElementById('chart-month-name').innerText = `${monthNames[now.getMonth()]} ${curYear}`;
 
-        const ALL_LINKS = [
-            { id: 'producaosetor', title: 'Produção (Fusão)', url: 'apontamentos_produtivos.html', icon: 'fa-industry', api: '/api/producao-apontada' },
-            { id: 'acabamentoexterno', title: 'Acab. Externo', url: 'acabamento_externo.html', icon: 'fa-truck-fast', api: '/api/acabamento-externo' },
-            { id: 'faturamento', title: 'Produção Faturada', url: 'faturamentos.html', icon: 'fa-sack-dollar', api: '/api/faturamento-clientes-detalhado' },
-            { id: 'carteira', title: 'Carteira Total', url: 'pedidos.html', icon: 'fa-briefcase', api: '/api/carteira' },
-            { id: 'refugo', title: 'Refugo Total', url: 'refugo.html', icon: 'fa-trash-can', api: '/api/refugo' }
-        ];
+            const ALL_LINKS = [
+                { id: 'producaosetor', title: 'Produção (Fusão)', url: 'apontamentos_produtivos.html', icon: 'fa-industry', api: '/api/producao-apontada' },
+                { id: 'acabamentoexterno', title: 'Acab. Externo', url: 'acabamento_externo.html', icon: 'fa-truck-fast', api: '/api/acabamento-externo' },
+                { id: 'faturamento', title: 'Produção Faturada', url: 'faturamentos.html', icon: 'fa-sack-dollar', api: '/api/faturamento-clientes-detalhado' },
+                { id: 'carteira', title: 'Carteira Total', url: 'pedidos.html', icon: 'fa-briefcase', api: '/api/carteira' },
+                { id: 'refugo', title: 'Refugo Total', url: 'refugo.html', icon: 'fa-trash-can', api: '/api/refugo' }
+            ];
 
-        // --- NOVA FUNÇÃO DE USUÁRIO ---
-        function updateUserInfo() {
-            // Pega dados do LocalStorage (definidos no login)
-            const rawUser = localStorage.getItem('erus_user') || 'Colaborador';
-            const rawRole = localStorage.getItem('erus_role') || 'Visitante';
+            // --- NOVA FUNÇÃO DE USUÁRIO ---
+            function updateUserInfo() {
+                // Pega dados do LocalStorage (definidos no login)
+                const rawUser = localStorage.getItem('erus_user') || 'Colaborador';
+                const rawRole = localStorage.getItem('erus_role') || 'Visitante';
 
-            // Formata nome (Primeira letra maiúscula)
-            const userName = rawUser.charAt(0).toUpperCase() + rawUser.slice(1);
+                // Formata nome (Primeira letra maiúscula)
+                const userName = rawUser.charAt(0).toUpperCase() + rawUser.slice(1);
 
-            // Lógica de Saudação
-            const hour = new Date().getHours();
-            let greeting = 'Bom dia';
-            if (hour >= 12 && hour < 18) greeting = 'Boa tarde';
-            if (hour >= 18) greeting = 'Boa noite';
+                // Lógica de Saudação
+                const hour = new Date().getHours();
+                let greeting = 'Bom dia';
+                if (hour >= 12 && hour < 18) greeting = 'Boa tarde';
+                if (hour >= 18) greeting = 'Boa noite';
 
-            // Atualiza HTML
-            document.getElementById('header-greeting').innerHTML = `${greeting}, <span style="color:#fff;">${userName}</span>`;
+                // Atualiza HTML
+                document.getElementById('header-greeting').innerHTML = `${greeting}, <span style="color:#fff;">${userName}</span>`;
 
-            let roleColor = '#9ca3af'; // Default gray
-            if (rawRole === 'desenvolvedor' || rawRole === 'admin') roleColor = '#ef4444'; // Vermelho
-            if (rawRole === 'comercial') roleColor = '#3b82f6'; // Azul
-            if (rawRole === 'visitante') roleColor = '#f59e0b'; // Laranja
+                let roleColor = '#9ca3af'; // Default gray
+                if (rawRole === 'desenvolvedor' || rawRole === 'admin') roleColor = '#ef4444'; // Vermelho
+                if (rawRole === 'comercial') roleColor = '#3b82f6'; // Azul
+                if (rawRole === 'visitante') roleColor = '#f59e0b'; // Laranja
 
-            document.getElementById('header-role').innerHTML = `<i class="fa-solid fa-id-badge" style="margin-right:4px; color: ${roleColor};"></i> <span style="color:${roleColor}">${rawRole}</span>`;
-        }
+                document.getElementById('header-role').innerHTML = `<i class="fa-solid fa-id-badge" style="margin-right:4px; color: ${roleColor};"></i> <span style="color:${roleColor}">${rawRole}</span>`;
+            }
 
-        function renderCards() {
-            const grid = document.getElementById('quickAccessGrid');
-            grid.innerHTML = '';
-            ALL_LINKS.forEach(link => {
-                const card = document.createElement('a');
-                card.className = 'bento-card';
-                card.href = link.url;
-                card.innerHTML = `
+            function renderCards() {
+                const grid = document.getElementById('quickAccessGrid');
+                grid.innerHTML = '';
+                ALL_LINKS.forEach(link => {
+                    const card = document.createElement('a');
+                    card.className = 'bento-card';
+                    card.href = link.url;
+                    card.innerHTML = `
                     <div class="card-header"><i class="fa-solid ${link.icon}"></i></div>
                     <div class="card-live-data" id="live-${link.id}">
                         <h4 class="card-title">${link.title}</h4>
@@ -1459,426 +1506,426 @@
                     </div>
                     <i class="fa-solid ${link.icon} card-decoration"></i>
                 `;
-                grid.appendChild(card);
-                if (link.api) fetchLiveData(link);
-            });
-        }
-
-        let customWeightsMap = {};
-        let excludedClientsSet = new Set();
-
-        // Helper para cálculo de peso corrigido (Igual ao pedidos.html)
-        function getCorrectedWeight(item) {
-            const saldoLiberado = Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0;
-            const qtdOriginal = Number(item.QUANTIDADE_PPR) || 0;
-            const saldoReal = saldoLiberado > 0 ? saldoLiberado : qtdOriginal;
-
-            let pesoUnitario = qtdOriginal > 0 ? (Number(item.PESO_LIQUIDO_NPR) || 0) / qtdOriginal : 0;
-
-            if (customWeightsMap[item.PRODUTO_PPR]) {
-                pesoUnitario = customWeightsMap[item.PRODUTO_PPR];
+                    grid.appendChild(card);
+                    if (link.api) fetchLiveData(link);
+                });
             }
 
-            return pesoUnitario * saldoReal;
-        }
+            let customWeightsMap = {};
+            let excludedClientsSet = new Set();
 
-        async function fetchLiveData(link) {
-            try {
-                const response = await fetch(link.api);
-                const data = await response.json();
-                const container = document.getElementById(`live-${link.id}`);
+            // Helper para cálculo de peso corrigido (Igual ao pedidos.html)
+            function getCorrectedWeight(item) {
+                const saldoLiberado = Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0;
+                const qtdOriginal = Number(item.QUANTIDADE_PPR) || 0;
+                const saldoReal = saldoLiberado > 0 ? saldoLiberado : qtdOriginal;
 
-                let mainValue = "0.00 Ton";
-                let subLabel = "Mês Vigente";
+                let pesoUnitario = qtdOriginal > 0 ? (Number(item.PESO_LIQUIDO_NPR) || 0) / qtdOriginal : 0;
 
-                if (link.id === 'producaosetor') {
-                    // CORREÇÃO 1: Aplicar correção de pesos (igual ao producao_apontada.html)
-                    const productWeights = JSON.parse(localStorage.getItem('producao_product_weights')) || {};
-
-                    if (data.length > 1) {
-                        const monthRows = data.slice(1).filter(r => {
-                            const dateStr = String(r[0]);
-                            return dateStr.includes(`${curYear}-${curMonth}`) || dateStr.includes(`/${curMonth}/${curYear}`);
-                        });
-
-                        let totalFusaoKg = 0;
-                        let totalMoldagemKg = 0;
-
-                        monthRows.forEach(r => {
-                            // Aplicar correção de pesos
-                            let pu = parseFloat(r[4] || 0);
-                            const code = String(r[2]);
-                            if (pu === 0 && productWeights[code]) {
-                                pu = parseFloat(productWeights[code]);
-                            }
-                            const q = parseFloat(r[5] || 0);
-                            const totalRow = pu * q; // Total corrigido em kg
-
-                            const dateStr = String(r[0]);
-                            let day = 0;
-
-                            if (dateStr.includes('-')) {
-                                day = parseInt(dateStr.split('-')[2]);
-                            } else if (dateStr.includes('/')) {
-                                day = parseInt(dateStr.split('/')[0]);
-                            }
-
-                            const setor = String(r[1]).toUpperCase();
-
-                            if (day > 0 && day <= daysInMonth) {
-                                if (setor.includes("FUS")) {
-                                    chartData.fusao[day - 1] += (totalRow / 1000); // Converter para ton
-                                    totalFusaoKg += totalRow;
-                                }
-                                if (setor.includes("MOLDAGEM") || setor.includes("LEVE") || setor.includes("PESADA") || setor.includes("ROLLOVER")) {
-                                    chartData.moldagem[day - 1] += (totalRow / 1000);
-                                    totalMoldagemKg += totalRow;
-                                }
-                            }
-                        });
-
-                        mainValue = (totalFusaoKg / 1000).toFixed(2) + " Ton";
-                        subLabel = `Produção Apontada no Mês`;
-
-                        if (!prodChartInstance) initChart();
-                    }
+                if (customWeightsMap[item.PRODUTO_PPR]) {
+                    pesoUnitario = customWeightsMap[item.PRODUTO_PPR];
                 }
-                else if (link.id === 'acabamentoexterno') {
-                    const listaDeRegistros = data.registros || [];
-                    const monthData = listaDeRegistros.filter(r => {
-                        const d = r.data || "";
-                        return d.includes(`${curYear}-${curMonth}`);
-                    });
 
-                    monthData.forEach(r => {
-                        let day = 0;
-                        if (r.data && r.data.includes('-')) {
-                            day = parseInt(r.data.split('-')[2]);
-                        }
+                return pesoUnitario * saldoReal;
+            }
 
-                        if (day > 0 && day <= daysInMonth) {
-                            const pesoLinha = parseFloat(r.quant || 0) * parseFloat(r.peso || 0);
-                            chartData.terceiro[day - 1] += pesoLinha;
-                        }
-                    });
+            async function fetchLiveData(link) {
+                try {
+                    const response = await fetch(link.api);
+                    const data = await response.json();
+                    const container = document.getElementById(`live-${link.id}`);
 
-                    const totalKg = monthData.reduce((acc, r) => acc + (parseFloat(r.quant || 0) * parseFloat(r.peso || 0)), 0);
-                    const uniqueCargas = new Set(monthData.map(r => r.carga)).size;
+                    let mainValue = "0.00 Ton";
+                    let subLabel = "Mês Vigente";
 
-                    mainValue = (totalKg / 1000).toFixed(2) + " Ton";
-                    subLabel = `${uniqueCargas} Cargas no Mês`;
-                }
-                else if (link.id === 'faturamento') {
-                    // Fetch PREFERENCES first (Exclusions)
-                    try {
-                        const prefsRes = await fetch('/api/preferences/excluded_clients');
-                        const prefsJson = await prefsRes.json();
-                        if (prefsJson.success) excludedClientsSet = new Set(prefsJson.data || []);
-                    } catch (e) { console.error('Erro loading prefs', e); }
-
-                    // Fetch DATA (Current Month)
-                    const now = new Date();
-                    const y = now.getFullYear();
-                    const m = now.getMonth();
-                    const start = new Date(y, m, 1);
-                    const end = new Date(y, m + 1, 0);
-                    const fmt = (d) => d.toISOString().split('T')[0];
-
-                    const url = `/api/faturamento-postgres/detalhado?limit=100000&startDate=${fmt(start)}&endDate=${fmt(end)}`;
-                    const res = await fetch(url);
-                    const json = await res.json();
-
-                    if (json.success) {
-                        const validItems = json.data.filter(item => {
-                            const cName = (item.clienteNome || 'Desconhecido').trim();
-                            const isExcluded = excludedClientsSet.has(cName);
-                            // Also check manual exclusion
-                            const isManual = item.excluido_manualmente === true || item.excluido_manualmente === 1;
-                            return !isExcluded && !isManual;
-                        });
-
-                        // Sum Weight
-                        const totalKg = validItems.reduce((acc, item) => acc + (Number(item.pesoTotal) || 0), 0);
-                        mainValue = (totalKg / 1000).toFixed(2) + " Ton";
-                        subLabel = `Produção Faturada no Mês`;
-
-                        // Populate Chart Data (Faturado)
-                        // Reset current month data
-                        chartData.faturado.fill(0);
-                        validItems.forEach(item => {
-                            if (item.data) {
-                                const d = parseInt(item.data.split('-')[2]);
-                                if (d > 0 && d <= daysInMonth) {
-                                    chartData.faturado[d - 1] += (Number(item.pesoTotal) || 0) / 1000;
-                                }
-                            }
-                        });
-                    }
-                }
-                else if (link.id === 'carteira') {
-                    // Fetch Custom Weights first
-                    try {
-                        const wRes = await fetch('/api/weights/list');
-                        if (wRes.ok) customWeightsMap = await wRes.json();
-                    } catch (e) { console.error('Erro loading weights', e); }
-
-                    // Fetch Pedidos Sync (User specific route? No, general sync)
-                    // The link.api is already /api/carteira, but user wants pedidos logic.
-                    // We will fetch /api/pedidos-sync manually here to ensure we get the full sync data
-                    const pRes = await fetch('/api/pedidos-sync');
-                    const pData = await pRes.json();
-
-                    const totalKg = pData.reduce((acc, item) => acc + getCorrectedWeight(item), 0);
-                    mainValue = (totalKg / 1000).toFixed(1) + " Ton";
-                    subLabel = "Total em Carteira";
-                }
-                else if (link.id === 'refugo') {
-                    // CORREÇÃO 2: Mudar para mostrar porcentagem em vez de tonelagem
-                    const listaRefugo = data.refugoRawData || [];
-                    const monthData = listaRefugo.filter(r => {
-                        const d = r.data || "";
-                        return d.includes(`${curYear}-${curMonth}`);
-                    });
-
-                    const totalRefugoKg = monthData.reduce((acc, r) => acc + parseFloat(r.peso_total || 0), 0);
-
-                    // Calcular produção total (fusão) do mesmo mês para calcular a porcentagem
-                    try {
-                        const producaoResponse = await fetch('/api/producao-apontada');
-                        const producaoData = await producaoResponse.json();
+                    if (link.id === 'producaosetor') {
+                        // CORREÇÃO 1: Aplicar correção de pesos (igual ao producao_apontada.html)
                         const productWeights = JSON.parse(localStorage.getItem('producao_product_weights')) || {};
 
-                        if (producaoData.length > 1) {
-                            const monthRows = producaoData.slice(1).filter(r => {
+                        if (data.length > 1) {
+                            const monthRows = data.slice(1).filter(r => {
                                 const dateStr = String(r[0]);
                                 return dateStr.includes(`${curYear}-${curMonth}`) || dateStr.includes(`/${curMonth}/${curYear}`);
                             });
 
-                            let totalProducaoKg = 0;
+                            let totalFusaoKg = 0;
+                            let totalMoldagemKg = 0;
 
                             monthRows.forEach(r => {
+                                // Aplicar correção de pesos
                                 let pu = parseFloat(r[4] || 0);
                                 const code = String(r[2]);
                                 if (pu === 0 && productWeights[code]) {
                                     pu = parseFloat(productWeights[code]);
                                 }
                                 const q = parseFloat(r[5] || 0);
-                                const totalRow = pu * q;
+                                const totalRow = pu * q; // Total corrigido em kg
+
+                                const dateStr = String(r[0]);
+                                let day = 0;
+
+                                if (dateStr.includes('-')) {
+                                    day = parseInt(dateStr.split('-')[2]);
+                                } else if (dateStr.includes('/')) {
+                                    day = parseInt(dateStr.split('/')[0]);
+                                }
 
                                 const setor = String(r[1]).toUpperCase();
-                                if (setor.includes("FUS")) {
-                                    totalProducaoKg += totalRow;
+
+                                if (day > 0 && day <= daysInMonth) {
+                                    if (setor.includes("FUS")) {
+                                        chartData.fusao[day - 1] += (totalRow / 1000); // Converter para ton
+                                        totalFusaoKg += totalRow;
+                                    }
+                                    if (setor.includes("MOLDAGEM") || setor.includes("LEVE") || setor.includes("PESADA") || setor.includes("ROLLOVER")) {
+                                        chartData.moldagem[day - 1] += (totalRow / 1000);
+                                        totalMoldagemKg += totalRow;
+                                    }
                                 }
                             });
 
-                            // Calcular porcentagem
-                            let porcentagem = 0;
-                            if (totalProducaoKg > 0) {
-                                porcentagem = (totalRefugoKg / totalProducaoKg) * 100;
-                            }
+                            mainValue = (totalFusaoKg / 1000).toFixed(2) + " Ton";
+                            subLabel = `Produção Apontada no Mês`;
 
-                            mainValue = porcentagem.toFixed(2) + " %";
-                            subLabel = `${monthData.length} Ocorrências no Mês`;
-                        } else {
-                            mainValue = "0.00 %";
-                            subLabel = `${monthData.length} Ocorrências no Mês`;
+                            if (!prodChartInstance) initChart();
                         }
-                    } catch (e) {
-                        // Em caso de erro, mostrar apenas o total em toneladas como fallback
-                        mainValue = (totalRefugoKg / 1000).toFixed(2) + " Ton";
-                        subLabel = `${monthData.length} Ocorrências no Mês`;
                     }
-                }
+                    else if (link.id === 'acabamentoexterno') {
+                        const listaDeRegistros = data.registros || [];
+                        const monthData = listaDeRegistros.filter(r => {
+                            const d = r.data || "";
+                            return d.includes(`${curYear}-${curMonth}`);
+                        });
 
-                container.querySelector('.live-value').innerText = mainValue;
-                container.querySelector('.live-label').innerText = subLabel;
-
-            } catch (e) {
-                console.error(e);
-                const el = document.getElementById(`live-${link.id}`);
-                if (el) el.querySelector('.live-label').innerText = "ERRO CONEXÃO";
-            }
-        }
-
-        function initChart() {
-            const ctx = document.getElementById('prodChart').getContext('2d');
-            prodChartInstance = new Chart(ctx, {
-                type: 'bar', // Alterado para Gráfico de Barras
-                data: {
-                    labels: chartData.labels,
-                    datasets: [{
-                        label: 'Valor',
-                        data: chartData.fusao,
-                        borderColor: '#fbbf24',
-                        backgroundColor: '#fbbf24',
-                        borderWidth: 0,
-                        borderRadius: 4, // Barras arredondadas
-                        barPercentage: 0.6,
-                        categoryPercentage: 0.8
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    animation: {
-                        duration: 800, // Duração da animação do Chart.js
-                        easing: 'easeOutQuart'
-                    },
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                            callbacks: {
-                                label: function (context) { return context.parsed.y.toFixed(2) + " Ton"; }
+                        monthData.forEach(r => {
+                            let day = 0;
+                            if (r.data && r.data.includes('-')) {
+                                day = parseInt(r.data.split('-')[2]);
                             }
+
+                            if (day > 0 && day <= daysInMonth) {
+                                const pesoLinha = parseFloat(r.quant || 0) * parseFloat(r.peso || 0);
+                                chartData.terceiro[day - 1] += pesoLinha;
+                            }
+                        });
+
+                        const totalKg = monthData.reduce((acc, r) => acc + (parseFloat(r.quant || 0) * parseFloat(r.peso || 0)), 0);
+                        const uniqueCargas = new Set(monthData.map(r => r.carga)).size;
+
+                        mainValue = (totalKg / 1000).toFixed(2) + " Ton";
+                        subLabel = `${uniqueCargas} Cargas no Mês`;
+                    }
+                    else if (link.id === 'faturamento') {
+                        // Fetch PREFERENCES first (Exclusions)
+                        try {
+                            const prefsRes = await fetch('/api/preferences/excluded_clients');
+                            const prefsJson = await prefsRes.json();
+                            if (prefsJson.success) excludedClientsSet = new Set(prefsJson.data || []);
+                        } catch (e) { console.error('Erro loading prefs', e); }
+
+                        // Fetch DATA (Current Month)
+                        const now = new Date();
+                        const y = now.getFullYear();
+                        const m = now.getMonth();
+                        const start = new Date(y, m, 1);
+                        const end = new Date(y, m + 1, 0);
+                        const fmt = (d) => d.toISOString().split('T')[0];
+
+                        const url = `/api/faturamento-postgres/detalhado?limit=100000&startDate=${fmt(start)}&endDate=${fmt(end)}`;
+                        const res = await fetch(url);
+                        const json = await res.json();
+
+                        if (json.success) {
+                            const validItems = json.data.filter(item => {
+                                const cName = (item.clienteNome || 'Desconhecido').trim();
+                                const isExcluded = excludedClientsSet.has(cName);
+                                // Also check manual exclusion
+                                const isManual = item.excluido_manualmente === true || item.excluido_manualmente === 1;
+                                return !isExcluded && !isManual;
+                            });
+
+                            // Sum Weight
+                            const totalKg = validItems.reduce((acc, item) => acc + (Number(item.pesoTotal) || 0), 0);
+                            mainValue = (totalKg / 1000).toFixed(2) + " Ton";
+                            subLabel = `Produção Faturada no Mês`;
+
+                            // Populate Chart Data (Faturado)
+                            // Reset current month data
+                            chartData.faturado.fill(0);
+                            validItems.forEach(item => {
+                                if (item.data) {
+                                    const d = parseInt(item.data.split('-')[2]);
+                                    if (d > 0 && d <= daysInMonth) {
+                                        chartData.faturado[d - 1] += (Number(item.pesoTotal) || 0) / 1000;
+                                    }
+                                }
+                            });
                         }
+                    }
+                    else if (link.id === 'carteira') {
+                        // Fetch Custom Weights first
+                        try {
+                            const wRes = await fetch('/api/weights/list');
+                            if (wRes.ok) customWeightsMap = await wRes.json();
+                        } catch (e) { console.error('Erro loading weights', e); }
+
+                        // Fetch Pedidos Sync (User specific route? No, general sync)
+                        // The link.api is already /api/carteira, but user wants pedidos logic.
+                        // We will fetch /api/pedidos-sync manually here to ensure we get the full sync data
+                        const pRes = await fetch('/api/pedidos-sync');
+                        const pData = await pRes.json();
+
+                        const totalKg = pData.reduce((acc, item) => acc + getCorrectedWeight(item), 0);
+                        mainValue = (totalKg / 1000).toFixed(1) + " Ton";
+                        subLabel = "Total em Carteira";
+                    }
+                    else if (link.id === 'refugo') {
+                        // CORREÇÃO 2: Mudar para mostrar porcentagem em vez de tonelagem
+                        const listaRefugo = data.refugoRawData || [];
+                        const monthData = listaRefugo.filter(r => {
+                            const d = r.data || "";
+                            return d.includes(`${curYear}-${curMonth}`);
+                        });
+
+                        const totalRefugoKg = monthData.reduce((acc, r) => acc + parseFloat(r.peso_total || 0), 0);
+
+                        // Calcular produção total (fusão) do mesmo mês para calcular a porcentagem
+                        try {
+                            const producaoResponse = await fetch('/api/producao-apontada');
+                            const producaoData = await producaoResponse.json();
+                            const productWeights = JSON.parse(localStorage.getItem('producao_product_weights')) || {};
+
+                            if (producaoData.length > 1) {
+                                const monthRows = producaoData.slice(1).filter(r => {
+                                    const dateStr = String(r[0]);
+                                    return dateStr.includes(`${curYear}-${curMonth}`) || dateStr.includes(`/${curMonth}/${curYear}`);
+                                });
+
+                                let totalProducaoKg = 0;
+
+                                monthRows.forEach(r => {
+                                    let pu = parseFloat(r[4] || 0);
+                                    const code = String(r[2]);
+                                    if (pu === 0 && productWeights[code]) {
+                                        pu = parseFloat(productWeights[code]);
+                                    }
+                                    const q = parseFloat(r[5] || 0);
+                                    const totalRow = pu * q;
+
+                                    const setor = String(r[1]).toUpperCase();
+                                    if (setor.includes("FUS")) {
+                                        totalProducaoKg += totalRow;
+                                    }
+                                });
+
+                                // Calcular porcentagem
+                                let porcentagem = 0;
+                                if (totalProducaoKg > 0) {
+                                    porcentagem = (totalRefugoKg / totalProducaoKg) * 100;
+                                }
+
+                                mainValue = porcentagem.toFixed(2) + " %";
+                                subLabel = `${monthData.length} Ocorrências no Mês`;
+                            } else {
+                                mainValue = "0.00 %";
+                                subLabel = `${monthData.length} Ocorrências no Mês`;
+                            }
+                        } catch (e) {
+                            // Em caso de erro, mostrar apenas o total em toneladas como fallback
+                            mainValue = (totalRefugoKg / 1000).toFixed(2) + " Ton";
+                            subLabel = `${monthData.length} Ocorrências no Mês`;
+                        }
+                    }
+
+                    container.querySelector('.live-value').innerText = mainValue;
+                    container.querySelector('.live-label').innerText = subLabel;
+
+                } catch (e) {
+                    console.error(e);
+                    const el = document.getElementById(`live-${link.id}`);
+                    if (el) el.querySelector('.live-label').innerText = "ERRO CONEXÃO";
+                }
+            }
+
+            function initChart() {
+                const ctx = document.getElementById('prodChart').getContext('2d');
+                prodChartInstance = new Chart(ctx, {
+                    type: 'bar', // Alterado para Gráfico de Barras
+                    data: {
+                        labels: chartData.labels,
+                        datasets: [{
+                            label: 'Valor',
+                            data: chartData.fusao,
+                            borderColor: '#fbbf24',
+                            backgroundColor: '#fbbf24',
+                            borderWidth: 0,
+                            borderRadius: 4, // Barras arredondadas
+                            barPercentage: 0.6,
+                            categoryPercentage: 0.8
+                        }]
                     },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                            ticks: { color: '#a1a1aa', font: { size: 10 } },
-                            border: { display: false }
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        animation: {
+                            duration: 800, // Duração da animação do Chart.js
+                            easing: 'easeOutQuart'
                         },
-                        x: {
-                            grid: { display: false },
-                            ticks: { color: '#a1a1aa', font: { size: 10 } }
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                callbacks: {
+                                    label: function (context) { return context.parsed.y.toFixed(2) + " Ton"; }
+                                }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                                ticks: { color: '#a1a1aa', font: { size: 10 } },
+                                border: { display: false }
+                            },
+                            x: {
+                                grid: { display: false },
+                                ticks: { color: '#a1a1aa', font: { size: 10 } }
+                            }
                         }
                     }
-                }
-            });
+                });
 
-            startRotationTimer();
-        }
-
-        function logout() {
-            localStorage.removeItem('erus_auth');
-            localStorage.removeItem('erus_last_activity');
-            window.location.href = 'login.html';
-        }
-
-        function startRotationTimer() {
-            setInterval(() => {
-                // Não subtrai tempo se estiver no meio da animação de troca
-                if (!isTransitioning) {
-                    timeLeft--;
-                    const formattedTime = String(timeLeft).padStart(2, '0');
-                    document.getElementById('countdown-timer').innerText = formattedTime + "s";
-
-                    if (timeLeft <= 0) {
-                        rotateChart();
-                        timeLeft = 10;
-                    }
-                }
-            }, 1000);
-        }
-
-        // Função para avançar manualmente
-        function nextChart() {
-            if (isTransitioning) return;
-            timeLeft = 10;
-            rotateChart();
-        }
-
-        // Função para voltar manualmente
-        function prevChart() {
-            if (isTransitioning) return;
-            timeLeft = 10;
-            // Lógica para decrementar circularmente
-            // A função rotateChart sempre faz +1. Para ir para trás, definimos o índice para 2 posições atrás
-            // para que ao somar 1, ele caia na posição anterior à atual.
-            currentChartMode = (currentChartMode - 2 + 4) % 4;
-            rotateChart();
-        }
-
-        function rotateChart() {
-            if (!prodChartInstance || isTransitioning) return;
-
-            isTransitioning = true;
-            const wrapper = document.getElementById('chartWrapper');
-
-            // 1. Inicia animação de saída (Fade Out)
-            wrapper.classList.add('chart-switching');
-
-            // Aguarda o tempo da transição CSS (400ms)
-            setTimeout(() => {
-                currentChartMode = (currentChartMode + 1) % 4;
-                let label = "";
-                let color = "";
-                let data = [];
-
-                if (currentChartMode === 0) {
-                    label = "Produção Diária (Fusão)";
-                    color = "#fbbf24";
-                    data = chartData.fusao;
-                } else if (currentChartMode === 1) {
-                    label = "Produção Diária (Moldagem)";
-                    color = "#a855f7";
-                    data = chartData.moldagem;
-                } else if (currentChartMode === 2) {
-                    label = "Total Terceirizado Diário (KG)";
-                    color = "#38bdf8";
-                    data = chartData.terceiro;
-                } else {
-                    label = "Total Faturado Diário (Ton)";
-                    color = "#10b981";
-                    data = chartData.faturado;
-                }
-
-                // Atualiza textos
-                const titleSpan = document.getElementById('chart-display-title').querySelector('span');
-                document.getElementById('chart-display-title').firstChild.textContent = label + " - ";
-                if (titleSpan) titleSpan.style.color = color;
-
-                // Atualiza Chart.js Data
-                prodChartInstance.data.datasets[0].data = data;
-                prodChartInstance.data.datasets[0].borderColor = color;
-                prodChartInstance.data.datasets[0].backgroundColor = color;
-
-                // Atualiza Tooltips
-                prodChartInstance.options.plugins.tooltip.callbacks.label = function (context) {
-                    if (currentChartMode === 2) return context.parsed.y.toLocaleString('pt-BR') + " Kg";
-                    return context.parsed.y.toFixed(2) + " Ton";
-                };
-
-                // Roda atualização do Chart.js (com animação interna das barras crescendo)
-                prodChartInstance.update();
-
-                // 2. Inicia animação de entrada (Fade In)
-                wrapper.classList.remove('chart-switching');
-
-                // Libera para próxima troca
-                setTimeout(() => {
-                    isTransitioning = false;
-                }, 400); // Pequeno delay de segurança
-
-            }, 400); // Deve bater com o tempo do CSS transition
-        }
-
-        function toggleGroup(id) {
-            const group = document.getElementById(id);
-            const icon = document.getElementById('icon-' + id);
-            group.classList.toggle('collapsed');
-            if (icon) { icon.classList.toggle('fa-plus'); icon.classList.toggle('fa-minus'); }
-        }
-
-        // --- FUNÇÃO DE CONTROLE DE TOAST (IGUAL AO CARTEIRA) ---
-        function showToast(title, subtitle, type = 'info') {
-            let container = document.getElementById('toast-container');
-            if (!container) {
-                container = document.createElement('div');
-                container.id = 'toast-container';
-                container.className = 'toast-container';
-                document.body.appendChild(container);
+                startRotationTimer();
             }
 
-            const toast = document.createElement('div');
-            toast.className = `toast ${type}`;
+            function logout() {
+                localStorage.removeItem('erus_auth');
+                localStorage.removeItem('erus_last_activity');
+                window.location.href = 'login.html';
+            }
 
-            const icon = type === 'danger' ? '<i class="fa-solid fa-ban toast-icon"></i>' :
-                type === 'success' ? '<i class="fa-solid fa-check-circle toast-icon"></i>' :
-                    '<i class="fa-solid fa-circle-info toast-icon"></i>';
+            function startRotationTimer() {
+                setInterval(() => {
+                    // Não subtrai tempo se estiver no meio da animação de troca
+                    if (!isTransitioning) {
+                        timeLeft--;
+                        const formattedTime = String(timeLeft).padStart(2, '0');
+                        document.getElementById('countdown-timer').innerText = formattedTime + "s";
 
-            toast.innerHTML = `
+                        if (timeLeft <= 0) {
+                            rotateChart();
+                            timeLeft = 10;
+                        }
+                    }
+                }, 1000);
+            }
+
+            // Função para avançar manualmente
+            function nextChart() {
+                if (isTransitioning) return;
+                timeLeft = 10;
+                rotateChart();
+            }
+
+            // Função para voltar manualmente
+            function prevChart() {
+                if (isTransitioning) return;
+                timeLeft = 10;
+                // Lógica para decrementar circularmente
+                // A função rotateChart sempre faz +1. Para ir para trás, definimos o índice para 2 posições atrás
+                // para que ao somar 1, ele caia na posição anterior à atual.
+                currentChartMode = (currentChartMode - 2 + 4) % 4;
+                rotateChart();
+            }
+
+            function rotateChart() {
+                if (!prodChartInstance || isTransitioning) return;
+
+                isTransitioning = true;
+                const wrapper = document.getElementById('chartWrapper');
+
+                // 1. Inicia animação de saída (Fade Out)
+                wrapper.classList.add('chart-switching');
+
+                // Aguarda o tempo da transição CSS (400ms)
+                setTimeout(() => {
+                    currentChartMode = (currentChartMode + 1) % 4;
+                    let label = "";
+                    let color = "";
+                    let data = [];
+
+                    if (currentChartMode === 0) {
+                        label = "Produção Diária (Fusão)";
+                        color = "#fbbf24";
+                        data = chartData.fusao;
+                    } else if (currentChartMode === 1) {
+                        label = "Produção Diária (Moldagem)";
+                        color = "#a855f7";
+                        data = chartData.moldagem;
+                    } else if (currentChartMode === 2) {
+                        label = "Total Terceirizado Diário (KG)";
+                        color = "#38bdf8";
+                        data = chartData.terceiro;
+                    } else {
+                        label = "Total Faturado Diário (Ton)";
+                        color = "#10b981";
+                        data = chartData.faturado;
+                    }
+
+                    // Atualiza textos
+                    const titleSpan = document.getElementById('chart-display-title').querySelector('span');
+                    document.getElementById('chart-display-title').firstChild.textContent = label + " - ";
+                    if (titleSpan) titleSpan.style.color = color;
+
+                    // Atualiza Chart.js Data
+                    prodChartInstance.data.datasets[0].data = data;
+                    prodChartInstance.data.datasets[0].borderColor = color;
+                    prodChartInstance.data.datasets[0].backgroundColor = color;
+
+                    // Atualiza Tooltips
+                    prodChartInstance.options.plugins.tooltip.callbacks.label = function (context) {
+                        if (currentChartMode === 2) return context.parsed.y.toLocaleString('pt-BR') + " Kg";
+                        return context.parsed.y.toFixed(2) + " Ton";
+                    };
+
+                    // Roda atualização do Chart.js (com animação interna das barras crescendo)
+                    prodChartInstance.update();
+
+                    // 2. Inicia animação de entrada (Fade In)
+                    wrapper.classList.remove('chart-switching');
+
+                    // Libera para próxima troca
+                    setTimeout(() => {
+                        isTransitioning = false;
+                    }, 400); // Pequeno delay de segurança
+
+                }, 400); // Deve bater com o tempo do CSS transition
+            }
+
+            function toggleGroup(id) {
+                const group = document.getElementById(id);
+                const icon = document.getElementById('icon-' + id);
+                group.classList.toggle('collapsed');
+                if (icon) { icon.classList.toggle('fa-plus'); icon.classList.toggle('fa-minus'); }
+            }
+
+            // --- FUNÇÃO DE CONTROLE DE TOAST (IGUAL AO CARTEIRA) ---
+            function showToast(title, subtitle, type = 'info') {
+                let container = document.getElementById('toast-container');
+                if (!container) {
+                    container = document.createElement('div');
+                    container.id = 'toast-container';
+                    container.className = 'toast-container';
+                    document.body.appendChild(container);
+                }
+
+                const toast = document.createElement('div');
+                toast.className = `toast ${type}`;
+
+                const icon = type === 'danger' ? '<i class="fa-solid fa-ban toast-icon"></i>' :
+                    type === 'success' ? '<i class="fa-solid fa-check-circle toast-icon"></i>' :
+                        '<i class="fa-solid fa-circle-info toast-icon"></i>';
+
+                toast.innerHTML = `
                 ${icon} 
                 <div class="toast-content">
                     <span class="toast-title">${title}</span>
@@ -1886,51 +1933,51 @@
                 </div>
             `;
 
-            container.appendChild(toast);
+                container.appendChild(toast);
 
-            setTimeout(() => {
-                toast.style.animation = 'fadeOut 0.5s ease-out forwards';
                 setTimeout(() => {
-                    if (toast.parentNode) toast.parentNode.removeChild(toast);
-                }, 500);
-            }, 4000);
-        }
-
-        // --- FUNÇÃO DE CONTROLE DE ACESSO PARA CUSTOS ---
-        function accessCustos(e) {
-            e.preventDefault(); // Impede a navegação padrão
-
-            // Pega o role do usuário salvo
-            const rawRole = localStorage.getItem('erus_role') || '';
-            const role = rawRole.toLowerCase();
-
-            // Verifica permissão (Analista, Desenvolvedor ou Admin)
-            if (role.includes('analista') || role.includes('desenvolvedor') || role.includes('admin') || role.includes('comercial')) {
-                window.location.href = 'custos.html';
-            } else {
-                showToast("Acesso Negado", "Você precisa de permissão de Analista ou Desenvolvedor.", "danger");
+                    toast.style.animation = 'fadeOut 0.5s ease-out forwards';
+                    setTimeout(() => {
+                        if (toast.parentNode) toast.parentNode.removeChild(toast);
+                    }, 500);
+                }, 4000);
             }
-        }
 
-        setInterval(() => {
-            const d = new Date();
-            document.getElementById('clock-display').innerText = d.toLocaleDateString('pt-BR') + " " + d.toLocaleTimeString('pt-BR');
-        }, 1000);
+            // --- FUNÇÃO DE CONTROLE DE ACESSO PARA CUSTOS ---
+            function accessCustos(e) {
+                e.preventDefault(); // Impede a navegação padrão
 
-        document.addEventListener('DOMContentLoaded', () => {
-            renderCards();
-            updateUserInfo();
+                // Pega o role do usuário salvo
+                const rawRole = localStorage.getItem('erus_role') || '';
+                const role = rawRole.toLowerCase();
 
-            // Hide Custos menu for visitors
-            const role = localStorage.getItem('erus_role');
-            if (role === 'visitante') {
-                const separator = document.getElementById('nav-separator-custos');
-                const group = document.getElementById('group-custos');
-                if (separator) separator.style.display = 'none';
-                if (group) group.style.display = 'none';
+                // Verifica permissão (Analista, Desenvolvedor ou Admin)
+                if (role.includes('analista') || role.includes('desenvolvedor') || role.includes('admin') || role.includes('comercial')) {
+                    window.location.href = 'custos.html';
+                } else {
+                    showToast("Acesso Negado", "Você precisa de permissão de Analista ou Desenvolvedor.", "danger");
+                }
             }
-        });
-    </script>
+
+            setInterval(() => {
+                const d = new Date();
+                document.getElementById('clock-display').innerText = d.toLocaleDateString('pt-BR') + " " + d.toLocaleTimeString('pt-BR');
+            }, 1000);
+
+            document.addEventListener('DOMContentLoaded', () => {
+                renderCards();
+                updateUserInfo();
+
+                // Hide Custos menu for visitors
+                const role = localStorage.getItem('erus_role');
+                if (role === 'visitante') {
+                    const separator = document.getElementById('nav-separator-custos');
+                    const group = document.getElementById('group-custos');
+                    if (separator) separator.style.display = 'none';
+                    if (group) group.style.display = 'none';
+                }
+            });
+        </script>
 </body>
 
 </html>
