@@ -21,9 +21,10 @@ router.post('/chat', async (req, res) => {
         const sectors = ['FUSAO', 'ACABAMENTO', 'EXPEDICAO', 'MOLDAGEM LEVE', 'MOLDAGEM MANUAL', 'MOLDAGEM PESADA'];
 
         // Execute all queries in parallel
-        const [dailyProd, dailyBilling, scrapStats, extFinishingStats, ...sectorResults] = await Promise.all([
+        const [dailyProd, dailyBilling, billingHistory, scrapStats, extFinishingStats, ...sectorResults] = await Promise.all([
             getDailyProduction(),
             getDailyBilling(),
+            getBillingHistory(),
             getScrapStats(),
             getExternalFinishingStats(),
             ...sectors.map(s => getSectorStats(s)),
