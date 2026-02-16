@@ -16,19 +16,30 @@ router.post('/chat', async (req, res) => {
             return res.status(500).json({ reply: "Erro: Chave de API do Gemini não configurada no arquivo de config." });
         }
 
-        // 1. Aggregate Data
-        const [dailyProd, dailyBilling, scrapStats, fusionStats, extFinishingStats] = await Promise.all([
+        // 1. Aggregate Data from Database
+        // Define all sectors to monitor
+        const sectors = ['FUSAO', 'ACABAMENTO', 'EXPEDICAO', 'MOLDAGEM LEVE', 'MOLDAGEM MANUAL', 'MOLDAGEM PESADA'];
+
+        // Execute all queries in parallel
+        const [dailyProd, dailyBilling, scrapStats, extFinishingStats, ...sectorResults] = await Promise.all([
             getDailyProduction(),
             getDailyBilling(),
             getScrapStats(),
-            getFusionStats(),
-            getExternalFinishingStats()
+            getExternalFinishingStats(),
+            ...sectors.map(s => getSectorStats(s)),
+            getSectorStats('MOLDAGEM', true) // Special case for MOLDAGEM GERAL (Use LIKE %MOLDAGEM%)
         ]);
 
-        // Debug log to check fetched data
-        console.log("AI Data Context:", { dailyProd, fusionStats, extFinishingStats });
+        // Map results back to specific variables for the prompt
+        const sectorStats = {};
+        sectors.forEach((s, i) => sectorStats[s] = sectorResults[i]);
+        // The last result is MOLDAGEM GERAL
+        const moldingGeneralStats = sectorResults[sectors.length];
 
-        // 2. System Prompt
+        // Debug log to check fetched data
+        console.log("AI Data Context:", { dailyProd, sectorStats, extFinishingStats });
+
+        // 2. Construct System Prompt
         const systemPrompt = `
 Você é uma IA assistente especializada para uma fábrica de fundição. 
 Sabe tudo sobre os processos, dados e metas.
@@ -48,13 +59,31 @@ Seus dados vêm diretamente do banco de dados em tempo real.
 
 📅 **DATA ATUAL:** ${new Date().toLocaleDateString('pt-BR')}
 
-🏭 **PRODUÇÃO FUSÃO (KPI Principal)**
-- **Produção Hoje:** ${fusionStats.today} kg
-- **Acumulado Mês:** ${fusionStats.month} Toneladas (KPI de Fusão)
+🏭 **PRODUÇÃO POR SETOR (Hoje vs Mês Atual):**
 
-🛠️ **ACABAMENTO EXTERNO (Mês Vigente)**
-- **Total Enviado:** ${extFinishingStats.weight} kg
-- **Cargas Realizadas:** ${extFinishingStats.loads} viagens
+*   **FUSAO (KPI Principal):**
+    *   Hoje: **${sectorStats['FUSAO'].today} kg**
+    *   Mês: **${sectorStats['FUSAO'].month} Ton**
+
+*   **MOLDAGEM GERAL (Soma de todas):**
+    *   Hoje: **${moldingGeneralStats.today} kg**
+    *   Mês: **${moldingGeneralStats.month} Ton**
+    *   *Detalhe:*
+        *   Leve: ${sectorStats['MOLDAGEM LEVE'].month} Ton
+        *   Manual: ${sectorStats['MOLDAGEM MANUAL'].month} Ton
+        *   Pesada: ${sectorStats['MOLDAGEM PESADA'].month} Ton
+
+*   **ACABAMENTO INTERNO:**
+    *   Hoje: **${sectorStats['ACABAMENTO'].today} kg**
+    *   Mês: **${sectorStats['ACABAMENTO'].month} Ton**
+
+*   **EXPEDIÇÃO:**
+    *   Hoje: **${sectorStats['EXPEDICAO'].today} kg**
+    *   Mês: **${sectorStats['EXPEDICAO'].month} Ton**
+
+🛠️ **ACABAMENTO EXTERNO (Terceirização - Mês):**
+- Total Enviado: ${extFinishingStats.weight} kg
+- Cargas: ${extFinishingStats.loads}
 
 📊 **PRODUÇÃO GERAL (Todos os Setores - Hoje)**
 - **Peso Total:** ${dailyProd.weight} kg
@@ -94,27 +123,26 @@ ${userMessage}
 
 // --- HELPER FUNCTIONS ---
 
-async function getFusionStats() {
+async function getSectorStats(sectorName, isLike = false) {
     try {
-        // Query paramterized for safety
-        // Using LIKE %FUSAO% to catch 'FUSAO', 'SETOR FUSAO', etc.
-        // Assuming producao_apontada_sincronizada is the correct source
+        const operator = isLike ? 'LIKE' : '=';
+        const value = isLike ? `%${sectorName}%` : sectorName;
 
         // TODAY
         const resToday = await pool.query(`
             SELECT SUM(peso_total) as weight
             FROM producao_apontada_sincronizada
-            WHERE setor LIKE '%FUSAO%' 
+            WHERE setor ${operator} $1 
             AND data_producao = CURRENT_DATE
-        `);
+        `, [value]);
 
         // MONTH
         const resMonth = await pool.query(`
             SELECT SUM(peso_total) as weight
             FROM producao_apontada_sincronizada
-            WHERE setor LIKE '%FUSAO%' 
+            WHERE setor ${operator} $1 
             AND to_char(data_producao, 'YYYY-MM') = to_char(CURRENT_DATE, 'YYYY-MM')
-        `);
+        `, [value]);
 
         const weightToday = parseFloat(resToday.rows[0].weight || 0);
         const weightMonth = parseFloat(resMonth.rows[0].weight || 0);
@@ -124,7 +152,7 @@ async function getFusionStats() {
             month: (weightMonth / 1000).toFixed(2) // Returns in Tons for the KPI
         };
     } catch (e) {
-        console.error("Erro getFusionStats:", e);
+        console.error(`Erro stats ${sectorName}:`, e);
         return { today: "0", month: "0" };
     }
 }
