@@ -44,7 +44,6 @@ router.put('/:username/role', checkDevRole, async (req, res) => {
         console.error('Erro ao atualizar role:', error);
         res.status(500).json({ success: false, message: 'Erro ao atualizar permissão.' });
     }
-}
 });
 
 // DELETAR USUÁRIO (BANIR)
