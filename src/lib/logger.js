@@ -1,4 +1,4 @@
-const pool = require('./db');
+const pool = require('../../lib/db');
 
 /**
  * Registra uma atividade no log de auditoria.
