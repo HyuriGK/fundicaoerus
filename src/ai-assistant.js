@@ -8,53 +8,76 @@ const geminiConfig = require('./gemini_config');
 router.post('/chat', async (req, res) => {
     try {
         const userMessage = req.body.message;
-
         const apiKey = geminiConfig.GEMINI_API_KEY;
 
-        // Debug logging
         console.log("Debugging Gemini Key:", apiKey ? "Presente" : "Ausente");
 
         if (!apiKey) {
             return res.status(500).json({ reply: "Erro: Chave de API do Gemini não configurada no arquivo de config." });
         }
 
-        // 1. Aggregate Data from Database
-        const [dailyProd, dailyBilling, scrapStats] = await Promise.all([
+        // 1. Aggregate Data
+        const [dailyProd, dailyBilling, scrapStats, fusionStats, extFinishingStats] = await Promise.all([
             getDailyProduction(),
             getDailyBilling(),
-            getScrapStats()
+            getScrapStats(),
+            getFusionStats(),
+            getExternalFinishingStats()
         ]);
 
-        // 2. Construct System Prompt
+        // Debug log to check fetched data
+        console.log("AI Data Context:", { dailyProd, fusionStats, extFinishingStats });
+
+        // 2. System Prompt
         const systemPrompt = `
-Você é uma IA assistente especializada para uma fábrica de fundição. Sabe tudo sobre os processos, dados e metas.
-Seu objetivo é ajudar o gerente a ter uma visão rápida e precisa da fábrica.
-Responda de forma concisa, direta e profissional, mas com um tom prestativo.
-Use formatação Markdown para destacar números importantes.
+Você é uma IA assistente especializada para uma fábrica de fundição. 
+Sabe tudo sobre os processos, dados e metas.
 
-**DADOS ATUAIS DA FÁBRICA (Hoje: ${new Date().toLocaleDateString('pt-BR')}):**
+**OBJETIVO:** 
+Fornecer ao gerente um resumo preciso e rápido da situação da fábrica.
+Seus dados vêm diretamente do banco de dados em tempo real.
 
-**Produção Hoje:**
-- Peso Total: ${dailyProd.weight} kg
-- Quantidade: ${dailyProd.qty} peças
-- Principais Setores: ${dailyProd.sectors}
+**DIRETRIZES:**
+- Seja direto, conciso e profissional.
+- Use **negrito** para destacar números críticos.
+- Se o valor for 0 ou muito baixo, alerte.
+- Responda apenas o que foi perguntado, mas pode dar um breve contexto se relevante.
 
-**Faturamento Hoje:**
-- Valor Total: R$ ${dailyBilling.value}
-- Peso Faturado: ${dailyBilling.weight} kg
-- Ticket Médio: R$ ${dailyBilling.ticket}
+---
+**CONTEXTO DE DADOS (DASHBOARD):**
 
-**Qualidade (Refugo - Últimos 7 dias):**
-- Taxa de Refugo: ${scrapStats.rate}%
-- Principais Motivos: ${scrapStats.reasons}
+📅 **DATA ATUAL:** ${new Date().toLocaleDateString('pt-BR')}
 
-**Pergunta do Usuário:** ${userMessage}
-        `;
+🏭 **PRODUÇÃO FUSÃO (KPI Principal)**
+- **Produção Hoje:** ${fusionStats.today} kg
+- **Acumulado Mês:** ${fusionStats.month} Toneladas (KPI de Fusão)
 
-        // 3. Call Gemini API
-        // Re-initialize to ensure key is used
+🛠️ **ACABAMENTO EXTERNO (Mês Vigente)**
+- **Total Enviado:** ${extFinishingStats.weight} kg
+- **Cargas Realizadas:** ${extFinishingStats.loads} viagens
+
+📊 **PRODUÇÃO GERAL (Todos os Setores - Hoje)**
+- **Peso Total:** ${dailyProd.weight} kg
+- **Quantidade:** ${dailyProd.qty} peças
+- **Setores Ativos:** ${dailyProd.sectors}
+
+💰 **FATURAMENTO (Hoje)**
+- **Total:** R$ ${dailyBilling.value}
+- **Peso:** ${dailyBilling.weight} kg
+- **Ticket Médio:** R$ ${dailyBilling.ticket}
+
+⚠️ **QUALIDADE (Refugo - 7 Dias)**
+- **Total Refugado:** ${scrapStats.rate}
+- **Top Motivos:** ${scrapStats.reasons}
+
+---
+**PERGUNTA DO USUÁRIO:**
+${userMessage}
+`;
+
+        // 3. Call Gemini
         const genAI = new GoogleGenerativeAI(apiKey);
-        // User requested Gemini 3 Flash
+        // Using Gemini 3 Flash Preview as requested
         const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
 
         const result = await model.generateContent(systemPrompt);
@@ -69,7 +92,64 @@ Use formatação Markdown para destacar números importantes.
     }
 });
 
-// Helper Functions for Data Aggregation
+// --- HELPER FUNCTIONS ---
+
+async function getFusionStats() {
+    try {
+        // Query paramterized for safety
+        // Using LIKE %FUSAO% to catch 'FUSAO', 'SETOR FUSAO', etc.
+        // Assuming producao_apontada_sincronizada is the correct source
+
+        // TODAY
+        const resToday = await pool.query(`
+            SELECT SUM(peso_total) as weight
+            FROM producao_apontada_sincronizada
+            WHERE setor LIKE '%FUSAO%' 
+            AND data_producao = CURRENT_DATE
+        `);
+
+        // MONTH
+        const resMonth = await pool.query(`
+            SELECT SUM(peso_total) as weight
+            FROM producao_apontada_sincronizada
+            WHERE setor LIKE '%FUSAO%' 
+            AND to_char(data_producao, 'YYYY-MM') = to_char(CURRENT_DATE, 'YYYY-MM')
+        `);
+
+        const weightToday = parseFloat(resToday.rows[0].weight || 0);
+        const weightMonth = parseFloat(resMonth.rows[0].weight || 0);
+
+        return {
+            today: weightToday.toFixed(2),
+            month: (weightMonth / 1000).toFixed(2) // Returns in Tons for the KPI
+        };
+    } catch (e) {
+        console.error("Erro getFusionStats:", e);
+        return { today: "0", month: "0" };
+    }
+}
+
+async function getExternalFinishingStats() {
+    try {
+        // Source: acabamento_externo_registros (from acabamento-externo.js)
+        const res = await pool.query(`
+            SELECT 
+                SUM(peso) as weight,
+                COUNT(DISTINCT carga) as loads
+            FROM acabamento_externo_registros
+            WHERE to_char(data, 'YYYY-MM') = to_char(CURRENT_DATE, 'YYYY-MM')
+        `);
+
+        return {
+            weight: parseFloat(res.rows[0].weight || 0).toFixed(2),
+            loads: parseInt(res.rows[0].loads || 0)
+        };
+    } catch (e) {
+        console.error("Erro getExternalFinishingStats:", e);
+        return { weight: "0", loads: "0" };
+    }
+}
+
 async function getDailyProduction() {
     try {
         const res = await pool.query(`
@@ -118,17 +198,14 @@ async function getDailyBilling() {
 
 async function getScrapStats() {
     try {
-        // Get scrap for the last 7 days from refugo_dados
         const res = await pool.query(`
-            SELECT 
-                SUM(peso_total) as weight
+            SELECT SUM(peso_total) as weight
             FROM refugo_dados
             WHERE data >= CURRENT_DATE - INTERVAL '7 days'
         `);
 
         const totalRefugo = parseFloat(res.rows[0].weight || 0);
 
-        // Get top reasons
         const resReasons = await pool.query(`
             SELECT motivo, SUM(peso_total) as weight
             FROM refugo_dados
@@ -141,12 +218,12 @@ async function getScrapStats() {
         const reasons = resReasons.rows.map(r => `${r.motivo} (${parseFloat(r.weight).toFixed(1)}kg)`).join(', ');
 
         return {
-            rate: `${totalRefugo.toFixed(1)}kg (Total 7 dias)`,
-            reasons: reasons || 'Nenhum registro recente'
+            rate: `${totalRefugo.toFixed(1)}kg (7d)`,
+            reasons: reasons || 'Nenhum'
         };
     } catch (e) {
         console.error("Erro scrap stats", e);
-        return { rate: "Erro", reasons: "Erro ao buscar dados" };
+        return { rate: "Erro", reasons: "Erro" };
     }
 }
 
