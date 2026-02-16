@@ -25,10 +25,16 @@ router.post('/', async (req, res) => {
         const isMatch = await bcrypt.compare(pass, userData.password);
 
         if (isMatch) {
-            // Sucesso! Retorna os dados
-            return res.status(200).json({ 
-                success: true, 
-                role: userData.role, 
+            // Sucesso!
+
+            // 3. Atualiza o timestamp de último login (Fire & Forget)
+            pool.query('UPDATE users SET last_login = NOW() WHERE username = $1', [user])
+                .catch(err => console.error('Erro ao atualizar last_login:', err));
+
+            // Retorna os dados
+            return res.status(200).json({
+                success: true,
+                role: userData.role,
                 name: userData.name
             });
         } else {
