@@ -2,6 +2,10 @@
 // public/js/ai-assistant.js
 
 document.addEventListener('DOMContentLoaded', () => {
+    // Role Check: Only 'desenvolvedor' can see the AI
+    const userRole = localStorage.getItem('erus_role');
+    if (userRole !== 'desenvolvedor') return;
+
     const aiButton = document.createElement('button');
     aiButton.id = 'ai-assistant-btn';
     aiButton.innerHTML = '<i class="fas fa-robot"></i>';

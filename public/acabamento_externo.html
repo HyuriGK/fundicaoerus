@@ -1293,7 +1293,7 @@
         // Função para alternar visibilidade do valor total
         function toggleValorTotalVisibility() {
             const role = checkUserRole();
-            if (role === 'desenvolvedor') {
+            if (role === 'desenvolvedor' || role === 'comercial' || role === 'administrador') {
                 isValorTotalVisible = !isValorTotalVisible;
                 updateDashboardAndCharts();
                 showToast(
@@ -1394,7 +1394,7 @@
             let totalWeight = 0;
             let totalQty = 0;
 
-            const isDev = (checkUserRole() === 'desenvolvedor' || checkUserRole() === 'comercial');
+            const isDev = (checkUserRole() === 'desenvolvedor' || checkUserRole() === 'comercial' || checkUserRole() === 'administrador');
             const showValue = isDev && isValorTotalVisible;
 
             Object.keys(grouped).sort((a, b) => (parseInt(b) || 0) - (parseInt(a) || 0)).forEach(c => {
@@ -1480,7 +1480,7 @@
                 tCusto += parseFloat(r.valor || 0);
             });
 
-            const isDev = (checkUserRole() === 'desenvolvedor' || checkUserRole() === 'comercial');
+            const isDev = (checkUserRole() === 'desenvolvedor' || checkUserRole() === 'comercial' || checkUserRole() === 'administrador');
             // Allow everyone to see values ONLY if dev AND toggle is on
             const showValue = isDev && isValorTotalVisible;
 
@@ -1772,9 +1772,12 @@
             const item = registros.find(r => r.id === id);
             if (!item) return;
 
-            const vUnit = item.valor_unit ? formatCurrency(parseFloat(item.valor_unit)) : '-';
-            const vTotalSales = item.valor_unit ? formatCurrency(parseFloat(item.valor_unit) * (item.quant || 0)) : '-';
-            const vCost = formatCurrency(parseFloat(item.valor || 0));
+            const role = checkUserRole();
+            const allowed = (role === 'desenvolvedor' || role === 'comercial' || role === 'administrador');
+
+            const vUnit = allowed && item.valor_unit ? formatCurrency(parseFloat(item.valor_unit)) : '****';
+            const vTotalSales = allowed && item.valor_unit ? formatCurrency(parseFloat(item.valor_unit) * (item.quant || 0)) : '****';
+            const vCost = allowed ? formatCurrency(parseFloat(item.valor || 0)) : '****';
 
             const html = `
                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px; margin-bottom:15px;">
@@ -1810,14 +1813,11 @@
         }
 
         function generateCargaPDF(carga) {
-            // Removed isDev check for PDF generation
-            /*
             const role = checkUserRole();
-            if (role !== 'desenvolvedor') {
-                showToast("Você não tem permissão", "Apenas desenvolvedores podem gerar PDF", "danger");
+            if (role === 'visitante') {
+                showToast("Acesso Negado", "Visitantes não podem gerar relatórios financeiros.", "danger");
                 return;
             }
-            */
 
             const { jsPDF } = window.jspdf;
             const cStr = carga.replace(/<[^>]*>?/gm, '').trim();
