@@ -3,6 +3,10 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../lib/db');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const path = require('path');
+
+// Force load .env.local from root
+require('dotenv').config({ path: path.resolve(__dirname, '../.env.local') });
 
 // Initialize Gemini API
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
@@ -11,8 +15,11 @@ router.post('/chat', async (req, res) => {
     try {
         const userMessage = req.body.message;
 
+        // Debug logging
+        console.log("Debugging Gemini Key:", process.env.GEMINI_API_KEY ? "Presente" : "Ausente");
+
         if (!process.env.GEMINI_API_KEY) {
-            return res.status(500).json({ reply: "Erro: Chave de API do Gemini não configurada." });
+            return res.status(500).json({ reply: "Erro: Chave de API do Gemini não configurada no servidor." });
         }
 
         // 1. Aggregate Data from Database
@@ -58,7 +65,7 @@ Use formatação Markdown para destacar números importantes.
 
     } catch (error) {
         console.error("Erro na IA:", error);
-        res.status(500).json({ reply: "Desculpe, tive um problema ao processar sua solicitação." });
+        res.status(500).json({ reply: "Desculpe, tive um problema ao processar sua solicitação: " + error.message });
     }
 });
 
@@ -87,27 +94,14 @@ async function getDailyProduction() {
 async function getDailyBilling() {
     try {
         const res = await pool.query(`
-            SELECT 
-                SUM(valor_total) as value,
-                SUM(peso_total) as weight,
-                COUNT(*) as count
-            FROM faturamento_diario
-            WHERE data = CURRENT_DATE
-        `);
-        // Note: faturamento_diario is aggregated by day, so this query sums the day's aggregate? 
-        // Wait, faturamento_diario already has one row per day. 
-        // Let's check faturamento_postgres.js: "SELECT * FROM faturamento_diario ORDER BY data DESC LIMIT 90"
-
-        // Better query:
-        const res2 = await pool.query(`
             SELECT total_notas, valor_total, peso_total 
             FROM faturamento_diario 
             WHERE data = CURRENT_DATE 
         `);
 
-        if (res2.rows.length === 0) return { value: "0,00", weight: "0", ticket: "0,00" };
+        if (res.rows.length === 0) return { value: "0,00", weight: "0", ticket: "0,00" };
 
-        const row = res2.rows[0];
+        const row = res.rows[0];
         const val = parseFloat(row.valor_total || 0);
         const count = parseInt(row.total_notas || 1);
 
