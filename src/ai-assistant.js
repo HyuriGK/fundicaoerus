@@ -3,41 +3,19 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../lib/db');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
-const path = require('path');
-const fs = require('fs');
-
-// Force load .env.local from root
-require('dotenv').config({ path: path.resolve(__dirname, '../.env.local') });
-
-// Initialize Gemini API
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const geminiConfig = require('./gemini_config');
 
 router.post('/chat', async (req, res) => {
     try {
         const userMessage = req.body.message;
 
-        // Fallback: Read .env.local directly if process.env is missing the key
-        if (!process.env.GEMINI_API_KEY) {
-            try {
-                const envPath = path.resolve(__dirname, '../.env.local');
-                if (fs.existsSync(envPath)) {
-                    const envFileContent = fs.readFileSync(envPath, 'utf8');
-                    const envConfig = require('dotenv').parse(envFileContent);
-                    if (envConfig.GEMINI_API_KEY) {
-                        process.env.GEMINI_API_KEY = envConfig.GEMINI_API_KEY;
-                        console.log("Recovered Gemini Key manually from file.");
-                    }
-                }
-            } catch (err) {
-                console.error("Error reading .env.local manually:", err);
-            }
-        }
+        const apiKey = geminiConfig.GEMINI_API_KEY;
 
         // Debug logging
-        console.log("Debugging Gemini Key:", process.env.GEMINI_API_KEY ? "Presente" : "Ausente");
+        console.log("Debugging Gemini Key:", apiKey ? "Presente" : "Ausente");
 
-        if (!process.env.GEMINI_API_KEY) {
-            return res.status(500).json({ reply: "Erro: Chave de API do Gemini não configurada no servidor." });
+        if (!apiKey) {
+            return res.status(500).json({ reply: "Erro: Chave de API do Gemini não configurada no arquivo de config." });
         }
 
         // 1. Aggregate Data from Database
@@ -74,9 +52,9 @@ Use formatação Markdown para destacar números importantes.
         `;
 
         // 3. Call Gemini API
-        // Re-initialize if the key was added only inside the handler
-        const currentGenAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-        const model = currentGenAI.getGenerativeModel({ model: "gemini-pro" });
+        // Re-initialize to ensure key is used
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({ model: "gemini-pro" });
 
         const result = await model.generateContent(systemPrompt);
         const response = await result.response;
