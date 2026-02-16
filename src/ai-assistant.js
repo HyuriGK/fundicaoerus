@@ -221,26 +221,65 @@ async function getDailyProduction() {
 
 async function getDailyBilling() {
     try {
+        // 1. Fetch Excluded Clients
+        const resPrefs = await pool.query("SELECT value FROM app_preferences WHERE key = 'excluded_clients'");
+        const excludedClients = new Set(resPrefs.rows.length > 0 ? resPrefs.rows[0].value : []);
+
+        // 2. Fetch Daily Data (Detail Level) matching Logic in faturamento-postgres.js
+        // We join with preferences to respect manual exclusions
         const res = await pool.query(`
-            SELECT total_notas, valor_total, peso_total 
-            FROM faturamento_diario 
-            WHERE data = CURRENT_DATE 
+            SELECT 
+                f.cliente_nome,
+                f.valor_unitario,
+                f.quantidade,
+                f.peso_total,
+                f.nota_fiscal,
+                COALESCE(p.excluido, f.excluido_manualmente, false) as is_excluded_manual
+            FROM faturamento_firebird f
+            LEFT JOIN faturamento_firebird_preferencias p 
+                ON p.nota_fiscal = f.nota_fiscal
+                AND p.codigo_item IS NOT DISTINCT FROM CAST(TRIM(f.codigo_item) AS VARCHAR)
+                AND COALESCE(p.pedido, '') = COALESCE(TRIM(f.pedido), '')
+                AND p.data_faturamento = f.data_faturamento
+                AND p.quantidade = f.quantidade
+            WHERE f.data_faturamento = CURRENT_DATE
         `);
 
-        if (res.rows.length === 0) return { value: "0,00", weight: "0", ticket: "0,00" };
+        let totalValue = 0;
+        let totalWeight = 0;
+        const uniqueNotes = new Set();
 
-        const row = res.rows[0];
-        const val = parseFloat(row.valor_total || 0);
-        const count = parseInt(row.total_notas || 1);
+        res.rows.forEach(row => {
+            const cliente = (row.cliente_nome || 'Desconhecido').trim();
+
+            // Filter 1: Client Exclusion
+            if (excludedClients.has(cliente)) return;
+
+            // Filter 2: Manual Exclusion
+            if (row.is_excluded_manual) return;
+
+            // Calculation Logic from faturamentos.html: calculateCalculatedTotal
+            // Formula: valorUnitario * quantidade * 100
+            const valUnit = parseFloat(row.valor_unitario || 0);
+            const qty = parseFloat(row.quantidade || 0);
+            const itemTotal = valUnit * qty * 100;
+
+            totalValue += itemTotal;
+            totalWeight += parseFloat(row.peso_total || 0);
+            uniqueNotes.add(row.nota_fiscal);
+        });
+
+        const count = uniqueNotes.size || 1;
 
         return {
-            value: val.toFixed(2),
-            weight: parseFloat(row.peso_total || 0).toFixed(2),
-            ticket: (val / count).toFixed(2)
+            value: totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+            weight: totalWeight.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+            ticket: (count > 0 ? totalValue / count : 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
         };
+
     } catch (e) {
-        console.error("Erro billing stats", e);
-        return { value: "0,00", weight: "0", ticket: "0,00" };
+        console.error("Erro billing stats correction", e);
+        return { value: "0,00", weight: "0,00", ticket: "0,00" };
     }
 }
 
