@@ -1590,7 +1590,7 @@
                 document.getElementById('chart-month-name').innerText = `${monthNames[now.getMonth()]} ${curYear}`;
 
                 const ALL_LINKS = [
-                    { id: 'producaosetor', title: 'Produção (Fusão)', url: 'apontamentos_produtivos.html', icon: 'fa-industry', api: '/api/producao-apontada' },
+                    { id: 'producaosetor', title: 'Produção (Fusão)', url: 'apontamentos_produtivos.html', icon: 'fa-industry', api: '/api/producao-postgres' },
                     { id: 'acabamentoexterno', title: 'Acab. Externo', url: 'acabamento_externo.html', icon: 'fa-truck-fast', api: '/api/acabamento-externo' },
                     { id: 'faturamento', title: 'Produção Faturada', url: 'faturamentos.html', icon: 'fa-sack-dollar', api: '/api/faturamento-clientes-detalhado' },
                     { id: 'carteira', title: 'Carteira Total', url: 'pedidos.html', icon: 'fa-briefcase', api: '/api/carteira' },
@@ -1672,47 +1672,36 @@
                         let subLabel = "Mês Vigente";
 
                         if (link.id === 'producaosetor') {
-                            // CORREÇÃO 1: Aplicar correção de pesos (igual ao producao_apontada.html)
-                            const productWeights = JSON.parse(localStorage.getItem('producao_product_weights')) || {};
+                            // CORREÇÃO: Usar dados do Postgres (apontamentos_produtivos)
+                            if (data.success && Array.isArray(data.data)) {
+                                const producaoData = data.data;
 
-                            if (data.length > 1) {
-                                const monthRows = data.slice(1).filter(r => {
-                                    const dateStr = String(r[0]);
-                                    return dateStr.includes(`${curYear}-${curMonth}`) || dateStr.includes(`/${curMonth}/${curYear}`);
+                                // Filtrar mês atual
+                                const monthRows = producaoData.filter(r => {
+                                    const dateStr = String(r.data); // YYYY-MM-DD
+                                    return dateStr.includes(`${curYear}-${curMonth}`);
                                 });
 
                                 let totalFusaoKg = 0;
                                 let totalMoldagemKg = 0;
 
                                 monthRows.forEach(r => {
-                                    // Aplicar correção de pesos
-                                    let pu = parseFloat(r[4] || 0);
-                                    const code = String(r[2]);
-                                    if (pu === 0 && productWeights[code]) {
-                                        pu = parseFloat(productWeights[code]);
-                                    }
-                                    const q = parseFloat(r[5] || 0);
-                                    const totalRow = pu * q; // Total corrigido em kg
-
-                                    const dateStr = String(r[0]);
                                     let day = 0;
-
-                                    if (dateStr.includes('-')) {
-                                        day = parseInt(dateStr.split('-')[2]);
-                                    } else if (dateStr.includes('/')) {
-                                        day = parseInt(dateStr.split('/')[0]);
+                                    if (r.data) {
+                                        day = parseInt(r.data.split('-')[2]);
                                     }
 
-                                    const setor = String(r[1]).toUpperCase();
+                                    const peso = parseFloat(r.pesoTotal || 0);
+                                    const setor = String(r.setor || '').toUpperCase();
 
                                     if (day > 0 && day <= daysInMonth) {
-                                        if (setor.includes("FUS")) {
-                                            chartData.fusao[day - 1] += (totalRow / 1000); // Converter para ton
-                                            totalFusaoKg += totalRow;
+                                        if (setor.includes("FUSAO") || setor.includes("FUSÃO")) {
+                                            chartData.fusao[day - 1] += (peso / 1000); // Converter para ton
+                                            totalFusaoKg += peso;
                                         }
-                                        if (setor.includes("MOLDAGEM") || setor.includes("LEVE") || setor.includes("PESADA") || setor.includes("ROLLOVER")) {
-                                            chartData.moldagem[day - 1] += (totalRow / 1000);
-                                            totalMoldagemKg += totalRow;
+                                        if (setor.includes("MOLDAGEM")) {
+                                            chartData.moldagem[day - 1] += (peso / 1000);
+                                            totalMoldagemKg += peso;
                                         }
                                     }
                                 });
