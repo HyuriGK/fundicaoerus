@@ -26,8 +26,15 @@ router.post('/', async (req, res) => {
         const isMatch = await bcrypt.compare(pass, userData.password);
 
         if (isMatch) {
-            // Sucesso!
+            // VERIFICAÇÃO DE APROVAÇÃO
+            if (!userData.approved) {
+                return res.status(401).json({
+                    success: false,
+                    message: "O administrador do sistema ainda não aceitou seu acesso."
+                });
+            }
 
+            // Sucesso!
             // 3. Atualiza o timestamp de último login (Fire & Forget)
             pool.query('UPDATE users SET last_login = NOW() WHERE username = $1', [user])
                 .then(() => logActivity(user, 'LOGIN', 'users', { name: userData.name, role: userData.role }))

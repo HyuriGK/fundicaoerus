@@ -21,7 +21,7 @@ const checkDevRole = async (req, res, next) => {
 // LISTAR USUÁRIOS
 router.get('/', checkDevRole, async (req, res) => {
     try {
-        const result = await pool.query('SELECT id, username, name, role, last_login, created_at FROM users ORDER BY name');
+        const result = await pool.query('SELECT id, username, name, role, last_login, created_at, approved FROM users ORDER BY name');
         res.json({ success: true, users: result.rows });
     } catch (error) {
         console.error('Erro ao listar usuários:', error);
@@ -63,6 +63,21 @@ router.delete('/:username', checkDevRole, async (req, res) => {
     } catch (error) {
         console.error('Erro ao deletar usuário:', error);
         res.status(500).json({ success: false, message: 'Erro ao banir usuário.' });
+    }
+});
+
+// APROVAR USUÁRIO
+router.put('/:username/approve', checkDevRole, async (req, res) => {
+    const { username } = req.params;
+
+    try {
+        await pool.query('UPDATE users SET approved = TRUE WHERE username = $1', [username]);
+        const adminUser = req.headers['x-user'] || 'Admin';
+        logActivity(adminUser, 'APPROVE_USER', 'users', { affected_user: username });
+        res.json({ success: true, message: 'Usuário aprovado com sucesso.' });
+    } catch (error) {
+        console.error('Erro ao aprovar usuário:', error);
+        res.status(500).json({ success: false, message: 'Erro ao aprovar usuário.' });
     }
 });
 

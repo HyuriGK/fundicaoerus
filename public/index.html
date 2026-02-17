@@ -1199,6 +1199,7 @@
                                             class="fa-solid fa-sort"></i></th>
                                     <th style="cursor: pointer;" onclick="sortUsers('role')">Role Atual <i
                                             class="fa-solid fa-sort"></i></th>
+                                    <th>Status</th>
                                     <th style="cursor: pointer;" onclick="sortUsers('last_login')">Último Login <i
                                             class="fa-solid fa-sort"></i></th>
                                     <th>Ações</th>
@@ -1348,13 +1349,28 @@
                         const lastLogin = u.last_login ? new Date(u.last_login).toLocaleString() : 'Nunca';
                         const roleClass = getRoleBadgeClass(u.role);
 
+                        // Status Badge
+                        const isApproved = u.approved !== false; // Default true if undefined
+                        const statusBadge = isApproved
+                            ? '<span class="badge-role badge-info"><i class="fa-solid fa-check"></i> Ativo</span>'
+                            : '<span class="badge-role badge-warning"><i class="fa-solid fa-clock"></i> Pendente</span>';
+
+                        // Approve Button
+                        const approveBtn = !isApproved
+                            ? `<button class="btn-action edit" onclick="approveUser('${u.username}')" title="Aprovar Acesso" style="color: #10b981; border-color: rgba(16, 185, 129, 0.3); background: rgba(16, 185, 129, 0.1);">
+                                 <i class="fa-solid fa-check"></i>
+                               </button>`
+                            : '';
+
                         tr.innerHTML = `
                         <td>${u.id}</td>
                         <td style="font-weight:600">${u.username}</td>
                         <td>${u.name}</td>
                         <td><span class="badge-role ${roleClass}">${u.role}</span></td>
+                        <td>${statusBadge}</td>
                         <td style="font-size: 0.8rem; color: #a1a1aa;">${lastLogin}</td>
                         <td class="table-actions">
+                            ${approveBtn}
                             <button class="btn-action edit" onclick="editUserRole('${u.username}', '${u.role}')" title="Editar Permissão">
                                 <i class="fa-solid fa-user-pen"></i>
                             </button>
@@ -1425,6 +1441,32 @@
                                 loadAdminUsers(); // Reload table
                             } else {
                                 showToast("Erro", data.message || "Falha ao banir usuário", "danger");
+                            }
+                        } catch (error) {
+                            console.error(error);
+                            showToast("Erro", "Erro ao conectar com servidor", "danger");
+                        }
+                    }
+                }
+
+                async function approveUser(username) {
+                    if (confirm(`Deseja aprovar o acesso do usuário ${username}?`)) {
+                        try {
+                            const response = await fetch(`/api/admin/users/${username}/approve`, {
+                                method: 'PUT',
+                                headers: {
+                                    'x-role': localStorage.getItem('erus_role'),
+                                    'x-user': localStorage.getItem('erus_user')
+                                }
+                            });
+
+                            const data = await response.json();
+
+                            if (data.success) {
+                                showToast("Sucesso", `Usuário ${username} aprovado!`, "success");
+                                loadAdminUsers();
+                            } else {
+                                showToast("Erro", data.message || "Falha ao aprovar usuário", "danger");
                             }
                         } catch (error) {
                             console.error(error);
