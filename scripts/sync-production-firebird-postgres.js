@@ -68,9 +68,9 @@ function chunkArray(myArray, chunk_size) {
         `);
         console.log('✅ Postgres ready.');
 
-        // console.log('🧹 Clearing existing data...');
-        // await pool.query('TRUNCATE TABLE producao_apontada_sincronizada');
-        // console.log('✅ Table cleared.');
+        console.log('🧹 Clearing existing data...');
+        await pool.query('TRUNCATE TABLE producao_apontada_sincronizada RESTART IDENTITY CASCADE');
+        console.log('✅ Table cleared.');
 
         // Add columns if they don't exist (migration for existing table)
         await pool.query(`
