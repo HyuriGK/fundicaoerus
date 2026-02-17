@@ -2,18 +2,17 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../lib/db');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
-const geminiConfig = require('./gemini_config');
+const OpenAI = require('openai');
 
 router.post('/chat', async (req, res) => {
     try {
         const userMessage = req.body.message;
-        const apiKey = geminiConfig.GEMINI_API_KEY;
+        const apiKey = process.env.OPENROUTER_API_KEY;
 
-        console.log("Debugging Gemini Key:", apiKey ? "Presente" : "Ausente");
+        console.log("Debugging OpenRouter Key:", apiKey ? "Presente" : "Ausente");
 
         if (!apiKey) {
-            return res.status(500).json({ reply: "Erro: Chave de API do Gemini não configurada no arquivo de config." });
+            return res.status(500).json({ reply: "Erro: Chave de API do OpenRouter não configurada." });
         }
 
         // 1. Aggregate Data from Database
@@ -101,19 +100,26 @@ ${billingHistory}
 ${userMessage}
 `;
 
-        // 3. Call Gemini
-        const genAI = new GoogleGenerativeAI(apiKey);
-        // Using Gemini 3 Flash Preview as requested
-        const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
+        // 3. Call OpenRouter (via OpenAI SDK)
+        const openai = new OpenAI({
+            baseURL: "https://openrouter.ai/api/v1",
+            apiKey: apiKey,
+        });
 
-        const result = await model.generateContent(systemPrompt);
-        const response = await result.response;
-        const text = response.text();
+        const completion = await openai.chat.completions.create({
+            model: "google/gemini-2.0-flash-001",
+            messages: [
+                { role: "system", content: systemPrompt },
+                { role: "user", content: userMessage }
+            ],
+        });
+
+        const text = completion.choices[0].message.content;
 
         res.json({ reply: text });
 
     } catch (error) {
-        console.error("Erro na IA:", error);
+        console.error("Erro na IA (OpenRouter):", error);
         res.status(500).json({ reply: "Desculpe, tive um problema ao processar sua solicitação: " + error.message });
     }
 });
