@@ -76,6 +76,7 @@ async function syncData() {
                         ) AS DECIMAL(18,4))
                     ELSE P.VALOR_PPR 
                 END AS VALOR_PPR,
+                CAST(PC.PRECO_POR_KG_PPRC AS DECIMAL(18,4)) AS PRECO_KG,
                 P.QUANTIDADE_PPR,
                 P.QUANTIDADE_FATURADA_PPR,
                 P.SALDO_LIBERADO_FATURAR_PPR,

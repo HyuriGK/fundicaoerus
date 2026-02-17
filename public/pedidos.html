@@ -1504,8 +1504,12 @@
             const unitWeight = getCorrectedWeight(item) / saldoReal; // Approx if customized
             const totalWeightReal = unitWeight * saldoReal;
 
-            const vUnit = parseFloat(item.VALOR_PPR || 0);
-            const vTotal = vUnit * saldoReal; // Reverted: Price is unit based
+            let vUnit = parseFloat(item.VALOR_PPR || 0);
+            // Custom Price Logic: If PRECO_KG exists and Custom Weight is used
+            if (item.PRECO_KG && parseFloat(item.PRECO_KG) > 0 && customWeights[item.PRODUTO_PPR]) {
+                vUnit = parseFloat(item.PRECO_KG) * unitWeight;
+            }
+            const vTotal = vUnit * saldoReal;
 
             const isVisitor = localStorage.getItem('erus_role') === 'visitante';
 
@@ -2012,7 +2016,12 @@
                 const totalWeightReal = unitWeight * saldoReal;
 
                 // VALOR Logic
-                const valorUnit = parseFloat(item.VALOR_PPR || 0);
+                let valorUnit = parseFloat(item.VALOR_PPR || 0);
+                // Dynamically calculate price if custom weight is used and PRECO_KG is available
+                if (item.PRECO_KG && parseFloat(item.PRECO_KG) > 0 && customWeights[item.PRODUTO_PPR]) {
+                    valorUnit = parseFloat(item.PRECO_KG) * unitWeight;
+                }
+
                 const valorTotal = valorUnit * saldoReal;
 
                 const valStr = unitWeight > 0 ? formatNumber(unitWeight) : '';
@@ -2095,11 +2104,20 @@
                 const qtdOriginal = Number(item.QUANTIDADE_PPR) || 0;
                 const realQty = saldo > 0 ? saldo : qtdOriginal;
 
-                const unitPrice = parseFloat(item.VALOR_PPR || 0);
-                const itemTotalValue = unitPrice * realQty;
-
                 // Main Accumulators
                 totalWeight += itemTotalWeight;
+
+                // Recalculate Value based on custom weight if applicable
+                let unitPrice = parseFloat(item.VALOR_PPR || 0);
+                if (item.PRECO_KG && parseFloat(item.PRECO_KG) > 0 && customWeights[item.PRODUTO_PPR]) {
+                    // Check if we are using custom weight
+                    // getCorrectedWeight uses custom weight if present.
+                    // Calculate Unit Weight for this item
+                    let unitW = realQty > 0 ? (itemTotalWeight / realQty) : 0;
+                    unitPrice = parseFloat(item.PRECO_KG) * unitW;
+                }
+                const itemTotalValue = unitPrice * realQty;
+
                 totalValue += itemTotalValue;
                 totalQty += realQty;
 
@@ -2606,10 +2624,16 @@
                     const weight = getCorrectedWeight(item);
 
                     // Calculate Value
-                    const vUnit = parseFloat(item.VALOR_PPR || 0);
+                    let vUnit = parseFloat(item.VALOR_PPR || 0);
                     const saldo = Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0;
                     const q = Number(item.QUANTIDADE_PPR) || 0;
                     const realQ = saldo > 0 ? saldo : q;
+
+                    if (item.PRECO_KG && parseFloat(item.PRECO_KG) > 0 && customWeights[item.PRODUTO_PPR]) {
+                        let uW = realQ > 0 ? (weight / realQ) : 0;
+                        vUnit = parseFloat(item.PRECO_KG) * uW;
+                    }
+
                     const val = vUnit * realQ;
 
                     mData[d.getMonth()] += weight;
