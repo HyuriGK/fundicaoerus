@@ -66,7 +66,16 @@ async function syncData() {
                 P.CODIGO_PPR,
                 P.PRODUTO_PPR,
                 P.NOME_PRODUTO_PPR,
-                P.VALOR_PPR,
+                CASE 
+                    WHEN PC.PPR_CODIGO_PPRC IS NOT NULL THEN 
+                         CAST(PC.PRECO_POR_KG_PPRC * (
+                            CASE 
+                                WHEN COALESCE(PC.PRO_PESO_LIQUIDO_PPRC, 0) > 0 THEN PC.PRO_PESO_LIQUIDO_PPRC 
+                                ELSE COALESCE(PC.PRO_PESO_ESTIMADO_PPRC, 0) 
+                            END
+                        ) AS DECIMAL(18,4))
+                    ELSE P.VALOR_PPR 
+                END AS VALOR_PPR,
                 P.QUANTIDADE_PPR,
                 P.QUANTIDADE_FATURADA_PPR,
                 P.SALDO_LIBERADO_FATURAR_PPR,
@@ -136,6 +145,11 @@ async function syncData() {
                 ON P.PRODUTO_PPR = PM.PRODUTO_PMT
             LEFT JOIN MATERIAL M 
                 ON PM.MAT_ID_PMT = M.ID_MAT
+            LEFT JOIN PEDIDO_PRODUTO_CALCULO_PRECO PC
+                ON P.CODIGO_PPR = PC.PPR_CODIGO_PPRC
+                AND P.ANO_PPR = PC.PPR_ANO_PPRC
+                AND P.ITEM_PPR = PC.PPR_ITEM_PPRC
+                AND P.EMPRESA_PPR = PC.PPR_EMPRESA_PPRC
             WHERE P.ANO_PPR IN (2025, 2026)
             AND (P.FATURADO_PPR <> 'T' OR P.FATURADO_PPR IS NULL)
             AND (P.STATUS_PPR <> 'C' OR P.STATUS_PPR IS NULL)
