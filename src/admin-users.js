@@ -81,6 +81,21 @@ router.put('/:username/approve', checkDevRole, async (req, res) => {
     }
 });
 
+// BLOQUEAR USUÁRIO
+router.put('/:username/block', checkDevRole, async (req, res) => {
+    const { username } = req.params;
+
+    try {
+        await pool.query('UPDATE users SET approved = FALSE WHERE username = $1', [username]);
+        const adminUser = req.headers['x-user'] || 'Admin';
+        logActivity(adminUser, 'BLOCK_USER', 'users', { affected_user: username });
+        res.json({ success: true, message: 'Usuário bloqueado com sucesso.' });
+    } catch (error) {
+        console.error('Erro ao bloquear usuário:', error);
+        res.status(500).json({ success: false, message: 'Erro ao bloquear usuário.' });
+    }
+});
+
 // LISTAR LOGS DE AUDITORIA
 router.get('/logs', checkDevRole, async (req, res) => {
     try {

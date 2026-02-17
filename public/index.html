@@ -1355,12 +1355,17 @@
                             ? '<span class="badge-role badge-info"><i class="fa-solid fa-check"></i> Ativo</span>'
                             : '<span class="badge-role badge-warning"><i class="fa-solid fa-clock"></i> Pendente</span>';
 
-                        // Approve Button
-                        const approveBtn = !isApproved
-                            ? `<button class="btn-action edit" onclick="approveUser('${u.username}')" title="Aprovar Acesso" style="color: #10b981; border-color: rgba(16, 185, 129, 0.3); background: rgba(16, 185, 129, 0.1);">
+                        // Approve/Block Button Logic
+                        let actionBtn = '';
+                        if (!isApproved) {
+                            actionBtn = `<button class="btn-action edit" onclick="approveUser('${u.username}')" title="Aprovar Acesso" style="color: #10b981; border-color: rgba(16, 185, 129, 0.3); background: rgba(16, 185, 129, 0.1);">
                                  <i class="fa-solid fa-check"></i>
-                               </button>`
-                            : '';
+                               </button>`;
+                        } else {
+                            actionBtn = `<button class="btn-action delete" onclick="blockUser('${u.username}')" title="Bloquear Acesso" style="color: #f59e0b; border-color: rgba(245, 158, 11, 0.3); background: rgba(245, 158, 11, 0.1);">
+                                 <i class="fa-solid fa-ban"></i>
+                               </button>`;
+                        }
 
                         tr.innerHTML = `
                         <td>${u.id}</td>
@@ -1370,12 +1375,12 @@
                         <td>${statusBadge}</td>
                         <td style="font-size: 0.8rem; color: #a1a1aa;">${lastLogin}</td>
                         <td class="table-actions">
-                            ${approveBtn}
+                            ${actionBtn}
                             <button class="btn-action edit" onclick="editUserRole('${u.username}', '${u.role}')" title="Editar Permissão">
                                 <i class="fa-solid fa-user-pen"></i>
                             </button>
-                            <button class="btn-action delete" onclick="deleteUser('${u.username}')" title="Banir Usuário">
-                                <i class="fa-solid fa-user-slash"></i>
+                            <button class="btn-action delete" onclick="deleteUser('${u.username}')" title="Excluir Usuário">
+                                <i class="fa-solid fa-trash"></i>
                             </button>
                         </td>
                     `;
@@ -1467,6 +1472,32 @@
                                 loadAdminUsers();
                             } else {
                                 showToast("Erro", data.message || "Falha ao aprovar usuário", "danger");
+                            }
+                        } catch (error) {
+                            console.error(error);
+                            showToast("Erro", "Erro ao conectar com servidor", "danger");
+                        }
+                    }
+                }
+
+                async function blockUser(username) {
+                    if (confirm(`Deseja BLOQUEAR o acesso do usuário ${username}? Ele não poderá mais logar.`)) {
+                        try {
+                            const response = await fetch(`/api/admin/users/${username}/block`, {
+                                method: 'PUT',
+                                headers: {
+                                    'x-role': localStorage.getItem('erus_role'),
+                                    'x-user': localStorage.getItem('erus_user')
+                                }
+                            });
+
+                            const data = await response.json();
+
+                            if (data.success) {
+                                showToast("Bloqueado", `Usuário ${username} foi bloqueado.`, "info");
+                                loadAdminUsers();
+                            } else {
+                                showToast("Erro", data.message || "Falha ao bloquear usuário", "danger");
                             }
                         } catch (error) {
                             console.error(error);
