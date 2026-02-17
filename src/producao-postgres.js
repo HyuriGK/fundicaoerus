@@ -11,17 +11,23 @@ router.get('/', async (req, res) => {
 
         let query = `
             SELECT 
-                id,
-                TO_CHAR(data_producao, 'YYYY-MM-DD') as data,
-                setor,
-                produto,
-                liga,
-                op,
-                codigo_peca,
-                peso_un,
-                quantidade,
-                peso_total
-            FROM producao_apontada_sincronizada
+                t.id,
+                TO_CHAR(t.data_producao, 'YYYY-MM-DD') as data,
+                t.setor,
+                t.produto,
+                t.liga,
+                t.op,
+                t.codigo_peca,
+                -- Lógica de Prioridade: ERP > 0 ? ERP : Custom
+                COALESCE(NULLIF(t.peso_un, 0), p.peso, 0) as peso_un,
+                t.quantidade,
+                -- Recalcula Total
+                (t.quantidade * COALESCE(NULLIF(t.peso_un, 0), p.peso, 0)) as peso_total,
+                -- Metadados para UI
+                t.peso_un as peso_erp,
+                p.peso as peso_custom
+            FROM producao_apontada_sincronizada t
+            LEFT JOIN produto_pesos_producao p ON t.codigo_peca = p.codigo_peca
             WHERE 1=1
         `;
 
@@ -29,30 +35,30 @@ router.get('/', async (req, res) => {
         let paramIndex = 1;
 
         if (startDate) {
-            query += ` AND data_producao >= $${paramIndex}`;
+            query += ` AND t.data_producao >= $${paramIndex}`;
             params.push(startDate);
             paramIndex++;
         }
 
         if (endDate) {
-            query += ` AND data_producao <= $${paramIndex}`;
+            query += ` AND t.data_producao <= $${paramIndex}`;
             params.push(endDate);
             paramIndex++;
         }
 
         if (sector && sector !== 'Todos') {
-            query += ` AND setor = $${paramIndex}`;
+            query += ` AND t.setor = $${paramIndex}`;
             params.push(sector);
             paramIndex++;
         }
 
         if (search) {
-            query += ` AND (LOWER(produto) LIKE $${paramIndex} OR LOWER(liga) LIKE $${paramIndex})`;
+            query += ` AND (LOWER(t.produto) LIKE $${paramIndex} OR LOWER(t.liga) LIKE $${paramIndex} OR LOWER(t.codigo_peca) LIKE $${paramIndex})`;
             params.push(`%${search.toLowerCase()}%`);
             paramIndex++;
         }
 
-        query += ` ORDER BY data_producao DESC, id DESC LIMIT $${paramIndex}`;
+        query += ` ORDER BY t.data_producao DESC, t.id DESC LIMIT $${paramIndex}`;
         params.push(parseInt(limit));
 
         const result = await pool.query(query, params);
@@ -68,6 +74,8 @@ router.get('/', async (req, res) => {
                 op: row.op || '',
                 codigo_peca: row.codigo_peca || '',
                 pesoUn: parseFloat(row.peso_un),
+                pesoErp: parseFloat(row.peso_erp || 0),
+                pesoCustom: parseFloat(row.peso_custom || 0),
                 quantidade: parseFloat(row.quantidade),
                 pesoTotal: parseFloat(row.peso_total)
             }))
@@ -88,9 +96,10 @@ router.get('/stats', async (req, res) => {
         let query = `
             SELECT 
                 COUNT(*) as total_records,
-                SUM(quantidade) as total_qty,
-                SUM(peso_total) as total_weight
-            FROM producao_apontada_sincronizada
+                SUM(t.quantidade) as total_qty,
+                SUM(t.quantidade * COALESCE(NULLIF(t.peso_un, 0), p.peso, 0)) as total_weight
+            FROM producao_apontada_sincronizada t
+            LEFT JOIN produto_pesos_producao p ON t.codigo_peca = p.codigo_peca
             WHERE 1=1
         `;
 
@@ -98,19 +107,19 @@ router.get('/stats', async (req, res) => {
         let paramIndex = 1;
 
         if (startDate) {
-            query += ` AND data_producao >= $${paramIndex}`;
+            query += ` AND t.data_producao >= $${paramIndex}`;
             params.push(startDate);
             paramIndex++;
         }
 
         if (endDate) {
-            query += ` AND data_producao <= $${paramIndex}`;
+            query += ` AND t.data_producao <= $${paramIndex}`;
             params.push(endDate);
             paramIndex++;
         }
 
         if (sector && sector !== 'Todos') {
-            query += ` AND setor = $${paramIndex}`;
+            query += ` AND t.setor = $${paramIndex}`;
             params.push(sector);
             paramIndex++;
         }
@@ -184,6 +193,27 @@ router.post('/meta', async (req, res) => {
 
     } catch (error) {
         console.error('❌ Error saving meta:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+router.post('/peso', async (req, res) => {
+    const { codigo_peca, peso } = req.body;
+
+    if (!codigo_peca || peso === undefined) {
+        return res.status(400).json({ success: false, error: 'Código da peça e peso são obrigatórios' });
+    }
+
+    try {
+        await pool.query(`
+            INSERT INTO produto_pesos_producao (codigo_peca, peso, updated_at)
+            VALUES ($1, $2, CURRENT_TIMESTAMP)
+            ON CONFLICT (codigo_peca) 
+            DO UPDATE SET peso = EXCLUDED.peso, updated_at = CURRENT_TIMESTAMP
+        `, [String(codigo_peca), parseFloat(peso)]);
+
+        res.json({ success: true, message: 'Peso salvo com sucesso' });
+    } catch (error) {
+        console.error('❌ Error saving custom weight:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 });
