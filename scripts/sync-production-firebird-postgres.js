@@ -47,7 +47,7 @@ function chunkArray(myArray, chunk_size) {
         console.log('🔗 Connecting to Postgres...');
         await pool.query('SELECT NOW()');
 
-        // 1. Prepare Postgres (Create Table & Indexes) - REMOVED TRUNCATE
+        // 1. Prepare Postgres (Create Table & Indexes)
         await pool.query(`
             CREATE TABLE IF NOT EXISTS producao_apontada_sincronizada (
                 id SERIAL PRIMARY KEY,
@@ -68,9 +68,21 @@ function chunkArray(myArray, chunk_size) {
         `);
         console.log('✅ Postgres ready.');
 
-        console.log('🧹 Clearing existing data...');
-        await pool.query('TRUNCATE TABLE producao_apontada_sincronizada RESTART IDENTITY CASCADE');
-        console.log('✅ Table cleared.');
+        // DETERMINAR DATA DE INÍCIO (Lógica "Carregar 2025 uma única vez")
+        // Se já existem dados de 2025, sincroniza apenas 2026 em diante.
+        // Se NÃO existem dados de 2025, busca desde 2025-01-01.
+
+        let startDate = '2026-01-01'; // Default
+        const minDateRes = await pool.query("SELECT MIN(data_producao) as min_data FROM producao_apontada_sincronizada");
+        const minDate = minDateRes.rows[0]?.min_data ? new Date(minDateRes.rows[0].min_data) : null;
+
+        if (!minDate || minDate.getFullYear() >= 2026) {
+            console.log('📅 No 2025 data found (or table empty). Backfilling from 2025-01-01...');
+            startDate = '2025-01-01';
+        } else {
+            console.log('📅 2025 data already exists. Syncing from 2026-01-01...');
+            startDate = '2026-01-01';
+        }
 
         // Add columns if they don't exist (migration for existing table)
         await pool.query(`
@@ -97,7 +109,7 @@ function chunkArray(myArray, chunk_size) {
                 console.error('❌ Firebird Connection Error:', err);
                 process.exit(1);
             }
-            console.log('✅ Firebird attached. Fetching Movements...');
+            console.log(`✅ Firebird attached. Fetching Movements starting from ${startDate}...`);
 
             // 1. Fetch PRODUCAO_SETOR (Base Table as per user request)
             // User restriction: "se baseie em PRODUCAO_SETOR SOMENTE COM AS COLUNAS QUE EU TE MANDEI"
@@ -111,7 +123,7 @@ function chunkArray(myArray, chunk_size) {
                     LOTE_PCS,
                     SETOR_PCS
                 FROM PRODUCAO_SETOR
-                WHERE DATA_PCS >= '2026-01-01' AND DATA_PCS <= '2026-12-31'
+                WHERE DATA_PCS >= '${startDate}' AND DATA_PCS <= '2026-12-31'
                 ORDER BY DATA_PCS DESC
             `;
 
@@ -137,22 +149,24 @@ function chunkArray(myArray, chunk_size) {
                 const lookupSET = {};
 
                 // Helper to fetch and map
-                const fetchMap = (ids, table, pk, cols, targetMap) => {
-                    return new Promise((resolve, reject) => {
-                        if (ids.length === 0) return resolve();
-                        const chunks = chunkArray(ids, 500);
-                        let processed = 0;
-                        chunks.forEach(chunk => {
-                            const idList = chunk.join(',');
-                            const q = `SELECT ${pk}, ${cols} FROM ${table} WHERE ${pk} IN (${idList})`;
+                // Helper to fetch and map (Sequential to avoid Firebird congestion)
+                const fetchMap = async (ids, table, pk, cols, targetMap) => {
+                    if (ids.length === 0) return;
+                    const chunks = chunkArray(ids, 200); // Smaller chunks
+                    console.log(`       fetching ${table} in ${chunks.length} chunks...`);
+
+                    for (const chunk of chunks) {
+                        const idList = chunk.join(',');
+                        const q = `SELECT ${pk}, ${cols} FROM ${table} WHERE ${pk} IN (${idList})`;
+
+                        await new Promise((resolve, reject) => {
                             db.query(q, (err, rows) => {
                                 if (err) return reject(err);
                                 rows.forEach(r => { targetMap[r[pk]] = r; });
-                                processed++;
-                                if (processed === chunks.length) resolve();
+                                resolve();
                             });
                         });
-                    });
+                    }
                 };
 
                 try {
@@ -225,78 +239,73 @@ function chunkArray(myArray, chunk_size) {
 
                 console.log('✅ Lookups fetched. Syncing to Postgres...');
 
+
                 // 4. Transform & Insert
                 let inserted = 0;
                 let errors = 0;
 
-                for (const pcs of productionRows) {
-                    try {
-                        const set = lookupSET[pcs.SETOR_PCS] || {};
+                const insertChunks = chunkArray(productionRows, 100); // Process 100 rows in parallel
+                console.log(`🚀 Inserting ${productionRows.length} rows (Chunks of 100)...`);
 
-                        const dataProd = parseDate(pcs.DATA_PCS);
-                        if (!dataProd || isNaN(dataProd.getTime())) {
-                            // console.warn('Skipping invalid date:', pcs.DATA_PCS);
-                            continue;
+                for (const chunk of insertChunks) {
+                    const promises = chunk.map(async (pcs) => {
+                        try {
+                            const set = lookupSET[pcs.SETOR_PCS] || {};
+
+                            const dataProd = parseDate(pcs.DATA_PCS);
+                            if (!dataProd || isNaN(dataProd.getTime())) return;
+
+                            const chaveOrigem = `PCS-${pcs.ID_PCS}`;
+                            const setor = cleanString(set.NOME_SET) || 'DESCONHECIDO';
+
+                            // Product Details from Joined Tables
+                            let produtoName = 'PRODUTO INDEFINIDO';
+                            let produtoCode = null; // Part Code (Referencia)
+                            let produtoWeight = 0;
+
+                            if (pcs._produto) {
+                                produtoName = cleanString(pcs._produto.NOME_PRO) || produtoName;
+                                const rawCode = pcs._produto.CODIGO_PRO;
+                                produtoCode = rawCode ? cleanString(String(rawCode)) : null;
+                                produtoWeight = parseFloat(pcs._produto.PESO_LIQUIDO_PRO || 0);
+                            }
+
+                            // Mapped Fields:
+                            const op = pcs.CODIGO_PCS ? String(pcs.CODIGO_PCS) : null;
+                            const quantidade = parseFloat(pcs.QUANTIDADE_PCS || 0);
+                            const codigoPeca = produtoCode;
+                            const pesoTotal = quantidade * produtoWeight;
+                            const pesoUn = produtoWeight;
+                            const produto = produtoName;
+
+                            const liga = pcs._materialName || null;
+
+                            await pool.query(`
+                                INSERT INTO producao_apontada_sincronizada 
+                                (chave_origem, data_producao, setor, produto, liga, peso_un, quantidade, peso_total, op, codigo_peca, atualizado_em)
+                                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP)
+                                ON CONFLICT (chave_origem) DO UPDATE SET
+                                    data_producao = EXCLUDED.data_producao,
+                                    setor = EXCLUDED.setor,
+                                    produto = EXCLUDED.produto,
+                                    liga = EXCLUDED.liga,
+                                    peso_un = EXCLUDED.peso_un,
+                                    quantidade = EXCLUDED.quantidade,
+                                    peso_total = EXCLUDED.peso_total,
+                                    op = EXCLUDED.op,
+                                    codigo_peca = EXCLUDED.codigo_peca,
+                                    atualizado_em = CURRENT_TIMESTAMP
+                            `, [chaveOrigem, dataProd, setor, produto, liga, pesoUn, quantidade, pesoTotal, op, codigoPeca]);
+
+                            inserted++;
+                        } catch (rowErr) {
+                            console.error('Row Error:', rowErr);
+                            errors++;
                         }
+                    });
 
-                        // Strict year check (redundant but safe)
-                        if (dataProd.getFullYear() !== 2026) {
-                            continue;
-                        }
-
-                        const chaveOrigem = `PCS-${pcs.ID_PCS}`; // UPDATED: Use Unique ID from Table, not OP Code
-                        const setor = cleanString(set.NOME_SET) || 'DESCONHECIDO';
-
-                        // Product Details from Joined Tables
-                        let produtoName = 'PRODUTO INDEFINIDO';
-                        let produtoCode = null; // Part Code (Referencia)
-                        let produtoWeight = 0;
-
-                        if (pcs._produto) {
-                            produtoName = cleanString(pcs._produto.NOME_PRO) || produtoName;
-                            // Ensure CODIGO_PRO is treated as a string before cleaning
-                            const rawCode = pcs._produto.CODIGO_PRO;
-                            produtoCode = rawCode ? cleanString(String(rawCode)) : null;
-                            produtoWeight = parseFloat(pcs._produto.PESO_LIQUIDO_PRO || 0);
-                        }
-
-                        // Mapped Fields:
-                        const op = pcs.CODIGO_PCS ? String(pcs.CODIGO_PCS) : null;
-                        const quantidade = parseFloat(pcs.QUANTIDADE_PCS || 0);
-                        const codigoPeca = produtoCode;
-                        const pesoTotal = quantidade * produtoWeight;
-                        const pesoUn = produtoWeight;
-                        const produto = produtoName;
-
-                        const liga = pcs._materialName || null;
-
-                        // Note: LOTE_PCS is available in 'pcs.LOTE_PCS' but we don't have a column for it in Postgres yet. 
-                        // User didn't ask to create a column, just to "use data from these columns".
-
-                        await pool.query(`
-                            INSERT INTO producao_apontada_sincronizada 
-                            (chave_origem, data_producao, setor, produto, liga, peso_un, quantidade, peso_total, op, codigo_peca, atualizado_em)
-                            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP)
-                            ON CONFLICT (chave_origem) DO UPDATE SET
-                                data_producao = EXCLUDED.data_producao,
-                                setor = EXCLUDED.setor,
-                                produto = EXCLUDED.produto,
-                                liga = EXCLUDED.liga,
-                                peso_un = EXCLUDED.peso_un,
-                                quantidade = EXCLUDED.quantidade,
-                                peso_total = EXCLUDED.peso_total,
-                                op = EXCLUDED.op,
-                                codigo_peca = EXCLUDED.codigo_peca,
-                                atualizado_em = CURRENT_TIMESTAMP
-                        `, [chaveOrigem, dataProd, setor, produto, liga, pesoUn, quantidade, pesoTotal, op, codigoPeca]);
-
-                        inserted++;
-                        if (inserted % 100 === 0) process.stdout.write('.');
-
-                    } catch (rowErr) {
-                        console.error('Row Error:', rowErr);
-                        errors++;
-                    }
+                    await Promise.all(promises);
+                    process.stdout.write('.');
                 }
 
                 console.log(`\n✅ Sync Loop Complete.`);
@@ -309,10 +318,10 @@ function chunkArray(myArray, chunk_size) {
                 console.log('🧹 Clearing stale data (Mark & Sweep)...');
                 const cleanup = await pool.query(`
                     DELETE FROM producao_apontada_sincronizada 
-                    WHERE data_producao >= '2026-01-01' 
+                    WHERE data_producao >= $2
                       AND data_producao <= '2026-12-31'
                       AND atualizado_em < $1
-                `, [syncStartTime]);
+                `, [syncStartTime, startDate]);
                 console.log(`   Removed ${cleanup.rowCount} stale records.`);
 
                 db.detach();
