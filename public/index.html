@@ -1178,6 +1178,12 @@
 
 
 
+                        <div class="admin-item-card" onclick="switchAdminView('locks')">
+                            <i class="fa-solid fa-lock admin-item-icon" style="color: var(--status-danger);"></i>
+                            <div class="admin-item-title">Bloqueio de Telas</div>
+                            <div class="admin-item-desc">Ativar modo manutenção em páginas específicas</div>
+                        </div>
+
                         <div class="admin-item-card" style="opacity: 0.4; cursor: not-allowed;">
                             <i class="fa-solid fa-database admin-item-icon" style="color: #71717a;"></i>
                             <div class="admin-item-title" style="color: #71717a;">Status do Servidor</div>
@@ -1233,6 +1239,28 @@
                         </table>
                     </div>
                 </div>
+
+                <!-- PAGE LOCKS VIEW -->
+                <div id="adminPageLocksView" class="admin-view-transition" style="display: none;">
+                    <div style="margin-bottom: 20px; color: var(--text-muted); font-size: 0.85rem;">
+                        <i class="fa-solid fa-circle-info"></i> Páginas bloqueadas mostrarão um aviso de manutenção para
+                        usuários comuns. Desenvolvedores continuam com acesso total.
+                    </div>
+                    <div class="table-container" style="height: 100%;">
+                        <table id="adminPageLocksTable">
+                            <thead>
+                                <tr>
+                                    <th>Página (Arquivo)</th>
+                                    <th>Status Atual</th>
+                                    <th style="text-align: center;">Ação</th>
+                                </tr>
+                            </thead>
+                            <tbody id="page-locks-table-body">
+                                <!-- Populated by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
 
             <!-- SCRIPT DA SIDEBAR -->
@@ -1255,6 +1283,7 @@
                     const dashboard = document.getElementById('adminDashboardView');
                     const userView = document.getElementById('adminUserManagementView');
                     const logsView = document.getElementById('adminLogsView');
+                    const locksView = document.getElementById('adminPageLocksView');
                     const backBtn = document.getElementById('adminBackBtn');
                     const title = document.getElementById('adminModalTitle');
                     const icon = document.getElementById('adminModalIcon');
@@ -1263,6 +1292,7 @@
                     dashboard.style.display = 'none';
                     userView.style.display = 'none';
                     logsView.style.display = 'none';
+                    locksView.style.display = 'none';
 
                     if (view === 'dashboard') {
                         dashboard.style.display = 'block';
@@ -1281,6 +1311,12 @@
                         title.textContent = 'Logs do Sistema';
                         icon.className = 'fa-solid fa-file-waveform';
                         loadAdminLogs();
+                    } else if (view === 'locks') {
+                        locksView.style.display = 'block';
+                        backBtn.style.display = 'flex';
+                        title.textContent = 'Bloqueio de Telas';
+                        icon.className = 'fa-solid fa-lock';
+                        loadPageLocks();
                     }
                 }
 
@@ -1575,6 +1611,86 @@
                         </tr>
                     `;
                         }).join('');
+                    }
+                }
+
+                // --- SISTEMA DE BLOQUEIO DE TELAS ---
+                const LOCKABLE_PAGES = [
+                    { id: 'pedidos.html', name: 'Carteira de Pedidos' },
+                    { id: 'apontamentos_produtivos.html', name: 'Produção Apontada' },
+                    { id: 'amostras.html', name: 'Produção Amostras' },
+                    { id: 'acabamento_externo.html', name: 'Acabamento Externo' },
+                    { id: 'usinagem_externo.html', name: 'Usinagem Externa' },
+                    { id: 'custos.html', name: 'Custos Gerais' },
+                    { id: 'faturamentos.html', name: 'Produção Faturada' },
+                    { id: 'aderencia.html', name: 'Aderência' },
+                    { id: 'refugo.html', name: 'Dashboard de Refugo' },
+                    { id: 'refugos.html', name: 'Lançamento de Refugo' }
+                ];
+
+                async function loadPageLocks() {
+                    try {
+                        const response = await fetch('/api/page-locks');
+                        const result = await response.json();
+                        if (result.success) {
+                            renderPageLocksTable(result.data);
+                        } else {
+                            showToast('Erro', 'Falha ao carregar bloqueios', 'danger');
+                        }
+                    } catch (error) {
+                        console.error('Erro ao carregar bloqueios:', error);
+                        showToast('Erro', 'Erro ao conectar com servidor', 'danger');
+                    }
+                }
+
+                function renderPageLocksTable(activeLocks) {
+                    const tbody = document.getElementById('page-locks-table-body');
+                    if (!tbody) return;
+
+                    const lockMap = {};
+                    activeLocks.forEach(l => { lockMap[l.page_id] = l.is_locked; });
+
+                    tbody.innerHTML = LOCKABLE_PAGES.map(page => {
+                        const isLocked = lockMap[page.id] || false;
+                        const statusTag = isLocked
+                            ? '<span style="color: #ef4444; background: rgba(239, 68, 68, 0.1); padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">BLOQUEADA</span>'
+                            : '<span style="color: #10b981; background: rgba(16, 185, 129, 0.1); padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">LIBERADA</span>';
+
+                        const actionBtn = isLocked
+                            ? `<button class="modal-close-btn" style="background: rgba(16, 185, 129, 0.1); color: #10b981; border: none; padding: 5px 12px; width: 100px;" onclick="togglePageLock('${page.id}', false)">Liberar</button>`
+                            : `<button class="modal-close-btn" style="background: rgba(239, 68, 68, 0.1); color: #ef4444; border: none; padding: 5px 12px; width: 100px;" onclick="togglePageLock('${page.id}', true)">Bloquear</button>`;
+
+                        return `
+                            <tr>
+                                <td style="font-weight: 500;">${page.name} <br><small style="color: var(--text-dim); opacity: 0.7;">${page.id}</small></td>
+                                <td>${statusTag}</td>
+                                <td style="text-align: center;">${actionBtn}</td>
+                            </tr>
+                        `;
+                    }).join('');
+                }
+
+                async function togglePageLock(pageId, isLocked) {
+                    try {
+                        const response = await fetch('/api/page-locks/toggle', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'x-role': localStorage.getItem('erus_role')
+                            },
+                            body: JSON.stringify({ page_id: pageId, is_locked: isLocked })
+                        });
+
+                        const data = await response.json();
+                        if (data.success) {
+                            showToast(isLocked ? 'Página Bloqueada' : 'Página Liberada', `${pageId} agora está ${isLocked ? 'bloqueada' : 'disponível'}.`, isLocked ? 'info' : 'success');
+                            loadPageLocks();
+                        } else {
+                            showToast('Erro', data.message || 'Falha ao alterar bloqueio', 'danger');
+                        }
+                    } catch (error) {
+                        console.error('Erro ao alternar bloqueio:', error);
+                        showToast('Erro', 'Erro ao conectar com servidor', 'danger');
                     }
                 }
 

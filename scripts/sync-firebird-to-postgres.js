@@ -3,7 +3,16 @@
 // IMPORTANTE: Somente leitura no Firebird, escrita apenas no PostgreSQL
 
 const Firebird = require('node-firebird');
-require('dotenv').config({ path: '.env.local' }); // Carregar .env.local
+const path = require('path');
+const fs = require('fs');
+
+// Determine path to .env.local
+let envPath = '.env.local';
+if (process.pkg) {
+    envPath = path.join(path.dirname(process.execPath), '.env.local');
+}
+
+require('dotenv').config({ path: envPath });
 const pool = require('../lib/db'); // Usar pool existente
 
 // =========================================================
@@ -34,6 +43,18 @@ function formatarData(data) {
     if (!data) return null;
     const d = new Date(data);
     return d.toISOString().split('T')[0];
+}
+
+function chunkArray(myArray, chunk_size) {
+    var index = 0;
+    var arrayLength = myArray.length;
+    var tempArray = [];
+
+    for (index = 0; index < arrayLength; index += chunk_size) {
+        myChunk = myArray.slice(index, index + chunk_size);
+        tempArray.push(myChunk);
+    }
+    return tempArray;
 }
 
 // =========================================================
@@ -93,8 +114,9 @@ async function sincronizarFaturamentoDiario(fbDb) {
     console.log('\n📊 Sincronizando faturamento diário...');
 
     // Buscar últimos 90 dias do Firebird
-    const dataInicio = new Date();
-    dataInicio.setDate(dataInicio.getDate() - 90);
+    // Buscar dados de 2026 em diante (conforme solicitado para limpar e regravar)
+    const dataInicio = new Date('2026-01-01');
+    console.log(`📅 Buscando faturamento diário a partir de: ${dataInicio.toISOString().split('T')[0]}`);
 
     const query = `
         SELECT 
@@ -269,7 +291,8 @@ async function sincronizarDetalhado(fbDb) {
             const prefsMap = new Map();
             prefsResult.rows.forEach(r => {
                 const dateStr = r.data_faturamento ? r.data_faturamento.toISOString().split('T')[0] : '';
-                const qStr = parseFloat(r.quantidade || 0).toFixed(3);
+                // IMPORTANT: Must match loop logic (String(parseFloat(quant)))
+                const qStr = parseFloat(r.quantidade || 0);
                 const key = `${r.nota_fiscal}-${String(r.codigo_item).trim()}-${String(r.pedido || '').trim()}-${dateStr}-${qStr}`;
                 prefsMap.set(key, r.excluido);
             });
@@ -278,79 +301,88 @@ async function sincronizarDetalhado(fbDb) {
 
             let inserted = 0;
             let errors = 0;
-            for (const row of result) {
-                try {
-                    // Usar CODIGO_NOT como número da nota, pois em 2026 NUMERO_NOT está vindo nulo no banco
-                    // Verificado que o CODIGO_NOT bate com o número na CHAVE_NOT
-                    const notaFiscal = parseInt(row.CODIGO_NOT);
-                    if (isNaN(notaFiscal)) {
-                        console.warn(`  ⚠️  Nota Fiscal inválida(Cód: ${row.CODIGO_NOT}), pulando item.`);
+
+            // OTIMIZAÇÃO: Processamento Concorrente em Lotes (Chunks)
+            // Processa blocos de 50 registros simultaneamente para maior velocidade
+            const insertChunks = chunkArray(result, 50);
+
+            for (const chunk of insertChunks) {
+                const promises = chunk.map(async (row) => {
+                    try {
+                        const notaFiscal = parseInt(row.CODIGO_NOT);
+                        if (isNaN(notaFiscal)) {
+                            // console.warn(`  ⚠️  Nota Fiscal inválida(Cód: ${row.CODIGO_NOT}), pulando item.`);
+                            errors++;
+                            return;
+                        }
+
+                        const pesoUn = parseFloat(row.PESO_UNITARIO) || 0;
+                        const quantidade = parseFloat(row.QUANTIDADE_NPR) || 0;
+                        const pesoTotal = pesoUn * quantidade;
+                        const dataFat = formatarData(row.DATA_FATURAMENTO);
+                        const codigoItem = row.PRODUTO_NPR;
+                        const itemNota = parseInt(row.ITEM_NPR) || 0;
+
+                        // Gerar chave única para conferir preferência (Lógica C: Nota-Item-Pedido-Data-Quant)
+                        const pedidoFinal = String(row.PEDIDO_LINK || row.PEDIDO_NPR || '').trim();
+                        // IMPORTANT: Must match frontend logic (String(parseFloat(quant)))
+                        const qStr = parseFloat(quantidade);
+                        const keyForPref = `${notaFiscal}-${String(codigoItem).trim()}-${pedidoFinal}-${dataFat}-${qStr}`;
+                        const isExcluded = prefsMap.has(keyForPref) ? prefsMap.get(keyForPref) : false;
+
+                        await pool.query(`
+                            INSERT INTO faturamento_firebird 
+                            (nota_fiscal, serie, item_nota, data_faturamento, cliente_codigo, cliente_nome, 
+                             codigo_item, descricao, quantidade, valor_unitario, valor_total, 
+                             peso_un, peso_total, status, excluido_manualmente, pedido)
+                            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+                            ON CONFLICT ON CONSTRAINT faturamento_firebird_nf_serie_item_prod_key DO UPDATE SET
+                                data_faturamento = EXCLUDED.data_faturamento,
+                                cliente_nome = EXCLUDED.cliente_nome,
+                                descricao = EXCLUDED.descricao,
+                                quantidade = EXCLUDED.quantidade,
+                                valor_unitario = EXCLUDED.valor_unitario,
+                                valor_total = EXCLUDED.valor_total,
+                                peso_un = EXCLUDED.peso_un,
+                                peso_total = EXCLUDED.peso_total,
+                                status = EXCLUDED.status,
+                                excluido_manualmente = EXCLUDED.excluido_manualmente,
+                                pedido = EXCLUDED.pedido,
+                                atualizado_em = CURRENT_TIMESTAMP
+                        `, [
+                            notaFiscal,
+                            row.SERIE_NOT ? String(row.SERIE_NOT).trim() : null,
+                            itemNota,
+                            dataFat,
+                            row.COD_CLIENTE_NOT,
+                            row.CLIENTE_NOME_NOT,
+                            codigoItem,
+                            row.NOME_PRODUTO_NPR,
+                            quantidade,
+                            centavosParaReais(row.UNITARIO_NPR),
+                            centavosParaReais(row.TOTAL_NPR),
+                            pesoUn,
+                            pesoTotal,
+                            row.STATUS_NOT,
+                            isExcluded,
+                            pedidoFinal
+                        ]);
+
+                        inserted++;
+                    } catch (rowErr) {
+                        console.error(`  ❌ Erro no item NF ${row.CODIGO_NOT}:`, rowErr.message);
                         errors++;
-                        continue;
                     }
+                });
 
-                    const pesoUn = parseFloat(row.PESO_UNITARIO) || 0;
-                    const quantidade = parseFloat(row.QUANTIDADE_NPR) || 0;
-                    const pesoTotal = pesoUn * quantidade;
-                    const dataFat = formatarData(row.DATA_FATURAMENTO);
-                    const codigoItem = row.PRODUTO_NPR;
-                    const itemNota = parseInt(row.ITEM_NPR) || 0;
-
-                    // Gerar chave única para conferir preferência (Lógica C: Nota-Item-Pedido-Data-Quant)
-                    const pedidoFinal = String(row.PEDIDO_LINK || row.PEDIDO_NPR || '').trim();
-                    const qStr = parseFloat(quantidade).toFixed(3);
-                    const keyForPref = `${notaFiscal}-${String(codigoItem).trim()}-${pedidoFinal}-${dataFat}-${qStr}`;
-                    const isExcluded = prefsMap.has(keyForPref) ? prefsMap.get(keyForPref) : false;
-
-                    await pool.query(`
-                        INSERT INTO faturamento_firebird 
-                        (nota_fiscal, serie, item_nota, data_faturamento, cliente_codigo, cliente_nome, 
-                         codigo_item, descricao, quantidade, valor_unitario, valor_total, 
-                         peso_un, peso_total, status, excluido_manualmente, pedido)
-                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
-                        ON CONFLICT ON CONSTRAINT faturamento_firebird_nf_serie_item_prod_key DO UPDATE SET
-                            data_faturamento = EXCLUDED.data_faturamento,
-                            cliente_nome = EXCLUDED.cliente_nome,
-                            descricao = EXCLUDED.descricao,
-                            quantidade = EXCLUDED.quantidade,
-                            valor_unitario = EXCLUDED.valor_unitario,
-                            valor_total = EXCLUDED.valor_total,
-                            peso_un = EXCLUDED.peso_un,
-                            peso_total = EXCLUDED.peso_total,
-                            status = EXCLUDED.status,
-                            excluido_manualmente = EXCLUDED.excluido_manualmente,
-                            pedido = EXCLUDED.pedido,
-                            atualizado_em = CURRENT_TIMESTAMP
-                    `, [
-                        notaFiscal,
-                        row.SERIE_NOT ? String(row.SERIE_NOT).trim() : null,
-                        itemNota,
-                        dataFat,
-                        row.COD_CLIENTE_NOT,
-                        row.CLIENTE_NOME_NOT,
-                        codigoItem,
-                        row.NOME_PRODUTO_NPR,
-                        quantidade,
-                        centavosParaReais(row.UNITARIO_NPR),
-                        centavosParaReais(row.TOTAL_NPR),
-                        pesoUn,
-                        pesoTotal,
-                        row.STATUS_NOT,
-                        isExcluded,
-                        pedidoFinal
-                    ]);
-
-                    inserted++;
-                    if (inserted % 100 === 0) {
-                        console.log(`  ⏳ ${inserted}/${result.length} itens sincronizados...`);
-                    }
-                } catch (rowErr) {
-                    console.error(`  ❌ Erro no item NF ${row.NUMERO_NOT}:`, rowErr.message);
-                    errors++;
+                await Promise.all(promises);
+                if (inserted % 500 === 0) {
+                    process.stdout.write(`  ⏳ ${inserted}/${result.length} itens sincronizados...\r`);
                 }
             }
 
-            console.log(`\n✅ Faturamento detalhado sincronizado! Total: ${inserted} registros.`);
+            console.log(`\n✅ Faturamento detalhado sincronizado! Total: ${inserted} registros processados.`);
+            console.log(`   Erros: ${errors}`);
             resolve();
         });
     });
@@ -363,8 +395,8 @@ async function sincronizarDetalhado(fbDb) {
 async function sincronizarEstatisticas(fbDb) {
     console.log('\n📈 Sincronizando estatísticas gerais...');
 
-    const dataInicio = new Date();
-    dataInicio.setDate(dataInicio.getDate() - 90);
+    const dataInicio = new Date('2026-01-01');
+    console.log(`📈 Buscando estatísticas a partir de: ${dataInicio.toISOString().split('T')[0]}`);
 
     const query = `
         SELECT 
