@@ -17,6 +17,22 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <style>
+        function copyToClipboard(text, type) {
+            if ( !text || text==='-') return;
+
+            navigator.clipboard.writeText(text).then(()=> {
+                    showToast('Copiado!', `$ {
+                            type
+                        }
+
+                        "${text}" copiado para a área de transferência.`, 'success');
+
+                }).catch(err=> {
+                    console.error('Failed to copy: ', err);
+                    showToast('Erro', 'Falha ao copiar texto.', 'danger');
+                });
+        }
+
         /* --- BLOQUEIO DE SELEÇÃO GLOBAL --- */
         * {
             user-select: none;
@@ -504,6 +520,17 @@
         tr:hover td {
             background: rgba(255, 255, 255, 0.02);
             color: var(--color-primary);
+        }
+
+        /* Copyable Cells */
+        .copyable {
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+
+        .copyable:hover {
+            color: var(--color-primary);
+            text-decoration: underline;
         }
 
         /* Row Ignored Styling */
@@ -1028,8 +1055,8 @@
         <div class="kpi-row">
             <div class="kpi-stack-container">
                 <div class="kpi-top-tab tab-success" id="avgPriceTab">R$ -- / kg</div>
-                <div class="kpi-card attached-top kpi-success" id="cardValorTotal"
-                    onclick="toggleValorTotalVisibility()" data-visible="false" style="cursor: pointer;">
+                <div class="kpi-card attached-top kpi-success" onclick="toggleValorTotalVisibility()"
+                    data-visible="false" style="cursor: pointer;">
                     <div class="kpi-title">Valor Faturado <i class="fa-solid fa-eye-slash" id="valorEyeIcon"></i></div>
                     <div class="kpi-value" id="totalValor">R$ -----</div>
                 </div>
@@ -1106,7 +1133,7 @@
         let dailyChart = null, annualChart = null;
 
         const formatCurrency = (val) => (val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 2 });
-        const formatNumber = (val) => (val || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const formatNumber = (val, decimals = 2) => (val || 0).toLocaleString('pt-BR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
         const formatWeight = (val) => (val || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kg';
         const formatDate = (dateStr) => { if (!dateStr) return ''; const [y, m, d] = dateStr.split('-'); return `${d}/${m}/${y}`; };
 
@@ -1135,10 +1162,10 @@
             }, 4000);
         }
 
-        function copyToClipboard(text) {
+        function copyToClipboard(text, type) {
             if (!text || text === '-') return;
             navigator.clipboard.writeText(text).then(() => {
-                showToast('Copiado!', `Texto "${text}" copiado para a área de transferência.`, 'success');
+                showToast('Copiado!', `${type} "${text}" copiado para a área de transferência.`, 'success');
             }).catch(err => {
                 console.error('Failed to copy: ', err);
                 showToast('Erro', 'Falha ao copiar texto.', 'danger');
@@ -1540,22 +1567,21 @@
                 const valorUnit = isVisible ? formatCurrency(item.valorUnitario || 0) : 'R$ ---';
                 const valorTotal = isVisible ? formatCurrency(calculatedTotal) : 'R$ ---';
 
-                const isDev = (localStorage.getItem('erus_role') || 'Visitante').toLowerCase() === 'desenvolvedor';
-                const inclCell = `<td class="checkbox-cell" style="${isDev ? '' : 'display: none;'}"><input type="checkbox" ${!item.excluido_manualmente ? 'checked' : ''} onclick="toggleRowExclusion(${globalIdx})"></td>`;
+                const inclCell = `<td class="checkbox-cell" style="${isDev ? '' : 'display: none;'}" onclick="event.stopPropagation()"><input type="checkbox" ${!item.excluido_manualmente ? 'checked' : ''} onclick="toggleRowExclusion(${globalIdx})"></td>`;
 
                 return `
                 <tr class="${item.excluido_manualmente ? 'row-ignored' : ''}">
                     ${inclCell}
                     <td>${formatDate(item.data)}</td>
-                    <td><span class="clickable-code" title="Clique para copiar" onclick="copyToClipboard('${item.pedido || ''}')">${item.pedido || ''}</span></td>
+                    <td class="copyable" onclick="copyToClipboard('${item.pedido || ''}', 'Pedido')">${item.pedido || ''} <i class="fa-regular fa-copy" style="font-size:0.7em; margin-left:5px; opacity:0.5;"></i></td>
                     <td>${item.clienteCodigo || ''}</td>
                     <td>${item.clienteNome || ''}</td>
-                    <td><span class="clickable-code" title="Clique para copiar" onclick="copyToClipboard('${item.codigoItem || ''}')">${item.codigoItem || ''}</span></td>
+                    <td class="copyable" onclick="copyToClipboard('${item.codigoItem || ''}', 'Cód. Item')">${item.codigoItem || ''} <i class="fa-regular fa-copy" style="font-size:0.7em; margin-left:5px; opacity:0.5;"></i></td>
                     <td>${item.descricao || ''}</td>
-                    <td class="text-right">${formatNumber(item.quantidade)}</td>
+                    <td class="text-right">${formatNumber(item.quantidade, 0)}</td>
                     <td class="text-right">${valorUnit}</td>
-                    <td class="text-right">${formatNumber(item.pesoUn)}</td>
-                    <td class="text-right">${formatNumber(item.pesoTotal)}</td>
+                    <td class="text-right">${formatNumber(item.pesoUn, 2)}</td>
+                    <td class="text-right">${formatNumber(item.pesoTotal, 2)}</td>
                     <td class="text-right" style="color:var(--color-primary); font-weight:600;">${valorTotal}</td>
                 </tr>
             `}).join('') || '<tr><td colspan="12" style="text-align:center; padding: 20px;">Nenhum registro.</td></tr>';
