@@ -37,14 +37,16 @@ router.get('/', async (req, res) => {
         let prodMap = {};
 
         // Option A: Use Synced Production (More accurate if sync is running)
-        // Aggregating by Month-Year
+        // Aggregating by Month-Year for 2025 and 2026
+        // Using logic from producao-postgres.js to handle zero weights
         const producaoAgg = await client.query(`
             SELECT 
-                to_char(data_producao, 'YYYY-MM') as mes_ano, 
-                SUM(peso_total) as total_peso
-            FROM producao_apontada_sincronizada
-            WHERE data_producao >= '2025-01-01'
-              AND setor = 'FUSÃO'
+                to_char(t.data_producao, 'YYYY-MM') as mes_ano, 
+                SUM(t.quantidade * COALESCE(NULLIF(t.peso_un, 0), p.peso, 0)) as total_peso
+            FROM producao_apontada_sincronizada t
+            LEFT JOIN produto_pesos_producao p ON t.codigo_peca = p.codigo_peca
+            WHERE t.data_producao >= '2025-01-01'
+              AND t.setor = 'FUSAO'
             GROUP BY 1
         `);
 
