@@ -73,6 +73,11 @@ function chunkArray(myArray, chunk_size) {
                 EXCEPTION
                     WHEN duplicate_column THEN NULL;
                 END;
+                BEGIN
+                    ALTER TABLE refugo_apontado_sincronizado ADD COLUMN motivo VARCHAR(255);
+                EXCEPTION
+                    WHEN duplicate_column THEN NULL;
+                END;
             END $$;
         `);
         console.log('✅ Postgres table ready.');
@@ -93,7 +98,8 @@ function chunkArray(myArray, chunk_size) {
                     DATA_PCS,
                     QUANTIDADE_REFUGO_PCS,
                     LOTE_PCS,
-                    SETOR_PCS
+                    SETOR_PCS,
+                    REF_CODIGO_PCS
                 FROM PRODUCAO_SETOR
                 WHERE DATA_PCS >= '2025-01-01'
                   AND QUANTIDADE_REFUGO_PCS > 0
@@ -121,10 +127,14 @@ function chunkArray(myArray, chunk_size) {
                 const opIds = [...new Set(productionRows.map(p => p.CODIGO_PCS).filter(id => id))];
                 console.log(`ℹ️ Unique IDs - OP: ${opIds.length}`);
 
+                const refugoIds = [...new Set(productionRows.map(p => p.REF_CODIGO_PCS).filter(id => id))];
+                console.log(`ℹ️ Unique IDs - REFUGO: ${refugoIds.length}`);
+
                 // 3. Fetch Lookup Data
                 const lookupSET = {};
                 const lookupPRODUCAO = {};
                 const lookupPRODUTO = {};
+                const lookupREFUGO = {};
 
                 const fetchMap = (ids, table, pk, cols, targetMap) => {
                     return new Promise((resolve, reject) => {
@@ -159,6 +169,11 @@ function chunkArray(myArray, chunk_size) {
                         await fetchMap(productIds, 'PRODUTO', 'CODIGO_PRO', 'NOME_PRO, REFERENCIA_PRO, PESO_LIQUIDO_PRO', lookupPRODUTO);
                     }
 
+                    // 3.4 Fetch REFUGO (Reasons)
+                    if (refugoIds.length > 0) {
+                        await fetchMap(refugoIds, 'REFUGO', 'CODIGO_REF', 'NOME_REF', lookupREFUGO);
+                    }
+
                     // Attach lookups
                     productionRows.forEach(row => {
                         row._producao = lookupPRODUCAO[row.CODIGO_PCS];
@@ -180,6 +195,7 @@ function chunkArray(myArray, chunk_size) {
                 for (const pcs of productionRows) {
                     try {
                         const set = lookupSET[pcs.SETOR_PCS] || {};
+                        const ref = lookupREFUGO[pcs.REF_CODIGO_PCS] || {};
                         const dataRefugo = parseDate(pcs.DATA_PCS);
 
                         // Validation
@@ -187,6 +203,7 @@ function chunkArray(myArray, chunk_size) {
 
                         const chaveOrigem = `REF-PCS-${pcs.ID_PCS}`;
                         const setor = cleanString(set.NOME_SET) || 'DESCONHECIDO';
+                        const motivo = cleanString(ref.NOME_REF) || 'NAO INFORMADO';
                         const lote = cleanString(pcs.LOTE_PCS) || '';
 
                         const op = pcs.CODIGO_PCS ? String(pcs.CODIGO_PCS) : null;
@@ -209,8 +226,8 @@ function chunkArray(myArray, chunk_size) {
 
                         await pool.query(`
                             INSERT INTO refugo_apontado_sincronizado 
-                            (chave_origem, data_refugo, setor, produto, codigo_peca, lote, quantidade, peso_un, peso_total, op, atualizado_em)
-                            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP)
+                            (chave_origem, data_refugo, setor, produto, codigo_peca, lote, quantidade, peso_un, peso_total, op, motivo, atualizado_em)
+                            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP)
                             ON CONFLICT (chave_origem) DO UPDATE SET
                                 data_refugo = EXCLUDED.data_refugo,
                                 setor = EXCLUDED.setor,
@@ -221,8 +238,9 @@ function chunkArray(myArray, chunk_size) {
                                 peso_un = EXCLUDED.peso_un,
                                 peso_total = EXCLUDED.peso_total,
                                 op = EXCLUDED.op,
+                                motivo = EXCLUDED.motivo,
                                 atualizado_em = CURRENT_TIMESTAMP
-                        `, [chaveOrigem, dataRefugo, setor, produtoName, produtoCode, lote, quantidade, pesoUn, pesoTotal, op]);
+                        `, [chaveOrigem, dataRefugo, setor, produtoName, produtoCode, lote, quantidade, pesoUn, pesoTotal, op, motivo]);
 
                         inserted++;
                         if (inserted % 100 === 0) process.stdout.write('.');
