@@ -404,6 +404,127 @@
             flex: 1;
             overflow: auto;
         }
+
+        /* TOAST NOTIFICATION */
+        .toast-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 10000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .toast {
+            min-width: 300px;
+            background: #18181b;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 16px;
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+            animation: slideIn 0.3s ease-out;
+            color: #fff;
+        }
+
+        .toast.success {
+            border-left: 4px solid #10b981;
+        }
+
+        .toast.danger {
+            border-left: 4px solid #ef4444;
+        }
+
+        .toast.info {
+            border-left: 4px solid #3b82f6;
+        }
+
+        .toast-icon {
+            font-size: 1.2rem;
+            margin-top: 2px;
+        }
+
+        .toast.success .toast-icon {
+            color: #10b981;
+        }
+
+        .toast.danger .toast-icon {
+            color: #ef4444;
+        }
+
+        .toast.info .toast-icon {
+            color: #3b82f6;
+        }
+
+        .toast-content {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .toast-title {
+            font-weight: 600;
+            font-size: 0.95rem;
+            margin-bottom: 2px;
+        }
+
+        .toast-subtitle {
+            font-size: 0.85rem;
+            color: #a1a1aa;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        @keyframes fadeOut {
+            from {
+                opacity: 1;
+            }
+
+            to {
+                opacity: 0;
+            }
+        }
+
+        /* Copyable Cells */
+        .copyable {
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+
+        .copyable:hover {
+            color: var(--color-primary);
+            text-decoration: underline;
+        }
+
+        /* Column Filters */
+        .col-filter {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border-subtle);
+            border-radius: 4px;
+            padding: 4px 8px;
+            color: #fff;
+            width: 100%;
+            font-size: 0.7rem;
+            margin-top: 5px;
+            font-family: var(--font-mono);
+        }
+
+        .col-filter:focus {
+            outline: none;
+            border-color: var(--color-primary);
+        }
     </style>
 </head>
 
@@ -492,25 +613,29 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h2 style="color: var(--color-primary); margin:0;">Registros Detalhados</h2>
-                <div style="flex:1; display:flex; justify-content:center; padding: 0 20px;">
-                    <input type="text" id="tableSearchInput" placeholder="Filtrar (OP, Peça, Produto, Lote...)"
-                        onkeyup="filterTable()"
-                        style="background:rgba(255,255,255,0.05); border:1px solid var(--border-subtle); padding:8px 16px; color:#fff; border-radius:6px; width:100%; max-width: 400px; font-family: var(--font-main);">
-                </div>
+
                 <button class="close-btn" onclick="closeTableModal()">&times;</button>
             </div>
             <div class="table-scroll">
                 <table id="dataTable">
                     <thead>
                         <tr>
-                            <th>Data</th>
-                            <th>OP</th>
-                            <th>Cód. Peça</th>
-                            <th>Produto</th>
-                            <th>Lote</th>
-                            <th>Qtd</th>
-                            <th>Peso Un (kg)</th>
-                            <th>Peso Total (kg)</th>
+                            <th>Data<br><input type="text" class="col-filter" onkeyup="filterTable()"
+                                    placeholder="Filtro..."></th>
+                            <th>OP<br><input type="text" class="col-filter" onkeyup="filterTable()"
+                                    placeholder="Filtro..."></th>
+                            <th>Cód. Peça<br><input type="text" class="col-filter" onkeyup="filterTable()"
+                                    placeholder="Filtro..."></th>
+                            <th>Produto<br><input type="text" class="col-filter" onkeyup="filterTable()"
+                                    placeholder="Filtro..."></th>
+                            <th>Lote<br><input type="text" class="col-filter" onkeyup="filterTable()"
+                                    placeholder="Filtro..."></th>
+                            <th>Qtd<br><input type="text" class="col-filter" onkeyup="filterTable()"
+                                    placeholder="Filtro..."></th>
+                            <th>Peso Un (kg)<br><input type="text" class="col-filter" onkeyup="filterTable()"
+                                    placeholder="Exato..."></th>
+                            <th>Peso Total (kg)<br><input type="text" class="col-filter" onkeyup="filterTable()"
+                                    placeholder="Filtro..."></th>
                         </tr>
                     </thead>
                     <tbody></tbody>
@@ -618,24 +743,85 @@
             // Clear filter when closing? Optional.
         }
 
-        function filterTable() {
-            const input = document.getElementById('tableSearchInput');
-            const filter = input.value.toUpperCase();
-            const table = document.getElementById('dataTable');
-            const tr = table.getElementsByTagName('tr');
 
-            for (let i = 1; i < tr.length; i++) {
-                let show = false;
+
+        function filterTable() {
+            const table = document.getElementById('dataTable');
+            const inputs = table.querySelectorAll('.col-filter');
+            const tr = table.getElementsByTagName('tbody')[0].getElementsByTagName('tr');
+
+            for (let i = 0; i < tr.length; i++) {
+                let show = true;
                 const tds = tr[i].getElementsByTagName('td');
+
                 for (let j = 0; j < tds.length; j++) {
-                    const txtValue = tds[j].textContent || tds[j].innerText;
-                    if (txtValue.toUpperCase().indexOf(filter) > -1) {
-                        show = true;
-                        break;
+                    const input = inputs[j];
+                    if (!input) continue;
+
+                    const filterVal = input.value.toUpperCase();
+                    if (!filterVal) continue; // No filter for this column
+
+                    const txtValue = (tds[j].textContent || tds[j].innerText).toUpperCase();
+
+                    // Specific Logic for Peso Un (Index 6) -> Exact Match
+                    if (j === 6) {
+                        // Exact match logic (comparing strings)
+                        if (txtValue !== filterVal) {
+                            show = false;
+                            break;
+                        }
+                    } else {
+                        // Contains logic for others
+                        if (txtValue.indexOf(filterVal) === -1) {
+                            show = false;
+                            break;
+                        }
                     }
                 }
                 tr[i].style.display = show ? '' : 'none';
             }
+        }
+
+        function copyToClipboard(text, type) {
+            if (!text || text === '-') return;
+            navigator.clipboard.writeText(text).then(() => {
+                showToast('Copiado!', `${type} "${text}" copiado para a área de transferência.`, 'success');
+            }).catch(err => {
+                console.error('Failed to copy: ', err);
+                showToast('Erro', 'Falha ao copiar texto.', 'danger');
+            });
+        }
+
+        function showToast(title, subtitle, type = 'info') {
+            let container = document.getElementById('toast-container');
+            if (!container) {
+                container = document.createElement('div');
+                container.id = 'toast-container';
+                container.className = 'toast-container';
+                document.body.appendChild(container);
+            }
+
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+
+            const icon = type === 'danger' ? '<i class="fa-solid fa-ban toast-icon"></i>' : (type === 'success' ? '<i class="fa-solid fa-check-circle toast-icon"></i>' : '<i class="fa-solid fa-circle-info toast-icon"></i>');
+
+            toast.innerHTML = `
+                ${icon} 
+                <div class="toast-content">
+                    <span class="toast-title">${title}</span>
+                    <span class="toast-subtitle">${subtitle}</span>
+                </div>
+            `;
+
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.style.animation = 'fadeOut 0.5s ease-out forwards';
+                setTimeout(() => {
+                    if (toast.parentNode) toast.parentNode.removeChild(toast);
+                }, 500);
+            }, 4000);
         }
 
         // --- DATA PROCESSING ---

@@ -37,14 +37,14 @@ router.get('/', async (req, res) => {
 
         // Option A: Use Synced Production (More accurate if sync is running)
         // Aggregating by Month-Year
-        const producaoAgg = await client.query(`
-            SELECT 
-                to_char(data_producao, 'YYYY-MM') as mes_ano, 
-                SUM(peso_total) as total_peso
+        SELECT
+        to_char(data_producao, 'YYYY-MM') as mes_ano,
+            SUM(peso_total) as total_peso
             FROM producao_apontada_sincronizada
             WHERE data_producao >= '2025-01-01'
+              AND setor = 'FUSÃO'
             GROUP BY 1
-        `);
+            `);
 
         producaoAgg.rows.forEach(r => {
             prodMap[r.mes_ano] = parseFloat(r.total_peso);
