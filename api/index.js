@@ -70,7 +70,8 @@ app.use('/api/faturamento', faturamento);
 app.use('/api/faturamento-clientes-detalhado', fatDetalhado);
 app.use('/api/metas', metas);
 app.use('/api/producao-apontada', producaoApontada);
-app.use('/api/refugo', refugo);
+app.use('/api/refugo', refugo); // Legacy
+app.use('/api/refugos-new', require('../src/refugos')); // NEW: Data from Firebird Sync
 app.use('/api/register', register);
 app.use('/api/custos', custosRoutes);
 app.use('/api/pedidos-sync', require('../src/pedidos-sync'));

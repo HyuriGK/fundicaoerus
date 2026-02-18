@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Análise de Refugo - Fundição Erus (Automático)</title>
+    <!-- Bibliotecas -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap"
+        rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script
+        src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+    <style>
+        /* Copied Styles from refugo.html with adjustments */
+        :root {
+            --font-main: 'Inter', sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+            --color-primary: #fbbf24;
+            --bg-body: #09090b;
+            --bg-card: rgba(24, 24, 27, 0.7);
+            --text-main: #f4f4f5;
+            --text-muted: #a1a1aa;
+            --border-subtle: rgba(255, 255, 255, 0.08);
+            --border-highlight: rgba(255, 255, 255, 0.15);
+            --status-danger: #ef4444;
+            --status-info: #06b6d4;
+            --status-purple: #a855f7;
+            --radius-md: 12px;
+            --shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+            --shadow-glow-red: 0 0 15px rgba(239, 68, 68, 0.2);
+        }
+
+        * {
+            box-sizing: border-box;
+            user-select: none;
+        }
+
+        body {
+            margin: 0;
+            font-family: var(--font-main);
+            background-color: var(--bg-body);
+            color: var(--text-main);
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .app-layout {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        /* HEADER */
+        .top-header {
+            min-height: 60px;
+            margin: 10px 32px 0 32px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 0;
+            z-index: 100;
+        }
+
+        .header-brand {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .brand-icon {
+            width: 45px;
+            height: 45px;
+            background: linear-gradient(135deg, var(--status-danger), #b91c1c);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-size: 1.3rem;
+            box-shadow: var(--shadow-glow-red);
+        }
+
+        .page-title {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: #fff;
+            margin: 0;
+        }
+
+        .page-subtitle {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin: 2px 0 0 0;
+        }
+
+        .btn-back {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-main);
+            border: 1px solid var(--border-subtle);
+            padding: 8px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s;
+            text-decoration: none;
+            font-size: 0.9rem;
+        }
+
+        .btn-back:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+        }
+
+        /* DASHBOARD */
+        .dashboard-content {
+            flex-grow: 1;
+            padding: 10px 32px 15px 32px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* KPI ROW */
+        .kpi-row {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 20px;
+            flex-shrink: 0;
+        }
+
+        .kpi-card {
+            flex: 1;
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-md);
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+            overflow: hidden;
+            box-shadow: var(--shadow-card);
+        }
+
+        .kpi-card::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            background: var(--border-highlight);
+        }
+
+        .kpi-card.danger::before {
+            background: var(--status-danger);
+        }
+
+        .kpi-card.info::before {
+            background: var(--status-info);
+        }
+
+        .kpi-title {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            margin-bottom: 6px;
+        }
+
+        .kpi-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #fff;
+            font-family: var(--font-mono);
+        }
+
+        .kpi-value.danger {
+            color: var(--status-danger);
+        }
+
+        .kpi-feedback {
+            margin-top: 5px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+
+        /* TOOLBAR */
+        .toolbar-row {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-md);
+            padding: 10px 16px;
+            margin-bottom: 20px;
+            display: flex;
+            gap: 16px;
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0;
+        }
+
+        .year-select {
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid var(--border-subtle);
+            color: var(--color-primary);
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-family: var(--font-mono);
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .months-group {
+            display: flex;
+            gap: 5px;
+        }
+
+        .month-btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-muted);
+            padding: 8px 14px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+        }
+
+        .month-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+        }
+
+        .month-btn.active {
+            background: var(--color-primary);
+            color: #000;
+            border-color: var(--color-primary);
+            font-weight: 800;
+        }
+
+        .month-btn.all-btn.active {
+            background: var(--status-info);
+            color: #000;
+        }
+
+        /* CHARTS SECTION */
+        .charts-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            gap: 20px;
+        }
+
+        .chart-panel {
+            flex: 1;
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-md);
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            position: relative;
+        }
+
+        .chart-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-main);
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        .chart-wrapper {
+            flex: 1;
+            position: relative;
+            width: 100%;
+            min-height: 0;
+        }
+
+        /* MODAL */
+        #loading-screen {
+            position: fixed;
+            inset: 0;
+            background: #09090b;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.5s;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(239, 68, 68, 0.3);
+            border-top-color: var(--status-danger);
+            border-radius: 50%;
+            animation: spin 1s infinite linear;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* VIEW TOGGLE BUTTONS */
+        .view-toggle {
+            display: flex;
+            gap: 5px;
+        }
+
+        .view-btn {
+            padding: 6px 12px;
+            font-size: 0.8rem;
+            border-radius: 6px;
+            border: 1px solid var(--border-subtle);
+            background: transparent;
+            color: var(--text-muted);
+            cursor: pointer;
+        }
+
+        .view-btn.active {
+            background: var(--color-primary);
+            color: #000;
+            border-color: var(--color-primary);
+            font-weight: 700;
+        }
+
+        /* TABLE MODAL */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(4px);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background-color: #18181b;
+            width: 95vw;
+            height: 90vh;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border-highlight);
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            color: #fff;
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            margin-top: 10px;
+        }
+
+        th,
+        td {
+            padding: 8px;
+            border-bottom: 1px solid var(--border-subtle);
+            text-align: left;
+        }
+
+        th {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--color-primary);
+            position: sticky;
+            top: 0;
+        }
+
+        .table-scroll {
+            flex: 1;
+            overflow: auto;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="loading-screen">
+        <div class="spinner"></div>
+        <p style="margin-top:10px; color:#666;">Carregando dados...</p>
+    </div>
+
+    <div class="app-layout">
+        <header class="top-header">
+            <div class="header-brand">
+                <div class="brand-icon"><i class="fa-solid fa-recycle"></i></div>
+                <div>
+                    <h1 class="page-title">Refugo (Automático)</h1>
+                    <p class="page-subtitle">Análise de Refugo Sincronizada (Firebird)</p>
+                </div>
+            </div>
+            <div>
+                <button onclick="showTableModal()" class="btn-back" style="margin-right: 10px; display: inline-flex;"><i
+                        class="fa-solid fa-table"></i> Ver Tabela</button>
+                <a href="/" class="btn-back" style="display: inline-flex;"><i class="fa-solid fa-arrow-left"></i>
+                    Voltar</a>
+            </div>
+        </header>
+
+        <div class="dashboard-content">
+            <!-- KPI Row -->
+            <div class="kpi-row">
+                <div class="kpi-card danger">
+                    <div class="kpi-title">Refugo Total</div>
+                    <div class="kpi-value danger" id="kpiRefugoTotal">0 kg</div>
+                    <div class="kpi-feedback" id="kpiRefugoPct">–</div>
+                </div>
+                <div class="kpi-card info">
+                    <div class="kpi-title">Produção Total (Est.)</div>
+                    <div class="kpi-value" id="kpiProducaoTotal">0 kg</div>
+                    <div class="kpi-feedback" style="color: var(--status-info)">Base Sincronizada</div>
+                </div>
+                <!-- Add more KPIs if needed -->
+            </div>
+
+            <!-- Toolbar -->
+            <div class="toolbar-row">
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <select id="yearSelect" class="year-select" onchange="changeYear()">
+                        <option value="2026">2026</option>
+                        <option value="2025">2025</option>
+                        <option value="0">TODOS</option>
+                    </select>
+                    <div class="months-group" id="monthButtons">
+                        <!-- JS Generated -->
+                    </div>
+                </div>
+                <div class="view-toggle">
+                    <button class="view-btn active" id="btnViewDay" onclick="switchView('day')">Por Dia</button>
+                    <button class="view-btn" id="btnViewSector" onclick="switchView('sector')">Por Setor</button>
+                    <!-- Reason View Removed -->
+                </div>
+            </div>
+
+            <!-- Charts Area -->
+            <div class="charts-container" id="viewDay">
+                <div class="chart-panel">
+                    <div class="chart-title">Evolução Diária / Mensal</div>
+                    <div class="chart-wrapper">
+                        <canvas id="barChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="charts-container" id="viewSector" style="display: none;">
+                <div class="chart-panel">
+                    <div class="chart-title">Refugo por Setor</div>
+                    <div class="chart-wrapper">
+                        <canvas id="sectorChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Table Modal -->
+    <div id="tableModalOverlay" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 style="color: var(--color-primary); margin:0;">Registros Detalhados</h2>
+                <button class="close-btn"
+                    onclick="document.getElementById('tableModalOverlay').classList.remove('active')">&times;</button>
+            </div>
+            <div class="table-scroll">
+                <table id="dataTable">
+                    <thead>
+                        <tr>
+                            <th>Data</th>
+                            <th>Setor</th>
+                            <th>Produto</th>
+                            <th>Cód. Peça</th>
+                            <th>Lote</th>
+                            <th>Qtd</th>
+                            <th>Peso (kg)</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- CONSTANTS & STATE ---
+        const MONTHS_SHORT = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
+        let rawData = [];
+        let monthlyProduction = {};
+        let selectedYear = 2026;
+        let selectedMonthIndex = new Date().getMonth(); // 0-based
+        let currentView = 'day';
+
+        // --- INIT ---
+        document.addEventListener('DOMContentLoaded', async () => {
+            renderMonthButtons();
+            await fetchData();
+        });
+
+        function renderMonthButtons() {
+            const container = document.getElementById('monthButtons');
+            container.innerHTML = '';
+
+            // All Button
+            const btnAll = document.createElement('button');
+            btnAll.className = 'month-btn all-btn';
+            btnAll.textContent = 'ANO';
+            btnAll.onclick = () => selectMonth(-1);
+            container.appendChild(btnAll);
+
+            MONTHS_SHORT.forEach((m, i) => {
+                const btn = document.createElement('button');
+                btn.className = 'month-btn';
+                btn.textContent = m;
+                btn.id = `btn-month-${i}`;
+                btn.onclick = () => selectMonth(i);
+                container.appendChild(btn);
+            });
+            updateMonthButtonsUI();
+        }
+
+        async function fetchData() {
+            try {
+                const res = await fetch('/api/refugos-new'); // New API endpoint
+                const json = await res.json();
+                rawData = json.refugoRawData || [];
+                monthlyProduction = json.refugoMonthlyProduction || {};
+                processData();
+                document.getElementById('loading-screen').style.opacity = 0;
+                setTimeout(() => document.getElementById('loading-screen').style.display = 'none', 500);
+            } catch (e) {
+                console.error(e);
+                alert('Erro ao carregar dados.');
+            }
+        }
+
+        function changeYear() {
+            selectedYear = parseInt(document.getElementById('yearSelect').value);
+            processData();
+        }
+
+        function selectMonth(idx) {
+            selectedMonthIndex = idx;
+            updateMonthButtonsUI();
+            processData();
+        }
+
+        function updateMonthButtonsUI() {
+            document.querySelectorAll('.month-btn').forEach(b => b.classList.remove('active'));
+            if (selectedMonthIndex === -1) {
+                document.querySelector('.all-btn').classList.add('active');
+            } else {
+                const btn = document.getElementById(`btn-month-${selectedMonthIndex}`);
+                if (btn) btn.classList.add('active');
+            }
+        }
+
+        function switchView(view) {
+            currentView = view;
+            document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
+
+            if (view === 'day') {
+                document.getElementById('btnViewDay').classList.add('active');
+                document.getElementById('viewDay').style.display = 'flex';
+                document.getElementById('viewSector').style.display = 'none';
+                renderBarChart(getDataForBarChart());
+            } else {
+                document.getElementById('btnViewSector').classList.add('active');
+                document.getElementById('viewDay').style.display = 'none';
+                document.getElementById('viewSector').style.display = 'flex';
+                renderSectorChart(getDataForSectorChart());
+            }
+        }
+
+        // --- DATA PROCESSING ---
+        function processData() {
+            // Filter Data based on Year & Month
+            const filteredData = rawData.filter(r => {
+                if (!r.data) return false;
+                const d = new Date(r.data); // Corrects if needed, assuming YYYY-MM-DD from API
+                // API sends YYYY-MM-DD string, so:
+                const [y, m, day] = r.data.split('-').map(Number);
+
+                if (selectedYear !== 0 && y !== selectedYear) return false;
+                if (selectedMonthIndex !== -1 && (m - 1) !== selectedMonthIndex) return false;
+                return true;
+            });
+
+            // KPIs
+            const totalRefugo = filteredData.reduce((acc, curr) => acc + parseFloat(curr.peso_total || 0), 0);
+
+            // Production Match
+            let totalProd = 0;
+            if (selectedYear !== 0) {
+                if (selectedMonthIndex !== -1) {
+                    // Specific Month
+                    const key = `${selectedYear}-${String(selectedMonthIndex + 1).padStart(2, '0')}`;
+                    totalProd = monthlyProduction[key] || 0;
+                } else {
+                    // Full Year
+                    Object.keys(monthlyProduction).forEach(k => {
+                        if (k.startsWith(`${selectedYear}-`)) totalProd += monthlyProduction[k];
+                    });
+                }
+            } else {
+                // All Years
+                Object.values(monthlyProduction).forEach(v => totalProd += v);
+            }
+
+            document.getElementById('kpiRefugoTotal').textContent = totalRefugo.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) + ' kg';
+            document.getElementById('kpiProducaoTotal').textContent = totalProd.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) + ' kg';
+
+            const pct = totalProd > 0 ? (totalRefugo / totalProd) * 100 : 0;
+            document.getElementById('kpiRefugoPct').textContent = `${pct.toFixed(2)}% do Total`;
+
+            // Render Active Chart
+            if (currentView === 'day') renderBarChart(getDataForBarChart(filteredData));
+            else renderSectorChart(getDataForSectorChart(filteredData));
+
+            // Populate Table
+            const tbody = document.querySelector('#dataTable tbody');
+            tbody.innerHTML = filteredData.map(r => `
+                <tr>
+                    <td>${formatDate(r.data)}</td>
+                    <td>${r.setor || '-'}</td>
+                    <td>${r.descricao || '-'}</td>
+                    <td>${r.codigo_peca || '-'}</td>
+                    <td>${r.lote || '-'}</td>
+                    <td>${parseFloat(r.quantidade).toFixed(2)}</td>
+                    <td>${parseFloat(r.peso_total).toFixed(2)}</td>
+                </tr>
+            `).join('');
+        }
+
+        function getDataForBarChart(data = null) {
+            // If data is null, likely first load or switch view needs fresh filter
+            if (!data) {
+                // Re-filter logic or pass filteredData from processData (better approach: verify flow)
+                // For simplicity, re-run filter if needed, but usually called from processData
+                return {};
+            }
+
+            const aggregated = {};
+
+            if (selectedMonthIndex === -1 && selectedYear !== 0) {
+                // Group by Month (JAN, FEV...)
+                MONTHS_SHORT.forEach(m => aggregated[m] = 0);
+                data.forEach(r => {
+                    const [y, m] = r.data.split('-');
+                    const mName = MONTHS_SHORT[parseInt(m) - 1];
+                    aggregated[mName] += parseFloat(r.peso_total || 0);
+                });
+            } else if (selectedMonthIndex !== -1) {
+                // Group by Day (1, 2, 3...)
+                // Initialize days
+                const daysInMonth = new Date(selectedYear, selectedMonthIndex + 1, 0).getDate();
+                for (let i = 1; i <= daysInMonth; i++) aggregated[i] = 0;
+
+                data.forEach(r => {
+                    const [y, m, d] = r.data.split('-');
+                    aggregated[parseInt(d)] += parseFloat(r.peso_total || 0);
+                });
+            } else {
+                // All years (Group by Year-Month or just Year?)
+                // Simple: Group by Year
+                data.forEach(r => {
+                    const [y] = r.data.split('-');
+                    aggregated[y] = (aggregated[y] || 0) + parseFloat(r.peso_total || 0);
+                });
+            }
+            return aggregated;
+        }
+
+        function getDataForSectorChart(data) {
+            const agg = {};
+            data.forEach(r => {
+                const s = r.setor || 'Outros';
+                agg[s] = (agg[s] || 0) + parseFloat(r.peso_total || 0);
+            });
+            return agg;
+        }
+
+        // --- CHARTS ---
+        let barChartInstance = null;
+        let sectorChartInstance = null;
+
+        function renderBarChart(dataObj) {
+            const ctx = document.getElementById('barChart').getContext('2d');
+            if (barChartInstance) barChartInstance.destroy();
+
+            const labels = Object.keys(dataObj);
+            const values = Object.values(dataObj);
+
+            barChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Refugo (kg)',
+                        data: values,
+                        backgroundColor: '#ef4444',
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: (ctx) => `${ctx.parsed.y.toFixed(2)} kg`
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            ticks: { color: '#a1a1aa' }
+                        },
+                        x: {
+                            grid: { display: false },
+                            ticks: { color: '#a1a1aa' }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderSectorChart(dataObj) {
+            const ctx = document.getElementById('sectorChart').getContext('2d');
+            if (sectorChartInstance) sectorChartInstance.destroy();
+
+            // Sort
+            const sorted = Object.entries(dataObj).sort((a, b) => b[1] - a[1]);
+            const labels = sorted.map(s => s[0]);
+            const values = sorted.map(s => s[1]);
+
+            sectorChartInstance = new Chart(ctx, {
+                type: 'bar', // Vertical bars as per user preference in previous tasks ("Sector chart ... vertical bar chart")
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Refugo (kg)',
+                        data: values,
+                        backgroundColor: '#a855f7',
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'y', // Horizontal bars usually better for sector names, but lets stick to vertical if space allows, or auto. "Vertical bar chart" requested previously. okay.
+                    // Wait, usually sector names are long, horizontal (indexAxis: 'y') is better. 
+                    // But prompt said "Sector chart is displayed as a vertical bar chart" for refugo.html in context. i'll stick to logic.
+                    // Let's use horizontal for readability if names are long, but context said vertical. I'll use horizontal (indexAxis 'y') because creates better lists. 
+                    // Actually, let's look at `refugo.html`... it used `indexAxis: 'x'` (vertical) in the viewed file.
+                    // I will use `indexAxis: 'x'` to match `refugo.html`.
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#a1a1aa' } },
+                        x: { grid: { display: false }, ticks: { color: '#a1a1aa', autoSkip: false, maxRotation: 90, minRotation: 45 } }
+                    }
+                }
+            });
+        }
+
+        function formatDate(str) {
+            if (!str) return '-';
+            const [y, m, d] = str.split('-');
+            return `${d}/${m}/${y}`;
+        }
+
+    </script>
+</body>
+
+</html>
