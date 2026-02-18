@@ -615,7 +615,7 @@
                 <div class="view-toggle">
                     <button class="view-btn active" id="btnViewDay" onclick="switchView('day')">Por Dia</button>
                     <button class="view-btn" id="btnViewSector" onclick="switchView('sector')">Por Setor</button>
-                    <!-- Reason View Removed -->
+                    <button class="view-btn" id="btnViewReason" onclick="switchView('reason')">Por Motivo</button>
                 </div>
             </div>
 
@@ -631,9 +631,18 @@
 
             <div class="charts-container" id="viewSector" style="display: none;">
                 <div class="chart-panel">
-                    <div class="chart-title">Refugo por Setor</div>
+                    <div class="chart-title">Refugo por Setor (Top 5)</div>
                     <div class="chart-wrapper">
                         <canvas id="sectorChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="charts-container" id="viewReason" style="display: none;">
+                <div class="chart-panel">
+                    <div class="chart-title">Refugo por Motivo (Top 5)</div>
+                    <div class="chart-wrapper">
+                        <canvas id="reasonChart"></canvas>
                     </div>
                 </div>
             </div>
@@ -689,6 +698,7 @@
         let selectedYear = 2026;
         let selectedMonthIndex = new Date().getMonth(); // 0-based
         let currentView = 'day';
+        let currentFilteredData = []; // Store for view switching
 
         // --- INIT ---
         document.addEventListener('DOMContentLoaded', async () => {
@@ -761,20 +771,28 @@
             }
         }
 
+        // --- VIEW TOGGLE ---
         function switchView(view) {
             currentView = view;
             document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
 
+            // Reset Displays
+            document.getElementById('viewDay').style.display = 'none';
+            document.getElementById('viewSector').style.display = 'none';
+            document.getElementById('viewReason').style.display = 'none';
+
             if (view === 'day') {
                 document.getElementById('btnViewDay').classList.add('active');
                 document.getElementById('viewDay').style.display = 'flex';
-                document.getElementById('viewSector').style.display = 'none';
-                renderBarChart(getDataForBarChart());
-            } else {
+                renderBarChart(getDataForBarChart(currentFilteredData)); // Use cached filtered data
+            } else if (view === 'sector') {
                 document.getElementById('btnViewSector').classList.add('active');
-                document.getElementById('viewDay').style.display = 'none';
                 document.getElementById('viewSector').style.display = 'flex';
-                renderSectorChart(getDataForSectorChart());
+                renderPieChart('sectorChart', getDataForTop5(currentFilteredData, 'setor'), 'Setor');
+            } else if (view === 'reason') {
+                document.getElementById('btnViewReason').classList.add('active');
+                document.getElementById('viewReason').style.display = 'flex';
+                renderPieChart('reasonChart', getDataForTop5(currentFilteredData, 'motivo'), 'Motivo');
             }
         }
 
@@ -873,14 +891,14 @@
             // Filter Data based on Year & Month
             const filteredData = rawData.filter(r => {
                 if (!r.data) return false;
-                const d = new Date(r.data); // Corrects if needed, assuming YYYY-MM-DD from API
-                // API sends YYYY-MM-DD string, so:
-                const [y, m, day] = r.data.split('-').map(Number);
+                const [y, m] = r.data.split('-').map(Number);
 
                 if (selectedYear !== 0 && y !== selectedYear) return false;
                 if (selectedMonthIndex !== -1 && (m - 1) !== selectedMonthIndex) return false;
                 return true;
             });
+
+            currentFilteredData = filteredData; // Update cache
 
             // KPIs
             const totalRefugo = filteredData.reduce((acc, curr) => acc + parseFloat(curr.peso_total || 0), 0);
@@ -911,7 +929,8 @@
 
             // Render Active Chart
             if (currentView === 'day') renderBarChart(getDataForBarChart(filteredData));
-            else renderSectorChart(getDataForSectorChart(filteredData));
+            else if (currentView === 'sector') renderPieChart('sectorChart', getDataForTop5(filteredData, 'setor'), 'Setor');
+            else if (currentView === 'reason') renderPieChart('reasonChart', getDataForTop5(filteredData, 'motivo'), 'Motivo');
 
             // Populate Table
             const tbody = document.querySelector('#dataTable tbody');
@@ -950,7 +969,7 @@
                 data.forEach(r => {
                     const [y, m] = r.data.split('-');
                     const mName = MONTHS_SHORT[parseInt(m) - 1];
-                    aggregated[mName] += parseFloat(r.peso_total || 0);
+                    aggregated[mName] = (aggregated[mName] || 0) + parseFloat(r.peso_total || 0);
                 });
             } else if (selectedMonthIndex !== -1) {
                 // Group by Day (1, 2, 3...)
@@ -960,7 +979,7 @@
 
                 data.forEach(r => {
                     const [y, m, d] = r.data.split('-');
-                    aggregated[parseInt(d)] += parseFloat(r.peso_total || 0);
+                    aggregated[parseInt(d)] = (aggregated[parseInt(d)] || 0) + parseFloat(r.peso_total || 0);
                 });
             } else {
                 // All years (Group by Year-Month or just Year?)
@@ -973,18 +992,36 @@
             return aggregated;
         }
 
-        function getDataForSectorChart(data) {
+        function getDataForTop5(data, field) {
             const agg = {};
+            let total = 0;
             data.forEach(r => {
-                const s = r.setor || 'Outros';
-                agg[s] = (agg[s] || 0) + parseFloat(r.peso_total || 0);
+                const key = r[field] || 'Outros';
+                const val = parseFloat(r.peso_total || 0);
+                agg[key] = (agg[key] || 0) + val;
+                total += val;
             });
-            return agg;
+
+            // Convert to array and sort
+            let sorted = Object.entries(agg).sort((a, b) => b[1] - a[1]);
+
+            // Take Top 5
+            const top5 = sorted.slice(0, 5);
+
+            // Calculate 'Outros' if there represent rest
+            const top5Total = top5.reduce((sum, item) => sum + item[1], 0);
+            const others = total - top5Total;
+
+            if (others > 0.01) { // Avoid tiny floating point residuals
+                top5.push(['Outros', others]);
+            }
+
+            return Object.fromEntries(top5);
         }
 
         // --- CHARTS ---
         let barChartInstance = null;
-        let sectorChartInstance = null;
+        let pieCharts = {}; // Store instances by canvas ID
 
         function renderBarChart(dataObj) {
             const ctx = document.getElementById('barChart').getContext('2d');
@@ -1011,7 +1048,7 @@
                         legend: { display: false },
                         tooltip: {
                             callbacks: {
-                                label: (ctx) => `${ctx.parsed.y.toFixed(2)} kg`
+                                label: (ctx) => `${ctx.parsed.y.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} kg`
                             }
                         }
                     },
@@ -1030,45 +1067,86 @@
             });
         }
 
-        function renderSectorChart(dataObj) {
-            const ctx = document.getElementById('sectorChart').getContext('2d');
-            if (sectorChartInstance) sectorChartInstance.destroy();
+        function renderPieChart(canvasId, dataObj, labelPrefix) {
+            const ctx = document.getElementById(canvasId).getContext('2d');
 
-            // Sort
-            const sorted = Object.entries(dataObj).sort((a, b) => b[1] - a[1]);
-            const labels = sorted.map(s => s[0]);
-            const values = sorted.map(s => s[1]);
+            if (pieCharts[canvasId]) {
+                pieCharts[canvasId].destroy();
+            }
 
-            sectorChartInstance = new Chart(ctx, {
-                type: 'bar', // Vertical bars as per user preference in previous tasks ("Sector chart ... vertical bar chart")
+            const labels = Object.keys(dataObj);
+            const values = Object.values(dataObj);
+            const total = values.reduce((a, b) => a + b, 0);
+
+            // Professional Colors Palette (Vibrant & Distinct)
+            const colors = [
+                '#ef4444', // Red
+                '#f97316', // Orange
+                '#f59e0b', // Amber
+                '#84cc16', // Lime
+                '#10b981', // Emerald
+                '#06b6d4', // Cyan
+                '#6366f1', // Indigo
+                '#a855f7'  // Purple
+            ];
+
+            pieCharts[canvasId] = new Chart(ctx, {
+                type: 'doughnut', // Doughnut looks more professional than simple pie
                 data: {
                     labels: labels,
                     datasets: [{
-                        label: 'Refugo (kg)',
                         data: values,
-                        backgroundColor: '#a855f7',
-                        borderRadius: 4
+                        backgroundColor: colors.slice(0, labels.length),
+                        borderColor: '#18181b', // Match card bg
+                        borderWidth: 2,
+                        hoverOffset: 10
                     }]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    indexAxis: 'y', // Horizontal bars usually better for sector names, but lets stick to vertical if space allows, or auto. "Vertical bar chart" requested previously. okay.
-                    // Wait, usually sector names are long, horizontal (indexAxis: 'y') is better. 
-                    // But prompt said "Sector chart is displayed as a vertical bar chart" for refugo.html in context. i'll stick to logic.
-                    // Let's use horizontal for readability if names are long, but context said vertical. I'll use horizontal (indexAxis 'y') because creates better lists. 
-                    // Actually, let's look at `refugo.html`... it used `indexAxis: 'x'` (vertical) in the viewed file.
-                    // I will use `indexAxis: 'x'` to match `refugo.html`.
-                    plugins: {
-                        legend: { display: false }
+                    layout: {
+                        padding: 20
                     },
-                    scales: {
-                        y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#a1a1aa' } },
-                        x: { grid: { display: false }, ticks: { color: '#a1a1aa', autoSkip: false, maxRotation: 90, minRotation: 45 } }
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'right',
+                            labels: {
+                                color: '#e4e4e7',
+                                font: {
+                                    family: "'Inter', sans-serif",
+                                    size: 12
+                                },
+                                padding: 15,
+                                usePointStyle: true,
+                                pointStyle: 'circle'
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(24, 24, 27, 0.95)',
+                            titleColor: '#fbbf24',
+                            bodyColor: '#fff',
+                            borderColor: 'rgba(255,255,255,0.1)',
+                            borderWidth: 1,
+                            padding: 10,
+                            callbacks: {
+                                label: function (context) {
+                                    const value = context.parsed;
+                                    const percentage = ((value / total) * 100).toFixed(1) + '%';
+                                    return ` ${context.label}: ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} kg (${percentage})`;
+                                }
+                            }
+                        },
+                        datalabels: {
+                            display: false // Cleaner look without internal labels
+                        }
                     }
-                }
+                },
+                plugins: [ChartDataLabels]
             });
         }
+
 
         function formatDate(str) {
             if (!str) return '-';
