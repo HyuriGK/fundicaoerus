@@ -80,7 +80,12 @@ function chunkArray(myArray, chunk_size) {
                 END;
             END $$;
         `);
-        console.log('✅ Postgres table ready.');
+
+        // Clear existing data as requested
+        console.log('🧹 Clearing existing data in Postgres...');
+        await pool.query('TRUNCATE TABLE refugo_apontado_sincronizado RESTART IDENTITY');
+
+        console.log('✅ Postgres table ready and emptied.');
 
         Firebird.attach(fbOptions, function (err, db) {
             if (err) {
@@ -92,14 +97,14 @@ function chunkArray(myArray, chunk_size) {
             // 1. Fetch PRODUCAO_SETOR (Refugo)
             // Filters: QUANTIDADE_REFUGO_PCS > 0 AND DATA_PCS >= '2025-01-01'
             const queryPCS = `
-                SELECT 
-                    ID_PCS,
-                    CODIGO_PCS,
-                    DATA_PCS,
-                    QUANTIDADE_REFUGO_PCS,
-                    LOTE_PCS,
-                    SETOR_PCS,
-                    REF_CODIGO_PCS
+        SELECT
+        ID_PCS,
+            CODIGO_PCS,
+            DATA_PCS,
+            QUANTIDADE_REFUGO_PCS,
+            LOTE_PCS,
+            SETOR_PCS,
+            REF_CODIGO_PCS
                 FROM PRODUCAO_SETOR
                 WHERE DATA_PCS >= '2025-01-01'
                   AND QUANTIDADE_REFUGO_PCS > 0
@@ -112,7 +117,7 @@ function chunkArray(myArray, chunk_size) {
                     db.detach();
                     return;
                 }
-                console.log(`📦 Refugo records fetched: ${productionRows.length}`);
+                console.log(`📦 Refugo records fetched: ${productionRows.length} `);
 
                 if (productionRows.length === 0) {
                     console.log('No refugo records found.');
@@ -122,13 +127,13 @@ function chunkArray(myArray, chunk_size) {
 
                 // 2. Collect IDs for Lookups
                 const setIds = [...new Set(productionRows.map(p => p.SETOR_PCS).filter(id => id))];
-                console.log(`ℹ️ Unique IDs - SET: ${setIds.length}`);
+                console.log(`ℹ️ Unique IDs - SET: ${setIds.length} `);
 
                 const opIds = [...new Set(productionRows.map(p => p.CODIGO_PCS).filter(id => id))];
-                console.log(`ℹ️ Unique IDs - OP: ${opIds.length}`);
+                console.log(`ℹ️ Unique IDs - OP: ${opIds.length} `);
 
                 const refugoIds = [...new Set(productionRows.map(p => p.REF_CODIGO_PCS).filter(id => id))];
-                console.log(`ℹ️ Unique IDs - REFUGO: ${refugoIds.length}`);
+                console.log(`ℹ️ Unique IDs - REFUGO: ${refugoIds.length} `);
 
                 // 3. Fetch Lookup Data
                 const lookupSET = {};
@@ -143,7 +148,7 @@ function chunkArray(myArray, chunk_size) {
                         let processed = 0;
                         chunks.forEach(chunk => {
                             const idList = chunk.join(',');
-                            const q = `SELECT ${pk}, ${cols} FROM ${table} WHERE ${pk} IN (${idList})`;
+                            const q = `SELECT ${pk}, ${cols} FROM ${table} WHERE ${pk} IN(${idList})`;
                             db.query(q, (err, rows) => {
                                 if (err) return reject(err);
                                 rows.forEach(r => { targetMap[r[pk]] = r; });
@@ -201,7 +206,7 @@ function chunkArray(myArray, chunk_size) {
                         // Validation
                         if (!dataRefugo || isNaN(dataRefugo.getTime())) continue;
 
-                        const chaveOrigem = `REF-PCS-${pcs.ID_PCS}`;
+                        const chaveOrigem = `REF - PCS - ${pcs.ID_PCS} `;
                         const setor = cleanString(set.NOME_SET) || 'DESCONHECIDO';
                         const motivo = cleanString(ref.NOME_REF) || 'NAO INFORMADO';
                         const lote = cleanString(pcs.LOTE_PCS) || '';
@@ -225,22 +230,22 @@ function chunkArray(myArray, chunk_size) {
                         const pesoUn = produtoWeight;
 
                         await pool.query(`
-                            INSERT INTO refugo_apontado_sincronizado 
-                            (chave_origem, data_refugo, setor, produto, codigo_peca, lote, quantidade, peso_un, peso_total, op, motivo, atualizado_em)
-                            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP)
-                            ON CONFLICT (chave_origem) DO UPDATE SET
-                                data_refugo = EXCLUDED.data_refugo,
-                                setor = EXCLUDED.setor,
-                                produto = EXCLUDED.produto,
-                                codigo_peca = EXCLUDED.codigo_peca,
-                                lote = EXCLUDED.lote,
-                                quantidade = EXCLUDED.quantidade,
-                                peso_un = EXCLUDED.peso_un,
-                                peso_total = EXCLUDED.peso_total,
-                                op = EXCLUDED.op,
-                                motivo = EXCLUDED.motivo,
-                                atualizado_em = CURRENT_TIMESTAMP
-                        `, [chaveOrigem, dataRefugo, setor, produtoName, produtoCode, lote, quantidade, pesoUn, pesoTotal, op, motivo]);
+                            INSERT INTO refugo_apontado_sincronizado
+            (chave_origem, data_refugo, setor, produto, codigo_peca, lote, quantidade, peso_un, peso_total, op, motivo, atualizado_em)
+        VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP)
+                            ON CONFLICT(chave_origem) DO UPDATE SET
+        data_refugo = EXCLUDED.data_refugo,
+            setor = EXCLUDED.setor,
+            produto = EXCLUDED.produto,
+            codigo_peca = EXCLUDED.codigo_peca,
+            lote = EXCLUDED.lote,
+            quantidade = EXCLUDED.quantidade,
+            peso_un = EXCLUDED.peso_un,
+            peso_total = EXCLUDED.peso_total,
+            op = EXCLUDED.op,
+            motivo = EXCLUDED.motivo,
+            atualizado_em = CURRENT_TIMESTAMP
+                `, [chaveOrigem, dataRefugo, setor, produtoName, produtoCode, lote, quantidade, pesoUn, pesoTotal, op, motivo]);
 
                         inserted++;
                         if (inserted % 100 === 0) process.stdout.write('.');
@@ -252,8 +257,8 @@ function chunkArray(myArray, chunk_size) {
                 }
 
                 console.log(`\n✅ Sync Loop Complete.`);
-                console.log(`   Processed: ${inserted}`);
-                console.log(`   Errors: ${errors}`);
+                console.log(`   Processed: ${inserted} `);
+                console.log(`   Errors: ${errors} `);
 
                 db.detach();
                 await pool.end();
