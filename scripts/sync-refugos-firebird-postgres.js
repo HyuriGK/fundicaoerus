@@ -1,5 +1,15 @@
-// scripts/sync-refugos-firebird-postgres.js
-require('dotenv').config({ path: '.env.local' });
+const path = require('path');
+const fs = require('fs');
+
+// Determine path to .env.local
+// If running as PKG (exe), look in the same directory as the executable
+// If running as Node, look in current working directory (or specific path)
+let envPath = '.env.local';
+if (process.pkg) {
+    envPath = path.join(path.dirname(process.execPath), '.env.local');
+}
+
+require('dotenv').config({ path: envPath });
 const Firebird = require('node-firebird');
 const pool = require('../lib/db');
 

@@ -1,5 +1,13 @@
-// scripts/sync-production-firebird-postgres.js
-require('dotenv').config({ path: '.env.local' });
+const path = require('path');
+const fs = require('fs');
+
+// Determine path to .env.local
+let envPath = '.env.local';
+if (process.pkg) {
+    envPath = path.join(path.dirname(process.execPath), '.env.local');
+}
+
+require('dotenv').config({ path: envPath });
 const Firebird = require('node-firebird');
 const pool = require('../lib/db');
 
@@ -68,21 +76,11 @@ function chunkArray(myArray, chunk_size) {
         `);
         console.log('✅ Postgres ready.');
 
-        // DETERMINAR DATA DE INÍCIO (Lógica "Carregar 2025 uma única vez")
-        // Se já existem dados de 2025, sincroniza apenas 2026 em diante.
-        // Se NÃO existem dados de 2025, busca desde 2025-01-01.
+        // DETERMINAR DATA DE INÍCIO (Forçar Sincronização e Limpeza)
+        // O usuário solicitou limpar 2026 e garantir que 2025 exista.
 
-        let startDate = '2026-01-01'; // Default
-        const minDateRes = await pool.query("SELECT MIN(data_producao) as min_data FROM producao_apontada_sincronizada");
-        const minDate = minDateRes.rows[0]?.min_data ? new Date(minDateRes.rows[0].min_data) : null;
-
-        if (!minDate || minDate.getFullYear() >= 2026) {
-            console.log('📅 No 2025 data found (or table empty). Backfilling from 2025-01-01...');
-            startDate = '2025-01-01';
-        } else {
-            console.log('📅 2025 data already exists. Syncing from 2026-01-01...');
-            startDate = '2026-01-01';
-        }
+        let startDate = '2025-01-01';
+        console.log(`📅 Sincronizing PERMANENTLY from ${startDate}...`);
 
         // Add columns if they don't exist (migration for existing table)
         await pool.query(`
@@ -103,6 +101,11 @@ function chunkArray(myArray, chunk_size) {
 
         // Widen liga column if needed (was VARCHAR(50), now VARCHAR(255))
         await pool.query(`ALTER TABLE producao_apontada_sincronizada ALTER COLUMN liga TYPE VARCHAR(255)`);
+
+        // Clear requested range first (2025 and 2026)
+        console.log('🧹 Clearing data from 2025 onwards (Clean Slate)...');
+        await pool.query("DELETE FROM producao_apontada_sincronizada WHERE data_producao >= $1", [startDate]);
+        console.log('✅ Data cleared.');
 
         Firebird.attach(fbOptions, function (err, db) {
             if (err) {
@@ -311,18 +314,6 @@ function chunkArray(myArray, chunk_size) {
                 console.log(`\n✅ Sync Loop Complete.`);
                 console.log(`   Processed: ${inserted}`);
                 console.log(`   Errors: ${errors}`);
-
-                // Final Safeguard: Delete records that were NOT updated in this sync run
-                // This handles deletions: if a record exists in Postgres but was not fetched from Firebird (because it was deleted or moved),
-                // it won't have been updated, so its 'atualizado_em' will be older than 'syncStartTime'.
-                console.log('🧹 Clearing stale data (Mark & Sweep)...');
-                const cleanup = await pool.query(`
-                    DELETE FROM producao_apontada_sincronizada 
-                    WHERE data_producao >= $2
-                      AND data_producao <= '2026-12-31'
-                      AND atualizado_em < $1
-                `, [syncStartTime, startDate]);
-                console.log(`   Removed ${cleanup.rowCount} stale records.`);
 
                 db.detach();
                 await pool.end();
