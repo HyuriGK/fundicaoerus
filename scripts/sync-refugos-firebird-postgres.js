@@ -60,10 +60,20 @@ function chunkArray(myArray, chunk_size) {
                 quantidade NUMERIC(10,2),
                 peso_un NUMERIC(10,4),
                 peso_total NUMERIC(10,2),
+                op VARCHAR(50),
                 atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
             CREATE INDEX IF NOT EXISTS idx_refugo_data ON refugo_apontado_sincronizado(data_refugo);
             CREATE INDEX IF NOT EXISTS idx_refugo_setor ON refugo_apontado_sincronizado(setor);
+            
+            DO $$ 
+            BEGIN 
+                BEGIN
+                    ALTER TABLE refugo_apontado_sincronizado ADD COLUMN op VARCHAR(50);
+                EXCEPTION
+                    WHEN duplicate_column THEN NULL;
+                END;
+            END $$;
         `);
         console.log('✅ Postgres table ready.');
 
@@ -179,6 +189,8 @@ function chunkArray(myArray, chunk_size) {
                         const setor = cleanString(set.NOME_SET) || 'DESCONHECIDO';
                         const lote = cleanString(pcs.LOTE_PCS) || '';
 
+                        const op = pcs.CODIGO_PCS ? String(pcs.CODIGO_PCS) : null;
+
                         // Product Details
                         let produtoName = 'PRODUTO INDEFINIDO';
                         let produtoCode = null;
@@ -197,8 +209,8 @@ function chunkArray(myArray, chunk_size) {
 
                         await pool.query(`
                             INSERT INTO refugo_apontado_sincronizado 
-                            (chave_origem, data_refugo, setor, produto, codigo_peca, lote, quantidade, peso_un, peso_total, atualizado_em)
-                            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)
+                            (chave_origem, data_refugo, setor, produto, codigo_peca, lote, quantidade, peso_un, peso_total, op, atualizado_em)
+                            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP)
                             ON CONFLICT (chave_origem) DO UPDATE SET
                                 data_refugo = EXCLUDED.data_refugo,
                                 setor = EXCLUDED.setor,
@@ -208,8 +220,9 @@ function chunkArray(myArray, chunk_size) {
                                 quantidade = EXCLUDED.quantidade,
                                 peso_un = EXCLUDED.peso_un,
                                 peso_total = EXCLUDED.peso_total,
+                                op = EXCLUDED.op,
                                 atualizado_em = CURRENT_TIMESTAMP
-                        `, [chaveOrigem, dataRefugo, setor, produtoName, produtoCode, lote, quantidade, pesoUn, pesoTotal]);
+                        `, [chaveOrigem, dataRefugo, setor, produtoName, produtoCode, lote, quantidade, pesoUn, pesoTotal, op]);
 
                         inserted++;
                         if (inserted % 100 === 0) process.stdout.write('.');

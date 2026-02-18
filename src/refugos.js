@@ -19,7 +19,8 @@ router.get('/', async (req, res) => {
                 lote, 
                 quantidade, 
                 peso_un, 
-                peso_total 
+                peso_total,
+                op
             FROM refugo_apontado_sincronizado 
             ORDER BY data_refugo DESC
         `);

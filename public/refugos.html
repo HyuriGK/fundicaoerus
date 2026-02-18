@@ -492,20 +492,25 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h2 style="color: var(--color-primary); margin:0;">Registros Detalhados</h2>
-                <button class="close-btn"
-                    onclick="document.getElementById('tableModalOverlay').classList.remove('active')">&times;</button>
+                <div style="flex:1; display:flex; justify-content:center; padding: 0 20px;">
+                    <input type="text" id="tableSearchInput" placeholder="Filtrar (OP, Peça, Produto, Lote...)"
+                        onkeyup="filterTable()"
+                        style="background:rgba(255,255,255,0.05); border:1px solid var(--border-subtle); padding:8px 16px; color:#fff; border-radius:6px; width:100%; max-width: 400px; font-family: var(--font-main);">
+                </div>
+                <button class="close-btn" onclick="closeTableModal()">&times;</button>
             </div>
             <div class="table-scroll">
                 <table id="dataTable">
                     <thead>
                         <tr>
                             <th>Data</th>
-                            <th>Setor</th>
-                            <th>Produto</th>
+                            <th>OP</th>
                             <th>Cód. Peça</th>
+                            <th>Produto</th>
                             <th>Lote</th>
                             <th>Qtd</th>
-                            <th>Peso (kg)</th>
+                            <th>Peso Un (kg)</th>
+                            <th>Peso Total (kg)</th>
                         </tr>
                     </thead>
                     <tbody></tbody>
@@ -610,6 +615,27 @@
         }
         function closeTableModal() {
             document.getElementById('tableModalOverlay').classList.remove('active');
+            // Clear filter when closing? Optional.
+        }
+
+        function filterTable() {
+            const input = document.getElementById('tableSearchInput');
+            const filter = input.value.toUpperCase();
+            const table = document.getElementById('dataTable');
+            const tr = table.getElementsByTagName('tr');
+
+            for (let i = 1; i < tr.length; i++) {
+                let show = false;
+                const tds = tr[i].getElementsByTagName('td');
+                for (let j = 0; j < tds.length; j++) {
+                    const txtValue = tds[j].textContent || tds[j].innerText;
+                    if (txtValue.toUpperCase().indexOf(filter) > -1) {
+                        show = true;
+                        break;
+                    }
+                }
+                tr[i].style.display = show ? '' : 'none';
+            }
         }
 
         // --- DATA PROCESSING ---
@@ -662,14 +688,18 @@
             tbody.innerHTML = filteredData.map(r => `
                 <tr>
                     <td>${formatDate(r.data)}</td>
-                    <td>${r.setor || '-'}</td>
-                    <td>${r.descricao || '-'}</td>
+                    <td>${r.op || '-'}</td>
                     <td>${r.codigo_peca || '-'}</td>
+                    <td>${r.descricao || '-'}</td>
                     <td>${r.lote || '-'}</td>
                     <td>${parseFloat(r.quantidade).toFixed(2)}</td>
+                    <td>${parseFloat(r.peso_un || 0).toFixed(4)}</td>
                     <td>${parseFloat(r.peso_total).toFixed(2)}</td>
                 </tr>
             `).join('');
+
+            // Re-apply filter if text exists
+            filterTable();
         }
 
         function getDataForBarChart(data = null) {
