@@ -650,6 +650,84 @@
         </div>
     </div>
 
+    <!-- Full Screen Detail Modal -->
+    <div id="detailModalOverlay" class="modal-overlay full-screen">
+        <div class="modal-content full-screen-content">
+            <div class="modal-header">
+                <div>
+                    <h2 class="modal-title" id="detailModalTitle">Detalhes</h2>
+                    <p class="modal-subtitle" id="detailModalSubtitle">Visualizando registros filtrados</p>
+                </div>
+                <button class="close-btn" onclick="closeDetailModal()">&times;</button>
+            </div>
+            <div class="table-scroll">
+                <table id="detailDataTable">
+                    <thead>
+                        <tr>
+                            <th style="text-align: center;">Data</th>
+                            <th style="text-align: center;">Setor</th>
+                            <th style="text-align: center;">OP</th>
+                            <th style="text-align: center;">Cód. Peça</th>
+                            <th>Produto</th>
+                            <th>Motivo</th>
+                            <th style="text-align: center;">Lote</th>
+                            <th style="text-align: center;">Qtd</th>
+                            <th style="text-align: center;">Peso Un</th>
+                            <th style="text-align: center;">Peso Total</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        /* Full Screen Modal Styles */
+        .modal-overlay.full-screen {
+            align-items: flex-end !important;
+            /* Align to bottom */
+            padding: 0;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(8px);
+        }
+
+        .modal-content.full-screen-content {
+            width: 100%;
+            height: 90vh;
+            /* Occupy 90% of height */
+            max-width: none;
+            border-radius: 20px 20px 0 0;
+            /* Rounded top corners only */
+            margin: 0;
+            animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            background: #18181b;
+            border: 1px solid var(--border-subtle);
+            border-bottom: none;
+            display: flex;
+            flex-direction: column;
+        }
+
+        @keyframes slideUp {
+            from {
+                transform: translateY(100%);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .modal-subtitle {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin: 0;
+            font-weight: 400;
+        }
+    </style>
+
     <!-- Table Modal -->
     <div id="tableModalOverlay" class="modal-overlay">
         <div class="modal-content">
@@ -1067,6 +1145,74 @@
             });
         }
 
+        // --- DETAIL MODAL ---
+        function openDetailModal(filterValue, filterType) {
+            const modal = document.getElementById('detailModalOverlay');
+            const title = document.getElementById('detailModalTitle');
+            const subtitle = document.getElementById('detailModalSubtitle');
+            const tbody = document.querySelector('#detailDataTable tbody');
+
+            // Set Title
+            title.textContent = `${filterType}: ${filterValue}`;
+            subtitle.textContent = `Listando todos os registros para "${filterValue}"`;
+
+            // Filter Data
+            // Note: filterValue comes from chart label. 
+            // If "Outros", we might need special logic or just show all "Outros" (which are items not in Top 5).
+            // For now, let's look for exact match in raw data or filtered data.
+            // Using currentFilteredData which respects year/month selection.
+
+            const details = currentFilteredData.filter(r => {
+                const val = r[filterType.toLowerCase()] || 'N/A';
+
+                // If the chart logic grouped it into "Outros", we need to know what constitutes "Outros".
+                // But here we receive the clicked label.
+                // Case 1: Clicked on specific item (e.g., "FUSÃO") -> Exact match.
+                // Case 2: Clicked on "Outros" -> We need to find items NOT in top 5.
+                // For simplicity first iteration: Exact match.
+                // If value is "Outros", this simple check might return nothing if no record has logic "Outros" in database.
+                // Improvements for "Outros" can be added if needed, but usually charts passed exact labels.
+
+                if (filterValue === 'Outros') {
+                    // Re-calculate top 5 to find what ISN'T in it? 
+                    // Or just skip for now? Let's hide modal for Outros or show empty?
+                    // Better: The chart data generation knows what is Top 5.
+                    // Let's implement simple exact match for now.
+                    return false; // TODO: Implement Outros logic if critical
+                }
+
+                return val === filterValue;
+            });
+
+            // Populate Table
+            if (details.length === 0 && filterValue === 'Outros') {
+                tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding:20px;">Detalhes para "Outros" não disponíveis nesta visualização.</td></tr>';
+            } else {
+                tbody.innerHTML = details.map(r => `
+                    <tr>
+                        <td style="text-align: center;">${formatDate(r.data)}</td>
+                        <td style="text-align: center;">${r.setor || '-'}</td>
+                        <td style="text-align: center;">${r.op || '-'}</td>
+                        <td style="text-align: center;">${r.codigo_peca || '-'}</td>
+                        <td class="truncate-text" title="${r.descricao || ''}">${r.descricao || '-'}</td>
+                        <td class="truncate-text" title="${r.motivo || ''}">${r.motivo || '-'}</td>
+                        <td style="text-align: center;">${r.lote || '-'}</td>
+                        <td style="text-align: center;">${parseFloat(r.quantidade).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                        <td style="text-align: center;">${parseFloat(r.peso_un || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                        <td style="text-align: center;">${parseFloat(r.peso_total).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    </tr>
+                `).join('');
+            }
+
+            modal.classList.add('active');
+        }
+
+        function closeDetailModal() {
+            const modal = document.getElementById('detailModalOverlay');
+            modal.classList.remove('active');
+        }
+
+        // Update renderPieChart to include onClick
         function renderPieChart(canvasId, dataObj, labelPrefix) {
             const ctx = document.getElementById(canvasId).getContext('2d');
 
@@ -1091,13 +1237,13 @@
             ];
 
             pieCharts[canvasId] = new Chart(ctx, {
-                type: 'doughnut', // Doughnut looks more professional than simple pie
+                type: 'doughnut',
                 data: {
                     labels: labels,
                     datasets: [{
                         data: values,
                         backgroundColor: colors.slice(0, labels.length),
-                        borderColor: '#18181b', // Match card bg
+                        borderColor: '#18181b',
                         borderWidth: 2,
                         hoverOffset: 10
                     }]
@@ -1105,6 +1251,16 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    onClick: (evt, elements) => {
+                        if (elements.length > 0) {
+                            const index = elements[0].index;
+                            const label = labels[index];
+                            // labelPrefix is "Setor" or "Motivo"
+                            // We pass type as 'setor' or 'motivo' for filtering
+                            const filterType = labelPrefix === 'Setor' ? 'setor' : 'motivo';
+                            openDetailModal(label, labelPrefix); // Pass LabelPrefix as display name, logic handles filterType conversion
+                        }
+                    },
                     layout: {
                         padding: 20
                     },
@@ -1139,7 +1295,7 @@
                             }
                         },
                         datalabels: {
-                            display: false // Cleaner look without internal labels
+                            display: false
                         }
                     }
                 },
