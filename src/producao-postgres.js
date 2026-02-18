@@ -7,7 +7,7 @@ const pool = require('../lib/db');
 // Returns filtered productio records from the synced table
 router.get('/', async (req, res) => {
     try {
-        const { startDate, endDate, sector, search, limit = 10000 } = req.query;
+        const { startDate, endDate, sector, search, limit = 100000 } = req.query;
 
         let query = `
             SELECT 
