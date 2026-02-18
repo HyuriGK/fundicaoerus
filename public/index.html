@@ -1686,7 +1686,7 @@
                     { id: 'acabamentoexterno', title: 'Acab. Externo', url: 'acabamento_externo.html', icon: 'fa-truck-fast', api: '/api/acabamento-externo' },
                     { id: 'faturamento', title: 'Produção Faturada', url: 'faturamentos.html', icon: 'fa-sack-dollar', api: '/api/faturamento-clientes-detalhado' },
                     { id: 'carteira', title: 'Carteira Total', url: 'pedidos.html', icon: 'fa-briefcase', api: '/api/carteira' },
-                    { id: 'refugo', title: 'Refugo Total', url: 'refugo.html', icon: 'fa-trash-can', api: '/api/refugo' }
+                    { id: 'refugo', title: 'Refugo Total', url: 'refugos.html', icon: 'fa-trash-can', api: '/api/refugos-new' }
                 ];
 
                 // --- NOVA FUNÇÃO DE USUÁRIO ---
@@ -1915,64 +1915,33 @@
                             subLabel = "Total em Carteira";
                         }
                         else if (link.id === 'refugo') {
-                            // CORREÇÃO 2: Mudar para mostrar porcentagem em vez de tonelagem
-                            const listaRefugo = data.refugoRawData || [];
-                            const monthData = listaRefugo.filter(r => {
-                                const d = r.data || "";
-                                return d.includes(`${curYear}-${curMonth}`);
+                            // Data already fetched from /api/refugos-new
+                            // Structure: { refugoRawData: [...], refugoMonthlyProduction: {'YYYY-MM': total} }
+                            const rData = data;
+
+                            const currentMonthKey = `${curYear}-${curMonth}`; // YYYY-MM
+
+                            // 1. Calculate Total Refugo for Current Month
+                            const monthRefugos = (rData.refugoRawData || []).filter(r => {
+                                return (r.data || '').startsWith(currentMonthKey);
                             });
 
-                            const totalRefugoKg = monthData.reduce((acc, r) => acc + parseFloat(r.peso_total || 0), 0);
+                            const totalRefugoKg = monthRefugos.reduce((acc, r) => acc + (parseFloat(r.peso_total) || 0), 0);
 
-                            // Calcular produção total (fusão) do mesmo mês para calcular a porcentagem
-                            try {
-                                const producaoResponse = await fetch('/api/producao-apontada');
-                                const producaoData = await producaoResponse.json();
-                                const productWeights = JSON.parse(localStorage.getItem('producao_product_weights')) || {};
+                            // 2. Get Total Production for Current Month
+                            // The API returns a map: "2025-02": 150000.50
+                            const totalProducaoKg = rData.refugoMonthlyProduction ? (rData.refugoMonthlyProduction[currentMonthKey] || 0) : 0;
 
-                                if (producaoData.length > 1) {
-                                    const monthRows = producaoData.slice(1).filter(r => {
-                                        const dateStr = String(r[0]);
-                                        return dateStr.includes(`${curYear}-${curMonth}`) || dateStr.includes(`/${curMonth}/${curYear}`);
-                                    });
-
-                                    let totalProducaoKg = 0;
-
-                                    monthRows.forEach(r => {
-                                        let pu = parseFloat(r[4] || 0);
-                                        const code = String(r[2]);
-                                        if (pu === 0 && productWeights[code]) {
-                                            pu = parseFloat(productWeights[code]);
-                                        }
-                                        const q = parseFloat(r[5] || 0);
-                                        const totalRow = pu * q;
-
-                                        const setor = String(r[1]).toUpperCase();
-                                        if (setor.includes("FUS")) {
-                                            totalProducaoKg += totalRow;
-                                        }
-                                    });
-
-                                    // Calcular porcentagem
-                                    let porcentagem = 0;
-                                    if (totalProducaoKg > 0) {
-                                        porcentagem = (totalRefugoKg / totalProducaoKg) * 100;
-                                    }
-
-                                    numericValue = porcentagem;
-                                    valueSuffix = "%";
-                                    subLabel = `${monthData.length} Ocorrências no Mês`;
-                                } else {
-                                    numericValue = 0;
-                                    valueSuffix = "%";
-                                    subLabel = `${monthData.length} Ocorrências no Mês`;
-                                }
-                            } catch (e) {
-                                // Em caso de erro, mostrar apenas o total em toneladas como fallback
-                                numericValue = totalRefugoKg / 1000;
-                                valueSuffix = "Ton";
-                                subLabel = `${monthData.length} Ocorrências no Mês`;
+                            // 3. Calculate Percentage
+                            let porcentagem = 0;
+                            if (totalProducaoKg > 0) {
+                                porcentagem = (totalRefugoKg / totalProducaoKg) * 100;
                             }
+
+                            // 4. Update UI
+                            numericValue = porcentagem;
+                            valueSuffix = "%";
+                            subLabel = `${monthRefugos.length} Ocorrências no Mês`;
                         }
 
                         // ANIMATION START
