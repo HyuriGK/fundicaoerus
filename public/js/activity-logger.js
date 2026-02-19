@@ -125,12 +125,21 @@
         `;
         document.head.appendChild(style);
 
-        // 2. Aplicar Blur no body (leve para manter a página visível atrás)
-        const appLayout = document.querySelector('.app-layout') || document.body;
-        appLayout.style.filter = 'blur(8px) saturate(0.5)';
-        appLayout.style.pointerEvents = 'none';
-        appLayout.style.userSelect = 'none';
-        appLayout.style.transition = 'filter 0.6s ease';
+        // 2. Aplicar Blur no conteúdo da página (sem afetar o overlay)
+        let blurTarget = document.querySelector('.app-layout');
+        if (!blurTarget) {
+            // Se não há .app-layout, encapsular todo o conteúdo do body num wrapper
+            blurTarget = document.createElement('div');
+            blurTarget.id = 'mt-blur-wrapper';
+            while (document.body.firstChild) {
+                blurTarget.appendChild(document.body.firstChild);
+            }
+            document.body.appendChild(blurTarget);
+        }
+        blurTarget.style.filter = 'blur(8px) saturate(0.5)';
+        blurTarget.style.pointerEvents = 'none';
+        blurTarget.style.userSelect = 'none';
+        blurTarget.style.transition = 'filter 0.6s ease';
 
         // 3. Criar Overlay (semi-transparente para ver o conteúdo atrás com blur)
         const overlay = document.createElement('div');
