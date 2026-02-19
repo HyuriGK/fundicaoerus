@@ -30,7 +30,24 @@ router.get('/', checkDevRole, async (req, res) => {
             LEFT JOIN LATERAL (
                 SELECT created_at AS last_activity_at, table_name AS last_activity_page
                 FROM audit_logs
-                WHERE user_name = u.username AND action = 'PAGE_VISIT'
+                WHERE user_name = u.username
+                  AND table_name IN (
+                    'index.html',
+                    'apontamentos_produtivos.html',
+                    'amostras.html',
+                    'producao_apontada.html',
+                    'acabamento_externo.html',
+                    'usinagem_externo.html',
+                    'faturamentos.html',
+                    'faturamento_detalhado.html',
+                    'controle_dureza.html',
+                    'clientes.html',
+                    'aderencia.html',
+                    'refugos.html',
+                    'pedidos.html',
+                    'carteira.html',
+                    'custos.html'
+                  )
                 ORDER BY created_at DESC
                 LIMIT 1
             ) la ON true
