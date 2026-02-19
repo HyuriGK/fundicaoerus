@@ -13,15 +13,13 @@ echo ===================================================
 echo.
 
 :: Bloqueia a tela durante a sincronizacao
-echo [LOCK] Bloqueando tela faturamentos.html...
-curl -s -X POST http://localhost:3000/api/page-locks/sync-lock -H "Content-Type: application/json" -d "{\"page_id\":\"faturamentos.html\"}" > nul 2>&1
+node scripts/sync-page-lock.js lock faturamentos.html
 
 :: Executa o script Node.js
 node scripts/sync-firebird-to-postgres.js
 
 :: Desbloqueia a tela apos a sincronizacao
-echo [UNLOCK] Desbloqueando tela faturamentos.html...
-curl -s -X POST http://localhost:3000/api/page-locks/sync-unlock -H "Content-Type: application/json" -d "{\"page_id\":\"faturamentos.html\"}" > nul 2>&1
+node scripts/sync-page-lock.js unlock faturamentos.html
 
 echo.
 echo ===================================================
