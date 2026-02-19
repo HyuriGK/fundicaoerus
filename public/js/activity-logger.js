@@ -50,13 +50,89 @@
     }
 
     function showMaintenanceOverlay() {
-        // 1. Aplicar Blur no body (Exceto o overlay)
+        // 1. Injetar estilos de animação
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes mt-overlay-fadein {
+                from { opacity: 0; }
+                to { opacity: 1; }
+            }
+            @keyframes mt-modal-enter {
+                0% { opacity: 0; transform: translateY(30px) scale(0.92); }
+                60% { transform: translateY(-6px) scale(1.02); }
+                100% { opacity: 1; transform: translateY(0) scale(1); }
+            }
+            @keyframes mt-icon-float {
+                0%, 100% { transform: translateY(0); }
+                50% { transform: translateY(-8px); }
+            }
+            @keyframes mt-icon-rotate {
+                0%, 100% { transform: translateY(0) rotate(0deg); }
+                25% { transform: translateY(-8px) rotate(-8deg); }
+                75% { transform: translateY(-4px) rotate(8deg); }
+            }
+            @keyframes mt-pulse-dot {
+                0%, 100% { opacity: 1; transform: scale(1); }
+                50% { opacity: 0.5; transform: scale(1.4); }
+            }
+            @keyframes mt-shimmer {
+                0% { background-position: -200% center; }
+                100% { background-position: 200% center; }
+            }
+            @keyframes mt-border-glow {
+                0%, 100% { border-color: rgba(251, 191, 36, 0.15); }
+                50% { border-color: rgba(251, 191, 36, 0.35); }
+            }
+            @keyframes mt-gear-spin {
+                from { transform: rotate(0deg); }
+                to { transform: rotate(360deg); }
+            }
+            #maintenance-overlay {
+                animation: mt-overlay-fadein 0.6s ease-out forwards;
+            }
+            #maintenance-overlay .mt-modal {
+                animation: mt-modal-enter 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) 0.2s both;
+            }
+            #maintenance-overlay .mt-icon-wrap {
+                animation: mt-icon-rotate 3s ease-in-out infinite;
+            }
+            #maintenance-overlay .mt-pulse {
+                animation: mt-pulse-dot 2s ease-in-out infinite;
+            }
+            #maintenance-overlay .mt-modal {
+                animation: mt-modal-enter 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) 0.2s both,
+                           mt-border-glow 3s ease-in-out infinite 1s;
+            }
+            #maintenance-overlay .mt-title {
+                background: linear-gradient(90deg, #fff 0%, #fbbf24 30%, #fff 60%, #fbbf24 100%);
+                background-size: 200% auto;
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                background-clip: text;
+                animation: mt-shimmer 4s linear infinite;
+            }
+            #maintenance-overlay .mt-btn {
+                transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            }
+            #maintenance-overlay .mt-btn:hover {
+                transform: translateY(-2px) scale(1.04);
+                box-shadow: 0 14px 30px -6px rgba(251, 191, 36, 0.35);
+                background: linear-gradient(135deg, #fbbf24, #f59e0b) !important;
+            }
+            #maintenance-overlay .mt-gear {
+                animation: mt-gear-spin 6s linear infinite;
+            }
+        `;
+        document.head.appendChild(style);
+
+        // 2. Aplicar Blur no body (leve para manter a página visível atrás)
         const appLayout = document.querySelector('.app-layout') || document.body;
-        appLayout.style.filter = 'blur(20px)';
+        appLayout.style.filter = 'blur(8px) saturate(0.5)';
         appLayout.style.pointerEvents = 'none';
         appLayout.style.userSelect = 'none';
+        appLayout.style.transition = 'filter 0.6s ease';
 
-        // 2. Criar Overlay
+        // 3. Criar Overlay (semi-transparente para ver o conteúdo atrás com blur)
         const overlay = document.createElement('div');
         overlay.id = 'maintenance-overlay';
         overlay.style.cssText = `
@@ -65,7 +141,7 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(9, 9, 11, 0.85);
+            background: rgba(9, 9, 11, 0.55);
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -75,21 +151,113 @@
             font-family: 'Inter', sans-serif;
             text-align: center;
             padding: 20px;
-            backdrop-filter: blur(5px);
+            backdrop-filter: blur(2px);
+            opacity: 0;
         `;
 
         overlay.innerHTML = `
-            <div style="max-width: 600px; background: rgba(255, 255, 255, 0.03); padding: 40px; border-radius: 24px; border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);">
-                <div style="width: 80px; height: 80px; background: rgba(251, 191, 36, 0.1); border-radius: 20px; display: flex; align-items: center; justify-content: center; margin: 0 auto 24px;">
-                    <i class="fa-solid fa-screwdriver-wrench" style="font-size: 32px; color: #fbbf24;"></i>
+            <div class="mt-modal" style="
+                max-width: 520px;
+                width: 100%;
+                background: rgba(15, 15, 20, 0.85);
+                backdrop-filter: blur(40px) saturate(1.5);
+                -webkit-backdrop-filter: blur(40px) saturate(1.5);
+                padding: 48px 40px 40px;
+                border-radius: 28px;
+                border: 1px solid rgba(251, 191, 36, 0.15);
+                box-shadow:
+                    0 0 0 1px rgba(255,255,255,0.04),
+                    0 30px 60px -12px rgba(0, 0, 0, 0.6),
+                    0 0 80px -20px rgba(251, 191, 36, 0.12);
+                position: relative;
+                overflow: hidden;
+            ">
+                <!-- Decorative gear background -->
+                <div style="position: absolute; top: -30px; right: -30px; opacity: 0.03; pointer-events: none;">
+                    <i class="fa-solid fa-gear mt-gear" style="font-size: 120px; color: #fbbf24;"></i>
                 </div>
-                <h1 style="font-size: 1.8rem; font-weight: 800; margin-bottom: 16px; letter-spacing: -0.02em;">Acesso Temporariamente Suspenso</h1>
-                <p style="color: #a1a1aa; line-height: 1.6; margin-bottom: 32px; font-size: 1.05rem;">
-                    Esta página está passando por atualizações técnicas para aprimorar a precisão dos dados e a performance do sistema. 
-                    <br><br>
-                    O acesso será normalizado assim que as melhorias forem concluídas. Agradecemos a compreensão.
+                <div style="position: absolute; bottom: -20px; left: -20px; opacity: 0.02; pointer-events: none;">
+                    <i class="fa-solid fa-gear mt-gear" style="font-size: 80px; color: #fbbf24; animation-direction: reverse;"></i>
+                </div>
+
+                <!-- Status indicator -->
+                <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 28px;">
+                    <span class="mt-pulse" style="width: 8px; height: 8px; background: #fbbf24; border-radius: 50%; display: inline-block;"></span>
+                    <span style="font-size: 0.75rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #fbbf24;">Em Manutenção</span>
+                </div>
+
+                <!-- Icon -->
+                <div class="mt-icon-wrap" style="
+                    width: 88px;
+                    height: 88px;
+                    background: linear-gradient(135deg, rgba(251, 191, 36, 0.15), rgba(251, 191, 36, 0.05));
+                    border-radius: 24px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    margin: 0 auto 28px;
+                    border: 1px solid rgba(251, 191, 36, 0.2);
+                    box-shadow: 0 8px 24px -4px rgba(251, 191, 36, 0.15);
+                ">
+                    <i class="fa-solid fa-screwdriver-wrench" style="font-size: 36px; color: #fbbf24;"></i>
+                </div>
+
+                <!-- Title -->
+                <h1 class="mt-title" style="
+                    font-size: 1.6rem;
+                    font-weight: 800;
+                    margin-bottom: 14px;
+                    letter-spacing: -0.03em;
+                    line-height: 1.2;
+                ">Acesso Temporariamente<br>Suspenso</h1>
+
+                <!-- Description -->
+                <p style="
+                    color: #a1a1aa;
+                    line-height: 1.7;
+                    margin-bottom: 12px;
+                    font-size: 0.95rem;
+                    max-width: 400px;
+                    margin-left: auto;
+                    margin-right: auto;
+                ">
+                    Esta página está em <strong style="color: #e4e4e7;">manutenção</strong> para melhorias de desempenho e precisão dos dados.
                 </p>
-                <a href="index.html" style="display: inline-flex; align-items: center; justify-content: center; background: #fff; color: #000; padding: 12px 32px; border-radius: 12px; font-weight: 700; text-decoration: none; transition: transform 0.2s ease; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);">
+                <p style="
+                    color: #71717a;
+                    line-height: 1.6;
+                    margin-bottom: 32px;
+                    font-size: 0.85rem;
+                ">
+                    O acesso será restaurado em breve. Agradecemos a compreensão.
+                </p>
+
+                <!-- Divider -->
+                <div style="
+                    width: 60px;
+                    height: 2px;
+                    background: linear-gradient(90deg, transparent, rgba(251, 191, 36, 0.4), transparent);
+                    margin: 0 auto 28px;
+                    border-radius: 1px;
+                "></div>
+
+                <!-- Button -->
+                <a href="index.html" class="mt-btn" style="
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 10px;
+                    background: linear-gradient(135deg, #fbbf24, #d97706);
+                    color: #000;
+                    padding: 14px 36px;
+                    border-radius: 14px;
+                    font-weight: 700;
+                    font-size: 0.9rem;
+                    text-decoration: none;
+                    box-shadow: 0 10px 25px -5px rgba(251, 191, 36, 0.3);
+                    letter-spacing: 0.01em;
+                ">
+                    <i class="fa-solid fa-arrow-left" style="font-size: 14px;"></i>
                     Voltar para o Início
                 </a>
             </div>
