@@ -44,7 +44,7 @@
                 if (lock && lock.is_locked) {
                     if (lock.lock_reason === 'sync') {
                         // Sync lock afeta TODOS os usuários, inclusive devs
-                        showSyncOverlay();
+                        showSyncOverlay(lock);
                     } else if (role !== 'desenvolvedor' && role !== 'admin') {
                         // Bloqueio manual — apenas não-devs
                         showMaintenanceOverlay();
@@ -291,9 +291,15 @@
     }
 
     // --- OVERLAY DE SINCRONIZAÇÃO (DADOS ATUALIZANDO) ---
-    function showSyncOverlay() {
+    function showSyncOverlay(lockData) {
         // Evitar overlay duplicado
         if (document.getElementById('sync-overlay')) return;
+
+        // Calcular progresso real baseado no servidor
+        const syncStartedAt = lockData && lockData.sync_started_at ? new Date(lockData.sync_started_at).getTime() : Date.now();
+        const syncEstimatedMs = lockData && lockData.sync_estimated_ms ? lockData.sync_estimated_ms : 120000;
+        const estimatedMinutes = Math.ceil(syncEstimatedMs / 60000);
+        const estimatedLabel = estimatedMinutes <= 1 ? '~1 minuto' : `~${estimatedMinutes} minutos`;
 
         // 1. Injetar estilos
         const style = document.createElement('style');
@@ -314,10 +320,6 @@
             @keyframes sync-pulse {
                 0%, 100% { opacity: 1; transform: scale(1); }
                 50% { opacity: 0.5; transform: scale(1.3); }
-            }
-            @keyframes sync-progress {
-                from { width: 0%; }
-                to { width: 100%; }
             }
             @keyframes sync-shimmer {
                 0% { background-position: -200% center; }
@@ -348,9 +350,6 @@
                 background-clip: text;
                 animation: sync-shimmer 4s linear infinite;
             }
-            #sync-overlay .sync-progress-fill {
-                animation: sync-progress 120s linear forwards;
-            }
             #sync-overlay .sync-btn {
                 transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
             }
@@ -376,6 +375,10 @@
         blurTarget.style.pointerEvents = 'none';
         blurTarget.style.userSelect = 'none';
         blurTarget.style.transition = 'filter 0.6s ease';
+
+        // Calcular progresso inicial
+        const elapsedMs = Date.now() - syncStartedAt;
+        const initialProgress = Math.min((elapsedMs / syncEstimatedMs) * 100, 95);
 
         // 3. Overlay
         const overlay = document.createElement('div');
@@ -435,22 +438,31 @@
                     Os dados desta tela estão sendo <strong style="color: #e4e4e7;">sincronizados</strong> com o sistema ERP.
                 </p>
                 <p style="color: #71717a; line-height: 1.6; margin-bottom: 20px; font-size: 0.85rem;">
-                    Tempo estimado: <strong style="color: #60a5fa;">~2 minutos</strong>
+                    Tempo estimado: <strong style="color: #60a5fa;">${estimatedLabel}</strong>
                 </p>
 
                 <!-- Progress bar -->
                 <div style="
-                    width: 100%; max-width: 360px; height: 4px;
+                    width: 100%; max-width: 360px; height: 6px;
                     background: rgba(59, 130, 246, 0.1);
-                    border-radius: 2px; margin: 0 auto 14px;
+                    border-radius: 3px; margin: 0 auto 6px;
                     overflow: hidden;
                 ">
-                    <div class="sync-progress-fill" style="height: 100%; background: linear-gradient(90deg, #3b82f6, #60a5fa); border-radius: 2px; width: 0%;"></div>
+                    <div id="sync-progress-fill" style="
+                        height: 100%; 
+                        background: linear-gradient(90deg, #3b82f6, #60a5fa); 
+                        border-radius: 3px; 
+                        width: ${initialProgress}%;
+                        transition: width 1s linear;
+                    "></div>
                 </div>
+                <p id="sync-progress-label" style="color: #52525b; font-size: 0.75rem; margin-bottom: 20px;">
+                    ${Math.round(initialProgress)}%
+                </p>
 
                 <!-- Countdown -->
                 <p id="sync-redirect-countdown" style="color: #71717a; font-size: 0.8rem; margin-bottom: 28px;">
-                    Redirecionando em <strong style="color: #e4e4e7;">5</strong> segundos...
+                    Redirecionando em <strong style="color: #e4e4e7;">10</strong> segundos...
                 </p>
 
                 <!-- Divider -->
@@ -473,8 +485,18 @@
 
         document.body.appendChild(overlay);
 
-        // Countdown e redirect automático
-        let secondsLeft = 5;
+        // Atualizar barra de progresso a cada segundo (progresso real baseado no tempo do servidor)
+        const progressFill = document.getElementById('sync-progress-fill');
+        const progressLabel = document.getElementById('sync-progress-label');
+        const progressInterval = setInterval(() => {
+            const elapsed = Date.now() - syncStartedAt;
+            const pct = Math.min((elapsed / syncEstimatedMs) * 100, 95); // Nunca chega a 100 até desbloquear
+            if (progressFill) progressFill.style.width = pct + '%';
+            if (progressLabel) progressLabel.textContent = Math.round(pct) + '%';
+        }, 1000);
+
+        // Countdown de 10 segundos e redirect automático
+        let secondsLeft = 10;
         const countdownEl = document.getElementById('sync-redirect-countdown');
         const countdownInterval = setInterval(() => {
             secondsLeft--;
@@ -483,6 +505,7 @@
             }
             if (secondsLeft <= 0) {
                 clearInterval(countdownInterval);
+                clearInterval(progressInterval);
                 window.location.replace('index.html');
             }
         }, 1000);

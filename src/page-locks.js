@@ -55,15 +55,37 @@ router.post('/sync-lock', async (req, res) => {
     }
 
     try {
-        await pool.query(`
-            INSERT INTO page_locks (page_id, is_locked, lock_reason)
-            VALUES ($1, true, 'sync')
-            ON CONFLICT (page_id) 
-            DO UPDATE SET is_locked = true, lock_reason = 'sync', updated_at = CURRENT_TIMESTAMP
-        `, [page_id]);
+        // Calcular estimativa baseada na média das últimas 3 sincronizações
+        const historyResult = await pool.query(
+            `SELECT duration_ms FROM sync_history 
+             WHERE page_id = $1 
+             ORDER BY created_at DESC LIMIT 3`,
+            [page_id]
+        );
 
-        console.log(`🔒 Sync lock ativado: ${page_id}`);
-        res.json({ success: true, message: `Página ${page_id} bloqueada para sincronização.` });
+        let estimatedMs = 120000; // Default: 2 minutos
+        if (historyResult.rows.length > 0) {
+            const sum = historyResult.rows.reduce((acc, r) => acc + r.duration_ms, 0);
+            estimatedMs = Math.round(sum / historyResult.rows.length);
+        }
+
+        const now = new Date();
+
+        await pool.query(`
+            INSERT INTO page_locks (page_id, is_locked, lock_reason, sync_started_at, sync_estimated_ms)
+            VALUES ($1, true, 'sync', $2, $3)
+            ON CONFLICT (page_id) 
+            DO UPDATE SET is_locked = true, lock_reason = 'sync', 
+                          sync_started_at = $2, sync_estimated_ms = $3, 
+                          updated_at = CURRENT_TIMESTAMP
+        `, [page_id, now, estimatedMs]);
+
+        console.log(`🔒 Sync lock ativado: ${page_id} (estimativa: ${Math.round(estimatedMs / 1000)}s)`);
+        res.json({
+            success: true,
+            message: `Página ${page_id} bloqueada para sincronização.`,
+            estimated_ms: estimatedMs
+        });
     } catch (error) {
         console.error('Erro ao ativar sync lock:', error);
         res.status(500).json({ success: false, message: 'Erro ao bloquear página.' });
@@ -79,14 +101,42 @@ router.post('/sync-unlock', async (req, res) => {
     }
 
     try {
+        // Buscar o horário de início do sync para calcular a duração real
+        const lockResult = await pool.query(
+            'SELECT sync_started_at FROM page_locks WHERE page_id = $1',
+            [page_id]
+        );
+
+        const now = new Date();
+        let durationMs = 0;
+
+        if (lockResult.rows.length > 0 && lockResult.rows[0].sync_started_at) {
+            const startedAt = new Date(lockResult.rows[0].sync_started_at);
+            durationMs = now.getTime() - startedAt.getTime();
+
+            // Registrar no histórico
+            await pool.query(
+                `INSERT INTO sync_history (page_id, started_at, finished_at, duration_ms)
+                 VALUES ($1, $2, $3, $4)`,
+                [page_id, startedAt, now, durationMs]
+            );
+        }
+
+        // Desbloquear a página
         await pool.query(`
             UPDATE page_locks 
-            SET is_locked = false, lock_reason = NULL, updated_at = CURRENT_TIMESTAMP
+            SET is_locked = false, lock_reason = NULL, 
+                sync_started_at = NULL, sync_estimated_ms = NULL,
+                updated_at = CURRENT_TIMESTAMP
             WHERE page_id = $1
         `, [page_id]);
 
-        console.log(`🔓 Sync lock removido: ${page_id}`);
-        res.json({ success: true, message: `Página ${page_id} desbloqueada após sincronização.` });
+        console.log(`🔓 Sync lock removido: ${page_id} (duração real: ${Math.round(durationMs / 1000)}s)`);
+        res.json({
+            success: true,
+            message: `Página ${page_id} desbloqueada após sincronização.`,
+            duration_ms: durationMs
+        });
     } catch (error) {
         console.error('Erro ao remover sync lock:', error);
         res.status(500).json({ success: false, message: 'Erro ao desbloquear página.' });
