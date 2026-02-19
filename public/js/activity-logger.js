@@ -34,9 +34,7 @@
         const page = window.location.pathname.split('/').pop() || 'index.html';
         const role = (localStorage.getItem('erus_role') || 'Visitante').toLowerCase();
 
-        // Desenvolvedores e Admins ignoram bloqueios
-        if (role === 'desenvolvedor' || role === 'admin') return;
-
+        // Desenvolvedores e Admins ignoram bloqueios manuais, mas NÃO sync locks
         try {
             const response = await fetch('/api/page-locks');
             const result = await response.json();
@@ -44,7 +42,13 @@
             if (result.success && Array.isArray(result.data)) {
                 const lock = result.data.find(l => l.page_id === page);
                 if (lock && lock.is_locked) {
-                    showMaintenanceOverlay();
+                    if (lock.lock_reason === 'sync') {
+                        // Sync lock afeta TODOS os usuários, inclusive devs
+                        showSyncOverlay();
+                    } else if (role !== 'desenvolvedor' && role !== 'admin') {
+                        // Bloqueio manual — apenas não-devs
+                        showMaintenanceOverlay();
+                    }
                 }
             }
         } catch (e) {
@@ -281,6 +285,209 @@
         document.body.appendChild(overlay);
 
         // Impedir que o usuário use ESC para fechar algo se estiver bloqueado
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') e.preventDefault();
+        }, true);
+    }
+
+    // --- OVERLAY DE SINCRONIZAÇÃO (DADOS ATUALIZANDO) ---
+    function showSyncOverlay() {
+        // Evitar overlay duplicado
+        if (document.getElementById('sync-overlay')) return;
+
+        // 1. Injetar estilos
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes sync-fadein {
+                from { opacity: 0; }
+                to { opacity: 1; }
+            }
+            @keyframes sync-modal-enter {
+                0% { opacity: 0; transform: translateY(30px) scale(0.92); }
+                60% { transform: translateY(-6px) scale(1.02); }
+                100% { opacity: 1; transform: translateY(0) scale(1); }
+            }
+            @keyframes sync-spin {
+                from { transform: rotate(0deg); }
+                to { transform: rotate(360deg); }
+            }
+            @keyframes sync-pulse {
+                0%, 100% { opacity: 1; transform: scale(1); }
+                50% { opacity: 0.5; transform: scale(1.3); }
+            }
+            @keyframes sync-progress {
+                from { width: 0%; }
+                to { width: 100%; }
+            }
+            @keyframes sync-shimmer {
+                0% { background-position: -200% center; }
+                100% { background-position: 200% center; }
+            }
+            @keyframes sync-border-glow {
+                0%, 100% { border-color: rgba(59, 130, 246, 0.15); }
+                50% { border-color: rgba(59, 130, 246, 0.4); }
+            }
+            #sync-overlay {
+                animation: sync-fadein 0.5s ease-out forwards;
+            }
+            #sync-overlay .sync-modal {
+                animation: sync-modal-enter 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) 0.15s both,
+                           sync-border-glow 3s ease-in-out infinite 1s;
+            }
+            #sync-overlay .sync-spinner {
+                animation: sync-spin 1.5s linear infinite;
+            }
+            #sync-overlay .sync-pulse {
+                animation: sync-pulse 2s ease-in-out infinite;
+            }
+            #sync-overlay .sync-title {
+                background: linear-gradient(90deg, #fff 0%, #60a5fa 30%, #fff 60%, #60a5fa 100%);
+                background-size: 200% auto;
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                background-clip: text;
+                animation: sync-shimmer 4s linear infinite;
+            }
+            #sync-overlay .sync-progress-fill {
+                animation: sync-progress 120s linear forwards;
+            }
+            #sync-overlay .sync-btn {
+                transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            }
+            #sync-overlay .sync-btn:hover {
+                transform: translateY(-2px) scale(1.04);
+                box-shadow: 0 14px 30px -6px rgba(59, 130, 246, 0.35);
+                background: linear-gradient(135deg, #60a5fa, #3b82f6) !important;
+            }
+        `;
+        document.head.appendChild(style);
+
+        // 2. Blur
+        let blurTarget = document.querySelector('.app-layout');
+        if (!blurTarget) {
+            blurTarget = document.createElement('div');
+            blurTarget.id = 'sync-blur-wrapper';
+            while (document.body.firstChild) {
+                blurTarget.appendChild(document.body.firstChild);
+            }
+            document.body.appendChild(blurTarget);
+        }
+        blurTarget.style.filter = 'blur(8px) saturate(0.5)';
+        blurTarget.style.pointerEvents = 'none';
+        blurTarget.style.userSelect = 'none';
+        blurTarget.style.transition = 'filter 0.6s ease';
+
+        // 3. Overlay
+        const overlay = document.createElement('div');
+        overlay.id = 'sync-overlay';
+        overlay.style.cssText = `
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(9, 9, 11, 0.6);
+            display: flex; align-items: center; justify-content: center;
+            z-index: 99999;
+            color: #fff;
+            font-family: 'Inter', sans-serif;
+            text-align: center;
+            padding: 20px;
+            backdrop-filter: blur(2px);
+            opacity: 0;
+        `;
+
+        overlay.innerHTML = `
+            <div class="sync-modal" style="
+                max-width: 520px; width: 100%;
+                background: rgba(15, 15, 20, 0.88);
+                backdrop-filter: blur(40px) saturate(1.5);
+                -webkit-backdrop-filter: blur(40px) saturate(1.5);
+                padding: 48px 40px 40px;
+                border-radius: 28px;
+                border: 1px solid rgba(59, 130, 246, 0.15);
+                box-shadow: 0 0 0 1px rgba(255,255,255,0.04), 0 30px 60px -12px rgba(0,0,0,0.6), 0 0 80px -20px rgba(59, 130, 246, 0.12);
+                position: relative; overflow: hidden;
+            ">
+                <!-- Status -->
+                <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 28px;">
+                    <span class="sync-pulse" style="width: 8px; height: 8px; background: #60a5fa; border-radius: 50%; display: inline-block;"></span>
+                    <span style="font-size: 0.75rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #60a5fa;">Sincronização em Andamento</span>
+                </div>
+
+                <!-- Icon -->
+                <div style="
+                    width: 88px; height: 88px;
+                    background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(59, 130, 246, 0.05));
+                    border-radius: 24px;
+                    display: flex; align-items: center; justify-content: center;
+                    margin: 0 auto 28px;
+                    border: 1px solid rgba(59, 130, 246, 0.2);
+                    box-shadow: 0 8px 24px -4px rgba(59, 130, 246, 0.15);
+                ">
+                    <i class="fa-solid fa-arrows-rotate sync-spinner" style="font-size: 36px; color: #60a5fa;"></i>
+                </div>
+
+                <!-- Title -->
+                <h1 class="sync-title" style="font-size: 1.5rem; font-weight: 800; margin-bottom: 14px; letter-spacing: -0.03em; line-height: 1.2;">
+                    Dados Sendo Atualizados
+                </h1>
+
+                <!-- Description -->
+                <p style="color: #a1a1aa; line-height: 1.7; margin-bottom: 8px; font-size: 0.95rem; max-width: 400px; margin-left: auto; margin-right: auto;">
+                    Os dados desta tela estão sendo <strong style="color: #e4e4e7;">sincronizados</strong> com o sistema ERP.
+                </p>
+                <p style="color: #71717a; line-height: 1.6; margin-bottom: 20px; font-size: 0.85rem;">
+                    Tempo estimado: <strong style="color: #60a5fa;">~2 minutos</strong>
+                </p>
+
+                <!-- Progress bar -->
+                <div style="
+                    width: 100%; max-width: 360px; height: 4px;
+                    background: rgba(59, 130, 246, 0.1);
+                    border-radius: 2px; margin: 0 auto 14px;
+                    overflow: hidden;
+                ">
+                    <div class="sync-progress-fill" style="height: 100%; background: linear-gradient(90deg, #3b82f6, #60a5fa); border-radius: 2px; width: 0%;"></div>
+                </div>
+
+                <!-- Countdown -->
+                <p id="sync-redirect-countdown" style="color: #71717a; font-size: 0.8rem; margin-bottom: 28px;">
+                    Redirecionando em <strong style="color: #e4e4e7;">5</strong> segundos...
+                </p>
+
+                <!-- Divider -->
+                <div style="width: 60px; height: 2px; background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.4), transparent); margin: 0 auto 28px; border-radius: 1px;"></div>
+
+                <!-- Button -->
+                <a href="index.html" class="sync-btn" style="
+                    display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+                    background: linear-gradient(135deg, #3b82f6, #2563eb);
+                    color: #fff; padding: 14px 36px; border-radius: 14px;
+                    font-weight: 700; font-size: 0.9rem; text-decoration: none;
+                    box-shadow: 0 10px 25px -5px rgba(59, 130, 246, 0.3);
+                    letter-spacing: 0.01em;
+                ">
+                    <i class="fa-solid fa-arrow-left" style="font-size: 14px;"></i>
+                    Voltar para o Início
+                </a>
+            </div>
+        `;
+
+        document.body.appendChild(overlay);
+
+        // Countdown e redirect automático
+        let secondsLeft = 5;
+        const countdownEl = document.getElementById('sync-redirect-countdown');
+        const countdownInterval = setInterval(() => {
+            secondsLeft--;
+            if (countdownEl) {
+                countdownEl.innerHTML = `Redirecionando em <strong style="color: #e4e4e7;">${secondsLeft}</strong> segundo${secondsLeft !== 1 ? 's' : ''}...`;
+            }
+            if (secondsLeft <= 0) {
+                clearInterval(countdownInterval);
+                window.location.replace('index.html');
+            }
+        }, 1000);
+
+        // Bloquear ESC
         window.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') e.preventDefault();
         }, true);
@@ -546,6 +753,13 @@
             url: window.location.href
         });
     });
+
+    // 1b. Polling de sync lock a cada 10s (detecta bloqueio enquanto usuário está na página)
+    setInterval(() => {
+        if (!document.getElementById('sync-overlay') && !document.getElementById('maintenance-overlay')) {
+            checkPageLock();
+        }
+    }, 10000);
 
     // 2. Log Modal Openings
     document.addEventListener('DOMContentLoaded', () => {
