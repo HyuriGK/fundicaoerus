@@ -16,14 +16,16 @@ router.get('/', async (req, res) => {
         const endDate = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`;
 
         // 1. Produção por setor (mês selecionado)
+        // JOIN com produto_pesos_producao para usar pesos corrigidos (mesmo que apontamentos_produtivos.html)
         const producaoSetoresRes = await pool.query(`
             SELECT 
-                setor,
-                SUM(quantidade) as qty,
-                SUM(quantidade * COALESCE(NULLIF(peso_un, 0), 0)) as peso_total
-            FROM producao_apontada_sincronizada
-            WHERE data_producao >= $1 AND data_producao < $2
-            GROUP BY setor
+                t.setor,
+                SUM(t.quantidade) as qty,
+                SUM(t.quantidade * COALESCE(NULLIF(t.peso_un, 0), p.peso, 0)) as peso_total
+            FROM producao_apontada_sincronizada t
+            LEFT JOIN produto_pesos_producao p ON t.codigo_peca = p.codigo_peca
+            WHERE t.data_producao >= $1 AND t.data_producao < $2
+            GROUP BY t.setor
             ORDER BY peso_total DESC
         `, [startDate, endDate]);
 
@@ -66,11 +68,12 @@ router.get('/', async (req, res) => {
         // 6. Evolução mensal (12 meses do ano)
         const evolucaoRes = await pool.query(`
             SELECT 
-                EXTRACT(MONTH FROM data_producao) as mes,
-                SUM(quantidade * COALESCE(NULLIF(peso_un, 0), 0)) as producao_kg
-            FROM producao_apontada_sincronizada
-            WHERE EXTRACT(YEAR FROM data_producao) = $1
-            GROUP BY EXTRACT(MONTH FROM data_producao)
+                EXTRACT(MONTH FROM t.data_producao) as mes,
+                SUM(t.quantidade * COALESCE(NULLIF(t.peso_un, 0), p.peso, 0)) as producao_kg
+            FROM producao_apontada_sincronizada t
+            LEFT JOIN produto_pesos_producao p ON t.codigo_peca = p.codigo_peca
+            WHERE EXTRACT(YEAR FROM t.data_producao) = $1
+            GROUP BY EXTRACT(MONTH FROM t.data_producao)
             ORDER BY mes
         `, [year]);
 
@@ -102,13 +105,14 @@ router.get('/', async (req, res) => {
         // 7. Top 5 ligas mais produzidas (mês selecionado)
         const ligasRes = await pool.query(`
             SELECT 
-                COALESCE(NULLIF(TRIM(liga), ''), 'Sem Liga') as liga,
-                SUM(quantidade) as qty,
-                SUM(quantidade * COALESCE(NULLIF(peso_un, 0), 0)) as peso_total
-            FROM producao_apontada_sincronizada
-            WHERE data_producao >= $1 AND data_producao < $2
-              AND liga IS NOT NULL AND TRIM(liga) != ''
-            GROUP BY TRIM(liga)
+                COALESCE(NULLIF(TRIM(t.liga), ''), 'Sem Liga') as liga,
+                SUM(t.quantidade) as qty,
+                SUM(t.quantidade * COALESCE(NULLIF(t.peso_un, 0), p.peso, 0)) as peso_total
+            FROM producao_apontada_sincronizada t
+            LEFT JOIN produto_pesos_producao p ON t.codigo_peca = p.codigo_peca
+            WHERE t.data_producao >= $1 AND t.data_producao < $2
+              AND t.liga IS NOT NULL AND TRIM(t.liga) != ''
+            GROUP BY TRIM(t.liga)
             ORDER BY peso_total DESC
             LIMIT 5
         `, [startDate, endDate]);
