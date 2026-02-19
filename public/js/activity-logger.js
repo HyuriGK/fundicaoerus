@@ -1,5 +1,8 @@
 
 (function () {
+    // Evitar execução duplicada se o script for incluído mais de uma vez
+    if (window.__activityLoggerLoaded) return;
+    window.__activityLoggerLoaded = true;
     // Helper to get current user
     function getUserName() {
         return localStorage.getItem('erus_user') || localStorage.getItem('erus_username') || 'Visitante';
@@ -50,6 +53,9 @@
     }
 
     function showMaintenanceOverlay() {
+        // Evitar criar overlay duplicado
+        if (document.getElementById('maintenance-overlay')) return;
+
         // 1. Injetar estilos de animação
         const style = document.createElement('style');
         style.textContent = `
