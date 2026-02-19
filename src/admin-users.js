@@ -30,7 +30,7 @@ router.get('/', checkDevRole, async (req, res) => {
             LEFT JOIN LATERAL (
                 SELECT created_at AS last_activity_at, table_name AS last_activity_page
                 FROM audit_logs
-                WHERE user_name = u.username
+                WHERE user_name = u.username AND action = 'PAGE_VISIT'
                 ORDER BY created_at DESC
                 LIMIT 1
             ) la ON true
