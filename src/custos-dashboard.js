@@ -15,8 +15,19 @@ router.get('/', async (req, res) => {
         const nextYear = month === 12 ? year + 1 : year;
         const endDate = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`;
 
-        // 1. Produção por setor (mês selecionado)
-        // JOIN com produto_pesos_producao para usar pesos corrigidos (mesmo que apontamentos_produtivos.html)
+        // 1. Produção FUSÃO no mês (KPI principal)
+        // JOIN com produto_pesos_producao para pesos corrigidos (mesmo que apontamentos_produtivos.html)
+        const fusaoRes = await pool.query(`
+            SELECT 
+                COALESCE(SUM(t.quantidade * COALESCE(NULLIF(t.peso_un, 0), p.peso, 0)), 0) as peso_total
+            FROM producao_apontada_sincronizada t
+            LEFT JOIN produto_pesos_producao p ON t.codigo_peca = p.codigo_peca
+            WHERE t.data_producao >= $1 AND t.data_producao < $2
+              AND UPPER(t.setor) = 'FUSAO'
+        `, [startDate, endDate]);
+        const producaoFusaoKg = parseFloat(fusaoRes.rows[0].peso_total || 0);
+
+        // 2. Produção por setor (para gráfico)
         const producaoSetoresRes = await pool.query(`
             SELECT 
                 t.setor,
@@ -29,23 +40,28 @@ router.get('/', async (req, res) => {
             ORDER BY peso_total DESC
         `, [startDate, endDate]);
 
-        // 2. Produção total do mês
-        const producaoTotalKg = producaoSetoresRes.rows.reduce((sum, r) => sum + parseFloat(r.peso_total || 0), 0);
-
-        // 3. Faturamento do mês (não excluídos manualmente)
+        // 3. Faturamento do mês — mesma lógica do faturamentos.html
+        // Peso = SUM(peso_total), Valor = SUM(valor_unitario * quantidade * 100)
+        // Exclui registros excluídos manualmente e via preferências
         const fatRes = await pool.query(`
             SELECT 
-                COALESCE(SUM(peso_total), 0) as fat_peso,
-                COALESCE(SUM(valor_total), 0) as fat_valor
-            FROM faturamento_firebird
-            WHERE data_faturamento >= $1 AND data_faturamento < $2
-              AND (excluido_manualmente IS NULL OR excluido_manualmente = false)
+                COALESCE(SUM(f.peso_total), 0) as fat_peso,
+                COALESCE(SUM(f.valor_unitario * f.quantidade * 100), 0) as fat_valor
+            FROM faturamento_firebird f
+            LEFT JOIN faturamento_firebird_preferencias p
+                ON p.nota_fiscal = f.nota_fiscal
+                AND p.codigo_item IS NOT DISTINCT FROM CAST(TRIM(f.codigo_item) AS VARCHAR)
+                AND COALESCE(p.pedido, '') = COALESCE(TRIM(f.pedido), '')
+                AND p.data_faturamento = f.data_faturamento
+                AND p.quantidade = f.quantidade
+            WHERE f.data_faturamento >= $1 AND f.data_faturamento < $2
+              AND COALESCE(p.excluido, f.excluido_manualmente, false) = false
         `, [startDate, endDate]);
 
         const faturamentoKg = parseFloat(fatRes.rows[0].fat_peso || 0);
         const faturamentoValor = parseFloat(fatRes.rows[0].fat_valor || 0);
 
-        // 4. Carteira (snapshot atual, sem filtro de data)
+        // 4. Carteira (snapshot atual)
         const carteiraRes = await pool.query(`
             SELECT 
                 COUNT(*) as total_pedidos,
@@ -63,46 +79,53 @@ router.get('/', async (req, res) => {
             WHERE EXTRACT(MONTH FROM data_iso) = $1 AND EXTRACT(YEAR FROM data_iso) = $2
         `, [month, year]);
         const custoTotal = parseFloat(custosRes.rows[0].custo_total || 0);
-        const custoPerKg = producaoTotalKg > 0 ? custoTotal / producaoTotalKg : 0;
+        const custoPerKg = producaoFusaoKg > 0 ? custoTotal / producaoFusaoKg : 0;
 
-        // 6. Evolução mensal (12 meses do ano)
-        const evolucaoRes = await pool.query(`
+        // 6. Evolução mensal (12 meses):
+        //    Produção = FUSÃO com pesos corrigidos
+        //    Faturamento = peso_total de faturamento_firebird (mesma lógica do faturamentos.html)
+        const evolucaoFusaoRes = await pool.query(`
             SELECT 
                 EXTRACT(MONTH FROM t.data_producao) as mes,
                 SUM(t.quantidade * COALESCE(NULLIF(t.peso_un, 0), p.peso, 0)) as producao_kg
             FROM producao_apontada_sincronizada t
             LEFT JOIN produto_pesos_producao p ON t.codigo_peca = p.codigo_peca
             WHERE EXTRACT(YEAR FROM t.data_producao) = $1
+              AND UPPER(t.setor) = 'FUSAO'
             GROUP BY EXTRACT(MONTH FROM t.data_producao)
             ORDER BY mes
         `, [year]);
 
         const fatEvolucaoRes = await pool.query(`
             SELECT 
-                EXTRACT(MONTH FROM data_faturamento) as mes,
-                COALESCE(SUM(peso_total), 0) as fat_kg,
-                COALESCE(SUM(valor_total), 0) as fat_valor
-            FROM faturamento_firebird
-            WHERE EXTRACT(YEAR FROM data_faturamento) = $1
-              AND (excluido_manualmente IS NULL OR excluido_manualmente = false)
-            GROUP BY EXTRACT(MONTH FROM data_faturamento)
+                EXTRACT(MONTH FROM f.data_faturamento) as mes,
+                COALESCE(SUM(f.peso_total), 0) as fat_kg
+            FROM faturamento_firebird f
+            LEFT JOIN faturamento_firebird_preferencias p
+                ON p.nota_fiscal = f.nota_fiscal
+                AND p.codigo_item IS NOT DISTINCT FROM CAST(TRIM(f.codigo_item) AS VARCHAR)
+                AND COALESCE(p.pedido, '') = COALESCE(TRIM(f.pedido), '')
+                AND p.data_faturamento = f.data_faturamento
+                AND p.quantidade = f.quantidade
+            WHERE EXTRACT(YEAR FROM f.data_faturamento) = $1
+              AND COALESCE(p.excluido, f.excluido_manualmente, false) = false
+            GROUP BY EXTRACT(MONTH FROM f.data_faturamento)
             ORDER BY mes
         `, [year]);
 
         // Merge into 12-month array
         const evolucaoMensal = [];
         for (let m = 1; m <= 12; m++) {
-            const prod = evolucaoRes.rows.find(r => parseInt(r.mes) === m);
+            const prod = evolucaoFusaoRes.rows.find(r => parseInt(r.mes) === m);
             const fat = fatEvolucaoRes.rows.find(r => parseInt(r.mes) === m);
             evolucaoMensal.push({
                 mes: m,
                 producaoKg: parseFloat(prod?.producao_kg || 0),
-                faturamentoKg: parseFloat(fat?.fat_kg || 0),
-                faturamentoValor: parseFloat(fat?.fat_valor || 0)
+                faturamentoKg: parseFloat(fat?.fat_kg || 0)
             });
         }
 
-        // 7. Top 5 ligas mais produzidas (mês selecionado)
+        // 7. Top 5 ligas (mês selecionado)
         const ligasRes = await pool.query(`
             SELECT 
                 COALESCE(NULLIF(TRIM(t.liga), ''), 'Sem Liga') as liga,
@@ -121,7 +144,7 @@ router.get('/', async (req, res) => {
             success: true,
             data: {
                 // KPIs
-                producaoTotalKg: Math.round(producaoTotalKg),
+                producaoFusaoKg: Math.round(producaoFusaoKg),
                 faturamentoKg: Math.round(faturamentoKg),
                 faturamentoValor: Math.round(faturamentoValor * 100) / 100,
                 carteiraPeso: Math.round(carteiraPeso),

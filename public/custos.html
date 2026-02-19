@@ -253,7 +253,7 @@
         /* --- KPI GRID --- */
         .kpi-grid {
             display: grid;
-            grid-template-columns: repeat(6, 1fr);
+            grid-template-columns: repeat(5, 1fr);
             gap: 10px;
             flex-shrink: 0;
         }
@@ -376,6 +376,10 @@
             gap: 10px;
             flex: 1;
             min-height: 0;
+        }
+
+        .charts-grid>.chart-panel:last-child {
+            grid-column: 1 / -1;
         }
 
         .chart-panel {
@@ -503,8 +507,8 @@
         <div class="kpi-grid">
             <div class="kpi-card kpi-amber">
                 <div class="kpi-header">
-                    <span class="kpi-label">Produção Total</span>
-                    <div class="kpi-icon"><i class="fa-solid fa-weight-hanging"></i></div>
+                    <span class="kpi-label">Produção Fusão</span>
+                    <div class="kpi-icon"><i class="fa-solid fa-fire"></i></div>
                 </div>
                 <span class="kpi-value" id="kpiProducao">—</span>
                 <span class="kpi-sub">kg no mês</span>
@@ -533,14 +537,6 @@
                 <span class="kpi-value" id="kpiCarteiraPeso">—</span>
                 <span class="kpi-sub" id="kpiCarteiraPedidos">— pedidos</span>
             </div>
-            <div class="kpi-card kpi-cyan">
-                <div class="kpi-header">
-                    <span class="kpi-label">Setores Ativos</span>
-                    <div class="kpi-icon"><i class="fa-solid fa-gears"></i></div>
-                </div>
-                <span class="kpi-value" id="kpiSetoresAtivos">—</span>
-                <span class="kpi-sub">com produção</span>
-            </div>
             <div class="kpi-card kpi-red">
                 <div class="kpi-header">
                     <span class="kpi-label">Custo / Kg</span>
@@ -564,11 +560,11 @@
                 <div class="chart-container"><canvas id="chartSetores"></canvas></div>
             </div>
 
-            <!-- 2. Evolução Mensal -->
+            <!-- 2. Evolução Mensal (Fusão vs Faturamento em peso) -->
             <div class="chart-panel">
                 <div class="panel-header">
                     <span class="panel-title"><i class="fa-solid fa-chart-line" style="color: var(--success);"></i>
-                        Evolução Mensal (kg)</span>
+                        Evolução Mensal — Fusão vs Faturamento (kg)</span>
                     <span class="panel-badge" style="background: rgba(16,185,129,0.1); color: var(--success);"
                         id="badgeEvolucao">—</span>
                 </div>
@@ -585,17 +581,6 @@
                 </div>
                 <div class="chart-container"><canvas id="chartLigas"></canvas></div>
             </div>
-
-            <!-- 4. Faturamento Mensal -->
-            <div class="chart-panel">
-                <div class="panel-header">
-                    <span class="panel-title"><i class="fa-solid fa-money-bill-trend-up"
-                            style="color: var(--info);"></i> Faturamento Mensal (R$)</span>
-                    <span class="panel-badge" style="background: rgba(59,130,246,0.1); color: var(--info);"
-                        id="badgeFaturamento">—</span>
-                </div>
-                <div class="chart-container"><canvas id="chartFaturamento"></canvas></div>
-            </div>
         </div>
     </div>
 
@@ -610,7 +595,7 @@
         // STATE
         // ========================
         let currentYear, currentMonth;
-        let chartSetores, chartEvolucao, chartLigas, chartFaturamento;
+        let chartSetores, chartEvolucao, chartLigas;
 
         const MONTH_NAMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
@@ -671,7 +656,6 @@
                 renderChartSetores(d.producaoSetores);
                 renderChartEvolucao(d.evolucaoMensal);
                 renderChartLigas(d.topLigas);
-                renderChartFaturamento(d.evolucaoMensal);
 
                 document.getElementById('footerTimestamp').textContent =
                     `Atualizado em ${new Date().toLocaleString('pt-BR')}`;
@@ -694,12 +678,11 @@
         }
 
         function updateKPIs(d) {
-            document.getElementById('kpiProducao').textContent = fmtNum(d.producaoTotalKg) + ' kg';
+            document.getElementById('kpiProducao').textContent = fmtNum(d.producaoFusaoKg) + ' kg';
             document.getElementById('kpiFatPeso').textContent = fmtNum(d.faturamentoKg) + ' kg';
             document.getElementById('kpiFatValor').textContent = fmtBRL(d.faturamentoValor);
             document.getElementById('kpiCarteiraPeso').textContent = fmtNum(d.carteiraPeso) + ' kg';
             document.getElementById('kpiCarteiraPedidos').textContent = d.carteiraPedidos + ' pedidos';
-            document.getElementById('kpiSetoresAtivos').textContent = d.producaoSetores.length;
             document.getElementById('kpiCustoKg').textContent = d.custoTotal > 0 ? fmtBRL(d.custoPerKg) : '—';
             document.getElementById('kpiCustoTotal').textContent = d.custoTotal > 0
                 ? 'custo total: ' + fmtBRL(d.custoTotal)
@@ -811,7 +794,7 @@
                     labels,
                     datasets: [
                         {
-                            label: 'Produção',
+                            label: 'Fusão',
                             data: prodData,
                             borderColor: '#fbbf24',
                             backgroundColor: 'rgba(251, 191, 36, 0.08)',
@@ -822,7 +805,7 @@
                             borderWidth: 2
                         },
                         {
-                            label: 'Faturamento',
+                            label: 'Faturamento (peso)',
                             data: fatData,
                             borderColor: '#10b981',
                             backgroundColor: 'rgba(16, 185, 129, 0.08)',
@@ -940,66 +923,7 @@
             });
         }
 
-        // ========================
-        // 4. FATURAMENTO MENSAL (R$)
-        // ========================
-        function renderChartFaturamento(evolucao) {
-            const ctx = document.getElementById('chartFaturamento').getContext('2d');
-            if (chartFaturamento) chartFaturamento.destroy();
 
-            const labels = evolucao.map(e => MONTH_NAMES[e.mes - 1]);
-            const data = evolucao.map(e => e.faturamentoValor);
-            const total = data.reduce((a, b) => a + b, 0);
-
-            document.getElementById('badgeFaturamento').textContent = fmtBRL(total);
-
-            const gradient = ctx.createLinearGradient(0, 0, 0, ctx.canvas.clientHeight || 300);
-            gradient.addColorStop(0, 'rgba(59, 130, 246, 0.25)');
-            gradient.addColorStop(1, 'rgba(59, 130, 246, 0.02)');
-
-            chartFaturamento = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels,
-                    datasets: [{
-                        data,
-                        backgroundColor: gradient,
-                        borderColor: 'rgba(59, 130, 246, 0.6)',
-                        borderWidth: 1,
-                        borderRadius: 4,
-                        barThickness: 20
-                    }]
-                },
-                options: {
-                    ...CHART_DEFAULTS,
-                    scales: {
-                        x: {
-                            grid: GRID_STYLE,
-                            ticks: TICK_STYLE
-                        },
-                        y: {
-                            grid: GRID_STYLE,
-                            ticks: {
-                                ...TICK_STYLE,
-                                callback: v => {
-                                    if (v >= 1000000) return (v / 1000000).toFixed(1) + 'M';
-                                    if (v >= 1000) return (v / 1000).toFixed(0) + 'k';
-                                    return v;
-                                }
-                            }
-                        }
-                    },
-                    plugins: {
-                        ...CHART_DEFAULTS.plugins,
-                        tooltip: {
-                            callbacks: {
-                                label: ctx => fmtBRL(ctx.raw)
-                            }
-                        }
-                    }
-                }
-            });
-        }
     </script>
 </body>
 
