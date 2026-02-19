@@ -485,10 +485,30 @@
         const progressLabel = document.getElementById('sync-progress-label');
         const progressInterval = setInterval(() => {
             const elapsed = Date.now() - syncStartedAt;
-            const pct = Math.min((elapsed / syncEstimatedMs) * 100, 95); // Nunca chega a 100 até desbloquear
+            const pct = Math.min((elapsed / syncEstimatedMs) * 100, 100);
             if (progressFill) progressFill.style.width = pct + '%';
             if (progressLabel) progressLabel.textContent = Math.round(pct) + '%';
         }, 1000);
+
+        // Verificar a cada 5s se o sync terminou — quando desbloquear, recarrega a página
+        const page = window.location.pathname.split('/').pop() || 'index.html';
+        const syncCheckInterval = setInterval(async () => {
+            try {
+                const resp = await fetch('/api/page-locks');
+                const result = await resp.json();
+                if (result.success && Array.isArray(result.data)) {
+                    const lock = result.data.find(l => l.page_id === page);
+                    if (!lock || !lock.is_locked || lock.lock_reason !== 'sync') {
+                        // Sync terminou! Mostrar 100% e recarregar
+                        clearInterval(progressInterval);
+                        clearInterval(syncCheckInterval);
+                        if (progressFill) progressFill.style.width = '100%';
+                        if (progressLabel) progressLabel.textContent = '100%';
+                        setTimeout(() => window.location.reload(), 1500);
+                    }
+                }
+            } catch (e) { /* silenciar erros de rede */ }
+        }, 5000);
 
         // Bloquear ESC
         window.addEventListener('keydown', (e) => {
