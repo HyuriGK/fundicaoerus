@@ -286,7 +286,259 @@
         }, true);
     }
 
-    // 1. Log Page Visit on Load
+    // --- SISTEMA DE CONTROLE DE SESSÃO (CENTRALIZADO) ---
+    const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutos
+
+    function verificarSessao() {
+        // Ignorar na página de login
+        if (window.location.pathname.includes('login.html')) return;
+
+        const logado = localStorage.getItem('erus_auth');
+        const ultimaAtividade = localStorage.getItem('erus_last_activity');
+        const agora = Date.now();
+
+        // Se não estiver logado
+        if (logado !== 'true' || !ultimaAtividade) {
+            redirecionarLogin();
+            return;
+        }
+
+        // Se o tempo de inatividade passou do limite
+        if (agora - parseInt(ultimaAtividade) > SESSION_TIMEOUT) {
+            showSessionExpiredOverlay();
+        }
+    }
+
+    function atualizarAtividade() {
+        if (localStorage.getItem('erus_auth') === 'true') {
+            localStorage.setItem('erus_last_activity', Date.now().toString());
+        }
+    }
+
+    function redirecionarLogin() {
+        localStorage.clear();
+        window.location.replace('login.html');
+    }
+
+    function showSessionExpiredOverlay() {
+        // Evitar duplicado
+        if (document.getElementById('session-expired-overlay')) return;
+
+        // Limpar localStorage
+        localStorage.removeItem('erus_auth');
+        localStorage.removeItem('erus_last_activity');
+
+        // Injetar estilos de animação
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes se-overlay-fadein {
+                from { opacity: 0; }
+                to { opacity: 1; }
+            }
+            @keyframes se-modal-enter {
+                0% { opacity: 0; transform: translateY(30px) scale(0.92); }
+                60% { transform: translateY(-6px) scale(1.02); }
+                100% { opacity: 1; transform: translateY(0) scale(1); }
+            }
+            @keyframes se-pulse-ring {
+                0% { transform: scale(0.8); opacity: 1; }
+                100% { transform: scale(2.2); opacity: 0; }
+            }
+            @keyframes se-shake {
+                0%, 100% { transform: translateX(0); }
+                20% { transform: translateX(-4px); }
+                40% { transform: translateX(4px); }
+                60% { transform: translateX(-3px); }
+                80% { transform: translateX(3px); }
+            }
+            @keyframes se-countdown-pulse {
+                0%, 100% { opacity: 1; }
+                50% { opacity: 0.4; }
+            }
+            #session-expired-overlay {
+                animation: se-overlay-fadein 0.5s ease-out forwards;
+            }
+            #session-expired-overlay .se-modal {
+                animation: se-modal-enter 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) 0.15s both;
+            }
+            #session-expired-overlay .se-icon-wrap {
+                animation: se-shake 0.6s ease-in-out 0.8s;
+            }
+            #session-expired-overlay .se-pulse-ring {
+                animation: se-pulse-ring 1.5s ease-out infinite;
+            }
+            #session-expired-overlay .se-timer {
+                animation: se-countdown-pulse 2s ease-in-out infinite;
+            }
+            #session-expired-overlay .se-btn {
+                transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            }
+            #session-expired-overlay .se-btn:hover {
+                transform: translateY(-2px) scale(1.04);
+                box-shadow: 0 14px 30px -6px rgba(239, 68, 68, 0.35);
+                background: linear-gradient(135deg, #ef4444, #dc2626) !important;
+            }
+        `;
+        document.head.appendChild(style);
+
+        // Aplicar blur no conteúdo
+        let blurTarget = document.querySelector('.app-layout');
+        if (!blurTarget) {
+            blurTarget = document.createElement('div');
+            blurTarget.id = 'se-blur-wrapper';
+            while (document.body.firstChild) {
+                blurTarget.appendChild(document.body.firstChild);
+            }
+            document.body.appendChild(blurTarget);
+        }
+        blurTarget.style.filter = 'blur(8px) saturate(0.5)';
+        blurTarget.style.pointerEvents = 'none';
+        blurTarget.style.userSelect = 'none';
+        blurTarget.style.transition = 'filter 0.6s ease';
+
+        // Criar overlay
+        const overlay = document.createElement('div');
+        overlay.id = 'session-expired-overlay';
+        overlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(9, 9, 11, 0.6);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 99999;
+            color: #fff;
+            font-family: 'Inter', sans-serif;
+            text-align: center;
+            padding: 20px;
+            backdrop-filter: blur(2px);
+            opacity: 0;
+        `;
+
+        overlay.innerHTML = `
+            <div class="se-modal" style="
+                max-width: 480px;
+                width: 100%;
+                background: rgba(15, 15, 20, 0.88);
+                backdrop-filter: blur(40px) saturate(1.5);
+                -webkit-backdrop-filter: blur(40px) saturate(1.5);
+                padding: 44px 36px 36px;
+                border-radius: 28px;
+                border: 1px solid rgba(239, 68, 68, 0.15);
+                box-shadow:
+                    0 0 0 1px rgba(255,255,255,0.04),
+                    0 30px 60px -12px rgba(0, 0, 0, 0.6),
+                    0 0 60px -20px rgba(239, 68, 68, 0.1);
+                position: relative;
+                overflow: hidden;
+            ">
+                <!-- Status indicator -->
+                <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 24px;">
+                    <div style="position: relative; width: 8px; height: 8px;">
+                        <span style="position: absolute; width: 8px; height: 8px; background: #ef4444; border-radius: 50; display: inline-block;"></span>
+                        <span class="se-pulse-ring" style="position: absolute; width: 8px; height: 8px; border: 2px solid #ef4444; border-radius: 50%; display: inline-block;"></span>
+                    </div>
+                    <span style="font-size: 0.75rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #ef4444;">Sessão Expirada</span>
+                </div>
+
+                <!-- Icon -->
+                <div class="se-icon-wrap" style="
+                    width: 80px;
+                    height: 80px;
+                    background: linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(239, 68, 68, 0.05));
+                    border-radius: 22px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    margin: 0 auto 24px;
+                    border: 1px solid rgba(239, 68, 68, 0.2);
+                    box-shadow: 0 8px 24px -4px rgba(239, 68, 68, 0.12);
+                ">
+                    <i class="fa-solid fa-clock-rotate-left" style="font-size: 32px; color: #ef4444;"></i>
+                </div>
+
+                <!-- Title -->
+                <h1 style="
+                    font-size: 1.5rem;
+                    font-weight: 800;
+                    margin-bottom: 12px;
+                    letter-spacing: -0.03em;
+                    line-height: 1.2;
+                    color: #fff;
+                ">Sessão Expirada</h1>
+
+                <!-- Description -->
+                <p style="
+                    color: #a1a1aa;
+                    line-height: 1.7;
+                    margin-bottom: 10px;
+                    font-size: 0.92rem;
+                    max-width: 380px;
+                    margin-left: auto;
+                    margin-right: auto;
+                ">
+                    Sua sessão foi encerrada por <strong style="color: #e4e4e7;">inatividade de 30 minutos</strong>.
+                </p>
+                <p style="
+                    color: #71717a;
+                    line-height: 1.6;
+                    margin-bottom: 28px;
+                    font-size: 0.82rem;
+                ">
+                    Por questões de segurança, faça login novamente para continuar.
+                </p>
+
+                <!-- Divider -->
+                <div style="
+                    width: 60px;
+                    height: 2px;
+                    background: linear-gradient(90deg, transparent, rgba(239, 68, 68, 0.4), transparent);
+                    margin: 0 auto 24px;
+                    border-radius: 1px;
+                "></div>
+
+                <!-- Button -->
+                <a href="login.html" class="se-btn" style="
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 10px;
+                    background: linear-gradient(135deg, #ef4444, #b91c1c);
+                    color: #fff;
+                    padding: 14px 36px;
+                    border-radius: 14px;
+                    font-weight: 700;
+                    font-size: 0.9rem;
+                    text-decoration: none;
+                    box-shadow: 0 10px 25px -5px rgba(239, 68, 68, 0.3);
+                    letter-spacing: 0.01em;
+                ">
+                    <i class="fa-solid fa-right-to-bracket" style="font-size: 14px;"></i>
+                    Voltar para Login
+                </a>
+            </div>
+        `;
+
+        document.body.appendChild(overlay);
+
+        // Bloquear interações
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') e.preventDefault();
+        }, true);
+    }
+
+    // --- INICIALIZAÇÃO ---
+
+    // Verificar sessão IMEDIATAMENTE (antes de qualquer renderização)
+    if (!window.location.pathname.includes('login.html')) {
+        verificarSessao();
+    }
+
+    // 1. Log Page Visit on Load + verificar bloqueio
     window.addEventListener('load', () => {
         checkPageLock(); // Verificar se a página está bloqueada
         logActivity('PAGE_VISIT', {
@@ -309,5 +561,14 @@
             }, true);
         }
     });
+
+    // 3. Monitorar interações para resetar cronômetro de inatividade
+    const eventos = ['mousedown', 'mousemove', 'keypress', 'touchstart', 'scroll'];
+    eventos.forEach(evento => {
+        window.addEventListener(evento, atualizarAtividade, { passive: true });
+    });
+
+    // 4. Verificar sessão periodicamente (a cada 60s)
+    setInterval(verificarSessao, 60000);
 
 })();

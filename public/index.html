@@ -957,59 +957,7 @@
 
 <body>
 
-    <script>
-        (function () {
-            // Configure aqui o tempo (30 minutos)
-            const tempoLimite = 30 * 60 * 1000;
-
-            function verificarSessao() {
-                // Se já estiver na página de login, não faz nada para evitar loop
-                if (window.location.pathname.includes('login.html')) return;
-
-                const logado = localStorage.getItem('erus_auth');
-                const ultimaAtividade = localStorage.getItem('erus_last_activity');
-                const agora = Date.now();
-
-                // 1. Verificação: Se não houver marca de login ou horário de atividade
-                if (logado !== 'true' || !ultimaAtividade) {
-                    redirecionarLogin();
-                    return;
-                }
-
-                // 2. Verificação de Tempo: Se o tempo de inatividade passou do limite
-                if (agora - parseInt(ultimaAtividade) > tempoLimite) {
-                    alert("Sua sessão expirou por inatividade.");
-                    redirecionarLogin();
-                    return;
-                }
-            }
-
-            function atualizarAtividade() {
-                // Só atualiza se o usuário ainda estiver marcado como logado
-                if (localStorage.getItem('erus_auth') === 'true') {
-                    localStorage.setItem('erus_last_activity', Date.now().toString());
-                }
-            }
-
-            function redirecionarLogin() {
-                localStorage.clear();
-                // Usamos replace para o usuário não conseguir "voltar" para a página protegida
-                window.location.replace('login.html');
-            }
-
-            // Executa a verificação IMEDIATAMENTE
-            verificarSessao();
-
-            // Monitora interações para resetar o cronômetro
-            const eventos = ['mousedown', 'mousemove', 'keypress', 'touchstart', 'scroll'];
-            eventos.forEach(evento => {
-                window.addEventListener(evento, atualizarAtividade, { passive: true });
-            });
-
-            // Verifica a cada 30 segundos se o tempo expirou
-            setInterval(verificarSessao, 60000);
-        })();
-    </script>
+    <!-- Sessão gerenciada centralmente por js/activity-logger.js -->
 
     <!-- Container para Toasts -->
     <div id="toast-container" class="toast-container"></div>
@@ -1245,6 +1193,8 @@
                                     <th>Status</th>
                                     <th style="cursor: pointer;" onclick="sortUsers('last_login')">Último Login <i
                                             class="fa-solid fa-sort"></i></th>
+                                    <th style="cursor: pointer;" onclick="sortUsers('last_activity_at')">Últ. Atividade
+                                        <i class="fa-solid fa-sort"></i></th>
                                     <th>Ações</th>
                                 </tr>
                             </thead>
@@ -1440,6 +1390,11 @@
                                </button>`;
                         }
 
+                        // Last activity formatting
+                        const lastActivity = u.last_activity_at ? new Date(u.last_activity_at).toLocaleString() : '—';
+                        const lastPage = u.last_activity_page || '';
+                        const activityTooltip = lastPage ? `title="Tela: ${lastPage}"` : '';
+
                         tr.innerHTML = `
                         <td>${u.id}</td>
                         <td style="font-weight:600">${u.username}</td>
@@ -1447,6 +1402,7 @@
                         <td><span class="badge-role ${roleClass}">${u.role}</span></td>
                         <td>${statusBadge}</td>
                         <td style="font-size: 0.8rem; color: #a1a1aa;">${lastLogin}</td>
+                        <td style="font-size: 0.8rem; color: #a1a1aa; cursor: default;" ${activityTooltip}>${lastActivity}</td>
                         <td class="table-actions">
                             ${actionBtn}
                             <button class="btn-action edit" onclick="editUserRole('${u.username}', '${u.role}')" title="Editar Permissão">

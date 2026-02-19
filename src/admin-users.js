@@ -18,10 +18,24 @@ const checkDevRole = async (req, res, next) => {
     next();
 };
 
-// LISTAR USUÁRIOS
+// LISTAR USUÁRIOS (com última atividade do audit_logs)
 router.get('/', checkDevRole, async (req, res) => {
     try {
-        const result = await pool.query('SELECT id, username, name, role, last_login, created_at, approved FROM users ORDER BY name');
+        const result = await pool.query(`
+            SELECT 
+                u.id, u.username, u.name, u.role, u.last_login, u.created_at, u.approved,
+                la.last_activity_at,
+                la.last_activity_page
+            FROM users u
+            LEFT JOIN LATERAL (
+                SELECT created_at AS last_activity_at, table_name AS last_activity_page
+                FROM audit_logs
+                WHERE user_name = u.username
+                ORDER BY created_at DESC
+                LIMIT 1
+            ) la ON true
+            ORDER BY u.name
+        `);
         res.json({ success: true, users: result.rows });
     } catch (error) {
         console.error('Erro ao listar usuários:', error);
