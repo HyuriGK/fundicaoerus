@@ -3,7 +3,7 @@
  * Uso: node scripts/sync-page-lock.js <lock|unlock> <page_id>
  * Exemplo: node scripts/sync-page-lock.js lock faturamentos.html
  */
-const http = require('http');
+const https = require('https');
 
 const action = process.argv[2]; // 'lock' ou 'unlock'
 const pageId = process.argv[3]; // ex: 'faturamentos.html'
@@ -17,8 +17,8 @@ const endpoint = action === 'lock' ? '/api/page-locks/sync-lock' : '/api/page-lo
 const data = JSON.stringify({ page_id: pageId });
 
 const options = {
-    hostname: 'localhost',
-    port: 3000,
+    hostname: 'fundicaoerus.vercel.app',
+    port: 443,
     path: endpoint,
     method: 'POST',
     headers: {
@@ -27,7 +27,7 @@ const options = {
     }
 };
 
-const req = http.request(options, (res) => {
+const req = https.request(options, (res) => {
     let body = '';
     res.on('data', (chunk) => body += chunk);
     res.on('end', () => {
@@ -45,8 +45,7 @@ const req = http.request(options, (res) => {
 });
 
 req.on('error', (e) => {
-    console.error(`[ERRO] Não foi possível conectar ao servidor (localhost:3000): ${e.message}`);
-    console.error('       Certifique-se de que o servidor está rodando.');
+    console.error(`[ERRO] Não foi possível conectar ao servidor: ${e.message}`);
 });
 
 req.write(data);
