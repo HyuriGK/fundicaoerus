@@ -460,11 +460,6 @@
                     ${Math.round(initialProgress)}%
                 </p>
 
-                <!-- Countdown -->
-                <p id="sync-redirect-countdown" style="color: #71717a; font-size: 0.8rem; margin-bottom: 28px;">
-                    Redirecionando em <strong style="color: #e4e4e7;">10</strong> segundos...
-                </p>
-
                 <!-- Divider -->
                 <div style="width: 60px; height: 2px; background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.4), transparent); margin: 0 auto 28px; border-radius: 1px;"></div>
 
@@ -493,21 +488,6 @@
             const pct = Math.min((elapsed / syncEstimatedMs) * 100, 95); // Nunca chega a 100 até desbloquear
             if (progressFill) progressFill.style.width = pct + '%';
             if (progressLabel) progressLabel.textContent = Math.round(pct) + '%';
-        }, 1000);
-
-        // Countdown de 10 segundos e redirect automático
-        let secondsLeft = 10;
-        const countdownEl = document.getElementById('sync-redirect-countdown');
-        const countdownInterval = setInterval(() => {
-            secondsLeft--;
-            if (countdownEl) {
-                countdownEl.innerHTML = `Redirecionando em <strong style="color: #e4e4e7;">${secondsLeft}</strong> segundo${secondsLeft !== 1 ? 's' : ''}...`;
-            }
-            if (secondsLeft <= 0) {
-                clearInterval(countdownInterval);
-                clearInterval(progressInterval);
-                window.location.replace('index.html');
-            }
         }, 1000);
 
         // Bloquear ESC
