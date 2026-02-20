@@ -1140,13 +1140,16 @@
             `;
 
             try {
-                const res = await fetch('/api/custos-detalhados');
-                if (!res.ok) throw new Error('Erro ao buscar dados.');
+                const params = new URLSearchParams();
+                if (appState.month !== 'all') params.append('mes', appState.month);
+                if (appState.year !== 'all') params.append('ano', appState.year);
+
+                const res = await fetch(`/api/custos-detalhados?${params.toString()}`);
+                if (!res.ok) throw new Error('Erro na requisição');
                 const json = await res.json();
 
-                if (json.success) {
-                    renderCostsTables(json.data);
-                } else {
+                if (json.success) renderCostsTables(json.data);
+                else {
                     body.innerHTML = `<div style="grid-column: 1 / -1; color: var(--danger); text-align: center;">${json.error}</div>`;
                 }
             } catch (err) {
@@ -1161,35 +1164,87 @@
         function renderCostsTables(data) {
             const body = document.getElementById('costsModalBody');
 
-            const makeTable = (title, icon, items) => {
+            const makeTable = (title, icon, items, catTag) => {
                 let rows = items.slice(0, 10).map(i => `
-                    <tr>
+                < tr onclick = "openDrilldownCosts('${catTag}', '${i.nome}')" style = "cursor: pointer;" title = "Clique para ver os recibos mensais destas custas" >
                         <td class="name" title="${i.nome}">${i.nome}</td>
                         <td class="val">${fmtBRL(i.total)}</td>
-                    </tr>
-                `).join('');
+                    </tr >
+                    `).join('');
 
                 if (items.length === 0) {
-                    rows = `<tr><td colspan="2" style="text-align: center; color: var(--text-muted);">Nenhum dado encontrado</td></tr>`;
+                    rows = `< tr > <td colspan="2" style="text-align: center; color: var(--text-muted);">Nenhum gasto documentado neste mês</td></tr > `;
                 }
 
                 return `
-                    <div class="costs-table-section">
+                    < div class="costs-table-section" >
                         <div class="costs-table-title"><i class="fa-solid ${icon}"></i> ${title}</div>
                         <table class="costs-table">
-                            <thead><tr><th>Descrição</th><th style="text-align: right;">Custo Agregado</th></tr></thead>
+                            <thead><tr><th>Descrição</th><th style="text-align: right;">Despesa Mensal</th></tr></thead>
                             <tbody>${rows}</tbody>
                         </table>
-                    </div>
-                `;
+                    </div >
+                    `;
             };
 
             body.innerHTML = `
-                ${makeTable('Top Fornecedores', 'fa-truck', data.fornecedores)}
-                ${makeTable('Custos por Categoria', 'fa-tags', data.tipos)}
-                ${makeTable('Custos por Setor', 'fa-building', data.setores)}
-                ${makeTable('Materiais Mais Comprados', 'fa-box', data.materiais)}
-            `;
+                ${makeTable('Top Fornecedores', 'fa-truck', data.fornecedores, 'fornecedores')}
+                ${makeTable('Custos por Categoria', 'fa-tags', data.tipos, 'tipos')}
+                ${makeTable('Custos por Setor', 'fa-building', data.setores, 'setores')}
+                ${makeTable('Materiais Mais Comprados', 'fa-box', data.materiais, 'materiais')}
+                `;
+        }
+
+        async function openDrilldownCosts(category, name) {
+            document.getElementById('drilldownModal').style.display = 'flex';
+            document.getElementById('drilldownTitle').textContent = name;
+            const body = document.getElementById('drilldownBody');
+
+            body.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 40px;"><i class="fa-solid fa-circle-notch fa-spin fa-2x"></i><br><br>Filtrando recibos (Postgres)...</div>';
+
+            try {
+                const p = new URLSearchParams({ categoria: category, nome: name });
+                if (appState.month !== 'all') p.append('mes', appState.month);
+                if (appState.year !== 'all') p.append('ano', appState.year);
+
+                const res = await fetch(`/ api / custos - detalhados / registros ? ${p.toString()} `);
+                const json = await res.json();
+
+                if (!json.success) throw new Error(json.error);
+
+                if (json.data.length === 0) {
+                    body.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 20px;">Nenhum documento emitido neste mês.</div>';
+                    return;
+                }
+
+                let rows = json.data.map(r => `
+                    < tr >
+                        <td>${new Date(r.data_emissao).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
+                        <td>${r.documento || 'S/N'}</td>
+                        <td class="val">${fmtBRL(r.valor)}</td>
+                    </tr >
+                    `).join('');
+
+                body.innerHTML = `
+                    < table class="costs-table" >
+                        <thead>
+                            <tr>
+                                <th>Emissão</th>
+                                <th>Documento / NF</th>
+                                <th style="text-align: right;">Abatimento</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows}</tbody>
+                    </table >
+                `;
+
+            } catch (e) {
+                console.error(e);
+                body.innerHTML = '<div style="color: var(--danger); text-align: center; padding: 20px;"><i class="fa-solid fa-triangle-exclamation"></i> Erro ao rastrear NF no banco.</div>';
+            }
+        }
+        function closeDrilldownCosts() {
+            document.getElementById('drilldownModal').style.display = 'none';
         }
 
     </script>
@@ -1208,7 +1263,22 @@
                 <!-- Injetado dinamicamente -->
             </div>
         </div>
-    </div>
+        <!-- Drilldown/Tickets Modal -->
+        <div id="drilldownModal" class="costs-modal-overlay" style="z-index: 10001; display: none;">
+            <div class="costs-modal" style="max-width: 600px;">
+                <div class="costs-modal-header">
+                    <div class="costs-modal-title">
+                        <i class="fa-solid fa-receipt"></i>
+                        Recibos: <span id="drilldownTitle" style="color: var(--amber); margin-left: 8px;"></span>
+                    </div>
+                    <button class="btn-close-modal" onclick="closeDrilldownCosts()"><i
+                            class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="costs-modal-body" id="drilldownBody" style="max-height: 400px; overflow-y: auto;">
+                    <!-- Dinamicamente Injetado -->
+                </div>
+            </div>
+        </div>
 </body>
 
 </html>
