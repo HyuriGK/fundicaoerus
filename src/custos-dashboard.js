@@ -75,16 +75,41 @@ router.get('/', async (req, res) => {
         const faturamentoKg = parseFloat(fatRes.rows[0].fat_peso || 0);
         const faturamentoValor = parseFloat(fatRes.rows[0].fat_valor || 0);
 
-        // 4. Carteira (snapshot atual)
-        const carteiraRes = await pool.query(`
-            SELECT 
-                COUNT(*) as total_pedidos,
-                COALESCE(SUM(CAST(peso_total AS NUMERIC)), 0) as peso_total,
-                COALESCE(SUM(CAST(saldo AS NUMERIC) * CAST(NULLIF(peso_un, '0') AS NUMERIC)), 0) as saldo_peso
-            FROM carteira
-        `);
-        const carteiraPeso = parseFloat(carteiraRes.rows[0].saldo_peso || 0);
-        const carteiraPedidos = parseInt(carteiraRes.rows[0].total_pedidos || 0);
+        // 4. Carteira (Cálculo dinâmico baseado no sincronismo e pesos customizados)
+        let carteiraPeso = 0;
+        let carteiraPedidos = 0;
+
+        try {
+            // A. Buscar pesos customizados
+            const weightsRes = await pool.query('SELECT codigo, peso FROM pesos_customizados');
+            const customWeights = {};
+            weightsRes.rows.forEach(r => customWeights[r.codigo] = parseFloat(r.peso));
+
+            // B. Buscar carteira mais atual sincronizada do Firebird
+            const syncRes = await pool.query('SELECT data FROM firebird_sync_pedidos');
+            const uniquePedidos = new Set();
+
+            syncRes.rows.forEach(row => {
+                const item = row.data;
+                if (item.CODIGO_PPR) uniquePedidos.add(item.CODIGO_PPR);
+
+                const saldoLiberado = Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0;
+                const qtdOriginal = Number(item.QUANTIDADE_PPR) || 0;
+                const saldoReal = saldoLiberado > 0 ? saldoLiberado : qtdOriginal;
+
+                let pesoUnitario = qtdOriginal > 0 ? (Number(item.PESO_LIQUIDO_NPR) || 0) / qtdOriginal : 0;
+
+                if (customWeights[item.PRODUTO_PPR]) {
+                    pesoUnitario = customWeights[item.PRODUTO_PPR];
+                }
+
+                carteiraPeso += (pesoUnitario * saldoReal);
+            });
+
+            carteiraPedidos = uniquePedidos.size;
+        } catch (e) {
+            console.error('Erro ao calcular carteira dinamica no dashboard:', e);
+        }
 
         // 5. Custos do mês
         const custosRes = await pool.query(`
