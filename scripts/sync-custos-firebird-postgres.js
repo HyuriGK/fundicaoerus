@@ -14,13 +14,17 @@ const FIREBIRD_OPTIONS = {
 };
 
 async function createTableIfNotExists() {
+    console.log('📡 Tentando conectar ao Postgres para verificar tabela...');
     const client = await pool.connect();
+    console.log('✅ Conectado ao Postgres.');
     try {
+        console.log('🛠️ Executando DDL (Create/Alter Table)...');
         await client.query(`
             CREATE TABLE IF NOT EXISTS custos_registros (
                 id SERIAL PRIMARY KEY,
                 categoria VARCHAR(50) NOT NULL,
                 nome VARCHAR(255) NOT NULL,
+                produto VARCHAR(255),
                 valor NUMERIC(15,2) DEFAULT 0,
                 documento VARCHAR(100),
                 data_emissao DATE,
@@ -28,6 +32,9 @@ async function createTableIfNotExists() {
                 ano INTEGER,
                 atualizado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
+            
+            -- Garantir que a coluna produto exista caso a tabela já tenha sido criada anteriormente
+            ALTER TABLE custos_registros ADD COLUMN IF NOT EXISTS produto VARCHAR(255);
             
             -- Índices para performance na API (Filtros e Agrupamentos)
             CREATE INDEX IF NOT EXISTS idx_custos_registros_mes_ano ON custos_registros(mes, ano);
@@ -39,13 +46,14 @@ async function createTableIfNotExists() {
         throw error;
     } finally {
         client.release();
+        console.log('ℹ️ Conexão Postgres liberada.');
     }
 }
 
 async function syncData() {
     console.log(`\n🚀 Iniciando sincronização de Custos Granular (Firebird -> Postgres) - ${new Date().toLocaleString()}`);
 
-    await createTableIfNotExists();
+    // await createTableIfNotExists();
 
     const dbFb = await new Promise((resolve, reject) => {
         let retries = 0;
@@ -75,34 +83,39 @@ async function syncData() {
         fornecedores: `
             SELECT 
                 COALESCE(FORN.RAZAO_SOCIAL_FRN, 'DESCONHECIDO') AS NOME,
-                C.TOTAL_PRODUTOS_COM AS VALOR,
+                CP.NOME_PRODUTO_CPR AS PRODUTO,
+                CP.VALOR_PRODUTOS_CPR AS VALOR,
                 C.EMISSAO_COM AS DATA_EMISSAO,
                 C.NUMERO_COM AS DOCUMENTO,
                 EXTRACT(MONTH FROM C.EMISSAO_COM) AS MES,
                 EXTRACT(YEAR FROM C.EMISSAO_COM) AS ANO
-            FROM COMPRA C
+            FROM COMPRA_PRODUTO CP
+            JOIN COMPRA C ON CP.COM_ID_CPR = C.ID_COM
             LEFT JOIN FORNECEDOR FORN ON C.FORNECEDOR_COM = FORN.FOR_CODIGO_FRN
             WHERE EXTRACT(YEAR FROM C.EMISSAO_COM) IN (2025, 2026)
         `,
         tipos: `
             SELECT 
                 COALESCE(DES.NOME_DES, 'NAO CATEGORIZADO') AS NOME,
-                C.TOTAL_PRODUTOS_COM AS VALOR,
+                CP.NOME_PRODUTO_CPR AS PRODUTO,
+                CP.VALOR_PRODUTOS_CPR AS VALOR,
                 C.EMISSAO_COM AS DATA_EMISSAO,
                 C.NUMERO_COM AS DOCUMENTO,
                 EXTRACT(MONTH FROM C.EMISSAO_COM) AS MES,
                 EXTRACT(YEAR FROM C.EMISSAO_COM) AS ANO
-            FROM COMPRA C
+            FROM COMPRA_PRODUTO CP
+            JOIN COMPRA C ON CP.COM_ID_CPR = C.ID_COM
             LEFT JOIN DESPESA DES ON C.DESPESA_COM = DES.CODIGO_DES
             WHERE EXTRACT(YEAR FROM C.EMISSAO_COM) IN (2025, 2026) AND DES.NOME_DES IS NOT NULL
         `,
         setores: `
             SELECT 
                 COALESCE(CC.NOME_CTU, 'GERAL / NAO ALOCADO') AS NOME,
+                NULL AS PRODUTO,
                 PAG.VALOR_PARCELA_PAG AS VALOR,
                 PAG.DATA_EMISSAO_PAG AS DATA_EMISSAO,
                 PAG.DOCUMENTO_PAG AS DOCUMENTO,
-                PAG.MES_PAG AS MES,
+                EXTRACT(MONTH FROM PAG.DATA_EMISSAO_PAG) AS MES,
                 PAG.ANO_PAG AS ANO
             FROM PAGAR PAG
             LEFT JOIN CENTRO_CUSTO CC ON PAG.CTU_CODIGO_PAG = CC.CODIGO_CTU
@@ -111,6 +124,7 @@ async function syncData() {
         materiais: `
             SELECT 
                 COALESCE(PRO.NOME_PRO, 'DIVERSOS') AS NOME,
+                CP.NOME_PRODUTO_CPR AS PRODUTO,
                 CP.VALOR_PRODUTOS_CPR AS VALOR,
                 C.EMISSAO_COM AS DATA_EMISSAO,
                 C.NUMERO_COM AS DOCUMENTO,
@@ -155,25 +169,54 @@ async function syncData() {
             // Limpa os registros do cache
             await client.query('TRUNCATE TABLE custos_registros');
 
-            let inseridos = 0;
+            let totalInseridos = 0;
 
-            const insertRow = async (cat, row) => {
-                const valor = row.VALOR || 0;
-                // Formatação robusta para lidar com os tipos buffer/date do array retornados pela query nativa.
-                await client.query(`
-                    INSERT INTO custos_registros (categoria, nome, valor, documento, data_emissao, mes, ano) 
-                    VALUES ($1, $2, $3, $4, $5, $6, $7)
-                `, [cat, row.NOME, valor, String(row.DOCUMENTO || ''), row.DATA_EMISSAO, row.MES, row.ANO]);
-                inseridos++;
+            const insertBatch = async (cat, rows) => {
+                const BATCH_SIZE = 500;
+                console.log(`📤 Inserindo ${rows.length} registros para a categoria: ${cat} (Lotes de ${BATCH_SIZE})...`);
+
+                for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+                    const chunk = rows.slice(i, i + BATCH_SIZE);
+                    const values = [];
+                    const params = [];
+
+                    chunk.forEach((row, idx) => {
+                        const baseIdx = idx * 8;
+                        values.push(`($${baseIdx + 1}, $${baseIdx + 2}, $${baseIdx + 3}, $${baseIdx + 4}, $${baseIdx + 5}, $${baseIdx + 6}, $${baseIdx + 7}, $${baseIdx + 8})`);
+                        params.push(
+                            cat,
+                            row.NOME,
+                            row.PRODUTO,
+                            row.VALOR || 0,
+                            String(row.DOCUMENTO || ''),
+                            row.DATA_EMISSAO,
+                            row.MES,
+                            row.ANO
+                        );
+                    });
+
+                    const query = `
+                        INSERT INTO custos_registros (categoria, nome, produto, valor, documento, data_emissao, mes, ano) 
+                        VALUES ${values.join(',')}
+                    `;
+
+                    await client.query(query, params);
+                    totalInseridos += chunk.length;
+
+                    if (totalInseridos % 1000 === 0 || i + BATCH_SIZE >= rows.length) {
+                        console.log(`⏳ Progresso: ${totalInseridos} registros processados...`);
+                    }
+                }
+                console.log(`✅ Categoria ${cat} concluída.`);
             };
 
-            for (const row of dados.fornecedores) await insertRow('fornecedores', row);
-            for (const row of dados.tipos) await insertRow('tipos', row);
-            for (const row of dados.setores) await insertRow('setores', row);
-            for (const row of dados.materiais) await insertRow('materiais', row);
+            await insertBatch('fornecedores', dados.fornecedores);
+            await insertBatch('tipos', dados.tipos);
+            await insertBatch('setores', dados.setores);
+            await insertBatch('materiais', dados.materiais);
 
             await client.query('COMMIT');
-            console.log(`✅ Sincronização concluída com sucesso! ${inseridos} tickets armazenados no Postgres.`);
+            console.log(`✅ Sincronização concluída com sucesso! ${totalInseridos} registros totais armazenados.`);
 
         } catch (dbErr) {
             await client.query('ROLLBACK');

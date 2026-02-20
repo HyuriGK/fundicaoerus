@@ -64,7 +64,7 @@ router.get('/registros', async (req, res) => {
         }
 
         let query = `
-            SELECT data_emissao, documento, valor 
+            SELECT data_emissao, documento, valor, produto 
             FROM custos_registros
             WHERE categoria = $1 AND nome = $2
         `;
