@@ -55,6 +55,7 @@ async function syncData() {
 
     // await createTableIfNotExists();
 
+    console.log('📡 Tentando conectar ao Firebird...');
     const dbFb = await new Promise((resolve, reject) => {
         let retries = 0;
         const connect = () => {
@@ -164,16 +165,14 @@ async function syncData() {
 
         const client = await pool.connect();
         try {
-            await client.query('BEGIN');
-
-            // Limpa os registros do cache
+            console.log('🧹 Limpando tabela de registros (TRUNCATE)...');
             await client.query('TRUNCATE TABLE custos_registros');
 
             let totalInseridos = 0;
 
             const insertBatch = async (cat, rows) => {
-                const BATCH_SIZE = 500;
-                console.log(`📤 Inserindo ${rows.length} registros para a categoria: ${cat} (Lotes de ${BATCH_SIZE})...`);
+                const BATCH_SIZE = 200; // Lotes menores para commit mais frequente e feedback rápido
+                console.log(`📤 Inserindo ${rows.length} registros para a categoria: ${cat}...`);
 
                 for (let i = 0; i < rows.length; i += BATCH_SIZE) {
                     const chunk = rows.slice(i, i + BATCH_SIZE);
@@ -203,11 +202,9 @@ async function syncData() {
                     await client.query(query, params);
                     totalInseridos += chunk.length;
 
-                    if (totalInseridos % 1000 === 0 || i + BATCH_SIZE >= rows.length) {
-                        console.log(`⏳ Progresso: ${totalInseridos} registros processados...`);
-                    }
+                    process.stdout.write(`\r⏳ Progresso: ${totalInseridos} registros totais... `);
                 }
-                console.log(`✅ Categoria ${cat} concluída.`);
+                console.log(`\n✅ Categoria ${cat} concluída.`);
             };
 
             await insertBatch('fornecedores', dados.fornecedores);
@@ -215,8 +212,7 @@ async function syncData() {
             await insertBatch('setores', dados.setores);
             await insertBatch('materiais', dados.materiais);
 
-            await client.query('COMMIT');
-            console.log(`✅ Sincronização concluída com sucesso! ${totalInseridos} registros totais armazenados.`);
+            console.log(`\n✨ Sincronização concluída com sucesso! ${totalInseridos} registros totais armazenados.`);
 
         } catch (dbErr) {
             await client.query('ROLLBACK');
