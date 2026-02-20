@@ -59,19 +59,24 @@ router.get('/registros', async (req, res) => {
         const { categoria, nome, mes, ano, grouped } = req.query;
         console.log(`🔍 [API] Detalhando Registros -> Categoria: ${categoria} | Nome: ${nome} | Mês: ${mes} | Ano: ${ano} | Grouped: ${grouped}`);
 
-        if (!categoria || !nome) {
-            return res.status(400).json({ success: false, error: 'Parâmetros "categoria" e "nome" são obrigatórios.' });
+        if (!categoria) {
+            return res.status(400).json({ success: false, error: 'Parâmetro "categoria" é obrigatório.' });
         }
 
         let query = "";
-        const params = [categoria, nome];
+        const params = [categoria];
 
         if (grouped === 'true') {
             query = `
                 SELECT produto, produto_cod, fornecedor, SUM(valor) as total, COUNT(*) as ocorrencias
                 FROM custos_registros
-                WHERE categoria = $1 AND nome = $2
+                WHERE categoria = $1
             `;
+
+            if (nome) {
+                params.push(nome);
+                query += ` AND nome = $${params.length}`;
+            }
 
             if (mes) {
                 params.push(Number(mes));
@@ -87,8 +92,13 @@ router.get('/registros', async (req, res) => {
             query = `
                 SELECT data_emissao, documento, valor, produto, produto_cod, fornecedor 
                 FROM custos_registros
-                WHERE categoria = $1 AND nome = $2
+                WHERE categoria = $1
             `;
+
+            if (nome) {
+                params.push(nome);
+                query += ` AND nome = $${params.length}`;
+            }
 
             const { produto_cod, fornecedor: provider } = req.query;
 
