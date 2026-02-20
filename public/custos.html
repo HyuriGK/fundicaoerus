@@ -311,6 +311,40 @@
             font-size: 0.65rem;
             color: var(--text-muted);
             font-family: var(--font-mono);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        /* MoM Indicator Styles */
+        .mom-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .mom-up {
+            color: var(--success);
+        }
+
+        .mom-up i {
+            transform: rotate(45deg);
+        }
+
+        .mom-down {
+            color: var(--danger);
+        }
+
+        .mom-down i {
+            transform: rotate(-45deg);
+        }
+
+        .mom-neutral {
+            color: var(--text-muted);
         }
 
         /* KPI Color Variants */
@@ -511,7 +545,10 @@
                     <div class="kpi-icon"><i class="fa-solid fa-fire"></i></div>
                 </div>
                 <span class="kpi-value" id="kpiProducao">—</span>
-                <span class="kpi-sub">kg no mês</span>
+                <span class="kpi-sub">
+                    <span>kg no mês</span>
+                    <span id="momProducao"></span>
+                </span>
             </div>
             <div class="kpi-card kpi-emerald">
                 <div class="kpi-header">
@@ -519,7 +556,10 @@
                     <div class="kpi-icon"><i class="fa-solid fa-boxes-stacked"></i></div>
                 </div>
                 <span class="kpi-value" id="kpiFatPeso">—</span>
-                <span class="kpi-sub">kg faturados</span>
+                <span class="kpi-sub">
+                    <span>kg faturados</span>
+                    <span id="momFatPeso"></span>
+                </span>
             </div>
             <div class="kpi-card kpi-blue">
                 <div class="kpi-header">
@@ -527,7 +567,10 @@
                     <div class="kpi-icon"><i class="fa-solid fa-dollar-sign"></i></div>
                 </div>
                 <span class="kpi-value" id="kpiFatValor">—</span>
-                <span class="kpi-sub">receita no mês</span>
+                <span class="kpi-sub">
+                    <span>receita no mês</span>
+                    <span id="momFatValor"></span>
+                </span>
             </div>
             <div class="kpi-card kpi-purple">
                 <div class="kpi-header">
@@ -535,7 +578,9 @@
                     <div class="kpi-icon"><i class="fa-solid fa-clipboard-list"></i></div>
                 </div>
                 <span class="kpi-value" id="kpiCarteiraPeso">—</span>
-                <span class="kpi-sub" id="kpiCarteiraPedidos">— pedidos</span>
+                <span class="kpi-sub">
+                    <span id="kpiCarteiraPedidos">— pedidos</span>
+                </span>
             </div>
             <div class="kpi-card kpi-red">
                 <div class="kpi-header">
@@ -543,7 +588,10 @@
                     <div class="kpi-icon"><i class="fa-solid fa-chart-pie"></i></div>
                 </div>
                 <span class="kpi-value" id="kpiCustoKg">—</span>
-                <span class="kpi-sub" id="kpiCustoTotal">custo total: —</span>
+                <span class="kpi-sub">
+                    <span id="kpiCustoTotal">custo total: —</span>
+                    <span id="momCustoKg"></span>
+                </span>
             </div>
         </div>
 
@@ -677,16 +725,42 @@
             return 'R$ ' + n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         }
 
+        function getMoMHtml(curr, prev, inverse = false) {
+            if (!prev || prev === 0) return '';
+            const diff = curr - prev;
+            if (diff === 0) return '<span class="mom-indicator mom-neutral"><i class="fa-solid fa-minus"></i> 0%</span>';
+
+            const pct = Math.abs((diff / prev) * 100);
+            const pctStr = pct > 999 ? '>999%' : pct.toFixed(1) + '%';
+
+            const isUp = diff > 0;
+            let isGood = isUp;
+            if (inverse) isGood = !isUp;
+
+            const colorClass = isGood ? 'mom-up' : 'mom-down';
+            const iconClass = isUp ? 'fa-arrow-up' : 'fa-arrow-down';
+
+            return `<span class="mom-indicator ${colorClass}" title="vs mês anterior"><i class="fa-solid ${iconClass}"></i> ${pctStr}</span>`;
+        }
+
         function updateKPIs(d) {
             document.getElementById('kpiProducao').textContent = fmtNum(d.producaoFusaoKg) + ' kg';
+            document.getElementById('momProducao').innerHTML = getMoMHtml(d.producaoFusaoKg, d.prevProducaoFusaoKg);
+
             document.getElementById('kpiFatPeso').textContent = fmtNum(d.faturamentoKg) + ' kg';
+            document.getElementById('momFatPeso').innerHTML = getMoMHtml(d.faturamentoKg, d.prevFaturamentoKg);
+
             document.getElementById('kpiFatValor').textContent = fmtBRL(d.faturamentoValor);
+            document.getElementById('momFatValor').innerHTML = getMoMHtml(d.faturamentoValor, d.prevFaturamentoValor);
+
             document.getElementById('kpiCarteiraPeso').textContent = fmtNum(d.carteiraPeso) + ' kg';
             document.getElementById('kpiCarteiraPedidos').textContent = d.carteiraPedidos + ' pedidos';
+
             document.getElementById('kpiCustoKg').textContent = d.custoTotal > 0 ? fmtBRL(d.custoPerKg) : '—';
             document.getElementById('kpiCustoTotal').textContent = d.custoTotal > 0
                 ? 'custo total: ' + fmtBRL(d.custoTotal)
                 : 'sem custos lançados';
+            document.getElementById('momCustoKg').innerHTML = d.custoTotal > 0 ? getMoMHtml(d.custoPerKg, d.prevCustoPerKg, true) : '';
         }
 
         // ========================
