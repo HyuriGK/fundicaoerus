@@ -21,10 +21,23 @@ router.get('/', async (req, res) => {
         console.log('📊 [API] Recebida requisicao para detalhamento de Custos (2025-2026).');
 
         const db = await new Promise((resolve, reject) => {
-            Firebird.attach(firebirdOptions, (err, db) => {
-                if (err) reject(err);
-                else resolve(db);
-            });
+            let retries = 0;
+            const tryConnect = () => {
+                Firebird.attach(firebirdOptions, (err, db) => {
+                    if (err) {
+                        if (retries < 3) {
+                            retries++;
+                            console.warn(`⚠️ [API Custos] Falha ao conectar no Firebird. Tentativa ${retries}/3. Retentando em 1s...`);
+                            setTimeout(tryConnect, 1000);
+                        } else {
+                            reject(err);
+                        }
+                    } else {
+                        resolve(db);
+                    }
+                });
+            };
+            tryConnect();
         });
 
         dbConn = db;
