@@ -15,6 +15,15 @@ router.get('/', async (req, res) => {
         const nextYear = month === 12 ? year + 1 : year;
         const endDate = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`;
 
+        // Buscar clientes excluídos (mesma lógica do faturamentos.html)
+        let excludedClients = [];
+        try {
+            const prefRes = await pool.query(`SELECT value FROM app_preferences WHERE key = 'excluded_clients'`);
+            if (prefRes.rows.length > 0 && prefRes.rows[0].value) {
+                excludedClients = typeof prefRes.rows[0].value === 'string' ? JSON.parse(prefRes.rows[0].value) : prefRes.rows[0].value;
+            }
+        } catch (e) { /* ignore if table doesn't exist */ }
+
         // 1. Produção FUSÃO no mês (KPI principal)
         // JOIN com produto_pesos_producao para pesos corrigidos (mesmo que apontamentos_produtivos.html)
         const fusaoRes = await pool.query(`
@@ -41,9 +50,8 @@ router.get('/', async (req, res) => {
         `, [startDate, endDate]);
 
         // 3. Faturamento do mês — mesma lógica do faturamentos.html
-        // Peso = SUM(peso_total), Valor = SUM(valor_unitario * quantidade * 100)
-        // Exclui registros excluídos manualmente e via preferências
-        const fatRes = await pool.query(`
+        // Exclui registros excluídos manualmente, via preferências, e clientes excluídos
+        let fatQuery = `
             SELECT 
                 COALESCE(SUM(f.peso_total), 0) as fat_peso,
                 COALESCE(SUM(f.valor_unitario * f.quantidade * 100), 0) as fat_valor
@@ -56,7 +64,13 @@ router.get('/', async (req, res) => {
                 AND p.quantidade = f.quantidade
             WHERE f.data_faturamento >= $1 AND f.data_faturamento < $2
               AND COALESCE(p.excluido, f.excluido_manualmente, false) = false
-        `, [startDate, endDate]);
+        `;
+        const fatParams = [startDate, endDate];
+        if (excludedClients.length > 0) {
+            fatQuery += ` AND TRIM(f.cliente_nome) NOT IN (${excludedClients.map((_, i) => `$${i + 3}`).join(',')})`;
+            fatParams.push(...excludedClients);
+        }
+        const fatRes = await pool.query(fatQuery, fatParams);
 
         const faturamentoKg = parseFloat(fatRes.rows[0].fat_peso || 0);
         const faturamentoValor = parseFloat(fatRes.rows[0].fat_valor || 0);
@@ -96,7 +110,7 @@ router.get('/', async (req, res) => {
             ORDER BY mes
         `, [year]);
 
-        const fatEvolucaoRes = await pool.query(`
+        let fatEvoQuery = `
             SELECT 
                 EXTRACT(MONTH FROM f.data_faturamento) as mes,
                 COALESCE(SUM(f.peso_total), 0) as fat_kg
@@ -109,9 +123,14 @@ router.get('/', async (req, res) => {
                 AND p.quantidade = f.quantidade
             WHERE EXTRACT(YEAR FROM f.data_faturamento) = $1
               AND COALESCE(p.excluido, f.excluido_manualmente, false) = false
-            GROUP BY EXTRACT(MONTH FROM f.data_faturamento)
-            ORDER BY mes
-        `, [year]);
+        `;
+        const fatEvoParams = [year];
+        if (excludedClients.length > 0) {
+            fatEvoQuery += ` AND TRIM(f.cliente_nome) NOT IN (${excludedClients.map((_, i) => `$${i + 2}`).join(',')})`;
+            fatEvoParams.push(...excludedClients);
+        }
+        fatEvoQuery += ` GROUP BY EXTRACT(MONTH FROM f.data_faturamento) ORDER BY mes`;
+        const fatEvolucaoRes = await pool.query(fatEvoQuery, fatEvoParams);
 
         // Merge into 12-month array
         const evolucaoMensal = [];
