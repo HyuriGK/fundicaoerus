@@ -412,10 +412,6 @@
             min-height: 0;
         }
 
-        .charts-grid>.chart-panel:last-child {
-            grid-column: 1 / -1;
-        }
-
         .chart-panel {
             background: var(--bg-panel);
             border: 1px solid var(--border-subtle);
@@ -777,6 +773,17 @@
                 </div>
                 <div class="chart-container"><canvas id="chartLigas"></canvas></div>
             </div>
+
+            <!-- 4. Top 10 Fornecedores -->
+            <div class="chart-panel">
+                <div class="panel-header">
+                    <span class="panel-title"><i class="fa-solid fa-truck" style="color: var(--info);"></i> Top 10
+                        Fornecedores (Valor)</span>
+                    <span class="panel-badge" style="background: rgba(59,130,246,0.1); color: var(--info);"
+                        id="badgeFornecedores">—</span>
+                </div>
+                <div class="chart-container"><canvas id="chartFornecedores"></canvas></div>
+            </div>
         </div>
     </div>
 
@@ -791,7 +798,7 @@
         // STATE
         // ========================
         let currentYear, currentMonth;
-        let chartSetores, chartEvolucao, chartLigas;
+        let chartSetores, chartEvolucao, chartLigas, chartFornecedores;
 
         const MONTH_NAMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
         const FULL_MONTH_NAMES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
@@ -853,6 +860,7 @@
                 renderChartSetores(d.producaoSetores);
                 renderChartEvolucao(d.evolucaoMensal);
                 renderChartLigas(d.topLigas);
+                renderChartFornecedores(d.topFornecedores);
 
                 document.getElementById('footerTimestamp').textContent =
                     `Atualizado em ${new Date().toLocaleString('pt-BR')}`;
@@ -1139,6 +1147,68 @@
                         tooltip: {
                             callbacks: {
                                 label: ctx => fmtNum(ctx.raw) + ' kg'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // ========================
+        // 4. TOP FORNECEDORES
+        // ========================
+        function renderChartFornecedores(fornecedores) {
+            const ctx = document.getElementById('chartFornecedores').getContext('2d');
+            if (chartFornecedores) chartFornecedores.destroy();
+
+            const labels = fornecedores.map(f => f.fornecedor.length > 25 ? f.fornecedor.slice(0, 23) + '…' : f.fornecedor);
+            const data = fornecedores.map(f => f.total);
+
+            document.getElementById('badgeFornecedores').textContent = fornecedores.length + ' fornecedores';
+
+            const blueShades = [
+                'rgba(59, 130, 246, 0.9)',
+                'rgba(59, 130, 246, 0.7)',
+                'rgba(59, 130, 246, 0.55)',
+                'rgba(59, 130, 246, 0.4)',
+                'rgba(59, 130, 246, 0.25)'
+            ];
+
+            chartFornecedores = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [{
+                        data,
+                        backgroundColor: blueShades,
+                        borderColor: 'rgba(59, 130, 246, 0.3)',
+                        borderWidth: 1,
+                        borderRadius: 4,
+                        barThickness: 18
+                    }]
+                },
+                options: {
+                    ...CHART_DEFAULTS,
+                    indexAxis: 'y',
+                    scales: {
+                        x: {
+                            ...CHART_DEFAULTS.scales?.x,
+                            grid: GRID_STYLE,
+                            ticks: {
+                                ...TICK_STYLE,
+                                callback: (v) => v >= 1000 ? (v / 1000).toFixed(1) + 'k' : v
+                            }
+                        },
+                        y: {
+                            grid: { display: false },
+                            ticks: TICK_STYLE
+                        }
+                    },
+                    plugins: {
+                        ...CHART_DEFAULTS.plugins,
+                        tooltip: {
+                            callbacks: {
+                                label: (ctx) => ' ' + fmtBRL(ctx.raw)
                             }
                         }
                     }

@@ -269,6 +269,21 @@ router.get('/', async (req, res) => {
                     liga: r.liga,
                     qty: parseFloat(r.qty),
                     pesoTotal: Math.round(parseFloat(r.peso_total || 0))
+                })),
+
+                // 8. Top 10 Fornecedores (mês selecionado) - Buscando da tabela detalhada sincronizada
+                topFornecedores: (await pool.query(`
+                    SELECT 
+                        nome as fornecedor,
+                        SUM(valor) as total
+                    FROM custos_registros
+                    WHERE mes = $1 AND ano = $2 AND categoria = 'fornecedores'
+                    GROUP BY nome
+                    ORDER BY total DESC
+                    LIMIT 10
+                `, [month, year])).rows.map(r => ({
+                    fornecedor: r.fornecedor,
+                    total: Math.round(parseFloat(r.total || 0))
                 }))
             }
         });
