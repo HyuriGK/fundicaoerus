@@ -90,6 +90,8 @@ router.get('/registros', async (req, res) => {
                 WHERE categoria = $1 AND nome = $2
             `;
 
+            const { produto_cod, fornecedor: provider } = req.query;
+
             if (mes) {
                 params.push(Number(mes));
                 query += ` AND mes = $${params.length}`;
@@ -97,6 +99,14 @@ router.get('/registros', async (req, res) => {
             if (ano) {
                 params.push(Number(ano));
                 query += ` AND ano = $${params.length}`;
+            }
+            if (produto_cod) {
+                params.push(produto_cod);
+                query += ` AND produto_cod = $${params.length}`;
+            }
+            if (provider) {
+                params.push(provider);
+                query += ` AND fornecedor = $${params.length}`;
             }
 
             query += ` ORDER BY data_emissao DESC, valor DESC`;
