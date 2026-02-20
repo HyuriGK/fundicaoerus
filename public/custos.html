@@ -501,6 +501,132 @@
                 transform: rotate(360deg);
             }
         }
+
+        /* Modal Detalhamento Custos */
+        .costs-modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(4px);
+            z-index: 9999;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .costs-modal {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            width: 100%;
+            max-width: 1000px;
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+        }
+
+        .costs-modal-header {
+            padding: 16px 24px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .costs-modal-title {
+            color: var(--text);
+            font-size: 1.1rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .costs-modal-title i {
+            color: var(--danger);
+        }
+
+        .btn-close-modal {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 1.2rem;
+            transition: color 0.2s;
+        }
+
+        .btn-close-modal:hover {
+            color: var(--danger);
+        }
+
+        .costs-modal-body {
+            padding: 24px;
+            overflow-y: auto;
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 24px;
+        }
+
+        .costs-table-section {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            padding: 16px;
+            border: 1px solid var(--border);
+        }
+
+        .costs-table-title {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .costs-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.8rem;
+        }
+
+        .costs-table th,
+        .costs-table td {
+            padding: 8px;
+            text-align: left;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .costs-table th {
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .costs-table td.val {
+            text-align: right;
+            font-family: var(--font-mono);
+            color: var(--text);
+        }
+
+        .costs-table td.name {
+            max-width: 150px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        @media (max-width: 768px) {
+            .costs-modal-body {
+                grid-template-columns: 1fr;
+            }
+        }
     </style>
 </head>
 
@@ -582,7 +708,9 @@
                     <span id="kpiCarteiraPedidos">— pedidos</span>
                 </span>
             </div>
-            <div class="kpi-card kpi-red">
+            <div class="kpi-card kpi-red" onclick="openCostsModal()"
+                style="cursor: pointer; transition: transform 0.2s;"
+                onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''">
                 <div class="kpi-header">
                     <span class="kpi-label">Custo / Kg</span>
                     <div class="kpi-icon"><i class="fa-solid fa-chart-pie"></i></div>
@@ -997,8 +1125,90 @@
             });
         }
 
+        // ========================
+        // 4. DETALHAMENTO CUSTOS MODAL
+        // ========================
+        async function openCostsModal() {
+            document.getElementById('costsModal').style.display = 'flex';
+            const body = document.getElementById('costsModalBody');
+
+            // Set loading state
+            body.innerHTML = `
+                <div style="grid-column: 1 / -1; text-align: center; color: var(--text-muted); padding: 40px;">
+                    <i class="fa-solid fa-circle-notch fa-spin fa-2x"></i><br><br>Consultando bases financeiras de 2025/2026...
+                </div>
+            `;
+
+            try {
+                const res = await fetch('/api/custos-detalhados-firebird');
+                if (!res.ok) throw new Error('Erro ao buscar dados.');
+                const json = await res.json();
+
+                if (json.success) {
+                    renderCostsTables(json.data);
+                } else {
+                    body.innerHTML = `<div style="grid-column: 1 / -1; color: var(--danger); text-align: center;">${json.error}</div>`;
+                }
+            } catch (err) {
+                body.innerHTML = `<div style="grid-column: 1 / -1; color: var(--danger); text-align: center;">Erro de conexão.</div>`;
+            }
+        }
+
+        function closeCostsModal() {
+            document.getElementById('costsModal').style.display = 'none';
+        }
+
+        function renderCostsTables(data) {
+            const body = document.getElementById('costsModalBody');
+
+            const makeTable = (title, icon, items) => {
+                let rows = items.slice(0, 10).map(i => `
+                    <tr>
+                        <td class="name" title="${i.nome}">${i.nome}</td>
+                        <td class="val">${fmtBRL(i.total)}</td>
+                    </tr>
+                `).join('');
+
+                if (items.length === 0) {
+                    rows = `<tr><td colspan="2" style="text-align: center; color: var(--text-muted);">Nenhum dado encontrado</td></tr>`;
+                }
+
+                return `
+                    <div class="costs-table-section">
+                        <div class="costs-table-title"><i class="fa-solid ${icon}"></i> ${title}</div>
+                        <table class="costs-table">
+                            <thead><tr><th>Descrição</th><th style="text-align: right;">Custo Agregado</th></tr></thead>
+                            <tbody>${rows}</tbody>
+                        </table>
+                    </div>
+                `;
+            };
+
+            body.innerHTML = `
+                ${makeTable('Top Fornecedores', 'fa-truck', data.fornecedores)}
+                ${makeTable('Custos por Categoria', 'fa-tags', data.tipos)}
+                ${makeTable('Custos por Setor', 'fa-building', data.setores)}
+                ${makeTable('Materiais Mais Comprados', 'fa-box', data.materiais)}
+            `;
+        }
 
     </script>
+
+    <!-- Custos Detalhados Modal -->
+    <div id="costsModal" class="costs-modal-overlay">
+        <div class="costs-modal">
+            <div class="costs-modal-header">
+                <div class="costs-modal-title">
+                    <i class="fa-solid fa-chart-pie"></i>
+                    Detalhamento de Custos (Base 2025/2026)
+                </div>
+                <button class="btn-close-modal" onclick="closeCostsModal()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="costs-modal-body" id="costsModalBody">
+                <!-- Injetado dinamicamente -->
+            </div>
+        </div>
+    </div>
 </body>
 
 </html>

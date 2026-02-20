@@ -83,6 +83,7 @@ app.use('/api/ai-assistant', require('../src/ai-assistant')); // NOVO: Assistent
 app.use('/api/audit-logger', require('../src/audit-logger')); // NOVO: Log de Atividades
 app.use('/api/page-locks', require('../src/page-locks')); // NOVO: Bloqueio de Telas
 app.use('/api/custos-dashboard', require('../src/custos-dashboard')); // NOVO: Painel de Produção
+app.use('/api/custos-detalhados-firebird', require('../src/custos-detalhados-firebird')); // NOVO: Detalhamento de Custos
 
 // Rota temporária de diagnóstico do Firebird
 app.get('/api/test-firebird', (req, res) => {
