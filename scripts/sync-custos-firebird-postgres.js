@@ -25,6 +25,8 @@ async function createTableIfNotExists() {
                 categoria VARCHAR(50) NOT NULL,
                 nome VARCHAR(255) NOT NULL,
                 produto VARCHAR(255),
+                produto_cod VARCHAR(50),
+                fornecedor VARCHAR(255),
                 valor NUMERIC(15,2) DEFAULT 0,
                 documento VARCHAR(100),
                 data_emissao DATE,
@@ -33,8 +35,10 @@ async function createTableIfNotExists() {
                 atualizado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
             
-            -- Garantir que a coluna produto exista caso a tabela já tenha sido criada anteriormente
+            -- Garantir que as colunas novas existam
             ALTER TABLE custos_registros ADD COLUMN IF NOT EXISTS produto VARCHAR(255);
+            ALTER TABLE custos_registros ADD COLUMN IF NOT EXISTS produto_cod VARCHAR(50);
+            ALTER TABLE custos_registros ADD COLUMN IF NOT EXISTS fornecedor VARCHAR(255);
             
             -- Índices para performance na API (Filtros e Agrupamentos)
             CREATE INDEX IF NOT EXISTS idx_custos_registros_mes_ano ON custos_registros(mes, ano);
@@ -84,7 +88,9 @@ async function syncData() {
         fornecedores: `
             SELECT 
                 COALESCE(FORN.RAZAO_SOCIAL_FRN, 'DESCONHECIDO') AS NOME,
-                '[' || COALESCE(FORN.FANTASIA_FRN, FORN.RAZAO_SOCIAL_FRN) || '] ' || COALESCE(CP.NOME_PRODUTO_CPR, 'DIVERSOS') AS PRODUTO,
+                CP.NOME_PRODUTO_CPR AS PRODUTO,
+                CP.PRODUTO_CPR AS PRODUTO_COD,
+                COALESCE(FORN.FANTASIA_FRN, FORN.RAZAO_SOCIAL_FRN) AS FORNECEDOR,
                 CP.VALOR_PRODUTOS_CPR AS VALOR,
                 C.EMISSAO_COM AS DATA_EMISSAO,
                 C.NUMERO_COM AS DOCUMENTO,
@@ -98,7 +104,9 @@ async function syncData() {
         tipos: `
             SELECT 
                 COALESCE(DES.NOME_DES, 'NAO CATEGORIZADO') AS NOME,
-                '[' || COALESCE(FORN.FANTASIA_FRN, FORN.RAZAO_SOCIAL_FRN) || '] ' || COALESCE(CP.NOME_PRODUTO_CPR, 'DIVERSOS') AS PRODUTO,
+                CP.NOME_PRODUTO_CPR AS PRODUTO,
+                CP.PRODUTO_CPR AS PRODUTO_COD,
+                COALESCE(FORN.FANTASIA_FRN, FORN.RAZAO_SOCIAL_FRN) AS FORNECEDOR,
                 CP.VALOR_PRODUTOS_CPR AS VALOR,
                 C.EMISSAO_COM AS DATA_EMISSAO,
                 C.NUMERO_COM AS DOCUMENTO,
@@ -113,7 +121,9 @@ async function syncData() {
         setores: `
             SELECT 
                 COALESCE(CC.NOME_CTU, 'GERAL / NAO ALOCADO') AS NOME,
-                COALESCE(FORN.RAZAO_SOCIAL_FRN, 'PAGAMENTO DIRETO') AS PRODUTO,
+                NULL AS PRODUTO,
+                NULL AS PRODUTO_COD,
+                FORN.RAZAO_SOCIAL_FRN AS FORNECEDOR,
                 PAG.VALOR_PARCELA_PAG AS VALOR,
                 PAG.DATA_EMISSAO_PAG AS DATA_EMISSAO,
                 PAG.DOCUMENTO_PAG AS DOCUMENTO,
@@ -127,7 +137,9 @@ async function syncData() {
         materiais: `
             SELECT 
                 COALESCE(PRO.NOME_PRO, 'DIVERSOS') AS NOME,
-                '[' || COALESCE(FORN.FANTASIA_FRN, FORN.RAZAO_SOCIAL_FRN) || '] ' || COALESCE(CP.NOME_PRODUTO_CPR, 'DIVERSOS') AS PRODUTO,
+                CP.NOME_PRODUTO_CPR AS PRODUTO,
+                CP.PRODUTO_CPR AS PRODUTO_COD,
+                COALESCE(FORN.FANTASIA_FRN, FORN.RAZAO_SOCIAL_FRN) AS FORNECEDOR,
                 CP.VALOR_PRODUTOS_CPR AS VALOR,
                 C.EMISSAO_COM AS DATA_EMISSAO,
                 C.NUMERO_COM AS DOCUMENTO,
@@ -183,12 +195,14 @@ async function syncData() {
                     const params = [];
 
                     chunk.forEach((row, idx) => {
-                        const baseIdx = idx * 8;
-                        values.push(`($${baseIdx + 1}, $${baseIdx + 2}, $${baseIdx + 3}, $${baseIdx + 4}, $${baseIdx + 5}, $${baseIdx + 6}, $${baseIdx + 7}, $${baseIdx + 8})`);
+                        const baseIdx = idx * 10;
+                        values.push(`($${baseIdx + 1}, $${baseIdx + 2}, $${baseIdx + 3}, $${baseIdx + 4}, $${baseIdx + 5}, $${baseIdx + 6}, $${baseIdx + 7}, $${baseIdx + 8}, $${baseIdx + 9}, $${baseIdx + 10})`);
                         params.push(
                             cat,
                             row.NOME,
                             row.PRODUTO,
+                            row.PRODUTO_COD,
+                            row.FORNECEDOR,
                             row.VALOR || 0,
                             String(row.DOCUMENTO || ''),
                             row.DATA_EMISSAO,
@@ -198,7 +212,7 @@ async function syncData() {
                     });
 
                     const query = `
-                        INSERT INTO custos_registros (categoria, nome, produto, valor, documento, data_emissao, mes, ano) 
+                        INSERT INTO custos_registros (categoria, nome, produto, produto_cod, fornecedor, valor, documento, data_emissao, mes, ano) 
                         VALUES ${values.join(',')}
                     `;
 

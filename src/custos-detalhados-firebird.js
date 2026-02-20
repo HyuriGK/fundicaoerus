@@ -56,30 +56,51 @@ router.get('/', async (req, res) => {
 // Retorna a lista detalhada de comprovantes/tickets para uma categoria e nome específico
 router.get('/registros', async (req, res) => {
     try {
-        const { categoria, nome, mes, ano } = req.query;
-        console.log(`🔍 [API] Detalhando Registros -> Categoria: ${categoria} | Nome: ${nome} | Mês: ${mes} | Ano: ${ano}`);
+        const { categoria, nome, mes, ano, grouped } = req.query;
+        console.log(`🔍 [API] Detalhando Registros -> Categoria: ${categoria} | Nome: ${nome} | Mês: ${mes} | Ano: ${ano} | Grouped: ${grouped}`);
 
         if (!categoria || !nome) {
             return res.status(400).json({ success: false, error: 'Parâmetros "categoria" e "nome" são obrigatórios.' });
         }
 
-        let query = `
-            SELECT data_emissao, documento, valor, produto 
-            FROM custos_registros
-            WHERE categoria = $1 AND nome = $2
-        `;
+        let query = "";
         const params = [categoria, nome];
 
-        if (mes) {
-            params.push(Number(mes));
-            query += ` AND mes = $${params.length}`;
-        }
-        if (ano) {
-            params.push(Number(ano));
-            query += ` AND ano = $${params.length}`;
-        }
+        if (grouped === 'true') {
+            query = `
+                SELECT produto, produto_cod, SUM(valor) as total, COUNT(*) as ocorrencias
+                FROM custos_registros
+                WHERE categoria = $1 AND nome = $2
+            `;
 
-        query += ` ORDER BY data_emissao DESC, valor DESC`;
+            if (mes) {
+                params.push(Number(mes));
+                query += ` AND mes = $${params.length}`;
+            }
+            if (ano) {
+                params.push(Number(ano));
+                query += ` AND ano = $${params.length}`;
+            }
+
+            query += ` GROUP BY produto, produto_cod ORDER BY total DESC`;
+        } else {
+            query = `
+                SELECT data_emissao, documento, valor, produto, produto_cod, fornecedor 
+                FROM custos_registros
+                WHERE categoria = $1 AND nome = $2
+            `;
+
+            if (mes) {
+                params.push(Number(mes));
+                query += ` AND mes = $${params.length}`;
+            }
+            if (ano) {
+                params.push(Number(ano));
+                query += ` AND ano = $${params.length}`;
+            }
+
+            query += ` ORDER BY data_emissao DESC, valor DESC`;
+        }
 
         const { rows } = await pool.query(query, params);
 
@@ -88,8 +109,11 @@ router.get('/registros', async (req, res) => {
             data: rows.map(r => ({
                 data_emissao: r.data_emissao,
                 documento: r.documento,
-                valor: Number(r.valor) || 0,
-                produto: r.produto
+                valor: Number(r.valor || r.total) || 0,
+                produto: r.produto,
+                produto_cod: r.produto_cod,
+                fornecedor: r.fornecedor,
+                ocorrencias: Number(r.ocorrencias) || 1
             }))
         });
 

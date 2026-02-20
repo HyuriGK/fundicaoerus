@@ -1196,10 +1196,10 @@
             };
 
             body.innerHTML = `
+                ${makeTable('Principais Despesas', 'fa-tags', data.tipos, 'tipos')}
                 ${makeTable('Top Fornecedores', 'fa-truck', data.fornecedores, 'fornecedores')}
-                ${makeTable('Custos por Categoria', 'fa-tags', data.tipos, 'tipos')}
-                ${makeTable('Custos por Setor', 'fa-building', data.setores, 'setores')}
                 ${makeTable('Materiais Mais Comprados', 'fa-box', data.materiais, 'materiais')}
+                ${makeTable('Custos por Setor', 'fa-building', data.setores, 'setores')}
             `;
         }
 
@@ -1212,9 +1212,11 @@
             body.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 40px;"><i class="fa-solid fa-circle-notch fa-spin fa-2x"></i><br><br>Filtrando recibos (Postgres)...</div>';
 
             try {
+                const isGroupable = ['tipos', 'materiais', 'fornecedores'].includes(category);
                 const p = new URLSearchParams({ categoria: category, nome: name });
                 if (currentMonth) p.append('mes', currentMonth);
                 if (currentYear) p.append('ano', currentYear);
+                if (isGroupable) p.append('grouped', 'true');
 
                 const res = await fetch(`/api/custos-detalhados/registros?${p.toString()}`);
                 const json = await res.json();
@@ -1226,32 +1228,59 @@
                     return;
                 }
 
-                let rows = json.data.map(r => `
-                    <tr>
-                        <td>${new Date(r.data_emissao).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
-                        <td title="${r.produto || ''}">${r.produto || '—'}</td>
-                        <td>${r.documento || 'S/N'}</td>
-                        <td class="val">${fmtBRL(r.valor)}</td>
-                    </tr>
-                `).join('');
+                if (isGroupable) {
+                    // Tabela Agrupada por Produto
+                    let rows = json.data.map(r => `
+                        <tr>
+                            <td style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted);">${r.produto_cod || 'S/C'}</td>
+                            <td>${r.produto || 'DIVERSOS'}</td>
+                            <td style="text-align: center;">${r.ocorrencias}</td>
+                            <td class="val" style="font-weight: 600; color: var(--amber);">${fmtBRL(r.valor)}</td>
+                        </tr>
+                    `).join('');
 
-                body.innerHTML = `
-                    <table class="costs-table">
-                        <thead>
-                            <tr>
-                                <th style="width: 100px;">Emissão</th>
-                                <th>Produto / Descrição</th>
-                                <th style="width: 120px;">Documento / NF</th>
-                                <th style="text-align: right; width: 120px;">Abatimento</th>
-                            </tr>
-                        </thead>
-                        <tbody>${rows}</tbody>
-                    </table>
-                `;
+                    body.innerHTML = `
+                        <table class="costs-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 100px;">Código</th>
+                                    <th>Produto / Item</th>
+                                    <th style="width: 120px; text-align: center;">Ocorrências</th>
+                                    <th style="text-align: right; width: 140px;">Valor Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>${rows}</tbody>
+                        </table>
+                    `;
+                } else {
+                    // Tabela Detalhada (Listagem Padrão para Setores etc)
+                    let rows = json.data.map(r => `
+                        <tr>
+                            <td>${new Date(r.data_emissao).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
+                            <td title="${r.fornecedor || ''}">${r.fornecedor || '—'}</td>
+                            <td>${r.documento || 'S/N'}</td>
+                            <td class="val">${fmtBRL(r.valor)}</td>
+                        </tr>
+                    `).join('');
+
+                    body.innerHTML = `
+                        <table class="costs-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 100px;">Emissão</th>
+                                    <th>Favorecido / Destino</th>
+                                    <th style="width: 120px;">Documento / NF</th>
+                                    <th style="text-align: right; width: 120px;">Valor</th>
+                                </tr>
+                            </thead>
+                            <tbody>${rows}</tbody>
+                        </table>
+                    `;
+                }
 
             } catch (e) {
                 console.error('Erro no drilldown de custos:', e);
-                body.innerHTML = '<div style="color: var(--danger); text-align: center; padding: 20px;"><i class="fa-solid fa-triangle-exclamation"></i> Erro ao rastrear NF no banco.</div>';
+                body.innerHTML = '<div style="color: var(--danger); text-align: center; padding: 20px;"><i class="fa-solid fa-triangle-exclamation"></i> Erro ao rastrear registros no banco.</div>';
             }
         }
         function closeDrilldownCosts() {
