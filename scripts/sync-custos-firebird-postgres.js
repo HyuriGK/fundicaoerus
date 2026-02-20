@@ -84,7 +84,7 @@ async function syncData() {
         fornecedores: `
             SELECT 
                 COALESCE(FORN.RAZAO_SOCIAL_FRN, 'DESCONHECIDO') AS NOME,
-                CP.NOME_PRODUTO_CPR AS PRODUTO,
+                '[' || COALESCE(FORN.FANTASIA_FRN, FORN.RAZAO_SOCIAL_FRN) || '] ' || COALESCE(CP.NOME_PRODUTO_CPR, 'DIVERSOS') AS PRODUTO,
                 CP.VALOR_PRODUTOS_CPR AS VALOR,
                 C.EMISSAO_COM AS DATA_EMISSAO,
                 C.NUMERO_COM AS DOCUMENTO,
@@ -98,7 +98,7 @@ async function syncData() {
         tipos: `
             SELECT 
                 COALESCE(DES.NOME_DES, 'NAO CATEGORIZADO') AS NOME,
-                CP.NOME_PRODUTO_CPR AS PRODUTO,
+                '[' || COALESCE(FORN.FANTASIA_FRN, FORN.RAZAO_SOCIAL_FRN) || '] ' || COALESCE(CP.NOME_PRODUTO_CPR, 'DIVERSOS') AS PRODUTO,
                 CP.VALOR_PRODUTOS_CPR AS VALOR,
                 C.EMISSAO_COM AS DATA_EMISSAO,
                 C.NUMERO_COM AS DOCUMENTO,
@@ -107,12 +107,13 @@ async function syncData() {
             FROM COMPRA_PRODUTO CP
             JOIN COMPRA C ON CP.COM_ID_CPR = C.ID_COM
             LEFT JOIN DESPESA DES ON C.DESPESA_COM = DES.CODIGO_DES
+            LEFT JOIN FORNECEDOR FORN ON C.FORNECEDOR_COM = FORN.FOR_CODIGO_FRN
             WHERE EXTRACT(YEAR FROM C.EMISSAO_COM) IN (2025, 2026) AND DES.NOME_DES IS NOT NULL
         `,
         setores: `
             SELECT 
                 COALESCE(CC.NOME_CTU, 'GERAL / NAO ALOCADO') AS NOME,
-                NULL AS PRODUTO,
+                COALESCE(FORN.RAZAO_SOCIAL_FRN, 'PAGAMENTO DIRETO') AS PRODUTO,
                 PAG.VALOR_PARCELA_PAG AS VALOR,
                 PAG.DATA_EMISSAO_PAG AS DATA_EMISSAO,
                 PAG.DOCUMENTO_PAG AS DOCUMENTO,
@@ -120,12 +121,13 @@ async function syncData() {
                 PAG.ANO_PAG AS ANO
             FROM PAGAR PAG
             LEFT JOIN CENTRO_CUSTO CC ON PAG.CTU_CODIGO_PAG = CC.CODIGO_CTU
+            LEFT JOIN FORNECEDOR FORN ON PAG.FORNECEDOR_PAG = FORN.FOR_CODIGO_FRN
             WHERE PAG.ANO_PAG IN (2025, 2026)
         `,
         materiais: `
             SELECT 
                 COALESCE(PRO.NOME_PRO, 'DIVERSOS') AS NOME,
-                CP.NOME_PRODUTO_CPR AS PRODUTO,
+                '[' || COALESCE(FORN.FANTASIA_FRN, FORN.RAZAO_SOCIAL_FRN) || '] ' || COALESCE(CP.NOME_PRODUTO_CPR, 'DIVERSOS') AS PRODUTO,
                 CP.VALOR_PRODUTOS_CPR AS VALOR,
                 C.EMISSAO_COM AS DATA_EMISSAO,
                 C.NUMERO_COM AS DOCUMENTO,
@@ -134,6 +136,7 @@ async function syncData() {
             FROM COMPRA_PRODUTO CP
             JOIN COMPRA C ON CP.COM_ID_CPR = C.ID_COM
             LEFT JOIN PRODUTO PRO ON CP.PRODUTO_CPR = PRO.CODIGO_PRO
+            LEFT JOIN FORNECEDOR FORN ON C.FORNECEDOR_COM = FORN.FOR_CODIGO_FRN
             WHERE EXTRACT(YEAR FROM C.EMISSAO_COM) IN (2025, 2026)
         `
     };

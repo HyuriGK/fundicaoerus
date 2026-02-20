@@ -88,7 +88,8 @@ router.get('/registros', async (req, res) => {
             data: rows.map(r => ({
                 data_emissao: r.data_emissao,
                 documento: r.documento,
-                valor: Number(r.valor) || 0
+                valor: Number(r.valor) || 0,
+                produto: r.produto
             }))
         });
 
