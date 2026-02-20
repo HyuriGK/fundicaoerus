@@ -65,28 +65,32 @@ router.get('/', async (req, res) => {
         const queryMateriais = `
             SELECT FIRST 20 
                 COALESCE(PRO.NOME_PRO, 'DIVERSOS') AS NOME,
-                SUM(CP.VALOR_TOTAL_CPO) AS TOTAL
+                SUM(CP.VALOR_PRODUTOS_CPR) AS TOTAL
             FROM COMPRA_PRODUTO CP
             JOIN COMPRA C ON CP.COM_ID_CPR = C.ID_COM
-            LEFT JOIN PRODUTO PRO ON CP.PRODUTO_CPO = PRO.CODIGO_PRO
+            LEFT JOIN PRODUTO PRO ON CP.PRODUTO_CPR = PRO.CODIGO_PRO
             WHERE EXTRACT(YEAR FROM C.EMISSAO_COM) IN (2025, 2026)
             GROUP BY 1
             ORDER BY 2 DESC
         `;
 
-        const runQuery = (q) => {
+        const runQuery = (q, name) => {
             return new Promise((resolve) => {
                 dbConn.query(q, (err, res) => {
-                    if (err) resolve([]); // Fallback para não quebrar todo o dashboard
-                    else resolve(res || []);
+                    if (err) {
+                        console.error(`[API Custos] Erro na query ${name}:`, err.message);
+                        resolve([]); // Fallback para não quebrar todo o dashboard
+                    } else {
+                        resolve(res || []);
+                    }
                 });
             });
         };
 
-        const fornecedores = await runQuery(queryFornecedores);
-        const tipos = await runQuery(queryTipos);
-        const setores = await runQuery(querySetores);
-        const materiais = await runQuery(queryMateriais);
+        const fornecedores = await runQuery(queryFornecedores, 'Fornecedores');
+        const tipos = await runQuery(queryTipos, 'Tipos');
+        const setores = await runQuery(querySetores, 'Setores');
+        const materiais = await runQuery(queryMateriais, 'Materiais');
 
         res.json({
             success: true,
