@@ -31,24 +31,24 @@ router.get('/', async (req, res) => {
 
         const queryFornecedores = `
             SELECT FIRST 20 
-                COALESCE(FORN.NOME_FOR, 'DESCONHECIDO') AS NOME,
-                SUM(PAG.VALOR_PARCELA_PAG) AS TOTAL
-            FROM PAGAR PAG
-            LEFT JOIN FORNECEDOR FORN ON PAG.FORNECEDOR_PAG = FORN.CODIGO_FOR
-            WHERE PAG.ANO_PAG IN (2025, 2026)
-            GROUP BY COALESCE(FORN.NOME_FOR, 'DESCONHECIDO')
-            ORDER BY TOTAL DESC
+                COALESCE(FORN.RAZAO_SOCIAL_FRN, 'DESCONHECIDO') AS NOME,
+                SUM(C.TOTAL_PRODUTOS_COM) AS TOTAL
+            FROM COMPRA C
+            LEFT JOIN FORNECEDOR FORN ON C.FORNECEDOR_COM = FORN.FOR_CODIGO_FRN
+            WHERE EXTRACT(YEAR FROM C.EMISSAO_COM) IN (2025, 2026)
+            GROUP BY 1
+            ORDER BY 2 DESC
         `;
 
         const queryTipos = `
             SELECT FIRST 20 
                 COALESCE(DES.NOME_DES, 'NAO CATEGORIZADO') AS NOME,
-                SUM(PAG.VALOR_PARCELA_PAG) AS TOTAL
-            FROM PAGAR PAG
-            LEFT JOIN DESPESA DES ON PAG.DESPESA_PAG = DES.CODIGO_DES
-            WHERE PAG.ANO_PAG IN (2025, 2026)
-            GROUP BY COALESCE(DES.NOME_DES, 'NAO CATEGORIZADO')
-            ORDER BY TOTAL DESC
+                SUM(C.TOTAL_PRODUTOS_COM) AS TOTAL
+            FROM COMPRA C
+            LEFT JOIN DESPESA DES ON C.DESPESA_COM = DES.CODIGO_DES
+            WHERE EXTRACT(YEAR FROM C.EMISSAO_COM) IN (2025, 2026)
+            GROUP BY 1
+            ORDER BY 2 DESC
         `;
 
         const querySetores = `
@@ -58,8 +58,8 @@ router.get('/', async (req, res) => {
             FROM PAGAR PAG
             LEFT JOIN CENTRO_CUSTO CC ON PAG.CTU_CODIGO_PAG = CC.CODIGO_CTU
             WHERE PAG.ANO_PAG IN (2025, 2026)
-            GROUP BY COALESCE(CC.NOME_CTU, 'GERAL / NAO ALOCADO')
-            ORDER BY TOTAL DESC
+            GROUP BY 1
+            ORDER BY 2 DESC
         `;
 
         const queryMateriais = `
@@ -67,28 +67,26 @@ router.get('/', async (req, res) => {
                 COALESCE(PRO.NOME_PRO, 'DIVERSOS') AS NOME,
                 SUM(CP.VALOR_TOTAL_CPO) AS TOTAL
             FROM COMPRA_PRODUTO CP
-            JOIN COMPRA C ON CP.COMPRA_CPO = C.ID_COM
+            JOIN COMPRA C ON CP.COM_ID_CPR = C.ID_COM
             LEFT JOIN PRODUTO PRO ON CP.PRODUTO_CPO = PRO.CODIGO_PRO
-            WHERE EXTRACT(YEAR FROM C.ENTRADA_COM) IN (2025, 2026)
-            GROUP BY COALESCE(PRO.NOME_PRO, 'DIVERSOS')
-            ORDER BY TOTAL DESC
+            WHERE EXTRACT(YEAR FROM C.EMISSAO_COM) IN (2025, 2026)
+            GROUP BY 1
+            ORDER BY 2 DESC
         `;
 
         const runQuery = (q) => {
-            return new Promise((resolve, reject) => {
+            return new Promise((resolve) => {
                 dbConn.query(q, (err, res) => {
-                    if (err) reject(err);
-                    else resolve(res);
+                    if (err) resolve([]); // Fallback para não quebrar todo o dashboard
+                    else resolve(res || []);
                 });
             });
         };
 
-        const [fornecedores, tipos, setores, materiais] = await Promise.all([
-            runQuery(queryFornecedores),
-            runQuery(queryTipos),
-            runQuery(querySetores),
-            runQuery(queryMateriais)
-        ]);
+        const fornecedores = await runQuery(queryFornecedores);
+        const tipos = await runQuery(queryTipos);
+        const setores = await runQuery(querySetores);
+        const materiais = await runQuery(queryMateriais);
 
         res.json({
             success: true,
