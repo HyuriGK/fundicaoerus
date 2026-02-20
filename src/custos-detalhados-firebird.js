@@ -68,7 +68,7 @@ router.get('/registros', async (req, res) => {
 
         if (grouped === 'true') {
             query = `
-                SELECT produto, produto_cod, SUM(valor) as total, COUNT(*) as ocorrencias
+                SELECT produto, produto_cod, fornecedor, SUM(valor) as total, COUNT(*) as ocorrencias
                 FROM custos_registros
                 WHERE categoria = $1 AND nome = $2
             `;
@@ -82,7 +82,7 @@ router.get('/registros', async (req, res) => {
                 query += ` AND ano = $${params.length}`;
             }
 
-            query += ` GROUP BY produto, produto_cod ORDER BY total DESC`;
+            query += ` GROUP BY produto, produto_cod, fornecedor ORDER BY total DESC`;
         } else {
             query = `
                 SELECT data_emissao, documento, valor, produto, produto_cod, fornecedor 
