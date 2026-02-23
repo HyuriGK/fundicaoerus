@@ -95,7 +95,7 @@ router.get('/resumo', async (req, res) => {
             const val = Number(f.total) || 0;
             ccTotals[cc] = (ccTotals[cc] || 0) + val;
             if (!ccFornecedores[cc]) ccFornecedores[cc] = [];
-            ccFornecedores[cc].push({ fornecedor: f.fornecedor, total: val });
+            ccFornecedores[cc].push({ fornecedor: f.fornecedor, total: val, produtos: f.produtos });
         });
 
         // Build result array
