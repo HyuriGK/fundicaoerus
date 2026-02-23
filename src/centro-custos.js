@@ -25,6 +25,7 @@ const CENTROS_CUSTO = [
     { codigo: 'EQF', nome: 'Equip. Uso Fabril' },
     { codigo: 'PSV', nome: 'Prestação de Serviço' },
     { codigo: 'ALI', nome: 'Alimentação' },
+    { codigo: 'EPI', nome: 'Equip. Proteção Individual' },
     { codigo: 'OUT', nome: 'Outros' }
 ];
 
