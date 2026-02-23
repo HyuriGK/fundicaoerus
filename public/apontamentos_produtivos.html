@@ -429,6 +429,72 @@
             color: #fff;
         }
 
+        /* --- DROPDOWN SYSTEM --- */
+        .dropdown {
+            position: relative;
+            display: inline-flex;
+            height: 100%;
+        }
+
+        .dropdown-content {
+            display: none;
+            position: absolute;
+            right: 0;
+            top: 100%;
+            margin-top: 10px;
+            background-color: #18181b;
+            min-width: 250px;
+            border: 1px solid var(--border-subtle);
+            border-radius: 6px;
+            box-shadow: var(--shadow-card);
+            z-index: 200;
+        }
+
+        /* Hover para o menu de relatórios */
+        #reportDropdown:hover .dropdown-content {
+            display: block !important;
+        }
+
+        .dropdown-content.show {
+            display: block !important;
+        }
+
+        .dropdown-content::before {
+            content: '';
+            position: absolute;
+            top: -20px;
+            left: 0;
+            width: 100%;
+            height: 20px;
+            background: transparent;
+        }
+
+        .dropdown-content .dropdown-item {
+            color: var(--text-main) !important;
+            padding: 12px 16px;
+            display: block;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: background 0.2s;
+            font-family: var(--font-main);
+            border: none;
+            background: transparent;
+            width: 100%;
+            text-align: left;
+            text-decoration: none !important;
+        }
+
+        .dropdown-content .dropdown-item:hover {
+            background-color: rgba(251, 191, 36, 0.1);
+            color: var(--color-primary) !important;
+        }
+
+        .dropdown-divider {
+            height: 1px;
+            background: var(--border-separator);
+            margin: 4px 0;
+        }
+
         /* --- 4. CONTENT --- */
         .dashboard-content {
             flex-grow: 1;
@@ -950,10 +1016,22 @@
                 </div>
             </div>
             <div class="header-actions">
-                <button class="btn-glass" id="generate-complete-report-button" onclick="generateCompleteReport()"
-                    title="Gerar Relatório PDF" style="border-color: var(--status-info); color: var(--status-info);">
-                    <i class="fa-solid fa-file-pdf"></i> <span style="margin-left:5px;">Relatório</span>
-                </button>
+                <!-- Botão Relatório com Dropdown -->
+                <div class="dropdown" id="reportDropdown">
+                    <button class="btn-glass" id="dropdown-report-btn" title="Gerar Relatório PDF"
+                        onclick="toggleReportDropdown()"
+                        style="border-color: var(--status-info); color: var(--status-info);">
+                        <i class="fa-solid fa-file-pdf"></i> <span style="margin-left:5px;">Relatórios</span>
+                    </button>
+                    <div class="dropdown-content">
+                        <button class="dropdown-item" onclick="generateCompleteReport()">
+                            <i class="fa-solid fa-table"></i> Relatório Numérico
+                        </button>
+                        <button class="dropdown-item" onclick="generateGraphicReport()">
+                            <i class="fa-solid fa-chart-line"></i> Relatório Gráfico
+                        </button>
+                    </div>
+                </div>
                 <div class="separator-vertical"></div>
 
                 <button class="btn-glass" onclick="openRecordsModal(); this.blur()" title="Ver Registros">
@@ -1399,6 +1477,100 @@
             return `<div class="pdf-content-wrapper"><div class="pdf-header"><h3>Relatório: ${sector}</h3><p>Período de Análise:<br><strong>${d.dateRange}</strong></p></div>${summaryHTML}${d.weeklyTableHTML}${d.dailyTableHTML}</div>`;
         }
 
+        async function generateGraphicReport() {
+            const excludedSectors = ['USINAGEM', 'TRATAMENTO TERMICO', 'INSPECAO DE QUALIDADE', 'FATURAMENTO'];
+            const allSectors = [
+                'MOLDAGEM GERAL',
+                'MOLDAGEM LEVE',
+                'MOLDAGEM MANUAL',
+                'MOLDAGEM PESADA',
+                'FUSAO',
+                'ACABAMENTO',
+                'EXPEDICAO'
+            ];
+
+            const sectorArray = allSectors.filter(s => !excludedSectors.includes(s));
+            const originalSector = currentSectorFilter;
+
+            loadingScreen.style.display = 'flex';
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF('l', 'mm', 'a4'); // Paisagem para gráficos
+            const pdfTempContainer = document.getElementById('pdf-temp-container');
+            pdfTempContainer.innerHTML = '';
+            window.isGraphicReportRunning = true;
+
+            try {
+                for (let i = 0; i < sectorArray.length; i++) {
+                    const sector = sectorArray[i];
+                    currentSectorFilter = sector;
+                    applyFilters();
+
+                    // Pequena pausa para garantir renderização do Chart.js
+                    await new Promise(r => setTimeout(r, 800));
+
+                    const pageWrapper = document.createElement('div');
+                    pageWrapper.style.padding = '40px';
+                    pageWrapper.style.backgroundColor = '#09090b';
+                    pageWrapper.style.width = '1120px'; // A4 Landscape scale
+                    pageWrapper.style.minHeight = '790px';
+                    pageWrapper.style.display = 'flex';
+                    pageWrapper.style.flexDirection = 'column';
+                    pageWrapper.style.gap = '30px';
+
+                    const header = document.createElement('div');
+                    header.style.color = '#fff';
+                    header.style.fontSize = '24px';
+                    header.style.fontWeight = '700';
+                    header.style.marginBottom = '10px';
+                    header.style.fontFamily = 'Inter, sans-serif';
+                    header.innerText = `Relatório de Produção: ${sector}`;
+                    pageWrapper.appendChild(header);
+
+                    // Clone KPIs
+                    const kpiRow = document.querySelector('.kpi-row').cloneNode(true);
+                    kpiRow.style.marginBottom = '20px';
+                    pageWrapper.appendChild(kpiRow);
+
+                    // Clone Chart Panel
+                    const chartPanel = document.querySelector('.chart-panel').cloneNode(true);
+                    chartPanel.style.flex = '1';
+                    chartPanel.style.height = '460px'; // Altura fixa no PDF
+                    pageWrapper.appendChild(chartPanel);
+
+                    // Importante: html2canvas não renderiza o <canvas> original se clonado assim.
+                    // Precisamos desenhar o canvas original no clone ou capturar o original.
+                    // Estratégia: Adicionar temporariamente o wrapper ao DOM (invisível) e capturar.
+                    document.body.appendChild(pageWrapper);
+
+                    const canvas = await html2canvas(pageWrapper, {
+                        scale: 2,
+                        useCORS: true,
+                        backgroundColor: '#09090b',
+                        logging: false
+                    });
+
+                    document.body.removeChild(pageWrapper);
+
+                    const imgData = canvas.toDataURL('image/png');
+                    if (i > 0) doc.addPage();
+                    doc.addImage(imgData, 'PNG', 0, 0, 297, 210);
+                }
+
+                const now = new Date();
+                const dateStr = now.toLocaleDateString('pt-BR').replace(/\//g, '-');
+                doc.save(`Relatorio_Grafico_Producao_${dateStr}.pdf`);
+
+            } catch (error) {
+                console.error(error);
+                alert('Erro ao gerar relatório gráfico: ' + error.message);
+            } finally {
+                window.isGraphicReportRunning = false;
+                currentSectorFilter = originalSector;
+                applyFilters();
+                loadingScreen.style.display = 'none';
+            }
+        }
+
         async function exportReportToPDF(name, contentId) {
             const content = document.getElementById(contentId);
             const pages = content.querySelectorAll('.pdf-content-wrapper');
@@ -1634,6 +1806,24 @@
                     renderTable();
                 });
             });
+        }
+
+        function toggleReportDropdown() {
+            const content = document.querySelector('#reportDropdown .dropdown-content');
+            if (content.classList.contains('show')) {
+                content.classList.remove('show');
+            } else {
+                // Fecha outros dropdowns
+                document.querySelectorAll('.dropdown-content').forEach(d => d.classList.remove('show'));
+                content.classList.add('show');
+            }
+        }
+
+        // Fechar dropdown ao clicar fora
+        window.onclick = function (event) {
+            if (!event.target.matches('.btn-glass') && !event.target.closest('.dropdown')) {
+                document.querySelectorAll('.dropdown-content').forEach(d => d.classList.remove('show'));
+            }
         }
 
         async function fetchData() {
@@ -1957,7 +2147,18 @@
                             }
                         },
                         datalabels: {
-                            display: false
+                            display: true,
+                            anchor: 'end',
+                            align: 'top',
+                            color: '#fff',
+                            offset: 4,
+                            font: { size: 10, weight: 'bold' },
+                            formatter: (value) => {
+                                if (window.isGraphicReportRunning) {
+                                    return formatNumber(value / 1000, 2) + ' Ton';
+                                }
+                                return formatNumber(value, 0);
+                            }
                         }
                     }
                 }
