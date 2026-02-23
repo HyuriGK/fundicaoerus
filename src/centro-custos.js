@@ -71,7 +71,7 @@ router.get('/resumo', async (req, res) => {
 
         // Get all fornecedores with values for the period
         let query = `
-            SELECT nome as fornecedor, SUM(valor) as total
+            SELECT nome as fornecedor, SUM(valor) as total, STRING_AGG(DISTINCT produto, ', ') as produtos
             FROM custos_registros
             WHERE categoria = 'fornecedores'
         `;
