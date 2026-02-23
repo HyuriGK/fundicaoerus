@@ -24,6 +24,7 @@ const CENTROS_CUSTO = [
     { codigo: 'MDL', nome: 'Modelação' },
     { codigo: 'EQF', nome: 'Equip. Uso Fabril' },
     { codigo: 'PSV', nome: 'Prestação de Serviço' },
+    { codigo: 'ALI', nome: 'Alimentação' },
     { codigo: 'OUT', nome: 'Outros' }
 ];
 
