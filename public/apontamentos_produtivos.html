@@ -1508,6 +1508,13 @@
                     // Pequena pausa para garantir renderização do Chart.js
                     await new Promise(r => setTimeout(r, 800));
 
+                    // TRICK: Temporarily resize the dashboard chart container to match the PDF proportions
+                    const originalDashboardPanel = document.querySelector('.chart-panel');
+                    const originalHeight = originalDashboardPanel.style.height;
+                    originalDashboardPanel.style.height = '650px';
+                    if (dailyProductionChart) dailyProductionChart.resize();
+                    await new Promise(r => setTimeout(r, 200));
+
                     const pageWrapper = document.createElement('div');
                     pageWrapper.style.padding = '10px 20px'; // Drastically reduced vertical padding
                     pageWrapper.style.backgroundColor = '#ffffff'; // White background for PDF
@@ -1554,24 +1561,28 @@
                     chartPanel.className = 'chart-panel';
                     chartPanel.style.flex = '1';
                     chartPanel.style.height = '100%';
-                    chartPanel.style.maxHeight = '650px'; // Drastically increased height
                     chartPanel.style.backgroundColor = '#ffffff';
                     chartPanel.style.border = '1px solid #e2e8f0';
                     chartPanel.style.borderRadius = '12px';
-                    chartPanel.style.padding = '0px'; // No padding to maximize chart
+                    chartPanel.style.padding = '0px';
                     chartPanel.style.display = 'flex';
                     chartPanel.style.alignItems = 'center';
                     chartPanel.style.justifyContent = 'center';
                     chartPanel.style.boxSizing = 'border-box';
+                    chartPanel.style.overflow = 'hidden';
 
                     const chartImg = document.createElement('img');
                     chartImg.src = document.getElementById('dailyProductionChart').toDataURL('image/png');
                     chartImg.style.width = '100%';
-                    chartImg.style.height = '100%'; // Full height (reverting from 200% which was breaking layout)
-                    chartImg.style.objectFit = 'contain';
+                    chartImg.style.height = '100%';
+                    chartImg.style.objectFit = 'fill'; // Force fill the huge panel
                     chartPanel.appendChild(chartImg);
 
                     pageWrapper.appendChild(chartPanel);
+
+                    // Restore original dashboard height immediately
+                    originalDashboardPanel.style.height = originalHeight;
+                    if (dailyProductionChart) dailyProductionChart.resize();
 
                     // Importante: html2canvas não renderiza o <canvas> original se clonado assim.
                     // Precisamos desenhar o canvas original no clone ou capturar o original.
