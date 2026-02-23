@@ -672,6 +672,94 @@
                 grid-template-columns: 1fr;
             }
         }
+
+        /* Fornecedores Table */
+        .fornecedores-table-wrap {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+
+        .fornecedores-table-wrap::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .fornecedores-table-wrap::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 2px;
+        }
+
+        .forn-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.72rem;
+        }
+
+        .forn-table th {
+            color: var(--text-muted);
+            font-weight: 600;
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            padding: 6px 8px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-subtle);
+            position: sticky;
+            top: 0;
+            background: var(--bg-panel);
+            z-index: 1;
+        }
+
+        .forn-table td {
+            padding: 5px 8px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+            white-space: nowrap;
+        }
+
+        .forn-table tr:hover td {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .forn-table .forn-name {
+            max-width: 160px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            color: var(--text-main);
+        }
+
+        .forn-table .forn-val {
+            text-align: right;
+            font-family: var(--font-mono);
+            color: var(--info);
+            font-weight: 600;
+        }
+
+        .cc-select {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-main);
+            padding: 3px 6px;
+            border-radius: 4px;
+            font-size: 0.65rem;
+            font-family: var(--font-ui);
+            cursor: pointer;
+            width: 100%;
+            max-width: 120px;
+        }
+
+        .cc-select:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        .cc-badge {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 0.6rem;
+            font-weight: 700;
+            letter-spacing: 0.03em;
+        }
     </style>
 </head>
 
@@ -803,7 +891,7 @@
                 <div class="chart-container"><canvas id="chartLigas"></canvas></div>
             </div>
 
-            <!-- 4. Top 10 Fornecedores -->
+            <!-- 4. Top 10 Fornecedores (Table with Cost Center) -->
             <div class="chart-panel">
                 <div class="panel-header">
                     <span class="panel-title"><i class="fa-solid fa-truck" style="color: var(--info);"></i> Top 10
@@ -811,7 +899,18 @@
                     <span class="panel-badge" style="background: rgba(59,130,246,0.1); color: var(--info);"
                         id="badgeFornecedores">—</span>
                 </div>
-                <div class="chart-container"><canvas id="chartFornecedores"></canvas></div>
+                <div class="fornecedores-table-wrap" id="fornecedoresTableWrap">
+                    <table class="forn-table">
+                        <thead>
+                            <tr>
+                                <th>Fornecedor</th>
+                                <th style="text-align:right;">Valor</th>
+                                <th>Centro de Custo</th>
+                            </tr>
+                        </thead>
+                        <tbody id="fornecedoresBody"></tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
@@ -827,7 +926,9 @@
         // STATE
         // ========================
         let currentYear, currentMonth;
-        let chartSetores, chartEvolucao, chartLigas, chartFornecedores;
+        let chartSetores, chartEvolucao, chartLigas;
+        let centrosCusto = [];
+        let mapeamentosCentro = {};
 
         const MONTH_NAMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
         const FULL_MONTH_NAMES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
@@ -835,7 +936,7 @@
         // ========================
         // INIT
         // ========================
-        document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', async () => {
             const now = new Date();
             currentYear = now.getFullYear();
             currentMonth = now.getMonth() + 1;
@@ -849,6 +950,9 @@
                 yearSel.appendChild(opt);
             }
             yearSel.value = currentYear;
+
+            // Load cost center mappings
+            await loadCentroCustos();
 
             // Month buttons
             renderMonthButtons();
@@ -889,7 +993,7 @@
                 renderChartSetores(d.producaoSetores);
                 renderChartEvolucao(d.evolucaoMensal);
                 renderChartLigas(d.topLigas);
-                renderChartFornecedores(d.topFornecedores);
+                renderFornecedoresTable(d.topFornecedores);
 
                 document.getElementById('footerTimestamp').textContent =
                     `Atualizado em ${new Date().toLocaleString('pt-BR')}`;
@@ -1184,64 +1288,88 @@
         }
 
         // ========================
-        // 4. TOP FORNECEDORES
+        // 4. TOP FORNECEDORES (TABLE)
         // ========================
-        function renderChartFornecedores(fornecedores) {
-            const ctx = document.getElementById('chartFornecedores').getContext('2d');
-            if (chartFornecedores) chartFornecedores.destroy();
+        const CC_COLORS = {
+            FUS: { bg: 'rgba(251,191,36,0.15)', color: '#fbbf24' },
+            MOL: { bg: 'rgba(168,85,247,0.15)', color: '#a855f7' },
+            ACB: { bg: 'rgba(59,130,246,0.15)', color: '#3b82f6' },
+            USI: { bg: 'rgba(6,182,212,0.15)', color: '#06b6d4' },
+            TTE: { bg: 'rgba(239,68,68,0.15)', color: '#ef4444' },
+            LAB: { bg: 'rgba(16,185,129,0.15)', color: '#10b981' },
+            MAN: { bg: 'rgba(245,158,11,0.15)', color: '#f59e0b' },
+            ADM: { bg: 'rgba(148,163,184,0.15)', color: '#94a3b8' },
+            LOG: { bg: 'rgba(34,197,94,0.15)', color: '#22c55e' },
+            RH: { bg: 'rgba(236,72,153,0.15)', color: '#ec4899' },
+            COM: { bg: 'rgba(99,102,241,0.15)', color: '#6366f1' },
+            TER: { bg: 'rgba(14,165,233,0.15)', color: '#0ea5e9' },
+            INV: { bg: 'rgba(168,162,158,0.15)', color: '#a8a29e' },
+            OUT: { bg: 'rgba(113,113,122,0.15)', color: '#71717a' }
+        };
 
-            const labels = fornecedores.map(f => f.fornecedor.length > 25 ? f.fornecedor.slice(0, 23) + '…' : f.fornecedor);
-            const data = fornecedores.map(f => f.total);
+        async function loadCentroCustos() {
+            try {
+                const res = await fetch('/api/centro-custos');
+                const json = await res.json();
+                if (json.success) {
+                    centrosCusto = json.centros;
+                    mapeamentosCentro = json.mapeamentos || {};
+                }
+            } catch (e) {
+                console.error('Erro ao carregar centros de custo:', e);
+            }
+        }
 
+        async function saveCentroCusto(fornecedor, centroCusto) {
+            try {
+                mapeamentosCentro[fornecedor] = centroCusto;
+                await fetch('/api/centro-custos', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ fornecedor, centro_custo: centroCusto })
+                });
+            } catch (e) {
+                console.error('Erro ao salvar centro de custo:', e);
+            }
+        }
+
+        function renderFornecedoresTable(fornecedores) {
             document.getElementById('badgeFornecedores').textContent = fornecedores.length + ' fornecedores';
 
-            const blueShades = [
-                'rgba(59, 130, 246, 0.9)',
-                'rgba(59, 130, 246, 0.7)',
-                'rgba(59, 130, 246, 0.55)',
-                'rgba(59, 130, 246, 0.4)',
-                'rgba(59, 130, 246, 0.25)'
-            ];
+            const tbody = document.getElementById('fornecedoresBody');
+            if (!fornecedores.length) {
+                tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:var(--text-muted); padding:20px;">Sem dados</td></tr>';
+                return;
+            }
 
-            chartFornecedores = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels,
-                    datasets: [{
-                        data,
-                        backgroundColor: blueShades,
-                        borderColor: 'rgba(59, 130, 246, 0.3)',
-                        borderWidth: 1,
-                        borderRadius: 4,
-                        barThickness: 18
-                    }]
-                },
-                options: {
-                    ...CHART_DEFAULTS,
-                    indexAxis: 'y',
-                    scales: {
-                        x: {
-                            ...CHART_DEFAULTS.scales?.x,
-                            grid: GRID_STYLE,
-                            ticks: {
-                                ...TICK_STYLE,
-                                callback: (v) => v >= 1000 ? (v / 1000).toFixed(1) + 'k' : v
-                            }
-                        },
-                        y: {
-                            grid: { display: false },
-                            ticks: TICK_STYLE
-                        }
-                    },
-                    plugins: {
-                        ...CHART_DEFAULTS.plugins,
-                        tooltip: {
-                            callbacks: {
-                                label: (ctx) => ' ' + fmtBRL(ctx.raw)
-                            }
-                        }
-                    }
-                }
+            const optionsHtml = centrosCusto.map(c =>
+                `<option value="${c.codigo}">${c.codigo} - ${c.nome}</option>`
+            ).join('');
+
+            tbody.innerHTML = fornecedores.map((f, i) => {
+                const cc = mapeamentosCentro[f.fornecedor] || '';
+                const ccInfo = CC_COLORS[cc];
+                const badgeHtml = cc && ccInfo
+                    ? `<span class="cc-badge" style="background:${ccInfo.bg}; color:${ccInfo.color};">${cc}</span>`
+                    : '';
+
+                return `<tr>
+                    <td class="forn-name" title="${f.fornecedor}">${f.fornecedor}</td>
+                    <td class="forn-val">${fmtBRL(f.total)}</td>
+                    <td>
+                        <select class="cc-select" onchange="saveCentroCusto('${f.fornecedor.replace(/'/g, "\\'")}', this.value)">
+                            <option value="">—</option>
+                            ${optionsHtml}
+                        </select>
+                    </td>
+                </tr>`;
+            }).join('');
+
+            // Set current values
+            const selects = tbody.querySelectorAll('.cc-select');
+            fornecedores.forEach((f, i) => {
+                const cc = mapeamentosCentro[f.fornecedor] || '';
+                if (selects[i]) selects[i].value = cc;
             });
         }
 
