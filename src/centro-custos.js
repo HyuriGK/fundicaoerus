@@ -21,6 +21,8 @@ const CENTROS_CUSTO = [
     { codigo: 'COM', nome: 'Comercial' },
     { codigo: 'TER', nome: 'Terceirização' },
     { codigo: 'INV', nome: 'Investimentos' },
+    { codigo: 'MDL', nome: 'Modelação' },
+    { codigo: 'EQF', nome: 'Equip. Uso Fabril' },
     { codigo: 'PSV', nome: 'Prestação de Serviço' },
     { codigo: 'OUT', nome: 'Outros' }
 ];
