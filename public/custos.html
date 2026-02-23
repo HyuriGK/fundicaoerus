@@ -1568,13 +1568,24 @@
                 const total = ccData.fornecedores.reduce((s, f) => s + f.total, 0);
                 const ccStyle = CC_COLORS[ccCode] || CC_COLORS.OUT;
 
+                const ccOpts = centrosCusto.map(c =>
+                    `<option value="${c.codigo}">${c.codigo} - ${c.nome}</option>`
+                ).join('');
+
                 const rows = ccData.fornecedores.map(f => {
+                    const safeForn = (f.fornecedor || '').replace(/'/g, "\\'");
                     const pct = total > 0 ? ((f.total / total) * 100).toFixed(1) : '0';
                     return `
-                    <tr>
-                        <td class="name" title="${f.fornecedor}">${f.fornecedor}</td>
+                    <tr class="clickable" onclick="openOccurrences('fornecedores', '${safeForn}')" title="Clique para ver detalhes dos recibos">
+                        <td class="name truncate" title="${f.fornecedor}" style="max-width:300px;">${f.fornecedor}</td>
                         <td class="val" style="font-weight:600;">${fmtBRL(f.total)}</td>
                         <td style="text-align:right; color:var(--text-muted); font-size:0.75rem;">${pct}%</td>
+                        <td onclick="event.stopPropagation()" style="width:140px;">
+                            <select class="cc-select" onchange="saveCentroCusto('${safeForn}', this.value)">
+                                <option value="">—</option>
+                                ${ccOpts}
+                            </select>
+                        </td>
                     </tr>`;
                 }).join('');
 
@@ -1585,10 +1596,21 @@
                         <span style="color:var(--text-muted); font-size:0.8rem; margin-left:auto;">Total: <b style="color:${ccStyle.color};">${fmtBRL(total)}</b></span>
                     </div>
                     <table class="costs-table">
-                        <thead><tr><th>Fornecedor</th><th style="text-align:right;">Valor</th><th style="text-align:right; width:60px;">%</th></tr></thead>
+                        <thead><tr><th>Fornecedor</th><th style="text-align:right;">Valor</th><th style="text-align:right; width:60px;">%</th><th style="width:140px;">Centro Custo</th></tr></thead>
                         <tbody>${rows}</tbody>
                     </table>
                 `;
+
+                setTimeout(() => {
+                    body.querySelectorAll('.cc-select').forEach(sel => {
+                        const row = sel.closest('tr');
+                        const fornCell = row?.querySelector('.name');
+                        if (fornCell) {
+                            const fname = fornCell.getAttribute('title') || fornCell.textContent;
+                            sel.value = mapeamentosCentro[fname] || '';
+                        }
+                    });
+                }, 50);
             } catch (e) {
                 console.error('Erro CC drilldown:', e);
                 body.innerHTML = '<div style="color:var(--danger); text-align:center; padding:20px;">Erro ao carregar dados.</div>';
