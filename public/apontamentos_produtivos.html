@@ -1517,13 +1517,17 @@
                     pageWrapper.style.flexDirection = 'column';
                     pageWrapper.style.gap = '30px';
 
+                    const metaVal = sectorGoalDisplay.innerText;
                     const header = document.createElement('div');
                     header.style.color = '#fff';
                     header.style.fontSize = '24px';
                     header.style.fontWeight = '700';
                     header.style.marginBottom = '10px';
                     header.style.fontFamily = 'Inter, sans-serif';
-                    header.innerText = `Relatório de Produção: ${sector}`;
+                    header.innerHTML = `<div style="display:flex; justify-content:space-between; align-items:center;">
+                        <span>Relatório de Produção: ${sector}</span>
+                        <span style="font-size:18px; color:var(--status-warning)">Meta Mensal: ${metaVal} Kg</span>
+                    </div>`;
                     pageWrapper.appendChild(header);
 
                     // Clone KPIs
@@ -1531,10 +1535,24 @@
                     kpiRow.style.marginBottom = '20px';
                     pageWrapper.appendChild(kpiRow);
 
-                    // Clone Chart Panel
-                    const chartPanel = document.querySelector('.chart-panel').cloneNode(true);
+                    // Clone Chart Panel - Fix: Use Image of Chart
+                    const chartPanel = document.createElement('div');
+                    chartPanel.className = 'chart-panel';
                     chartPanel.style.flex = '1';
                     chartPanel.style.height = '460px'; // Altura fixa no PDF
+                    chartPanel.style.backgroundColor = '#18181b';
+                    chartPanel.style.borderRadius = '12px';
+                    chartPanel.style.padding = '20px';
+                    chartPanel.style.display = 'flex';
+                    chartPanel.style.alignItems = 'center';
+                    chartPanel.style.justifyContent = 'center';
+
+                    const chartImg = document.createElement('img');
+                    chartImg.src = document.getElementById('dailyProductionChart').toDataURL('image/png');
+                    chartImg.style.maxWidth = '100%';
+                    chartImg.style.maxHeight = '100%';
+                    chartPanel.appendChild(chartImg);
+
                     pageWrapper.appendChild(chartPanel);
 
                     // Importante: html2canvas não renderiza o <canvas> original se clonado assim.
@@ -2050,26 +2068,17 @@
                             tension: 0.3,
                             pointRadius: 2,
                             order: 1,
-                            yAxisID: 'y1'
-                        },
-                        {
-                            type: 'line',
-                            label: 'Meta Mensal',
-                            data: dataGoal,
-                            borderColor: '#a855f7', // Purple
-                            borderWidth: 2,
-                            borderDash: [5, 5],
-                            pointRadius: 0,
-                            pointHoverRadius: 0,
-                            fill: false,
-                            order: 0,
-                            yAxisID: 'y1' // Goal is against Cumulative
+                            yAxisID: 'y1',
+                            datalabels: {
+                                display: false
+                            }
                         }
                     ]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    animation: window.isGraphicReportRunning ? false : { duration: 1000 },
                     onClick: (e, activeElements) => {
                         if (activeElements.length > 0) {
                             const index = activeElements[0].index;
@@ -2132,12 +2141,10 @@
                                     } else if (label === 'Acumulado') {
                                         return `${label}: ${formattedValue}`;
                                     } else if (label === 'Meta Mensal') {
-                                        // Find Accumulated value (Dataset 1) for the same index
                                         const accumData = context.chart.data.datasets[1].data[context.dataIndex];
-                                        const accum = accumData || 0;
-                                        const meta = value || 1; // Avoid divide by zero
-                                        const percent = ((accum / meta) * 100).toFixed(1);
-                                        return `${label}: ${formattedValue} (${percent}%)`;
+                                        const meta = goalValue || 1;
+                                        const percent = (((accumData || 0) / meta) * 100).toFixed(1);
+                                        return `Meta Mensal: ${meta.toLocaleString('pt-BR')} Kg (${percent}%)`;
                                     }
                                     return `${label}: ${formattedValue}`;
                                 },
