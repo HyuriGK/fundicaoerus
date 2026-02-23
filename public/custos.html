@@ -735,21 +735,35 @@
         }
 
         .cc-select {
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid var(--border-subtle);
-            color: var(--text-main);
-            padding: 3px 6px;
+            background: #1a1b1e;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            color: #e4e4e7;
+            padding: 4px 8px;
             border-radius: 4px;
             font-size: 0.65rem;
             font-family: var(--font-ui);
             cursor: pointer;
             width: 100%;
-            max-width: 120px;
+            max-width: 140px;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right 4px center;
+            background-size: 12px;
+            padding-right: 20px;
         }
 
         .cc-select:focus {
             outline: none;
             border-color: var(--primary);
+            box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.3);
+        }
+
+        .cc-select option {
+            background: #1a1b1e;
+            color: #e4e4e7;
         }
 
         .cc-badge {
@@ -1291,6 +1305,8 @@
         // 4. TOP FORNECEDORES (TABLE)
         // ========================
         const CC_COLORS = {
+            MTP: { bg: 'rgba(234,179,8,0.15)', color: '#eab308' },
+            ENE: { bg: 'rgba(250,204,21,0.15)', color: '#facc15' },
             FUS: { bg: 'rgba(251,191,36,0.15)', color: '#fbbf24' },
             MOL: { bg: 'rgba(168,85,247,0.15)', color: '#a855f7' },
             ACB: { bg: 'rgba(59,130,246,0.15)', color: '#3b82f6' },
@@ -1304,7 +1320,8 @@
             COM: { bg: 'rgba(99,102,241,0.15)', color: '#6366f1' },
             TER: { bg: 'rgba(14,165,233,0.15)', color: '#0ea5e9' },
             INV: { bg: 'rgba(168,162,158,0.15)', color: '#a8a29e' },
-            OUT: { bg: 'rgba(113,113,122,0.15)', color: '#71717a' }
+            OUT: { bg: 'rgba(113,113,122,0.15)', color: '#71717a' },
+            SEM: { bg: 'rgba(63,63,70,0.15)', color: '#71717a' }
         };
 
         async function loadCentroCustos() {
@@ -1394,13 +1411,18 @@
                 if (currentMonth) params.append('mes', currentMonth);
                 if (currentYear) params.append('ano', currentYear);
 
-                const res = await fetch(`/api/custos-detalhados?${params.toString()}`);
-                if (!res.ok) throw new Error('Erro na requisição');
-                const json = await res.json();
+                const [detRes, ccRes] = await Promise.all([
+                    fetch(`/api/custos-detalhados?${params.toString()}`),
+                    fetch(`/api/centro-custos/resumo?${params.toString()}`)
+                ]);
 
-                if (json.success) renderCostsTables(json.data);
-                else {
-                    body.innerHTML = `<div style="grid-column: 1 / -1; color: var(--danger); text-align: center;">${json.error}</div>`;
+                const detJson = await detRes.json();
+                const ccJson = await ccRes.json();
+
+                if (detJson.success) {
+                    renderCostsTables(detJson.data, ccJson.success ? ccJson.data : []);
+                } else {
+                    body.innerHTML = `<div style="grid-column: 1 / -1; color: var(--danger); text-align: center;">${detJson.error}</div>`;
                 }
             } catch (err) {
                 console.error('Erro ao abrir modal de custos:', err);
@@ -1412,20 +1434,40 @@
             document.getElementById('costsModal').style.display = 'none';
         }
 
-        function renderCostsTables(data) {
+        function renderCostsTables(data, ccSummary) {
             const body = document.getElementById('costsModalBody');
 
+            const ccOptionsHtml = centrosCusto.map(c =>
+                `<option value="${c.codigo}">${c.codigo} - ${c.nome}</option>`
+            ).join('');
+
             const makeTable = (title, icon, items, catTag) => {
-                let rows = items.slice(0, 10).map(i => `
-                    <tr onclick="openDrilldownCosts('${catTag}', '${i.nome}')" style="cursor: pointer;" title="Clique para ver os recibos mensais destas custas">
+                const isFornecedores = catTag === 'fornecedores';
+
+                let rows = items.slice(0, 10).map(i => {
+                    const safeName = (i.nome || '').replace(/'/g, "\\'");
+                    const ccCol = isFornecedores ? `
+                        <td style="width:140px;">
+                            <select class="cc-select" onchange="saveCentroCusto('${safeName}', this.value)">
+                                <option value="">—</option>
+                                ${ccOptionsHtml}
+                            </select>
+                        </td>` : '';
+
+                    return `
+                    <tr onclick="openDrilldownCosts('${catTag}', '${safeName}')" style="cursor: pointer;" title="Clique para ver recibos">
                         <td class="name" title="${i.nome}">${i.nome}</td>
                         <td class="val">${fmtBRL(i.total)}</td>
-                    </tr>
-                `).join('');
+                        ${ccCol}
+                    </tr>`;
+                }).join('');
 
                 if (items.length === 0) {
-                    rows = `<tr><td colspan="2" style="text-align: center; color: var(--text-muted);">Nenhum gasto documentado neste mês</td></tr>`;
+                    const cols = isFornecedores ? 3 : 2;
+                    rows = `<tr><td colspan="${cols}" style="text-align: center; color: var(--text-muted);">Nenhum gasto neste mês</td></tr>`;
                 }
+
+                const extraTh = isFornecedores ? '<th style="width:140px;">Centro Custo</th>' : '';
 
                 return `
                     <div class="costs-table-section">
@@ -1438,19 +1480,120 @@
                             </button>
                         </div>
                         <table class="costs-table">
-                            <thead><tr><th>Descrição</th><th style="text-align: right;">Despesa Mensal</th></tr></thead>
+                            <thead><tr><th>Descrição</th><th style="text-align: right;">Despesa Mensal</th>${extraTh}</tr></thead>
                             <tbody>${rows}</tbody>
                         </table>
                     </div>
                 `;
             };
 
+            // CC Summary
+            let ccRows = '';
+            if (ccSummary && ccSummary.length > 0) {
+                ccRows = ccSummary.map(cc => {
+                    const ccStyle = CC_COLORS[cc.codigo] || CC_COLORS.OUT;
+                    const safeName = (cc.nome || '').replace(/'/g, "\\'");
+                    return `
+                    <tr onclick="openCCDrilldown('${cc.codigo}', '${safeName}')" style="cursor: pointer;" title="Clique para ver fornecedores">
+                        <td><span class="cc-badge" style="background:${ccStyle.bg}; color:${ccStyle.color};">${cc.codigo}</span></td>
+                        <td class="name">${cc.nome}</td>
+                        <td style="text-align:center; color:var(--text-muted); font-size:0.75rem;">${cc.fornecedores.length}</td>
+                        <td class="val" style="font-weight:600; color:${ccStyle.color};">${fmtBRL(cc.total)}</td>
+                    </tr>`;
+                }).join('');
+            } else {
+                ccRows = '<tr><td colspan="4" style="text-align:center; color:var(--text-muted);">Nenhum centro de custo atribuído</td></tr>';
+            }
+
+            const ccSection = `
+                <div class="costs-table-section" style="grid-column: 1 / -1;">
+                    <div class="costs-table-title">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <i class="fa-solid fa-sitemap" style="color: var(--primary);"></i> Principais Centros de Custo
+                        </div>
+                    </div>
+                    <table class="costs-table">
+                        <thead><tr><th style="width:60px;">CC</th><th>Descrição</th><th style="text-align:center; width:80px;">Fornec.</th><th style="text-align:right;">Total</th></tr></thead>
+                        <tbody>${ccRows}</tbody>
+                    </table>
+                </div>
+            `;
+
             body.innerHTML = `
                 ${makeTable('Principais Despesas', 'fa-tags', data.tipos, 'tipos')}
                 ${makeTable('Top Fornecedores', 'fa-truck', data.fornecedores, 'fornecedores')}
                 ${makeTable('Materiais Mais Comprados', 'fa-box', data.materiais, 'materiais')}
                 ${makeTable('Custos por Setor', 'fa-building', data.setores, 'setores')}
+                ${ccSection}
             `;
+
+            // Set CC dropdown values
+            setTimeout(() => {
+                body.querySelectorAll('.cc-select').forEach(sel => {
+                    const row = sel.closest('tr');
+                    const nameCell = row?.querySelector('.name');
+                    if (nameCell) {
+                        const fname = nameCell.getAttribute('title') || nameCell.textContent;
+                        sel.value = mapeamentosCentro[fname] || '';
+                    }
+                });
+            }, 50);
+        }
+
+        // CC Drilldown
+        async function openCCDrilldown(ccCode, ccName) {
+            document.getElementById('ccDrilldownModal').style.display = 'flex';
+            const periodStr = currentMonth ? `${FULL_MONTH_NAMES[currentMonth - 1]} / ${currentYear}` : '';
+            document.getElementById('ccDrilldownTitle').textContent = `${ccCode} — ${ccName} (${periodStr})`;
+            const body = document.getElementById('ccDrilldownBody');
+            body.innerHTML = '<div style="text-align:center; color:var(--text-muted); padding:40px;"><i class="fa-solid fa-circle-notch fa-spin fa-2x"></i><br><br>Carregando...</div>';
+
+            try {
+                const params = new URLSearchParams();
+                if (currentMonth) params.append('mes', currentMonth);
+                if (currentYear) params.append('ano', currentYear);
+                const res = await fetch(`/api/centro-custos/resumo?${params.toString()}`);
+                const json = await res.json();
+                if (!json.success) throw new Error(json.error);
+
+                const ccData = json.data.find(c => c.codigo === ccCode);
+                if (!ccData || !ccData.fornecedores.length) {
+                    body.innerHTML = '<div style="text-align:center; color:var(--text-muted); padding:40px;">Nenhum fornecedor neste centro.</div>';
+                    return;
+                }
+
+                const total = ccData.fornecedores.reduce((s, f) => s + f.total, 0);
+                const ccStyle = CC_COLORS[ccCode] || CC_COLORS.OUT;
+
+                const rows = ccData.fornecedores.map(f => {
+                    const pct = total > 0 ? ((f.total / total) * 100).toFixed(1) : '0';
+                    return `
+                    <tr>
+                        <td class="name" title="${f.fornecedor}">${f.fornecedor}</td>
+                        <td class="val" style="font-weight:600;">${fmtBRL(f.total)}</td>
+                        <td style="text-align:right; color:var(--text-muted); font-size:0.75rem;">${pct}%</td>
+                    </tr>`;
+                }).join('');
+
+                body.innerHTML = `
+                    <div style="margin-bottom:16px; display:flex; align-items:center; gap:12px;">
+                        <span class="cc-badge" style="background:${ccStyle.bg}; color:${ccStyle.color}; font-size:0.8rem; padding:4px 10px;">${ccCode}</span>
+                        <span style="color:var(--text-main); font-weight:600;">${ccName}</span>
+                        <span style="color:var(--text-muted); font-size:0.8rem; margin-left:auto;">Total: <b style="color:${ccStyle.color};">${fmtBRL(total)}</b></span>
+                    </div>
+                    <table class="costs-table">
+                        <thead><tr><th>Fornecedor</th><th style="text-align:right;">Valor</th><th style="text-align:right; width:60px;">%</th></tr></thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                `;
+            } catch (e) {
+                console.error('Erro CC drilldown:', e);
+                body.innerHTML = '<div style="color:var(--danger); text-align:center; padding:20px;">Erro ao carregar dados.</div>';
+            }
+        }
+
+        function closeCCDrilldown() {
+            document.getElementById('ccDrilldownModal').style.display = 'none';
         }
 
         async function openDrilldownCosts(category, name) {
@@ -1605,6 +1748,8 @@
             if (e.key === 'Escape') {
                 if (document.getElementById('occurrencesModal').style.display === 'flex') {
                     closeOccurrencesModal();
+                } else if (document.getElementById('ccDrilldownModal').style.display === 'flex') {
+                    closeCCDrilldown();
                 } else if (document.getElementById('drilldownModal').style.display === 'flex') {
                     closeDrilldownCosts();
                 } else if (document.getElementById('costsModal').style.display === 'flex') {
@@ -1664,6 +1809,23 @@
             <div class="costs-modal-body" id="occurrencesBody"
                 style="flex: 1; overflow-y: auto; padding: 24px; display: block;">
                 <!-- Dinamicamente Injetado -->
+            </div>
+        </div>
+    </div>
+
+    <!-- CC Drilldown Modal -->
+    <div id="ccDrilldownModal" class="costs-modal-overlay" style="z-index: 10001; display: none;">
+        <div class="costs-modal full-screen">
+            <div class="costs-modal-header">
+                <div class="costs-modal-title">
+                    <i class="fa-solid fa-sitemap"></i>
+                    Centro de Custo: <span id="ccDrilldownTitle"
+                        style="color: var(--primary); margin-left: 8px;"></span>
+                </div>
+                <button class="btn-close-modal" onclick="closeCCDrilldown()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="costs-modal-body" id="ccDrilldownBody"
+                style="flex: 1; overflow-y: auto; padding: 24px; display: block;">
             </div>
         </div>
     </div>
