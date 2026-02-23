@@ -314,10 +314,9 @@
             z-index: 200;
         }
 
-        /* REMOVIDO O HOVER DO CSS - Agora controlado apenas por JS */
-        /* .dropdown:hover .dropdown-content { display: block; } */
+        /* Dropdown common styles */
         .dropdown-content.show {
-            display: block;
+            display: block !important;
         }
 
         .dropdown-content::before {
@@ -1224,11 +1223,22 @@
                 <h2 class="modal-title"><i class="fa-solid fa-list-check" style="margin-right: 15px;"></i>Detalhamento
                     de Registros</h2>
                 <div class="modal-header-actions">
-                    <!-- Botão Relatório movido para cá -->
-                    <button class="btn-glass" id="generate-complete-report-button" title="Gerar Relatório PDF"
-                        style="border-color: var(--status-info); color: var(--status-info);">
-                        <i class="fa-solid fa-file-pdf"></i> <span style="margin-left:5px;">Relatório</span>
-                    </button>
+                    <!-- Botão Relatório com Dropdown -->
+                    <div class="dropdown" id="reportDropdown">
+                        <button class="btn-glass" id="dropdown-report-btn" title="Gerar Relatório PDF"
+                            onclick="toggleReportDropdown()"
+                            style="border-color: var(--status-info); color: var(--status-info);">
+                            <i class="fa-solid fa-file-pdf"></i> <span style="margin-left:5px;">Relatórios</span>
+                        </button>
+                        <div class="dropdown-content">
+                            <a onclick="generateCompleteReport()">
+                                <i class="fa-solid fa-table" style="margin-right: 8px;"></i> Relatório Numérico
+                            </a>
+                            <a onclick="generateGraphicReport()">
+                                <i class="fa-solid fa-chart-line" style="margin-right: 8px;"></i> Relatório Gráfico
+                            </a>
+                        </div>
+                    </div>
                     <span class="modal-close" onclick="closeRecordsModal()" title="Fechar (ESC)">&times;</span>
                 </div>
             </div>
@@ -1662,6 +1672,17 @@
             if (content.classList.contains('show')) {
                 content.classList.remove('show');
             } else {
+                content.classList.add('show');
+            }
+        }
+
+        function toggleReportDropdown() {
+            const content = document.querySelector('#reportDropdown .dropdown-content');
+            if (content.classList.contains('show')) {
+                content.classList.remove('show');
+            } else {
+                // Fecha outros dropdowns
+                document.querySelectorAll('.dropdown-content').forEach(d => d.classList.remove('show'));
                 content.classList.add('show');
             }
         }
@@ -2118,7 +2139,12 @@
                 datalabels: {
                     display: (ctx) => ctx.dataset.data[ctx.dataIndex] > 0,
                     color: '#fff', anchor: 'end', align: 'top', font: { weight: 'bold', size: 10 },
-                    formatter: (value) => formatNumber(value, 0)
+                    formatter: (value) => {
+                        if (window.isGraphicReportRunning) {
+                            return formatNumber(value / 1000, 2) + ' Ton';
+                        }
+                        return formatNumber(value, 0);
+                    }
                 }
             };
 
@@ -2423,6 +2449,117 @@
                 setTimeout(() => { statusMessage.textContent = 'Pronto.'; statusMessage.className = 'status-text normal'; pdfTempContainer.innerHTML = ''; }, 5000);
             }
         }
+
+        async function generateGraphicReport() {
+            const excludedSectors = ['usinagem', 'tratamento termico', 'inspeção de qualidade', 'faturamento'];
+            const now = new Date();
+            const currentMonth = now.getMonth();
+            const currentYear = now.getFullYear();
+
+            const uniqueSectors = new Set();
+            allData.forEach(rowData => {
+                const s = rowData[COLUMN_MAP.SETOR] || 'Não Definido';
+                if (s !== GENERAL_MOLDING_KEY) uniqueSectors.add(s);
+            });
+            const sectorArray = Array.from(uniqueSectors).sort().filter(s => !excludedSectors.includes(s.toLowerCase()));
+
+            if (sectorArray.length === 0) { alert('Sem setores válidos para o relatório.'); return; }
+
+            statusMessage.textContent = `Gerando Relatório Gráfico...`;
+            statusMessage.className = 'status-text info';
+
+            const originalSector = sectorChartSelect.value;
+            window.isGraphicReportRunning = true;
+
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF('l', 'mm', 'a4'); // Paisagem para melhor encaixe de gráficos
+            const margin = 10;
+            const printWidth = 277; // A4 Paisagem width minus margins
+
+            try {
+                for (let i = 0; i < sectorArray.length; i++) {
+                    const sector = sectorArray[i];
+                    sectorChartSelect.value = sector;
+                    updateDailyProductionChartFromSelection();
+
+                    // Aguarda o gráfico renderizar
+                    await new Promise(r => setTimeout(r, 800));
+
+                    // Cria um container temporário para a folha
+                    const pageWrapper = document.createElement('div');
+                    pageWrapper.className = 'pdf-graphic-page';
+                    pageWrapper.style.cssText = `
+                        width: 1200px; padding: 40px; background: #09090b;
+                        color: #fff; font-family: Inter, sans-serif;
+                    `;
+
+                    // Header
+                    const header = document.createElement('div');
+                    header.innerHTML = `<h2 style="color: var(--color-primary); margin-bottom: 20px; font-size: 2.5rem; border-bottom: 2px solid var(--border-highlight); padding-bottom: 10px;">${sector}</h2>`;
+                    pageWrapper.appendChild(header);
+
+                    // Clona KPIs
+                    const kpis = document.querySelector('.kpi-row').cloneNode(true);
+                    kpis.style.marginBottom = '40px';
+                    kpis.style.display = 'flex';
+                    kpis.style.flexWrap = 'nowrap';
+                    kpis.style.gap = '20px';
+                    // Forçar visibilidade e estilos de cores que podem ser perdidos no clone
+                    kpis.querySelectorAll('.kpi-card').forEach(card => {
+                        card.style.flex = '1';
+                        card.style.background = 'rgba(24, 24, 27, 0.8)';
+                        card.style.border = '1px solid var(--border-highlight)';
+                    });
+                    pageWrapper.appendChild(kpis);
+
+                    // Clona Painel de Gráfico
+                    const chartPanel = document.querySelector('.chart-panel').cloneNode(true);
+                    chartPanel.style.height = '500px';
+                    chartPanel.style.background = 'rgba(24, 24, 27, 0.5)';
+                    chartPanel.style.borderRadius = '12px';
+                    chartPanel.style.padding = '20px';
+
+                    // Canvas precisa de tratamento especial - clones não trazem conteúdo de canvas
+                    const originalCanvas = document.getElementById('dailyProductionChart');
+                    const clonedCanvas = chartPanel.querySelector('canvas');
+                    const ctx = clonedCanvas.getContext('2d');
+                    clonedCanvas.width = originalCanvas.width;
+                    clonedCanvas.height = originalCanvas.height;
+                    ctx.drawImage(originalCanvas, 0, 0);
+
+                    pageWrapper.appendChild(chartPanel);
+
+                    document.body.appendChild(pageWrapper);
+
+                    const canvas = await html2canvas(pageWrapper, { scale: 2, useCORS: true, backgroundColor: '#09090b' });
+                    const imgData = canvas.toDataURL('image/png');
+
+                    if (i > 0) doc.addPage();
+                    const imgProps = doc.getImageProperties(imgData);
+                    const pdfHeight = (imgProps.height * printWidth) / imgProps.width;
+                    doc.addImage(imgData, 'PNG', margin, margin, printWidth, pdfHeight);
+
+                    document.body.removeChild(pageWrapper);
+                }
+
+                const monthName = now.toLocaleString('pt-BR', { month: 'long' });
+                doc.save(`Grafico_Producao_${monthName}_${currentYear}.pdf`);
+                statusMessage.textContent = `Relatório gráfico gerado com sucesso.`;
+                statusMessage.className = 'status-text success';
+            } catch (error) {
+                console.error(error);
+                statusMessage.textContent = 'Erro ao gerar gráfico.';
+            } finally {
+                window.isGraphicReportRunning = false;
+                sectorChartSelect.value = originalSector;
+                updateDailyProductionChartFromSelection();
+                setTimeout(() => {
+                    statusMessage.textContent = 'Pronto.';
+                    statusMessage.className = 'status-text normal';
+                }, 5000);
+            }
+        }
+
         // A função é atribuída ao botão após o carregamento da página
 
         async function exportReportToPDF(name, contentId) {
