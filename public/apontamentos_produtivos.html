@@ -1020,22 +1020,11 @@
                 </div>
             </div>
             <div class="header-actions">
-                <!-- Botão Relatório com Dropdown -->
-                <div class="dropdown" id="reportDropdown">
-                    <button class="btn-glass" id="dropdown-report-btn" title="Gerar Relatório PDF"
-                        onclick="toggleReportDropdown()"
-                        style="border-color: var(--status-info); color: var(--status-info);">
-                        <i class="fa-solid fa-file-pdf"></i> <span style="margin-left:5px;">Relatórios</span>
-                    </button>
-                    <div class="dropdown-content">
-                        <button class="dropdown-item" onclick="generateCompleteReport()">
-                            <i class="fa-solid fa-table"></i> Relatório Numérico
-                        </button>
-                        <button class="dropdown-item" onclick="generateGraphicReport()">
-                            <i class="fa-solid fa-chart-line"></i> Relatório Gráfico
-                        </button>
-                    </div>
-                </div>
+                <!-- Botão Relatório Quantitativo -->
+                <button class="btn-glass" onclick="generateCompleteReport()" title="Gerar Relatório Quantitativo PDF"
+                    style="border-color: var(--status-info); color: var(--status-info);">
+                    <i class="fa-solid fa-file-pdf"></i> <span style="margin-left:5px;">Relatório Quantitativo</span>
+                </button>
                 <div class="separator-vertical"></div>
 
                 <button class="btn-glass" onclick="openRecordsModal(); this.blur()" title="Ver Registros">
@@ -1481,146 +1470,6 @@
             return `<div class="pdf-content-wrapper"><div class="pdf-header"><h3>Relatório: ${sector}</h3><p>Período de Análise:<br><strong>${d.dateRange}</strong></p></div>${summaryHTML}${d.weeklyTableHTML}${d.dailyTableHTML}</div>`;
         }
 
-        async function generateGraphicReport() {
-            const excludedSectors = ['USINAGEM', 'TRATAMENTO TERMICO', 'INSPECAO DE QUALIDADE', 'FATURAMENTO'];
-            const allSectors = [
-                'MOLDAGEM GERAL',
-                'MOLDAGEM LEVE',
-                'MOLDAGEM MANUAL',
-                'MOLDAGEM PESADA',
-                'FUSAO',
-                'ACABAMENTO',
-                'EXPEDICAO'
-            ];
-
-            const sectorArray = allSectors.filter(s => !excludedSectors.includes(s));
-            const originalSector = currentSectorFilter;
-
-            loadingScreen.style.display = 'flex';
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF('l', 'mm', 'a4'); // Paisagem para gráficos
-            const pdfTempContainer = document.getElementById('pdf-temp-container');
-            pdfTempContainer.innerHTML = '';
-            window.isGraphicReportRunning = true;
-
-            try {
-                for (let i = 0; i < sectorArray.length; i++) {
-                    const sector = sectorArray[i];
-                    currentSectorFilter = sector;
-                    applyFilters();
-
-                    // Pequena pausa para garantir renderização do Chart.js
-                    await new Promise(r => setTimeout(r, 800));
-
-                    // TRICK: Temporarily resize the dashboard chart container to match the PDF proportions
-                    const originalDashboardPanel = document.querySelector('.chart-panel');
-                    const originalHeight = originalDashboardPanel.style.height;
-                    originalDashboardPanel.style.height = '720px';
-                    if (chartInstance) chartInstance.resize();
-                    await new Promise(r => setTimeout(r, 200));
-
-                    const pageWrapper = document.createElement('div');
-                    pageWrapper.style.padding = '5px 15px'; // Minimal vertical padding
-                    pageWrapper.style.backgroundColor = '#ffffff'; // White background for PDF
-                    pageWrapper.style.width = '1120px'; // A4 Landscape scale
-                    pageWrapper.style.minHeight = '790px';
-                    pageWrapper.style.maxHeight = '790px';
-                    pageWrapper.style.display = 'flex';
-                    pageWrapper.style.boxSizing = 'border-box';
-                    pageWrapper.style.flexDirection = 'column';
-                    pageWrapper.style.gap = '2px'; // Minimal gap to maximize chart space
-
-                    const metaVal = sectorGoalDisplay.innerText;
-                    const header = document.createElement('div');
-                    header.style.color = '#000000'; // Black text for header
-                    header.style.fontSize = '14px'; // More compressed header
-                    header.style.fontWeight = '800';
-                    header.style.marginBottom = '2px';
-                    header.style.fontFamily = 'Inter, sans-serif';
-                    header.innerHTML = `<div style="display:flex; justify-content:space-between; align-items:center; border-bottom: 2px solid #e5e7eb; padding-bottom: 2px;">
-                        <span>Relatório de Produção: ${sector}</span>
-                        <span style="font-size:12px; color:#c0392b">Meta Mensal: ${metaVal} Kg</span>
-                    </div>`;
-                    pageWrapper.appendChild(header);
-
-                    // Clone KPIs
-                    const kpiRow = document.querySelector('.kpi-row').cloneNode(true);
-                    kpiRow.style.marginBottom = '2px';
-                    kpiRow.style.gap = '8px';
-                    // Style KPI cards for light theme
-                    kpiRow.querySelectorAll('.kpi-card').forEach(card => {
-                        card.style.backgroundColor = '#f8fafc';
-                        card.style.border = '1px solid #e2e8f0';
-                        card.style.boxShadow = 'none';
-                        card.style.padding = '4px 8px'; // Even more compressed padding
-                        card.querySelector('.kpi-title').style.color = '#64748b';
-                        card.querySelector('.kpi-title').style.fontSize = '9px'; // Tiny labels
-                        card.querySelector('.kpi-value').style.color = '#0f172a';
-                        card.querySelector('.kpi-value').style.fontSize = '16px'; // Smaller values
-                    });
-                    pageWrapper.appendChild(kpiRow);
-
-                    // Clone Chart Panel - Fix: Use Image of Chart
-                    const chartPanel = document.createElement('div');
-                    chartPanel.className = 'chart-panel';
-                    chartPanel.style.flex = '1';
-                    chartPanel.style.height = '100%';
-                    chartPanel.style.backgroundColor = '#ffffff';
-                    chartPanel.style.border = '1px solid #e2e8f0';
-                    chartPanel.style.borderRadius = '12px';
-                    chartPanel.style.padding = '0px';
-                    chartPanel.style.display = 'flex';
-                    chartPanel.style.alignItems = 'center';
-                    chartPanel.style.justifyContent = 'center';
-                    chartPanel.style.boxSizing = 'border-box';
-                    chartPanel.style.overflow = 'hidden';
-
-                    const chartImg = document.createElement('img');
-                    chartImg.src = document.getElementById('dailyProductionChart').toDataURL('image/png');
-                    chartImg.style.width = '100%';
-                    chartImg.style.height = '100%';
-                    chartImg.style.objectFit = 'fill'; // Force fill the huge panel
-                    chartPanel.appendChild(chartImg);
-
-                    pageWrapper.appendChild(chartPanel);
-
-                    // Restore original dashboard height immediately
-                    originalDashboardPanel.style.height = originalHeight;
-                    if (chartInstance) chartInstance.resize();
-
-                    // Importante: html2canvas não renderiza o <canvas> original se clonado assim.
-                    // Precisamos desenhar o canvas original no clone ou capturar o original.
-                    // Estratégia: Adicionar temporariamente o wrapper ao DOM (invisível) e capturar.
-                    document.body.appendChild(pageWrapper);
-
-                    const canvas = await html2canvas(pageWrapper, {
-                        scale: 2,
-                        useCORS: true,
-                        backgroundColor: '#ffffff',
-                        logging: false
-                    });
-
-                    document.body.removeChild(pageWrapper);
-
-                    const imgData = canvas.toDataURL('image/png');
-                    if (i > 0) doc.addPage();
-                    doc.addImage(imgData, 'PNG', 0, 0, 297, 210);
-                }
-
-                const now = new Date();
-                const dateStr = now.toLocaleDateString('pt-BR').replace(/\//g, '-');
-                doc.save(`Relatorio_Grafico_Producao_${dateStr}.pdf`);
-
-            } catch (error) {
-                console.error(error);
-                alert('Erro ao gerar relatório gráfico: ' + error.message);
-            } finally {
-                window.isGraphicReportRunning = false;
-                currentSectorFilter = originalSector;
-                applyFilters();
-                loadingScreen.style.display = 'none';
-            }
-        }
 
         async function exportReportToPDF(name, contentId) {
             const content = document.getElementById(contentId);
@@ -1859,23 +1708,6 @@
             });
         }
 
-        function toggleReportDropdown() {
-            const content = document.querySelector('#reportDropdown .dropdown-content');
-            if (content.classList.contains('show')) {
-                content.classList.remove('show');
-            } else {
-                // Fecha outros dropdowns
-                document.querySelectorAll('.dropdown-content').forEach(d => d.classList.remove('show'));
-                content.classList.add('show');
-            }
-        }
-
-        // Fechar dropdown ao clicar fora
-        window.onclick = function (event) {
-            if (!event.target.matches('.btn-glass') && !event.target.closest('.dropdown')) {
-                document.querySelectorAll('.dropdown-content').forEach(d => d.classList.remove('show'));
-            }
-        }
 
         async function fetchData() {
             loadingScreen.style.display = 'flex';
