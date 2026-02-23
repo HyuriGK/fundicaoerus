@@ -27,6 +27,8 @@ const CENTROS_CUSTO = [
     { codigo: 'ALI', nome: 'Alimentação' },
     { codigo: 'EPI', nome: 'Equip. Proteção Individual' },
     { codigo: 'PRM', nome: 'Premiações' },
+    { codigo: 'ENG', nome: 'Engenharia' },
+    { codigo: 'SFT', nome: 'Softwares' },
     { codigo: 'OUT', nome: 'Outros' }
 ];
 
