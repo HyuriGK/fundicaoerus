@@ -26,6 +26,7 @@ const CENTROS_CUSTO = [
     { codigo: 'PSV', nome: 'Prestação de Serviço' },
     { codigo: 'ALI', nome: 'Alimentação' },
     { codigo: 'EPI', nome: 'Equip. Proteção Individual' },
+    { codigo: 'PRM', nome: 'Premiações' },
     { codigo: 'OUT', nome: 'Outros' }
 ];
 
