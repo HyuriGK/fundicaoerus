@@ -1320,6 +1320,7 @@
             COM: { bg: 'rgba(99,102,241,0.15)', color: '#6366f1' },
             TER: { bg: 'rgba(14,165,233,0.15)', color: '#0ea5e9' },
             INV: { bg: 'rgba(168,162,158,0.15)', color: '#a8a29e' },
+            PSV: { bg: 'rgba(192,132,252,0.15)', color: '#c084fc' },
             OUT: { bg: 'rgba(113,113,122,0.15)', color: '#71717a' },
             SEM: { bg: 'rgba(63,63,70,0.15)', color: '#71717a' }
         };
@@ -1634,16 +1635,34 @@
                 }
 
                 if (isGroupable) {
-                    // Tabela Agrupada por Produto
-                    let rows = json.data.map(r => `
+                    // Build CC options for fornecedores
+                    const isFornCategory = category === 'fornecedores';
+                    const ccOpts = isFornCategory ? centrosCusto.map(c =>
+                        `<option value="${c.codigo}">${c.codigo} - ${c.nome}</option>`
+                    ).join('') : '';
+
+                    let rows = json.data.map(r => {
+                        const safeForn = (r.fornecedor || '').replace(/'/g, "\\'");
+                        const ccCol = isFornCategory ? `
+                            <td onclick="event.stopPropagation()">
+                                <select class="cc-select" onchange="saveCentroCusto('${safeForn}', this.value)">
+                                    <option value="">—</option>
+                                    ${ccOpts}
+                                </select>
+                            </td>` : '';
+
+                        return `
                         <tr class="clickable" onclick="openOccurrences('${category}', '${name}', '${r.produto_cod || ''}', '${r.fornecedor || ''}', '${r.produto || ''}')">
                             <td style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted);">${r.produto_cod || 'S/C'}</td>
                             <td class="truncate" title="${r.fornecedor || ''}">${r.fornecedor || '—'}</td>
                             <td class="truncate" title="${r.produto || ''}">${r.produto || 'DIVERSOS'}</td>
                             <td style="text-align: center;">${r.ocorrencias}</td>
                             <td class="val" style="font-weight: 600; color: var(--amber);">${fmtBRL(r.valor)}</td>
-                        </tr>
-                    `).join('');
+                            ${ccCol}
+                        </tr>`;
+                    }).join('');
+
+                    const ccTh = isFornCategory ? '<th style="width:140px;">Centro Custo</th>' : '';
 
                     body.innerHTML = `
                         <table class="costs-table">
@@ -1654,11 +1673,26 @@
                                     <th>Produto / Item</th>
                                     <th style="width: 100px; text-align: center;">Ocorrências</th>
                                     <th style="text-align: right; width: 140px;">Valor Total</th>
+                                    ${ccTh}
                                 </tr>
                             </thead>
                             <tbody>${rows}</tbody>
                         </table>
                     `;
+
+                    // Set CC dropdown values
+                    if (isFornCategory) {
+                        setTimeout(() => {
+                            body.querySelectorAll('.cc-select').forEach(sel => {
+                                const row = sel.closest('tr');
+                                const fornCell = row?.querySelector('.truncate');
+                                if (fornCell) {
+                                    const fname = fornCell.getAttribute('title') || fornCell.textContent;
+                                    sel.value = mapeamentosCentro[fname] || '';
+                                }
+                            });
+                        }, 50);
+                    }
                 } else {
                     // Tabela Detalhada (Listagem Padrão para Setores etc)
                     let rows = json.data.map(r => `

@@ -21,6 +21,7 @@ const CENTROS_CUSTO = [
     { codigo: 'COM', nome: 'Comercial' },
     { codigo: 'TER', nome: 'Terceirização' },
     { codigo: 'INV', nome: 'Investimentos' },
+    { codigo: 'PSV', nome: 'Prestação de Serviço' },
     { codigo: 'OUT', nome: 'Outros' }
 ];
 
