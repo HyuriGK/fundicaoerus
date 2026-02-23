@@ -29,6 +29,7 @@ const CENTROS_CUSTO = [
     { codigo: 'PRM', nome: 'Premiações' },
     { codigo: 'ENG', nome: 'Engenharia' },
     { codigo: 'SFT', nome: 'Softwares' },
+    { codigo: 'GAS', nome: 'Gás' },
     { codigo: 'OUT', nome: 'Outros' }
 ];
 
