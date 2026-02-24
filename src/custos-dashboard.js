@@ -114,8 +114,8 @@ router.get('/', async (req, res) => {
         // 5. Custos do mês
         const custosRes = await pool.query(`
             SELECT COALESCE(SUM(valor), 0) as custo_total
-            FROM custos_lancamentos
-            WHERE EXTRACT(MONTH FROM data_iso) = $1 AND EXTRACT(YEAR FROM data_iso) = $2
+            FROM custos_registros
+            WHERE mes = $1 AND ano = $2 AND categoria = 'fornecedores'
         `, [month, year]);
         const custoTotal = parseFloat(custosRes.rows[0].custo_total || 0);
         const custoPerKg = producaoFusaoKg > 0 ? custoTotal / producaoFusaoKg : 0;
@@ -168,8 +168,8 @@ router.get('/', async (req, res) => {
         // Prev Custos
         const prevCustosRes = await pool.query(`
             SELECT COALESCE(SUM(valor), 0) as custo_total
-            FROM custos_lancamentos
-            WHERE EXTRACT(MONTH FROM data_iso) = $1 AND EXTRACT(YEAR FROM data_iso) = $2
+            FROM custos_registros
+            WHERE mes = $1 AND ano = $2 AND categoria = 'fornecedores'
         `, [prevMonth, prevYear]);
         const prevCustoTotal = parseFloat(prevCustosRes.rows[0].custo_total || 0);
         const prevCustoPerKg = prevProducaoFusaoKg > 0 ? prevCustoTotal / prevProducaoFusaoKg : 0;
