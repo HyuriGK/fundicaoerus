@@ -1,283 +1,220 @@
-const path = require('path');
-const fs = require('fs');
 
-// Determine path to .env.local
-// If running as PKG (exe), look in the same directory as the executable
-// If running as Node, look in current working directory (or specific path)
-let envPath = '.env.local';
-if (process.pkg) {
-    envPath = path.join(path.dirname(process.execPath), '.env.local');
-}
+// Script: sync-refugos-firebird-postgres.js
+// Sincroniza dados de REFUGO (PRODUCAO_SETOR) para PostgreSQL
+// Adiciona informação de CLIENTE via PRODUCAO -> PEDIDO ou NOTA_FISCAL
 
-require('dotenv').config({ path: envPath });
+require('dotenv').config({ path: '.env.local' });
 const Firebird = require('node-firebird');
 const pool = require('../lib/db');
 
-// --- Firebird Configuration ---
 const fbOptions = {
-    host: '10.1.1.100',
-    port: 3050,
+    host: '10.1.1.100', port: 3050,
     database: '/home/lm/LM-Sistemas/SIGE2.0/Dados/sige.fdb',
-    user: 'SYSDBA',
-    password: 'masterkey',
-    lowercase_keys: false,
-    pageSize: 4096
+    user: 'SYSDBA', password: 'masterkey',
+    lowercase_keys: false, pageSize: 4096
 };
 
-// --- Helper Functions ---
 function cleanString(str) {
-    if (!str) return null;
-    return str.trim();
+    if (!str) return '';
+    return str.toString().trim().replace(/['"\\\b\f\n\r\t]/g, '');
 }
 
-function parseDate(dateVal) {
-    if (!dateVal) return null;
-    if (dateVal instanceof Date) return dateVal;
-    return new Date(dateVal);
+function parseDate(fbDate) {
+    if (!fbDate) return null;
+    return new Date(fbDate);
 }
 
 function chunkArray(myArray, chunk_size) {
     var index = 0;
     var arrayLength = myArray.length;
     var tempArray = [];
-
     for (index = 0; index < arrayLength; index += chunk_size) {
-        myChunk = myArray.slice(index, index + chunk_size);
-        tempArray.push(myChunk);
+        tempArray.push(myArray.slice(index, index + chunk_size));
     }
     return tempArray;
 }
 
-// --- Main Execution ---
-(async () => {
-    try {
-        const syncStartTime = new Date();
-        console.log(`🕒 Refugo Sync Start Time: ${syncStartTime.toISOString()}`);
+async function startSync() {
+    console.log('🚀 Iniciando Sincronismo de Refugos...');
 
-        console.log('🔗 Connecting to Postgres...');
-        await pool.query('SELECT NOW()');
+    Firebird.attach(fbOptions, async (err, db) => {
+        if (err) { console.error(err); process.exit(1); }
 
-        // 1. Prepare Postgres (Create Table & Indexes)
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS refugo_apontado_sincronizado (
+        try {
+            // 1. Setup Postgres Table
+            await pool.query(`CREATE TABLE IF NOT EXISTS refugo_apontado_sincronizado (
                 id SERIAL PRIMARY KEY,
-                chave_origem VARCHAR(255) UNIQUE NOT NULL,
-                data_refugo TIMESTAMP NOT NULL,
+                chave_origem VARCHAR(100) UNIQUE,
+                data_refugo DATE,
                 setor VARCHAR(100),
-                produto VARCHAR(255),
-                codigo_peca VARCHAR(50),
-                lote VARCHAR(100),
-                quantidade NUMERIC(10,2),
-                peso_un NUMERIC(10,4),
-                peso_total NUMERIC(10,2),
+                cliente VARCHAR(255),
                 op VARCHAR(50),
+                codigo_peca VARCHAR(50),
+                produto_descricao TEXT,
+                peso_un DECIMAL(15,3),
+                quantidade DECIMAL(15,3),
+                peso_total DECIMAL(15,3),
+                motivo VARCHAR(100),
+                lote VARCHAR(100),
                 atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE INDEX IF NOT EXISTS idx_refugo_data ON refugo_apontado_sincronizado(data_refugo);
-            CREATE INDEX IF NOT EXISTS idx_refugo_setor ON refugo_apontado_sincronizado(setor);
-            
-            DO $$ 
-            BEGIN 
-                BEGIN
-                    ALTER TABLE refugo_apontado_sincronizado ADD COLUMN op VARCHAR(50);
-                EXCEPTION
-                    WHEN duplicate_column THEN NULL;
-                END;
-                BEGIN
-                    ALTER TABLE refugo_apontado_sincronizado ADD COLUMN motivo VARCHAR(255);
-                EXCEPTION
-                    WHEN duplicate_column THEN NULL;
-                END;
-            END $$;
-        `);
+            )`);
+            await pool.query('DELETE FROM refugo_apontado_sincronizado');
 
-        // Clear existing data as requested
-        console.log('🧹 Clearing existing data in Postgres...');
-        await pool.query('TRUNCATE TABLE refugo_apontado_sincronizado RESTART IDENTITY');
-
-        console.log('✅ Postgres table ready and emptied.');
-
-        Firebird.attach(fbOptions, function (err, db) {
-            if (err) {
-                console.error('❌ Firebird Connection Error:', err);
-                process.exit(1);
-            }
-            console.log('✅ Firebird attached. Fetching Refugo Data...');
-
-            // 1. Fetch PRODUCAO_SETOR (Refugo)
-            // Filters: QUANTIDADE_REFUGO_PCS > 0 AND DATA_PCS >= '2025-01-01'
-            const queryPCS = `
-        SELECT
-        ID_PCS,
-            CODIGO_PCS,
-            DATA_PCS,
-            QUANTIDADE_REFUGO_PCS,
-            LOTE_PCS,
-            SETOR_PCS,
-            REF_CODIGO_PCS
-                FROM PRODUCAO_SETOR
-                WHERE DATA_PCS >= '2025-01-01'
-                  AND QUANTIDADE_REFUGO_PCS > 0
-                ORDER BY DATA_PCS DESC
+            // 2. Fetch Refugos (PCS with REF_CODIGO)
+            const queryRefugos = `
+                SELECT 
+                    ID_PCS, CODIGO_PCS, SETOR_PCS, REF_CODIGO_PCS, DATA_PCS, 
+                    DQUANTIDADE_REFUGO_PCS as QUANTIDADE, LOTE_PCS,
+                    NOTA_NFE_PCS, SERIE_NFE_PCS
+                FROM PRODUCAO_SETOR 
+                WHERE DATA_PCS >= '2025-01-01' AND REF_CODIGO_PCS IS NOT NULL AND DQUANTIDADE_REFUGO_PCS > 0
             `;
 
-            db.query(queryPCS, async (err, productionRows) => {
-                if (err) {
-                    console.error('❌ Query PCS Error:', err);
-                    db.detach();
-                    return;
-                }
-                console.log(`📦 Refugo records fetched: ${productionRows.length} `);
+            db.query(queryRefugos, async (err, rows) => {
+                if (err) throw err;
+                console.log(`📦 Registros de refugo encontrados: ${rows.length}`);
 
-                if (productionRows.length === 0) {
-                    console.log('No refugo records found.');
-                    db.detach();
-                    process.exit(0);
-                }
+                // 3. Lookups
+                const opIds = [...new Set(rows.map(r => r.CODIGO_PCS).filter(id => id))];
+                const setIds = [...new Set(rows.map(r => r.SETOR_PCS).filter(id => id))];
+                const refIds = [...new Set(rows.map(r => r.REF_CODIGO_PCS).filter(id => id))];
+                const nfeIds = [...new Set(rows.map(r => r.NOTA_NFE_PCS).filter(id => id))];
 
-                // 2. Collect IDs for Lookups
-                const setIds = [...new Set(productionRows.map(p => p.SETOR_PCS).filter(id => id))];
-                console.log(`ℹ️ Unique IDs - SET: ${setIds.length} `);
-
-                const opIds = [...new Set(productionRows.map(p => p.CODIGO_PCS).filter(id => id))];
-                console.log(`ℹ️ Unique IDs - OP: ${opIds.length} `);
-
-                const refugoIds = [...new Set(productionRows.map(p => p.REF_CODIGO_PCS).filter(id => id))];
-                console.log(`ℹ️ Unique IDs - REFUGO: ${refugoIds.length} `);
-
-                // 3. Fetch Lookup Data
                 const lookupSET = {};
+                const lookupREF = {};
                 const lookupPRODUCAO = {};
+                const lookupPEDIDO = {};
+                const lookupCLIENTE = {};
+                const lookupNOTA = {};
                 const lookupPRODUTO = {};
-                const lookupREFUGO = {};
 
-                const fetchMap = (ids, table, pk, cols, targetMap) => {
-                    return new Promise((resolve, reject) => {
-                        if (ids.length === 0) return resolve();
-                        const chunks = chunkArray(ids, 500);
-                        let processed = 0;
-                        chunks.forEach(chunk => {
-                            const idList = chunk.join(',');
-                            const q = `SELECT ${pk}, ${cols} FROM ${table} WHERE ${pk} IN(${idList})`;
-                            db.query(q, (err, rows) => {
+                const fetchMap = async (ids, table, pk, cols, targetMap) => {
+                    if (ids.length === 0) return;
+                    const chunks = chunkArray(ids, 500);
+                    for (const chunk of chunks) {
+                        const q = `SELECT ${pk}, ${cols} FROM ${table} WHERE ${pk} IN(${chunk.join(',')})`;
+                        await new Promise((resolve, reject) => {
+                            db.query(q, (err, res) => {
                                 if (err) return reject(err);
-                                rows.forEach(r => { targetMap[r[pk]] = r; });
-                                processed++;
-                                if (processed === chunks.length) resolve();
+                                res.forEach(r => { targetMap[String(r[pk]).trim()] = r; });
+                                resolve();
                             });
                         });
-                    });
+                    }
                 };
 
-                try {
-                    // 3.1 Fetch SETOR names
-                    await fetchMap(setIds, 'SETOR', 'CODIGO_SET', 'NOME_SET', lookupSET);
+                await fetchMap(setIds, 'SETOR', 'CODIGO_SET', 'NOME_SET', lookupSET);
+                await fetchMap(refIds, 'REFUGO', 'CODIGO_REF', 'NOME_REF', lookupREF);
 
-                    // 3.2 Fetch PRODUCAO (OP Details) to get Product ID
-                    if (opIds.length > 0) {
-                        await fetchMap(opIds, 'PRODUCAO', 'CODIGO_PCP', 'PRODUTO_PCP', lookupPRODUCAO);
+                // OP -> PRODUCAO -> PEDIDO -> CLIENTE
+                await fetchMap(opIds, 'PRODUCAO', 'CODIGO_PCP', 'PRODUTO_PCP, PEDIDO_PCP, ANO_PCP, EMPRESA_PCP', lookupPRODUCAO);
+
+                // Fetch PEDIDO with composite key search support
+                const peds = [...new Set(Object.values(lookupPRODUCAO).map(p => p.PEDIDO_PCP).filter(id => id))];
+                if (peds.length > 0) {
+                    const chunks = chunkArray(peds, 500);
+                    for (const chunk of chunks) {
+                        const q = `SELECT CODIGO_PED, ANO_PED, EMPRESA_PED, CLIENTE_PED FROM PEDIDO WHERE CODIGO_PED IN(${chunk.join(',')})`;
+                        await new Promise((resolve, reject) => {
+                            db.query(q, (err, res) => {
+                                if (err) return resolve();
+                                res.forEach(r => {
+                                    const key = `${String(r.CODIGO_PED).trim()}|${String(r.ANO_PED).trim()}|${String(r.EMPRESA_PED).trim()}`;
+                                    lookupPEDIDO[key] = r;
+                                });
+                                resolve();
+                            });
+                        });
                     }
-
-                    // 3.3 Fetch PRODUTO (Product Details)
-                    const productIds = [...new Set(Object.values(lookupPRODUCAO).map(p => p.PRODUTO_PCP).filter(id => id))];
-                    if (productIds.length > 0) {
-                        await fetchMap(productIds, 'PRODUTO', 'CODIGO_PRO', 'NOME_PRO, REFERENCIA_PRO, PESO_LIQUIDO_PRO', lookupPRODUTO);
-                    }
-
-                    // 3.4 Fetch REFUGO (Reasons)
-                    if (refugoIds.length > 0) {
-                        await fetchMap(refugoIds, 'REFUGO', 'CODIGO_REF', 'NOME_REF', lookupREFUGO);
-                    }
-
-                    // Attach lookups
-                    productionRows.forEach(row => {
-                        row._producao = lookupPRODUCAO[row.CODIGO_PCS];
-                        row._produto = row._producao ? lookupPRODUTO[row._producao.PRODUTO_PCP] : null;
-                    });
-
-                } catch (fetchErr) {
-                    console.error('❌ Error fetching lookups:', fetchErr);
-                    db.detach();
-                    return;
                 }
 
-                console.log('✅ Lookups fetched. Syncing to Postgres...');
+                const cliIds = [...new Set(Object.values(lookupPEDIDO).map(p => p.CLIENTE_PED).filter(id => id))];
+                await fetchMap(cliIds, 'CLIENTE', 'CODIGO_CLI', 'RAZAO_SOCIAL_CLI', lookupCLIENTE);
 
-                // 4. Transform & Insert
+                // FALLBACK: NOTA_FISCAL
+                if (nfeIds.length > 0) {
+                    const chunks = chunkArray(nfeIds, 500);
+                    for (const chunk of chunks) {
+                        const q = `SELECT CODIGO_NOT, SERIE_NOT, RAZAO_SOCIAL_NOT FROM NOTA_FISCAL WHERE CODIGO_NOT IN(${chunk.join(',')})`;
+                        await new Promise((resolve, reject) => {
+                            db.query(q, (err, res) => {
+                                if (err) return resolve();
+                                res.forEach(r => {
+                                    const key = `${String(r.CODIGO_NOT).trim()}|${String(r.SERIE_NOT).trim()}`;
+                                    lookupNOTA[key] = r;
+                                });
+                                resolve();
+                            });
+                        });
+                    }
+                }
+
+                const prodIds = [...new Set(Object.values(lookupPRODUCAO).map(p => p.PRODUTO_PCP).filter(id => id))];
+                await fetchMap(prodIds, 'PRODUTO', 'CODIGO_PRO', 'NOME_PRO, PESO_LIQUIDO_PRO', lookupPRODUTO);
+
+                console.log('✅ Lookups concluídos. Inserindo no Postgres...');
+
                 let inserted = 0;
-                let errors = 0;
-
-                for (const pcs of productionRows) {
+                for (const row of rows) {
                     try {
-                        const set = lookupSET[pcs.SETOR_PCS] || {};
-                        const ref = lookupREFUGO[pcs.REF_CODIGO_PCS] || {};
-                        const dataRefugo = parseDate(pcs.DATA_PCS);
+                        const opId = String(row.CODIGO_PCS || '').trim();
+                        const prod = lookupPRODUCAO[opId] || {};
+                        const pedKey = `${String(prod.PEDIDO_PCP || '').trim()}|${String(prod.ANO_PCP || '').trim()}|${String(prod.EMPRESA_PCP || '').trim()}`;
+                        const ped = lookupPEDIDO[pedKey] || {};
+                        const cli = lookupCLIENTE[String(ped.CLIENTE_PED || '').trim()] || {};
 
-                        // Validation
-                        if (!dataRefugo || isNaN(dataRefugo.getTime())) continue;
-
-                        const chaveOrigem = `REF - PCS - ${pcs.ID_PCS} `;
-                        const setor = cleanString(set.NOME_SET) || 'DESCONHECIDO';
-                        const motivo = cleanString(ref.NOME_REF) || 'NAO INFORMADO';
-                        const lote = cleanString(pcs.LOTE_PCS) || '';
-
-                        const op = pcs.CODIGO_PCS ? String(pcs.CODIGO_PCS) : null;
-
-                        // Product Details
-                        let produtoName = 'PRODUTO INDEFINIDO';
-                        let produtoCode = null;
-                        let produtoWeight = 0;
-
-                        if (pcs._produto) {
-                            produtoName = cleanString(pcs._produto.NOME_PRO) || produtoName;
-                            const rawCode = pcs._produto.CODIGO_PRO;
-                            produtoCode = rawCode ? cleanString(String(rawCode)) : null;
-                            produtoWeight = parseFloat(pcs._produto.PESO_LIQUIDO_PRO || 0);
+                        let clienteName = cleanString(cli.RAZAO_SOCIAL_CLI);
+                        if (!clienteName || clienteName === '-') {
+                            const nfeKey = `${String(row.NOTA_NFE_PCS || '').trim()}|${String(row.SERIE_NFE_PCS || '').trim()}`;
+                            const nfe = lookupNOTA[nfeKey] || {};
+                            clienteName = cleanString(nfe.RAZAO_SOCIAL_NOT);
                         }
+                        if (!clienteName) clienteName = '-';
 
-                        const quantidade = parseFloat(pcs.QUANTIDADE_REFUGO_PCS || 0);
-                        const pesoTotal = quantidade * produtoWeight;
-                        const pesoUn = produtoWeight;
+                        const item = lookupPRODUTO[String(prod.PRODUTO_PCP || '').trim()] || {};
+                        const setor = lookupSET[String(row.SETOR_PCS).trim()] || {};
+                        const motivo = lookupREF[String(row.REF_CODIGO_PCS).trim()] || {};
+
+                        const pesoUn = parseFloat(item.PESO_LIQUIDO_PRO) || 0;
+                        const quant = parseFloat(row.QUANTIDADE) || 0;
 
                         await pool.query(`
-                            INSERT INTO refugo_apontado_sincronizado
-            (chave_origem, data_refugo, setor, produto, codigo_peca, lote, quantidade, peso_un, peso_total, op, motivo, atualizado_em)
-        VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP)
-                            ON CONFLICT(chave_origem) DO UPDATE SET
-        data_refugo = EXCLUDED.data_refugo,
-            setor = EXCLUDED.setor,
-            produto = EXCLUDED.produto,
-            codigo_peca = EXCLUDED.codigo_peca,
-            lote = EXCLUDED.lote,
-            quantidade = EXCLUDED.quantidade,
-            peso_un = EXCLUDED.peso_un,
-            peso_total = EXCLUDED.peso_total,
-            op = EXCLUDED.op,
-            motivo = EXCLUDED.motivo,
-            atualizado_em = CURRENT_TIMESTAMP
-                `, [chaveOrigem, dataRefugo, setor, produtoName, produtoCode, lote, quantidade, pesoUn, pesoTotal, op, motivo]);
-
+                            INSERT INTO refugo_apontado_sincronizado 
+                            (chave_origem, data_refugo, setor, cliente, op, codigo_peca, produto_descricao, peso_un, quantidade, peso_total, motivo, lote)
+                            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                        `, [
+                            `REF-PCS-${row.ID_PCS}`,
+                            row.DATA_PCS,
+                            cleanString(setor.NOME_SET) || 'DESCONHECIDO',
+                            clienteName,
+                            opId,
+                            String(prod.PRODUTO_PCP || '-'),
+                            cleanString(item.NOME_PRO) || '-',
+                            pesoUn,
+                            quant,
+                            pesoUn * quant,
+                            cleanString(motivo.NOME_REF) || 'N/I',
+                            cleanString(row.LOTE_PCS)
+                        ]);
                         inserted++;
-                        if (inserted % 100 === 0) process.stdout.write('.');
-
-                    } catch (rowErr) {
-                        console.error('Row Error:', rowErr);
-                        errors++;
+                        if (inserted % 100 === 0) console.log(`  ⏳ Processados: ${inserted}/${rows.length}`);
+                    } catch (e) {
+                        console.error(`  ❌ Erro no registro ${row.ID_PCS}:`, e.message);
                     }
                 }
 
-                console.log(`\n✅ Sync Loop Complete.`);
-                console.log(`   Processed: ${inserted} `);
-                console.log(`   Errors: ${errors} `);
-
+                console.log('✅ Sincronismo concluído com sucesso!');
                 db.detach();
                 await pool.end();
                 process.exit(0);
             });
-        });
 
-    } catch (err) {
-        console.error('❌ Critical Error:', err);
-        process.exit(1);
-    }
-})();
+        } catch (e) {
+            console.error('❌ Erro fatal:', e);
+            db.detach();
+            process.exit(1);
+        }
+    });
+}
+
+startSync();
