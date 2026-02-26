@@ -1024,6 +1024,31 @@
             </div>
         </div>
         <div class="header-actions">
+            <div class="header-filters" style="display: flex; gap: 8px; align-items: center; margin-right: 15px;">
+                <select id="monthSelector" class="filter-input"
+                    style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.1); color: #fff; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 0.9rem;"
+                    onchange="updatePeriod()">
+                    <option value="01">Janeiro</option>
+                    <option value="02">Fevereiro</option>
+                    <option value="03">Março</option>
+                    <option value="04">Abril</option>
+                    <option value="05">Maio</option>
+                    <option value="06">Junho</option>
+                    <option value="07">Julho</option>
+                    <option value="08">Agosto</option>
+                    <option value="09">Setembro</option>
+                    <option value="10">Outubro</option>
+                    <option value="11">Novembro</option>
+                    <option value="12">Dezembro</option>
+                </select>
+                <select id="yearSelector" class="filter-input"
+                    style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.1); color: #fff; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 0.9rem;"
+                    onchange="updatePeriod()">
+                    <option value="2026">2026</option>
+                    <option value="2025">2025</option>
+                </select>
+            </div>
+
             <button class="btn-glass" onclick="openRecordsModal()">
                 <i class="fa-solid fa-table-list" style="color: #fff;"></i> Registros
             </button>
@@ -1096,13 +1121,7 @@
                 <div class="chart-header-row">
                     <div class="chart-title">Evolução Anual (Peso)</div>
                     <div class="chart-header-kpi">
-                        <span>Ano:</span>
-                        <select id="yearSelector" class="filter-input"
-                            style="background:#27272a; border:1px solid var(--border-subtle); padding:2px 8px; border-radius:4px; color:#fff; font-size: 0.8rem; cursor: pointer;"
-                            onchange="updateDashboardfromRecords(allData)">
-                            <option value="2026" selected>2026</option>
-                            <option value="2025">2025</option>
-                        </select>
+                        <span class="highlight">Visualização Mensal Integrada</span>
                     </div>
                 </div>
                 <div style="position: relative; flex: 1; width: 100%; min-height: 0;"><canvas id="annualChart"></canvas>
@@ -1166,6 +1185,26 @@
         }
 
         async function refreshAll() { await loadRecordsData(); }
+
+        function updatePeriod() {
+            const year = document.getElementById('yearSelector').value;
+            const month = document.getElementById('monthSelector').value;
+
+            const firstDay = `${year}-${month}-01`;
+            const lastDayDate = new Date(year, parseInt(month), 0);
+            const lastDay = `${year}-${month}-${String(lastDayDate.getDate()).padStart(2, '0')}`;
+
+            const startInput = document.getElementById('startDate');
+            const endInput = document.getElementById('endDate');
+
+            if (startInput && endInput) {
+                startInput.value = firstDay;
+                endInput.value = lastDay;
+            }
+
+            loadMeta();
+            updateDashboardfromRecords(allData);
+        }
 
         async function loadMeta() {
             try {
@@ -1433,39 +1472,15 @@
                     },
                     onClick: (e, elements) => {
                         if (elements.length > 0) {
-                            const index = elements[0].index; // 0 = Jan, 1 = Feb...
-
-                            // Toggle Logic
-                            if (index === highlightIndex) {
-                                // Reset to Full Year
-                                const year = new Date().getFullYear();
-                                document.getElementById('startDate').value = `${year}-01-01`;
-                                document.getElementById('endDate').value = `${year}-12-31`;
-                            } else {
-                                // Filter to Month
-                                const year = new Date().getFullYear(); // Assuming current year
-                                const firstDay = new Date(year, index, 1);
-                                const lastDay = new Date(year, index + 1, 0); // Last day of month
-
-                                const fmt = (d) => {
-                                    const y = d.getFullYear();
-                                    const m = String(d.getMonth() + 1).padStart(2, '0');
-                                    const day = String(d.getDate()).padStart(2, '0');
-                                    return `${y}-${m}-${day}`;
-                                };
-
-                                document.getElementById('startDate').value = fmt(firstDay);
-                                document.getElementById('endDate').value = fmt(lastDay);
-                            }
-
-                            // Update View
-                            renderTable();
-                            updateDashboardfromRecords(allData);
+                            const index = elements[0].index;
+                            const month = String(index + 1).padStart(2, '0');
+                            document.getElementById('monthSelector').value = month;
+                            updatePeriod();
                         }
-                    },
-                    onHover: (event, chartElement) => {
-                        event.native.target.style.cursor = chartElement[0] ? 'pointer' : 'default';
                     }
+                },
+                onHover: (event, chartElement) => {
+                    event.native.target.style.cursor = chartElement[0] ? 'pointer' : 'default';
                 }
             });
         }
@@ -1670,9 +1685,17 @@
 
         document.addEventListener('DOMContentLoaded', () => {
             const now = new Date();
-            document.getElementById('startDate').valueAsDate = new Date(now.getFullYear(), now.getMonth(), 1);
-            document.getElementById('endDate').valueAsDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-            refreshAll();
+            const currentYear = now.getFullYear().toString();
+            const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
+
+            const ySel = document.getElementById('yearSelector');
+            const mSel = document.getElementById('monthSelector');
+
+            if (ySel) ySel.value = currentYear;
+            if (mSel) mSel.value = currentMonth;
+
+            updatePeriod();
+            loadRecordsData();
             setInterval(() => {
                 const n = new Date();
                 document.getElementById('clock-time').innerText = n.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
