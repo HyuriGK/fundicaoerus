@@ -670,6 +670,10 @@
                 </div>
                 <button class="close-btn" onclick="closeDetailModal()">&times;</button>
             </div>
+            <!-- Novo Container de Gráfico para Drilldown de Pareto -->
+            <div id="drilldownChartContainer" style="height: 350px; padding: 10px; display: none; margin-bottom: 20px;">
+                <canvas id="drilldownParetoChart"></canvas>
+            </div>
             <div class="table-scroll">
                 <table id="detailDataTable">
                     <thead>
@@ -1193,6 +1197,7 @@
 
         // --- PARETO CHART ---
         let paretoChartInstance = null;
+        let drilldownChartInstance = null;
 
         function renderParetoChart(data) {
             const ctx = document.getElementById('paretoChart').getContext('2d');
@@ -1305,6 +1310,91 @@
             });
         }
 
+        function renderDrilldownPareto(details, clientName) {
+            const ctx = document.getElementById('drilldownParetoChart').getContext('2d');
+            if (drilldownChartInstance) drilldownChartInstance.destroy();
+
+            // Aggregate by Product (descricao)
+            const agg = {};
+            details.forEach(r => {
+                const key = r.descricao || 'N/I';
+                agg[key] = (agg[key] || 0) + parseFloat(r.weight_total || r.peso_total || 0);
+            });
+
+            const sorted = Object.entries(agg).sort((a, b) => b[1] - a[1]);
+            const labels = sorted.map(i => i[0]);
+            const rawValues = sorted.map(i => i[1]);
+
+            const total = rawValues.reduce((a, b) => a + b, 0);
+            let runningSum = 0;
+            const accumulatedPct = rawValues.map(v => {
+                runningSum += v;
+                return total > 0 ? (runningSum / total) * 100 : 0;
+            });
+
+            drilldownChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Refugo (kg)',
+                            data: rawValues,
+                            backgroundColor: '#ef4444',
+                            borderRadius: 4,
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: 'Acumulado (%)',
+                            data: accumulatedPct,
+                            type: 'line',
+                            borderColor: '#fbbf24',
+                            borderWidth: 3,
+                            fill: false,
+                            tension: 0.1,
+                            pointStyle: 'circle',
+                            yAxisID: 'y1'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: true, labels: { color: '#e4e4e7' } },
+                        tooltip: {
+                            callbacks: {
+                                label: (ctx) => {
+                                    if (ctx.datasetIndex === 0) return ` ${ctx.parsed.y.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} kg`;
+                                    return ` ${ctx.parsed.y.toFixed(1)}% Acumulado`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: { position: 'left', beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#a1a1aa' } },
+                        y1: {
+                            position: 'right',
+                            beginAtZero: true,
+                            max: 100,
+                            grid: { display: false },
+                            ticks: { color: '#fbbf24', callback: v => v + '%' }
+                        },
+                        x: {
+                            grid: { display: false },
+                            ticks: {
+                                color: '#a1a1aa',
+                                callback: function (value, index) {
+                                    const label = this.getLabelForValue(value);
+                                    return label.length > 20 ? label.substring(0, 17) + '...' : label;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
         // --- DETAIL MODAL ---
         function openDetailModal(filterValue, filterType) {
             const modal = document.getElementById('detailModalOverlay');
@@ -1365,6 +1455,16 @@
                 `).join('');
             }
 
+            // Drilldown Pareto Logic
+            const chartContainer = document.getElementById('drilldownChartContainer');
+            if (filterType === 'Cliente') {
+                chartContainer.style.display = 'block';
+                renderDrilldownPareto(details, filterValue);
+            } else {
+                chartContainer.style.display = 'none';
+                if (drilldownChartInstance) drilldownChartInstance.destroy();
+            }
+
             // requestAnimationFrame to ensure transition plays
             requestAnimationFrame(() => {
                 modal.classList.add('active');
@@ -1374,6 +1474,10 @@
         function closeDetailModal() {
             const modal = document.getElementById('detailModalOverlay');
             modal.classList.remove('active');
+            if (drilldownChartInstance) {
+                drilldownChartInstance.destroy();
+                drilldownChartInstance = null;
+            }
         }
 
         // Update renderPieChart to include onClick
