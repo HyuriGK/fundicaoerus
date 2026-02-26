@@ -616,6 +616,7 @@
                     <button class="view-btn active" id="btnViewDay" onclick="switchView('day')">Por Dia</button>
                     <button class="view-btn" id="btnViewSector" onclick="switchView('sector')">Por Setor</button>
                     <button class="view-btn" id="btnViewReason" onclick="switchView('reason')">Por Motivo</button>
+                    <button class="view-btn" id="btnViewClient" onclick="switchView('client')">Por Cliente</button>
                 </div>
             </div>
 
@@ -643,6 +644,15 @@
                     <div class="chart-title">Refugo por Motivo (Top 5)</div>
                     <div class="chart-wrapper">
                         <canvas id="reasonChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="charts-container" id="viewClient" style="display: none;">
+                <div class="chart-panel">
+                    <div class="chart-title">Refugo por Cliente (Pareto)</div>
+                    <div class="chart-wrapper">
+                        <canvas id="paretoChart"></canvas>
                     </div>
                 </div>
             </div>
@@ -887,6 +897,7 @@
             document.getElementById('viewDay').style.display = 'none';
             document.getElementById('viewSector').style.display = 'none';
             document.getElementById('viewReason').style.display = 'none';
+            document.getElementById('viewClient').style.display = 'none';
 
             if (view === 'day') {
                 document.getElementById('btnViewDay').classList.add('active');
@@ -900,6 +911,10 @@
                 document.getElementById('btnViewReason').classList.add('active');
                 document.getElementById('viewReason').style.display = 'flex';
                 renderPieChart('reasonChart', getDataForTop5(currentFilteredData, 'motivo'), 'Motivo');
+            } else if (view === 'client') {
+                document.getElementById('btnViewClient').classList.add('active');
+                document.getElementById('viewClient').style.display = 'flex';
+                renderParetoChart(currentFilteredData);
             }
         }
 
@@ -1038,6 +1053,7 @@
             if (currentView === 'day') renderBarChart(getDataForBarChart(filteredData));
             else if (currentView === 'sector') renderPieChart('sectorChart', getDataForTop5(filteredData, 'setor'), 'Setor');
             else if (currentView === 'reason') renderPieChart('reasonChart', getDataForTop5(filteredData, 'motivo'), 'Motivo');
+            else if (currentView === 'client') renderParetoChart(filteredData);
 
             // Populate Table
             const tbody = document.querySelector('#dataTable tbody');
@@ -1169,6 +1185,116 @@
                         x: {
                             grid: { display: false },
                             ticks: { color: '#a1a1aa' }
+                        }
+                    }
+                }
+            });
+        }
+
+        // --- PARETO CHART ---
+        let paretoChartInstance = null;
+
+        function renderParetoChart(data) {
+            const ctx = document.getElementById('paretoChart').getContext('2d');
+            if (paretoChartInstance) paretoChartInstance.destroy();
+
+            // Aggregation by Client
+            const agg = {};
+            data.forEach(r => {
+                const key = r.cliente || 'N/I';
+                agg[key] = (agg[key] || 0) + parseFloat(r.peso_total || 0);
+            });
+
+            // Sort Descending
+            const sorted = Object.entries(agg).sort((a, b) => b[1] - a[1]);
+            const labels = sorted.map(i => i[0]);
+            const rawValues = sorted.map(i => i[1]);
+
+            // Calculate Accumulated Percentage
+            const total = rawValues.reduce((a, b) => a + b, 0);
+            let runningSum = 0;
+            const accumulatedPct = rawValues.map(v => {
+                runningSum += v;
+                return total > 0 ? (runningSum / total) * 100 : 0;
+            });
+
+            paretoChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Refugo (kg)',
+                            data: rawValues,
+                            backgroundColor: '#ef4444',
+                            borderRadius: 4,
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: 'Acumulado (%)',
+                            data: accumulatedPct,
+                            type: 'line',
+                            borderColor: '#fbbf24',
+                            borderWidth: 3,
+                            fill: false,
+                            tension: 0.1,
+                            pointStyle: 'circle',
+                            pointRadius: 4,
+                            pointBackgroundColor: '#fbbf24',
+                            yAxisID: 'y1'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    onClick: (evt, elements) => {
+                        if (elements.length > 0) {
+                            const index = elements[0].index;
+                            const label = labels[index];
+                            openDetailModal(label, 'Cliente');
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: true,
+                            labels: { color: '#e4e4e7' }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: (ctx) => {
+                                    if (ctx.datasetIndex === 0) return ` ${ctx.parsed.y.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} kg`;
+                                    return ` ${ctx.parsed.y.toFixed(1)}% Acumulado`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            position: 'left',
+                            beginAtZero: true,
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            ticks: { color: '#a1a1aa' },
+                            title: { display: true, text: 'Refugo (kg)', color: '#a1a1aa' }
+                        },
+                        y1: {
+                            position: 'right',
+                            beginAtZero: true,
+                            max: 100,
+                            grid: { display: false },
+                            ticks: {
+                                color: '#fbbf24',
+                                callback: (v) => v + '%'
+                            },
+                            title: { display: true, text: '% Acumulado', color: '#fbbf24' }
+                        },
+                        x: {
+                            grid: { display: false },
+                            ticks: {
+                                color: '#a1a1aa',
+                                maxRotation: 45,
+                                minRotation: 45
+                            }
                         }
                     }
                 }
