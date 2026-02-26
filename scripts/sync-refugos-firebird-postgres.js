@@ -68,6 +68,7 @@ async function startSync() {
             quantidade DECIMAL(15,3),
             peso_total DECIMAL(15,3),
             motivo VARCHAR(100),
+            setor_responsavel VARCHAR(100),
             lote VARCHAR(100),
             atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )`);
@@ -105,6 +106,7 @@ async function startSync() {
         const lookupPRODUTO = {};
         const lookupCLIENTE = {};
         const lookupNOTA = {};
+        const lookupRSR = {}; // Motivo ID -> Setor ID (Responsável)
 
         // Helper para preencher Mapas com chunks (Suporte a strings e números)
         const fillMap = async (ids, table, pk, cols, targetMap, isComposite = false) => {
@@ -134,6 +136,19 @@ async function startSync() {
         console.log('⏳ Carregando Tabelas Auxiliares (Lookups)...');
         await fillMap(setIds, 'SETOR', 'CODIGO_SET', 'NOME_SET', lookupSET);
         await fillMap(refIds, 'REFUGO', 'CODIGO_REF', 'NOME_REF', lookupREF);
+
+        console.log('⏳ Carregando Setores Responsáveis...');
+        if (refIds.length > 0) {
+            const rsrChunks = chunkArray(refIds, 500);
+            for (const chunk of rsrChunks) {
+                const quotedIds = chunk.map(id => typeof id === 'string' ? `'${id}'` : id).join(',');
+                const q = `SELECT REF_CODIGO_RSR, SET_CODIGO_RSR FROM REFUGO_SETOR_RESPONSAVEL WHERE REF_CODIGO_RSR IN(${quotedIds})`;
+                const res = await firebirdQuery(db, q);
+                res.forEach(r => {
+                    lookupRSR[String(r.REF_CODIGO_RSR).trim()] = String(r.SET_CODIGO_RSR).trim();
+                });
+            }
+        }
 
         // Lookup Produção (Chave Composta)
         await fillMap(opIds, 'PRODUCAO', 'CODIGO_PCP', 'CODIGO_PCP, EMPRESA_PCP, PRODUTO_PCP, PEDIDO_PCP, ANO_PCP', lookupPRODUCAO, 'PRODUCAO');
@@ -190,17 +205,23 @@ async function startSync() {
 
                 const setor = lookupSET[String(row.SETOR_PCS).trim()] || {};
                 const motivo = lookupREF[String(row.REF_CODIGO_PCS).trim()] || {};
+
+                // Setor Responsável
+                const idSetorResponsavel = lookupRSR[String(row.REF_CODIGO_PCS).trim()];
+                const setorResponsavel = idSetorResponsavel ? (lookupSET[idSetorResponsavel] || {}) : {};
+
                 const pesoUn = parseFloat(item.PESO_LIQUIDO_PRO) || 0;
                 const quant = parseFloat(row.QUANTIDADE) || 0;
 
                 await pool.query(`
                     INSERT INTO refugo_apontado_sincronizado 
-                    (chave_origem, data_refugo, setor, cliente, op, codigo_peca, produto, peso_un, quantidade, peso_total, motivo, lote)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                    (chave_origem, data_refugo, setor, cliente, op, codigo_peca, produto, peso_un, quantidade, peso_total, motivo, setor_responsavel, lote)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
                     ON CONFLICT (chave_origem) DO UPDATE SET
                         cliente = EXCLUDED.cliente,
                         peso_total = EXCLUDED.peso_total,
                         produto = EXCLUDED.produto,
+                        setor_responsavel = EXCLUDED.setor_responsavel,
                         atualizado_em = CURRENT_TIMESTAMP
                 `, [
                     `REF-PCS-${row.ID_PCS}`,
@@ -214,6 +235,7 @@ async function startSync() {
                     quant,
                     pesoUn * quant,
                     cleanString(motivo.NOME_REF) || 'N/I',
+                    cleanString(setorResponsavel.NOME_SET) || 'N/I',
                     cleanString(row.LOTE_PCS)
                 ]);
 
