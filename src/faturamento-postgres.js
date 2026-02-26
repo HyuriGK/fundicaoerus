@@ -306,7 +306,7 @@ router.get('/evolucao-mensal', async (req, res) => {
         const query = `
             WITH meses AS (
                 SELECT generate_series(
-                    DATE_TRUNC('year', CURRENT_DATE),
+                    '2025-01-01'::DATE,
                     DATE_TRUNC('year', CURRENT_DATE) + INTERVAL '11 months',
                     INTERVAL '1 month'
                 )::DATE as mes

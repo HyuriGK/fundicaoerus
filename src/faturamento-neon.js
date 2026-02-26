@@ -25,7 +25,7 @@ router.get('/', async (req, res) => {
             FROM faturamento_firebird f
             LEFT JOIN faturamento_clientes_ocultos o 
                 ON f.cliente_codigo = o.cliente_codigo
-            WHERE f.data_faturamento >= '2026-01-01'
+            WHERE f.data_faturamento >= '2025-01-01'
                 AND f.data_faturamento < '2027-01-01'
                 AND o.cliente_codigo IS NULL
             ORDER BY f.data_faturamento DESC, f.nota_fiscal DESC

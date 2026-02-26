@@ -114,8 +114,7 @@ async function sincronizarFaturamentoDiario(fbDb) {
     console.log('\n📊 Sincronizando faturamento diário...');
 
     // Buscar últimos 90 dias do Firebird
-    // Buscar dados de 2026 em diante (conforme solicitado para limpar e regravar)
-    const dataInicio = new Date('2026-01-01');
+    const dataInicio = new Date('2025-01-01');
     console.log(`📅 Buscando faturamento diário a partir de: ${dataInicio.toISOString().split('T')[0]}`);
 
     const query = `
@@ -239,7 +238,7 @@ async function sincronizarDetalhado(fbDb) {
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_fat_fb_data ON faturamento_firebird(data_faturamento DESC)`);
 
     const dataInicio = new Date();
-    dataInicio.setFullYear(2026, 0, 1); // Faturamento de 2026 conforme objetivo do projeto
+    dataInicio.setFullYear(2025, 0, 1); // Faturamento de 2025 em diante conforme objetivo do projeto
 
     const query = `
     SELECT
@@ -297,7 +296,7 @@ async function sincronizarDetalhado(fbDb) {
                 prefsMap.set(key, r.excluido);
             });
 
-            await pool.query("DELETE FROM faturamento_firebird WHERE data_faturamento >= '2026-01-01' OR data_faturamento IS NULL");
+            await pool.query("DELETE FROM faturamento_firebird WHERE data_faturamento >= '2025-01-01' OR data_faturamento IS NULL");
 
             let inserted = 0;
             let errors = 0;
@@ -395,7 +394,7 @@ async function sincronizarDetalhado(fbDb) {
 async function sincronizarEstatisticas(fbDb) {
     console.log('\n📈 Sincronizando estatísticas gerais...');
 
-    const dataInicio = new Date('2026-01-01');
+    const dataInicio = new Date('2025-01-01');
     console.log(`📈 Buscando estatísticas a partir de: ${dataInicio.toISOString().split('T')[0]}`);
 
     const query = `
