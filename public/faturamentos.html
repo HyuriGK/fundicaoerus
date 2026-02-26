@@ -1097,8 +1097,11 @@
                     <div class="chart-title">Evolução Anual (Peso)</div>
                     <div class="chart-header-kpi">
                         <span>Ano:</span>
-                        <select id="yearSelector" class="filter-input" style="background:#27272a; border:1px solid var(--border-subtle); padding:2px 8px; border-radius:4px; color:#fff; font-size: 0.8rem; cursor: pointer;" onchange="updateDashboardfromRecords(allData)">
-                            <!-- Options filled dynamically -->
+                        <select id="yearSelector" class="filter-input"
+                            style="background:#27272a; border:1px solid var(--border-subtle); padding:2px 8px; border-radius:4px; color:#fff; font-size: 0.8rem; cursor: pointer;"
+                            onchange="updateDashboardfromRecords(allData)">
+                            <option value="2026" selected>2026</option>
+                            <option value="2025">2025</option>
                         </select>
                     </div>
                 </div>
@@ -1187,25 +1190,21 @@
             // 1. Base Data (Global Valid - Year Context)
             const globalValid = data.filter(item => !excludedClients.has((item.clienteNome || 'Desconhecido').trim()) && !item.excluido_manualmente);
 
-            // Populate Year Selector if empty
+            // Populate Year Selector with any additional years found in data
             const yearSelector = document.getElementById('yearSelector');
-            if (yearSelector && yearSelector.options.length === 0) {
-                const years = [...new Set(globalValid.map(item => item.data ? item.data.substring(0, 4) : null).filter(y => y))].sort((a, b) => b - a);
-                const currentYear = new Date().getFullYear().toString();
-                
-                years.forEach(y => {
-                    const opt = document.createElement('option');
-                    opt.value = y;
-                    opt.textContent = y;
-                    yearSelector.appendChild(opt);
+            if (yearSelector) {
+                const existingYears = new Set([...yearSelector.options].map(o => o.value));
+                const dataYears = [...new Set(globalValid.map(item => item.data ? item.data.substring(0, 4) : null).filter(y => y))];
+
+                dataYears.forEach(y => {
+                    if (!existingYears.has(y)) {
+                        const opt = document.createElement('option');
+                        opt.value = y;
+                        opt.textContent = y;
+                        yearSelector.appendChild(opt);
+                        existingYears.add(y);
+                    }
                 });
-                
-                // Default to current year if available, otherwise latest
-                if (years.includes(currentYear)) {
-                    yearSelector.value = currentYear;
-                } else if (years.length > 0) {
-                    yearSelector.value = years[0];
-                }
             }
 
             const selectedYear = yearSelector ? yearSelector.value : new Date().getFullYear().toString();
@@ -1476,11 +1475,9 @@
 
         async function loadRecordsData() {
             showSpinner();
-            const startInput = document.getElementById('startDate').value;
-            const endInput = document.getElementById('endDate').value;
-            const year = startInput ? startInput.substring(0, 4) : new Date().getFullYear();
-            const fullStart = `${year}-01-01`;
-            const fullEnd = `${year}-12-31`;
+            // Carregar histórico completo (2025 e 2026) para o seletor de anos funcionar
+            const fullStart = '2025-01-01';
+            const fullEnd = '2026-12-31';
 
             try {
                 await Promise.all([loadPreferences(), loadMeta()]);
