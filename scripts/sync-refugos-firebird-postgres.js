@@ -1,7 +1,7 @@
 
 // Script: sync-refugos-firebird-postgres.js
 // Sincroniza dados de REFUGO (PRODUCAO_SETOR) para PostgreSQL
-// Adiciona informação de CLIENTE via PRODUCAO -> PEDIDO ou NOTA_FISCAL
+// Adiciona informação de CLIENTE via Hierarchy: NOTA_FISCAL -> PEDIDO -> PRODUTO
 
 require('dotenv').config({ path: '.env.local' });
 const Firebird = require('node-firebird');
@@ -35,14 +35,15 @@ function chunkArray(myArray, chunk_size) {
 }
 
 async function startSync() {
-    console.log('🚀 Iniciando Sincronismo de Refugos...');
+    console.log('🚀 Iniciando Sincronismo de Refugos (Triple Lookup Strategy)...');
 
     Firebird.attach(fbOptions, async (err, db) => {
         if (err) { console.error(err); process.exit(1); }
 
         try {
             // 1. Setup Postgres Table
-            await pool.query(`CREATE TABLE IF NOT EXISTS refugo_apontado_sincronizado (
+            await pool.query(`DROP TABLE IF EXISTS refugo_apontado_sincronizado`);
+            await pool.query(`CREATE TABLE refugo_apontado_sincronizado (
                 id SERIAL PRIMARY KEY,
                 chave_origem VARCHAR(100) UNIQUE,
                 data_refugo DATE,
@@ -58,12 +59,11 @@ async function startSync() {
                 lote VARCHAR(100),
                 atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )`);
-            await pool.query('DELETE FROM refugo_apontado_sincronizado');
 
             // 2. Fetch Refugos (PCS with REF_CODIGO)
             const queryRefugos = `
                 SELECT 
-                    ID_PCS, CODIGO_PCS, SETOR_PCS, REF_CODIGO_PCS, DATA_PCS, 
+                    ID_PCS, EMPRESA_PCS, CODIGO_PCS, SETOR_PCS, REF_CODIGO_PCS, DATA_PCS, 
                     DQUANTIDADE_REFUGO_PCS as QUANTIDADE, LOTE_PCS,
                     NOTA_NFE_PCS, SERIE_NFE_PCS
                 FROM PRODUCAO_SETOR 
@@ -74,7 +74,7 @@ async function startSync() {
                 if (err) throw err;
                 console.log(`📦 Registros de refugo encontrados: ${rows.length}`);
 
-                // 3. Lookups
+                // 3. Collect IDs for Lookups
                 const opIds = [...new Set(rows.map(r => r.CODIGO_PCS).filter(id => id))];
                 const setIds = [...new Set(rows.map(r => r.SETOR_PCS).filter(id => id))];
                 const refIds = [...new Set(rows.map(r => r.REF_CODIGO_PCS).filter(id => id))];
@@ -93,9 +93,9 @@ async function startSync() {
                     const chunks = chunkArray(ids, 500);
                     for (const chunk of chunks) {
                         const q = `SELECT ${pk}, ${cols} FROM ${table} WHERE ${pk} IN(${chunk.join(',')})`;
-                        await new Promise((resolve, reject) => {
+                        await new Promise((resolve) => {
                             db.query(q, (err, res) => {
-                                if (err) return reject(err);
+                                if (err) { resolve(); return; }
                                 res.forEach(r => { targetMap[String(r[pk]).trim()] = r; });
                                 resolve();
                             });
@@ -103,23 +103,39 @@ async function startSync() {
                     }
                 };
 
+                // Normal Lookups
                 await fetchMap(setIds, 'SETOR', 'CODIGO_SET', 'NOME_SET', lookupSET);
                 await fetchMap(refIds, 'REFUGO', 'CODIGO_REF', 'NOME_REF', lookupREF);
 
-                // OP -> PRODUCAO -> PEDIDO -> CLIENTE
-                await fetchMap(opIds, 'PRODUCAO', 'CODIGO_PCP', 'PRODUTO_PCP, PEDIDO_PCP, ANO_PCP, EMPRESA_PCP', lookupPRODUCAO);
+                // 3.1 PRODUCAO (Composite: EMPRESA_PCP | CODIGO_PCP)
+                if (opIds.length > 0) {
+                    const chunks = chunkArray(opIds, 500);
+                    for (const chunk of chunks) {
+                        const q = `SELECT CODIGO_PCP, EMPRESA_PCP, PRODUTO_PCP, PEDIDO_PCP, ANO_PCP FROM PRODUCAO WHERE CODIGO_PCP IN(${chunk.join(',')})`;
+                        await new Promise((resolve) => {
+                            db.query(q, (err, res) => {
+                                if (err) { resolve(); return; }
+                                res.forEach(r => {
+                                    const key = `${String(r.EMPRESA_PCP).trim()}|${String(r.CODIGO_PCP).trim()}`;
+                                    lookupPRODUCAO[key] = r;
+                                });
+                                resolve();
+                            });
+                        });
+                    }
+                }
 
-                // Fetch PEDIDO with composite key search support
-                const peds = [...new Set(Object.values(lookupPRODUCAO).map(p => p.PEDIDO_PCP).filter(id => id))];
-                if (peds.length > 0) {
-                    const chunks = chunkArray(peds, 500);
+                // 3.2 PEDIDO (Composite: EMPRESA_PED | ANO_PED | CODIGO_PED)
+                const pedIds = [...new Set(Object.values(lookupPRODUCAO).map(p => p.PEDIDO_PCP).filter(id => id))];
+                if (pedIds.length > 0) {
+                    const chunks = chunkArray(pedIds, 500);
                     for (const chunk of chunks) {
                         const q = `SELECT CODIGO_PED, ANO_PED, EMPRESA_PED, CLIENTE_PED FROM PEDIDO WHERE CODIGO_PED IN(${chunk.join(',')})`;
-                        await new Promise((resolve, reject) => {
+                        await new Promise((resolve) => {
                             db.query(q, (err, res) => {
-                                if (err) return resolve();
+                                if (err) { resolve(); return; }
                                 res.forEach(r => {
-                                    const key = `${String(r.CODIGO_PED).trim()}|${String(r.ANO_PED).trim()}|${String(r.EMPRESA_PED).trim()}`;
+                                    const key = `${String(r.EMPRESA_PED).trim()}|${String(r.ANO_PED).trim()}|${String(r.CODIGO_PED).trim()}`;
                                     lookupPEDIDO[key] = r;
                                 });
                                 resolve();
@@ -128,17 +144,36 @@ async function startSync() {
                     }
                 }
 
-                const cliIds = [...new Set(Object.values(lookupPEDIDO).map(p => p.CLIENTE_PED).filter(id => id))];
-                await fetchMap(cliIds, 'CLIENTE', 'CODIGO_CLI', 'RAZAO_SOCIAL_CLI', lookupCLIENTE);
+                // 3.3 PRODUTO (Customizable Link: CODIGO_PRO -> CLIENTE_PRO)
+                const prodIds = [...new Set(Object.values(lookupPRODUCAO).map(p => p.PRODUTO_PCP).filter(id => id))];
+                if (prodIds.length > 0) {
+                    const chunks = chunkArray(prodIds, 500);
+                    for (const chunk of chunks) {
+                        const q = `SELECT CODIGO_PRO, NOME_PRO, PESO_LIQUIDO_PRO, CLIENTE_PRO FROM PRODUTO WHERE CODIGO_PRO IN(${chunk.join(',')})`;
+                        await new Promise((resolve) => {
+                            db.query(q, (err, res) => {
+                                if (err) { resolve(); return; }
+                                res.forEach(r => { lookupPRODUTO[String(r.CODIGO_PRO).trim()] = r; });
+                                resolve();
+                            });
+                        });
+                    }
+                }
 
-                // FALLBACK: NOTA_FISCAL
+                // 3.4 CLIENTE (Global Code from both Pedido and Produto)
+                const cliIdsPed = Object.values(lookupPEDIDO).map(p => p.CLIENTE_PED);
+                const cliIdsProd = Object.values(lookupPRODUTO).map(p => p.CLIENTE_PRO);
+                const allCliIds = [...new Set([...cliIdsPed, ...cliIdsProd].filter(id => id))];
+                await fetchMap(allCliIds, 'CLIENTE', 'CODIGO_CLI', 'RAZAO_SOCIAL_CLI', lookupCLIENTE);
+
+                // 3.5 NOTA_FISCAL (Fallback path - Composite: CODIGO_NOT | SERIE_NOT)
                 if (nfeIds.length > 0) {
                     const chunks = chunkArray(nfeIds, 500);
                     for (const chunk of chunks) {
                         const q = `SELECT CODIGO_NOT, SERIE_NOT, RAZAO_SOCIAL_NOT FROM NOTA_FISCAL WHERE CODIGO_NOT IN(${chunk.join(',')})`;
-                        await new Promise((resolve, reject) => {
+                        await new Promise((resolve) => {
                             db.query(q, (err, res) => {
-                                if (err) return resolve();
+                                if (err) { resolve(); return; }
                                 res.forEach(r => {
                                     const key = `${String(r.CODIGO_NOT).trim()}|${String(r.SERIE_NOT).trim()}`;
                                     lookupNOTA[key] = r;
@@ -149,32 +184,47 @@ async function startSync() {
                     }
                 }
 
-                const prodIds = [...new Set(Object.values(lookupPRODUCAO).map(p => p.PRODUTO_PCP).filter(id => id))];
-                await fetchMap(prodIds, 'PRODUTO', 'CODIGO_PRO', 'NOME_PRO, PESO_LIQUIDO_PRO', lookupPRODUTO);
-
-                console.log('✅ Lookups concluídos. Inserindo no Postgres...');
+                console.log('✅ Lookups concluídos. Iniciando processamento...');
 
                 let inserted = 0;
                 for (const row of rows) {
                     try {
-                        const opId = String(row.CODIGO_PCS || '').trim();
-                        const prod = lookupPRODUCAO[opId] || {};
-                        const pedKey = `${String(prod.PEDIDO_PCP || '').trim()}|${String(prod.ANO_PCP || '').trim()}|${String(prod.EMPRESA_PCP || '').trim()}`;
-                        const ped = lookupPEDIDO[pedKey] || {};
-                        const cli = lookupCLIENTE[String(ped.CLIENTE_PED || '').trim()] || {};
+                        let clienteName = '-';
 
-                        let clienteName = cleanString(cli.RAZAO_SOCIAL_CLI);
-                        if (!clienteName || clienteName === '-') {
-                            const nfeKey = `${String(row.NOTA_NFE_PCS || '').trim()}|${String(row.SERIE_NFE_PCS || '').trim()}`;
-                            const nfe = lookupNOTA[nfeKey] || {};
+                        const prodKey = `${String(row.EMPRESA_PCS).trim()}|${String(row.CODIGO_PCS).trim()}`;
+                        const prod = lookupPRODUCAO[prodKey] || {};
+                        const item = lookupPRODUTO[String(prod.PRODUTO_PCP || '').trim()] || {};
+
+                        // HIERARCHY 1: Direct NFE on the Scrap Line
+                        const nfeKey = `${String(row.NOTA_NFE_PCS || '').trim()}|${String(row.SERIE_NFE_PCS || '').trim()}`;
+                        const nfe = lookupNOTA[nfeKey];
+                        if (nfe && nfe.RAZAO_SOCIAL_NOT) {
                             clienteName = cleanString(nfe.RAZAO_SOCIAL_NOT);
                         }
+
+                        // HIERARCHY 2: Via Order (PRODUCAO -> PEDIDO -> CLIENTE)
+                        if ((!clienteName || clienteName === '-') && prod.PEDIDO_PCP) {
+                            const pedKey = `${String(prod.EMPRESA_PCP).trim()}|${String(prod.ANO_PCP).trim()}|${String(prod.PEDIDO_PCP).trim()}`;
+                            const ped = lookupPEDIDO[pedKey] || {};
+                            const cli = lookupCLIENTE[String(ped.CLIENTE_PED || '').trim()] || {};
+                            if (cli.RAZAO_SOCIAL_CLI) {
+                                clienteName = cleanString(cli.RAZAO_SOCIAL_CLI);
+                            }
+                        }
+
+                        // HIERARCHY 3: Via Product Master (PRODUTO -> CLIENTE) - Excellent for stock/pre-bill scrap
+                        if ((!clienteName || clienteName === '-') && item.CLIENTE_PRO) {
+                            const cli = lookupCLIENTE[String(item.CLIENTE_PRO).trim()] || {};
+                            if (cli.RAZAO_SOCIAL_CLI) {
+                                clienteName = cleanString(cli.RAZAO_SOCIAL_CLI);
+                            }
+                        }
+
+                        // Default
                         if (!clienteName) clienteName = '-';
 
-                        const item = lookupPRODUTO[String(prod.PRODUTO_PCP || '').trim()] || {};
                         const setor = lookupSET[String(row.SETOR_PCS).trim()] || {};
                         const motivo = lookupREF[String(row.REF_CODIGO_PCS).trim()] || {};
-
                         const pesoUn = parseFloat(item.PESO_LIQUIDO_PRO) || 0;
                         const quant = parseFloat(row.QUANTIDADE) || 0;
 
@@ -187,7 +237,7 @@ async function startSync() {
                             row.DATA_PCS,
                             cleanString(setor.NOME_SET) || 'DESCONHECIDO',
                             clienteName,
-                            opId,
+                            String(row.CODIGO_PCS),
                             String(prod.PRODUTO_PCP || '-'),
                             cleanString(item.NOME_PRO) || '-',
                             pesoUn,
@@ -197,7 +247,7 @@ async function startSync() {
                             cleanString(row.LOTE_PCS)
                         ]);
                         inserted++;
-                        if (inserted % 100 === 0) console.log(`  ⏳ Processados: ${inserted}/${rows.length}`);
+                        if (inserted % 100 === 0) console.log(`  ⏳ Processados: ${inserted}/${rows.length} (Último CLI: ${clienteName})`);
                     } catch (e) {
                         console.error(`  ❌ Erro no registro ${row.ID_PCS}:`, e.message);
                     }
