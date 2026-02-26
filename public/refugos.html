@@ -650,6 +650,9 @@
                 </div>
             </div>
             <div>
+                <button id="btnMapping" onclick="openMappingModal()" class="btn-back"
+                    style="margin-right: 10px; display: none; background: #4338ca; border-color: #4f46e5;"><i
+                        class="fa-solid fa-map-location-dot"></i> Mapeamento</button>
                 <button onclick="showTableModal()" class="btn-back" style="margin-right: 10px; display: inline-flex;"><i
                         class="fa-solid fa-table"></i> Ver Tabela</button>
                 <a href="/" class="btn-back" style="display: inline-flex;"><i class="fa-solid fa-arrow-left"></i>
@@ -918,6 +921,46 @@
         </div>
     </div>
 
+    <!-- MAPPING MODAL -->
+    <div id="mappingModalOverlay" class="modal-overlay">
+        <div class="modal-content" style="max-width: 800px; height: 80vh;">
+            <div class="modal-header">
+                <div>
+                    <h2 class="modal-title">Mapeamento de Setor Responsável</h2>
+                    <p class="modal-subtitle">Defina qual setor é responsável por cada motivo de refugo.</p>
+                </div>
+                <button class="close-btn" onclick="closeMappingModal()">&times;</button>
+            </div>
+
+            <div style="padding: 15px; background: #18181b; border-bottom: 1px solid #27272a;">
+                <input type="text" id="mappingSearch" onkeyup="filterMappingTable()" placeholder="Buscar motivo..."
+                    style="width: 100%; padding: 10px; background: #09090b; border: 1px solid #3f3f46; color: #fff; border-radius: 8px;">
+            </div>
+
+            <div class="table-scroll" style="flex: 1;">
+                <table id="mappingTable" style="width: 100%;">
+                    <thead>
+                        <tr>
+                            <th
+                                style="padding: 12px; text-align: left; background: #18181b; position: sticky; top: 0; z-index: 10;">
+                                Motivo</th>
+                            <th
+                                style="padding: 12px; text-align: left; background: #18181b; position: sticky; top: 0; z-index: 10; width: 250px;">
+                                Setor Responsável</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Gerado por JS -->
+                    </tbody>
+                </table>
+            </div>
+
+            <div style="padding: 20px; text-align: right; border-top: 1px solid #27272a; background: #18181b;">
+                <button onclick="closeMappingModal()" class="btn-back" style="background: #3f3f46;">Fechar</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         // --- CONSTANTS & STATE ---
         const MONTHS_SHORT = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
@@ -930,6 +973,7 @@
 
         // --- INIT ---
         document.addEventListener('DOMContentLoaded', async () => {
+            checkDeveloperRole();
             renderMonthButtons();
             await fetchData();
 
@@ -938,9 +982,17 @@
                 if (e.key === 'Escape') {
                     closeTableModal();
                     closeDetailModal();
+                    closeMappingModal();
                 }
             });
         });
+
+        function checkDeveloperRole() {
+            const role = localStorage.getItem('erus_role');
+            if (role === 'desenvolvedor') {
+                document.getElementById('btnMapping').style.display = 'inline-flex';
+            }
+        }
 
         function renderMonthButtons() {
             const container = document.getElementById('monthButtons');
@@ -1017,7 +1069,7 @@
             } else if (view === 'reasonSector') {
                 document.getElementById('btnViewReasonSector').classList.add('active');
                 document.getElementById('viewReasonSector').style.display = 'flex';
-                renderPieChart('sectorChart', getDataForTop5(currentFilteredData, 'setor'), 'Setor');
+                renderPieChart('sectorChart', getDataForTop5(currentFilteredData, 'setor_responsavel'), 'Setor');
                 renderPieChart('reasonChart', getDataForTop5(currentFilteredData, 'motivo'), 'Motivo');
             } else if (view === 'client') {
                 document.getElementById('btnViewClient').classList.add('active');
@@ -1055,8 +1107,8 @@
 
                     const txtValue = (tds[j].textContent || tds[j].innerText).toUpperCase();
 
-                    // Specific Logic for Peso Un (Index 9) -> Exact Match
-                    if (j === 9) {
+                    // Specific Logic for Peso Un (Index 10) -> Exact Match
+                    if (j === 10) {
                         // Exact match logic (comparing strings)
                         if (txtValue !== filterVal) {
                             show = false;
@@ -1114,6 +1166,91 @@
                     if (toast.parentNode) toast.parentNode.removeChild(toast);
                 }, 500);
             }, 4000);
+        }
+
+        // --- MAPPING MODAL LOGIC ---
+        let allMotivos = [];
+        let currentMapping = {};
+
+        async function openMappingModal() {
+            document.getElementById('mappingModalOverlay').classList.add('active');
+            await loadMappingData();
+        }
+
+        function closeMappingModal() {
+            document.getElementById('mappingModalOverlay').classList.remove('active');
+        }
+
+        async function loadMappingData() {
+            try {
+                const [motivosRes, mappingRes] = await Promise.all([
+                    fetch('/api/refugos-new/motivos').then(r => r.json()),
+                    fetch('/api/refugos-new/mapping').then(r => r.json())
+                ]);
+
+                allMotivos = motivosRes;
+                currentMapping = {};
+                mappingRes.forEach(m => {
+                    currentMapping[m.motivo] = m.setor_responsavel;
+                });
+
+                renderMappingTable();
+            } catch (e) {
+                console.error(e);
+                showToast('Erro', 'Falha ao carregar dados de mapeamento.', 'danger');
+            }
+        }
+
+        function renderMappingTable() {
+            const tbody = document.querySelector('#mappingTable tbody');
+            tbody.innerHTML = allMotivos.map(motivo => {
+                const assignedSetor = currentMapping[motivo] || '';
+                return `
+                    <tr>
+                        <td style="padding: 10px; border-bottom: 1px solid #27272a;">${motivo}</td>
+                        <td style="padding: 10px; border-bottom: 1px solid #27272a;">
+                            <select onchange="saveMapping('${motivo}', this.value)" style="width: 100%; padding: 8px; background: #09090b; border: 1px solid #3f3f46; color: #fff; border-radius: 4px;">
+                                <option value="">Não Definido</option>
+                                <option value="FUSAO" ${assignedSetor === 'FUSAO' ? 'selected' : ''}>FUSAO</option>
+                                <option value="MOLDAGEM" ${assignedSetor === 'MOLDAGEM' ? 'selected' : ''}>MOLDAGEM</option>
+                                <option value="MACHARIA" ${assignedSetor === 'MACHARIA' ? 'selected' : ''}>MACHARIA</option>
+                                <option value="REBARBACAO" ${assignedSetor === 'REBARBACAO' ? 'selected' : ''}>REBARBACAO</option>
+                                <option value="ESMERIL" ${assignedSetor === 'ESMERIL' ? 'selected' : ''}>ESMERIL</option>
+                                <option value="COMPRA" ${assignedSetor === 'COMPRA' ? 'selected' : ''}>COMPRA</option>
+                                <option value="QUALIDADE" ${assignedSetor === 'QUALIDADE' ? 'selected' : ''}>QUALIDADE</option>
+                            </select>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        async function saveMapping(motivo, setor_responsavel) {
+            try {
+                const res = await fetch('/api/refugos-new/mapping', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ motivo, setor_responsavel })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('Sucesso', 'Mapeamento atualizado!', 'success');
+                    // Refresh main data to reflect changes in charts
+                    await fetchData();
+                }
+            } catch (e) {
+                console.error(e);
+                showToast('Erro', 'Falha ao salvar mapeamento.', 'danger');
+            }
+        }
+
+        function filterMappingTable() {
+            const query = document.getElementById('mappingSearch').value.toUpperCase();
+            const trs = document.querySelectorAll('#mappingTable tbody tr');
+            trs.forEach(tr => {
+                const text = tr.cells[0].textContent.toUpperCase();
+                tr.style.display = text.indexOf(query) > -1 ? '' : 'none';
+            });
         }
 
         // --- DATA PROCESSING ---
@@ -1660,7 +1797,8 @@
         function filterDetailTable() {
             const filters = {
                 data: document.getElementById('filter-data').value.toLowerCase(),
-                setor: document.getElementById('filter-setor').value.toLowerCase(),
+                setorResp: document.getElementById('filter-setor-resp').value.toLowerCase(),
+                setorApont: document.getElementById('filter-setor').value.toLowerCase(),
                 cliente: document.getElementById('filter-cliente').value.toLowerCase(),
                 op: document.getElementById('filter-op').value.toLowerCase(),
                 codigo_peca: document.getElementById('filter-codigo_peca').value.toLowerCase(),
@@ -1673,15 +1811,16 @@
             rows.forEach(row => {
                 const cells = row.cells;
                 const matchData = cells[0].textContent.toLowerCase().includes(filters.data);
-                const matchSetor = cells[1].textContent.toLowerCase().includes(filters.setor);
-                const matchCliente = cells[2].textContent.toLowerCase().includes(filters.cliente);
-                const matchOp = cells[3].textContent.toLowerCase().includes(filters.op);
-                const matchCodigo = cells[4].textContent.toLowerCase().includes(filters.codigo_peca);
-                const matchProduto = cells[5].textContent.toLowerCase().includes(filters.produto);
-                const matchMotivo = cells[6].textContent.toLowerCase().includes(filters.motivo);
-                const matchLote = cells[7].textContent.toLowerCase().includes(filters.lote);
+                const matchSetorResp = cells[1].textContent.toLowerCase().includes(filters.setorResp);
+                const matchSetorApont = cells[2].textContent.toLowerCase().includes(filters.setorApont);
+                const matchCliente = cells[3].textContent.toLowerCase().includes(filters.cliente);
+                const matchOp = cells[4].textContent.toLowerCase().includes(filters.op);
+                const matchCodigo = cells[5].textContent.toLowerCase().includes(filters.codigo_peca);
+                const matchProduto = cells[6].textContent.toLowerCase().includes(filters.produto);
+                const matchMotivo = cells[7].textContent.toLowerCase().includes(filters.motivo);
+                const matchLote = cells[8].textContent.toLowerCase().includes(filters.lote);
 
-                if (matchData && matchSetor && matchCliente && matchOp && matchCodigo && matchProduto && matchMotivo && matchLote) {
+                if (matchData && matchSetorResp && matchSetorApont && matchCliente && matchOp && matchCodigo && matchProduto && matchMotivo && matchLote) {
                     row.style.display = '';
                 } else {
                     row.style.display = 'none';
