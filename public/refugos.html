@@ -1250,6 +1250,28 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    onClick: (evt, elements) => {
+                        if (elements.length > 0) {
+                            const index = elements[0].index;
+                            const label = labels[index]; // For days, this is '1', '2'...
+
+                            if (selectedMonthIndex !== -1) {
+                                // Drilldown into specific day
+                                const day = label.toString().padStart(2, '0');
+                                const month = (selectedMonthIndex + 1).toString().padStart(2, '0');
+                                const dateStr = `${selectedYear}-${month}-${day}`;
+                                openDetailModal(dateStr, 'Data');
+                            } else if (selectedYear !== 0) {
+                                // If month not selected, maybe drill into month?
+                                // User asked for "clicar no dia", so assuming day view.
+                                // But let's handle month click too for completeness
+                                const monthIdx = MONTHS_SHORT.indexOf(label);
+                                if (monthIdx !== -1) {
+                                    selectMonth(monthIdx);
+                                }
+                            }
+                        }
+                    },
                     plugins: {
                         legend: { display: false },
                         tooltip: {
@@ -1532,26 +1554,21 @@
             // Using currentFilteredData which respects year/month selection.
 
             const details = currentFilteredData.filter(r => {
-                const val = r[filterType.toLowerCase()] || 'N/A';
-
-                // If the chart logic grouped it into "Outros", we need to know what constitutes "Outros".
-                // But here we receive the clicked label.
-                // Case 1: Clicked on specific item (e.g., "FUSÃO") -> Exact match.
-                // Case 2: Clicked on "Outros" -> We need to find items NOT in top 5.
-                // For simplicity first iteration: Exact match.
-                // If value is "Outros", this simple check might return nothing if no record has logic "Outros" in database.
-                // Improvements for "Outros" can be added if needed, but usually charts passed exact labels.
-
-                if (filterValue === 'Outros') {
-                    // Re-calculate top 5 to find what ISN'T in it? 
-                    // Or just skip for now? Let's hide modal for Outros or show empty?
-                    // Better: The chart data generation knows what is Top 5.
-                    // Let's implement simple exact match for now.
-                    return false; // TODO: Implement Outros logic if critical
+                if (filterType.toLowerCase() === 'data') {
+                    // filterValue is YYYY-MM-DD
+                    return r.data === filterValue;
                 }
-
+                const val = r[filterType.toLowerCase()] || 'N/A';
+                if (filterValue === 'Outros') return false;
                 return val === filterValue;
             });
+
+            // Set Title Label appropriately
+            if (filterType.toLowerCase() === 'data') {
+                title.textContent = `Registros de ${formatDate(filterValue)}`;
+            } else {
+                title.textContent = `${filterValue}`;
+            }
 
             // Populate Table
             if (details.length === 0 && filterValue === 'Outros') {
