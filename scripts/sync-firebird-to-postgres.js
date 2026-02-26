@@ -113,8 +113,8 @@ async function criarTabelasPostgres() {
 async function sincronizarFaturamentoDiario(fbDb) {
     console.log('\n📊 Sincronizando faturamento diário...');
 
-    // Buscar últimos 90 dias do Firebird
-    const dataInicio = new Date('2025-01-01');
+    // Buscar faturamento de 2026 do Firebird
+    const dataInicio = new Date('2026-01-01');
     console.log(`📅 Buscando faturamento diário a partir de: ${dataInicio.toISOString().split('T')[0]}`);
 
     const query = `
@@ -148,8 +148,8 @@ async function sincronizarFaturamentoDiario(fbDb) {
 
             console.log(`📦 ${result.length} dias de faturamento encontrados`);
 
-            // Limpar dados antigos do PostgreSQL
-            await pool.query('DELETE FROM faturamento_diario');
+            // Limpar dados de 2026 do PostgreSQL para evitar duplicidade
+            await pool.query("DELETE FROM faturamento_diario WHERE data >= '2026-01-01'");
 
             // Inserir novos dados
             for (const row of result) {
@@ -238,7 +238,7 @@ async function sincronizarDetalhado(fbDb) {
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_fat_fb_data ON faturamento_firebird(data_faturamento DESC)`);
 
     const dataInicio = new Date();
-    dataInicio.setFullYear(2025, 0, 1); // Faturamento de 2025 em diante conforme objetivo do projeto
+    dataInicio.setFullYear(2026, 0, 1); // Faturamento apenas de 2026 conforme solicitado
 
     const query = `
     SELECT
@@ -296,7 +296,7 @@ async function sincronizarDetalhado(fbDb) {
                 prefsMap.set(key, r.excluido);
             });
 
-            await pool.query("DELETE FROM faturamento_firebird WHERE data_faturamento >= '2025-01-01' OR data_faturamento IS NULL");
+            await pool.query("DELETE FROM faturamento_firebird WHERE data_faturamento >= '2026-01-01' OR data_faturamento IS NULL");
 
             let inserted = 0;
             let errors = 0;
@@ -394,7 +394,7 @@ async function sincronizarDetalhado(fbDb) {
 async function sincronizarEstatisticas(fbDb) {
     console.log('\n📈 Sincronizando estatísticas gerais...');
 
-    const dataInicio = new Date('2025-01-01');
+    const dataInicio = new Date('2026-01-01');
     console.log(`📈 Buscando estatísticas a partir de: ${dataInicio.toISOString().split('T')[0]}`);
 
     const query = `
