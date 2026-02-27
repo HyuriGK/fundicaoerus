@@ -753,7 +753,7 @@
                     </div>
                 </div>
                 <div class="view-toggle">
-                    <button class="view-btn active" id="btnViewDay" onclick="switchView('day')">Por Dia</button>
+                    <button class="view-btn active" id="btnViewDay" onclick="switchView('day')">Por Dia/Mês</button>
                     <button class="view-btn" id="btnViewReasonSector" onclick="switchView('reasonSector')">Por
                         Motivo/Setor</button>
                     <button class="view-btn" id="btnViewClient" onclick="switchView('client')">Por Cliente</button>
@@ -1390,40 +1390,51 @@
             filterTable();
         }
 
-        function getDataForBarChart(data = null) {
-            // If data is null, likely first load or switch view needs fresh filter
-            if (!data) {
-                // Re-filter logic or pass filteredData from processData (better approach: verify flow)
-                // For simplicity, re-run filter if needed, but usually called from processData
-                return {};
-            }
-
+        function getDataForBarChart(data) {
             const aggregated = {};
 
             if (selectedMonthIndex === -1 && selectedYear !== 0) {
                 // Group by Month (JAN, FEV...)
-                MONTHS_SHORT.forEach(m => aggregated[m] = 0);
+                MONTHS_SHORT.forEach((m, idx) => {
+                    const key = `${selectedYear}-${String(idx + 1).padStart(2, '0')}`;
+                    const prod = monthlyProduction[key] || 0;
+                    aggregated[m] = { weight: 0, prod: prod, pct: 0 };
+                });
+
                 data.forEach(r => {
                     const [y, m] = r.data.split('-');
                     const mName = MONTHS_SHORT[parseInt(m) - 1];
-                    aggregated[mName] = (aggregated[mName] || 0) + parseFloat(r.peso_total || 0);
+                    if (aggregated[mName]) {
+                        aggregated[mName].weight += parseFloat(r.peso_total || 0);
+                    }
+                });
+
+                // Calculate Pct
+                Object.values(aggregated).forEach(item => {
+                    if (item.prod > 0) {
+                        item.pct = (item.weight / item.prod) * 100;
+                    }
                 });
             } else if (selectedMonthIndex !== -1) {
                 // Group by Day (1, 2, 3...)
-                // Initialize days
                 const daysInMonth = new Date(selectedYear, selectedMonthIndex + 1, 0).getDate();
-                for (let i = 1; i <= daysInMonth; i++) aggregated[i] = 0;
+                for (let i = 1; i <= daysInMonth; i++) {
+                    aggregated[i] = { weight: 0, prod: 0, pct: 0 };
+                }
 
                 data.forEach(r => {
                     const [y, m, d] = r.data.split('-');
-                    aggregated[parseInt(d)] = (aggregated[parseInt(d)] || 0) + parseFloat(r.peso_total || 0);
+                    const day = parseInt(d);
+                    if (aggregated[day]) {
+                        aggregated[day].weight += parseFloat(r.peso_total || 0);
+                    }
                 });
             } else {
-                // All years (Group by Year-Month or just Year?)
-                // Simple: Group by Year
+                // All years
                 data.forEach(r => {
                     const [y] = r.data.split('-');
-                    aggregated[y] = (aggregated[y] || 0) + parseFloat(r.peso_total || 0);
+                    if (!aggregated[y]) aggregated[y] = { weight: 0, prod: 0, pct: 0 };
+                    aggregated[y].weight += parseFloat(r.peso_total || 0);
                 });
             }
             return aggregated;
@@ -1439,70 +1450,83 @@
                 total += val;
             });
 
-            // Convert to array and sort
             let sorted = Object.entries(agg).sort((a, b) => b[1] - a[1]);
-
-            // Take Top 5
             const top5 = sorted.slice(0, 5);
-
-            // Calculate 'Outros' if there represent rest
             const top5Total = top5.reduce((sum, item) => sum + item[1], 0);
             const others = total - top5Total;
 
-            if (others > 0.01) { // Avoid tiny floating point residuals
+            if (others > 0.01) {
                 top5.push(['Outros', others]);
             }
-
             return Object.fromEntries(top5);
         }
 
         // --- CHARTS ---
         let barChartInstance = null;
-        let pieCharts = {}; // Store instances by canvas ID
+        let pieCharts = {};
 
         function renderBarChart(dataObj) {
             const ctx = document.getElementById('barChart').getContext('2d');
             if (barChartInstance) barChartInstance.destroy();
 
             const labels = Object.keys(dataObj);
-            const values = Object.values(dataObj);
+            const weights = Object.values(dataObj).map(v => v.weight);
+            const pcts = Object.values(dataObj).map(v => v.pct);
+
+            const datasets = [{
+                label: 'Refugo (kg)',
+                data: weights,
+                borderColor: '#ef4444',
+                backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                fill: true,
+                tension: 0.3,
+                pointBackgroundColor: '#ef4444',
+                pointBorderColor: '#fff',
+                pointBorderWidth: 1,
+                pointRadius: 4,
+                pointHoverRadius: 6,
+                yAxisID: 'y'
+            }];
+
+            if (selectedMonthIndex === -1 && selectedYear !== 0) {
+                datasets.push({
+                    label: '% Refugo',
+                    data: pcts,
+                    borderColor: '#fbbf24',
+                    backgroundColor: 'rgba(251, 191, 36, 0.1)',
+                    borderDash: [5, 5],
+                    fill: false,
+                    tension: 0.1,
+                    pointBackgroundColor: '#fbbf24',
+                    pointRadius: 3,
+                    yAxisID: 'y1'
+                });
+            }
 
             barChartInstance = new Chart(ctx, {
                 type: 'line',
                 data: {
                     labels: labels,
-                    datasets: [{
-                        label: 'Refugo (kg)',
-                        data: values,
-                        borderColor: '#ef4444',
-                        backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                        fill: true,
-                        tension: 0.3,
-                        pointBackgroundColor: '#ef4444',
-                        pointBorderColor: '#fff',
-                        pointBorderWidth: 1,
-                        pointRadius: 4,
-                        pointHoverRadius: 6
-                    }]
+                    datasets: datasets
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false
+                    },
                     onClick: (evt, elements) => {
                         if (elements.length > 0) {
                             const index = elements[0].index;
-                            const label = labels[index]; // For days, this is '1', '2'...
+                            const label = labels[index];
 
                             if (selectedMonthIndex !== -1) {
-                                // Drilldown into specific day
                                 const day = label.toString().padStart(2, '0');
                                 const month = (selectedMonthIndex + 1).toString().padStart(2, '0');
                                 const dateStr = `${selectedYear}-${month}-${day}`;
                                 openDetailModal(dateStr, 'Data');
                             } else if (selectedYear !== 0) {
-                                // If month not selected, maybe drill into month?
-                                // User asked for "clicar no dia", so assuming day view.
-                                // But let's handle month click too for completeness
                                 const monthIdx = MONTHS_SHORT.indexOf(label);
                                 if (monthIdx !== -1) {
                                     selectMonth(monthIdx);
@@ -1511,12 +1535,20 @@
                         }
                     },
                     plugins: {
-                        legend: { display: false },
+                        legend: {
+                            display: true,
+                            position: 'top',
+                            labels: { color: '#a1a1aa', font: { size: 10 } }
+                        },
                         tooltip: {
-                            mode: 'index',
-                            intersect: false,
                             callbacks: {
-                                label: (ctx) => ` ${ctx.parsed.y.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} kg`
+                                label: (ctx) => {
+                                    const val = ctx.parsed.y;
+                                    if (ctx.dataset.label.includes('%')) {
+                                        return ` ${ctx.dataset.label}: ${val.toFixed(2)}%`;
+                                    }
+                                    return ` ${ctx.dataset.label}: ${val.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} kg`;
+                                }
                             }
                         },
                         datalabels: {
@@ -1524,34 +1556,38 @@
                             align: 'top',
                             anchor: 'end',
                             offset: 4,
-                            color: '#fff',
-                            font: {
-                                weight: 'bold',
-                                size: 10
-                            },
-                            formatter: (value) => value > 0 ? value.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : ''
+                            color: (ctx) => ctx.dataset.borderColor,
+                            font: { weight: 'bold', size: 9 },
+                            formatter: (value, ctx) => {
+                                if (value <= 0) return '';
+                                if (ctx.dataset.label.includes('%')) return value.toFixed(1) + '%';
+                                return value.toLocaleString('pt-BR', { maximumFractionDigits: 0 });
+                            }
                         }
                     },
                     scales: {
                         y: {
                             beginAtZero: true,
-                            grid: { color: 'rgba(255,255,255,0.1)' },
-                            ticks: { color: '#a1a1aa' }
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            ticks: { color: '#a1a1aa', font: { size: 10 } },
+                            title: { display: true, text: 'Peso (kg)', color: '#666', font: { size: 10 } }
+                        },
+                        y1: {
+                            beginAtZero: true,
+                            position: 'right',
+                            grid: { display: false },
+                            ticks: {
+                                color: '#fbbf24',
+                                font: { size: 10 },
+                                callback: (val) => val + '%'
+                            },
+                            title: { display: true, text: '% Refugo', color: '#fbbf24', font: { size: 10 } },
+                            display: (selectedMonthIndex === -1 && selectedYear !== 0)
                         },
                         x: {
-                            grid: {
-                                display: true,
-                                drawOnChartArea: true,
-                                lineWidth: 1,
-                                color: 'rgba(255,255,255,0.1)'
-                            },
-                            ticks: { color: '#a1a1aa' }
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            ticks: { color: '#a1a1aa', font: { size: 10 } }
                         }
-                    },
-                    interaction: {
-                        mode: 'nearest',
-                        axis: 'x',
-                        intersect: false
                     }
                 }
             });
