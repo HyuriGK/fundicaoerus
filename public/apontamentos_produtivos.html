@@ -1550,7 +1550,7 @@
             updateMonthButtonsUI();
             applyFilters();
             fetchGoal();
-            updateYearTotal();
+            updateMonthButtonsTotals();
         }
 
         function updateMonthButtonsUI() {
@@ -1569,7 +1569,7 @@
             sectorChartSelect.addEventListener('change', (e) => {
                 currentSectorFilter = e.target.value;
                 applyFilters();
-                updateYearTotal();
+                updateMonthButtonsTotals();
             });
 
             // Sector Select
@@ -1587,7 +1587,7 @@
                 currentYearFilter = e.target.value;
                 applyFilters();
                 fetchGoal(); // Fetch goal for new year
-                updateYearTotal();
+                updateMonthButtonsTotals();
             });
 
             // Goal Edit (Persist to API)
@@ -1635,7 +1635,7 @@
                     // UI Update must happen AFTER filters are populated
                     // updateFilterUI(); // Removed, replaced by specific UI calls in populateFilters
                     renderMonthButtons();
-                    updateYearTotal();
+                    updateMonthButtonsTotals();
 
                     // Initial Goal Fetch
                     await fetchGoal();
@@ -1710,13 +1710,17 @@
             }
         }
 
-        function updateYearTotal() {
+        function updateMonthButtonsTotals() {
             const btnAll = document.getElementById('btn-month-all');
-            if (!btnAll) return;
+            if (btnAll) btnAll.textContent = 'ANO';
 
-            const yearTotal = allData.reduce((sum, item) => {
+            // Calculate totals per month for current year/sector
+            const monthTotals = Array(13).fill(0); // 1-12
+
+            allData.forEach(item => {
                 const date = new Date(item.data + 'T12:00:00');
                 const year = date.getFullYear().toString();
+                const month = date.getMonth() + 1;
                 const matchYear = currentYearFilter === 'TODOS' || year === currentYearFilter;
 
                 let matchSector = false;
@@ -1728,10 +1732,19 @@
                     matchSector = item.setor === currentSectorFilter;
                 }
 
-                return (matchYear && matchSector) ? sum + item.pesoTotal : sum;
-            }, 0);
+                if (matchYear && matchSector) {
+                    monthTotals[month] += item.pesoTotal;
+                }
+            });
 
-            btnAll.textContent = `ANO (${yearTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Kg)`;
+            // Update month buttons text
+            MONTHS_SHORT.forEach((m, i) => {
+                const btn = document.getElementById(`btn-month-${i + 1}`);
+                if (btn) {
+                    const total = monthTotals[i + 1];
+                    btn.textContent = `${m} (${total.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })})`;
+                }
+            });
         }
 
         function applyFilters() {
