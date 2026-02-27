@@ -416,6 +416,16 @@
             font-weight: 700;
         }
 
+        /* Dynamic KPI Transition classes */
+        .kpi-transitioning {
+            opacity: 0;
+            transform: translateX(-10px);
+        }
+
+        .card-live-data {
+            transition: opacity 0.4s ease, transform 0.4s ease;
+        }
+
 
         /* GRÁFICO PANEL */
         .chart-panel {
@@ -2324,12 +2334,55 @@
                         // 2. Inicia animação de entrada (Fade In)
                         wrapper.classList.remove('chart-switching');
 
+                        // Atualiza o KPI de Produção Dinamicamente
+                        updateDynamicKPI(label, data, currentChartMode);
+
                         // Libera para próxima troca
                         setTimeout(() => {
                             isTransitioning = false;
                         }, 400); // Pequeno delay de segurança
 
                     }, 400); // Deve bater com o tempo do CSS transition
+                }
+
+                function updateDynamicKPI(label, data, mode) {
+                    const card = document.getElementById('live-producaosetor');
+                    if (!card) return;
+
+                    const titleEl = card.querySelector('.card-title');
+                    const valueEl = card.querySelector('.live-value');
+                    const labelEl = card.querySelector('.live-label');
+
+                    // 1. Inicia animação de saída
+                    card.classList.add('kpi-transitioning');
+
+                    setTimeout(() => {
+                        // Calcula o total
+                        const total = data.reduce((acc, v) => acc + v, 0);
+
+                        // Define Sufixo e Sublabel
+                        let suffix = "Ton";
+                        let subLabel = "Produção Acumulada no Mês";
+                        if (mode === 2) {
+                            suffix = "Kg";
+                            subLabel = "Total Terceirizado no Mês";
+                        } else if (mode === 3) {
+                            subLabel = "Faturamento Acumulado no Mês";
+                        }
+
+                        // Remove "(Fusão)" do título para o KPI e usa o label do gráfico
+                        let cleanTitle = label.split(' - ')[0].replace(' Diária', '').replace(' Diário', '');
+
+                        // Atualiza Textos
+                        titleEl.innerText = cleanTitle;
+                        labelEl.innerText = subLabel;
+
+                        // Anima o valor
+                        animateValue(valueEl, parseFloat(valueEl.innerText.replace(',', '.')) || 0, total, 1000, suffix);
+
+                        // 2. Inicia animação de entrada
+                        card.classList.remove('kpi-transitioning');
+                    }, 400);
                 }
 
                 function toggleGroup(id) {
