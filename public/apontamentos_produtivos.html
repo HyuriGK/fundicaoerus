@@ -976,20 +976,6 @@
         <!-- DASHBOARD CONTENT -->
         <main class="dashboard-content">
 
-            <!-- Toolbar Row (Filters) -->
-            <div class="toolbar-row">
-                <div class="chart-filters">
-                    <select id="sector-chart-select" class="sector-select"></select>
-                    <select id="year-filter-select" class="year-select">
-                        <option value="TODOS">Todos os Anos</option>
-                    </select>
-                    <div class="months-group" id="monthButtons"></div>
-                </div>
-            </div>
-
-            <!-- SEPARATOR -->
-            <div class="section-divider"></div>
-
             <!-- KPIS ROW -->
             <div class="kpi-row">
                 <div class="kpi-card kpi-default">
@@ -1011,6 +997,17 @@
                 <div class="kpi-card kpi-teal">
                     <div class="kpi-title">Média / Peça</div>
                     <div id="sector-avg-piece-weight-display" class="kpi-value">0,00 Kg</div>
+                </div>
+            </div>
+
+            <!-- Toolbar Row (Filters) -->
+            <div class="toolbar-row">
+                <div class="chart-filters">
+                    <select id="sector-chart-select" class="sector-select"></select>
+                    <select id="year-filter-select" class="year-select">
+                        <option value="TODOS">Todos os Anos</option>
+                    </select>
+                    <div class="months-group" id="monthButtons"></div>
                 </div>
             </div>
 
@@ -1532,6 +1529,7 @@
 
             const btnAll = document.createElement('button');
             btnAll.className = 'month-btn all-btn';
+            btnAll.id = 'btn-month-all';
             btnAll.textContent = 'ANO';
             btnAll.onclick = () => selectMonth(0);
             container.appendChild(btnAll);
@@ -1552,6 +1550,7 @@
             updateMonthButtonsUI();
             applyFilters();
             fetchGoal();
+            updateYearTotal();
         }
 
         function updateMonthButtonsUI() {
@@ -1570,6 +1569,7 @@
             sectorChartSelect.addEventListener('change', (e) => {
                 currentSectorFilter = e.target.value;
                 applyFilters();
+                updateYearTotal();
             });
 
             // Sector Select
@@ -1587,6 +1587,7 @@
                 currentYearFilter = e.target.value;
                 applyFilters();
                 fetchGoal(); // Fetch goal for new year
+                updateYearTotal();
             });
 
             // Goal Edit (Persist to API)
@@ -1634,6 +1635,7 @@
                     // UI Update must happen AFTER filters are populated
                     // updateFilterUI(); // Removed, replaced by specific UI calls in populateFilters
                     renderMonthButtons();
+                    updateYearTotal();
 
                     // Initial Goal Fetch
                     await fetchGoal();
@@ -1706,6 +1708,30 @@
                 yearFilterSelect.value = currentYear;
                 currentYearFilter = currentYear;
             }
+        }
+
+        function updateYearTotal() {
+            const btnAll = document.getElementById('btn-month-all');
+            if (!btnAll) return;
+
+            const yearTotal = allData.reduce((sum, item) => {
+                const date = new Date(item.data + 'T12:00:00');
+                const year = date.getFullYear().toString();
+                const matchYear = currentYearFilter === 'TODOS' || year === currentYearFilter;
+
+                let matchSector = false;
+                if (currentSectorFilter === 'TODOS') {
+                    matchSector = true;
+                } else if (currentSectorFilter === 'MOLDAGEM GERAL') {
+                    matchSector = MOLDAGEM_GERAL_TYPES.includes(item.setor);
+                } else {
+                    matchSector = item.setor === currentSectorFilter;
+                }
+
+                return (matchYear && matchSector) ? sum + item.pesoTotal : sum;
+            }, 0);
+
+            btnAll.textContent = `ANO (${yearTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Kg)`;
         }
 
         function applyFilters() {
