@@ -1810,30 +1810,49 @@
         // Removed updateGoalDisplay local function as we use fetchGoal now
 
         function renderChart() {
-            // Group by Day
-            const dailyMap = {};
-            filteredData.forEach(item => {
-                // Assuming data is YYYY-MM-DD
-                const day = parseInt(item.data.split('-')[2]);
-                dailyMap[day] = (dailyMap[day] || 0) + item.pesoTotal;
-            });
+            let labels = [];
+            let dataDaily = [];
+            let chartTitle = "Produção Diária (KG)";
 
-            const daysInMonth = currentMonthFilter === 0 ? 31 : new Date(parseInt(currentYearFilter) || 2024, currentMonthFilter, 0).getDate();
-            const labels = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+            if (currentMonthFilter === 0) {
+                // ANO mode: Group by Month
+                chartTitle = "Produção Mensal (KG)";
+                labels = MONTHS_SHORT;
+                const monthlyMap = {};
 
-            // Daily Production (Bars)
-            const dataDaily = labels.map(day => dailyMap[day] || 0);
+                filteredData.forEach(item => {
+                    const date = new Date(item.data + 'T12:00:00');
+                    const monthIdx = date.getMonth(); // 0-11
+                    monthlyMap[monthIdx] = (monthlyMap[monthIdx] || 0) + item.pesoTotal;
+                });
+
+                dataDaily = labels.map((_, i) => monthlyMap[i] || 0);
+            } else {
+                // Month mode: Group by Day
+                const dailyMap = {};
+                filteredData.forEach(item => {
+                    const day = parseInt(item.data.split('-')[2]);
+                    dailyMap[day] = (dailyMap[day] || 0) + item.pesoTotal;
+                });
+
+                const daysInMonth = new Date(parseInt(currentYearFilter) || 2024, currentMonthFilter, 0).getDate();
+                labels = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+                dataDaily = labels.map(day => dailyMap[day] || 0);
+            }
+
+            // Update Chart Title in UI
+            const titleEl = document.querySelector('.chart-title');
+            if (titleEl) titleEl.innerText = chartTitle;
 
             // Cumulative Production (Line)
             let accum = 0;
-            const dataCumulative = labels.map(day => {
-                accum += (dailyMap[day] || 0);
+            const dataCumulative = dataDaily.map(val => {
+                accum += val;
                 return accum;
             });
 
-            // Goal Line
+            // Goal Line (Only relevant in month mode, but we'll show it if available)
             const goalValue = parseFloat(sectorGoalDisplay.innerText.replace(/[^0-9]/g, '')) || 0;
-            // Goal Line should be a single horizontal line at goalValue
             const dataGoal = labels.map(() => goalValue);
 
             if (chartInstance) chartInstance.destroy();
