@@ -370,9 +370,70 @@
             color: var(--text-main);
         }
 
+        .toolbar-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .year-select {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border-subtle);
+            color: #fff;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-family: var(--font-main);
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .year-select:hover {
+            border-color: var(--border-highlight);
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        .months-group {
+            display: flex;
+            gap: 5px;
+        }
+
+        .month-btn {
+            background: transparent;
+            border: 1px solid var(--border-subtle);
+            color: var(--text-muted);
+            padding: 8px 14px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+        }
+
+        .month-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+        }
+
+        .month-btn.active {
+            background: var(--color-primary);
+            color: #000;
+            border-color: var(--color-primary);
+            font-weight: 800;
+        }
+
+        .month-btn.all-btn.active {
+            background: var(--status-info);
+            color: #000;
+        }
+
         .chart-filters {
             display: flex;
             gap: 10px;
+            align-items: center;
         }
 
         .chart-container-wrapper {
@@ -871,8 +932,8 @@
                 <div class="chart-header">
                     <div class="chart-title">Peso Total Terceirizado (KG)</div>
                     <div class="chart-filters">
-                        <select id="filterMes" onchange="updateDashboardAndCharts()"></select>
-                        <select id="filterAno" onchange="updateDashboardAndCharts()"></select>
+                        <select id="yearSelect" class="year-select" onchange="changeYear()"></select>
+                        <div class="months-group" id="monthButtons"></div>
                     </div>
                 </div>
                 <div class="chart-container-wrapper">
@@ -1119,10 +1180,12 @@
         function showSpinner() { const s = document.getElementById('loading-screen'); if (s) { s.style.display = 'flex'; s.style.opacity = '1'; document.body.classList.add('no-scroll'); } }
         function hideSpinner() { const s = document.getElementById('loading-screen'); if (s) { s.style.opacity = '0'; document.body.classList.remove('no-scroll'); setTimeout(() => s.style.display = 'none', 500); } }
 
-        Chart.defaults.color = '#a1a1aa';
-        Chart.defaults.borderColor = 'rgba(255,255,255,0.05)';
         Chart.defaults.font.family = "'Inter', sans-serif";
         Chart.register(ChartDataLabels);
+
+        const MONTHS_SHORT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+        let selectedMonthIndex = new Date().getMonth(); // 0-11
+        let selectedYear = new Date().getFullYear();
 
         let registros = [];
         let recebidos = {};
@@ -1440,28 +1503,87 @@
             applyColumnFilters();
         }
 
+        function renderMonthButtons() {
+            const container = document.getElementById('monthButtons');
+            if (!container) return;
+            container.innerHTML = '';
+
+            const btnAll = document.createElement('button');
+            btnAll.className = 'month-btn all-btn';
+            btnAll.textContent = 'ANO';
+            btnAll.onclick = () => selectMonth(-1);
+            container.appendChild(btnAll);
+
+            MONTHS_SHORT.forEach((m, i) => {
+                const btn = document.createElement('button');
+                btn.className = 'month-btn';
+                btn.textContent = m;
+                btn.id = `btn-month-${i}`;
+                btn.onclick = () => selectMonth(i);
+                container.appendChild(btn);
+            });
+            updateMonthButtonsUI();
+        }
+
+        function selectMonth(idx) {
+            selectedMonthIndex = idx;
+            updateMonthButtonsUI();
+            updateDashboardAndCharts();
+        }
+
+        function changeYear() {
+            selectedYear = parseInt(document.getElementById('yearSelect').value);
+            updateDashboardAndCharts();
+        }
+
+        function updateMonthButtonsUI() {
+            document.querySelectorAll('.month-btn').forEach(b => b.classList.remove('active'));
+            if (selectedMonthIndex === -1) {
+                const allBtn = document.querySelector('.all-btn');
+                if (allBtn) allBtn.classList.add('active');
+            } else {
+                const btn = document.getElementById(`btn-month-${selectedMonthIndex}`);
+                if (btn) btn.classList.add('active');
+            }
+        }
+
         function populateDateFilters() {
-            const sM = document.getElementById('filterMes'), sA = document.getElementById('filterAno');
+            const sA = document.getElementById('yearSelect');
+            if (!sA) return;
 
-            sM.innerHTML = '<option value="">Todos os Meses</option>'; sA.innerHTML = '<option value="">Todos os Anos</option>';
-            const mSet = new Map(), aSet = new Set();
-            registros.forEach(r => { if (r.data) { const p = r.data.split('T')[0].split('-'); mSet.set(p[1], new Date(p[0], p[1] - 1, 2).toLocaleDateString('pt-BR', { month: 'long' })); aSet.add(p[0]); } });
-            Array.from(mSet.entries()).sort((a, b) => a[0] - b[0]).forEach(([k, v]) => { const o = document.createElement('option'); o.value = k; o.textContent = v.charAt(0).toUpperCase() + v.slice(1); sM.appendChild(o); });
-            Array.from(aSet).sort((a, b) => b - a).forEach(a => { const o = document.createElement('option'); o.value = a; o.textContent = a; sA.appendChild(o); });
-
-            // Selecionar Mês e Ano atuais por padrão se disponíveis
+            sA.innerHTML = '';
+            const aSet = new Set();
             const now = new Date();
-            const curMonth = (now.getMonth() + 1).toString().padStart(2, '0');
-            const curYear = now.getFullYear().toString();
+            const curYear = now.getFullYear();
+            aSet.add(curYear);
+            aSet.add(curYear - 1);
 
-            if ([...sM.options].some(o => o.value === curMonth)) sM.value = curMonth;
-            if ([...sA.options].some(o => o.value === curYear)) sA.value = curYear;
+            registros.forEach(r => {
+                if (r.data) {
+                    const p = r.data.split('T')[0].split('-');
+                    aSet.add(parseInt(p[0]));
+                }
+            });
+
+            Array.from(aSet).sort((a, b) => b - a).forEach(a => {
+                const o = document.createElement('option');
+                o.value = a;
+                o.textContent = a;
+                sA.appendChild(o);
+            });
+
+            sA.value = selectedYear;
+            renderMonthButtons();
         }
 
         function updateDashboardAndCharts() {
-            const fM = document.getElementById('filterMes').value;
-            const fA = document.getElementById('filterAno').value;
-            const filtrados = registros.filter(r => { if (!r.data) return false; const p = r.data.split('T')[0].split('-'); return (!fM || p[1] === fM) && (!fA || p[0] === fA); });
+            const fM = selectedMonthIndex === -1 ? "" : (selectedMonthIndex + 1).toString().padStart(2, '0');
+            const fA = selectedYear.toString();
+            const filtrados = registros.filter(r => {
+                if (!r.data) return false;
+                const p = r.data.split('T')[0].split('-');
+                return (!fM || p[1] === fM) && (!fA || p[0] === fA);
+            });
 
             // Calculate Sales Value and Weight only for pending items
             const tVenda = filtrados.reduce((acc, r) => {
@@ -1523,8 +1645,12 @@
             renderTable(filtrados);
             let cD = {};
             if (fM === "") { for (let i = 1; i <= 12; i++) cD[i.toString().padStart(2, '0')] = 0; filtrados.forEach(r => { const m = r.data.split('T')[0].split('-')[1]; cD[m] += (parseFloat(r.quant || 0) * parseFloat(r.peso || 0)); }); }
-            else { filtrados.forEach(r => { const d = r.data.split('T')[0]; cD[d] = (cD[d] || 0) + (parseFloat(r.quant || 0) * parseFloat(r.peso || 0)); }); }
-            renderLineChart(cD, fM === "");
+            else {
+                const fM = (selectedMonthIndex + 1).toString().padStart(2, '0');
+                const fA = selectedYear.toString();
+                filtrados.forEach(r => { const d = r.data.split('T')[0]; cD[d] = (cD[d] || 0) + (parseFloat(r.quant || 0) * parseFloat(r.peso || 0)); });
+            }
+            renderLineChart(cD, selectedMonthIndex === -1);
         }
 
         function renderLineChart(data, isM) {
@@ -1538,8 +1664,8 @@
                 w = Object.keys(data).sort().map(k => data[k]);
             } else {
                 // Visão Mensal (todos os dias do mês)
-                const fM = document.getElementById('filterMes').value;
-                const fA = document.getElementById('filterAno').value;
+                const fM = (selectedMonthIndex + 1).toString().padStart(2, '0');
+                const fA = selectedYear.toString();
                 // Pega o último dia do mês para saber quantos dias renderizar
                 const daysInMonth = new Date(parseInt(fA), parseInt(fM), 0).getDate();
 
@@ -1620,7 +1746,7 @@
                             align: 'top',
                             anchor: 'end',
                             offset: 4,
-                            color: '#fbbf24',
+                            color: '#ffffff',
                             font: {
                                 family: "'JetBrains Mono', monospace",
                                 weight: 'bold',
