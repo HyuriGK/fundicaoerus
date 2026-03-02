@@ -90,6 +90,7 @@ async function sincronizar() {
                 ON nfp.PRODUTO_NPR = p.CODIGO_PRO
             WHERE nf.FINALIDADE_NOT = 4
                 AND nf.DATA_ENT_NOT >= '2025-01-01'
+                AND (nfp.QUANTIDADE_NPR * COALESCE(p.PESO_LIQUIDO_PRO, 0)) > 0
             ORDER BY nf.DATA_ENT_NOT DESC
         `;
 
