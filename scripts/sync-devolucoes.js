@@ -71,7 +71,12 @@ async function sincronizar() {
                 nfp.NOME_PRODUTO_NPR as DESCRICAO,
                 nfp.QUANTIDADE_NPR as QUANTIDADE,
                 nfp.PRECO_NPR / 100.0 as VALOR_UNITARIO,
-                nf.TOTAL_NOT / 100.0 as VALOR_TOTAL,
+                (nf.TOTAL_NOT * 100.0) / (
+                    SELECT COUNT(*) FROM NOTA_FISCAL_PRODUTO nfp2 
+                    WHERE nfp2.EMPRESA_NPR = nf.EMPRESA_NOT 
+                      AND nfp2.SERIE_NPR = nf.SERIE_NOT 
+                      AND nfp2.CODIGO_NPR = nf.CODIGO_NOT
+                ) as VALOR_TOTAL,
                 p.PESO_LIQUIDO_PRO as PESO_UN,
                 (nfp.QUANTIDADE_NPR * COALESCE(p.PESO_LIQUIDO_PRO, 0)) as PESO_TOTAL,
                 nf.ADICIONAIS_NOT as MOTIVO,
