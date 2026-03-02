@@ -105,7 +105,7 @@ async function sincronizar() {
                         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
                     `, [
                         row.NOTA_FISCAL,
-                        row.SERIE ? row.SERIE.trim() : '',
+                        row.SERIE ? String(row.SERIE).trim() : '',
                         row.ITEM_NOTA,
                         formatarData(row.DATA_ENTRADA),
                         row.CLIENTE_CODIGO,

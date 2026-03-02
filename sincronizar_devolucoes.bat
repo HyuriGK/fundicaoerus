@@ -1,24 +1,12 @@
 @echo off
-setlocal enabledelayedexpansion
+setlocal
 
 :: ============================================================================
 :: Scripts de Sincronização SGP - DEVOLUÇÕES
 :: ============================================================================
 
-set LOCK_FILE=%temp%\sgp_sync_devolucoes.lock
-
-:: Verificar se já existe uma instância rodando
-if exist "%LOCK_FILE%" (
-    set /p PID_RUNNING=<"%LOCK_FILE%"
-    tasklist /FI "PID eq !PID_RUNNING!" | find "!PID_RUNNING!" > nul
-    if !errorlevel! equ 0 (
-        echo [ERROR] Sincronizacao de devolucoes ja esta em execucao (PID !PID_RUNNING!).
-        exit /b 1
-    )
-)
-
-:: Salvar o PID atual
-echo %RANDOM% > "%LOCK_FILE%"
+:: Garantir que o comando rode na pasta do script
+cd /d "%~dp0"
 
 echo [INFO] Iniciando sincronizacao de Devolucoes (Firebird -^> Postgres)...
 echo [INFO] Horario: %DATE% %TIME%
@@ -33,8 +21,5 @@ if %errorlevel% equ 0 (
     echo.
     echo [ERROR] Falha na sincronizacao. Verifique os logs acima.
 )
-
-:: Remover arquivo de lock
-del "%LOCK_FILE%" > nul 2^>^&1
 
 pause
