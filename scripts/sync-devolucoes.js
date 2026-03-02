@@ -61,8 +61,7 @@ async function sincronizar() {
 
         const query = `
             SELECT 
-                nf.CODIGO_NOT,
-                nf.NUMERO_NOT as NOTA_FISCAL,
+                nf.CODIGO_NOT as NOTA_FISCAL,
                 nf.SERIE_NOT as SERIE,
                 nfp.ITEM_NPR as ITEM_NOTA,
                 CAST(nf.DATA_ENT_NOT AS DATE) as DATA_ENTRADA,
@@ -72,10 +71,11 @@ async function sincronizar() {
                 nfp.NOME_PRODUTO_NPR as DESCRICAO,
                 nfp.QUANTIDADE_NPR as QUANTIDADE,
                 nfp.PRECO_NPR / 100.0 as VALOR_UNITARIO,
-                nfp.TOTAL_NPR / 100.0 as VALOR_TOTAL,
+                nf.TOTAL_NOT / 100.0 as VALOR_TOTAL,
                 p.PESO_LIQUIDO_PRO as PESO_UN,
                 (nfp.QUANTIDADE_NPR * COALESCE(p.PESO_LIQUIDO_PRO, 0)) as PESO_TOTAL,
-                nf.ADICIONAIS_NOT as MOTIVO
+                nf.ADICIONAIS_NOT as MOTIVO,
+                nf.CODIGO_NOT
             FROM NOTA_FISCAL nf
             INNER JOIN NOTA_FISCAL_PRODUTO nfp 
                 ON nf.EMPRESA_NOT = nfp.EMPRESA_NPR 

@@ -409,16 +409,15 @@
                         <table id="devolucoesTable">
                             <thead>
                                 <tr>
-                                    <th style="min-width: 80px;">ID</th>
-                                    <th style="min-width: 80px;">NF</th>
+                                    <th style="min-width: 90px;">NF (ID)</th>
                                     <th style="min-width: 100px;">Data Ent.</th>
-                                    <th style="min-width: 180px;">Cliente</th>
+                                    <th style="min-width: 200px;">Cliente</th>
                                     <th style="min-width: 100px;">Cód. Item</th>
                                     <th style="min-width: 250px;">Descrição</th>
                                     <th style="min-width: 250px;">Motivo (Obs)</th>
                                     <th class="text-right">Qtd</th>
                                     <th class="text-right">Peso Total</th>
-                                    <th class="text-right">Vlr Total</th>
+                                    <th class="text-right">Vlr Nota</th>
                                 </tr>
                                 <tr>
                                     <th><input type="text" class="col-filter-input"
@@ -433,8 +432,6 @@
                                             onkeyup="filterTable(4, this.value)"></th>
                                     <th><input type="text" class="col-filter-input"
                                             onkeyup="filterTable(5, this.value)"></th>
-                                    <th><input type="text" class="col-filter-input"
-                                            onkeyup="filterTable(6, this.value)"></th>
                                     <th></th>
                                     <th></th>
                                     <th></th>
@@ -559,7 +556,16 @@
             const year = document.getElementById('yearSelector').value;
             const filteredByYear = allData.filter(d => d.data_entrada && d.data_entrada.startsWith(year));
 
-            const totalValue = allData.reduce((acc, d) => acc + parseFloat(d.valor_total || 0), 0);
+            // Para o KPI de Valor: soma única por Nota Fiscal
+            const seenNotes = new Set();
+            let totalValue = 0;
+            allData.forEach(d => {
+                if (!seenNotes.has(d.nota_fiscal)) {
+                    totalValue += parseFloat(d.valor_total || 0);
+                    seenNotes.add(d.nota_fiscal);
+                }
+            });
+
             const totalWeight = allData.reduce((acc, d) => acc + parseFloat(d.peso_total || 0), 0);
 
             document.getElementById('kpiValue').textContent = formatCurrency(totalValue);
@@ -611,8 +617,7 @@
             const tbody = document.getElementById('tableBody');
             tbody.innerHTML = allData.map(item => `
                 <tr>
-                    <td style="color: var(--color-primary); font-weight: 600;">${item.codigo_not}</td>
-                    <td>${item.nota_fiscal}</td>
+                    <td style="color: var(--color-primary); font-weight: 600;">${item.nota_fiscal}</td>
                     <td>${formatDate(item.data_entrada)}</td>
                     <td>${item.cliente_nome}</td>
                     <td>${item.codigo_item}</td>
@@ -624,9 +629,19 @@
                 </tr>
             `).join('');
 
+            // Totais da tabela (usando lógica de nota única para valor)
+            const seenNotes = new Set();
+            let sumValue = 0;
+            allData.forEach(d => {
+                if (!seenNotes.has(d.nota_fiscal)) {
+                    sumValue += parseFloat(d.valor_total || 0);
+                    seenNotes.add(d.nota_fiscal);
+                }
+            });
+
             document.getElementById('totalCount').textContent = allData.length;
             document.getElementById('totalWeightTable').textContent = formatNumber(allData.reduce((a, b) => a + parseFloat(b.peso_total || 0), 0)) + ' kg';
-            document.getElementById('totalValueTable').textContent = formatCurrency(allData.reduce((a, b) => a + parseFloat(b.valor_total || 0), 0));
+            document.getElementById('totalValueTable').textContent = formatCurrency(sumValue);
         }
 
         function filterTable(colIdx, val) {
