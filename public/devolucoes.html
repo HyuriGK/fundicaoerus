@@ -232,6 +232,8 @@
             justify-content: space-between;
             align-items: center;
             gap: 20px;
+            flex-wrap: wrap;
+            /* Fix cutting off */
         }
 
         .months-group {
@@ -568,14 +570,14 @@
             </div>
         </div>
 
-        <div class="charts-row" style="grid-template-columns: 1fr 1fr; height: calc(100vh - 280px);">
-            <div class="chart-panel">
+        <div class="charts-row" style="display: flex; gap: 20px; flex: 1; height: auto; min-height: 0;">
+            <div class="chart-panel" style="flex: 1;">
                 <div class="chart-title">Evolução Mensal (Peso)</div>
                 <div class="chart-container">
                     <canvas id="evolutionChart"></canvas>
                 </div>
             </div>
-            <div class="chart-panel">
+            <div class="chart-panel" style="flex: 1;">
                 <div class="chart-title">Pareto por Cliente (Peso)</div>
                 <div class="chart-container">
                     <canvas id="paretoChart"></canvas>
@@ -611,7 +613,6 @@
                 if (json.success) {
                     allData = json.data;
                     updateDashboard();
-                    renderTable();
                 }
             } catch (e) {
                 console.error(e);
@@ -640,6 +641,7 @@
 
             renderEvolutionChart(allData.filter(d => d.data_entrada && d.data_entrada.startsWith(year)));
             renderParetoChart(filteredData);
+            renderTable(filteredData); // Sincroniza a tabela do modal
         }
 
         function renderEvolutionChart(data) {
@@ -690,40 +692,94 @@
                 clientMap[name] = (clientMap[name] || 0) + parseFloat(d.peso_total || 0);
             });
 
+            // Sort by weight descending
             const sortedClients = Object.entries(clientMap)
-                .sort((a, b) => b[1] - a[1])
-                .slice(0, 10);
+                .sort((a, b) => b[1] - a[1]);
+
+            if (sortedClients.length === 0) return;
+
+            const totalSum = sortedClients.reduce((acc, c) => acc + c[1], 0);
+            let cumulativeSum = 0;
 
             const labels = sortedClients.map(c => c[0]);
             const weights = sortedClients.map(c => c[1]);
+            const percentages = sortedClients.map(c => {
+                cumulativeSum += c[1];
+                return (cumulativeSum / totalSum) * 100;
+            });
 
             paretoChart = new Chart(ctx, {
-                type: 'bar',
                 data: {
                     labels: labels,
-                    datasets: [{
-                        label: 'Peso (kg)',
-                        data: weights,
-                        backgroundColor: 'rgba(234, 88, 12, 0.7)',
-                        borderRadius: 6
-                    }]
+                    datasets: [
+                        {
+                            type: 'bar',
+                            label: 'Peso (kg)',
+                            data: weights,
+                            backgroundColor: 'rgba(234, 88, 12, 0.7)',
+                            order: 2,
+                            yAxisID: 'y'
+                        },
+                        {
+                            type: 'line',
+                            label: '% Acumulado',
+                            data: percentages,
+                            borderColor: '#fafafa',
+                            borderWidth: 2,
+                            pointRadius: 3,
+                            fill: false,
+                            order: 1,
+                            yAxisID: 'y1'
+                        }
+                    ]
                 },
                 options: {
-                    indexAxis: 'y',
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function (context) {
+                                    if (context.dataset.type === 'line') return context.parsed.y.toFixed(2) + '%';
+                                    return context.parsed.y.toLocaleString('pt-BR') + ' kg';
+                                }
+                            }
+                        }
+                    },
                     scales: {
-                        x: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#a1a1aa' } },
-                        y: { grid: { display: false }, ticks: { color: '#a1a1aa', font: { size: 10 } } }
+                        x: {
+                            grid: { display: false },
+                            ticks: {
+                                color: '#a1a1aa',
+                                maxRotation: 45,
+                                minRotation: 45,
+                                font: { size: 10 }
+                            }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            ticks: { color: '#a1a1aa' },
+                            title: { display: true, text: 'Peso (kg)', color: '#a1a1aa' }
+                        },
+                        y1: {
+                            beginAtZero: true,
+                            max: 100,
+                            position: 'right',
+                            grid: { display: false },
+                            ticks: { color: '#fafafa', callback: v => v + '%' },
+                            title: { display: true, text: '% Acumulado', color: '#fafafa' }
+                        }
                     }
                 }
             });
         }
 
-        function renderTable() {
+        function renderTable(dataForTable) {
+            const tableData = dataForTable || allData;
             const tbody = document.getElementById('tableBody');
-            tbody.innerHTML = allData.map(item => `
+            tbody.innerHTML = tableData.map(item => `
                 <tr>
                     <td style="color: var(--color-primary); font-weight: 600;">${item.nota_fiscal}</td>
                     <td>${formatDate(item.data_entrada)}</td>
@@ -737,9 +793,9 @@
                 </tr>
             `).join('');
 
-            document.getElementById('totalCount').textContent = allData.length;
-            document.getElementById('totalWeightTable').textContent = formatNumber(allData.reduce((a, b) => a + parseFloat(b.peso_total || 0), 0)) + ' kg';
-            document.getElementById('totalValueTable').textContent = formatCurrency(allData.reduce((a, b) => a + parseFloat(b.valor_total || 0), 0));
+            document.getElementById('totalCount').textContent = tableData.length;
+            document.getElementById('totalWeightTable').textContent = formatNumber(tableData.reduce((a, b) => a + parseFloat(b.peso_total || 0), 0)) + ' kg';
+            document.getElementById('totalValueTable').textContent = formatCurrency(tableData.reduce((a, b) => a + parseFloat(b.valor_total || 0), 0));
         }
 
         function filterTable(colIdx, val) {
