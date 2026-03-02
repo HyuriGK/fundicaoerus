@@ -586,17 +586,25 @@
 
                 // Process data to add calculated status
                 allData = allData.map(item => {
-                    const prog = item.ENTREGA_PETR ? new Date(item.ENTREGA_PETR) : null;
-                    const real = item.DATA_PETR ? new Date(item.DATA_PETR) : null;
+                    // Helper to parse date string without timezone shift (forcing local midnight)
+                    const parseDate = (dateStr) => {
+                        if (!dateStr) return null;
+                        // If it's already a date-like string YYYY-MM-DD...
+                        const parts = dateStr.split(/[-T ]/);
+                        if (parts.length >= 3) {
+                            return new Date(parts[0], parts[1] - 1, parts[2]);
+                        }
+                        return new Date(dateStr);
+                    };
+
+                    const prog = parseDate(item.ENTREGA_PETR);
+                    const real = parseDate(item.DATA_PETR);
 
                     let status = 'NO PRAZO';
                     let isLate = false;
 
                     if (prog && real) {
-                        // Normalize dates to midnight for accurate comparison
-                        prog.setHours(0, 0, 0, 0);
-                        real.setHours(0, 0, 0, 0);
-
+                        // All dates already normalized to midnight by manual parsing above
                         if (real > prog) {
                             status = 'ATRASADO';
                             isLate = true;
@@ -658,9 +666,12 @@
             });
 
             filteredData = allData.filter(item => {
-                // Year/Month from Programmed Date
-                if (year && (!item.progDate || item.progDate.getFullYear().toString() !== year)) return false;
-                if (month !== "" && (!item.progDate || item.progDate.getMonth().toString() !== month)) return false;
+                // Year/Month from REAL INVOICING DATE (as requested)
+                // If it's not invoiced yet (realDate is null), it will only show when no filters are applied
+                const filterDate = item.realDate;
+
+                if (year && (!filterDate || filterDate.getFullYear().toString() !== year)) return false;
+                if (month !== "" && (!filterDate || filterDate.getMonth().toString() !== month)) return false;
 
                 // Status Filter
                 if (status === 'PRAZO' && item.isLate) return false;
