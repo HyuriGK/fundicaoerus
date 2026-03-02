@@ -495,7 +495,7 @@
                 <div class="chart-panel"
                     style="flex: 1; background: rgba(255, 255, 255, 0.02); border-radius: var(--radius-md); padding: 20px; border-bottom: 2px solid rgba(255, 255, 255, 0.15); box-shadow: 0 10px 30px -10px rgba(0,0,0,0.5); position: relative;">
                     <div style="text-align: center; margin-bottom: 10px; font-weight: 600; font-size: 0.9rem;">
-                        Assertividade Mensal (%)</div>
+                        Pareto de Atraso por Cliente (Total de Dias)</div>
                     <div style="flex-grow: 1; position: relative; height: 220px;">
                         <canvas id="monthlyChart"></canvas>
                     </div>
@@ -542,6 +542,7 @@
                             <th style="text-align: center;">Programado</th>
                             <th style="text-align: center;">Faturamento</th>
                             <th style="text-align: center;">Qtd Fat.</th>
+                            <th style="text-align: center;">Atraso (Dias)</th>
                             <th style="text-align: center;">Assertividade</th>
                         </tr>
                         <tr id="filter-row">
@@ -550,6 +551,7 @@
                             <th><input type="text" class="filter-input-table" data-col="cod_peca" placeholder="...">
                             </th>
                             <th><input type="text" class="filter-input-table" data-col="produto" placeholder="..."></th>
+                            <th></th>
                             <th></th>
                             <th></th>
                             <th></th>
@@ -609,12 +611,23 @@
                         }
                     }
 
+                    // Calculation of delay days (only if late)
+                    let delayDays = 0;
+                    if (isLate && prog) {
+                        const targetDate = real ? real : new Date();
+                        targetDate.setHours(0, 0, 0, 0);
+                        const diffTime = targetDate - prog;
+                        delayDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                        if (delayDays < 0) delayDays = 0;
+                    }
+
                     return {
                         ...item,
                         statusText: status,
                         isLate: isLate,
                         progDate: prog,
-                        realDate: real
+                        realDate: real,
+                        delayDays: delayDays
                     };
                 });
 
@@ -685,6 +698,9 @@
                     <td style="text-align: center;">${progStr}</td>
                     <td style="text-align: center;">${realStr}</td>
                     <td style="text-align: center;">${item.QUANTIDADE_FATURADA_PETR}</td>
+                    <td style="text-align: center; color: ${item.delayDays > 0 ? 'var(--status-danger)' : 'var(--text-muted)'}; font-weight: bold;">
+                        ${item.delayDays > 0 ? item.delayDays : '-'}
+                    </td>
                     <td style="text-align: center;">
                         <span class="badge ${item.isLate ? 'badge-danger' : 'badge-success'}">
                             ${item.statusText}
@@ -720,24 +736,34 @@
         }
 
         function updateChart() {
-            const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-            const assertData = Array(12).fill(0);
-            const countData = Array(12).fill(0);
-            const onTimeData = Array(12).fill(0);
-
+            // Group delay days by client
+            const clientDelays = {};
             filteredData.forEach(item => {
-                if (item.progDate) {
-                    const m = item.progDate.getMonth();
-                    countData[m]++;
-                    if (!item.isLate) onTimeData[m]++;
-                }
+                const client = item.NOME_CLIENTE || 'SEM CLIENTE';
+                if (!clientDelays[client]) clientDelays[client] = 0;
+                clientDelays[client] += item.delayDays || 0;
             });
 
-            for (let i = 0; i < 12; i++) {
-                if (countData[i] > 0) {
-                    assertData[i] = ((onTimeData[i] / countData[i]) * 100).toFixed(1);
-                }
-            }
+            // Convert to array and sort descending
+            let sortedClients = Object.keys(clientDelays)
+                .map(name => ({ name, days: clientDelays[name] }))
+                .filter(c => c.days > 0)
+                .sort((a, b) => b.days - a.days);
+
+            // Limit to top 15 for readability
+            const limit = 15;
+            const topClients = sortedClients.slice(0, limit);
+
+            const labels = topClients.map(c => c.name.length > 20 ? c.name.substring(0, 18) + '...' : c.name);
+            const dataDays = topClients.map(c => c.days);
+
+            // Pareto Calculation (Cumulative %)
+            const totalDelay = sortedClients.reduce((acc, current) => acc + current.days, 0);
+            let cumulativeSum = 0;
+            const cumulativePerc = topClients.map(c => {
+                cumulativeSum += c.days;
+                return ((cumulativeSum / totalDelay) * 100).toFixed(1);
+            });
 
             if (monthlyChart) monthlyChart.destroy();
 
@@ -745,35 +771,71 @@
             monthlyChart = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: months,
-                    datasets: [{
-                        label: 'Assertividade (%)',
-                        data: assertData,
-                        backgroundColor: assertData.map(v => v >= 90 ? '#10b981' : (v >= 70 ? '#fbbf24' : '#ef4444')),
-                        borderRadius: 6,
-                        borderWidth: 0
-                    }]
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Dias de Atraso',
+                            data: dataDays,
+                            backgroundColor: '#ef4444',
+                            borderRadius: 4,
+                            order: 2,
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: '% Acumulada',
+                            data: cumulativePerc,
+                            type: 'line',
+                            borderColor: '#fbbf24',
+                            backgroundColor: '#fbbf24',
+                            borderWidth: 2,
+                            pointRadius: 3,
+                            fill: false,
+                            order: 1,
+                            yAxisID: 'yPerc'
+                        }
+                    ]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: {
-                        legend: { display: false },
+                        legend: {
+                            display: true,
+                            labels: { color: '#a1a1aa', font: { size: 10 } }
+                        },
                         tooltip: {
                             callbacks: {
-                                label: (context) => `Assertividade: ${context.raw}%`
+                                label: (context) => {
+                                    if (context.datasetIndex === 0) return `Atraso: ${context.raw} dias`;
+                                    return `Acumulado: ${context.raw}%`;
+                                }
                             }
                         }
                     },
                     scales: {
                         y: {
                             beginAtZero: true,
-                            max: 100,
-                            ticks: { color: '#a1a1aa', callback: v => v + '%' },
+                            position: 'left',
+                            title: { display: true, text: 'Dias', color: '#a1a1aa' },
+                            ticks: { color: '#a1a1aa' },
                             grid: { color: 'rgba(255,255,255,0.05)' }
                         },
+                        yPerc: {
+                            beginAtZero: true,
+                            position: 'right',
+                            max: 100,
+                            title: { display: true, text: '% Acumulada', color: '#fbbf24' },
+                            ticks: { color: '#fbbf24', callback: v => v + '%' },
+                            grid: { display: false }
+                        },
                         x: {
-                            ticks: { color: '#a1a1aa' },
+                            ticks: {
+                                color: '#a1a1aa',
+                                autoSkip: false,
+                                maxRotation: 45,
+                                minRotation: 45,
+                                font: { size: 9 }
+                            },
                             grid: { display: false }
                         }
                     }
