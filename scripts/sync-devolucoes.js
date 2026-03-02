@@ -61,37 +61,32 @@ async function sincronizar() {
 
         const query = `
             SELECT 
-                nf.CODIGO_NOT as NOTA_FISCAL,
-                nf.SERIE_NOT as SERIE,
-                nfp.ITEM_NPR as ITEM_NOTA,
-                CAST(nf.DATA_ENT_NOT AS DATE) as DATA_ENTRADA,
-                nf.DESTINATARIO_NOT as CLIENTE_CODIGO,
-                nf.RAZAO_SOCIAL_NOT as CLIENTE_NOME,
-                nfp.PRODUTO_NPR as CODIGO_ITEM,
-                nfp.NOME_PRODUTO_NPR as DESCRICAO,
-                nfp.QUANTIDADE_NPR as QUANTIDADE,
-                nfp.PRECO_NPR as VALOR_UNITARIO,
-                CAST(nf.TOTAL_NOT AS DECIMAL(15,2)) / (
-                    SELECT COUNT(*) FROM NOTA_FISCAL_PRODUTO nfp2 
-                    WHERE nfp2.EMPRESA_NPR = nf.EMPRESA_NOT 
-                      AND nfp2.SERIE_NPR = nf.SERIE_NOT 
-                      AND nfp2.CODIGO_NPR = nf.CODIGO_NOT
-                ) as VALOR_TOTAL,
+                d.CODIGO_DEV as NOTA_FISCAL,
+                CAST(d.DATA_DEV AS DATE) as DATA_ENTRADA,
+                d.CLIENTE_DEV as CLIENTE_CODIGO,
+                c.RAZAO_SOCIAL_CLI as CLIENTE_NOME,
+                dp.PRODUTO_DEP as CODIGO_ITEM,
+                dp.ITEM_DEP as ITEM_DEV,
+                dp.NOME_PRODUTO_DEP as DESCRICAO,
+                dp.QUANTIDADE_DEP as QUANTIDADE,
+                dp.PRECO_DEP as VALOR_UNITARIO,
+                (dp.QUANTIDADE_DEP * dp.PRECO_DEP) as VALOR_TOTAL,
                 p.PESO_LIQUIDO_PRO as PESO_UN,
-                (nfp.QUANTIDADE_NPR * COALESCE(p.PESO_LIQUIDO_PRO, 0)) as PESO_TOTAL,
-                nf.ADICIONAIS_NOT as MOTIVO,
-                nf.CODIGO_NOT
-            FROM NOTA_FISCAL nf
-            INNER JOIN NOTA_FISCAL_PRODUTO nfp 
-                ON nf.EMPRESA_NOT = nfp.EMPRESA_NPR 
-                AND nf.SERIE_NOT = nfp.SERIE_NPR
-                AND nf.CODIGO_NOT = nfp.CODIGO_NPR
+                (dp.QUANTIDADE_DEP * COALESCE(p.PESO_LIQUIDO_PRO, 0)) as PESO_TOTAL,
+                d.OBSERVACAO_DEV as MOTIVO,
+                d.CODIGO_DEV
+            FROM DEVOLUCAO d
+            INNER JOIN DEVOLUCAO_PRODUTO dp 
+                ON d.EMPRESA_DEV = dp.EMPRESA_DEP 
+                AND d.CODIGO_DEV = dp.CODIGO_DEP
+            LEFT JOIN CLIENTE c
+                ON d.CLIENTE_DEV = c.CODIGO_CLI
             LEFT JOIN PRODUTO p
-                ON nfp.PRODUTO_NPR = p.CODIGO_PRO
-            WHERE nf.FINALIDADE_NOT = 4
-                AND nf.DATA_ENT_NOT >= '2025-01-01'
-                AND (nfp.QUANTIDADE_NPR * COALESCE(p.PESO_LIQUIDO_PRO, 0)) > 0
-            ORDER BY nf.DATA_ENT_NOT DESC
+                ON dp.PRODUTO_DEP = p.CODIGO_PRO
+            WHERE d.STATUS_DEV <> 'C'
+                AND dp.STATUS_DEP <> 'C'
+                AND d.DATA_DEV >= '2025-01-01'
+            ORDER BY d.DATA_DEV DESC
         `;
 
         db.query(query, async (err, result) => {
@@ -104,7 +99,7 @@ async function sincronizar() {
             console.log(`📦 Encontrados ${result.length} registros de devolução.`);
 
             try {
-                // Limpar dados para reinserir (mantendo simplicidade de sync total para 2025/2026)
+                // Limpar dados para reinserir
                 await pool.query('DELETE FROM firebird_sync_devolucoes');
 
                 for (const row of result) {
@@ -116,20 +111,20 @@ async function sincronizar() {
                         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
                     `, [
                         row.NOTA_FISCAL,
-                        row.SERIE ? String(row.SERIE).trim() : '',
-                        row.ITEM_NOTA,
+                        '', // Série não presente na tabela DEVOLUCAO
+                        row.ITEM_DEV, // Usando ITEM_DEP para garantir unicidade do registro
                         formatarData(row.DATA_ENTRADA),
                         row.CLIENTE_CODIGO,
-                        row.CLIENTE_NOME,
+                        row.CLIENTE_NOME ? String(row.CLIENTE_NOME).trim() : 'Cliente não identificado',
                         row.CODIGO_ITEM,
-                        row.DESCRICAO,
+                        row.DESCRICAO ? String(row.DESCRICAO).trim() : '',
                         row.QUANTIDADE,
                         row.VALOR_UNITARIO,
                         row.VALOR_TOTAL,
                         row.PESO_UN,
                         row.PESO_TOTAL,
-                        row.MOTIVO,
-                        row.CODIGO_NOT
+                        row.MOTIVO ? String(row.MOTIVO).trim() : '',
+                        row.CODIGO_DEV
                     ]);
                 }
 
