@@ -30,10 +30,10 @@
         body {
             background-color: var(--bg-dark);
             color: var(--text-main);
-            min-height: 100vh;
+            height: 100vh;
             display: flex;
             flex-direction: column;
-            overflow: auto;
+            overflow: hidden;
         }
 
         /* Scrollbar Styling */
@@ -209,8 +209,59 @@
         }
 
         .chart-title {
-            font-size: 1rem;
+            font-size: 0.9rem;
             font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 15px;
+        }
+
+        .chart-container {
+            flex: 1;
+            min-height: 0;
+            position: relative;
+        }
+
+        /* --- TOOLBAR --- */
+        .toolbar {
+            padding: 10px 40px;
+            background: rgba(24, 24, 27, 0.4);
+            border-bottom: 1px solid var(--border-subtle);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .months-group {
+            display: flex;
+            gap: 5px;
+        }
+
+        .month-btn {
+            background: transparent;
+            border: 1px solid var(--border-subtle);
+            color: var(--text-muted);
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            font-weight: 500;
+        }
+
+        .month-btn:hover {
+            background: rgba(255, 255, 255, 0.05);
+            color: #fff;
+        }
+
+        .month-btn.active {
+            background: var(--color-primary);
+            color: #000;
+            border-color: var(--color-primary);
+            font-weight: 700;
         }
 
         /* --- MODAL --- */
@@ -468,12 +519,37 @@
         </div>
     </header>
 
+    <div class="toolbar">
+        <div class="months-group" id="monthSelector">
+            <button class="month-btn" data-month="0">Jan</button>
+            <button class="month-btn" data-month="1">Fev</button>
+            <button class="month-btn" data-month="2">Mar</button>
+            <button class="month-btn" data-month="3">Abr</button>
+            <button class="month-btn" data-month="4">Mai</button>
+            <button class="month-btn" data-month="5">Jun</button>
+            <button class="month-btn" data-month="6">Jul</button>
+            <button class="month-btn" data-month="7">Ago</button>
+            <button class="month-btn" data-month="8">Set</button>
+            <button class="month-btn" data-month="9">Out</button>
+            <button class="month-btn" data-month="10">Nov</button>
+            <button class="month-btn" data-month="11">Dez</button>
+            <button class="month-btn" id="allMonthsBtn" data-month="all">Todos</button>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <select id="yearSelector" class="filter-input" onchange="updateView()"
+                style="height: 32px; padding: 0 10px;">
+                <option value="2026">2026</option>
+                <option value="2025">2025</option>
+            </select>
+        </div>
+    </div>
+
     <main>
         <div class="kpi-row">
             <div class="kpi-card">
                 <div class="kpi-title">Valor Devolvido</div>
                 <div class="kpi-value" id="kpiValue">R$ 0,00</div>
-                <div class="kpi-subtext">TOTAL NO PERÍODO</div>
+                <div class="kpi-subtext">NO FILTRO</div>
             </div>
             <div class="kpi-card">
                 <div class="kpi-title">Peso Devolvido</div>
@@ -492,27 +568,17 @@
             </div>
         </div>
 
-        <div class="charts-row">
+        <div class="charts-row" style="grid-template-columns: 1fr 1fr; height: calc(100vh - 280px);">
             <div class="chart-panel">
-                <div class="chart-header-row">
-                    <div class="chart-title">Evolução de Devoluções (Peso)</div>
-                </div>
-                <div style="flex: 1; min-height: 0; position: relative;">
+                <div class="chart-title">Evolução Mensal (Peso)</div>
+                <div class="chart-container">
                     <canvas id="evolutionChart"></canvas>
                 </div>
             </div>
             <div class="chart-panel">
-                <div class="chart-header-row">
-                    <div class="chart-title">Filtros Rápidos</div>
-                    <select id="yearSelector" class="filter-input" onchange="updateView()">
-                        <option value="2026">2026</option>
-                        <option value="2025">2025</option>
-                    </select>
-                </div>
-                <!-- Mini dash or text summary -->
-                <div style="display: flex; flex-direction: column; gap: 15px; margin-top: 10px;">
-                    <p style="font-size: 0.9rem; color: var(--text-muted);">Selecione o ano para filtrar a evolução
-                        mensal no gráfico.</p>
+                <div class="chart-title">Pareto por Cliente (Peso)</div>
+                <div class="chart-container">
+                    <canvas id="paretoChart"></canvas>
                 </div>
             </div>
         </div>
@@ -556,17 +622,24 @@
 
         function updateDashboard() {
             const year = document.getElementById('yearSelector').value;
-            const filteredByYear = allData.filter(d => d.data_entrada && d.data_entrada.startsWith(year));
+            const month = selectedMonth; // "all" or 0-11
 
-            const totalValue = allData.reduce((acc, d) => acc + parseFloat(d.valor_total || 0), 0);
-            const totalWeight = allData.reduce((acc, d) => acc + parseFloat(d.peso_total || 0), 0);
+            let filteredData = allData.filter(d => d.data_entrada && d.data_entrada.startsWith(year));
+
+            if (month !== 'all') {
+                filteredData = filteredData.filter(d => new Date(d.data_entrada).getMonth() === parseInt(month));
+            }
+
+            const totalValue = filteredData.reduce((acc, d) => acc + parseFloat(d.valor_total || 0), 0);
+            const totalWeight = filteredData.reduce((acc, d) => acc + parseFloat(d.peso_total || 0), 0);
 
             document.getElementById('kpiValue').textContent = formatCurrency(totalValue);
             document.getElementById('kpiWeight').textContent = formatNumber(totalWeight) + ' kg';
-            document.getElementById('kpiCount').textContent = allData.length;
-            document.getElementById('kpiAvgValue').textContent = formatCurrency(allData.length > 0 ? totalValue / allData.length : 0);
+            document.getElementById('kpiCount').textContent = filteredData.length;
+            document.getElementById('kpiAvgValue').textContent = formatCurrency(filteredData.length > 0 ? totalValue / filteredData.length : 0);
 
-            renderEvolutionChart(filteredByYear);
+            renderEvolutionChart(allData.filter(d => d.data_entrada && d.data_entrada.startsWith(year)));
+            renderParetoChart(filteredData);
         }
 
         function renderEvolutionChart(data) {
@@ -578,8 +651,8 @@
 
             data.forEach(d => {
                 if (d.data_entrada) {
-                    const month = new Date(d.data_entrada).getMonth();
-                    monthlyValues[month] += parseFloat(d.peso_total || 0);
+                    const m = new Date(d.data_entrada).getMonth();
+                    monthlyValues[m] += parseFloat(d.peso_total || 0);
                 }
             });
 
@@ -601,6 +674,48 @@
                     scales: {
                         y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#a1a1aa' } },
                         x: { grid: { display: false }, ticks: { color: '#a1a1aa' } }
+                    }
+                }
+            });
+        }
+
+        let paretoChart = null;
+        function renderParetoChart(data) {
+            const ctx = document.getElementById('paretoChart').getContext('2d');
+            if (paretoChart) paretoChart.destroy();
+
+            const clientMap = {};
+            data.forEach(d => {
+                const name = d.cliente_nome || 'Desconhecido';
+                clientMap[name] = (clientMap[name] || 0) + parseFloat(d.peso_total || 0);
+            });
+
+            const sortedClients = Object.entries(clientMap)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 10);
+
+            const labels = sortedClients.map(c => c[0]);
+            const weights = sortedClients.map(c => c[1]);
+
+            paretoChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Peso (kg)',
+                        data: weights,
+                        backgroundColor: 'rgba(234, 88, 12, 0.7)',
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#a1a1aa' } },
+                        y: { grid: { display: false }, ticks: { color: '#a1a1aa', font: { size: 10 } } }
                     }
                 }
             });
@@ -641,19 +756,31 @@
         function closeModal() { document.getElementById('recordsModal').style.display = 'none'; }
         function updateView() { updateDashboard(); }
 
+        let selectedMonth = new Date().getMonth();
+
         document.addEventListener('DOMContentLoaded', () => {
             const now = new Date();
             const yearStr = now.getFullYear().toString();
+            selectedMonth = now.getMonth();
 
-            // Set default filters (Full Range 2025-2026)
+            // Set default filters (Full Range 2025-2026 for API, but UI starts with current month/year)
             document.getElementById('startDate').value = `2025-01-01`;
             document.getElementById('endDate').value = `2026-12-31`;
+            document.getElementById('yearSelector').value = yearStr;
 
-            if (yearStr === '2026') {
-                document.getElementById('yearSelector').value = '2026';
-            } else {
-                document.getElementById('yearSelector').value = '2025';
-            }
+            // Month selectors
+            const btns = document.querySelectorAll('.month-btn');
+            btns.forEach(btn => {
+                const m = btn.getAttribute('data-month');
+                if (m == selectedMonth) btn.classList.add('active');
+
+                btn.onclick = () => {
+                    btns.forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    selectedMonth = btn.getAttribute('data-month');
+                    updateDashboard();
+                };
+            });
 
             refreshData();
 
