@@ -70,8 +70,8 @@ async function sincronizar() {
                 nfp.PRODUTO_NPR as CODIGO_ITEM,
                 nfp.NOME_PRODUTO_NPR as DESCRICAO,
                 nfp.QUANTIDADE_NPR as QUANTIDADE,
-                nfp.PRECO_NPR / 100.0 as VALOR_UNITARIO,
-                (nf.TOTAL_NOT * 100.0) / (
+                nfp.PRECO_NPR as VALOR_UNITARIO,
+                CAST(nf.TOTAL_NOT AS DECIMAL(15,2)) / (
                     SELECT COUNT(*) FROM NOTA_FISCAL_PRODUTO nfp2 
                     WHERE nfp2.EMPRESA_NPR = nf.EMPRESA_NOT 
                       AND nfp2.SERIE_NPR = nf.SERIE_NOT 
