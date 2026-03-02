@@ -44,10 +44,14 @@ async function sincronizar() {
             peso_un DECIMAL(15,3),
             peso_total DECIMAL(15,3),
             motivo TEXT,
+            codigo_not INTEGER,
             atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(nota_fiscal, serie, item_nota, codigo_item)
         )
     `);
+
+    // Migração: Adicionar coluna se não existir
+    await pool.query('ALTER TABLE firebird_sync_devolucoes ADD COLUMN IF NOT EXISTS codigo_not INTEGER');
 
     Firebird.attach(firebirdOptions, (err, db) => {
         if (err) {
@@ -57,6 +61,7 @@ async function sincronizar() {
 
         const query = `
             SELECT 
+                nf.CODIGO_NOT,
                 nf.NUMERO_NOT as NOTA_FISCAL,
                 nf.SERIE_NOT as SERIE,
                 nfp.ITEM_NPR as ITEM_NOTA,
@@ -101,8 +106,8 @@ async function sincronizar() {
                         INSERT INTO firebird_sync_devolucoes (
                             nota_fiscal, serie, item_nota, data_entrada, cliente_codigo, 
                             cliente_nome, codigo_item, descricao, quantidade, valor_unitario, 
-                            valor_total, peso_un, peso_total, motivo
-                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                            valor_total, peso_un, peso_total, motivo, codigo_not
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
                     `, [
                         row.NOTA_FISCAL,
                         row.SERIE ? String(row.SERIE).trim() : '',
@@ -117,7 +122,8 @@ async function sincronizar() {
                         row.VALOR_TOTAL,
                         row.PESO_UN,
                         row.PESO_TOTAL,
-                        row.MOTIVO
+                        row.MOTIVO,
+                        row.CODIGO_NOT
                     ]);
                 }
 

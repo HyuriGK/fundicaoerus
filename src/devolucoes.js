@@ -10,7 +10,7 @@ router.get('/', async (req, res) => {
 
         let query = `
             SELECT 
-                id,
+                codigo_not,
                 nota_fiscal,
                 serie,
                 item_nota,
