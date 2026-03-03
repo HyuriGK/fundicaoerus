@@ -868,6 +868,42 @@
             outline: none;
             box-shadow: 0 0 5px rgba(251, 191, 36, 0.3);
         }
+
+        .clickable-op {
+            cursor: pointer;
+            color: var(--color-primary);
+            transition: all 0.2s;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 700;
+        }
+
+        .clickable-op:hover {
+            background: rgba(234, 88, 12, 0.1);
+            transform: scale(1.1);
+            text-decoration: underline;
+        }
+
+        .op-detail-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .op-detail-sector {
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            font-size: 0.9rem;
+        }
+
+        .op-detail-value {
+            font-family: var(--font-mono);
+            font-weight: 700;
+            color: var(--color-primary);
+            font-size: 1.1rem;
+        }
     </style>
 </head>
 
@@ -1147,6 +1183,30 @@
             </div>
         </div>
     </div>
+    </div>
+
+    <!-- MODAL DE APONTAMENTOS DA OP -->
+    <div id="opDetailsModal" class="modal-overlay" style="z-index: 3000;">
+        <div class="modal-card" style="max-width: 500px; height: auto; min-height: 300px; background: #18181b;">
+            <div class="modal-header">
+                <h2 class="modal-title"><i class="fa-solid fa-industry" style="margin-right: 15px;"></i>Apontamentos da
+                    OP <span id="opModalNumber">-</span></h2>
+                <span class="modal-close" onclick="closeOPDetails()">&times;</span>
+            </div>
+            <div class="modal-body" id="opDetailsContent" style="padding: 30px;">
+                <!-- Preenchido via JS -->
+                <div style="text-align: center; padding: 40px;">
+                    <i class="fa-solid fa-circle-notch fa-spin"
+                        style="font-size: 2rem; color: var(--color-primary);"></i>
+                    <p style="margin-top: 15px; color: var(--text-muted);">Buscando apontamentos no Firebird...</p>
+                </div>
+            </div>
+            <div class="modal-footer"
+                style="padding: 15px; border-top: 1px solid var(--border-subtle); text-align: center;">
+                <button class="btn-modern" onclick="closeOPDetails()"
+                    style="background-color: #3f3f46; min-width: 150px;">Fechar</button>
+            </div>
+        </div>
     </div>
 
     <!-- MODAL DE FILTROS -->
@@ -2089,7 +2149,13 @@
                     <td style="text-align:center;">${formatNumber(totalWeightReal)}</td>
 
                     <td style="text-align:center; color:var(--status-purple); font-weight:bold;">${valorVisible ? formatCurrency(valorTotal) : '-----'}</td>
-                    <td style="text-align:center; font-size: 0.8rem; color:var(--accent-color); font-weight:bold;">${item.OP_PCS || '-'}</td>
+                    <td style="text-align:center; font-size: 0.8rem; color:var(--accent-color); font-weight:bold;">
+                        ${item.OP_PCS && item.OP_PCS !== '-' ? `
+                            <span class="clickable-op" onclick="showOPDetails('${item.OP_PCS}')">
+                                ${item.OP_PCS}
+                            </span>
+                        ` : '-'}
+                    </td>
                     <td style="text-align:center; color:var(--text-muted); font-size: 0.8rem;">${item.ANDAMENTO_PCS || '-'}</td>
                 </tr>
                 `;
@@ -3066,6 +3132,77 @@
                 showToast('Erro', 'Falha ao copiar texto.', 'danger');
             });
         }
+        // OP Details Functions
+        async function showOPDetails(op) {
+            const modal = document.getElementById('opDetailsModal');
+            const content = document.getElementById('opDetailsContent');
+            const opSpan = document.getElementById('opModalNumber');
+
+            opSpan.innerText = op;
+            modal.style.display = 'flex';
+
+            // Reset content with spinner
+            content.innerHTML = `
+                <div style="text-align: center; padding: 40px;">
+                    <i class="fa-solid fa-circle-notch fa-spin" style="font-size: 2rem; color: var(--color-primary);"></i>
+                    <p style="margin-top: 15px; color: var(--text-muted);">Buscando apontamentos no Firebird...</p>
+                </div>
+            `;
+
+            try {
+                const res = await fetch(`/api/pedidos-firebird/op-apontamentos?op=${op}`);
+                const data = await res.json();
+
+                if (data.error) throw new Error(data.error);
+
+                if (!data || data.length === 0) {
+                    content.innerHTML = `
+                        <div style="text-align: center; padding: 40px; color: var(--text-muted);">
+                            <i class="fa-solid fa-triangle-exclamation" style="font-size: 2rem; margin-bottom: 15px; opacity: 0.5;"></i>
+                            <p>Nenhum apontamento encontrado para esta OP no Firebird.</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                let html = '<div style="display: flex; flex-direction: column; gap: 5px;">';
+                data.forEach(row => {
+                    html += `
+                        <div class="op-detail-row">
+                            <span class="op-detail-sector">${row.setor}</span>
+                            <span class="op-detail-value">${formatNumber(row.quantidade, 0)} <small style="font-size: 0.6em; color: var(--text-muted);">APONTADA</small></span>
+                        </div>
+                    `;
+                });
+                html += '</div>';
+                content.innerHTML = html;
+
+            } catch (err) {
+                console.error(err);
+                content.innerHTML = `
+                    <div style="text-align: center; padding: 40px; color: var(--status-danger);">
+                        <i class="fa-solid fa-circle-xmark" style="font-size: 2rem; margin-bottom: 15px;"></i>
+                        <p>Erro ao buscar dados da OP.</p>
+                        <p style="font-size: 0.8rem; margin-top: 10px; opacity: 0.8;">${err.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        function closeOPDetails() {
+            document.getElementById('opDetailsModal').style.display = 'none';
+        }
+
+        // Handle Close on ESC for all modals including the new one
+        window.tempCloseModal = closeModal;
+        window.closeModal = function () {
+            if (document.getElementById('opDetailsModal').style.display === 'flex') {
+                closeOPDetails();
+            } else {
+                tempCloseModal();
+            }
+        };
+
     </script>
 </body>
 
