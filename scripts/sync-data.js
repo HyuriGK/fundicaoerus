@@ -168,7 +168,29 @@ async function syncData() {
                             AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR
                     )
                     AND (EXTRACT(YEAR FROM PCP.DATA_PCP) IN (2025, 2026) OR PCP.DATA_PCP IS NULL)
-                ) AS OP_ENTREGA
+                ) AS OP_ENTREGA,
+                (
+                    SELECT SUM(PS.QUANTIDADE_PCS)
+                    FROM PRODUCAO_PEDIDO PP
+                    JOIN PRODUCAO_SETOR PS ON PS.CODIGO_PCS = PP.PCP_CODIGO_PCPR AND PS.EMPRESA_PCS = PP.PCP_EMPRESA_PCPR
+                    WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR
+                        AND PP.PPR_ANO_PCPR = P.ANO_PPR
+                        AND PP.PPR_ITEM_PCPR = P.ITEM_PPR
+                        AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR
+                        AND PS.SETOR_PCS IN (1, 10, 11, 12)
+                        AND PS.STATUS_PCS NOT IN ('T', 'C')
+                ) AS QTY_MOLDADA,
+                (
+                    SELECT SUM(PS.QUANTIDADE_PCS)
+                    FROM PRODUCAO_PEDIDO PP
+                    JOIN PRODUCAO_SETOR PS ON PS.CODIGO_PCS = PP.PCP_CODIGO_PCPR AND PS.EMPRESA_PCS = PP.PCP_EMPRESA_PCPR
+                    WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR
+                        AND PP.PPR_ANO_PCPR = P.ANO_PPR
+                        AND PP.PPR_ITEM_PCPR = P.ITEM_PPR
+                        AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR
+                        AND PS.SETOR_PCS NOT IN (1, 10, 11, 12, 101, 110, 111, 112, 99)
+                        AND PS.STATUS_PCS NOT IN ('T', 'C')
+                ) AS QTY_FUNDIDA
             FROM PEDIDO_PRODUTO P
             LEFT JOIN PEDIDO_PRODUTO_ENTREGA E 
                 ON P.CODIGO_PPR = E.PPR_CODIGO_PETR 

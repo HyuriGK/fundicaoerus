@@ -2355,24 +2355,46 @@
                     releasedWeight += itemTotalWeight;
                 }
 
-                // --- STAGE CATEGORIZATION ---
-                const andamento = (item.ANDAMENTO_PCS || '').toUpperCase().trim();
+                // --- STAGE CATEGORIZATION (Proportional Refactor) ---
+                // Base quantity is the OP quantity if available, otherwise order quantity
+                const targetTotalQty = Number(item.OP_QUANTIDADE) || realQty;
 
-                if (!andamento || andamento === '-' || andamento === '') {
-                    // 1. Aguardando Moldagem
-                    kpiAguardando.qtd += realQty;
-                    kpiAguardando.peso += itemTotalWeight;
-                    kpiAguardando.valor += itemTotalValue;
-                } else if (andamento.startsWith('MOLDAGEM')) {
-                    // 2. Em Moldagem
-                    kpiMoldagem.qtd += realQty;
-                    kpiMoldagem.peso += itemTotalWeight;
-                    kpiMoldagem.valor += itemTotalValue;
-                } else {
-                    // 3. Fundidos (Everything else)
-                    kpiFundido.qtd += realQty;
-                    kpiFundido.peso += itemTotalWeight;
-                    kpiFundido.valor += itemTotalValue;
+                let qFundida = Number(item.QTY_FUNDIDA) || 0;
+                let qMoldada = Number(item.QTY_MOLDADA) || 0;
+
+                // If fundida > moldada for some reason (manual skip), adjust moldada
+                if (qFundida > qMoldada) qMoldada = qFundida;
+                // If moldada > total for some reason, cap it
+                if (qMoldada > targetTotalQty) qMoldada = targetTotalQty;
+                if (qFundida > targetTotalQty) qFundida = targetTotalQty;
+
+                const qApenasMoldada = Math.max(0, qMoldada - qFundida);
+                const qAguardando = Math.max(0, targetTotalQty - qMoldada);
+
+                // Proportional factors
+                const factorFundido = targetTotalQty > 0 ? (qFundida / targetTotalQty) : 0;
+                const factorMoldado = targetTotalQty > 0 ? (qApenasMoldada / targetTotalQty) : 0;
+                const factorAguardando = targetTotalQty > 0 ? (qAguardando / targetTotalQty) : 0;
+
+                // 1. Fundido (Fusão ou posterior)
+                if (factorFundido > 0) {
+                    kpiFundido.qtd += qFundida;
+                    kpiFundido.peso += itemTotalWeight * factorFundido;
+                    kpiFundido.valor += itemTotalValue * factorFundido;
+                }
+
+                // 2. Apenas Moldado (Moldado mas não fundido)
+                if (factorMoldado > 0) {
+                    kpiMoldagem.qtd += qApenasMoldada;
+                    kpiMoldagem.peso += itemTotalWeight * factorMoldado;
+                    kpiMoldagem.valor += itemTotalValue * factorMoldado;
+                }
+
+                // 3. Aguardando Moldagem (Restante sem moldagem apontada)
+                if (factorAguardando > 0) {
+                    kpiAguardando.qtd += qAguardando;
+                    kpiAguardando.peso += itemTotalWeight * factorAguardando;
+                    kpiAguardando.valor += itemTotalValue * factorAguardando;
                 }
             });
 
