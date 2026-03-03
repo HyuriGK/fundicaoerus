@@ -2758,20 +2758,26 @@
 
                 if (!filtersPassed) return false;
 
-                // 4. Stage Filter (PowerBI Style)
+                // 4. Stage Filter (Proportional Sync)
                 if (activeChartFilters.stage) {
-                    const andamento = (item.ANDAMENTO_PCS || '').toUpperCase().trim();
                     const s = activeChartFilters.stage;
+                    const saldo = Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0;
+                    const qtdOriginal = Number(item.QUANTIDADE_PPR) || 0;
+                    const realQty = saldo > 0 ? saldo : qtdOriginal;
+                    const targetTotalQty = Number(item.OP_QUANTIDADE) || realQty;
+
+                    const qFundida = Number(item.QTY_FUNDIDA) || 0;
+                    const qMoldada = Number(item.QTY_MOLDADA) || 0;
 
                     if (s === 'aguardando') {
-                        // Must be empty or '-'
-                        return !andamento || andamento === '-' || andamento === '';
+                        // Aguardando if total > moldada
+                        return (targetTotalQty - qMoldada) > 0.01;
                     } else if (s === 'moldagem') {
-                        // Must start with MOLDAGEM
-                        return andamento.startsWith('MOLDAGEM');
+                        // Apenas moldado if moldada > fundida
+                        return (qMoldada - qFundida) > 0.01;
                     } else if (s === 'fundido') {
-                        // Must NOT be empty/dash AND NOT start with Moldagem
-                        return andamento && andamento !== '-' && andamento !== '' && !andamento.startsWith('MOLDAGEM');
+                        // Fundido if fundida > 0
+                        return qFundida > 0.01;
                     }
                 }
 
