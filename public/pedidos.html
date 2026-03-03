@@ -907,6 +907,60 @@
             color: var(--text-muted);
         }
 
+        .op-detail-row.is-clickable {
+            cursor: pointer;
+            transition: all 0.2s;
+            border-radius: 6px;
+            padding: 12px 15px;
+            margin: 0 -15px;
+            /* Compensa o padding extra para alinhar a borda */
+        }
+
+        .op-detail-row.is-clickable:hover {
+            background: rgba(234, 88, 12, 0.08);
+            transform: translateX(5px);
+            border-bottom-color: var(--color-primary);
+        }
+
+        .op-detail-row.is-clickable:hover .op-detail-sector {
+            color: var(--color-primary);
+        }
+
+        .history-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        .history-table th {
+            text-align: left;
+            color: var(--text-muted);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            padding: 10px;
+            border-bottom: 2px solid var(--border-subtle);
+        }
+
+        .history-table td {
+            padding: 12px 10px;
+            border-bottom: 1px solid var(--border-subtle);
+            color: #fff;
+            font-size: 0.9rem;
+        }
+
+        .history-date {
+            font-family: var(--font-mono);
+            color: var(--accent-color);
+            font-weight: 600;
+        }
+
+        .history-qty {
+            font-family: var(--font-mono);
+            font-weight: 700;
+            color: var(--color-primary);
+            text-align: right;
+        }
+
         .op-detail-value {
             font-family: var(--font-mono);
             font-weight: 700;
@@ -3207,7 +3261,8 @@
                     const isZero = qty === 0;
 
                     html += `
-                        <div class="op-detail-row ${isZero ? 'is-zero' : ''}">
+                        <div class="op-detail-row ${isZero ? 'is-zero' : 'is-clickable'}" 
+                             ${!isZero ? `onclick="showSectorHistory('${op}', '${sector}')"` : ''}>
                             <span class="op-detail-sector">${sector}</span>
                             <span class="op-detail-value">${formatNumber(qty, 0)} <small style="font-size: 0.6em; color: var(--text-muted);">APONTADA</small></span>
                         </div>
@@ -3228,14 +3283,89 @@
             }
         }
 
+        async function showSectorHistory(op, category) {
+            const modal = document.getElementById('opSectorHistoryModal');
+            const content = document.getElementById('opSectorHistoryContent');
+            const sectorSpan = document.getElementById('historySectorName');
+
+            sectorSpan.innerText = category;
+            modal.style.display = 'flex';
+
+            content.innerHTML = `
+                <div style="text-align: center; padding: 30px;">
+                    <i class="fa-solid fa-circle-notch fa-spin" style="font-size: 1.5rem; color: var(--color-primary);"></i>
+                </div>
+            `;
+
+            // Mapeamento inverso para a query
+            const sectorMapping = {
+                'MOLDAGEM': ['MOLDAGEM', 'MOLDAGEM MANUAL', 'MOLDAGEM MECANIZADA', 'MOLDAGEM AUTOMÁTICA', 'MOLDAGEM EM AREIA'],
+                'FUSÃO': ['FUSÃO', 'FUSAO'],
+                'ACABAMENTO': ['ACABAMENTO', 'REBARBAÇÃO', 'GRALHA'],
+                'TRATAMENTO TÉRMICO': ['TRATAMENTO TÉRMICO', 'TRATAMENTO TERMICO'],
+                'USINAGEM': ['USINAGEM', 'TORNEARIA'],
+                'INSPEÇÃO DE QUALIDADE': ['INSPEÇÃO DE QUALIDADE', 'INSPECAO DE QUALIDADE', 'QUALIDADE', 'REVISÃO'],
+                'EXPEDIÇÃO': ['EXPEDIÇÃO', 'EXPEDICAO', 'LOGÍSTICA']
+            };
+
+            const targetSectors = sectorMapping[category] || [category];
+
+            try {
+                const url = `/api/pedidos-firebird/op-setor-detalhes?op=${op}&setores=${encodeURIComponent(targetSectors.join(','))}`;
+                const res = await fetch(url);
+                const data = await res.json();
+
+                if (data.error) throw new Error(data.error);
+
+                if (!data || data.length === 0) {
+                    content.innerHTML = '<p style="text-align:center; color:var(--text-muted);">Nenhum registro detalhado encontrado.</p>';
+                    return;
+                }
+
+                let html = `
+                    <table class="history-table">
+                        <thead>
+                            <tr>
+                                <th>Data</th>
+                                <th style="text-align: right;">Quantidade</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+
+                data.forEach(row => {
+                    const dataFormatada = new Date(row.data).toLocaleDateString('pt-BR');
+                    html += `
+                        <tr>
+                            <td class="history-date">${dataFormatada}</td>
+                            <td class="history-qty">${formatNumber(row.quantidade, 0)} pçs</td>
+                        </tr>
+                    `;
+                });
+
+                html += '</tbody></table>';
+                content.innerHTML = html;
+
+            } catch (err) {
+                console.error(err);
+                content.innerHTML = `<p style="color:var(--status-danger); text-align:center;">Erro: ${err.message}</p>`;
+            }
+        }
+
+        function closeSectorHistory() {
+            document.getElementById('opSectorHistoryModal').style.display = 'none';
+        }
+
         function closeOPDetails() {
             document.getElementById('opDetailsModal').style.display = 'none';
         }
 
-        // Handle Close on ESC for all modals including the new one
+        // Handle Close on ESC for all modals including the new ones
         window.tempCloseModal = closeModal;
         window.closeModal = function () {
-            if (document.getElementById('opDetailsModal').style.display === 'flex') {
+            if (document.getElementById('opSectorHistoryModal').style.display === 'flex') {
+                closeSectorHistory();
+            } else if (document.getElementById('opDetailsModal').style.display === 'flex') {
                 closeOPDetails();
             } else {
                 tempCloseModal();
