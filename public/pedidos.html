@@ -1251,19 +1251,47 @@
     <!-- MODAL DE APONTAMENTOS DA OP -->
     <div id="opDetailsModal" class="modal-overlay" style="z-index: 3000;">
         <div class="modal-card"
-            style="max-width: 800px; width: 90%; height: auto; min-height: 350px; background: #18181b;">
-            <div class="modal-header" style="padding: 20px 30px;">
+            style="max-width: 900px; width: 95%; height: auto; min-height: 450px; background: #18181b;">
+            <div class="modal-header" style="padding: 20px 30px; border-bottom: 1px solid var(--border-subtle);">
                 <h2 class="modal-title" style="font-size: 1.5rem;"><i class="fa-solid fa-industry"
-                        style="margin-right: 15px;"></i>Apontamentos da OP <span id="opModalNumber"
+                        style="margin-right: 15px;"></i>Detalhes da OP: <span id="opModalNumber"
                         style="color: var(--color-primary);">-</span></h2>
                 <span class="modal-close" onclick="closeOPDetails()">&times;</span>
             </div>
-            <div class="modal-body" id="opDetailsContent" style="padding: 40px 60px;">
-                <!-- Preenchido via JS -->
-                <div style="text-align: center; padding: 40px;">
-                    <i class="fa-solid fa-circle-notch fa-spin"
-                        style="font-size: 2rem; color: var(--color-primary);"></i>
-                    <p style="margin-top: 15px; color: var(--text-muted);">Buscando apontamentos no Firebird...</p>
+            <div class="modal-body" style="padding: 0;">
+                <!-- Cabeçalho de Informações do Pedido -->
+                <div id="opOrderInfo"
+                    style="background: rgba(255,255,255,0.02); padding: 20px 30px; border-bottom: 1px solid var(--border-subtle); display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;">
+                    <div class="info-item">
+                        <span
+                            style="display: block; font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;">Descrição
+                            do Item</span>
+                        <span id="opModalDesc" style="font-weight: 600; color: #fff;">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span
+                            style="display: block; font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;">Cliente</span>
+                        <span id="opModalClient" style="font-weight: 600; color: #fff;">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span
+                            style="display: block; font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;">Emissão</span>
+                        <span id="opModalEmission" style="font-weight: 600; color: var(--color-primary);">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span
+                            style="display: block; font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;">Entrega</span>
+                        <span id="opModalDelivery" style="font-weight: 600; color: var(--status-info);">-</span>
+                    </div>
+                </div>
+
+                <!-- Conteúdo da Produção -->
+                <div id="opDetailsContent" style="padding: 30px 40px;">
+                    <div style="text-align: center; padding: 40px;">
+                        <i class="fa-solid fa-circle-notch fa-spin"
+                            style="font-size: 2rem; color: var(--color-primary);"></i>
+                        <p style="margin-top: 15px; color: var(--text-muted);">Buscando apontamentos...</p>
+                    </div>
                 </div>
             </div>
             <div class="modal-footer"
@@ -2243,7 +2271,13 @@
                     <td style="text-align:center; color:var(--status-purple); font-weight:bold;">${valorVisible ? formatCurrency(valorTotal) : '-----'}</td>
                     <td style="text-align:center; font-size: 0.8rem; color:var(--accent-color); font-weight:bold;">
                         ${item.OP_PCS && item.OP_PCS !== '-' ? `
-                            <span class="clickable-op" onclick="showOPDetails('${item.OP_PCS}')">
+                            <span class="clickable-op" onclick='showOPDetails(${JSON.stringify({
+                    op: item.OP_PCS,
+                    desc: item.NOME_PRODUTO_PPR || item.PRODUTO_PPR,
+                    client: `(${item.CLIENTE_PPR}) ${item.NOME_CLIENTE || '-'}`,
+                    emission: item.DATA_EMISSAO_PEDIDO ? new Date(item.DATA_EMISSAO_PEDIDO).toLocaleDateString() : '-',
+                    delivery: entrega
+                }).replace(/'/g, "&apos;")})'>
                                 ${item.OP_PCS}
                             </span>
                         ` : '-'}
@@ -3226,18 +3260,31 @@
         };
 
         // OP Details Functions
-        window.showOPDetails = async function (op) {
+        window.showOPDetails = async function (data) {
+            const { op, desc, client, emission, delivery } = data;
             console.log('🔍 showOPDetails para OP:', op);
             const modal = document.getElementById('opDetailsModal');
             const content = document.getElementById('opDetailsContent');
+
+            // Novos campos de cabeçalho
             const opSpan = document.getElementById('opModalNumber');
+            const descSpan = document.getElementById('opModalDesc');
+            const clientSpan = document.getElementById('opModalClient');
+            const emissionSpan = document.getElementById('opModalEmission');
+            const deliverySpan = document.getElementById('opModalDelivery');
 
             if (!modal || !content) {
                 console.error('❌ Elementos do Modal OP não encontrados!');
                 return;
             }
 
+            // Preenche dados do pedido
             opSpan.innerText = op;
+            if (descSpan) descSpan.innerText = desc;
+            if (clientSpan) clientSpan.innerText = client;
+            if (emissionSpan) emissionSpan.innerText = emission;
+            if (deliverySpan) deliverySpan.innerText = delivery;
+
             modal.style.display = 'flex';
 
             content.innerHTML = `
