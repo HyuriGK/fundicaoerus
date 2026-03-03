@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const Firebird = require('node-firebird');
+const pool = require('../lib/db'); // Adicionado para consulta no Postgres
 
 // Configuração do Firebird
 const firebirdOptions = {
@@ -119,7 +120,7 @@ router.get('/emissao-mensal', async (req, res) => {
 });
 
 // GET /api/pedidos-firebird/op-apontamentos
-// Retorna o detalhamento de apontamentos de uma OP agrupado por setor
+// Retorna o detalhamento de apontamentos de uma OP agrupado por setor (Busca do POSTGRES)
 router.get('/op-apontamentos', async (req, res) => {
     try {
         const { op } = req.query;
@@ -127,32 +128,33 @@ router.get('/op-apontamentos', async (req, res) => {
             return res.status(400).json({ error: 'Número da OP é obrigatório' });
         }
 
-        console.log(`📊 [API] Buscando apontamentos para OP: ${op}`);
+        console.log(`📊 [API-POSTGRES] Buscando apontamentos para OP: ${op}`);
 
+        // Query no Postgres para maior rapidez (dados sincronizados)
         const query = `
             SELECT 
-                TRIM(s.NOME_SET) as SETOR,
-                SUM(ps.QUANTIDADE_PCS) as QTD_APONTADA
-            FROM PRODUCAO_SETOR ps
-            LEFT JOIN SETOR s ON ps.SETOR_PCS = s.CODIGO_SET
-            WHERE ps.CODIGO_PCS = '${op}'
-            GROUP BY s.NOME_SET
+                setor,
+                SUM(quantidade) as quantidade
+            FROM producao_apontada_sincronizada
+            WHERE op = $1
+            GROUP BY setor
             ORDER BY 1
         `;
 
-        const result = await executeQuery(query);
-        console.log(`✅ [API] OP ${op}: ${result.length} setores encontrados.`);
+        const result = await pool.query(query, [op]);
 
-        const dataFormatted = result.map(row => ({
-            setor: row.SETOR || 'DESCONHECIDO',
-            quantidade: row.QTD_APONTADA
+        console.log(`✅ [API-POSTGRES] OP ${op}: ${result.rows.length} setores encontrados.`);
+
+        const dataFormatted = result.rows.map(row => ({
+            setor: row.setor || 'DESCONHECIDO',
+            quantidade: parseFloat(row.quantidade)
         }));
 
         res.json(dataFormatted);
 
     } catch (error) {
-        console.error('❌ [API] Erro ao buscar apontamentos da OP:', error);
-        res.status(500).json({ error: 'Erro ao buscar dados da OP no Firebird', details: error.message });
+        console.error('❌ [API-POSTGRES] Erro ao buscar apontamentos da OP:', error);
+        res.status(500).json({ error: 'Erro ao buscar dados da OP no Postgres', details: error.message });
     }
 });
 
