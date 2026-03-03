@@ -123,6 +123,14 @@ async function syncData() {
                     ORDER BY PS.ID_PCS DESC
                 ) AS LOTE_PCS,
                 (
+                    SELECT FIRST 1 PP.PCP_CODIGO_PCPR
+                    FROM PRODUCAO_PEDIDO PP
+                    WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR
+                        AND PP.PPR_ANO_PCPR = P.ANO_PPR
+                        AND PP.PPR_ITEM_PCPR = P.ITEM_PPR
+                        AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR
+                ) AS OP_PCS,
+                (
                     SELECT FIRST 1 PCP.QUANTIDADE_PCP
                     FROM PRODUCAO PCP
                     WHERE PCP.CODIGO_PCP = (
@@ -133,7 +141,7 @@ async function syncData() {
                             AND PP.PPR_ITEM_PCPR = P.ITEM_PPR
                             AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR
                     )
-                    AND EXTRACT(YEAR FROM PCP.DATA_PCP) IN (2025, 2026)
+                    AND (EXTRACT(YEAR FROM PCP.DATA_PCP) IN (2025, 2026) OR PCP.DATA_PCP IS NULL)
                 ) AS OP_QUANTIDADE,
                 (
                     SELECT FIRST 1 PCP.DATA_PCP
@@ -146,7 +154,7 @@ async function syncData() {
                             AND PP.PPR_ITEM_PCPR = P.ITEM_PPR
                             AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR
                     )
-                    AND EXTRACT(YEAR FROM PCP.DATA_PCP) IN (2025, 2026)
+                    AND (EXTRACT(YEAR FROM PCP.DATA_PCP) IN (2025, 2026) OR PCP.DATA_PCP IS NULL)
                 ) AS OP_EMISSAO,
                 (
                     SELECT FIRST 1 PCP.ENTREGA_PCP
@@ -159,7 +167,7 @@ async function syncData() {
                             AND PP.PPR_ITEM_PCPR = P.ITEM_PPR
                             AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR
                     )
-                    AND EXTRACT(YEAR FROM PCP.DATA_PCP) IN (2025, 2026)
+                    AND (EXTRACT(YEAR FROM PCP.DATA_PCP) IN (2025, 2026) OR PCP.DATA_PCP IS NULL)
                 ) AS OP_ENTREGA
             FROM PEDIDO_PRODUTO P
             LEFT JOIN PEDIDO_PRODUTO_ENTREGA E 
