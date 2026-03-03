@@ -129,7 +129,37 @@ async function syncData() {
                         AND PP.PPR_ANO_PCPR = P.ANO_PPR
                         AND PP.PPR_ITEM_PCPR = P.ITEM_PPR
                         AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR
-                ) AS OP_PCS
+                ) AS OP_PCS,
+                (
+                    SELECT FIRST 1 PS.DATA_PCS
+                    FROM PRODUCAO_PEDIDO PP
+                    JOIN PRODUCAO_SETOR PS ON PS.CODIGO_PCS = PP.PCP_CODIGO_PCPR AND PS.EMPRESA_PCS = PP.PCP_EMPRESA_PCPR
+                    WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR
+                        AND PP.PPR_ANO_PCPR = P.ANO_PPR
+                        AND PP.PPR_ITEM_PCPR = P.ITEM_PPR
+                        AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR
+                    ORDER BY PS.ID_PCS ASC
+                ) AS OP_EMISSAO,
+                (
+                    SELECT FIRST 1 PS.DATA_ENTREGA_PCS
+                    FROM PRODUCAO_PEDIDO PP
+                    JOIN PRODUCAO_SETOR PS ON PS.CODIGO_PCS = PP.PCP_CODIGO_PCPR AND PS.EMPRESA_PCS = PP.PCP_EMPRESA_PCPR
+                    WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR
+                        AND PP.PPR_ANO_PCPR = P.ANO_PPR
+                        AND PP.PPR_ITEM_PCPR = P.ITEM_PPR
+                        AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR
+                    ORDER BY PS.ID_PCS ASC
+                ) AS OP_ENTREGA,
+                (
+                    SELECT FIRST 1 PS.QUANTIDADE_PCS
+                    FROM PRODUCAO_PEDIDO PP
+                    JOIN PRODUCAO_SETOR PS ON PS.CODIGO_PCS = PP.PCP_CODIGO_PCPR AND PS.EMPRESA_PCS = PP.PCP_EMPRESA_PCPR
+                    WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR
+                        AND PP.PPR_ANO_PCPR = P.ANO_PPR
+                        AND PP.PPR_ITEM_PCPR = P.ITEM_PPR
+                        AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR
+                    ORDER BY PS.ID_PCS ASC
+                ) AS OP_QUANTIDADE
             FROM PEDIDO_PRODUTO P
             LEFT JOIN PEDIDO_PRODUTO_ENTREGA E 
                 ON P.CODIGO_PPR = E.PPR_CODIGO_PETR 
