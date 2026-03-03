@@ -179,7 +179,7 @@ router.get('/op-setor-detalhes', async (req, res) => {
                 quantidade
             FROM producao_apontada_sincronizada
             WHERE op = $1 AND setor = ANY($2)
-            ORDER BY data_producao DESC, id DESC
+            ORDER BY data_producao ASC, id ASC
         `;
 
         const result = await pool.query(query, [op, sectorList]);
