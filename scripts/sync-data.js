@@ -106,7 +106,8 @@ async function syncData() {
                         AND PP.PPR_ANO_PCPR = P.ANO_PPR
                         AND PP.PPR_ITEM_PCPR = P.ITEM_PPR
                         AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR
-                        AND PS.STATUS_PCS NOT IN ('T', 'C')
+                        AND PS.STATUS_PCS <> 'C'
+                        AND PS.QUANTIDADE_PCS > 0
                     ORDER BY PS.ID_PCS DESC
                 ) AS ANDAMENTO_PCS,
                 (

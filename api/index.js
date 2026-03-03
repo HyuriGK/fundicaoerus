@@ -91,6 +91,7 @@ app.use('/api/page-locks', require('../src/page-locks')); // NOVO: Bloqueio de T
 app.use('/api/custos-dashboard', require('../src/custos-dashboard')); // NOVO: Painel de Produção
 app.use('/api/custos-detalhados', require('../src/custos-detalhados-firebird')); // NOVO: Detalhamento de Custos (Postgres Sync)
 app.use('/api/centro-custos', require('../src/centro-custos')); // NOVO: Centro de Custos (Mapeamento)
+app.use('/api/fichatecnica', require('../src/fichatecnica')); // NOVO: Ficha Técnica (Firebird Read-Only)
 
 // Rota temporária de diagnóstico do Firebird
 app.get('/api/test-firebird', (req, res) => {
