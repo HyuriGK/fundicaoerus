@@ -3345,16 +3345,77 @@
                     }
                 });
 
-                let html = '<div style="display: flex; flex-direction: column; gap: 5px;">';
-                orderedSectors.forEach(sector => {
+                // Lógica de Prazo e Cronograma
+                const parseDateBR = (s) => {
+                    if (!s || s === '-') return null;
+                    const parts = s.split('/');
+                    if (parts.length !== 3) return null;
+                    return new Date(parts[2], parts[1] - 1, parts[0]);
+                };
+
+                const dateEmission = parseDateBR(emission);
+                const dateDelivery = parseDateBR(delivery);
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+
+                let daysPerSector = 0;
+                if (dateEmission && dateDelivery && dateDelivery > dateEmission) {
+                    const diffTime = Math.abs(dateDelivery - dateEmission);
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                    daysPerSector = diffDays / orderedSectors.length;
+                }
+
+                let html = '<div style="display: flex; flex-direction: column; gap: 8px;">';
+
+                // Variável para rastrear se já encontramos a etapa atual (primeira com saldo ou a última apontada)
+                // Para simplificar: se uma etapa tem 0 e o prazo passou, e as anteriores também estão "atrás", ela está atrasada.
+                let productionFoundBeyond = false;
+
+                orderedSectors.forEach((sector, index) => {
                     const qty = aggregatedData[sector];
                     const isZero = qty === 0;
 
+                    // Cálculo do Prazo da Etapa
+                    let sectorDeadlineStr = '-';
+                    let delayHtml = '';
+                    let isDelayed = false;
+
+                    if (dateEmission && daysPerSector > 0) {
+                        const deadlineDate = new Date(dateEmission);
+                        deadlineDate.setDate(deadlineDate.getDate() + Math.round((index + 1) * daysPerSector));
+                        sectorDeadlineStr = deadlineDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+
+                        // Lógica de Atraso: 
+                        // Se a quantidade é 0 E a data de hoje passou do prazo da etapa
+                        if (isZero && today > deadlineDate) {
+                            const diffDelay = Math.abs(today - deadlineDate);
+                            const daysDelayed = Math.ceil(diffDelay / (1000 * 60 * 60 * 24));
+                            isDelayed = true;
+                            delayHtml = `<span style="background: #450a0a; color: #f87171; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: bold; border: 1px solid #7f1d1d; margin-left: 10px;">
+                                <i class="fa-solid fa-triangle-exclamation" style="margin-right: 5px;"></i>Atrasado ${daysDelayed} dias
+                            </span>`;
+                        }
+                    }
+
                     html += `
                         <div class="op-detail-row ${isZero ? 'is-zero' : 'is-clickable'}" 
+                             style="display: flex; align-items: center; justify-content: space-between; padding: 12px 20px; border-radius: 8px; background: ${isDelayed ? 'rgba(239, 68, 68, 0.05)' : 'rgba(255,255,255,0.03)'}; border: 1px solid ${isDelayed ? 'rgba(239, 68, 68, 0.2)' : 'transparent'};"
                              ${!isZero ? `onclick="window.showSectorHistory('${op}', '${sector}')"` : ''}>
-                            <span class="op-detail-sector">${sector}</span>
-                            <span class="op-detail-value">${qty.toLocaleString('pt-BR')} <small style="font-size: 0.6em; color: var(--text-muted);">APONTADA</small></span>
+                            
+                            <div style="display: flex; flex-direction: column; gap: 4px; flex: 1;">
+                                <div style="display: flex; align-items: center;">
+                                    <span class="op-detail-sector" style="font-weight: 600; color: ${isZero ? 'var(--text-muted)' : '#fff'};">${sector}</span>
+                                    ${delayHtml}
+                                </div>
+                                <span style="font-size: 0.7rem; color: var(--text-muted);">Prazo esperado: <span style="color: ${isDelayed ? '#f87171' : 'var(--text-muted)'}">${sectorDeadlineStr}</span></span>
+                            </div>
+
+                            <div style="text-align: right;">
+                                <span class="op-detail-value" style="font-size: 1.1rem; font-weight: 700; color: ${isZero ? 'var(--text-muted)' : 'var(--color-primary)'};">
+                                    ${qty.toLocaleString('pt-BR')} 
+                                    <small style="font-size: 0.55em; color: var(--text-muted); display: block; margin-top: -2px; font-weight: 400;">APONTADA</small>
+                                </span>
+                            </div>
                         </div>
                     `;
                 });
