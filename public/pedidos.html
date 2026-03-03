@@ -1274,6 +1274,26 @@
         </div>
     </div>
 
+    <!-- MODAL DE HISTÓRICO DE APONTAMENTOS DO SETOR -->
+    <div id="opSectorHistoryModal" class="modal-overlay" style="z-index: 4000;">
+        <div class="modal-card"
+            style="max-width: 500px; width: 90%; height: auto; background: #18181b; border: 1px solid var(--color-primary);">
+            <div class="modal-header" style="background: rgba(234, 88, 12, 0.05);">
+                <h3 class="modal-title" style="font-size: 1.2rem;"><i class="fa-solid fa-clock-rotate-left"
+                        style="margin-right: 12px;"></i>Histórico: <span id="historySectorName">-</span></h3>
+                <span class="modal-close" onclick="closeSectorHistory()">&times;</span>
+            </div>
+            <div class="modal-body" id="opSectorHistoryContent"
+                style="padding: 20px 30px; max-height: 400px; overflow-y: auto;">
+                <!-- Preenchido via JS -->
+            </div>
+            <div class="modal-footer" style="padding: 10px; text-align: center;">
+                <button class="btn-modern" onclick="closeSectorHistory()"
+                    style="background-color: #3f3f46; min-width: 120px; font-size: 0.8rem;">Voltar</button>
+            </div>
+        </div>
+    </div>
+
     <!-- MODAL DE FILTROS -->
     <style>
         /* CSS Specific to this modal to allow selection */
@@ -3188,29 +3208,35 @@
 
     </script>
     <script>
-        function copyToClipboard(text) {
+        // Funções Globais e Utilitários adicionais
+        window.copyToClipboard = function (text) {
             if (!text || text === '-') return;
             navigator.clipboard.writeText(text).then(() => {
-                showToast('Copiado!', `Texto "${text}" copiado para a área de transferência.`, 'success');
+                if (typeof showToast === 'function') showToast('Copiado!', `Texto "${text}" copiado para a área de transferência.`, 'success');
             }).catch(err => {
                 console.error('Failed to copy: ', err);
-                showToast('Erro', 'Falha ao copiar texto.', 'danger');
             });
-        }
+        };
+
         // OP Details Functions
-        async function showOPDetails(op) {
+        window.showOPDetails = async function (op) {
+            console.log('🔍 showOPDetails para OP:', op);
             const modal = document.getElementById('opDetailsModal');
             const content = document.getElementById('opDetailsContent');
             const opSpan = document.getElementById('opModalNumber');
 
+            if (!modal || !content) {
+                console.error('❌ Elementos do Modal OP não encontrados!');
+                return;
+            }
+
             opSpan.innerText = op;
             modal.style.display = 'flex';
 
-            // Reset content with spinner
             content.innerHTML = `
                 <div style="text-align: center; padding: 40px;">
                     <i class="fa-solid fa-circle-notch fa-spin" style="font-size: 2rem; color: var(--color-primary);"></i>
-                    <p style="margin-top: 15px; color: var(--text-muted);">Buscando apontamentos no Firebird...</p>
+                    <p style="margin-top: 15px; color: var(--text-muted);">Buscando apontamentos...</p>
                 </div>
             `;
 
@@ -3262,9 +3288,9 @@
 
                     html += `
                         <div class="op-detail-row ${isZero ? 'is-zero' : 'is-clickable'}" 
-                             ${!isZero ? `onclick="showSectorHistory('${op}', '${sector}')"` : ''}>
+                             ${!isZero ? `onclick="window.showSectorHistory('${op}', '${sector}')"` : ''}>
                             <span class="op-detail-sector">${sector}</span>
-                            <span class="op-detail-value">${formatNumber(qty, 0)} <small style="font-size: 0.6em; color: var(--text-muted);">APONTADA</small></span>
+                            <span class="op-detail-value">${qty.toLocaleString('pt-BR')} <small style="font-size: 0.6em; color: var(--text-muted);">APONTADA</small></span>
                         </div>
                     `;
                 });
@@ -3272,21 +3298,21 @@
                 content.innerHTML = html;
 
             } catch (err) {
-                console.error(err);
-                content.innerHTML = `
-                    <div style="text-align: center; padding: 40px; color: var(--status-danger);">
-                        <i class="fa-solid fa-circle-xmark" style="font-size: 2rem; margin-bottom: 15px;"></i>
-                        <p>Erro ao buscar dados da OP.</p>
-                        <p style="font-size: 0.8rem; margin-top: 10px; opacity: 0.8;">${err.message}</p>
-                    </div>
-                `;
+                console.error('❌ Erro no showOPDetails:', err);
+                content.innerHTML = `<div style="text-align: center; padding: 40px; color: var(--status-danger);"><p>Erro: ${err.message}</p></div>`;
             }
-        }
+        };
 
-        async function showSectorHistory(op, category) {
+        window.showSectorHistory = async function (op, category) {
+            console.log('🔍 showSectorHistory para category:', category, 'OP:', op);
             const modal = document.getElementById('opSectorHistoryModal');
             const content = document.getElementById('opSectorHistoryContent');
             const sectorSpan = document.getElementById('historySectorName');
+
+            if (!modal || !content) {
+                console.error('❌ Elementos do Modal Histórico não encontrados!');
+                return;
+            }
 
             sectorSpan.innerText = category;
             modal.style.display = 'flex';
@@ -3322,56 +3348,42 @@
                     return;
                 }
 
-                let html = `
-                    <table class="history-table">
-                        <thead>
-                            <tr>
-                                <th>Data</th>
-                                <th style="text-align: right;">Quantidade</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                `;
-
+                let html = `<table class="history-table"><thead><tr><th>Data</th><th style="text-align: right;">Quantidade</th></tr></thead><tbody>`;
                 data.forEach(row => {
                     const dataFormatada = new Date(row.data).toLocaleDateString('pt-BR');
-                    html += `
-                        <tr>
-                            <td class="history-date">${dataFormatada}</td>
-                            <td class="history-qty">${formatNumber(row.quantidade, 0)} pçs</td>
-                        </tr>
-                    `;
+                    html += `<tr><td class="history-date">${dataFormatada}</td><td class="history-qty">${row.quantidade.toLocaleString('pt-BR')} pçs</td></tr>`;
                 });
-
                 html += '</tbody></table>';
                 content.innerHTML = html;
 
             } catch (err) {
-                console.error(err);
+                console.error('❌ Erro no showSectorHistory:', err);
                 content.innerHTML = `<p style="color:var(--status-danger); text-align:center;">Erro: ${err.message}</p>`;
-            }
-        }
-
-        function closeSectorHistory() {
-            document.getElementById('opSectorHistoryModal').style.display = 'none';
-        }
-
-        function closeOPDetails() {
-            document.getElementById('opDetailsModal').style.display = 'none';
-        }
-
-        // Handle Close on ESC for all modals including the new ones
-        window.tempCloseModal = closeModal;
-        window.closeModal = function () {
-            if (document.getElementById('opSectorHistoryModal').style.display === 'flex') {
-                closeSectorHistory();
-            } else if (document.getElementById('opDetailsModal').style.display === 'flex') {
-                closeOPDetails();
-            } else {
-                tempCloseModal();
             }
         };
 
+        window.closeSectorHistory = function () {
+            document.getElementById('opSectorHistoryModal').style.display = 'none';
+        };
+
+        window.closeOPDetails = function () {
+            document.getElementById('opDetailsModal').style.display = 'none';
+        };
+
+        // ESC para fechar modais em ordem
+        const originalCloseModal = window.closeModal;
+        window.closeModal = function () {
+            const hModal = document.getElementById('opSectorHistoryModal');
+            const dModal = document.getElementById('opDetailsModal');
+
+            if (hModal && hModal.style.display === 'flex') {
+                closeSectorHistory();
+            } else if (dModal && dModal.style.display === 'flex') {
+                closeOPDetails();
+            } else if (typeof originalCloseModal === 'function') {
+                originalCloseModal();
+            }
+        };
     </script>
 </body>
 
