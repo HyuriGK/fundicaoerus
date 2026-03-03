@@ -1,9 +1,7 @@
-
 const express = require('express');
 const router = express.Router();
 const Firebird = require('node-firebird');
 
-// Configuração do Firebird (Mesma do faturamento-firebird.js)
 // Configuração do Firebird
 const firebirdOptions = {
     host: '10.1.1.100',
@@ -12,29 +10,78 @@ const firebirdOptions = {
     user: 'SYSDBA',
     password: 'masterkey',
     lowercase_keys: false,
-    role: null, // Explicitamente null para garantir
-    pageSize: 4096
+    role: null,
+    pageSize: 4096,
+    retry: 3
 };
+
+/**
+ * Função utilitária para executar queries no Firebird com tratamento de erros
+ * e tentativa de reconexão automática.
+ */
+async function executeQuery(query, params = []) {
+    let lastError = null;
+    const maxRetries = 3;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        let dbConn = null;
+        try {
+            if (attempt > 1) {
+                console.log(`🔄 [Firebird] Tentativa ${attempt}/${maxRetries} após erro...`);
+                await new Promise(resolve => setTimeout(resolve, 1500 * (attempt - 1))); // Incremental delay
+            }
+
+            const db = await new Promise((resolve, reject) => {
+                const timeout = setTimeout(() => reject(new Error('Timeout de conexão com Firebird')), 12000);
+                Firebird.attach(firebirdOptions, (err, db) => {
+                    clearTimeout(timeout);
+                    if (err) reject(err);
+                    else resolve(db);
+                });
+            });
+
+            dbConn = db;
+
+            const result = await new Promise((resolve, reject) => {
+                db.query(query, params, (err, res) => {
+                    if (err) reject(err);
+                    else resolve(res);
+                });
+            });
+
+            return result;
+
+        } catch (err) {
+            lastError = err;
+            console.error(`❌ [Firebird] Erro na tentativa ${attempt}:`, err.message);
+
+            // Verifica se é um erro que vale a pena tentar novamente (rede/timeout)
+            const isRetryable = ['ETIMEDOUT', 'ECONNREFUSED', 'ECONNRESET', 'Timeout', 'Network'].some(
+                msg => err.message.includes(msg) || (err.code && String(err.code).includes(msg))
+            );
+
+            if (!isRetryable) break;
+        } finally {
+            if (dbConn) {
+                try {
+                    dbConn.detach();
+                } catch (e) {
+                    console.warn('⚠️ Erro ao fechar conexão Firebird:', e.message);
+                }
+            }
+        }
+    }
+
+    throw lastError;
+}
 
 // GET /api/pedidos-firebird/emissao-mensal
 // Retorna o valor e peso total de pedidos emitidos por mês/ano
 router.get('/emissao-mensal', async (req, res) => {
-    let dbConn = null;
     try {
         console.log('📊 [API] Recebida requisição para histórico de emissão.');
-
         const { anoInicio } = req.query;
         const startYear = parseInt(anoInicio) || 2024;
-
-        // Promisify attach para usar async/await e facilitar tratamento de erro
-        const db = await new Promise((resolve, reject) => {
-            Firebird.attach(firebirdOptions, (err, db) => {
-                if (err) reject(err);
-                else resolve(db);
-            });
-        });
-
-        dbConn = db; // Salva referência para detach no finally
 
         const query = `
             SELECT 
@@ -51,14 +98,7 @@ router.get('/emissao-mensal', async (req, res) => {
             ORDER BY 1 DESC, 2 DESC
         `;
 
-        // Promisify query
-        const result = await new Promise((resolve, reject) => {
-            db.query(query, (err, res) => {
-                if (err) reject(err);
-                else resolve(res);
-            });
-        });
-
+        const result = await executeQuery(query);
         console.log(`✅ [API] Sucesso! ${result.length} registros encontrados.`);
 
         const dataFormatted = result.map(row => ({
@@ -74,22 +114,13 @@ router.get('/emissao-mensal', async (req, res) => {
 
     } catch (error) {
         console.error('❌ [API] Erro ao buscar emissão:', error);
-        res.status(500).json({ error: 'Erro interno no servidor', details: error.message });
-    } finally {
-        if (dbConn) {
-            try {
-                dbConn.detach();
-            } catch (e) {
-                console.warn('⚠️ Erro ao fechar conexão Firebird:', e.message);
-            }
-        }
+        res.status(500).json({ error: 'Erro ao conectar no banco de dados', details: error.message });
     }
 });
 
 // GET /api/pedidos-firebird/op-apontamentos
 // Retorna o detalhamento de apontamentos de uma OP agrupado por setor
 router.get('/op-apontamentos', async (req, res) => {
-    let dbConn = null;
     try {
         const { op } = req.query;
         if (!op) {
@@ -98,33 +129,18 @@ router.get('/op-apontamentos', async (req, res) => {
 
         console.log(`📊 [API] Buscando apontamentos para OP: ${op}`);
 
-        const db = await new Promise((resolve, reject) => {
-            Firebird.attach(firebirdOptions, (err, db) => {
-                if (err) reject(err);
-                else resolve(db);
-            });
-        });
-
-        dbConn = db;
-
         const query = `
             SELECT 
                 TRIM(s.NOME_SET) as SETOR,
                 SUM(ps.QUANTIDADE_PCS) as QTD_APONTADA
             FROM PRODUCAO_SETOR ps
             LEFT JOIN SETOR s ON ps.SETOR_PCS = s.CODIGO_SET
-            WHERE ps.CODIGO_PCS = ${op}
+            WHERE ps.CODIGO_PCS = '${op}'
             GROUP BY s.NOME_SET
             ORDER BY 1
         `;
 
-        const result = await new Promise((resolve, reject) => {
-            db.query(query, (err, res) => {
-                if (err) reject(err);
-                else resolve(res);
-            });
-        });
-
+        const result = await executeQuery(query);
         console.log(`✅ [API] OP ${op}: ${result.length} setores encontrados.`);
 
         const dataFormatted = result.map(row => ({
@@ -136,15 +152,7 @@ router.get('/op-apontamentos', async (req, res) => {
 
     } catch (error) {
         console.error('❌ [API] Erro ao buscar apontamentos da OP:', error);
-        res.status(500).json({ error: 'Erro interno no servidor', details: error.message });
-    } finally {
-        if (dbConn) {
-            try {
-                dbConn.detach();
-            } catch (e) {
-                console.warn('⚠️ Erro ao fechar conexão Firebird:', e.message);
-            }
-        }
+        res.status(500).json({ error: 'Erro ao buscar dados da OP no Firebird', details: error.message });
     }
 });
 
