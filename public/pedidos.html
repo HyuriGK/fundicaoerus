@@ -898,6 +898,15 @@
             font-size: 0.9rem;
         }
 
+        .op-detail-row.is-zero {
+            opacity: 0.35;
+            filter: grayscale(1);
+        }
+
+        .op-detail-row.is-zero .op-detail-value {
+            color: var(--text-muted);
+        }
+
         .op-detail-value {
             font-family: var(--font-mono);
             font-weight: 700;
@@ -3157,22 +3166,50 @@
 
                 if (data.error) throw new Error(data.error);
 
-                if (!data || data.length === 0) {
-                    content.innerHTML = `
-                        <div style="text-align: center; padding: 40px; color: var(--text-muted);">
-                            <i class="fa-solid fa-triangle-exclamation" style="font-size: 2rem; margin-bottom: 15px; opacity: 0.5;"></i>
-                            <p>Nenhum apontamento encontrado para esta OP no Firebird.</p>
-                        </div>
-                    `;
-                    return;
-                }
+                // Configuração da Ordem e Agregação dos Setores
+                const sectorMapping = {
+                    'MOLDAGEM': ['MOLDAGEM', 'MOLDAGEM MANUAL', 'MOLDAGEM MECANIZADA', 'MOLDAGEM AUTOMÁTICA', 'MOLDAGEM EM AREIA'],
+                    'FUSÃO': ['FUSÃO', 'FUSAO'],
+                    'ACABAMENTO': ['ACABAMENTO', 'REBARBAÇÃO', 'GRALHA'],
+                    'TRATAMENTO TÉRMICO': ['TRATAMENTO TÉRMICO', 'TRATAMENTO TERMICO'],
+                    'USINAGEM': ['USINAGEM', 'TORNEARIA'],
+                    'INSPEÇÃO DE QUALIDADE': ['INSPEÇÃO DE QUALIDADE', 'INSPECAO DE QUALIDADE', 'QUALIDADE', 'REVISÃO'],
+                    'EXPEDIÇÃO': ['EXPEDIÇÃO', 'EXPEDICAO', 'LOGÍSTICA']
+                };
+
+                const orderedSectors = [
+                    'MOLDAGEM',
+                    'FUSÃO',
+                    'ACABAMENTO',
+                    'TRATAMENTO TÉRMICO',
+                    'USINAGEM',
+                    'INSPEÇÃO DE QUALIDADE',
+                    'EXPEDIÇÃO'
+                ];
+
+                // Agrega os dados recebidos conforme o mapa
+                const aggregatedData = {};
+                orderedSectors.forEach(s => aggregatedData[s] = 0);
+
+                data.forEach(row => {
+                    const foundCategory = orderedSectors.find(cat =>
+                        sectorMapping[cat].some(sub => row.setor.includes(sub)) || row.setor === cat
+                    );
+
+                    if (foundCategory) {
+                        aggregatedData[foundCategory] += row.quantidade;
+                    }
+                });
 
                 let html = '<div style="display: flex; flex-direction: column; gap: 5px;">';
-                data.forEach(row => {
+                orderedSectors.forEach(sector => {
+                    const qty = aggregatedData[sector];
+                    const isZero = qty === 0;
+
                     html += `
-                        <div class="op-detail-row">
-                            <span class="op-detail-sector">${row.setor}</span>
-                            <span class="op-detail-value">${formatNumber(row.quantidade, 0)} <small style="font-size: 0.6em; color: var(--text-muted);">APONTADA</small></span>
+                        <div class="op-detail-row ${isZero ? 'is-zero' : ''}">
+                            <span class="op-detail-sector">${sector}</span>
+                            <span class="op-detail-value">${formatNumber(qty, 0)} <small style="font-size: 0.6em; color: var(--text-muted);">APONTADA</small></span>
                         </div>
                     `;
                 });
