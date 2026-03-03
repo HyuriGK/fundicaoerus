@@ -151,7 +151,7 @@ async function syncData() {
                     ORDER BY PS.ID_PCS ASC
                 ) AS OP_ENTREGA,
                 (
-                    SELECT FIRST 1 PS.QUANTIDADE_PCS
+                    SELECT FIRST 1 PS.DQUANTIDADE_PCS
                     FROM PRODUCAO_PEDIDO PP
                     JOIN PRODUCAO_SETOR PS ON PS.CODIGO_PCS = PP.PCP_CODIGO_PCPR AND PS.EMPRESA_PCS = PP.PCP_EMPRESA_PCPR
                     WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR
