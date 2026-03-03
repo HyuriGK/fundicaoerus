@@ -2283,7 +2283,8 @@
                     desc: item.NOME_PRODUTO_PPR || item.PRODUTO_PPR,
                     client: item.NOME_CLIENTE || '-',
                     emission: item.DATA_EMISSAO_PEDIDO ? new Date(item.DATA_EMISSAO_PEDIDO).toLocaleDateString() : '-',
-                    delivery: entrega
+                    delivery: entrega,
+                    saldo: saldoReal
                 }).replace(/'/g, "&apos;")})'>
                                 ${item.OP_PCS}
                             </span>
@@ -3268,7 +3269,7 @@
 
         // OP Details Functions
         window.showOPDetails = async function (data) {
-            const { op, desc, client, emission, delivery } = data;
+            const { op, desc, client, emission, delivery, saldo } = data;
             console.log('🔍 showOPDetails para OP:', op);
             const modal = document.getElementById('opDetailsModal');
             const content = document.getElementById('opDetailsContent');
@@ -3287,7 +3288,7 @@
 
             // Preenche dados do pedido
             opSpan.innerText = op;
-            if (descSpan) descSpan.innerText = desc;
+            if (descSpan) descSpan.innerHTML = `${desc} <span style="margin-left: 10px; padding: 2px 10px; background: rgba(var(--color-primary-rgb), 0.1); color: var(--color-primary); border-radius: 20px; font-size: 0.8rem; border: 1px solid rgba(var(--color-primary-rgb), 0.2);">Saldo: ${saldo}</span>`;
             if (clientSpan) clientSpan.innerText = client;
             if (emissionSpan) emissionSpan.innerText = emission;
             if (deliverySpan) deliverySpan.innerText = delivery;
@@ -3382,9 +3383,10 @@
                         deadlineDate.setDate(deadlineDate.getDate() + Math.round((index + 1) * daysPerSector));
                         sectorDeadlineStr = deadlineDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
 
-                        // Lógica de Atraso: 
-                        // Se a quantidade é 0 E a data de hoje passou do prazo da etapa
-                        if (isZero && today > deadlineDate) {
+                        // Lógica de Atraso Revisada: 
+                        // Se a data de hoje passou do prazo da etapa E a quantidade apontada é menor que o saldo total do pedido
+                        const saldoNum = parseInt(saldo.toString().replace(/\./g, '')) || 0;
+                        if (today > deadlineDate && qty < saldoNum) {
                             const diffDelay = Math.abs(today - deadlineDate);
                             const daysDelayed = Math.ceil(diffDelay / (1000 * 60 * 60 * 24));
                             isDelayed = true;
