@@ -127,9 +127,19 @@ async function runResetSync() {
                         const machosList = await getMachos(db, row.CODIGO_FIC);
                         const pinturaMachoMap = { 'N': 'NÃO SE APLICA', 'L': 'LAVAGEM', 'P': 'PINCEL', 'S': 'PISTOLA', 'I': 'IMERSÃO' };
                         const tipoMachoMap = { '5': 'PEPSET', '0': 'CURA FRIO' };
+
+                        const mapMulti = (str, map) => {
+                            if (!str) return '-';
+                            return String(str).split(/[;,]/)
+                                .map(p => p.trim())
+                                .filter(p => p !== '')
+                                .map(p => map[p] || p)
+                                .join(' / ') || '-';
+                        };
+
                         const detalhesMachos = machosList.map(m => {
-                            const pMacho = pinturaMachoMap[String(m.PINTURA_FTCM).trim()] || m.PINTURA_FTCM || '-';
-                            const tMacho = tipoMachoMap[String(m.TIPO_MOLDAGEM_FTCM).trim()] || m.TIPO_MOLDAGEM_FTCM || '-';
+                            const pMacho = mapMulti(m.PINTURA_FTCM, pinturaMachoMap);
+                            const tMacho = mapMulti(m.TIPO_MOLDAGEM_FTCM, tipoMachoMap);
                             return `MACHO ${m.SEQUENCIA_FTCM} - QTDE: ${m.QUANTIDADE_CADA_FTCM} - TIPO: ${tMacho} - PINTURA: ${pMacho}`;
                         }).join('\n');
 
