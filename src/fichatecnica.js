@@ -18,7 +18,7 @@ router.get('/:codigo', async (req, res) => {
                 nome_fic as "NOME_FIC",
                 material_fic as "MATERIAL_FIC",
                 peso_liquido_fic as "PESO_LIQUIDO_FIC",
-                peso_bruto_fic as "PESO_BRUTO_FIC",
+                peso_unit_pcp_fic as "PESO_UNIT_PCP_FIC",
                 tipo_moldagem_desc_fic as "TIPO_MOLDAGEM_DESC_FIC",
                 operacao_moldagem_desc_fic as "OPERACAO_MOLDAGEM_DESC_FIC",
                 desenho_int_data_rev_fic as "DESENHO_INT_DATA_REV_FIC",
@@ -29,7 +29,22 @@ router.get('/:codigo', async (req, res) => {
                 unidade_pro as "UNIDADE_PRO",
                 ncm_pro as "NCM_PRO",
                 situacao_pro as "SITUACAO_PRO",
-                nome_material as "NOME_MATERIAL"
+                nome_material as "NOME_MATERIAL",
+                cliente_nome as "CLIENTE_NOME",
+                modelo_fic as "MODELO_FIC",
+                peso_bolo_fic as "PESO_BOLO_FIC",
+                qtde_caixas_macho as "QTDE_CAIXAS_MACHO",
+                pintura_tipo as "PINTURA_TIPO",
+                fornecimento_desc as "FORNECIMENTO_DESC",
+                peso_penca as "PESO_PENCA",
+                peso_com_alimentacao as "PESO_COM_ALIMENTACAO",
+                peso_sem_alimentacao as "PESO_SEM_ALIMENTACAO",
+                relacao_molde_metal as "RELACAO_MOLDE_METAL",
+                peso_tampa as "PESO_TAMPA",
+                peso_fundo as "PESO_FUNDO",
+                qtde_figuras as "QTDE_FIGURAS",
+                tipo_modelo_desc as "TIPO_MODELO_DESC",
+                miniatura_link as "MINIATURA_LINK"
             FROM ficha_tecnica
             WHERE pro_codigo_fic = $1
             LIMIT 1
