@@ -1,16 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const Firebird = require('node-firebird');
-
-const options = {
-    host: '10.1.1.100',
-    port: 3050,
-    database: '/home/lm/LM-Sistemas/SIGE2.0/Dados/sige.fdb',
-    user: 'SYSDBA',
-    password: 'masterkey',
-    lowercase_keys: false,
-    pageSize: 4096
-};
+const pool = require('../lib/db');
 
 // GET /api/fichatecnica/:codigo
 router.get('/:codigo', async (req, res) => {
@@ -20,53 +10,45 @@ router.get('/:codigo', async (req, res) => {
         return res.status(400).json({ error: 'Código é obrigatório' });
     }
 
-    Firebird.attach(options, function (err, db) {
-        if (err) {
-            console.error('Firebird attach error:', err);
-            return res.status(500).json({ error: 'Erro ao conectar ao Firebird' });
-        }
-
-        // Query for Ficha Técnica data - CORRIGIDO: Join via PRODUTO_MATERIAL
+    try {
+        // Query PostgreSQL - Aliasing for frontend compatibility
         const sql = `
-            SELECT FIRST 1
-                F.*,
-                P.NOME_PRO,
-                P.PESO_LIQUIDO_PRO,
-                P.PESO_BRUTO_PRO,
-                P.UNIDADE_PRO,
-                P.NCM_PRO,
-                M.MATERIAL_MAT as NOME_MATERIAL
-            FROM FICHA_TECNICA F
-            LEFT JOIN PRODUTO P ON P.CODIGO_PRO = F.PRO_CODIGO_FIC
-            LEFT JOIN PRODUTO_MATERIAL PM ON PM.PRODUTO_PMT = P.CODIGO_PRO
-            LEFT JOIN MATERIAL M ON M.ID_MAT = PM.MAT_ID_PMT
-            WHERE F.PRO_CODIGO_FIC = ?
+            SELECT 
+                pro_codigo_fic as "PRO_CODIGO_FIC",
+                nome_fic as "NOME_FIC",
+                material_fic as "MATERIAL_FIC",
+                peso_liquido_fic as "PESO_LIQUIDO_FIC",
+                peso_bruto_fic as "PESO_BRUTO_FIC",
+                tipo_moldagem_desc_fic as "TIPO_MOLDAGEM_DESC_FIC",
+                operacao_moldagem_desc_fic as "OPERACAO_MOLDAGEM_DESC_FIC",
+                desenho_int_data_rev_fic as "DESENHO_INT_DATA_REV_FIC",
+                descricao_fic as "DESCRICAO_FIC",
+                nome_pro as "NOME_PRO",
+                peso_liquido_pro as "PESO_LIQUIDO_PRO",
+                peso_bruto_pro as "PESO_BRUTO_PRO",
+                unidade_pro as "UNIDADE_PRO",
+                ncm_pro as "NCM_PRO",
+                situacao_pro as "SITUACAO_PRO",
+                nome_material as "NOME_MATERIAL"
+            FROM ficha_tecnica
+            WHERE pro_codigo_fic = $1
+            LIMIT 1
         `;
 
-        db.query(sql, [codigo], function (err, result) {
-            if (err) {
-                console.error('Firebird query error details:', {
-                    message: err.message,
-                    sql: sql,
-                    codigo: codigo
-                });
-                db.detach();
-                return res.status(500).json({
-                    error: 'Erro ao consultar Ficha Técnica',
-                    details: err.message
-                });
-            }
+        const result = await pool.query(sql, [codigo]);
 
-            if (!result || result.length === 0) {
-                db.detach();
-                return res.status(404).json({ error: 'Ficha Técnica não encontrada para o código informado.' });
-            }
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Ficha Técnica não encontrada no Postgres.' });
+        }
 
-            const data = result[0];
-            db.detach();
-            res.json(data);
+        res.json(result.rows[0]);
+    } catch (err) {
+        console.error('Postgres query error:', err);
+        res.status(500).json({
+            error: 'Erro ao consultar Ficha Técnica no Postgres',
+            details: err.message
         });
-    });
+    }
 });
 
 module.exports = router;
