@@ -19,7 +19,23 @@ const pgPool = new Pool({
     ssl: { rejectUnauthorized: false }
 });
 
-// Helper to read Firebird BLOBs
+// Helper to read Firebird BLOBs as Buffer (for images)
+function readBlobBuffer(blob) {
+    return new Promise((resolve, reject) => {
+        if (!blob) return resolve(null);
+        if (typeof blob !== 'function') return resolve(null);
+
+        blob((err, name, stream) => {
+            if (err) return resolve(null);
+            let chunks = [];
+            stream.on('data', chunk => chunks.push(chunk));
+            stream.on('end', () => resolve(Buffer.concat(chunks)));
+            stream.on('error', () => resolve(null));
+        });
+    });
+}
+
+// Helper to read Firebird BLOBs as String (for text)
 function readBlob(blob) {
     return new Promise((resolve, reject) => {
         if (!blob) return resolve('');
@@ -36,7 +52,7 @@ function readBlob(blob) {
 }
 
 async function syncFichas() {
-    console.log('🚀 Sincronização de Fichas Técnicas (Correção Final)...');
+    console.log('🚀 Sincronização de Fichas Técnicas (incluindo fotos)...');
     const client = await pgPool.connect();
 
     Firebird.attach(firebirdOptions, function (err, db) {
@@ -52,7 +68,8 @@ async function syncFichas() {
                 F.PESO_UNITARIO_SEM_ALIMENT_FIC, F.RELACAO_MOLDE_METAL_FIC,
                 F.PESO_TAMPA_FIC, F.PESO_FUNDO_FIC, F.CAVIDADE_QTDE_FIGURAS_FIC, F.TIPO_MODELO_FIC,
                 P.NOME_PRO, P.PESO_LIQUIDO_PRO, P.PESO_BRUTO_PRO, P.SITUACAO_PRO,
-                C.RAZAO_SOCIAL_CLI as NOME_CLIENTE
+                C.RAZAO_SOCIAL_CLI as NOME_CLIENTE,
+                (SELECT FIRST 1 FTT.FOTO_FTT FROM FICHA_TECNICA_FOTO FTT WHERE FTT.FIC_CODIGO_FTT = F.CODIGO_FIC AND FTT.EXIBIR_RELATORIO_FTT = 'S' ORDER BY FTT.ORDEM_FTT ASC) as FOTO_FTT
             FROM FICHA_TECNICA F
             LEFT JOIN PRODUTO P ON P.CODIGO_PRO = F.PRO_CODIGO_FIC
             LEFT JOIN CLIENTE C ON C.CODIGO_CLI = F.CLI_CODIGO_FIC
@@ -74,6 +91,8 @@ async function syncFichas() {
                     const relacao = row.RELACAO_MOLDE_METAL_FIC || 0;
 
                     const descricao = await readBlob(row.DESCRICAO_FIC);
+                    const fotoBuffer = await readBlobBuffer(row.FOTO_FTT);
+                    const fotoBase64 = fotoBuffer ? fotoBuffer.toString('base64') : null;
 
                     await client.query(`
                         INSERT INTO ficha_tecnica (
@@ -83,8 +102,8 @@ async function syncFichas() {
                             situacao_pro, cliente_nome, cli_codigo_fic, cli_codgio_fic,
                             modelo_fic, peso_bolo_fic, qtde_caixas_macho, pintura_tipo, fornecimento_desc,
                             peso_penca, peso_com_alimentacao, peso_sem_alimentacao, relacao_molde_metal,
-                            peso_tampa, peso_fundo, qtde_figuras, tipo_modelo_desc, updated_at
-                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, NOW())
+                            peso_tampa, peso_fundo, qtde_figuras, tipo_modelo_desc, foto_base64, updated_at
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, NOW())
                         ON CONFLICT (pro_codigo_fic) DO UPDATE SET
                             material_fic = EXCLUDED.material_fic,
                             peso_liquido_fic = EXCLUDED.peso_liquido_fic,
@@ -109,6 +128,7 @@ async function syncFichas() {
                             peso_fundo = EXCLUDED.peso_fundo,
                             qtde_figuras = EXCLUDED.qtde_figuras,
                             tipo_modelo_desc = EXCLUDED.tipo_modelo_desc,
+                            foto_base64 = EXCLUDED.foto_base64,
                             updated_at = NOW();
                     `, [
                         String(row.PRO_CODIGO_FIC).trim(), row.MAT_NOMENCLATURA_FIC, row.PESO_LIQUIDO_FIC, row.PESO_UNIT_PCP_FIC,
@@ -117,7 +137,7 @@ async function syncFichas() {
                         row.NOME_CLIENTE, String(row.CLI_CODIGO_FIC).trim(), String(row.CLI_CODIGO_FIC).trim(),
                         row.MODELO_FIC, row.CAVIDADE_PESO_BOLO_FIC, row.QTDE_CAIXAS_MACHO_FIC, pintura, fornecimento,
                         row.PESO_PENCA_FIC, row.PESO_UNITARIO_COM_ALIMENT_FIC, row.PESO_UNITARIO_SEM_ALIMENT_FIC, relacao,
-                        row.PESO_TAMPA_FIC, row.PESO_FUNDO_FIC, row.CAVIDADE_QTDE_FIGURAS_FIC, tipoModelo
+                        row.PESO_TAMPA_FIC, row.PESO_FUNDO_FIC, row.CAVIDADE_QTDE_FIGURAS_FIC, tipoModelo, fotoBase64
                     ]);
                     count++;
                 } catch (e) {
