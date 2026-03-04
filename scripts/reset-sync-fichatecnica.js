@@ -46,16 +46,16 @@ function readBlob(blob) {
     });
 }
 
-function getMachos(db, proCodigo) {
+function getMachos(db, fichaCodigo) {
     return new Promise((resolve) => {
         db.query(`
             SELECT SEQUENCIA_FTCM, QUANTIDADE_CADA_FTCM, TIPO_MOLDAGEM_FTCM, PINTURA_FTCM 
             FROM FICHA_TECNICA_CAIXA_MACHO 
             WHERE FIC_CODIGO_FTCM = ?
             ORDER BY SEQUENCIA_FTCM
-        `, [proCodigo], (err, results) => {
+        `, [fichaCodigo], (err, results) => {
             if (err) {
-                console.error(`⚠️ Erro ao buscar machos para ${proCodigo}:`, err);
+                console.error(`⚠️ Erro ao buscar machos para ficha ID ${fichaCodigo}:`, err);
                 return resolve([]);
             }
             resolve(results);
@@ -82,7 +82,7 @@ async function runResetSync() {
 
             const sql = `
                 SELECT 
-                    F.PRO_CODIGO_FIC, F.MAT_NOMENCLATURA_FIC, F.PESO_LIQUIDO_FIC, F.PESO_UNIT_PCP_FIC,
+                    F.CODIGO_FIC, F.PRO_CODIGO_FIC, F.MAT_NOMENCLATURA_FIC, F.PESO_LIQUIDO_FIC, F.PESO_UNIT_PCP_FIC,
                     F.TIPO_MOLDAGEM_DESC_FIC, F.OPERACAO_MOLDAGEM_DESC_FIC,
                     F.DESCRICAO_FIC, F.CLI_CODIGO_FIC, F.PRO_COD_MODELO_FIC, F.CAVIDADE_PESO_BOLO_FIC,
                     F.QTDE_CAIXAS_MACHO_FIC, F.PINTAR_PISTOLA_FIC, F.PINTAR_IMERSAO_FIC,
@@ -123,8 +123,8 @@ async function runResetSync() {
                         const fotoBuffer = await readBlobBuffer(row.MINIATURA_FIC);
                         const fotoBase64 = fotoBuffer ? fotoBuffer.toString('base64') : null;
 
-                        // Fetch and format Machos
-                        const machosList = await getMachos(db, String(row.PRO_CODIGO_FIC).trim());
+                        // Fetch and format Machos (using CODIGO_FIC for join)
+                        const machosList = await getMachos(db, row.CODIGO_FIC);
                         const detalhesMachos = machosList.map(m =>
                             `MACHO ${m.SEQUENCIA_FTCM} - QTDE: ${m.QUANTIDADE_CADA_FTCM} - TIPO: ${String(m.TIPO_MOLDAGEM_FTCM).trim()} - PINTURA: ${String(m.PINTURA_FTCM).trim()}`
                         ).join('\n');
