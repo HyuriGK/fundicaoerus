@@ -67,9 +67,9 @@ async function syncFichas() {
                 F.FORNECIMENTO_FIC, F.PESO_PENCA_FIC, F.PESO_UNITARIO_COM_ALIMENT_FIC,
                 F.PESO_UNITARIO_SEM_ALIMENT_FIC, F.RELACAO_MOLDE_METAL_FIC,
                 F.PESO_TAMPA_FIC, F.PESO_FUNDO_FIC, F.CAVIDADE_QTDE_FIGURAS_FIC, F.TIPO_MODELO_FIC,
+                F.MINIATURA_FIC,
                 P.NOME_PRO, P.PESO_LIQUIDO_PRO, P.PESO_BRUTO_PRO, P.SITUACAO_PRO,
-                C.RAZAO_SOCIAL_CLI as NOME_CLIENTE,
-                (SELECT FIRST 1 FTT.FOTO_FTT FROM FICHA_TECNICA_FOTO FTT WHERE FTT.FIC_CODIGO_FTT = F.CODIGO_FIC AND FTT.EXIBIR_RELATORIO_FTT = 'S' ORDER BY FTT.ORDEM_FTT ASC) as FOTO_FTT
+                C.RAZAO_SOCIAL_CLI as NOME_CLIENTE
             FROM FICHA_TECNICA F
             LEFT JOIN PRODUTO P ON P.CODIGO_PRO = F.PRO_CODIGO_FIC
             LEFT JOIN CLIENTE C ON C.CODIGO_CLI = F.CLI_CODIGO_FIC
@@ -91,7 +91,7 @@ async function syncFichas() {
                     const relacao = row.RELACAO_MOLDE_METAL_FIC || 0;
 
                     const descricao = await readBlob(row.DESCRICAO_FIC);
-                    const fotoBuffer = await readBlobBuffer(row.FOTO_FTT);
+                    const fotoBuffer = await readBlobBuffer(row.MINIATURA_FIC);
                     const fotoBase64 = fotoBuffer ? fotoBuffer.toString('base64') : null;
 
                     await client.query(`
