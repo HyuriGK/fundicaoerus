@@ -26,7 +26,7 @@ router.get('/:codigo', async (req, res) => {
             return res.status(500).json({ error: 'Erro ao conectar ao Firebird' });
         }
 
-        // Query for Ficha Técnica data
+        // Query for Ficha Técnica data - CORRIGIDO: Join via PRODUTO_MATERIAL
         const sql = `
             SELECT FIRST 1
                 F.*,
@@ -38,15 +38,23 @@ router.get('/:codigo', async (req, res) => {
                 M.MATERIAL_MAT as NOME_MATERIAL
             FROM FICHA_TECNICA F
             LEFT JOIN PRODUTO P ON P.CODIGO_PRO = F.PRO_CODIGO_FIC
-            LEFT JOIN MATERIAL M ON M.CODIGO_MAT = P.MAT_CODIGO_PRO
+            LEFT JOIN PRODUTO_MATERIAL PM ON PM.PRODUTO_PMT = P.CODIGO_PRO
+            LEFT JOIN MATERIAL M ON M.ID_MAT = PM.MAT_ID_PMT
             WHERE F.PRO_CODIGO_FIC = ?
         `;
 
         db.query(sql, [codigo], function (err, result) {
             if (err) {
-                console.error('Firebird query error:', err);
+                console.error('Firebird query error details:', {
+                    message: err.message,
+                    sql: sql,
+                    codigo: codigo
+                });
                 db.detach();
-                return res.status(500).json({ error: 'Erro ao consultar Ficha Técnica' });
+                return res.status(500).json({
+                    error: 'Erro ao consultar Ficha Técnica',
+                    details: err.message
+                });
             }
 
             if (!result || result.length === 0) {
