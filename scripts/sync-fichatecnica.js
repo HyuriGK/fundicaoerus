@@ -19,8 +19,24 @@ const pgPool = new Pool({
     ssl: { rejectUnauthorized: false }
 });
 
+// Helper to read Firebird BLOBs
+function readBlob(blob) {
+    return new Promise((resolve, reject) => {
+        if (!blob) return resolve('');
+        if (typeof blob !== 'function') return resolve(String(blob));
+
+        blob((err, name, stream) => {
+            if (err) return resolve('');
+            let chunks = [];
+            stream.on('data', chunk => chunks.push(chunk));
+            stream.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')));
+            stream.on('error', () => resolve(''));
+        });
+    });
+}
+
 async function syncFichas() {
-    console.log('🚀 Sincronização de Fichas Técnicas (Otimizada)...');
+    console.log('🚀 Sincronização de Fichas Técnicas (Correção Final)...');
     const client = await pgPool.connect();
 
     Firebird.attach(firebirdOptions, function (err, db) {
@@ -46,7 +62,7 @@ async function syncFichas() {
         db.query(sql, async function (err, results) {
             if (err) { console.error('Erro query:', err); db.detach(); client.release(); return; }
 
-            console.log(`📊 ${results.length} registros recebidos. Iniciando processamento...`);
+            console.log(`📊 ${results.length} registros recebidos. Processando...`);
             let count = 0;
             for (const row of results) {
                 try {
@@ -55,9 +71,9 @@ async function syncFichas() {
                     const fornecimento = fornMap[String(row.FORNECIMENTO_FIC).trim()] || row.FORNECIMENTO_FIC || '-';
                     const modelMap = { 0: 'MODELO EM CAIXA', 1: 'MODELO EM PLACA', 2: 'MODELO SOLTO' };
                     const tipoModelo = modelMap[row.TIPO_MODELO_FIC] || '-';
-
-                    // Conforme solicitado: RELACAO_MOLDE_METAL_FIC estrito
                     const relacao = row.RELACAO_MOLDE_METAL_FIC || 0;
+
+                    const descricao = await readBlob(row.DESCRICAO_FIC);
 
                     await client.query(`
                         INSERT INTO ficha_tecnica (
@@ -96,7 +112,7 @@ async function syncFichas() {
                             updated_at = NOW();
                     `, [
                         String(row.PRO_CODIGO_FIC).trim(), row.MAT_NOMENCLATURA_FIC, row.PESO_LIQUIDO_FIC, row.PESO_UNIT_PCP_FIC,
-                        row.TIPO_MOLDAGEM_DESC_FIC, row.OPERACAO_MOLDAGEM_DESC_FIC, row.DESCRICAO_FIC,
+                        row.TIPO_MOLDAGEM_DESC_FIC, row.OPERACAO_MOLDAGEM_DESC_FIC, descricao,
                         row.NOME_PRO, row.PESO_LIQUIDO_PRO, row.PESO_BRUTO_PRO, row.SITUACAO_PRO,
                         row.NOME_CLIENTE, String(row.CLI_CODIGO_FIC).trim(), String(row.CLI_CODIGO_FIC).trim(),
                         row.MODELO_FIC, row.CAVIDADE_PESO_BOLO_FIC, row.QTDE_CAIXAS_MACHO_FIC, pintura, fornecimento,
@@ -105,7 +121,7 @@ async function syncFichas() {
                     ]);
                     count++;
                 } catch (e) {
-                    // console.error('Erro row:', e.message);
+                    console.error('Erro row:', e.message);
                 }
             }
             console.log(`✅ Sincronização concluída: ${count} registros.`);

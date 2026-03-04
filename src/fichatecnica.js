@@ -15,7 +15,7 @@ router.get('/:codigo', async (req, res) => {
         const sql = `
             SELECT 
                 pro_codigo_fic as "PRO_CODIGO_FIC",
-                nome_fic as "NOME_FIC",
+                nome_pro as "NOME_PRO",
                 material_fic as "MATERIAL_FIC",
                 peso_liquido_fic as "PESO_LIQUIDO_FIC",
                 peso_unit_pcp_fic as "PESO_UNIT_PCP_FIC",
