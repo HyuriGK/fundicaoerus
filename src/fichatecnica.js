@@ -21,6 +21,7 @@ router.get('/:codigo', async (req, res) => {
                 peso_unit_pcp_fic as "PESO_UNIT_PCP_FIC",
                 tipo_moldagem_desc_fic as "TIPO_MOLDAGEM_DESC_FIC",
                 operacao_moldagem_desc_fic as "OPERACAO_MOLDAGEM_DESC_FIC",
+                descricao_fic as "DESCRICAO_FIC",
                 situacao_pro as "SITUACAO_PRO",
                 nome_material as "NOME_MATERIAL",
                 cliente_nome as "CLIENTE_NOME",
