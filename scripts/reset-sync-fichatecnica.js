@@ -78,6 +78,7 @@ async function runResetSync() {
                 FROM FICHA_TECNICA F
                 LEFT JOIN PRODUTO P ON P.CODIGO_PRO = F.PRO_CODIGO_FIC
                 LEFT JOIN CLIENTE C ON C.CODIGO_CLI = F.CLI_CODIGO_FIC
+                WHERE F.EMP_CODIGO_FIC = 10
             `;
 
             console.log('📥 Buscando novos dados no Firebird...');
