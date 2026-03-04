@@ -126,9 +126,11 @@ async function runResetSync() {
                         // Fetch and format Machos (using CODIGO_FIC for join)
                         const machosList = await getMachos(db, row.CODIGO_FIC);
                         const pinturaMachoMap = { 'N': 'NÃO SE APLICA', 'L': 'LAVAGEM', 'P': 'PINCEL', 'S': 'PISTOLA', 'I': 'IMERSÃO' };
+                        const tipoMachoMap = { '5': 'PEPSET', '0': 'CURA FRIO' };
                         const detalhesMachos = machosList.map(m => {
                             const pMacho = pinturaMachoMap[String(m.PINTURA_FTCM).trim()] || m.PINTURA_FTCM || '-';
-                            return `MACHO ${m.SEQUENCIA_FTCM} - QTDE: ${m.QUANTIDADE_CADA_FTCM} - TIPO: ${String(m.TIPO_MOLDAGEM_FTCM).trim()} - PINTURA: ${pMacho}`;
+                            const tMacho = tipoMachoMap[String(m.TIPO_MOLDAGEM_FTCM).trim()] || m.TIPO_MOLDAGEM_FTCM || '-';
+                            return `MACHO ${m.SEQUENCIA_FTCM} - QTDE: ${m.QUANTIDADE_CADA_FTCM} - TIPO: ${tMacho} - PINTURA: ${pMacho}`;
                         }).join('\n');
 
                         await client.query(`
