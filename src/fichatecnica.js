@@ -41,6 +41,8 @@ router.get('/:codigo', async (req, res) => {
                 qtde_figuras as "QTDE_FIGURAS",
                 tipo_modelo_desc as "TIPO_MODELO_DESC",
                 foto_base64 as "FOTO_BASE64",
+                peso_machos as "PESO_MACHOS",
+                detalhes_machos as "DETALHES_MACHOS",
                 miniatura_link as "MINIATURA_LINK"
             FROM ficha_tecnica
             WHERE pro_codigo_fic = $1
