@@ -109,7 +109,11 @@ async function syncFichas() {
                 F.PESO_TAMPA_FIC, F.PESO_FUNDO_FIC, F.CAVIDADE_QTDE_FIGURAS_FIC, F.TIPO_MODELO_FIC,
                 F.MINIATURA_FIC, F.PESO_MACHOS_FIC, F.DATA_FIC, F.TINTA_REFRATARIA_FIC,
                 P.NOME_PRO, P.PESO_LIQUIDO_PRO, P.PESO_BRUTO_PRO, P.SITUACAO_PRO,
-                C.RAZAO_SOCIAL_CLI as NOME_CLIENTE
+                C.RAZAO_SOCIAL_CLI as NOME_CLIENTE,
+                (SELECT FIRST 1 M.MATERIAL_MAT 
+                 FROM PRODUTO_MATERIAL PM 
+                 JOIN MATERIAL M ON M.ID_MAT = PM.MAT_ID_PMT 
+                 WHERE PM.PRODUTO_PMT = F.PRO_CODIGO_FIC) as MATERIAL_REAL
             FROM FICHA_TECNICA F
             LEFT JOIN PRODUTO P ON P.CODIGO_PRO = F.PRO_CODIGO_FIC
             LEFT JOIN CLIENTE C ON C.CODIGO_CLI = F.CLI_CODIGO_FIC
@@ -220,7 +224,7 @@ async function syncFichas() {
                             detalhes_luvas = EXCLUDED.detalhes_luvas,
                             updated_at = NOW();
                     `, [
-                        String(row.PRO_CODIGO_FIC).trim(), row.MAT_NOMENCLATURA_FIC, row.PESO_LIQUIDO_FIC, row.PESO_UNIT_PCP_FIC,
+                        String(row.PRO_CODIGO_FIC).trim(), row.MATERIAL_REAL || row.MAT_NOMENCLATURA_FIC, row.PESO_LIQUIDO_FIC, row.PESO_UNIT_PCP_FIC,
                         row.TIPO_MOLDAGEM_DESC_FIC, row.OPERACAO_MOLDAGEM_DESC_FIC, descricao,
                         row.NOME_PRO, row.PESO_LIQUIDO_PRO, row.PESO_BRUTO_PRO, row.SITUACAO_PRO,
                         row.NOME_CLIENTE, String(row.CLI_CODIGO_FIC).trim(), String(row.CLI_CODIGO_FIC).trim(),
