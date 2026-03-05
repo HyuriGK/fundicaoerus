@@ -51,6 +51,18 @@ function readBlob(blob) {
     });
 }
 
+function parseObservation(raw) {
+    if (!raw) return '';
+    try {
+        const obsMatch = raw.match(/OBS:/i);
+        if (!obsMatch) return raw;
+        const content = raw.substring(obsMatch.index);
+        return content.replace(/\\par/g, '\n').replace(/}/g, '').trim();
+    } catch (e) {
+        return raw;
+    }
+}
+
 function getMachos(db, fichaCodigo) {
     return new Promise((resolve) => {
         db.query(`
@@ -107,7 +119,7 @@ async function syncFichas() {
                 F.FORNECIMENTO_FIC, F.PESO_PENCA_FIC, F.PESO_UNITARIO_COM_ALIMENT_FIC,
                 F.PESO_UNITARIO_SEM_ALIMENT_FIC, F.RELACAO_MOLDE_METAL_FIC,
                 F.PESO_TAMPA_FIC, F.PESO_FUNDO_FIC, F.CAVIDADE_QTDE_FIGURAS_FIC, F.TIPO_MODELO_FIC,
-                F.MINIATURA_FIC, F.PESO_MACHOS_FIC, F.DATA_FIC, F.TINTA_REFRATARIA_FIC,
+                F.MINIATURA_FIC, F.PESO_MACHOS_FIC, F.DATA_FIC, F.TINTA_REFRATARIA_FIC, F.MOLDAGEM_OBS_FIC,
                 P.NOME_PRO, P.PESO_LIQUIDO_PRO, P.PESO_BRUTO_PRO, P.SITUACAO_PRO, P.REFERENCIA_PRO,
                 C.RAZAO_SOCIAL_CLI as NOME_CLIENTE,
                 (SELECT FIRST 1 M.MATERIAL_MAT 
@@ -152,7 +164,8 @@ async function syncFichas() {
                     const tipoModelo = modelMap[row.TIPO_MODELO_FIC] || '-';
                     const relacao = row.RELACAO_MOLDE_METAL_FIC || 0;
 
-                    const descricao = await readBlob(row.DESCRICAO_FIC);
+                    const descricaoRaw = await readBlob(row.MOLDAGEM_OBS_FIC || row.DESCRICAO_FIC);
+                    const descricao = parseObservation(descricaoRaw);
                     const fotoBuffer = await readBlobBuffer(row.MINIATURA_FIC);
                     const fotoBase64 = fotoBuffer ? fotoBuffer.toString('base64') : null;
 
