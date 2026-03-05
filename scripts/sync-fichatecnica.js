@@ -71,10 +71,10 @@ function getMachos(db, fichaCodigo) {
 function getLuvas(db, fichaCodigo) {
     return new Promise((resolve) => {
         db.query(`
-            SELECT PCM.QUANTIDADE_PCM, P.NOME_PRO as NOME_LUVA
-            FROM PRODUCAO_COMPOSICAO_MATERIAL PCM
-            LEFT JOIN PRODUTO P ON P.CODIGO_PRO = PCM.PRO_CODIGO_PCM
-            WHERE PCM.FIC_CODIGO_PCM = ?
+            SELECT FIP.QUANTIDADE_FIP as QUANTIDADE_PCM, P.NOME_PRO as NOME_LUVA
+            FROM FICHA_TECNICA_PRODUTO FIP
+            LEFT JOIN PRODUTO P ON P.CODIGO_PRO = FIP.PRO_CODIGO_FIP
+            WHERE FIP.FIC_CODIGO_FIP = ?
         `, [fichaCodigo], (err, results) => {
             if (err) {
                 console.error(`⚠️ Erro ao buscar luvas para ficha ID ${fichaCodigo}:`, err);
