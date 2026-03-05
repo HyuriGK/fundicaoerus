@@ -68,6 +68,23 @@ function getMachos(db, fichaCodigo) {
     });
 }
 
+function getLuvas(db, fichaCodigo) {
+    return new Promise((resolve) => {
+        db.query(`
+            SELECT PCM.QUANTIDADE_PCM, P.NOME_PRO as NOME_LUVA
+            FROM PRODUCAO_COMPOSICAO_MATERIAL PCM
+            LEFT JOIN PRODUTO P ON P.CODIGO_PRO = PCM.PRO_CODIGO_PCM
+            WHERE PCM.FIC_CODIGO_PCM = ?
+        `, [fichaCodigo], (err, results) => {
+            if (err) {
+                console.error(`⚠️ Erro ao buscar luvas para ficha ID ${fichaCodigo}:`, err);
+                return resolve([]);
+            }
+            resolve(results);
+        });
+    });
+}
+
 async function syncFichas() {
     console.log('🚀 Sincronização de Fichas Técnicas (incluindo fotos)...');
     const client = await pgPool.connect();
@@ -155,6 +172,12 @@ async function syncFichas() {
                         return `MACHO ${m.SEQUENCIA_FTCM} - QTDE: ${m.QUANTIDADE_CADA_FTCM} - TIPO: ${tMacho} - PINTURA: ${pMacho}`;
                     }).join('\n');
 
+                    // Fetch and format Luvas
+                    const luvasList = await getLuvas(db, row.CODIGO_FIC);
+                    const detalhesLuvas = luvasList.map(l => {
+                        return `LUVA: ${l.NOME_LUVA || '-'} - QTDE: ${l.QUANTIDADE_PCM || 0}`;
+                    }).join('\n');
+
                     await client.query(`
                         INSERT INTO ficha_tecnica (
                             pro_codigo_fic, material_fic, peso_liquido_fic, peso_unit_pcp_fic,
@@ -164,8 +187,8 @@ async function syncFichas() {
                             modelo_fic, peso_bolo_fic, qtde_caixas_macho, pintura_tipo, fornecimento_desc,
                             peso_penca, peso_com_alimentacao, peso_sem_alimentacao, relacao_molde_metal,
                             peso_tampa, peso_fundo, qtde_figuras, tipo_modelo_desc, foto_base64,
-                            peso_machos, detalhes_machos, tinta_refrataria_fic, updated_at
-                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, NOW())
+                            peso_machos, detalhes_machos, tinta_refrataria_fic, detalhes_luvas, updated_at
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, NOW())
                         ON CONFLICT (pro_codigo_fic) DO UPDATE SET
                             material_fic = EXCLUDED.material_fic,
                             peso_liquido_fic = EXCLUDED.peso_liquido_fic,
@@ -194,6 +217,7 @@ async function syncFichas() {
                             peso_machos = EXCLUDED.peso_machos,
                             detalhes_machos = EXCLUDED.detalhes_machos,
                             tinta_refrataria_fic = EXCLUDED.tinta_refrataria_fic,
+                            detalhes_luvas = EXCLUDED.detalhes_luvas,
                             updated_at = NOW();
                     `, [
                         String(row.PRO_CODIGO_FIC).trim(), row.MAT_NOMENCLATURA_FIC, row.PESO_LIQUIDO_FIC, row.PESO_UNIT_PCP_FIC,
@@ -203,7 +227,7 @@ async function syncFichas() {
                         row.MODELO_FIC, row.CAVIDADE_PESO_BOLO_FIC, row.QTDE_CAIXAS_MACHO_FIC, pintura, fornecimento,
                         row.PESO_PENCA_FIC, row.PESO_UNITARIO_COM_ALIMENT_FIC, row.PESO_UNITARIO_SEM_ALIMENT_FIC, relacao,
                         row.PESO_TAMPA_FIC, row.PESO_FUNDO_FIC, row.CAVIDADE_QTDE_FIGURAS_FIC, tipoModelo, fotoBase64,
-                        row.PESO_MACHOS_FIC, detalhesMachos, row.TINTA_REFRATARIA_FIC
+                        row.PESO_MACHOS_FIC, detalhesMachos, row.TINTA_REFRATARIA_FIC, detalhesLuvas
                     ]);
                     count++;
                 } catch (e) {
