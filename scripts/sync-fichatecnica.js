@@ -108,7 +108,7 @@ async function syncFichas() {
                 F.PESO_UNITARIO_SEM_ALIMENT_FIC, F.RELACAO_MOLDE_METAL_FIC,
                 F.PESO_TAMPA_FIC, F.PESO_FUNDO_FIC, F.CAVIDADE_QTDE_FIGURAS_FIC, F.TIPO_MODELO_FIC,
                 F.MINIATURA_FIC, F.PESO_MACHOS_FIC, F.DATA_FIC, F.TINTA_REFRATARIA_FIC,
-                P.NOME_PRO, P.PESO_LIQUIDO_PRO, P.PESO_BRUTO_PRO, P.SITUACAO_PRO,
+                P.NOME_PRO, P.PESO_LIQUIDO_PRO, P.PESO_BRUTO_PRO, P.SITUACAO_PRO, P.REFERENCIA_PRO,
                 C.RAZAO_SOCIAL_CLI as NOME_CLIENTE,
                 (SELECT FIRST 1 M.MATERIAL_MAT 
                  FROM PRODUTO_MATERIAL PM 
@@ -228,7 +228,7 @@ async function syncFichas() {
                         row.TIPO_MOLDAGEM_DESC_FIC, row.OPERACAO_MOLDAGEM_DESC_FIC, descricao,
                         row.NOME_PRO, row.PESO_LIQUIDO_PRO, row.PESO_BRUTO_PRO, row.SITUACAO_PRO,
                         row.NOME_CLIENTE, String(row.CLI_CODIGO_FIC).trim(), String(row.CLI_CODIGO_FIC).trim(),
-                        row.MODELO_FIC, row.CAVIDADE_PESO_BOLO_FIC, row.QTDE_CAIXAS_MACHO_FIC, pintura, fornecimento,
+                        row.REFERENCIA_PRO || row.MODELO_FIC, row.CAVIDADE_PESO_BOLO_FIC, row.QTDE_CAIXAS_MACHO_FIC, pintura, fornecimento,
                         row.PESO_PENCA_FIC, row.PESO_UNITARIO_COM_ALIMENT_FIC, row.PESO_UNITARIO_SEM_ALIMENT_FIC, relacao,
                         row.PESO_TAMPA_FIC, row.PESO_FUNDO_FIC, row.CAVIDADE_QTDE_FIGURAS_FIC, tipoModelo, fotoBase64,
                         row.PESO_MACHOS_FIC, detalhesMachos, row.TINTA_REFRATARIA_FIC, detalhesLuvas
