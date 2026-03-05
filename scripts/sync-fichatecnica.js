@@ -72,6 +72,12 @@ async function syncFichas() {
     console.log('🚀 Sincronização de Fichas Técnicas (incluindo fotos)...');
     const client = await pgPool.connect();
 
+    // Buscar códigos em carteira no Postgres para priorização
+    console.log('🔍 Buscando códigos em carteira para priorização...');
+    const carteiraRes = await client.query('SELECT DISTINCT codigo FROM carteira');
+    const portfolioCodes = new Set(carteiraRes.rows.map(r => String(r.codigo).trim()));
+    console.log(`📌 ${portfolioCodes.size} códigos encontrados na carteira.`);
+
     Firebird.attach(firebirdOptions, function (err, db) {
         if (err) { console.error('Erro Firebird:', err); client.release(); return; }
 
@@ -84,7 +90,7 @@ async function syncFichas() {
                 F.FORNECIMENTO_FIC, F.PESO_PENCA_FIC, F.PESO_UNITARIO_COM_ALIMENT_FIC,
                 F.PESO_UNITARIO_SEM_ALIMENT_FIC, F.RELACAO_MOLDE_METAL_FIC,
                 F.PESO_TAMPA_FIC, F.PESO_FUNDO_FIC, F.CAVIDADE_QTDE_FIGURAS_FIC, F.TIPO_MODELO_FIC,
-                F.MINIATURA_FIC, F.PESO_MACHOS_FIC,
+                F.MINIATURA_FIC, F.PESO_MACHOS_FIC, F.DATA_FIC,
                 P.NOME_PRO, P.PESO_LIQUIDO_PRO, P.PESO_BRUTO_PRO, P.SITUACAO_PRO,
                 C.RAZAO_SOCIAL_CLI as NOME_CLIENTE
             FROM FICHA_TECNICA F
@@ -97,7 +103,24 @@ async function syncFichas() {
         db.query(sql, async function (err, results) {
             if (err) { console.error('Erro query:', err); db.detach(); client.release(); return; }
 
-            console.log(`📊 ${results.length} registros recebidos. Processando...`);
+            console.log(`📊 ${results.length} registros recebidos. Ordenando por prioridade (Carteira > Data)...`);
+
+            // Ordenação: 
+            // 1. Em carteira (portfolioCodes)
+            // 2. Data Decrescente (mais recentes primeiro)
+            results.sort((a, b) => {
+                const aIdx = portfolioCodes.has(String(a.PRO_CODIGO_FIC).trim()) ? 0 : 1;
+                const bIdx = portfolioCodes.has(String(b.PRO_CODIGO_FIC).trim()) ? 0 : 1;
+
+                if (aIdx !== bIdx) return aIdx - bIdx;
+
+                // DATA_FIC fallback
+                const dataA = a.DATA_FIC ? new Date(a.DATA_FIC) : new Date(0);
+                const dataB = b.DATA_FIC ? new Date(b.DATA_FIC) : new Date(0);
+                return dataB - dataA;
+            });
+
+            console.log(`✅ Ordenação concluída. Iniciando processamento...`);
             let count = 0;
             for (const row of results) {
                 try {
