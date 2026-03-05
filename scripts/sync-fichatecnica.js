@@ -90,7 +90,7 @@ async function syncFichas() {
                 F.FORNECIMENTO_FIC, F.PESO_PENCA_FIC, F.PESO_UNITARIO_COM_ALIMENT_FIC,
                 F.PESO_UNITARIO_SEM_ALIMENT_FIC, F.RELACAO_MOLDE_METAL_FIC,
                 F.PESO_TAMPA_FIC, F.PESO_FUNDO_FIC, F.CAVIDADE_QTDE_FIGURAS_FIC, F.TIPO_MODELO_FIC,
-                F.MINIATURA_FIC, F.PESO_MACHOS_FIC, F.DATA_FIC,
+                F.MINIATURA_FIC, F.PESO_MACHOS_FIC, F.DATA_FIC, F.TINTA_REFRATARIA_FIC,
                 P.NOME_PRO, P.PESO_LIQUIDO_PRO, P.PESO_BRUTO_PRO, P.SITUACAO_PRO,
                 C.RAZAO_SOCIAL_CLI as NOME_CLIENTE
             FROM FICHA_TECNICA F
@@ -164,8 +164,8 @@ async function syncFichas() {
                             modelo_fic, peso_bolo_fic, qtde_caixas_macho, pintura_tipo, fornecimento_desc,
                             peso_penca, peso_com_alimentacao, peso_sem_alimentacao, relacao_molde_metal,
                             peso_tampa, peso_fundo, qtde_figuras, tipo_modelo_desc, foto_base64,
-                            peso_machos, detalhes_machos, updated_at
-                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, NOW())
+                            peso_machos, detalhes_machos, tinta_refrataria_fic, updated_at
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, NOW())
                         ON CONFLICT (pro_codigo_fic) DO UPDATE SET
                             material_fic = EXCLUDED.material_fic,
                             peso_liquido_fic = EXCLUDED.peso_liquido_fic,
@@ -193,6 +193,7 @@ async function syncFichas() {
                             foto_base64 = EXCLUDED.foto_base64,
                             peso_machos = EXCLUDED.peso_machos,
                             detalhes_machos = EXCLUDED.detalhes_machos,
+                            tinta_refrataria_fic = EXCLUDED.tinta_refrataria_fic,
                             updated_at = NOW();
                     `, [
                         String(row.PRO_CODIGO_FIC).trim(), row.MAT_NOMENCLATURA_FIC, row.PESO_LIQUIDO_FIC, row.PESO_UNIT_PCP_FIC,
@@ -202,7 +203,7 @@ async function syncFichas() {
                         row.MODELO_FIC, row.CAVIDADE_PESO_BOLO_FIC, row.QTDE_CAIXAS_MACHO_FIC, pintura, fornecimento,
                         row.PESO_PENCA_FIC, row.PESO_UNITARIO_COM_ALIMENT_FIC, row.PESO_UNITARIO_SEM_ALIMENT_FIC, relacao,
                         row.PESO_TAMPA_FIC, row.PESO_FUNDO_FIC, row.CAVIDADE_QTDE_FIGURAS_FIC, tipoModelo, fotoBase64,
-                        row.PESO_MACHOS_FIC, detalhesMachos
+                        row.PESO_MACHOS_FIC, detalhesMachos, row.TINTA_REFRATARIA_FIC
                     ]);
                     count++;
                 } catch (e) {
