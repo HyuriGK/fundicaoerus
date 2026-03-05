@@ -72,11 +72,11 @@ async function syncFichas() {
     console.log('🚀 Sincronização de Fichas Técnicas (incluindo fotos)...');
     const client = await pgPool.connect();
 
-    // Buscar códigos em carteira no Postgres para priorização
-    console.log('🔍 Buscando códigos em carteira para priorização...');
-    const carteiraRes = await client.query('SELECT DISTINCT codigo FROM carteira');
+    // Buscar códigos em carteira no Postgres para priorização (da tabela firebird_sync_pedidos)
+    console.log('🔍 Buscando códigos em carteira (firebird_sync_pedidos) para priorização...');
+    const carteiraRes = await client.query("SELECT DISTINCT (data->>'PRODUTO_PPR') as codigo FROM firebird_sync_pedidos WHERE data->>'PRODUTO_PPR' IS NOT NULL");
     const portfolioCodes = new Set(carteiraRes.rows.map(r => String(r.codigo).trim()));
-    console.log(`📌 ${portfolioCodes.size} códigos encontrados na carteira.`);
+    console.log(`📌 ${portfolioCodes.size} códigos encontrados na carteira sincronizada.`);
 
     Firebird.attach(firebirdOptions, function (err, db) {
         if (err) { console.error('Erro Firebird:', err); client.release(); return; }
