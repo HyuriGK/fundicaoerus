@@ -90,7 +90,7 @@ async function syncFichas() {
             FROM FICHA_TECNICA F
             LEFT JOIN PRODUTO P ON P.CODIGO_PRO = F.PRO_CODIGO_FIC
             LEFT JOIN CLIENTE C ON C.CODIGO_CLI = F.CLI_CODIGO_FIC
-            WHERE F.EMP_CODIGO_FIC = 10
+            WHERE F.EMP_CODIGO_FIC = 10 AND F.ATIVO_FIC = 'S'
         `;
 
         console.log('📥 Executando query no Firebird...');
