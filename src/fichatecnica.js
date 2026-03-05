@@ -2,6 +2,29 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../lib/db');
 
+// GET /api/fichatecnica/list/all
+router.get('/list/all', async (req, res) => {
+    try {
+        const sql = `
+            SELECT 
+                pro_codigo_fic as "PRO_CODIGO_FIC",
+                nome_pro as "NOME_PRO",
+                cliente_nome as "CLIENTE_NOME",
+                material_fic as "MATERIAL_FIC",
+                modelo_fic as "MODELO_FIC",
+                data_fic as "DATA_FIC",
+                updated_at as "UPDATED_AT"
+            FROM ficha_tecnica
+            ORDER BY data_fic DESC NULLS LAST, updated_at DESC
+        `;
+        const result = await pool.query(sql);
+        res.json(result.rows);
+    } catch (err) {
+        console.error('Erro ao listar faturas:', err);
+        res.status(500).json({ error: 'Erro ao listar faturas no servidor.' });
+    }
+});
+
 // GET /api/fichatecnica/:codigo
 router.get('/:codigo', async (req, res) => {
     const { codigo } = req.params;
