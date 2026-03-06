@@ -75,7 +75,7 @@ function getMachos(db, fichaCodigo) {
 function getLuvas(db, fichaCodigo) {
     return new Promise((resolve) => {
         db.query(`
-            SELECT FIP.QUANTIDADE_FIP as QUANTIDADE_PCM, P.NOME_PRO as NOME_LUVA
+            SELECT FIP.QUANTIDADE_FIP as QUANTIDADE_PCM, P.NOME_PRO as NOME_LUVA, FIP.FATOR_FIGURAS_FIP
             FROM FICHA_TECNICA_PRODUTO FIP
             LEFT JOIN PRODUTO P ON P.CODIGO_PRO = FIP.PRO_CODIGO_FIP
             WHERE FIP.FIC_CODIGO_FIP = ?
@@ -190,7 +190,19 @@ async function syncFichas() {
                     // Fetch Luvas
                     const luvasList = await getLuvas(db, row.CODIGO_FIC);
                     const detalhesLuvas = luvasList.map(l => {
-                        return `LUVA: ${l.NOME_LUVA || '-'} - QTDE: ${l.QUANTIDADE_PCM || 0}`;
+                        let finalQuant = l.QUANTIDADE_PCM || 0;
+                        const fator = parseInt(l.FATOR_FIGURAS_FIP) || 0;
+                        const figuras = parseFloat(row.CAVIDADE_QTDE_FIGURAS_FIC) || 1;
+
+                        if (fator === 1 && figuras > 0) {
+                            finalQuant = finalQuant / figuras;
+                        } else if (fator === 2) {
+                            finalQuant = finalQuant * figuras;
+                        }
+
+                        // Format to 3 decimal places to keep it precise
+                        const qStr = parseFloat(finalQuant.toFixed(3));
+                        return `LUVA: ${l.NOME_LUVA || '-'} - QTDE: ${qStr}`;
                     }).join('\n');
 
                     // INSERT complete record into Postgres
