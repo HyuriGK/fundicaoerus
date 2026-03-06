@@ -16,10 +16,11 @@ router.get('/', async (req, res) => {
                     f.data_fic
                 FROM firebird_sync_pedidos p
                 INNER JOIN (
-                    // Join by OP PCS to ensure the OP exists in current backlog
+                    // Join by CODIGO_PPR (Sales Order) as confirmed by diagnostic
                     SELECT DISTINCT pedido FROM carteira
-                ) c ON (p.data->>'OP_PCS') = c.pedido
+                ) c ON (p.data->>'CODIGO_PPR') = c.pedido
                 LEFT JOIN ficha_tecnica f ON f.pro_codigo_fic = (p.data->>'PRODUTO_PPR')
+                WHERE (p.data->>'OP_PCS') IS NOT NULL AND (p.data->>'OP_PCS') <> '' -- Ensure it's a production order
                 ORDER BY 
                     (f.pro_codigo_fic IS NOT NULL) DESC,
                     f.data_fic DESC NULLS LAST,
