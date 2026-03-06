@@ -16,7 +16,7 @@ router.get('/', async (req, res) => {
                     f.data_fic
                 FROM firebird_sync_pedidos p
                 INNER JOIN (
-                    // Join by both Pedido and Produto to match exactly the items in the backlog
+                    -- Join by both Pedido and Produto to match exactly the items in the backlog
                     SELECT DISTINCT pedido, codigo FROM carteira
                 ) c ON (p.data->>'CODIGO_PPR') = c.pedido AND (p.data->>'PRODUTO_PPR') = c.codigo
                 LEFT JOIN ficha_tecnica f ON f.pro_codigo_fic = (p.data->>'PRODUTO_PPR')
