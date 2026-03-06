@@ -99,12 +99,6 @@ function getLuvas(db, fichaCodigo) {
 async function syncFichas() {
     console.log('🚀 Sincronização de Fichas Técnicas (incluindo fotos)...');
 
-    // Buscar códigos em carteira no Postgres para priorização (da tabela firebird_sync_pedidos)
-    console.log('🔍 Buscando códigos em carteira (firebird_sync_pedidos) para priorização...');
-    const carteiraRes = await pool.query("SELECT DISTINCT (data->>'PRODUTO_PPR') as codigo FROM firebird_sync_pedidos WHERE data->>'PRODUTO_PPR' IS NOT NULL");
-    const portfolioCodes = new Set(carteiraRes.rows.map(r => String(r.codigo).trim()));
-    console.log(`📌 ${portfolioCodes.size} códigos encontrados na carteira sincronizada.`);
-
     Firebird.attach(firebirdOptions, function (err, db) {
         if (err) { console.error('Erro Firebird:', err); return; }
 
@@ -128,30 +122,14 @@ async function syncFichas() {
             LEFT JOIN PRODUTO P ON P.CODIGO_PRO = F.PRO_CODIGO_FIC
             LEFT JOIN CLIENTE C ON C.CODIGO_CLI = F.CLI_CODIGO_FIC
             WHERE F.EMP_CODIGO_FIC = 10 AND F.ATIVO_FIC = 'S'
+            ORDER BY F.DATA_FIC DESC NULLS LAST
         `;
 
         console.log('📥 Executando query no Firebird...');
         db.query(sql, async function (err, results) {
             if (err) { console.error('Erro query:', err); db.detach(); return; }
 
-            console.log(`📊 ${results.length} registros recebidos. Ordenando por prioridade (Carteira > Data)...`);
-
-            // Ordenação: 
-            // 1. Em carteira (portfolioCodes)
-            // 2. Data Decrescente (mais recentes primeiro)
-            results.sort((a, b) => {
-                const aIdx = portfolioCodes.has(String(a.PRO_CODIGO_FIC).trim()) ? 0 : 1;
-                const bIdx = portfolioCodes.has(String(b.PRO_CODIGO_FIC).trim()) ? 0 : 1;
-
-                if (aIdx !== bIdx) return aIdx - bIdx;
-
-                // DATA_FIC fallback
-                const dataA = a.DATA_FIC ? new Date(a.DATA_FIC) : new Date(0);
-                const dataB = b.DATA_FIC ? new Date(b.DATA_FIC) : new Date(0);
-                return dataB - dataA;
-            });
-
-            console.log(`✅ Ordenação concluída. Pré-lendo BLOBs...`);
+            console.log(`📊 ${results.length} registros recebidos (ordenados por DATA_FIC DESC). Pré-lendo BLOBs...`);
 
             // PRE-READ all BLOBs before any sub-queries (Firebird invalidates blobs after new queries)
             const blobData = new Map();
