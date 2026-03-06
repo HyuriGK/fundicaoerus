@@ -1,6 +1,5 @@
-require('dotenv').config({ path: '.env.local' });
 const Firebird = require('node-firebird');
-const { Pool } = require('pg');
+const pool = require('../lib/db');
 
 // --- CONFIGURATION ---
 const FIREBIRD_OPTIONS = {
@@ -13,27 +12,13 @@ const FIREBIRD_OPTIONS = {
     pageSize: 4096
 };
 
-// Function to clean connection string (same as lib/db.js)
-function cleanConnectionString(str) {
-    if (!str) return '';
-    let cleaned = str.trim();
-    if (cleaned.startsWith('psql')) cleaned = cleaned.substring(4).trim();
-    return cleaned.replace(/^['"]|['"]$/g, '');
-}
-
-// Postgres Configuration
-const pgPool = new Pool({
-    connectionString: cleanConnectionString(process.env.DATABASE_URL),
-    ssl: { rejectUnauthorized: false }
-});
 
 async function syncAssertividade() {
     console.log('🚀 Iniciando sincronização (ASSERTIVIDADE 2025/2026)...');
 
     // 1. Prepare table in Postgres
-    const client = await pgPool.connect();
     try {
-        await client.query(`
+        await pool.query(`
             CREATE TABLE IF NOT EXISTS firebird_sync_assertividade (
                 sync_key TEXT PRIMARY KEY,
                 data JSONB,
@@ -41,13 +26,11 @@ async function syncAssertividade() {
             );
         `);
         // Clear table to ensure consistency
-        await client.query('DELETE FROM firebird_sync_assertividade');
+        await pool.query('DELETE FROM firebird_sync_assertividade');
         console.log('✅ Tabela Postgres firebird_sync_assertividade verificada e limpa.');
     } catch (e) {
         console.error('Erro ao criar tabela Postgres:', e);
         return;
-    } finally {
-        client.release();
     }
 
     // 2. Connect to Firebird
@@ -97,7 +80,6 @@ async function syncAssertividade() {
             }
 
             // 4. Insert into Postgres (Batch)
-            const pgClient = await pgPool.connect();
             try {
                 console.log('📤 Enviando para o Postgres...');
 
@@ -109,7 +91,7 @@ async function syncAssertividade() {
                     const key = `${row.PPR_EMPRESA_PETR}-${row.PPR_ANO_PETR}-${row.PPR_CODIGO_PETR}-${row.PPR_ITEM_PETR}`;
 
                     try {
-                        await pgClient.query(`
+                        await pool.query(`
                             INSERT INTO firebird_sync_assertividade (sync_key, data, updated_at)
                             VALUES ($1, $2, NOW())
                             ON CONFLICT (sync_key) 
@@ -129,7 +111,6 @@ async function syncAssertividade() {
                 console.log(`Erros: ${errorCount}`);
 
             } finally {
-                pgClient.release();
                 db.detach();
                 process.exit(0);
             }

@@ -133,7 +133,6 @@ async function sincronizar() {
                 console.error('❌ Erro ao salvar no Postgres:', pgErr);
             } finally {
                 db.detach();
-                await pool.end();
                 process.exit(0);
             }
         });

@@ -226,7 +226,6 @@ async function startSync() {
 
         console.log(`\n🎉 Sincronização Finalizada: ${inserted} registros inseridos/atualizados.`);
         db.detach();
-        await pool.end();
         process.exit(0);
 
     } catch (err) {

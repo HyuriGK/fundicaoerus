@@ -1,23 +1,11 @@
 const Firebird = require('node-firebird');
-const { Pool } = require('pg');
-require('dotenv').config({ path: '.env.local' });
+const pool = require('../lib/db');
 
 const firebirdOptions = {
     host: '10.1.1.100', port: 3050, database: '/home/lm/LM-Sistemas/SIGE2.0/Dados/sige.fdb',
     user: 'SYSDBA', password: 'masterkey', lowercase_keys: false, pageSize: 4096
 };
 
-function cleanConnectionString(str) {
-    if (!str) return '';
-    let cleaned = str.trim();
-    if (cleaned.startsWith('psql')) cleaned = cleaned.substring(4).trim();
-    return cleaned.replace(/^['"]|['"]$/g, '');
-}
-
-const pgPool = new Pool({
-    connectionString: cleanConnectionString(process.env.DATABASE_URL),
-    ssl: { rejectUnauthorized: false }
-});
 
 // Helper to read Firebird BLOBs as Buffer (for images)
 function readBlobBuffer(blob) {
@@ -99,16 +87,15 @@ function getLuvas(db, fichaCodigo) {
 
 async function syncFichas() {
     console.log('🚀 Sincronização de Fichas Técnicas (incluindo fotos)...');
-    const client = await pgPool.connect();
 
     // Buscar códigos em carteira no Postgres para priorização (da tabela firebird_sync_pedidos)
     console.log('🔍 Buscando códigos em carteira (firebird_sync_pedidos) para priorização...');
-    const carteiraRes = await client.query("SELECT DISTINCT (data->>'PRODUTO_PPR') as codigo FROM firebird_sync_pedidos WHERE data->>'PRODUTO_PPR' IS NOT NULL");
+    const carteiraRes = await pool.query("SELECT DISTINCT (data->>'PRODUTO_PPR') as codigo FROM firebird_sync_pedidos WHERE data->>'PRODUTO_PPR' IS NOT NULL");
     const portfolioCodes = new Set(carteiraRes.rows.map(r => String(r.codigo).trim()));
     console.log(`📌 ${portfolioCodes.size} códigos encontrados na carteira sincronizada.`);
 
     Firebird.attach(firebirdOptions, function (err, db) {
-        if (err) { console.error('Erro Firebird:', err); client.release(); return; }
+        if (err) { console.error('Erro Firebird:', err); return; }
 
         const sql = `
             SELECT 
@@ -134,7 +121,7 @@ async function syncFichas() {
 
         console.log('📥 Executando query no Firebird...');
         db.query(sql, async function (err, results) {
-            if (err) { console.error('Erro query:', err); db.detach(); client.release(); return; }
+            if (err) { console.error('Erro query:', err); db.detach(); return; }
 
             console.log(`📊 ${results.length} registros recebidos. Ordenando por prioridade (Carteira > Data)...`);
 
@@ -195,7 +182,7 @@ async function syncFichas() {
                         return `LUVA: ${l.NOME_LUVA || '-'} - QTDE: ${l.QUANTIDADE_PCM || 0}`;
                     }).join('\n');
 
-                    await client.query(`
+                    await pool.query(`
                         INSERT INTO ficha_tecnica (
                             pro_codigo_fic, material_fic, peso_liquido_fic, peso_unit_pcp_fic,
                             tipo_moldagem_desc_fic, operacao_moldagem_desc_fic,
@@ -252,7 +239,7 @@ async function syncFichas() {
                 }
             }
             console.log(`✅ Sincronização concluída: ${count} registros.`);
-            db.detach(); client.release(); await pgPool.end();
+            db.detach();
         });
     });
 }
