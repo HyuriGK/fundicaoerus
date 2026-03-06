@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitoramento de OP's - Fundição Erus</title>
+
+    <!-- Google Fonts & Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap"
+        rel="stylesheet">
+
+    <style>
+        :root {
+            --font-main: 'Inter', sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+
+            --color-primary: #fbbf24;
+            /* Amber 400 */
+            --color-primary-rgb: 251, 191, 36;
+            --bg-body: #09090b;
+            /* Zinc 950 */
+            --bg-card: rgba(24, 24, 27, 0.8);
+
+            --text-main: #f4f4f5;
+            --text-muted: #a1a1aa;
+
+            --border-subtle: rgba(255, 255, 255, 0.08);
+            --status-success: #10b981;
+            --status-danger: #ef4444;
+            --status-warning: #f59e0b;
+        }
+
+        * {
+            box-sizing: border-box;
+            user-select: none;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: var(--font-main);
+            background-color: var(--bg-body);
+            color: var(--text-main);
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            background-image:
+                radial-gradient(circle at 15% 50%, rgba(251, 191, 36, 0.05), transparent 25%),
+                radial-gradient(circle at 85% 30%, rgba(63, 63, 70, 0.08), transparent 25%);
+        }
+
+        /* --- HEADER --- */
+        header {
+            padding: 15px 30px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(0, 0, 0, 0.3);
+            border-bottom: 1px solid var(--border-subtle);
+            backdrop-filter: blur(10px);
+        }
+
+        .header-brand {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .brand-icon {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--color-primary), #d97706);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #000;
+            font-size: 1.2rem;
+            box-shadow: 0 0 20px rgba(var(--color-primary-rgb), 0.2);
+        }
+
+        .header-text h1 {
+            font-size: 1.2rem;
+            margin: 0;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
+        .header-text p {
+            font-size: 0.75rem;
+            margin: 2px 0 0 0;
+            color: var(--text-muted);
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 15px;
+        }
+
+        .btn-glass {
+            background: transparent;
+            border: none;
+            color: var(--text-main);
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s;
+            text-decoration: none;
+        }
+
+        .btn-glass:hover {
+            background: rgba(255, 255, 255, 0.05);
+            transform: scale(1.05);
+        }
+
+        /* --- KANBAN BOARD --- */
+        .kanban-container {
+            flex-grow: 1;
+            display: flex;
+            padding: 20px;
+            gap: 15px;
+            overflow-x: auto;
+            align-items: stretch;
+        }
+
+        .kanban-column {
+            flex: 1;
+            min-width: 300px;
+            max-width: 400px;
+            background: rgba(24, 24, 27, 0.4);
+            border: 1px solid var(--border-subtle);
+            border-radius: 15px;
+            display: flex;
+            flex-direction: column;
+            transition: all 0.3s ease;
+        }
+
+        .kanban-column:hover {
+            background: rgba(24, 24, 27, 0.6);
+            border-color: rgba(var(--color-primary-rgb), 0.2);
+        }
+
+        .column-header {
+            padding: 15px 20px;
+            border-bottom: 2px solid rgba(var(--color-primary-rgb), 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .column-header h2 {
+            font-size: 0.9rem;
+            font-weight: 700;
+            margin: 0;
+            color: var(--color-primary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .column-count {
+            background: rgba(var(--color-primary-rgb), 0.1);
+            color: var(--color-primary);
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            font-family: var(--font-mono);
+        }
+
+        .cards-list {
+            flex-grow: 1;
+            padding: 15px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        /* --- OP CARD --- */
+        .op-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            padding: 15px;
+            transition: all 0.2s;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .op-card:hover {
+            transform: translateY(-3px);
+            border-color: rgba(255, 255, 255, 0.2);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .op-card.delayed {
+            border-left: 4px solid var(--status-danger);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 8px;
+        }
+
+        .op-number {
+            font-family: var(--font-mono);
+            font-weight: 700;
+            font-size: 1.1rem;
+            color: #fff;
+        }
+
+        .client-name {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+
+        .product-desc {
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: var(--text-main);
+            margin-bottom: 12px;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            line-height: 1.4;
+        }
+
+        .card-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            padding-top: 10px;
+        }
+
+        .op-qty {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--color-primary);
+            background: rgba(var(--color-primary-rgb), 0.1);
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+
+        .days-counter {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .days-counter i {
+            font-size: 0.8rem;
+        }
+
+        .days-counter.danger {
+            color: var(--status-danger);
+            font-weight: 700;
+        }
+
+        /* --- MODAL --- */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(5px);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-card {
+            background: #18181b;
+            border: 1px solid var(--border-subtle);
+            border-radius: 16px;
+            width: 500px;
+            max-width: 90%;
+            padding: 30px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+        }
+
+        .modal-header h2 {
+            margin: 0;
+            font-size: 1.3rem;
+            color: var(--color-primary);
+        }
+
+        .modal-close {
+            color: var(--status-danger);
+            cursor: pointer;
+            font-size: 1.5rem;
+        }
+
+        .config-grid {
+            display: grid;
+            gap: 15px;
+        }
+
+        .config-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 8px;
+        }
+
+        .config-item label {
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .config-item input {
+            width: 60px;
+            background: #09090b;
+            border: 1px solid var(--border-subtle);
+            border-radius: 4px;
+            color: #fff;
+            padding: 5px;
+            text-align: center;
+            font-family: var(--font-mono);
+        }
+
+        .btn-save {
+            margin-top: 30px;
+            width: 100%;
+            background: var(--color-primary);
+            color: #000;
+            border: none;
+            padding: 12px;
+            border-radius: 8px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-save:hover {
+            transform: translateY(-2px);
+            background: #eab308;
+        }
+
+        /* --- SCROLLBAR --- */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <div class="header-brand">
+            <div class="brand-icon"><i class="fa-solid fa-gauge-high"></i></div>
+            <div class="header-text">
+                <h1>Monitoramento de OP's</h1>
+                <p>Acompanhamento de Processo em Tempo Real • McDonald's Style</p>
+            </div>
+        </div>
+
+        <div class="header-actions">
+            <button class="btn-glass" onclick="openConfig()"><i class="fa-solid fa-cog"></i> Config</button>
+            <a href="index.html" class="btn-glass" style="color: var(--status-danger);"><i
+                    class="fa-solid fa-arrow-left"></i> Voltar</a>
+        </div>
+    </header>
+
+    <div class="kanban-container">
+        <!-- Coluna: MOLDAGEM -->
+        <div class="kanban-column" id="col-moldagem">
+            <div class="column-header">
+                <h2>Moldagem</h2>
+                <span class="column-count" id="count-moldagem">0</span>
+            </div>
+            <div class="cards-list" id="list-moldagem">
+                <!-- Cards will be injected here -->
+                <div class="op-card delayed">
+                    <div class="card-header">
+                        <span class="op-number">OP 123456</span>
+                        <span class="client-name">VALE S.A.</span>
+                    </div>
+                    <div class="product-desc">TAMPA DE INSPEÇÃO Ø300MM - MATERIAL ASTM A536</div>
+                    <div class="card-footer">
+                        <span class="op-qty">50 pçs</span>
+                        <span class="days-counter danger"><i class="fa-solid fa-clock"></i> 5 dias</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Coluna: FUSÃO -->
+        <div class="kanban-column" id="col-fusao">
+            <div class="column-header">
+                <h2>Fusão</h2>
+                <span class="column-count" id="count-fusao">0</span>
+            </div>
+            <div class="cards-list" id="list-fusao">
+                <div class="op-card">
+                    <div class="card-header">
+                        <span class="op-number">OP 123478</span>
+                        <span class="client-name">WEG EQUIPAMENTOS</span>
+                    </div>
+                    <div class="product-desc">CARCAÇA MOTOR TAMANHO 160L</div>
+                    <div class="card-footer">
+                        <span class="op-qty">12 pçs</span>
+                        <span class="days-counter"><i class="fa-solid fa-clock"></i> 1 dia</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Coluna: ACABAMENTO -->
+        <div class="kanban-column" id="col-acabamento">
+            <div class="column-header">
+                <h2>Acabamento</h2>
+                <span class="column-count" id="count-acabamento">0</span>
+            </div>
+            <div class="cards-list" id="list-acabamento"></div>
+        </div>
+
+        <!-- Coluna: TRATAMENTO TÉRMICO -->
+        <div class="kanban-column" id="col-tratamento">
+            <div class="column-header">
+                <h2>Tratamento Térmico</h2>
+                <span class="column-count" id="count-tratamento">0</span>
+            </div>
+            <div class="cards-list" id="list-tratamento"></div>
+        </div>
+
+        <!-- Coluna: USINAGEM -->
+        <div class="kanban-column" id="col-usinagem">
+            <div class="column-header">
+                <h2>Usinagem</h2>
+                <span class="column-count" id="count-usinagem">0</span>
+            </div>
+            <div class="cards-list" id="list-usinagem"></div>
+        </div>
+
+        <!-- Coluna: EXPEDIÇÃO -->
+        <div class="kanban-column" id="col-expedicao">
+            <div class="column-header">
+                <h2>Expedição</h2>
+                <span class="column-count" id="count-expedicao">0</span>
+            </div>
+            <div class="cards-list" id="list-expedicao"></div>
+        </div>
+    </div>
+
+    <!-- Modal: Configuração de Lead Time -->
+    <div class="modal-overlay" id="configModal">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h2>Configurar Lead Times (Dias)</h2>
+                <i class="fa-solid fa-times modal-close" onclick="closeConfig()"></i>
+            </div>
+            <div class="config-grid">
+                <div class="config-item">
+                    <label>Moldagem</label>
+                    <input type="number" id="lt-moldagem" value="2">
+                </div>
+                <div class="config-item">
+                    <label>Fusão</label>
+                    <input type="number" id="lt-fusao" value="1">
+                </div>
+                <div class="config-item">
+                    <label>Acabamento</label>
+                    <input type="number" id="lt-acabamento" value="3">
+                </div>
+                <div class="config-item">
+                    <label>Tratamento Térmico</label>
+                    <input type="number" id="lt-tratamento" value="2">
+                </div>
+                <div class="config-item">
+                    <label>Usinagem</label>
+                    <input type="number" id="lt-usinagem" value="5">
+                </div>
+                <div class="config-item">
+                    <label>Expedição</label>
+                    <input type="number" id="lt-expedicao" value="1">
+                </div>
+            </div>
+            <button class="btn-save" onclick="saveConfig()">Salvar Configurações</button>
+        </div>
+    </div>
+
+    <script>
+        let allOps = [];
+        let pointingSummary = {};
+        let leadTimes = {
+            moldagem: 2,
+            fusao: 1,
+            acabamento: 3,
+            tratamento: 2,
+            usinagem: 5,
+            expedicao: 1
+        };
+
+        const sectorGroups = {
+            'MOLDAGEM': ['MOLDAGEM', 'MOLDAGEM MANUAL', 'MOLDAGEM PESADA', 'MOLDAGEM LEVE', 'MOLDAGEM MECANIZADA', 'MOLDAGEM AUTOMÁTICA', 'MOLDAGEM EM AREIA'],
+            'FUSÃO': ['FUSÃO', 'FUSAO'],
+            'ACABAMENTO': ['ACABAMENTO', 'REBARBAÇÃO', 'GRALHA'],
+            'TRATAMENTO TÉRMICO': ['TRATAMENTO TÉRMICO', 'TRATAMENTO TERMICO'],
+            'USINAGEM': ['USINAGEM', 'TORNEARIA'],
+            'EXPEDIÇÃO': ['EXPEDIÇÃO', 'EXPEDICAO', 'LOGÍSTICA']
+        };
+
+        const orderedStages = ['MOLDAGEM', 'FUSÃO', 'ACABAMENTO', 'TRATAMENTO TÉRMICO', 'USINAGEM', 'EXPEDIÇÃO'];
+
+        const configKeyMap = {
+            'MOLDAGEM': 'moldagem',
+            'FUSÃO': 'fusao',
+            'ACABAMENTO': 'acabamento',
+            'TRATAMENTO TÉRMICO': 'tratamento',
+            'USINAGEM': 'usinagem',
+            'EXPEDIÇÃO': 'expedicao'
+        };
+
+        const columnIdMap = {
+            'MOLDAGEM': 'col-moldagem',
+            'FUSÃO': 'col-fusao',
+            'ACABAMENTO': 'col-acabamento',
+            'TRATAMENTO TÉRMICO': 'col-tratamento',
+            'USINAGEM': 'col-usinagem',
+            'EXPEDIÇÃO': 'col-expedicao'
+        };
+
+        function openConfig() {
+            document.getElementById('configModal').style.display = 'flex';
+        }
+
+        function closeConfig() {
+            document.getElementById('configModal').style.display = 'none';
+        }
+
+        function saveConfig() {
+            leadTimes = {
+                moldagem: parseInt(document.getElementById('lt-moldagem').value) || 0,
+                fusao: parseInt(document.getElementById('lt-fusao').value) || 0,
+                acabamento: parseInt(document.getElementById('lt-acabamento').value) || 0,
+                tratamento: parseInt(document.getElementById('lt-tratamento').value) || 0,
+                usinagem: parseInt(document.getElementById('lt-usinagem').value) || 0,
+                expedicao: parseInt(document.getElementById('lt-expedicao').value) || 0
+            };
+            localStorage.setItem('monitoramento_leadtimes', JSON.stringify(leadTimes));
+            closeConfig();
+            renderBoard();
+        }
+
+        async function fetchData() {
+            try {
+                // Fetch OPs from the sync endpoint (like pedidos.html)
+                const [resOps, resPointing] = await Promise.all([
+                    fetch('/api/pedidos-sync'),
+                    fetch('/api/pedidos-firebird/op-apontamentos-resumo')
+                ]);
+
+                if (!resOps.ok || !resPointing.ok) throw new Error('Falha ao buscar dados');
+
+                const rawOps = await resOps.json();
+                pointingSummary = await resPointing.json();
+
+                // Filter only OPs that have an OP Number and are active
+                allOps = rawOps.filter(op => op.OP_PCS && op.OP_PCS !== '-');
+
+                renderBoard();
+            } catch (err) {
+                console.error('Erro no fetchData:', err);
+            }
+        }
+
+        function getOpStage(opNumber, totalQty) {
+            const opPoints = pointingSummary[opNumber] || {};
+
+            // Map raw sector pointings to our groups
+            const groupStatus = {};
+            orderedStages.forEach(s => groupStatus[s] = { qty: 0, lastDate: null });
+
+            Object.entries(opPoints).forEach(([sectorName, data]) => {
+                const group = orderedStages.find(stage =>
+                    sectorGroups[stage].some(sub => sectorName.toUpperCase().includes(sub))
+                );
+                if (group) {
+                    groupStatus[group].qty += data.quantidade;
+                    const date = new Date(data.data_fim);
+                    if (!groupStatus[group].lastDate || date > groupStatus[group].lastDate) {
+                        groupStatus[group].lastDate = date;
+                    }
+                }
+            });
+
+            // Logic: The current stage is the FIRST stage in order that hasn't reached totalQty
+            let currentStage = orderedStages[0];
+            for (const stage of orderedStages) {
+                if (groupStatus[stage].qty < totalQty) {
+                    currentStage = stage;
+                    break;
+                }
+                // If it finished the last stage (Expedicao), stay in Expedicao but maybe handle differently?
+                // For now, if all are finished, it stays in the last stage until faturado.
+                currentStage = stage;
+            }
+
+            // Calculate days in stage
+            // If in stage index N, use the lastDate of stage N-1 as "entry date"
+            const stageIdx = orderedStages.indexOf(currentStage);
+            let entryDate = null;
+            if (stageIdx > 0) {
+                entryDate = groupStatus[orderedStages[stageIdx - 1]].lastDate;
+            }
+
+            // Fallback to today if no pointing yet
+            const now = new Date();
+            const calcDate = entryDate || new Date(now.setDate(now.getDate() - 1)); // Default 1 day if newly started
+
+            const diffTime = Math.abs(new Date() - calcDate);
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+            return { stage: currentStage, days: diffDays };
+        }
+
+        function renderBoard() {
+            // Clear lists
+            orderedStages.forEach(stage => {
+                const list = document.getElementById(`list-${configKeyMap[stage]}`);
+                if (list) list.innerHTML = '';
+                const count = document.getElementById(`count-${configKeyMap[stage]}`);
+                if (count) count.innerText = '0';
+            });
+
+            const counts = {};
+            orderedStages.forEach(s => counts[s] = 0);
+
+            allOps.forEach(op => {
+                const totalQty = parseInt(op.OP_QUANTIDADE) || parseInt(op.QUANTIDADE_PPR) || 0;
+                const { stage, days } = getOpStage(op.OP_PCS, totalQty);
+
+                counts[stage]++;
+                const columnKey = configKeyMap[stage];
+                const list = document.getElementById(`list-${columnKey}`);
+
+                if (!list) return;
+
+                const limit = leadTimes[columnKey] || 0;
+                const isDelayed = days > limit;
+
+                const card = document.createElement('div');
+                card.className = `op-card ${isDelayed ? 'delayed' : ''}`;
+                card.innerHTML = `
+                    <div class="card-header">
+                        <span class="op-number">OP ${op.OP_PCS}</span>
+                        <span class="client-name">${(op.NOME_CLIENTE || 'N/A').split(' ')[0]}</span>
+                    </div>
+                    <div class="product-desc">${op.NOME_PRODUTO_PPR || op.PRODUTO_PPR}</div>
+                    <div class="card-footer">
+                        <span class="op-qty">${totalQty} pçs</span>
+                        <span class="days-counter ${isDelayed ? 'danger' : ''}">
+                            <i class="fa-solid fa-clock"></i> ${days} ${days === 1 ? 'dia' : 'dias'}
+                        </span>
+                    </div>
+                `;
+
+                // Add click event to show details (reuse logic from pedidos.html if needed)
+                card.onclick = () => {
+                    // Logic to open details modal could go here
+                    alert(`OP: ${op.OP_PCS}\nEmissão: ${op.OP_EMISSAO}\nStatus: ${op.ANDAMENTO_PCS}`);
+                };
+
+                list.appendChild(card);
+            });
+
+            // Update counts
+            Object.entries(counts).forEach(([stage, count]) => {
+                const el = document.getElementById(`count-${configKeyMap[stage]}`);
+                if (el) el.innerText = count;
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const saved = localStorage.getItem('monitoramento_leadtimes');
+            if (saved) {
+                leadTimes = JSON.parse(saved);
+                document.getElementById('lt-moldagem').value = leadTimes.moldagem;
+                document.getElementById('lt-fusao').value = leadTimes.fusao;
+                document.getElementById('lt-acabamento').value = leadTimes.acabamento;
+                document.getElementById('lt-tratamento').value = leadTimes.tratamento;
+                document.getElementById('lt-usinagem').value = leadTimes.usinagem;
+                document.getElementById('lt-expedicao').value = leadTimes.expedicao;
+            }
+
+            fetchData();
+            // Refresh every 5 minutes
+            setInterval(fetchData, 5 * 60 * 1000);
+        });
+    </script>
+</body>
+
+</html>

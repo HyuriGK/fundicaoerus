@@ -198,4 +198,46 @@ router.get('/op-setor-detalhes', async (req, res) => {
     }
 });
 
+// GET /api/pedidos-firebird/op-apontamentos-resumo
+// Retorna o resumo de todos os apontamentos por OP e Setor (Otimizado para Dashboard de Monitoramento)
+router.get('/op-apontamentos-resumo', async (req, res) => {
+    try {
+        console.log('📊 [API-POSTGRES] Buscando resumo global de apontamentos...');
+
+        const query = `
+            SELECT 
+                op,
+                setor,
+                SUM(quantidade) as quantidade,
+                MIN(data_producao) as data_inicio,
+                MAX(data_producao) as data_fim
+            FROM producao_apontada_sincronizada
+            WHERE op IS NOT NULL
+            GROUP BY op, setor
+        `;
+
+        const result = await pool.query(query);
+
+        // Agrupar por OP no objeto de retorno para facilitar o de/para no frontend
+        const summary = {};
+        result.rows.forEach(row => {
+            if (!summary[row.op]) {
+                summary[row.op] = {};
+            }
+            summary[row.op][row.setor] = {
+                quantidade: parseFloat(row.quantidade),
+                data_inicio: row.data_inicio,
+                data_fim: row.data_fim
+            };
+        });
+
+        console.log(`✅ [API-POSTGRES] Resumo gerado para ${Object.keys(summary).length} OPs.`);
+        res.json(summary);
+
+    } catch (error) {
+        console.error('❌ [API-POSTGRES] Erro ao buscar resumo de apontamentos:', error);
+        res.status(500).json({ error: 'Erro ao processar resumo no Postgres', details: error.message });
+    }
+});
+
 module.exports = router;
