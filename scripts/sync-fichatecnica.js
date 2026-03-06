@@ -151,7 +151,19 @@ async function syncFichas() {
                 return dataB - dataA;
             });
 
-            console.log(`✅ Ordenação concluída. Iniciando processamento...`);
+            console.log(`✅ Ordenação concluída. Pré-lendo BLOBs...`);
+
+            // PRE-READ all BLOBs before any sub-queries (Firebird invalidates blobs after new queries)
+            const blobData = new Map();
+            for (let i = 0; i < results.length; i++) {
+                const row = results[i];
+                const key = row.CODIGO_FIC;
+                const descricao = await readBlob(row.DESCRICAO_FIC);
+                const fotoBuffer = await readBlobBuffer(row.MINIATURA_FIC);
+                blobData.set(key, { descricao, fotoBuffer });
+            }
+            console.log(`📦 ${blobData.size} BLOBs lidos. Processando registros...`);
+
             let count = 0;
             for (const row of results) {
                 try {
@@ -162,10 +174,10 @@ async function syncFichas() {
                     const tipoModelo = modelMap[row.TIPO_MODELO_FIC] || '-';
                     const relacao = row.RELACAO_MOLDE_METAL_FIC || 0;
 
-                    const descricao = await readBlob(row.DESCRICAO_FIC);
-
-                    const fotoBuffer = await readBlobBuffer(row.MINIATURA_FIC);
-                    const fotoBase64 = fotoBuffer ? fotoBuffer.toString('base64') : null;
+                    // Use pre-read BLOB data
+                    const blobs = blobData.get(row.CODIGO_FIC) || {};
+                    const descricao = blobs.descricao || '';
+                    const fotoBase64 = blobs.fotoBuffer ? blobs.fotoBuffer.toString('base64') : null;
 
                     // Fetch and format Machos (using CODIGO_FIC for join)
                     const machosList = await getMachos(db, row.CODIGO_FIC);
