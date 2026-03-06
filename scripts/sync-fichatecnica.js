@@ -6,13 +6,11 @@ const firebirdOptions = {
     user: 'SYSDBA', password: 'masterkey', lowercase_keys: false, pageSize: 4096
 };
 
-
 // Helper to read Firebird BLOBs as Buffer (for images)
 function readBlobBuffer(blob) {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
         if (!blob) return resolve(null);
         if (typeof blob !== 'function') return resolve(null);
-
         blob((err, name, stream) => {
             if (err) return resolve(null);
             let chunks = [];
@@ -25,10 +23,9 @@ function readBlobBuffer(blob) {
 
 // Helper to read Firebird BLOBs as String (for text)
 function readBlob(blob) {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
         if (!blob) return resolve('');
         if (typeof blob !== 'function') return resolve(String(blob));
-
         blob((err, name, stream) => {
             if (err) return resolve('');
             let chunks = [];
@@ -42,20 +39,13 @@ function readBlob(blob) {
 function parseObservation(raw) {
     if (!raw) return '';
     try {
-        // Find OBS: marker (case-insensitive)
         const obsMatch = raw.match(/OBS:/i);
         let content = obsMatch ? raw.substring(obsMatch.index) : raw;
-
-        // Replace \par with newline
         content = content.replace(/\\par\b/g, '\n');
-        // Remove remaining RTF commands like \f0\fs24 \cf1 etc
         content = content.replace(/\\[a-z]+[0-9]*/gi, '');
-        // Remove curly braces
         content = content.replace(/[{}]/g, '');
-        // Collapse multiple spaces/newlines
         content = content.replace(/[ \t]+/g, ' ');
         content = content.replace(/\n\s*\n/g, '\n');
-
         return content.trim();
     } catch (e) {
         return raw;
@@ -70,10 +60,7 @@ function getMachos(db, fichaCodigo) {
             WHERE FIC_CODIGO_FTCM = ?
             ORDER BY SEQUENCIA_FTCM
         `, [fichaCodigo], (err, results) => {
-            if (err) {
-                console.error(`⚠️ Erro ao buscar machos para ficha ID ${fichaCodigo}:`, err);
-                return resolve([]);
-            }
+            if (err) return resolve([]);
             resolve(results);
         });
     });
@@ -87,31 +74,43 @@ function getLuvas(db, fichaCodigo) {
             LEFT JOIN PRODUTO P ON P.CODIGO_PRO = FIP.PRO_CODIGO_FIP
             WHERE FIP.FIC_CODIGO_FIP = ?
         `, [fichaCodigo], (err, results) => {
-            if (err) {
-                console.error(`⚠️ Erro ao buscar luvas para ficha ID ${fichaCodigo}:`, err);
-                return resolve([]);
-            }
+            if (err) return resolve([]);
             resolve(results);
         });
     });
 }
 
+// Fetch BLOBs for a single ficha via individual query (avoids invalidation)
+function getBlobs(db, fichaCodigo) {
+    return new Promise((resolve) => {
+        db.query('SELECT MOLDAGEM_OBS_FIC, MINIATURA_FIC FROM FICHA_TECNICA WHERE CODIGO_FIC = ?', [fichaCodigo], async (err, rows) => {
+            if (err || !rows || rows.length === 0) return resolve({ descricao: '', fotoBuffer: null });
+            const r = rows[0];
+            const obsRaw = await readBlob(r.MOLDAGEM_OBS_FIC);
+            const fotoBuffer = await readBlobBuffer(r.MINIATURA_FIC);
+            const descricao = obsRaw ? parseObservation(obsRaw) : '';
+            resolve({ descricao, fotoBuffer });
+        });
+    });
+}
+
 async function syncFichas() {
-    console.log('🚀 Sincronização de Fichas Técnicas (incluindo fotos)...');
+    console.log('🚀 Sincronização de Fichas Técnicas...');
 
     Firebird.attach(firebirdOptions, function (err, db) {
         if (err) { console.error('Erro Firebird:', err); return; }
 
+        // Main query WITHOUT BLOBs (fetched per-row via getBlobs)
         const sql = `
             SELECT 
                 F.CODIGO_FIC, F.PRO_CODIGO_FIC, F.MAT_NOMENCLATURA_FIC, F.PESO_LIQUIDO_FIC, F.PESO_UNIT_PCP_FIC,
                 F.TIPO_MOLDAGEM_DESC_FIC, F.OPERACAO_MOLDAGEM_DESC_FIC,
-                F.DESCRICAO_FIC, F.CLI_CODIGO_FIC, F.MODELO_FIC, F.CAVIDADE_PESO_BOLO_FIC,
+                F.CLI_CODIGO_FIC, F.MODELO_FIC, F.CAVIDADE_PESO_BOLO_FIC,
                 F.QTDE_CAIXAS_MACHO_FIC, F.PINTAR_PISTOLA_FIC, F.PINTAR_IMERSAO_FIC,
                 F.FORNECIMENTO_FIC, F.PESO_PENCA_FIC, F.PESO_UNITARIO_COM_ALIMENT_FIC,
                 F.PESO_UNITARIO_SEM_ALIMENT_FIC, F.RELACAO_MOLDE_METAL_FIC,
                 F.PESO_TAMPA_FIC, F.PESO_FUNDO_FIC, F.CAVIDADE_QTDE_FIGURAS_FIC, F.TIPO_MODELO_FIC,
-                F.MINIATURA_FIC, F.PESO_MACHOS_FIC, F.DATA_FIC, F.TINTA_REFRATARIA_FIC, F.MOLDAGEM_OBS_FIC,
+                F.PESO_MACHOS_FIC, F.DATA_FIC, F.TINTA_REFRATARIA_FIC,
                 P.NOME_PRO, P.PESO_LIQUIDO_PRO, P.PESO_BRUTO_PRO, P.SITUACAO_PRO, P.REFERENCIA_PRO,
                 C.RAZAO_SOCIAL_CLI as NOME_CLIENTE,
                 (SELECT FIRST 1 M.MATERIAL_MAT 
@@ -125,27 +124,11 @@ async function syncFichas() {
             ORDER BY F.DATA_FIC DESC NULLS LAST
         `;
 
-        console.log('📥 Executando query no Firebird...');
+        console.log('📥 Executando query no Firebird (sem BLOBs)...');
         db.query(sql, async function (err, results) {
             if (err) { console.error('Erro query:', err); db.detach(); return; }
 
-            console.log(`📊 ${results.length} registros recebidos (ordenados por DATA_FIC DESC). Pré-lendo BLOBs...`);
-
-            // PRE-READ all BLOBs before any sub-queries (Firebird invalidates blobs after new queries)
-            const blobData = new Map();
-            for (let i = 0; i < results.length; i++) {
-                const row = results[i];
-                const key = row.CODIGO_FIC;
-                const obsRaw = await readBlob(row.MOLDAGEM_OBS_FIC);
-                const descRaw = await readBlob(row.DESCRICAO_FIC);
-                const fotoBuffer = await readBlobBuffer(row.MINIATURA_FIC);
-                // Priority: MOLDAGEM_OBS_FIC (parsed) > DESCRICAO_FIC
-                let descricao = '';
-                if (obsRaw) descricao = parseObservation(obsRaw);
-                if (!descricao) descricao = descRaw || '';
-                blobData.set(key, { descricao, fotoBuffer });
-            }
-            console.log(`📦 ${blobData.size} BLOBs lidos. Processando registros...`);
+            console.log(`📊 ${results.length} registros. Processando ficha por ficha (BLOBs + Machos + Luvas)...`);
 
             let count = 0;
             for (const row of results) {
@@ -157,37 +140,32 @@ async function syncFichas() {
                     const tipoModelo = modelMap[row.TIPO_MODELO_FIC] || '-';
                     const relacao = row.RELACAO_MOLDE_METAL_FIC || 0;
 
-                    // Use pre-read BLOB data
-                    const blobs = blobData.get(row.CODIGO_FIC) || {};
+                    // Fetch BLOBs individually (separate query per row - avoids invalidation)
+                    const blobs = await getBlobs(db, row.CODIGO_FIC);
                     const descricao = blobs.descricao || '';
                     const fotoBase64 = blobs.fotoBuffer ? blobs.fotoBuffer.toString('base64') : null;
 
-                    // Fetch and format Machos (using CODIGO_FIC for join)
+                    // Fetch Machos
                     const machosList = await getMachos(db, row.CODIGO_FIC);
                     const pinturaMachoMap = { 'N': 'NÃO SE APLICA', 'L': 'LAVAGEM', 'P': 'PINCEL', 'S': 'PISTOLA', 'I': 'IMERSÃO' };
                     const tipoMachoMap = { '5': 'PEPSET', '0': 'CURA FRIO' };
-
                     const mapMulti = (str, map) => {
                         if (!str) return '-';
-                        return String(str).split(/[;,]/)
-                            .map(p => p.trim())
-                            .filter(p => p !== '')
-                            .map(p => map[p] || p)
-                            .join(' / ') || '-';
+                        return String(str).split(/[;,]/).map(p => p.trim()).filter(p => p !== '').map(p => map[p] || p).join(' / ') || '-';
                     };
-
                     const detalhesMachos = machosList.map(m => {
                         const pMacho = mapMulti(m.PINTURA_FTCM, pinturaMachoMap);
                         const tMacho = mapMulti(m.TIPO_MOLDAGEM_FTCM, tipoMachoMap);
                         return `MACHO ${m.SEQUENCIA_FTCM} - QTDE: ${m.QUANTIDADE_CADA_FTCM} - TIPO: ${tMacho} - PINTURA: ${pMacho}`;
                     }).join('\n');
 
-                    // Fetch and format Luvas
+                    // Fetch Luvas
                     const luvasList = await getLuvas(db, row.CODIGO_FIC);
                     const detalhesLuvas = luvasList.map(l => {
                         return `LUVA: ${l.NOME_LUVA || '-'} - QTDE: ${l.QUANTIDADE_PCM || 0}`;
                     }).join('\n');
 
+                    // INSERT complete record into Postgres
                     await pool.query(`
                         INSERT INTO ficha_tecnica (
                             pro_codigo_fic, material_fic, peso_liquido_fic, peso_unit_pcp_fic,
@@ -240,6 +218,7 @@ async function syncFichas() {
                         row.PESO_MACHOS_FIC, detalhesMachos, row.TINTA_REFRATARIA_FIC, detalhesLuvas
                     ]);
                     count++;
+                    if (count % 100 === 0) console.log(`⏳ ${count}/${results.length} registros processados...`);
                 } catch (e) {
                     console.error('Erro row:', e.message);
                 }
