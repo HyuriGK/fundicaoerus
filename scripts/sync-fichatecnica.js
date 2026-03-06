@@ -6,6 +6,12 @@ const firebirdOptions = {
     user: 'SYSDBA', password: 'masterkey', lowercase_keys: false, pageSize: 4096
 };
 
+// Helper to strip NULL characters (\u0000) which Postgres rejects
+function sanitize(str) {
+    if (typeof str !== 'string') return str;
+    return str.replace(/\0/g, '').trim();
+}
+
 // Helper to read Firebird BLOBs as Buffer (for images)
 function readBlobBuffer(blob) {
     return new Promise((resolve) => {
@@ -80,6 +86,21 @@ function getLuvas(db, fichaCodigo) {
     });
 }
 
+// Fetch Material for a single product (avoids large join/subquery in main query)
+function getMaterial(db, produtoCodigo) {
+    return new Promise((resolve) => {
+        db.query(`
+            SELECT FIRST 1 M.MATERIAL_MAT 
+            FROM PRODUTO_MATERIAL PM 
+            JOIN MATERIAL M ON M.ID_MAT = PM.MAT_ID_PMT 
+            WHERE PM.PRODUTO_PMT = ?
+        `, [produtoCodigo], (err, rows) => {
+            if (err || !rows || rows.length === 0) return resolve(null);
+            resolve(rows[0].MATERIAL_MAT);
+        });
+    });
+}
+
 // Fetch BLOBs for a single ficha via individual query (avoids invalidation)
 function getBlobs(db, fichaCodigo) {
     return new Promise((resolve) => {
@@ -112,23 +133,27 @@ async function syncFichas() {
                 F.PESO_TAMPA_FIC, F.PESO_FUNDO_FIC, F.CAVIDADE_QTDE_FIGURAS_FIC, F.TIPO_MODELO_FIC,
                 F.PESO_MACHOS_FIC, F.DATA_FIC, F.TINTA_REFRATARIA_FIC,
                 P.NOME_PRO, P.PESO_LIQUIDO_PRO, P.PESO_BRUTO_PRO, P.SITUACAO_PRO, P.REFERENCIA_PRO,
-                C.RAZAO_SOCIAL_CLI as NOME_CLIENTE,
-                (SELECT FIRST 1 M.MATERIAL_MAT 
-                 FROM PRODUTO_MATERIAL PM 
-                 JOIN MATERIAL M ON M.ID_MAT = PM.MAT_ID_PMT 
-                 WHERE PM.PRODUTO_PMT = F.PRO_CODIGO_FIC) as MATERIAL_REAL
+                C.RAZAO_SOCIAL_CLI as NOME_CLIENTE
             FROM FICHA_TECNICA F
             LEFT JOIN PRODUTO P ON P.CODIGO_PRO = F.PRO_CODIGO_FIC
             LEFT JOIN CLIENTE C ON C.CODIGO_CLI = F.CLI_CODIGO_FIC
             WHERE F.EMP_CODIGO_FIC = 10 AND F.ATIVO_FIC = 'S'
-            ORDER BY F.DATA_FIC DESC NULLS LAST
         `;
 
         console.log('📥 Executando query no Firebird (sem BLOBs)...');
         db.query(sql, async function (err, results) {
             if (err) { console.error('Erro query:', err); db.detach(); return; }
 
-            console.log(`📊 ${results.length} registros. Processando ficha por ficha (BLOBs + Machos + Luvas)...`);
+            console.log(`📊 ${results.length} registros recebidos. Ordenando por data...`);
+
+            // Sort in JS (much faster than Firebird without index)
+            results.sort((a, b) => {
+                const dataA = a.DATA_FIC ? new Date(a.DATA_FIC) : new Date(0);
+                const dataB = b.DATA_FIC ? new Date(b.DATA_FIC) : new Date(0);
+                return dataB - dataA;
+            });
+
+            console.log(`✅ Ordenação concluída. Iniciando loop de processamento...`);
 
             let count = 0;
             for (const row of results) {
@@ -144,6 +169,9 @@ async function syncFichas() {
                     const blobs = await getBlobs(db, row.CODIGO_FIC);
                     const descricao = blobs.descricao || '';
                     const fotoBase64 = blobs.fotoBuffer ? blobs.fotoBuffer.toString('base64') : null;
+
+                    // Fetch Material
+                    const materialReal = await getMaterial(db, row.PRO_CODIGO_FIC);
 
                     // Fetch Machos
                     const machosList = await getMachos(db, row.CODIGO_FIC);
@@ -208,17 +236,17 @@ async function syncFichas() {
                             detalhes_luvas = EXCLUDED.detalhes_luvas,
                             updated_at = NOW();
                     `, [
-                        String(row.PRO_CODIGO_FIC).trim(), row.MATERIAL_REAL || row.MAT_NOMENCLATURA_FIC, row.PESO_LIQUIDO_FIC, row.PESO_UNIT_PCP_FIC,
-                        row.TIPO_MOLDAGEM_DESC_FIC, row.OPERACAO_MOLDAGEM_DESC_FIC, descricao,
-                        row.NOME_PRO, row.PESO_LIQUIDO_PRO, row.PESO_BRUTO_PRO, row.SITUACAO_PRO,
-                        row.NOME_CLIENTE, String(row.CLI_CODIGO_FIC).trim(), String(row.CLI_CODIGO_FIC).trim(),
-                        row.REFERENCIA_PRO || row.MODELO_FIC, row.CAVIDADE_PESO_BOLO_FIC, row.QTDE_CAIXAS_MACHO_FIC, pintura, fornecimento,
+                        sanitize(row.PRO_CODIGO_FIC), sanitize(materialReal || row.MAT_NOMENCLATURA_FIC), row.PESO_LIQUIDO_FIC, row.PESO_UNIT_PCP_FIC,
+                        sanitize(row.TIPO_MOLDAGEM_DESC_FIC), sanitize(row.OPERACAO_MOLDAGEM_DESC_FIC), sanitize(descricao),
+                        sanitize(row.NOME_PRO), row.PESO_LIQUIDO_PRO, row.PESO_BRUTO_PRO, sanitize(row.SITUACAO_PRO),
+                        sanitize(row.NOME_CLIENTE), sanitize(row.CLI_CODIGO_FIC), sanitize(row.CLI_CODIGO_FIC),
+                        sanitize(row.REFERENCIA_PRO || row.MODELO_FIC), row.CAVIDADE_PESO_BOLO_FIC, row.QTDE_CAIXAS_MACHO_FIC, sanitize(pintura), sanitize(fornecimento),
                         row.PESO_PENCA_FIC, row.PESO_UNITARIO_COM_ALIMENT_FIC, row.PESO_UNITARIO_SEM_ALIMENT_FIC, relacao,
-                        row.PESO_TAMPA_FIC, row.PESO_FUNDO_FIC, row.CAVIDADE_QTDE_FIGURAS_FIC, tipoModelo, fotoBase64,
-                        row.PESO_MACHOS_FIC, detalhesMachos, row.TINTA_REFRATARIA_FIC, detalhesLuvas
+                        row.PESO_TAMPA_FIC, row.PESO_FUNDO_FIC, row.CAVIDADE_QTDE_FIGURAS_FIC, sanitize(tipoModelo), fotoBase64,
+                        row.PESO_MACHOS_FIC, sanitize(detalhesMachos), sanitize(row.TINTA_REFRATARIA_FIC), sanitize(detalhesLuvas)
                     ]);
                     count++;
-                    if (count % 100 === 0) console.log(`⏳ ${count}/${results.length} registros processados...`);
+                    if (count % 10 === 0) console.log(`⏳ ${count}/${results.length} registros processados...`);
                 } catch (e) {
                     console.error('Erro row:', e.message);
                 }
