@@ -13,7 +13,11 @@ router.get('/list/all', async (req, res) => {
                 material_fic as "MATERIAL_FIC",
                 modelo_fic as "MODELO_FIC",
                 data_fic as "DATA_FIC",
-                updated_at as "UPDATED_AT"
+                updated_at as "UPDATED_AT",
+                CASE WHEN detalhes_luvas IS NOT NULL AND detalhes_luvas != '' THEN 'Sim' ELSE 'Não' END as "TEM_LUVAS",
+                CASE WHEN detalhes_machos IS NOT NULL AND detalhes_machos != '' THEN 'Sim' ELSE 'Não' END as "TEM_MACHOS",
+                CASE WHEN descricao_fic IS NOT NULL AND descricao_fic != '' THEN 'Sim' ELSE 'Não' END as "TEM_NOTAS",
+                CASE WHEN foto_base64 IS NOT NULL AND foto_base64 != '' THEN 'Sim' ELSE 'Não' END as "TEM_FOTO"
             FROM ficha_tecnica
             ORDER BY data_fic DESC NULLS LAST, updated_at DESC
         `;
