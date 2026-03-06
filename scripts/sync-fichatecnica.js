@@ -117,7 +117,7 @@ async function syncFichas() {
                 F.FORNECIMENTO_FIC, F.PESO_PENCA_FIC, F.PESO_UNITARIO_COM_ALIMENT_FIC,
                 F.PESO_UNITARIO_SEM_ALIMENT_FIC, F.RELACAO_MOLDE_METAL_FIC,
                 F.PESO_TAMPA_FIC, F.PESO_FUNDO_FIC, F.CAVIDADE_QTDE_FIGURAS_FIC, F.TIPO_MODELO_FIC,
-                F.MINIATURA_FIC, F.PESO_MACHOS_FIC, F.DATA_FIC, F.TINTA_REFRATARIA_FIC,
+                F.MINIATURA_FIC, F.PESO_MACHOS_FIC, F.DATA_FIC, F.TINTA_REFRATARIA_FIC, F.MOLDAGEM_OBS_FIC,
                 P.NOME_PRO, P.PESO_LIQUIDO_PRO, P.PESO_BRUTO_PRO, P.SITUACAO_PRO, P.REFERENCIA_PRO,
                 C.RAZAO_SOCIAL_CLI as NOME_CLIENTE,
                 (SELECT FIRST 1 M.MATERIAL_MAT 
@@ -158,8 +158,13 @@ async function syncFichas() {
             for (let i = 0; i < results.length; i++) {
                 const row = results[i];
                 const key = row.CODIGO_FIC;
-                const descricao = await readBlob(row.DESCRICAO_FIC);
+                const obsRaw = await readBlob(row.MOLDAGEM_OBS_FIC);
+                const descRaw = await readBlob(row.DESCRICAO_FIC);
                 const fotoBuffer = await readBlobBuffer(row.MINIATURA_FIC);
+                // Priority: MOLDAGEM_OBS_FIC (parsed) > DESCRICAO_FIC
+                let descricao = '';
+                if (obsRaw) descricao = parseObservation(obsRaw);
+                if (!descricao) descricao = descRaw || '';
                 blobData.set(key, { descricao, fotoBuffer });
             }
             console.log(`📦 ${blobData.size} BLOBs lidos. Processando registros...`);
