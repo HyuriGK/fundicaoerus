@@ -13,10 +13,12 @@ echo.
 :: Bloqueia a tela durante a sincronizacao
 node scripts/sync-page-lock.js lock pedidos.html
 
-echo 🚀 Iniciando sincronização...
-echo.
-
+echo 🚀 Iniciando sincronização da Carteira...
 node scripts/sync-data.js
+
+echo.
+echo 🚀 Iniciando sincronização do Histórico de Emissões...
+node scripts/sync-emissoes.js
 
 :: Desbloqueia a tela apos a sincronizacao
 node scripts/sync-page-lock.js unlock pedidos.html
