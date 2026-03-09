@@ -1247,8 +1247,8 @@
     <div id="recordsModal" class="modal-overlay">
         <div class="modal-card fullscreen">
             <div class="modal-header">
-                <h2 class="modal-title"><i class="fa-solid fa-list-check" style="margin-right: 15px;"></i>Registros de
-                    Pedidos</h2>
+                <h2 class="modal-title" id="recordsModalTitle"><i class="fa-solid fa-list-check"
+                        style="margin-right: 15px;"></i>Registros de Pedidos</h2>
                 <span class="modal-close" onclick="closeModal()" title="Fechar (ESC)">&times;</span>
             </div>
 
@@ -3405,10 +3405,19 @@
                                 console.error('Erro ao buscar detalhes:', err);
                             }
                         } else {
-                            // Pareto Click -> Filtrar por esse cliente no modal (Simulando o comportamento dos outros paretos)
-                            // Por enquanto, apenas mostra os registros desse cliente no mês/ano selecionado
-                            // Precisamos de uma API que filtre por cliente também.
-                            // Para simplificar agora, podemos mostrar todos os registros do mês/ano e o usuário filtra na tabela.
+                            // Pareto Click -> Filtrar por esse cliente no modal
+                            const clientName = labels[index];
+                            try {
+                                const res = await fetch(`/api/emissoes/list?ano=${selectedYear}&mes=${selectedMonth}`);
+                                if (!res.ok) throw new Error();
+                                const allRecords = await res.json();
+
+                                // Filter locally by client name
+                                const filtered = allRecords.filter(r => r.NOME_CLIENTE === clientName);
+                                showHistoricalDetails(filtered, `Emissões - ${clientName} (${selectedMonth !== 'Todos' ? selectedMonth + '/' : ''}${selectedYear})`);
+                            } catch (err) {
+                                console.error('Erro ao buscar detalhes por cliente:', err);
+                            }
                         }
                     }
                 }
@@ -3417,21 +3426,27 @@
 
         async function showHistoricalDetails(records, title) {
             // Reutilizar lógica de renderTable para preencher o modal de registros
-            // Mas oRecordsModal é o oficial.
-            // Vou preencher o recordsModalTableBody e abrir
-            const tbody = document.getElementById('recordsModalTableBody');
+            const tbody = document.getElementById('table-body');
             if (!tbody) return;
 
             tbody.innerHTML = '';
             records.forEach(item => {
                 const tr = document.createElement('tr');
+                const valStr = valorVisible ? (item.VALOR_PPR ? item.VALOR_PPR.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-') : '-----';
+                const weightStr = item.PESO_LIQUIDO_NPR ? item.PESO_LIQUIDO_NPR.toLocaleString('pt-BR') : '0';
+
                 tr.innerHTML = `
                     <td>${item.CODIGO_PPR}</td>
-                    <td>${item.ID_CLIENTE_CORE} - ${item.NOME_CLIENTE}</td>
-                    <td>${item.VALOR_PPR ? formatCurrency(item.VALOR_PPR) : '-'}</td>
-                    <td>${item.QUANTIDADE_PPR || 0}</td>
-                    <td>${formatNumber(item.PESO_LIQUIDO_NPR || 0)}</td>
                     <td>${item.DATA_EMISSAO_PEDIDO ? new Date(item.DATA_EMISSAO_PEDIDO).toLocaleDateString() : '-'}</td>
+                    <td>${item.ID_CLIENTE_CORE} - ${item.NOME_CLIENTE}</td>
+                    <td>-</td> <!-- CÓDIGO PRODUTO -->
+                    <td>${item.NOME_PRODUTO_PPR || '-'}</td>
+                    <td>${item.QUANTIDADE_PPR || 0}</td>
+                    <td>-</td> <!-- PESO UN -->
+                    <td>${weightStr}</td>
+                    <td>${valStr}</td>
+                    <td>-</td> <!-- OP -->
+                    <td>-</td> <!-- ANDAMENTO -->
                 `;
                 tbody.appendChild(tr);
             });

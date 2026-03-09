@@ -81,19 +81,26 @@ router.get('/client-summary', async (req, res) => {
 router.get('/list', async (req, res) => {
     try {
         const { ano, mes } = req.query;
-        if (!ano || !mes) {
-            return res.status(400).json({ error: 'Ano e Mês são obrigatórios.' });
+        if (!ano) {
+            return res.status(400).json({ error: 'Ano é obrigatório.' });
+        }
+
+        let whereClause = "WHERE EXTRACT(YEAR FROM (data->>'DATA_EMISSAO_PEDIDO')::date) = $1";
+        const params = [ano];
+
+        if (mes && mes !== 'Todos') {
+            whereClause += " AND EXTRACT(MONTH FROM (data->>'DATA_EMISSAO_PEDIDO')::date) = $2";
+            params.push(mes);
         }
 
         const query = `
             SELECT data
             FROM firebird_sync_emissoes
-            WHERE EXTRACT(YEAR FROM (data->>'DATA_EMISSAO_PEDIDO')::date) = $1
-              AND EXTRACT(MONTH FROM (data->>'DATA_EMISSAO_PEDIDO')::date) = $2
+            ${whereClause}
             ORDER BY (data->>'DATA_EMISSAO_PEDIDO')::date DESC
         `;
 
-        const result = await pool.query(query, [ano, mes]);
+        const result = await pool.query(query, params);
         const records = result.rows.map(row => row.data);
 
         res.json(records);
