@@ -46,6 +46,9 @@ router.get('/', checkDevRole, async (req, res) => {
                     'refugos.html',
                     'pedidos.html',
                     'carteira.html',
+                    'fichatecmoldagem.html',
+                    'fichatecfusao.html',
+                    'fichatecacabamento.html',
                     'custos.html'
                   )
                 ORDER BY created_at DESC
