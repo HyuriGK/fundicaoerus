@@ -542,51 +542,28 @@
             background: linear-gradient(90deg, #10b981, #059669);
         }
 
-        /* Custom Tooltip */
-        .bar-segment::after {
-            content: attr(data-tooltip);
-            position: absolute;
-            bottom: 28px;
-            left: 50%;
-            transform: translateX(-50%) translateY(10px);
-            background: rgba(24, 24, 27, 0.95);
-            backdrop-filter: blur(12px);
+        /* Dynamic Floating Tooltip */
+        #floatingIndustrialTooltip {
+            position: fixed;
+            display: none;
+            background: rgba(24, 24, 27, 0.98);
+            backdrop-filter: blur(16px);
             color: #fff;
-            padding: 12px 18px;
-            border-radius: 12px;
-            font-size: 0.8rem;
+            padding: 18px 24px;
+            border-radius: 16px;
+            font-size: 0.9rem;
             white-space: pre-line;
-            opacity: 0;
             pointer-events: none;
-            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            z-index: 10000;
             box-shadow:
-                0 10px 25px -5px rgba(0, 0, 0, 0.6),
-                0 0 0 1px rgba(255, 255, 255, 0.1);
+                0 20px 50px -12px rgba(0, 0, 0, 0.8),
+                0 0 0 1px rgba(255, 255, 255, 0.15);
             width: max-content;
-            line-height: 1.6;
+            line-height: 1.7;
             text-align: left;
-            z-index: 1000;
+            transition: opacity 0.2s ease, transform 0.2s ease;
             font-weight: 500;
-        }
-
-        .bar-segment::before {
-            content: '';
-            position: absolute;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%) translateY(10px);
-            border: 8px solid transparent;
-            border-top-color: rgba(24, 24, 27, 0.95);
-            opacity: 0;
-            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-            pointer-events: none;
-            z-index: 1001;
-        }
-
-        .bar-segment:hover::after,
-        .bar-segment:hover::before {
-            opacity: 1;
-            transform: translateX(-50%) translateY(0);
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }
 
         .modal-card.fullscreen {
@@ -1588,7 +1565,8 @@
         </div>
     </div>
 
-    <!-- MODAL DE EMAIL (NOVO) -->
+    <!-- TOOLTIP DINÂMICO (NOVO) -->
+    <div id="floatingIndustrialTooltip"></div>
     <div id="emailModal" class="modal-overlay" style="z-index: 3000;">
         <div class="modal-card fullscreen" style="background: #09090b;">
             <div class="modal-header">
@@ -1635,6 +1613,50 @@
         let chartPCP = null, chartPareto = null, chartPending = null, chartHistorical = null;
         let activeMonthFilter = null, activeClientFilter = null; // Legacy vars, replacing with object below
         let activeChartFilters = { month: null, client: null, stage: null }; // New PowerBI-style filters
+
+        // Tooltip Dinâmico Logic
+        const dynamicTooltip = document.getElementById('floatingIndustrialTooltip');
+
+        document.querySelectorAll('.bar-segment').forEach(segment => {
+            segment.addEventListener('mouseenter', (e) => {
+                const text = segment.getAttribute('data-tooltip');
+                if (text && dynamicTooltip) {
+                    dynamicTooltip.innerText = text;
+                    dynamicTooltip.style.display = 'block';
+                    dynamicTooltip.style.opacity = '1';
+                }
+            });
+
+            segment.addEventListener('mousemove', (e) => {
+                if (!dynamicTooltip) return;
+
+                let x = e.clientX + 20;
+                let y = e.clientY - (dynamicTooltip.offsetHeight / 2);
+
+                // Keep inside viewport (X)
+                if (x + dynamicTooltip.offsetWidth > window.innerWidth) {
+                    x = e.clientX - dynamicTooltip.offsetWidth - 20;
+                }
+
+                // Keep inside viewport (Y)
+                if (y + dynamicTooltip.offsetHeight > window.innerHeight) {
+                    y = window.innerHeight - dynamicTooltip.offsetHeight - 10;
+                }
+                if (y < 10) {
+                    y = 10;
+                }
+
+                dynamicTooltip.style.left = x + 'px';
+                dynamicTooltip.style.top = y + 'px';
+            });
+
+            segment.addEventListener('mouseleave', () => {
+                if (dynamicTooltip) {
+                    dynamicTooltip.style.display = 'none';
+                    dynamicTooltip.style.opacity = '0';
+                }
+            });
+        });
 
         function filterByStage(stage) {
             // Toggle logic
