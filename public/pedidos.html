@@ -1127,8 +1127,16 @@
                     </div>
                 </div>
                 <div class="chart-panel">
-                    <div class="chart-header-row">
-                        <div class="chart-title-flex">Pareto - Peso por Cliente</div>
+                    <div class="chart-header-row" style="justify-content: space-between; padding: 0 10px;">
+                        <div class="chart-title-flex" id="paretoPanelTitle">Pareto - Peso por Cliente</div>
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <select id="paretoChartToggle" onchange="toggleParetoPanelSource()"
+                                style="font-size: 0.7rem; padding: 5px 12px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-subtle); gap: 6px; white-space: nowrap; color: #a1a1aa; cursor: pointer; outline: none;">
+                                <option value="pareto" selected style="background: #18181b;">Pareto (Carteira)</option>
+                                <option value="emissoes" style="background: #18181b;">Emissões Mensais (Histórico)
+                                </option>
+                            </select>
+                        </div>
                     </div>
                     <div style="position: relative; flex: 1; min-height: 0; width:100%;">
                         <canvas id="paretoChart"></canvas>
@@ -2851,9 +2859,30 @@
             }, 50);
         }
 
+        let paretoPanelMode = 'pareto'; // 'pareto' or 'emissoes'
+        let emissionDataCache = null;
+
+        async function toggleParetoPanelSource() {
+            const select = document.getElementById('paretoChartToggle');
+            paretoPanelMode = select.value;
+            const titleEl = document.getElementById('paretoPanelTitle');
+
+            if (paretoPanelMode === 'pareto') {
+                titleEl.textContent = 'Pareto - Peso por Cliente';
+                updateParetoChart(currentFilteredData);
+            } else {
+                titleEl.textContent = 'Emissões Mensais (Histórico 2025/2026)';
+                await updateEmissionChart();
+            }
+        }
+
         function updateCharts(list) {
             updateMonthlyChart(list);
-            updateParetoChart(list);
+            if (paretoPanelMode === 'pareto') {
+                updateParetoChart(list);
+            } else {
+                updateEmissionChart();
+            }
         }
 
 
@@ -3135,6 +3164,109 @@
                 }
             });
         }
+
+        async function updateEmissionChart() {
+            try {
+                if (!emissionDataCache) {
+                    const res = await fetch('/api/emissoes/monthly-summary');
+                    if (!res.ok) throw new Error('Erro ao buscar dados de emissão');
+                    emissionDataCache = await res.json();
+                }
+
+                const labels = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+                const currentYear = new Date().getFullYear();
+                const yearEl = document.getElementById('chartYearFilter');
+                const selectedYear = yearEl ? (parseInt(yearEl.value) || currentYear) : currentYear;
+
+                const weightData = Array(12).fill(0);
+                const valueData = Array(12).fill(0);
+
+                emissionDataCache.forEach(row => {
+                    if (row.ano === selectedYear) {
+                        weightData[row.mes - 1] = row.totalPeso;
+                        valueData[row.mes - 1] = row.totalValor;
+                    }
+                });
+
+                if (paretoChart) paretoChart.destroy();
+                paretoChart = new Chart(document.getElementById('paretoChart').getContext('2d'), {
+                    data: {
+                        labels: labels,
+                        datasets: [
+                            {
+                                type: 'bar',
+                                label: 'Peso (kg)',
+                                data: weightData,
+                                backgroundColor: chartColorAmber,
+                                borderRadius: 4,
+                                yAxisID: 'y'
+                            },
+                            {
+                                type: 'line',
+                                label: 'Valor (R$)',
+                                data: valueData,
+                                borderColor: '#fff',
+                                backgroundColor: 'rgba(255,255,255,0.1)',
+                                borderWidth: 2,
+                                pointRadius: 4,
+                                tension: 0.3,
+                                yAxisID: 'yValue'
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: {
+                                type: 'linear',
+                                display: true,
+                                position: 'left',
+                                beginAtZero: true,
+                                title: { display: true, text: 'kg', color: '#a1a1aa' },
+                                grid: { color: 'rgba(255,255,255,0.05)' }
+                            },
+                            yValue: {
+                                type: 'linear',
+                                display: true,
+                                position: 'right',
+                                beginAtZero: true,
+                                title: { display: true, text: 'R$', color: '#a1a1aa' },
+                                grid: { drawOnChartArea: false },
+                                ticks: {
+                                    callback: function (value) {
+                                        return valorVisible ? value.toLocaleString('pt-BR', { notation: 'compact' }) : '---';
+                                    }
+                                }
+                            },
+                            x: {
+                                grid: { color: 'rgba(255,255,255,0.05)' }
+                            }
+                        },
+                        plugins: {
+                            legend: { display: true, position: 'top', labels: { color: '#a1a1aa', boxWidth: 12 } },
+                            tooltip: {
+                                callbacks: {
+                                    label: function (context) {
+                                        let val = context.parsed.y;
+                                        if (context.datasetIndex === 0) {
+                                            return `Peso: ${val.toLocaleString('pt-BR')} kg`;
+                                        } else {
+                                            const valStr = valorVisible ? val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-----';
+                                            return `Valor: ${valStr}`;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            } catch (err) {
+                console.error(err);
+                showToast("Erro", "Falha ao carregar gráfico de emissões.", "danger");
+            }
+        }
+
 
 
 

@@ -52,6 +52,8 @@ const faturamentoFiltros = require('../src/faturamento-filtros');
 const usinagemExterno = require('../src/usinagem-externo'); // NOVO: Usinagem Externa
 const assertividade = require('../src/assertividade'); // NOVA: Assertividade Sincronizada
 const devolucoes = require('../src/devolucoes'); // NOVA: Devoluções Sincronizadas
+const emissoes = require('../src/emissoes-api'); // NOVO: Histórico de Emissões
+
 
 
 // --- DEFINIÇÃO DAS ROTAS ---
@@ -81,6 +83,8 @@ app.use('/api/pedidos-sync', require('../src/pedidos-sync'));
 app.use('/api/assertividade', assertividade); // NOVA: Assertividade Sincronizada
 app.use('/api/usinagem-externo', usinagemExterno); // NOVO: Usinagem Externa
 app.use('/api/devolucoes', devolucoes); // NOVA: Devoluções Sincronizadas
+app.use('/api/emissoes', emissoes); // NOVO: Histórico de Emissões
+
 
 app.use('/api/producao-postgres', require('../src/producao-postgres')); // NOVO: Produção Sincronizada
 app.use('/api/pedidos-firebird', require('../src/pedidos-firebird')); // NOVO: Pedidos Histórico Firebird
