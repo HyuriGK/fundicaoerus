@@ -33,6 +33,50 @@ router.get('/monthly-summary', async (req, res) => {
     }
 });
 
+// GET /api/emissoes/client-summary
+router.get('/client-summary', async (req, res) => {
+    try {
+        const { ano, mes } = req.query;
+        if (!ano) {
+            return res.status(400).json({ error: 'Ano é obrigatório.' });
+        }
+
+        let whereClause = "WHERE EXTRACT(YEAR FROM (data->>'DATA_EMISSAO_PEDIDO')::date) = $1";
+        const params = [ano];
+
+        if (mes && mes !== 'Todos') {
+            whereClause += " AND EXTRACT(MONTH FROM (data->>'DATA_EMISSAO_PEDIDO')::date) = $2";
+            params.push(mes);
+        }
+
+        const query = `
+            SELECT 
+                data->>'NOME_CLIENTE' as cliente,
+                data->>'ID_CLIENTE_CORE' as id_cliente,
+                SUM(CAST(COALESCE(data->>'PESO_LIQUIDO_NPR', '0') AS NUMERIC)) as total_peso,
+                SUM(CAST(COALESCE(data->>'VALOR_PPR', '0') AS NUMERIC) * CAST(COALESCE(data->>'QUANTIDADE_PPR', '0') AS NUMERIC)) as total_valor
+            FROM firebird_sync_emissoes
+            ${whereClause}
+            GROUP BY 1, 2
+            ORDER BY 3 DESC
+        `;
+
+        const result = await pool.query(query, params);
+
+        const formatted = result.rows.map(row => ({
+            id: row.id_cliente,
+            name: row.cliente,
+            totalPeso: parseFloat(row.total_peso),
+            totalValor: parseFloat(row.total_valor)
+        }));
+
+        res.json(formatted);
+    } catch (error) {
+        console.error('Erro ao buscar resumo de clientes:', error);
+        res.status(500).json({ error: 'Erro interno ao processar resumo de clientes.' });
+    }
+});
+
 // GET /api/emissoes/list
 router.get('/list', async (req, res) => {
     try {

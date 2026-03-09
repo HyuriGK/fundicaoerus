@@ -1182,11 +1182,42 @@
 
                 <!-- BOTTOM RIGHT: Emissão Histórica Mensal -->
                 <div class="chart-panel">
-                    <div class="chart-header-row" style="position: relative;">
+                    <div class="chart-header-row"
+                        style="position: relative; display: flex; align-items: center; justify-content: center; gap: 10px;">
                         <div class="chart-title-flex">Gráfico de Emissão de Pedidos</div>
-                        <select id="yearFilterHistorical" onchange="updateHistoricalChart()"
-                            style="position: absolute; right: 10px; font-size: 0.7rem; padding: 5px 12px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-subtle); color: #a1a1aa; cursor: pointer; outline: none;">
-                        </select>
+
+                        <!-- Filters Column Right -->
+                        <div style="position: absolute; right: 10px; display: flex; align-items: center; gap: 6px;">
+                            <!-- View Mode -->
+                            <select id="modeFilterHistorical" onchange="updateHistoricalChart()"
+                                style="font-size: 0.7rem; padding: 5px 8px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-subtle); color: #a1a1aa; cursor: pointer; outline: none; border-radius: 4px;">
+                                <option value="month">Por Mês</option>
+                                <option value="client">Por Cliente</option>
+                            </select>
+
+                            <!-- Month Filter (Visible when client mode or just always to refine) -->
+                            <select id="monthFilterHistorical" onchange="updateHistoricalChart()"
+                                style="font-size: 0.7rem; padding: 5px 8px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-subtle); color: #a1a1aa; cursor: pointer; outline: none; border-radius: 4px;">
+                                <option value="Todos">Meses: Todos</option>
+                                <option value="1">Janeiro</option>
+                                <option value="2">Fevereiro</option>
+                                <option value="3">Março</option>
+                                <option value="4">Abril</option>
+                                <option value="5">Maio</option>
+                                <option value="6">Junho</option>
+                                <option value="7">Julho</option>
+                                <option value="8">Agosto</option>
+                                <option value="9">Setembro</option>
+                                <option value="10">Outubro</option>
+                                <option value="11">Novembro</option>
+                                <option value="12">Dezembro</option>
+                            </select>
+
+                            <!-- Year Filter -->
+                            <select id="yearFilterHistorical" onchange="updateHistoricalChart()"
+                                style="font-size: 0.7rem; padding: 5px 8px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-subtle); color: #a1a1aa; cursor: pointer; outline: none; border-radius: 4px;">
+                            </select>
+                        </div>
                     </div>
                     <div style="position: relative; flex: 1; min-height: 0; width:100%;">
                         <canvas id="chartHistorical"></canvas>
@@ -3180,68 +3211,233 @@
         }
 
         let emissionDataCache = null;
+        let emissionClientCache = {}; // Cache by "year-month"
+
         async function updateHistoricalChart() {
             try {
-                if (!emissionDataCache) {
-                    const res = await fetch('/api/emissoes/monthly-summary');
-                    if (!res.ok) throw new Error('Erro ao buscar dados de emissão');
-                    emissionDataCache = await res.json();
-                }
-                const labels = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
                 const yearEl = document.getElementById('yearFilterHistorical');
-                const selectedYear = yearEl ? (parseInt(yearEl.value) || new Date().getFullYear()) : new Date().getFullYear();
-                const weightData = Array(12).fill(0);
-                const valueData = Array(12).fill(0);
-                emissionDataCache.forEach(row => {
-                    if (row.ano === selectedYear) {
-                        weightData[row.mes - 1] = row.totalPeso;
-                        valueData[row.mes - 1] = row.totalValor;
-                    }
-                });
+                const monthEl = document.getElementById('monthFilterHistorical');
+                const modeEl = document.getElementById('modeFilterHistorical');
 
-                if (chartHistorical) chartHistorical.destroy();
-                chartHistorical = new Chart(document.getElementById('chartHistorical').getContext('2d'), {
-                    type: 'bar',
-                    data: {
-                        labels: labels,
-                        datasets: [{
-                            label: 'Peso (kg)',
-                            data: weightData,
-                            backgroundColor: chartColorAmber,
-                            borderRadius: 4,
-                            extraValueData: valueData
-                        }]
-                    },
-                    options: {
-                        responsive: true, maintainAspectRatio: false,
-                        scales: {
-                            y: { beginAtZero: true, title: { display: true, text: 'kg', color: '#a1a1aa' }, grid: { color: 'rgba(255,255,255,0.05)' } },
-                            x: { grid: { color: 'rgba(255,255,255,0.05)' } }
+                const selectedYear = yearEl ? (parseInt(yearEl.value) || new Date().getFullYear()) : new Date().getFullYear();
+                const selectedMonth = monthEl ? monthEl.value : 'Todos';
+                const titleEl = modeEl.closest('.chart-panel').querySelector('.chart-title-flex');
+                if (viewMode === 'month') {
+                    if (titleEl) titleEl.innerText = 'Gráfico de Emissão de Pedidos';
+                    // MODO: POR MÊS
+                    if (!emissionDataCache) {
+                        const res = await fetch('/api/emissoes/monthly-summary');
+                        if (!res.ok) throw new Error('Erro ao buscar dados de emissão');
+                        emissionDataCache = await res.json();
+                    }
+
+                    const weightData = Array(12).fill(0);
+                    const valueData = Array(12).fill(0);
+
+                    emissionDataCache.forEach(row => {
+                        if (row.ano === selectedYear) {
+                            weightData[row.mes - 1] = row.totalPeso;
+                            valueData[row.mes - 1] = row.totalValor;
+                        }
+                    });
+
+                    // Filtering Month if not "Todos"
+                    let labels = monthLabels;
+                    let finalWeight = weightData;
+                    let finalValue = valueData;
+
+                    if (selectedMonth !== 'Todos') {
+                        const mIdx = parseInt(selectedMonth) - 1;
+                        labels = [monthLabels[mIdx]];
+                        finalWeight = [weightData[mIdx]];
+                        finalValue = [valueData[mIdx]];
+                    }
+
+                    if (chartHistorical) chartHistorical.destroy();
+                    chartHistorical = new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                label: 'Peso (kg)',
+                                data: finalWeight,
+                                backgroundColor: chartColorAmber,
+                                borderRadius: 4,
+                                extraData: finalValue
+                            }]
                         },
-                        plugins: {
-                            legend: { display: false },
-                            tooltip: {
-                                callbacks: {
-                                    label: function (context) {
-                                        const weight = context.parsed.y;
-                                        const value = context.dataset.extraValueData[context.dataIndex];
-                                        const valueStr = valorVisible ? value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-----';
-                                        return [`Peso: ${weight.toLocaleString('pt-BR')} kg`, `Valor: ${valueStr}`];
-                                    }
+                        options: getHistoricalOptions('kg', false)
+                    });
+
+                } else {
+                    if (titleEl) titleEl.innerText = 'Pareto - Emissão por Cliente';
+                    // MODO: POR CLIENTE (PARETO)
+                    const cacheKey = `${selectedYear}-${selectedMonth}`;
+                    let data = emissionClientCache[cacheKey];
+
+                    if (!data) {
+                        const res = await fetch(`/api/emissoes/client-summary?ano=${selectedYear}&mes=${selectedMonth}`);
+                        if (!res.ok) throw new Error('Erro ao buscar sumário de clientes');
+                        data = await res.json();
+                        emissionClientCache[cacheKey] = data;
+                    }
+
+                    // Pareto Logic
+                    const totalWeightAll = data.reduce((acc, row) => acc + row.totalPeso, 0);
+                    const sorted = [...data].sort((a, b) => b.totalPeso - a.totalPeso).slice(0, 15); // Top 15
+
+                    const labels = sorted.map(s => s.name);
+                    const weightData = sorted.map(s => s.totalPeso);
+                    const valueData = sorted.map(s => s.totalValor);
+
+                    let cumulative = 0;
+                    const dataPercent = sorted.map(s => {
+                        cumulative += s.totalPeso;
+                        return totalWeightAll > 0 ? (cumulative / totalWeightAll) * 100 : 0;
+                    });
+
+                    if (chartHistorical) chartHistorical.destroy();
+                    chartHistorical = new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: labels,
+                            datasets: [
+                                {
+                                    type: 'line',
+                                    label: '% Acumulada',
+                                    data: dataPercent,
+                                    borderColor: '#fff',
+                                    backgroundColor: 'rgba(255,255,255,0.1)',
+                                    borderWidth: 2,
+                                    pointRadius: 3,
+                                    tension: 0.3,
+                                    yAxisID: 'yPercent'
+                                },
+                                {
+                                    type: 'bar',
+                                    label: 'Peso (kg)',
+                                    data: weightData,
+                                    backgroundColor: chartColorAmber,
+                                    borderRadius: 4,
+                                    yAxisID: 'y',
+                                    extraData: valueData
                                 }
-                            }
+                            ]
                         },
-                        onClick: (e, elements) => {
-                            if (elements.length > 0) {
-                                showHistoricalRecords(selectedYear, elements[0].index + 1);
+                        options: getHistoricalOptions('kg', true)
+                    });
+                }
+            } catch (error) {
+                console.error('Erro no gráfico histórico:', error);
+            }
+        }
+
+        function getHistoricalOptions(unit, isPareto) {
+            return {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        type: 'linear',
+                        display: true,
+                        position: 'left',
+                        beginAtZero: true,
+                        grid: { color: 'rgba(255,255,255,0.05)' },
+                        title: { display: !isPareto, text: unit, color: '#a1a1aa' }
+                    },
+                    yPercent: {
+                        display: isPareto,
+                        type: 'linear',
+                        position: 'right',
+                        beginAtZero: true,
+                        max: 100,
+                        grid: { drawOnChartArea: false }
+                    },
+                    x: {
+                        ticks: {
+                            maxRotation: 45,
+                            minRotation: 45,
+                            callback: function (value) {
+                                const label = this.getLabelForValue(value);
+                                return (isPareto && typeof label === 'string' && label.length > 12) ? label.substring(0, 10) + '...' : label;
                             }
                         }
                     }
-                });
-            } catch (err) {
-                console.error(err);
-                showToast("Erro", "Falha ao carregar gráfico de emissões.", "danger");
-            }
+                },
+                plugins: {
+                    legend: { display: isPareto },
+                    tooltip: {
+                        callbacks: {
+                            label: function (context) {
+                                if (context.dataset.yAxisID === 'yPercent') {
+                                    return `% Acumulada: ${context.parsed.y.toFixed(1)}%`;
+                                }
+                                const weight = context.parsed.y;
+                                const val = context.dataset.extraData ? context.dataset.extraData[context.dataIndex] : 0;
+                                const valStr = valorVisible ? val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-----';
+                                return [`Peso: ${weight.toLocaleString('pt-BR')} kg`, `Valor: ${valStr}`];
+                            }
+                        }
+                    }
+                },
+                onClick: async (e, elements) => {
+                    if (elements.length > 0) {
+                        const index = elements[0].index;
+                        const yearEl = document.getElementById('yearFilterHistorical');
+                        const monthEl = document.getElementById('monthFilterHistorical');
+                        const modeEl = document.getElementById('modeFilterHistorical');
+
+                        const selectedYear = yearEl ? (parseInt(yearEl.value) || new Date().getFullYear()) : new Date().getFullYear();
+                        const selectedMonth = monthEl ? monthEl.value : 'Todos';
+                        const viewMode = modeEl ? modeEl.value : 'month';
+
+                        if (viewMode === 'month') {
+                            // Clicou no mês -> abre modal com registros desse mês
+                            let targetMonth = index + 1;
+                            if (selectedMonth !== 'Todos') targetMonth = parseInt(selectedMonth);
+
+                            try {
+                                const res = await fetch(`/api/emissoes/list?ano=${selectedYear}&mes=${targetMonth}`);
+                                if (!res.ok) throw new Error();
+                                const records = await res.json();
+                                showHistoricalDetails(records, `Emissões - ${targetMonth}/${selectedYear}`);
+                            } catch (err) {
+                                console.error('Erro ao buscar detalhes:', err);
+                            }
+                        } else {
+                            // Pareto Click -> Filtrar por esse cliente no modal (Simulando o comportamento dos outros paretos)
+                            // Por enquanto, apenas mostra os registros desse cliente no mês/ano selecionado
+                            // Precisamos de uma API que filtre por cliente também.
+                            // Para simplificar agora, podemos mostrar todos os registros do mês/ano e o usuário filtra na tabela.
+                        }
+                    }
+                }
+            };
+        }
+
+        async function showHistoricalDetails(records, title) {
+            // Reutilizar lógica de renderTable para preencher o modal de registros
+            // Mas oRecordsModal é o oficial.
+            // Vou preencher o recordsModalTableBody e abrir
+            const tbody = document.getElementById('recordsModalTableBody');
+            if (!tbody) return;
+
+            tbody.innerHTML = '';
+            records.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${item.CODIGO_PPR}</td>
+                    <td>${item.ID_CLIENTE_CORE} - ${item.NOME_CLIENTE}</td>
+                    <td>${item.VALOR_PPR ? formatCurrency(item.VALOR_PPR) : '-'}</td>
+                    <td>${item.QUANTIDADE_PPR || 0}</td>
+                    <td>${formatNumber(item.PESO_LIQUIDO_NPR || 0)}</td>
+                    <td>${item.DATA_EMISSAO_PEDIDO ? new Date(item.DATA_EMISSAO_PEDIDO).toLocaleDateString() : '-'}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            document.getElementById('recordsModalTitle').innerText = title;
+            openModal();
         }
 
         async function showHistoricalRecords(year, month) {
