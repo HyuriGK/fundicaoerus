@@ -1130,6 +1130,11 @@
                     <div class="chart-header-row" style="justify-content: space-between; padding: 0 10px;">
                         <div class="chart-title-flex" id="paretoPanelTitle">Pareto - Peso por Cliente</div>
                         <div style="display: flex; gap: 10px; align-items: center;">
+                            <select id="paretoChartYearFilter" onchange="toggleParetoPanelSource()"
+                                style="font-size: 0.7rem; padding: 5px 12px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-subtle); gap: 6px; white-space: nowrap; color: #a1a1aa; cursor: pointer; outline: none; display: none;">
+                                <!-- Populado via JS -->
+                            </select>
+
                             <select id="paretoChartToggle" onchange="toggleParetoPanelSource()"
                                 style="font-size: 0.7rem; padding: 5px 12px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-subtle); gap: 6px; white-space: nowrap; color: #a1a1aa; cursor: pointer; outline: none;">
                                 <option value="pareto" selected style="background: #18181b;">Pareto (Carteira)</option>
@@ -2034,10 +2039,20 @@
             document.getElementById('clock-date').innerText = now.toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric', month: 'short' }).toUpperCase();
         }, 1000);
 
+        function showLoadingScreen() {
+            const ls = document.getElementById('loading-screen');
+            if (ls) {
+                ls.style.display = 'flex';
+                ls.style.opacity = '1';
+            }
+        }
+
         function hideLoadingScreen() {
             const ls = document.getElementById('loading-screen');
-            ls.style.opacity = '0';
-            setTimeout(() => { ls.style.display = 'none'; }, 500);
+            if (ls) {
+                ls.style.opacity = '0';
+                setTimeout(() => { ls.style.display = 'none'; }, 500);
+            }
         }
 
         function formatNumber(v, d = 2) {
@@ -2864,14 +2879,17 @@
 
         async function toggleParetoPanelSource() {
             const select = document.getElementById('paretoChartToggle');
+            const yearFilter = document.getElementById('paretoChartYearFilter');
             paretoPanelMode = select.value;
             const titleEl = document.getElementById('paretoPanelTitle');
 
             if (paretoPanelMode === 'pareto') {
                 titleEl.textContent = 'Pareto - Peso por Cliente';
+                yearFilter.style.display = 'none';
                 updateParetoChart(currentFilteredData);
             } else {
-                titleEl.textContent = 'Emissões Mensais (Histórico 2025/2026)';
+                titleEl.textContent = 'Emissões Mensais (Histórico)';
+                yearFilter.style.display = 'block';
                 await updateEmissionChart();
             }
         }
@@ -2906,18 +2924,21 @@
         // Inicializar filtro de ano
         function initYearFilter() {
             const yearSelect = document.getElementById('chartYearFilter');
+            const paretoYearSelect = document.getElementById('paretoChartYearFilter');
             const currentYear = new Date().getFullYear();
-            // Mostrar ano anterior, atual e próximos 2 anos
             const years = [currentYear - 1, currentYear, currentYear + 1];
 
-            yearSelect.innerHTML = '';
-            years.forEach(y => {
-                const opt = document.createElement('option');
-                opt.value = y;
-                opt.textContent = y;
-                opt.style.background = '#18181b';
-                if (y === currentYear) opt.selected = true;
-                yearSelect.appendChild(opt);
+            [yearSelect, paretoYearSelect].forEach(select => {
+                if (!select) return;
+                select.innerHTML = '';
+                years.forEach(y => {
+                    const opt = document.createElement('option');
+                    opt.value = y;
+                    opt.textContent = y;
+                    opt.style.background = '#18181b';
+                    if (y === currentYear) opt.selected = true;
+                    select.appendChild(opt);
+                });
             });
         }
 
@@ -3175,7 +3196,7 @@
 
                 const labels = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
                 const currentYear = new Date().getFullYear();
-                const yearEl = document.getElementById('chartYearFilter');
+                const yearEl = document.getElementById('paretoChartYearFilter');
                 const selectedYear = yearEl ? (parseInt(yearEl.value) || currentYear) : currentYear;
 
                 const weightData = Array(12).fill(0);
@@ -3190,27 +3211,16 @@
 
                 if (paretoChart) paretoChart.destroy();
                 paretoChart = new Chart(document.getElementById('paretoChart').getContext('2d'), {
+                    type: 'bar',
                     data: {
                         labels: labels,
                         datasets: [
                             {
-                                type: 'bar',
                                 label: 'Peso (kg)',
                                 data: weightData,
                                 backgroundColor: chartColorAmber,
                                 borderRadius: 4,
-                                yAxisID: 'y'
-                            },
-                            {
-                                type: 'line',
-                                label: 'Valor (R$)',
-                                data: valueData,
-                                borderColor: '#fff',
-                                backgroundColor: 'rgba(255,255,255,0.1)',
-                                borderWidth: 2,
-                                pointRadius: 4,
-                                tension: 0.3,
-                                yAxisID: 'yValue'
+                                extraValueData: valueData // Custom property for tooltip
                             }
                         ]
                     },
@@ -3219,44 +3229,35 @@
                         maintainAspectRatio: false,
                         scales: {
                             y: {
-                                type: 'linear',
-                                display: true,
-                                position: 'left',
                                 beginAtZero: true,
                                 title: { display: true, text: 'kg', color: '#a1a1aa' },
                                 grid: { color: 'rgba(255,255,255,0.05)' }
-                            },
-                            yValue: {
-                                type: 'linear',
-                                display: true,
-                                position: 'right',
-                                beginAtZero: true,
-                                title: { display: true, text: 'R$', color: '#a1a1aa' },
-                                grid: { drawOnChartArea: false },
-                                ticks: {
-                                    callback: function (value) {
-                                        return valorVisible ? value.toLocaleString('pt-BR', { notation: 'compact' }) : '---';
-                                    }
-                                }
                             },
                             x: {
                                 grid: { color: 'rgba(255,255,255,0.05)' }
                             }
                         },
                         plugins: {
-                            legend: { display: true, position: 'top', labels: { color: '#a1a1aa', boxWidth: 12 } },
+                            legend: { display: false },
                             tooltip: {
                                 callbacks: {
                                     label: function (context) {
-                                        let val = context.parsed.y;
-                                        if (context.datasetIndex === 0) {
-                                            return `Peso: ${val.toLocaleString('pt-BR')} kg`;
-                                        } else {
-                                            const valStr = valorVisible ? val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-----';
-                                            return `Valor: ${valStr}`;
-                                        }
+                                        const weight = context.parsed.y;
+                                        const value = context.dataset.extraValueData[context.dataIndex];
+                                        const valueStr = valorVisible ? value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-----';
+                                        return [
+                                            `Peso: ${weight.toLocaleString('pt-BR')} kg`,
+                                            `Valor: ${valueStr}`
+                                        ];
                                     }
                                 }
+                            }
+                        },
+                        onClick: (e, elements) => {
+                            if (elements.length > 0) {
+                                const idx = elements[0].index;
+                                const month = idx + 1;
+                                showHistoricalRecords(selectedYear, month);
                             }
                         }
                     }
@@ -3264,6 +3265,51 @@
             } catch (err) {
                 console.error(err);
                 showToast("Erro", "Falha ao carregar gráfico de emissões.", "danger");
+            }
+        }
+
+        async function showHistoricalRecords(year, month) {
+            try {
+                showLoadingScreen();
+                const res = await fetch(`/api/emissoes/list?ano=${year}&mes=${month}`);
+                if (!res.ok) throw new Error('Erro ao buscar registros históricos');
+                const records = await res.json();
+
+                if (records.length === 0) {
+                    showToast("Atenção", "Nenhum registro encontrado para este período.", "warning");
+                    return;
+                }
+
+                // Normalizar registros para o formato da tabela se necessário
+                const normalized = records.map(r => ({
+                    ...r,
+                    // Garante campos virtuais/esperados pela renderTable
+                    VALOR_TOTAL: parseFloat(r.VALOR_PPR || 0) * parseFloat(r.QUANTIDADE_PPR || 0),
+                    ENTREGA_PETR: r.DATA_EMISSAO_PEDIDO // Usar emissão como fallback de data se não houver entrega
+                }));
+
+                // Abrir modal e renderizar
+                openModal();
+                const titleEl = document.querySelector('#recordsModal .modal-title');
+                const originalTitle = titleEl.innerHTML;
+                titleEl.innerHTML = `<i class="fa-solid fa-history" style="margin-right: 15px;"></i>Emissões - ${month < 10 ? '0' + month : month}/${year}`;
+
+                renderTable(normalized);
+                updateTotals(normalized);
+
+                // Override close modal logic once to restore title (optional quality of life)
+                const originalClose = window.closeModal;
+                window.closeModal = function () {
+                    titleEl.innerHTML = `<i class="fa-solid fa-list-check" style="margin-right: 15px;"></i>Registros de Pedidos`;
+                    originalClose();
+                    window.closeModal = originalClose; // Reset
+                };
+
+            } catch (err) {
+                console.error(err);
+                showToast("Erro", "Falha ao carregar registros históricos.", "danger");
+            } finally {
+                hideLoadingScreen();
             }
         }
 

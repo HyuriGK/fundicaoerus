@@ -33,4 +33,31 @@ router.get('/monthly-summary', async (req, res) => {
     }
 });
 
+// GET /api/emissoes/list
+router.get('/list', async (req, res) => {
+    try {
+        const { ano, mes } = req.query;
+        if (!ano || !mes) {
+            return res.status(400).json({ error: 'Ano e Mês são obrigatórios.' });
+        }
+
+        const query = `
+            SELECT data
+            FROM firebird_sync_emissoes
+            WHERE EXTRACT(YEAR FROM (data->>'DATA_EMISSAO_PEDIDO')::date) = $1
+              AND EXTRACT(MONTH FROM (data->>'DATA_EMISSAO_PEDIDO')::date) = $2
+            ORDER BY (data->>'DATA_EMISSAO_PEDIDO')::date DESC
+        `;
+
+        const result = await pool.query(query, [ano, mes]);
+        const records = result.rows.map(row => row.data);
+
+        res.json(records);
+    } catch (error) {
+        console.error('Erro ao listar registros de emissões:', error);
+        res.status(500).json({ error: 'Erro interno ao listar registros.' });
+    }
+});
+
 module.exports = router;
+
