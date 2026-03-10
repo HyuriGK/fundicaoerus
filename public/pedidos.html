@@ -1598,14 +1598,28 @@
     <div id="floatingIndustrialTooltip"></div>
     <div id="emailModal" class="modal-overlay" style="z-index: 3000;">
         <div class="modal-card fullscreen" style="background: #09090b;">
-            <div class="modal-header">
-                <h2 class="modal-title"><i class="fa-solid fa-envelope" style="margin-right: 15px;"></i>Email de
-                    Novos
-                    Pedidos</h2>
-                <span class="modal-close" onclick="closeEmailModal()">&times;</span>
+            <div class="modal-header"
+                style="flex-direction: column; align-items: stretch; padding-bottom: 0; gap: 15px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <h2 class="modal-title"><i class="fa-solid fa-envelope" style="margin-right: 15px;"></i>Email de
+                        <span id="emailModalTypeTitle">Novos Pedidos</span></h2>
+                    <span class="modal-close" onclick="closeEmailModal()">&times;</span>
+                </div>
+                <!-- Toggle Switches -->
+                <div
+                    style="display: flex; gap: 10px; margin-bottom: 15px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 15px;">
+                    <button id="btnEmailTypeNovos" class="btn-modern" onclick="changeEmailType('novos')"
+                        style="flex: 1; justify-content: center; background-color: var(--color-primary); color: #000;">
+                        <i class="fa-solid fa-plus-circle"></i> Novos Pedidos
+                    </button>
+                    <button id="btnEmailTypeBlocked" class="btn-modern" onclick="changeEmailType('blocked')"
+                        style="flex: 1; justify-content: center; background-color: #27272a; color: #fff;">
+                        <i class="fa-solid fa-ban"></i> Pedidos Bloqueados
+                    </button>
+                </div>
             </div>
             <div class="modal-body"
-                style="padding: 0 40px 30px 40px; display: flex; flex-direction: column; flex: 1; overflow: hidden;">
+                style="padding: 20px 40px 30px 40px; display: flex; flex-direction: column; flex: 1; overflow: hidden;">
                 <p style="color: var(--text-muted); margin-bottom: 15px;">
                     Copie o texto abaixo e cole no seu cliente de email.
                 </p>
@@ -1962,8 +1976,32 @@
         }
 
 
-        // --- FUNÇÕES DE EMAIL (NOVO) ---
+        // --- FUNÇÕES DE EMAIL (NOVO E BLOQUEADOS) ---
         let currentFilteredData = []; // Armazena a lista atual da tabela para o email
+        let currentEmailType = 'novos'; // 'novos' ou 'blocked'
+
+        function changeEmailType(type) {
+            currentEmailType = type;
+            const btnNovos = document.getElementById('btnEmailTypeNovos');
+            const btnBlocked = document.getElementById('btnEmailTypeBlocked');
+            const titleSpan = document.getElementById('emailModalTypeTitle');
+
+            if (type === 'novos') {
+                btnNovos.style.backgroundColor = 'var(--color-primary)';
+                btnNovos.style.color = '#000';
+                btnBlocked.style.backgroundColor = '#27272a';
+                btnBlocked.style.color = '#fff';
+                titleSpan.innerText = 'Novos Pedidos';
+            } else {
+                btnBlocked.style.backgroundColor = 'var(--status-danger)';
+                btnBlocked.style.color = '#fff';
+                btnNovos.style.backgroundColor = '#27272a';
+                btnNovos.style.color = '#fff';
+                titleSpan.innerText = 'Pedidos Bloqueados';
+            }
+
+            generateAndShowEmail();
+        }
 
         function openEmailModal() {
             // Security check
@@ -1972,48 +2010,8 @@
                 return;
             }
 
-            // Logic: Filter orders with Emission Date = Previous Business Day
-            // If Monday (1) -> Friday (today.getDate() - 3)
-            // If Sunday (0) -> Friday (today.getDate() - 2)
-            // Else -> Yesterday (today.getDate() - 1)
-            const today = new Date();
-            const dayOfWeek = today.getDay();
-            const targetDate = new Date(today);
-
-            if (dayOfWeek === 1) {
-                targetDate.setDate(today.getDate() - 3);
-            } else if (dayOfWeek === 0) {
-                targetDate.setDate(today.getDate() - 2);
-            } else {
-                targetDate.setDate(today.getDate() - 1);
-            }
-
-            // Format helper: Compare YYYY-MM-DD
-            // Assuming DATA_EMISSAO_PEDIDO is ISO or parseable by Date
-            const isSameDay = (d1, d2) => {
-                return d1.getFullYear() === d2.getFullYear() &&
-                    d1.getMonth() === d2.getMonth() &&
-                    d1.getDate() === d2.getDate();
-            };
-
-            const targetList = allData.filter(item => {
-                if (!item.DATA_EMISSAO_PEDIDO) return false;
-
-                // Exclude Modelos (Ends with '1')
-                const prodCode = String(item.PRODUTO_PPR || '').trim();
-                if (prodCode.endsWith('1')) return false;
-
-                const emissionDate = new Date(item.DATA_EMISSAO_PEDIDO);
-                return isSameDay(emissionDate, targetDate);
-            });
-
-            if (!targetList || targetList.length === 0) {
-                showToast("Atenção", "Nenhum pedido encontrado com data de emissão de " + targetDate.toLocaleDateString('pt-BR') + ".", "warning");
-                return;
-            }
-
-            const text = generateEmailText(targetList, targetDate, today);
-            document.getElementById('emailPreviewText').value = text;
+            // Inicia sempre como 'novos'
+            changeEmailType('novos');
             document.getElementById('emailModal').style.display = 'flex';
         }
 
@@ -2033,7 +2031,76 @@
             });
         }
 
-        function generateEmailText(list, targetDate, generationDate) {
+        function generateAndShowEmail() {
+            const today = new Date();
+            let text = "";
+
+            if (currentEmailType === 'novos') {
+                // Logic: Filter orders with Emission Date = Previous Business Day
+                // If Monday (1) -> Friday (today.getDate() - 3)
+                // If Sunday (0) -> Friday (today.getDate() - 2)
+                // Else -> Yesterday (today.getDate() - 1)
+                const dayOfWeek = today.getDay();
+                const targetDate = new Date(today);
+
+                if (dayOfWeek === 1) {
+                    targetDate.setDate(today.getDate() - 3);
+                } else if (dayOfWeek === 0) {
+                    targetDate.setDate(today.getDate() - 2);
+                } else {
+                    targetDate.setDate(today.getDate() - 1);
+                }
+
+                // Format helper: Compare YYYY-MM-DD
+                const isSameDay = (d1, d2) => {
+                    return d1.getFullYear() === d2.getFullYear() &&
+                        d1.getMonth() === d2.getMonth() &&
+                        d1.getDate() === d2.getDate();
+                };
+
+                const targetList = allData.filter(item => {
+                    if (!item.DATA_EMISSAO_PEDIDO) return false;
+
+                    // Exclude Modelos (Ends with '1')
+                    const prodCode = String(item.PRODUTO_PPR || '').trim();
+                    if (prodCode.endsWith('1')) return false;
+
+                    const emissionDate = new Date(item.DATA_EMISSAO_PEDIDO);
+                    return isSameDay(emissionDate, targetDate);
+                });
+
+                if (!targetList || targetList.length === 0) {
+                    text = "Nenhum pedido encontrado com data de emissão de " + targetDate.toLocaleDateString('pt-BR') + ".";
+                } else {
+                    text = generateEmailTextNovos(targetList, targetDate, today);
+                }
+
+            } else if (currentEmailType === 'blocked') {
+                // Logic: Filter orders where STATUS_PED == 'B' or STATUS_PPR == 'B' or STATUS_DESC_PED includes 'BLOQ'
+                const targetList = allData.filter(item => {
+                    // Exclude Modelos (Ends with '1')
+                    const prodCode = String(item.PRODUTO_PPR || '').trim();
+                    if (prodCode.endsWith('1')) return false;
+
+                    const isBlocked = (
+                        item.STATUS_PED === 'B' ||
+                        item.STATUS_PPR === 'B' ||
+                        (item.STATUS_DESC_PED && String(item.STATUS_DESC_PED).toUpperCase().includes('BLOQ'))
+                    );
+                    return isBlocked;
+                });
+
+                if (!targetList || targetList.length === 0) {
+                    text = "Nenhum pedido bloqueado encontrado na carteira atual.";
+                } else {
+                    text = generateEmailTextBlocked(targetList, today);
+                }
+            }
+
+            document.getElementById('emailPreviewText').value = text;
+        }
+
+        function generateEmailTextNovos(list, targetDate, generationDate) {
             // 1. Totals
             const uniqueOrderCodes = new Set(list.map(item => item.CODIGO_PPR)).size;
             let totalQtd = 0;
@@ -2085,10 +2152,6 @@
                 text += `--------------------------------------------------\n`;
 
                 const items = byClient[client];
-                // Sort items by date or code logic? Default to list order (usually date asc from DB, or ID asc)
-                // Let's sort by ID for consistency? Or Delivery? Code implies "Pedidos" so maybe Order Number.
-                // Original request list was: 107, 105, 106. No particular order.
-                // Keeping original order.
 
                 items.forEach(i => {
                     const cod = i.CODIGO_PPR || '-'; // Ped
@@ -2097,10 +2160,6 @@
                         (i.DATA_ENTREGA_PPR ? new Date(i.DATA_ENTREGA_PPR).toLocaleDateString('pt-BR') : 'Sem Data');
 
                     const desc = i.NOME_PRODUTO_PPR || i.PRODUTO_PPR || 'SEM DESCRIÇÃO';
-                    // Truncate desc if too long? Request shows "..." but full desc is better unless huge.
-                    // Request: "TAMPA MANCAL LADO PORCA THOR 009 THEST O..."
-                    // I'll keep it full for now or truncate at 45 chars logic if needed. 
-                    // Let's truncate to 50 chars for neatness like the example.
                     const truncDesc = desc.length > 50 ? desc.substring(0, 47) + '...' : desc;
 
                     const mat = i.NOME_MATERIAL || '-';
@@ -2111,6 +2170,84 @@
                     text += `• Ped: ${cod} | Cód: ${codProd} | Entrega: ${entrega}\n`;
                     text += `Desc: ${truncDesc}\n`;
                     text += `Mat: ${mat} | Qtd: ${qtd} | Peso Un: ${formatNumber(pesoUn)} | Total: ${formatNumber(pesoTotal)} kg\n\n`;
+                });
+            });
+
+            text += `\nAtenciosamente,\n`;
+            text += `Sistema de Gestão Comercial\n`;
+            text += `Fundição Erus\n`;
+
+            return text;
+        }
+
+        function generateEmailTextBlocked(list, generationDate) {
+            // 1. Totals
+            const uniqueOrderCodes = new Set(list.map(item => item.CODIGO_PPR)).size;
+            let totalQtd = 0;
+            let totalPeso = 0;
+
+            // Group by Client
+            const byClient = {};
+
+            list.forEach(item => {
+                // Determine Qty
+                const saldo = Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0;
+                const qtdOriginal = Number(item.QUANTIDADE_PPR) || 0;
+                const qtd = saldo > 0 ? saldo : qtdOriginal;
+
+                // Determine Weight
+                const weight = getCorrectedWeight(item);
+
+                totalQtd += qtd;
+                totalPeso += weight;
+
+                // Group
+                const clientName = item.NOME_CLIENTE || 'CLIENTE DESCONHECIDO';
+                if (!byClient[clientName]) {
+                    byClient[clientName] = [];
+                }
+                byClient[clientName].push({ ...item, _qtd: qtd, _weight: weight });
+            });
+
+            // 2. Build Header
+            const genDateStr = generationDate.toLocaleDateString('pt-BR');
+
+            let text = `Assunto: Resumo de Pedidos Bloqueados na Carteira - ${genDateStr}\n\n`;
+            text += `Prezados,\n\n`;
+            text += `Segue o resumo de todos os itens atualmente bloqueados na carteira de pedidos:\n\n`;
+            text += `• Total de Pedidos Bloqueados: ${uniqueOrderCodes}\n`;
+            text += `• Quantidade Bloqueada Total: ${totalQtd} pçs\n`;
+            text += `• Peso Bloqueado Total: ${formatNumber(totalPeso)} kg\n\n`;
+            text += `Lista de Bloqueios Pendentes:\n`;
+
+            // 3. Build Client Sections
+            // Sort clients alphabetically
+            const sortedClients = Object.keys(byClient).sort();
+
+            sortedClients.forEach(client => {
+                text += `--------------------------------------------------\n`;
+                text += `CLIENTE: ${client}\n`;
+                text += `--------------------------------------------------\n`;
+
+                const items = byClient[client];
+
+                items.forEach(i => {
+                    const cod = i.CODIGO_PPR || '-'; // Ped
+                    const codProd = i.PRODUTO_PPR || '-'; // Cód
+                    const emissao = i.DATA_EMISSAO_PEDIDO ? new Date(i.DATA_EMISSAO_PEDIDO).toLocaleDateString('pt-BR') : 'Sem Data';
+
+                    const desc = i.NOME_PRODUTO_PPR || i.PRODUTO_PPR || 'SEM DESCRIÇÃO';
+                    const truncDesc = desc.length > 50 ? desc.substring(0, 47) + '...' : desc;
+
+                    const motivo = i.STATUS_DESC_PED || 'Bloqueio manual/Desconhecido';
+
+                    const qtd = i._qtd;
+                    const pesoTotal = i._weight;
+
+                    text += `• Ped: ${cod} | Cód: ${codProd} | Emissão: ${emissao}\n`;
+                    text += `Desc: ${truncDesc}\n`;
+                    text += `MOTIVO DO BLOQUEIO: ${motivo}\n`;
+                    text += `Qtd: ${qtd} | Peso Total Bloqueado: ${formatNumber(pesoTotal)} kg\n\n`;
                 });
             });
 
