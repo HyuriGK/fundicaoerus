@@ -783,6 +783,53 @@
             'EXPEDIÇÃO': 'col-expedicao'
         };
 
+        // Helper to treat strings as local dates to avoid UTC shifts
+        function toLocalDate(val) {
+            if (!val) return new Date();
+            if (val instanceof Date) {
+                // Return a new date at local midnight
+                return new Date(val.getFullYear(), val.getMonth(), val.getDate());
+            }
+            // If it's a string from Firebird/Postgres like "2026-02-12 10:30:00" or ISO
+            // Split by space or T to get just the date part
+            const s = String(val).split(/T| /)[0];
+            const parts = s.split('-');
+            if (parts.length === 3) {
+                // Month is 0-indexed in JS Date Constructor (January = 0)
+                return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+            }
+            // Final fallback
+            const d = new Date(val);
+            return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+        }
+
+        // Helper to check the difference in business days between two dates logically
+        function getBusinessDaysDiff(date1, date2) {
+            const d1 = toLocalDate(date1);
+            const d2 = toLocalDate(date2);
+
+            let isNegative = d1 > d2;
+            let start = isNegative ? d2 : d1;
+            let end = isNegative ? d1 : d2;
+
+            if (start.getTime() === end.getTime()) return 0;
+
+            let count = 0;
+            let current = new Date(start);
+
+            // Increment day by day and count business days
+            current.setDate(current.getDate() + 1);
+            while (current <= end) {
+                const day = current.getDay();
+                if (day !== 0 && day !== 6) {
+                    count++;
+                }
+                current.setDate(current.getDate() + 1);
+            }
+
+            return isNegative ? -count : count;
+        }
+
         function openConfig() {
             document.getElementById('configModal').style.display = 'flex';
         }
@@ -840,7 +887,7 @@
                 );
                 if (group) {
                     groupStatus[group].qty += data.quantidade;
-                    const date = new Date(data.data_fim);
+                    const date = toLocalDate(data.data_fim);
                     if (!groupStatus[group].lastDate || date > groupStatus[group].lastDate) {
                         groupStatus[group].lastDate = date;
                     }
@@ -868,16 +915,10 @@
             }
 
             // Fallback to today if no pointing yet
-            const now = new Date();
-            const calcDate = entryDate || new Date(now.setDate(now.getDate() - 1)); // Default 1 day if newly started
+            const now = toLocalDate(new Date());
+            const calcDate = entryDate ? toLocalDate(entryDate) : toLocalDate(new Date(new Date().setDate(new Date().getDate() - 1)));
 
-            // Normalize to midnight
-            const d1 = new Date();
-            d1.setHours(0, 0, 0, 0);
-            const d2 = new Date(calcDate);
-            d2.setHours(0, 0, 0, 0);
-
-            const diffDays = Math.abs(getBusinessDaysDiff(d1, d2));
+            const diffDays = Math.abs(getBusinessDaysDiff(now, calcDate));
 
             return { stage: currentStage, days: diffDays };
         }
@@ -997,36 +1038,23 @@
                     );
                     if (category) {
                         aggregated[category] += row.quantidade;
-                        const date = new Date(row.data);
+                        const date = toLocalDate(row.data);
                         if (!lastPointingDate[category] || date > lastPointingDate[category]) {
                             lastPointingDate[category] = date;
                         }
                     }
                 });
 
-                // Helper to treat strings as local dates to avoid UTC shifts
-                const toLocalDate = (val) => {
-                    if (!val) return new Date();
-                    if (val instanceof Date) return new Date(val.getFullYear(), val.getMonth(), val.getDate());
-                    const s = String(val).split('T')[0];
-                    const parts = s.split('-');
-                    if (parts.length === 3) {
-                        return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
-                    }
-                    return new Date(val);
-                };
-
                 // PROGRESSIVE DEADLINE CALCULATION (FIXED META)
                 const metaDates = {};
                 const emissaoDate = toLocalDate(opData.OP_EMISSAO || opData.DATA_EMISSAO_PEDIDO);
-                let baselineDate = new Date(emissaoDate);
+                let baselineDate = toLocalDate(emissaoDate);
 
                 ordered.forEach((sector, idx) => {
                     const configKey = configKeyMap[sector];
                     const lt = leadTimes[configKey] || 0;
 
-                    // Add business days to the baseline to get the firm deadline of this sector
-                    let currentMeta = new Date(baselineDate);
+                    let currentMeta = toLocalDate(baselineDate);
                     let daysToAdd = lt;
                     while (daysToAdd > 0) {
                         currentMeta.setDate(currentMeta.getDate() + 1);
@@ -1035,10 +1063,8 @@
                             daysToAdd--;
                         }
                     }
-                    metaDates[sector] = currentMeta;
-
-                    // The baseline for the NEXT sector is ALWAYS the IDEAL target of THIS sector.
-                    baselineDate = new Date(currentMeta);
+                    metaDates[sector] = toLocalDate(currentMeta);
+                    baselineDate = toLocalDate(currentMeta);
                 });
 
                 let html = `
@@ -1199,40 +1225,6 @@
             return result;
         }
 
-        // Helper to check the difference in business days between two dates logically
-        function getBusinessDaysDiff(date1, date2) {
-            // Function to ensure we have a local midnight Date object
-            const normalize = (d) => {
-                if (!d) return new Date();
-                const v = new Date(d);
-                return new Date(v.getFullYear(), v.getMonth(), v.getDate());
-            };
-
-            const d1 = normalize(date1);
-            const d2 = normalize(date2);
-
-            let isNegative = d1 > d2;
-            let start = isNegative ? d2 : d1;
-            let end = isNegative ? d1 : d2;
-
-            if (start.getTime() === end.getTime()) return 0;
-
-            let count = 0;
-            let current = new Date(start);
-
-            // Increment the first day immediately as we want the difference count
-            current.setDate(current.getDate() + 1);
-
-            while (current <= end) {
-                const day = current.getDay();
-                if (day !== 0 && day !== 6) {
-                    count++;
-                }
-                current.setDate(current.getDate() + 1);
-            }
-
-            return isNegative ? -count : count;
-        }
 
         document.addEventListener('DOMContentLoaded', () => {
             const saved = localStorage.getItem('monitoramento_leadtimes');
