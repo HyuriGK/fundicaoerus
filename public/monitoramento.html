@@ -1196,34 +1196,34 @@
 
         // Helper to check the difference in business days between two dates logically
         function getBusinessDaysDiff(date1, date2) {
-            // First normalize timezone and trim times
-            const d1 = new Date(date1);
-            const d2 = new Date(date2);
-            d1.setHours(0, 0, 0, 0);
-            d2.setHours(0, 0, 0, 0);
+            // Transform directly into local midnights to bypass any DB/Timezone shifts
+            const d1 = new Date(date1.getFullYear(), date1.getMonth(), date1.getDate());
+            const d2 = new Date(date2.getFullYear(), date2.getMonth(), date2.getDate());
 
             let isNegative = d1 > d2;
             let start = isNegative ? d2 : d1;
             let end = isNegative ? d1 : d2;
 
-            // Direct calculation of full days
-            let totalDays = Math.round((end - start) / 86400000);
-
-            // Loop robust enough exactly counting endpoints
             let count = 0;
             let current = new Date(start);
-            // using <= end to INCLUDE the last day boundary properly without timezone skipping
+
+            // If they are exactly the same day, difference is 0.
+            if (current.getTime() === end.getTime()) {
+                return 0;
+            }
+
+            // Move one day forward to start counting the interval 
+            // We want to count exactly the days ELAPSED from start to end.
+            current.setDate(current.getDate() + 1);
+
             while (current <= end) {
-                // If it's the exact same day, it adds 0 diff if they are identical initially.
-                // But for 09 to 23 we count exactly bounded intersections
                 const day = current.getDay();
-                // If we are strictly measuring diff, we only add if current < end OR we change logic.
-                // Let's use pure math to be faster and timezone immune:
-                if (day !== 0 && day !== 6 && current < end) {
+                if (day !== 0 && day !== 6) {
                     count++;
                 }
                 current.setDate(current.getDate() + 1);
             }
+
             return isNegative ? -count : count;
         }
 
