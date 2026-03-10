@@ -185,6 +185,18 @@
             padding: 4px 10px;
         }
 
+        body.presentation-mode .op-card.delayed {
+            box-shadow: inset 0 0 15px rgba(239, 68, 68, 0.15), 0 0 10px rgba(239, 68, 68, 0.1);
+            border-color: var(--status-danger);
+        }
+
+        body.presentation-mode .days-counter.danger {
+            background: rgba(239, 68, 68, 0.2);
+            padding: 2px 8px;
+            border-radius: 6px;
+            font-weight: 700;
+        }
+
         /* --- KANBAN BOARD --- */
         .kanban-container {
             flex-grow: 1;
@@ -237,6 +249,25 @@
             font-size: 0.75rem;
             font-weight: 700;
             font-family: var(--font-mono);
+        }
+
+        /* --- TV CLOCK --- */
+        #tv-clock {
+            display: none;
+            background: rgba(0, 0, 0, 0.4);
+            padding: 5px 20px;
+            border-radius: 10px;
+            border: 1px solid var(--border-subtle);
+            font-family: var(--font-mono);
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: var(--color-primary);
+            text-shadow: 0 0 15px rgba(var(--color-primary-rgb), 0.4);
+            margin-right: 20px;
+        }
+
+        body.presentation-mode #tv-clock {
+            display: block;
         }
 
         /* --- COLUMN SEARCH --- */
@@ -614,6 +645,8 @@
                 <p>Acompanhamento de Processo em Tempo Real • McDonald's Style</p>
             </div>
         </div>
+
+        <div id="tv-clock">00:00:00</div>
 
         <div class="header-actions">
             <button class="btn-glass btn-presentation toggle-btn" onclick="togglePresentationMode()">
@@ -1390,6 +1423,9 @@
             });
         });
 
+        let autoScrollInterval = null;
+        let clockInterval = null;
+
         function togglePresentationMode() {
             const body = document.body;
             const text = document.getElementById('presentation-text');
@@ -1397,15 +1433,63 @@
 
             if (isPresentation) {
                 text.innerText = "Sair Modo TV";
-                // Optionally enter fullscreen
-                // document.documentElement.requestFullscreen().catch(e => {});
+                startPresentationSystems();
             } else {
                 text.innerText = "Modo TV";
-                // if (document.fullscreenElement) document.exitFullscreen();
+                stopPresentationSystems();
             }
 
             // Re-render to ensure any layout shifts are handled
             renderBoard();
+        }
+
+        function startPresentationSystems() {
+            // Clock
+            updateClock();
+            clockInterval = setInterval(updateClock, 1000);
+
+            // Auto-scroll
+            initAutoScroll();
+            autoScrollInterval = setInterval(initAutoScroll, 10000); // Check every 10s
+        }
+
+        function stopPresentationSystems() {
+            if (clockInterval) clearInterval(clockInterval);
+            if (autoScrollInterval) clearInterval(autoScrollInterval);
+
+            // Reset all lists scroll position
+            document.querySelectorAll('.cards-list').forEach(list => {
+                list.scrollTo({ top: 0, behavior: 'smooth' });
+            });
+        }
+
+        function updateClock() {
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString('pt-BR', { hour12: false });
+            const clockEl = document.getElementById('tv-clock');
+            if (clockEl) clockEl.innerText = timeStr;
+        }
+
+        function initAutoScroll() {
+            const lists = document.querySelectorAll('.cards-list');
+            lists.forEach(list => {
+                const isOverflowing = list.scrollHeight > list.clientHeight;
+                if (!isOverflowing) return;
+
+                // Continuous scroll logic:
+                const currentScroll = list.scrollTop;
+                const maxScroll = list.scrollHeight - list.clientHeight;
+
+                if (currentScroll >= maxScroll - 10) {
+                    // Reset to top with a delay
+                    setTimeout(() => {
+                        list.scrollTo({ top: 0, behavior: 'smooth' });
+                    }, 2000);
+                } else {
+                    // Scroll down a bit
+                    list.scrollBy({ top: 200, behavior: 'smooth' });
+                }
+            });
         }
     </script>
 </body>
