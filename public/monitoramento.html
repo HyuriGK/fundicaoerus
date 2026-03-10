@@ -1004,12 +1004,21 @@
                     }
                 });
 
+                // Helper to treat strings as local dates to avoid UTC shifts
+                const toLocalDate = (val) => {
+                    if (!val) return new Date();
+                    if (val instanceof Date) return new Date(val.getFullYear(), val.getMonth(), val.getDate());
+                    const s = String(val).split('T')[0];
+                    const parts = s.split('-');
+                    if (parts.length === 3) {
+                        return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+                    }
+                    return new Date(val);
+                };
+
                 // PROGRESSIVE DEADLINE CALCULATION (FIXED META)
-                // We start from Emissão Date.
-                // Each sector's meta is: The IDEAL Target Date of the previous sector + Lead Time of current sector.
-                // It NEVER uses actual pointing dates to push deadlines forward.
                 const metaDates = {};
-                const emissaoDate = opData.OP_EMISSAO ? new Date(opData.OP_EMISSAO) : (opData.DATA_EMISSAO_PEDIDO ? new Date(opData.DATA_EMISSAO_PEDIDO) : new Date());
+                const emissaoDate = toLocalDate(opData.OP_EMISSAO || opData.DATA_EMISSAO_PEDIDO);
                 let baselineDate = new Date(emissaoDate);
 
                 ordered.forEach((sector, idx) => {
@@ -1055,12 +1064,8 @@
                     // Status logic
                     // If finished or pending (but has pointings): use actual pointing date
                     // If no pointings at all: use Today (fallback, but actually it's 'Pendente' anyway)
-                    const referenceDate = lastPointingDate[sector] ? new Date(lastPointingDate[sector]) : new Date();
-
-                    // Normalize to midnight for fair business day comparison
-                    referenceDate.setHours(0, 0, 0, 0);
-                    const metaMidnight = new Date(meta);
-                    metaMidnight.setHours(0, 0, 0, 0);
+                    const referenceDate = toLocalDate(lastPointingDate[sector]);
+                    const metaMidnight = toLocalDate(meta);
 
                     // Use absolute strict difference (counting weekends as late too) to prevent positive diff bugs 
                     // when getBusinessDaysDiff flips zero on weekend overlaps. Using Math.round shields from DST/Timezone ms slips.
@@ -1196,24 +1201,26 @@
 
         // Helper to check the difference in business days between two dates logically
         function getBusinessDaysDiff(date1, date2) {
-            // Transform directly into local midnights to bypass any DB/Timezone shifts
-            const d1 = new Date(date1.getFullYear(), date1.getMonth(), date1.getDate());
-            const d2 = new Date(date2.getFullYear(), date2.getMonth(), date2.getDate());
+            // Function to ensure we have a local midnight Date object
+            const normalize = (d) => {
+                if (!d) return new Date();
+                const v = new Date(d);
+                return new Date(v.getFullYear(), v.getMonth(), v.getDate());
+            };
+
+            const d1 = normalize(date1);
+            const d2 = normalize(date2);
 
             let isNegative = d1 > d2;
             let start = isNegative ? d2 : d1;
             let end = isNegative ? d1 : d2;
 
+            if (start.getTime() === end.getTime()) return 0;
+
             let count = 0;
             let current = new Date(start);
 
-            // If they are exactly the same day, difference is 0.
-            if (current.getTime() === end.getTime()) {
-                return 0;
-            }
-
-            // Move one day forward to start counting the interval 
-            // We want to count exactly the days ELAPSED from start to end.
+            // Increment the first day immediately as we want the difference count
             current.setDate(current.getDate() + 1);
 
             while (current <= end) {
