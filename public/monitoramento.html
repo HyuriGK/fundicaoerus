@@ -188,8 +188,8 @@
             margin-bottom: 0;
             /* No margin between cards inside column to control height strictly */
             padding: 15px;
-            height: calc((100vh - 120px) / 5);
-            /* Adjust based on header height (~100px) */
+            height: 20%;
+            /* Strict 5 cards per view using percentage */
             display: flex;
             flex-direction: column;
             justify-content: center;
@@ -1561,26 +1561,33 @@
                 const cardCount = list.querySelectorAll('.op-card').length;
 
                 // Strict rule: Only scroll if there are MORE than 5 cards.
-                // This prevents any fractional pixel rounding issues.
                 if (cardCount <= 5) return;
 
                 const firstCard = list.querySelector('.op-card');
                 if (!firstCard) return;
 
-                // Height of card (no gap in presentation mode)
                 const cardHeight = firstCard.offsetHeight;
-
                 const currentScroll = list.scrollTop;
-                const maxScroll = list.scrollHeight - list.clientHeight;
+                const clientHeight = list.clientHeight;
+                const scrollHeight = list.scrollHeight;
+                const maxScroll = scrollHeight - clientHeight;
 
-                if (currentScroll >= maxScroll - 5) {
-                    // Reset to top with a delay
-                    setTimeout(() => {
-                        list.scrollTo({ top: 0, behavior: 'smooth' });
-                    }, 5000);
+                // Check if we are at the end (with a safety margin of 10px)
+                if (currentScroll + clientHeight >= scrollHeight - 10) {
+                    // Stay at bottom for 5 seconds before resetting
+                    if (!list._isWaitingAtBottom) {
+                        list._isWaitingAtBottom = true;
+                        setTimeout(() => {
+                            list.scrollTo({ top: 0, behavior: 'smooth' });
+                            list._isWaitingAtBottom = false;
+                        }, 5000);
+                    }
                 } else {
-                    // Scroll by exactly 2 cards
-                    list.scrollBy({ top: cardHeight * 2, behavior: 'smooth' });
+                    // Scroll by 2 cards, but don't overscroll
+                    let nextScroll = currentScroll + (cardHeight * 2);
+                    if (nextScroll > maxScroll) nextScroll = maxScroll;
+
+                    list.scrollTo({ top: nextScroll, behavior: 'smooth' });
                 }
             });
         }
