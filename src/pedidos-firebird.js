@@ -134,7 +134,8 @@ router.get('/op-apontamentos', async (req, res) => {
         const query = `
             SELECT 
                 setor,
-                SUM(quantidade) as quantidade
+                SUM(quantidade) as quantidade,
+                MAX(data_producao) as data
             FROM producao_apontada_sincronizada
             WHERE op = $1
             GROUP BY setor
@@ -147,7 +148,8 @@ router.get('/op-apontamentos', async (req, res) => {
 
         const dataFormatted = result.rows.map(row => ({
             setor: row.setor || 'DESCONHECIDO',
-            quantidade: parseFloat(row.quantidade)
+            quantidade: parseFloat(row.quantidade),
+            data: row.data
         }));
 
         res.json(dataFormatted);
