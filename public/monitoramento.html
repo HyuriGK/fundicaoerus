@@ -1012,19 +1012,39 @@
                     }
                 });
 
-                // DEADLINE CALCULATION (Reverse)
+                // PROGRESSIVE DEADLINE CALCULATION 
+                // We start from Emissão Date.
+                // Each sector's meta is: The Date it Entered the sector (lastPointingDate of the previous sector) + Lead Time of current sector.
+                // If the previous sector hasn't finished/been pointed, we use the previous sector's Meta Date as base instead.
                 const metaDates = {};
-                let currentMeta = deliveryRaw ? new Date(deliveryRaw) : new Date();
+                const emissaoDate = opData.OP_EMISSAO ? new Date(opData.OP_EMISSAO) : (opData.DATA_EMISSAO_PEDIDO ? new Date(opData.DATA_EMISSAO_PEDIDO) : new Date());
+                let baselineDate = new Date(emissaoDate);
 
-                // Expedicao (last) uses the delivery date minus its lead time? 
-                // Wait: Expedicao meta is the delivery date. The previous stage meta is delivery - expedicao lead time.
-                // Let's reverse orderedStages
-                const reverseStages = [...ordered].reverse();
-                reverseStages.forEach((sector, idx) => {
-                    metaDates[sector] = new Date(currentMeta);
+                ordered.forEach((sector, idx) => {
                     const configKey = configKeyMap[sector];
                     const lt = leadTimes[configKey] || 0;
-                    currentMeta = subtractBusinessDays(currentMeta, lt);
+
+                    // Add business days to the baseline to get the deadline of this sector
+                    let currentMeta = new Date(baselineDate);
+                    // Add days (naive approach, needs a loop for weekend skipping)
+                    // We'll use a local loop to add business days forward
+                    let daysToAdd = lt;
+                    while (daysToAdd > 0) {
+                        currentMeta.setDate(currentMeta.getDate() + 1);
+                        const day = currentMeta.getDay();
+                        if (day !== 0 && day !== 6) { // Skip weekends
+                            daysToAdd--;
+                        }
+                    }
+                    metaDates[sector] = currentMeta;
+
+                    // The baseline for the NEXT sector is either when THIS sector actually finished, 
+                    // or if it hasn't finished, we assume it finishes exactly on its meta date.
+                    if (lastPointingDate[sector]) {
+                        baselineDate = new Date(lastPointingDate[sector]);
+                    } else {
+                        baselineDate = new Date(currentMeta);
+                    }
                 });
 
                 let html = `
