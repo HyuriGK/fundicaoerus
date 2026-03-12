@@ -19,13 +19,33 @@ router.get('/', async (req, res) => {
             const resultTasks = await pool.query(queryTasks);
             const count = parseInt(resultTasks.rows[0].count);
             
+            let description = `Existem ${count} registros vinculados a peças sem peso definido.`;
+            
+            if (count > 0) {
+                // Fetch sample of 2 records
+                const sampleQuery = `
+                    SELECT 
+                        TO_CHAR(t.data_producao, 'DD/MM/YYYY') as data,
+                        t.codigo_peca,
+                        t.produto
+                    FROM producao_apontada_sincronizada t
+                    LEFT JOIN produto_pesos_producao p ON t.codigo_peca = p.codigo_peca
+                    WHERE COALESCE(NULLIF(t.peso_un, 0), p.peso, 0) = 0
+                    LIMIT 2
+                `;
+                const sampleResult = await pool.query(sampleQuery);
+                const samples = sampleResult.rows.map(r => `• ${r.data} - ${r.codigo_peca}: ${r.produto.substring(0, 30)}...`);
+                description += `<br><br><strong>Exemplos:</strong><br>${samples.join('<br>')}`;
+                if (count > 2) description += `<br>... e mais ${count - 2} registros.`;
+            }
+
             return res.status(200).json({ 
                 count: count,
                 tasks: [
                     {
                         id: 'zero-weight',
                         title: 'Pesos Unitários Zerados',
-                        description: `Existem ${count} registros vinculados a peças sem peso definido.`,
+                        description: description,
                         actionUrl: 'apontamentos_produtivos.html?filter=zero-weight',
                         priority: 'high',
                         count: count
