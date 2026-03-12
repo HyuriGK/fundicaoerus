@@ -621,6 +621,129 @@
                 transform: translateY(10px);
             }
         }
+
+        /* --- TASKS FLOATING BUTTON & MODAL --- */
+        .fab-task {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            width: 60px;
+            height: 60px;
+            background: var(--color-primary);
+            color: #000;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(251, 191, 36, 0.4);
+            z-index: 1000;
+            transition: all 0.3s var(--ease-out);
+        }
+
+        .fab-task:hover {
+            transform: scale(1.1) rotate(5deg);
+            box-shadow: 0 6px 20px rgba(251, 191, 36, 0.6);
+        }
+
+        .fab-badge {
+            position: absolute;
+            top: -2px;
+            right: -2px;
+            background: #ef4444;
+            color: #fff;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            font-size: 0.75rem;
+            font-weight: 700;
+            display: none;/* Shown when > 0 */
+            align-items: center;
+            justify-content: center;
+            border: 2px solid var(--bg-body);
+        }
+
+        .task-modal {
+            max-width: 450px !important;
+        }
+
+        .task-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .task-item {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 12px;
+            transition: all 0.2s;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .task-item:hover {
+            border-color: var(--color-primary);
+            background: rgba(251, 191, 36, 0.03);
+        }
+
+        .task-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .task-item-title {
+            font-weight: 700;
+            color: #fff;
+            font-size: 0.95rem;
+        }
+
+        .task-priority {
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 800;
+        }
+
+        .task-priority.high {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .task-item-desc {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            line-height: 1.4;
+        }
+
+        .task-item-footer {
+            display: flex;
+            justify-content: flex-end;
+        }
+
+        .btn-task-action {
+            background: var(--color-primary);
+            color: #000;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            cursor: pointer;
+            text-decoration: none;
+            transition: opacity 0.2s;
+        }
+
+        .btn-task-action:hover {
+            opacity: 0.9;
+        }
     </style>
     <style>
         /* --- COLLAPSIBLE SIDEBAR CSS --- */
@@ -2527,6 +2650,10 @@
                 document.addEventListener('DOMContentLoaded', () => {
                     renderCards();
                     updateUserInfo();
+                    checkTasks(); // Check tasks on load
+
+                    // Periódico (cada 5 min)
+                    setInterval(checkTasks, 5 * 60 * 1000);
 
                     // Hide Custos menu for visitors
                     const role = localStorage.getItem('erus_role');
@@ -2538,7 +2665,89 @@
                     }
                 });
 
+                // --- LOGICA DE TAREFAS ---
+                async function checkTasks() {
+                    try {
+                        const res = await fetch('/api/producao-apontada?action=check-tasks');
+                        if (!res.ok) return;
+                        const data = await res.json();
+
+                        const badge = document.getElementById('task-badge');
+                        if (data.count > 0) {
+                            badge.innerText = data.count > 99 ? '99+' : data.count;
+                            badge.style.display = 'flex';
+                            renderTaskList(data.tasks);
+                        } else {
+                            badge.style.display = 'none';
+                            renderEmptyTasks();
+                        }
+                    } catch (err) {
+                        console.error("Erro ao checar tarefas:", err);
+                    }
+                }
+
+                function renderTaskList(tasks) {
+                    const container = document.getElementById('task-list-container');
+                    container.innerHTML = '';
+                    tasks.forEach(task => {
+                        const item = document.createElement('div');
+                        item.className = 'task-item';
+                        item.innerHTML = `
+                            <div class="task-item-header">
+                                <span class="task-item-title">${task.title}</span>
+                                <span class="task-priority ${task.priority}">${task.priority}</span>
+                            </div>
+                            <div class="task-item-desc">${task.description}</div>
+                            <div class="task-item-footer">
+                                <a href="${task.actionUrl}" class="btn-task-action">CORRIGIR AGORA</a>
+                            </div>
+                        `;
+                        container.appendChild(item);
+                    });
+                }
+
+                function renderEmptyTasks() {
+                    const container = document.getElementById('task-list-container');
+                    container.innerHTML = `
+                        <div style="text-align: center; padding: 40px 20px; color: var(--text-dim);">
+                            <i class="fa-solid fa-check-double" style="font-size: 3rem; margin-bottom: 15px; opacity: 0.5;"></i>
+                            <p style="font-weight: 600;">Tudo em dia!</p>
+                            <p style="font-size: 0.8rem;">Nenhuma tarefa pendente identificada.</p>
+                        </div>
+                    `;
+                }
+
+                function openTaskModal() {
+                    document.getElementById('taskModal').style.display = 'flex';
+                }
+
+                function closeTaskModal() {
+                    document.getElementById('taskModal').style.display = 'none';
+                }
+
             </script>
+
+    <!-- Floating Button de Tarefas -->
+    <div class="fab-task" onclick="openTaskModal()" title="Tarefas e Alertas">
+        <i class="fa-solid fa-list-check"></i>
+        <div class="fab-badge" id="task-badge">0</div>
+    </div>
+
+    <!-- Modal de Tarefas -->
+    <div class="modal-overlay" id="taskModal">
+        <div class="modal-card task-modal">
+            <div class="modal-header">
+                <h2 class="modal-title" style="font-size: 1.2rem; color: #fff;">
+                    <i class="fa-solid fa-bullseye" style="color: var(--color-primary); margin-right: 10px;"></i>
+                    CENTRAL DE TAREFAS
+                </h2>
+                <span class="modal-close" onclick="closeTaskModal()">&times;</span>
+            </div>
+            <div id="task-list-container" class="task-list">
+                <!-- Preenchido via JS -->
+            </div>
+        </div>
+    </div>
 </body>
 
 </html>
