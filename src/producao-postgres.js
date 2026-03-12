@@ -7,22 +7,28 @@ const pool = require('../lib/db');
 // Returns filtered productio records from the synced table
 router.get('/', async (req, res) => {
     try {
-        // 2. Verificar tarefas (registros com peso zero na tabela sincronizada)
+        // 2. Verificar tarefas (registros com peso zero na tabela sincronizada - Agrupado por Setor)
         if (req.query.action === 'check-tasks') {
-            const queryTasks = `
+            const queryGrouped = `
                 SELECT 
+                    t.setor,
                     COUNT(*) as count
                 FROM producao_apontada_sincronizada t
                 LEFT JOIN produto_pesos_producao p ON t.codigo_peca = p.codigo_peca
                 WHERE COALESCE(NULLIF(t.peso_un, 0), p.peso, 0) = 0
+                GROUP BY t.setor
+                ORDER BY count DESC
             `;
-            const resultTasks = await pool.query(queryTasks);
-            const count = parseInt(resultTasks.rows[0].count);
+            const resultGrouped = await pool.query(queryGrouped);
             
-            let description = `Existem ${count} registros vinculados a peças sem peso definido.`;
-            
-            if (count > 0) {
-                // Fetch sample of 2 records
+            const tasks = [];
+            let totalCount = 0;
+
+            for (const row of resultGrouped.rows) {
+                const count = parseInt(row.count);
+                totalCount += count;
+                
+                // Fetch a sample of 2 records for this specific sector
                 const sampleQuery = `
                     SELECT 
                         TO_CHAR(t.data_producao, 'DD/MM/YYYY') as data,
@@ -31,26 +37,31 @@ router.get('/', async (req, res) => {
                     FROM producao_apontada_sincronizada t
                     LEFT JOIN produto_pesos_producao p ON t.codigo_peca = p.codigo_peca
                     WHERE COALESCE(NULLIF(t.peso_un, 0), p.peso, 0) = 0
+                    AND t.setor = $1
                     LIMIT 2
                 `;
-                const sampleResult = await pool.query(sampleQuery);
+                const sampleResult = await pool.query(sampleQuery, [row.setor]);
                 const samples = sampleResult.rows.map(r => `• ${r.data} - ${r.codigo_peca}: ${r.produto.substring(0, 30)}...`);
-                description += `<br><br><strong>Exemplos:</strong><br>${samples.join('<br>')}`;
-                if (count > 2) description += `<br>... e mais ${count - 2} registros.`;
+                
+                let desc = `Existem ${count} registros sem peso definido no setor <strong>${row.setor}</strong>.`;
+                if (samples.length > 0) {
+                    desc += `<br><br><strong>Amostras:</strong><br>${samples.join('<br>')}`;
+                }
+
+                tasks.push({
+                    id: `zero-weight-${row.setor.replace(/\s+/g, '-').toLowerCase()}`,
+                    sector: row.setor,
+                    title: `Pesos Zerados - ${row.setor}`,
+                    description: desc,
+                    actionUrl: `apontamentos_produtivos.html?filter=zero-weight&sector=${encodeURIComponent(row.setor)}`,
+                    priority: 'high',
+                    count: count
+                });
             }
 
             return res.status(200).json({ 
-                count: count,
-                tasks: [
-                    {
-                        id: 'zero-weight',
-                        title: 'Pesos Unitários Zerados',
-                        description: description,
-                        actionUrl: 'apontamentos_produtivos.html?filter=zero-weight',
-                        priority: 'high',
-                        count: count
-                    }
-                ].filter(t => t.count > 0)
+                count: totalCount,
+                tasks: tasks
             });
         }
 

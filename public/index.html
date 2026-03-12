@@ -622,46 +622,77 @@
             }
         }
 
-        /* --- TASKS FLOATING BUTTON & MODAL --- */
-        .fab-task {
-            position: fixed;
-            bottom: 30px;
-            right: 30px;
-            width: 60px;
-            height: 60px;
-            background: var(--color-primary);
-            color: #000;
-            border-radius: 50%;
+        /* --- TASKS UI REFACTORED --- */
+        .admin-task-view {
+            width: 100%;
+            height: 100%;
             display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.5rem;
-            cursor: pointer;
-            box-shadow: 0 4px 15px rgba(251, 191, 36, 0.4);
-            z-index: 1000;
-            transition: all 0.3s var(--ease-out);
+            flex-direction: column;
         }
 
-        .fab-task:hover {
-            transform: scale(1.1) rotate(5deg);
-            box-shadow: 0 6px 20px rgba(251, 191, 36, 0.6);
-        }
-
-        .fab-badge {
-            position: absolute;
-            top: -2px;
-            right: -2px;
-            background: #ef4444;
+        .task-table {
+            width: 100%;
+            border-collapse: collapse;
             color: #fff;
-            width: 22px;
-            height: 22px;
-            border-radius: 50%;
-            font-size: 0.75rem;
+            margin-top: 20px;
+        }
+
+        .task-table th {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 12px;
+            text-align: left;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            border-bottom: 2px solid var(--border-subtle);
+        }
+
+        .task-table td {
+            padding: 16px 12px;
+            border-bottom: 1px solid var(--border-subtle);
+            vertical-align: middle;
+        }
+
+        .task-table tr:hover {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .task-sector-badge {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 4px 8px;
+            border-radius: 4px;
             font-weight: 700;
-            display: none;/* Shown when > 0 */
-            align-items: center;
-            justify-content: center;
-            border: 2px solid var(--bg-body);
+            font-size: 0.75rem;
+            color: var(--color-primary);
+        }
+
+        .task-desc-cell {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            line-height: 1.4;
+            max-width: 400px;
+        }
+
+        .task-desc-cell strong {
+            color: #fff;
+        }
+
+        /* Sidebar Notification Dot */
+        .nav-notification-dot {
+            width: 8px;
+            height: 8px;
+            background: #ef4444;
+            border-radius: 50%;
+            position: absolute;
+            top: 12px;
+            right: 15px;
+            display: none; /* Shown when > 0 */
+            box-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
+        }
+
+        .nav-link {
+            position: relative;
         }
 
         .task-modal {
@@ -1330,6 +1361,7 @@
                 <a href="#" id="admin-menu-item" class="nav-link" onclick="openAdminModal()"
                     style="display: none; color: #a855f7;">
                     <i class="fa-solid fa-users-gear"></i><span>Sistema Admin</span>
+                    <div id="admin-notif-dot" class="nav-notification-dot"></div>
                 </a>
 
                 <a href="#" onclick="logout()" class="nav-link logout-link">
@@ -1449,6 +1481,13 @@
                             <div class="admin-item-desc">Ativar modo manutenção em páginas específicas</div>
                         </div>
 
+                        <div class="admin-item-card" onclick="switchAdminView('tasks')">
+                            <i class="fa-solid fa-list-check admin-item-icon"></i>
+                            <div class="admin-item-title">Central de Tarefas</div>
+                            <div class="admin-item-desc">Pendências e manutenções de dados</div>
+                            <div id="admin-card-badge" class="badge-danger" style="position:absolute; top:15px; right:15px; padding:2px 8px; border-radius:10px; font-size:0.6rem; display:none;">0</div>
+                        </div>
+
                         <div class="admin-item-card" style="opacity: 0.4; cursor: not-allowed;">
                             <i class="fa-solid fa-database admin-item-icon" style="color: #71717a;"></i>
                             <div class="admin-item-title" style="color: #71717a;">Status do Servidor</div>
@@ -1529,6 +1568,28 @@
                         </table>
                     </div>
                 </div>
+
+                <!-- TASKS VIEW -->
+                <div id="adminTasksView" class="admin-view-transition" style="display: none;">
+                    <div style="margin-bottom: 20px; color: var(--text-muted); font-size: 0.85rem;">
+                        <i class="fa-solid fa-circle-info"></i> Lista de pendências detectadas automaticamente pelo sistema.
+                    </div>
+                    <div class="table-container" style="height: 100%;">
+                        <table class="task-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 200px;">Setor</th>
+                                    <th>Descrição da Pendência</th>
+                                    <th style="width: 100px; text-align: center;">Qtd</th>
+                                    <th style="width: 120px; text-align: center;">Ação</th>
+                                </tr>
+                            </thead>
+                            <tbody id="admin-tasks-table-body">
+                                <!-- Populated by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
 
             <!-- SCRIPT DA SIDEBAR -->
@@ -1547,11 +1608,11 @@
                     switchAdminView('dashboard');
                 }
 
-                function switchAdminView(view) {
                     const dashboard = document.getElementById('adminDashboardView');
                     const userView = document.getElementById('adminUserManagementView');
                     const logsView = document.getElementById('adminLogsView');
                     const locksView = document.getElementById('adminPageLocksView');
+                    const tasksView = document.getElementById('adminTasksView');
                     const backBtn = document.getElementById('adminBackBtn');
                     const title = document.getElementById('adminModalTitle');
                     const icon = document.getElementById('adminModalIcon');
@@ -1561,6 +1622,7 @@
                     userView.style.display = 'none';
                     logsView.style.display = 'none';
                     locksView.style.display = 'none';
+                    tasksView.style.display = 'none';
 
                     if (view === 'dashboard') {
                         dashboard.style.display = 'block';
@@ -1585,8 +1647,13 @@
                         title.textContent = 'Bloqueio de Telas';
                         icon.className = 'fa-solid fa-lock';
                         loadPageLocks();
+                    } else if (view === 'tasks') {
+                        tasksView.style.display = 'block';
+                        backBtn.style.display = 'flex';
+                        title.textContent = 'Central de Tarefas';
+                        icon.className = 'fa-solid fa-list-check';
+                        loadAdminTasks();
                     }
-                }
 
                 function closeAdminModal() {
                     document.getElementById('adminUserModal').style.display = 'none';
@@ -2665,89 +2732,66 @@
                     }
                 });
 
-                // --- LOGICA DE TAREFAS ---
+                // --- LOGICA DE TAREFAS REFORMATADA ---
+                let cachedTasks = [];
+
                 async function checkTasks() {
                     try {
                         const res = await fetch('/api/producao-postgres?action=check-tasks');
                         if (!res.ok) return;
                         const data = await res.json();
+                        cachedTasks = data.tasks || [];
 
-                        const badge = document.getElementById('task-badge');
+                        const dot = document.getElementById('admin-notif-dot');
+                        const cardBadge = document.getElementById('admin-card-badge');
+
                         if (data.count > 0) {
-                            badge.innerText = data.count > 99 ? '99+' : data.count;
-                            badge.style.display = 'flex';
-                            renderTaskList(data.tasks);
+                            if (dot) dot.style.display = 'block';
+                            if (cardBadge) {
+                                cardBadge.innerText = data.count;
+                                cardBadge.style.display = 'block';
+                            }
                         } else {
-                            badge.style.display = 'none';
-                            renderEmptyTasks();
+                            if (dot) dot.style.display = 'none';
+                            if (cardBadge) cardBadge.style.display = 'none';
                         }
                     } catch (err) {
                         console.error("Erro ao checar tarefas:", err);
                     }
                 }
 
-                function renderTaskList(tasks) {
-                    const container = document.getElementById('task-list-container');
-                    container.innerHTML = '';
-                    tasks.forEach(task => {
-                        const item = document.createElement('div');
-                        item.className = 'task-item';
-                        item.innerHTML = `
-                            <div class="task-item-header">
-                                <span class="task-item-title">${task.title}</span>
-                                <span class="task-priority ${task.priority}">${task.priority}</span>
-                            </div>
-                            <div class="task-item-desc">${task.description}</div>
-                            <div class="task-item-footer">
-                                <a href="${task.actionUrl}" class="btn-task-action">CORRIGIR AGORA</a>
-                            </div>
+                function loadAdminTasks() {
+                    const tbody = document.getElementById('admin-tasks-table-body');
+                    if (!tbody) return;
+
+                    if (cachedTasks.length === 0) {
+                        tbody.innerHTML = `
+                            <tr>
+                                <td colspan="4" style="text-align: center; padding: 40px 20px; color: var(--text-dim);">
+                                    <i class="fa-solid fa-check-double" style="font-size: 2rem; margin-bottom: 10px; opacity: 0.5;"></i>
+                                    <p style="font-weight: 600;">Tudo em dia!</p>
+                                    <p style="font-size: 0.8rem;">Nenhuma tarefa pendente identificada.</p>
+                                </td>
+                            </tr>
                         `;
-                        container.appendChild(item);
-                    });
-                }
+                        return;
+                    }
 
-                function renderEmptyTasks() {
-                    const container = document.getElementById('task-list-container');
-                    container.innerHTML = `
-                        <div style="text-align: center; padding: 40px 20px; color: var(--text-dim);">
-                            <i class="fa-solid fa-check-double" style="font-size: 3rem; margin-bottom: 15px; opacity: 0.5;"></i>
-                            <p style="font-weight: 600;">Tudo em dia!</p>
-                            <p style="font-size: 0.8rem;">Nenhuma tarefa pendente identificada.</p>
-                        </div>
-                    `;
-                }
-
-                function openTaskModal() {
-                    document.getElementById('taskModal').style.display = 'flex';
-                }
-
-                function closeTaskModal() {
-                    document.getElementById('taskModal').style.display = 'none';
+                    tbody.innerHTML = cachedTasks.map(task => `
+                        <tr>
+                            <td><span class="task-sector-badge">${task.sector}</span></td>
+                            <td class="task-desc-cell">${task.description}</td>
+                            <td style="text-align: center; font-weight: 700;">${task.count}</td>
+                            <td style="text-align: center;">
+                                <a href="${task.actionUrl}" class="btn-task-action" style="padding: 6px 10px; font-size: 0.75rem;">RESOLVER</a>
+                            </td>
+                        </tr>
+                    `).join('');
                 }
 
             </script>
 
-    <!-- Floating Button de Tarefas -->
-    <div class="fab-task" onclick="openTaskModal()" title="Tarefas e Alertas">
-        <i class="fa-solid fa-list-check"></i>
-        <div class="fab-badge" id="task-badge">0</div>
-    </div>
-
-    <!-- Modal de Tarefas -->
-    <div class="modal-overlay" id="taskModal">
-        <div class="modal-card task-modal">
-            <div class="modal-header">
-                <h2 class="modal-title" style="font-size: 1.2rem; color: #fff;">
-                    <i class="fa-solid fa-bullseye" style="color: var(--color-primary); margin-right: 10px;"></i>
-                    CENTRAL DE TAREFAS
-                </h2>
-                <span class="modal-close" onclick="closeTaskModal()">&times;</span>
-            </div>
-            <div id="task-list-container" class="task-list">
-                <!-- Preenchido via JS -->
-            </div>
-        </div>
-    </div>
+    <!-- Modal de Tarefas removido (Agora integrado no Admin Modal) -->
 </body>
 
 </html>
