@@ -9,10 +9,6 @@ router.get('/', async (req, res) => {
     try {
         // 2. Verificar tarefas (registros com peso zero na tabela sincronizada - Agrupado por Setor)
         if (req.query.action === 'check-tasks') {
-            const tasks = [];
-            let totalCount = 0;
-
-            // --- TAREFAS DE PRODUÇÃO ---
             const queryGrouped = `
                 SELECT 
                     t.setor,
@@ -25,6 +21,9 @@ router.get('/', async (req, res) => {
             `;
             const resultGrouped = await pool.query(queryGrouped);
             
+            const tasks = [];
+            let totalCount = 0;
+
             for (const row of resultGrouped.rows) {
                 const count = parseInt(row.count);
                 totalCount += count;
@@ -50,72 +49,13 @@ router.get('/', async (req, res) => {
                 }
 
                 tasks.push({
-                    id: `prod-zero-weight-${row.setor.replace(/\s+/g, '-').toLowerCase()}`,
-                    type: 'production',
+                    id: `zero-weight-${row.setor.replace(/\s+/g, '-').toLowerCase()}`,
                     sector: row.setor,
-                    title: `Produção: Pesos Zerados - ${row.setor}`,
+                    title: `Pesos Zerados - ${row.setor}`,
                     description: desc,
                     actionUrl: `apontamentos_produtivos.html?filter=zero-weight&sector=${encodeURIComponent(row.setor)}`,
                     priority: 'high',
                     count: count
-                });
-            }
-
-            // --- TAREFAS DE PEDIDOS (CARTEIRA) ---
-            const queryOrderZero = `
-                SELECT 
-                    COUNT(*) as count
-                FROM firebird_sync_pedidos p
-                -- Join with carteira to only check active orders
-                INNER JOIN (
-                    SELECT DISTINCT pedido, codigo FROM carteira
-                ) c ON (p.data->>'CODIGO_PPR') = c.pedido AND (p.data->>'PRODUTO_PPR') = c.codigo
-                -- LEFT JOIN with weights to exclude those already corrected
-                LEFT JOIN pesos_customizados w ON (p.data->>'PRODUTO_PPR') = w.codigo
-                WHERE (p.data->>'OP_PCS') IS NOT NULL AND (p.data->>'OP_PCS') <> ''
-                -- Must have 0 weight in ERP AND no custom weight set
-                AND COALESCE(CAST(NULLIF(p.data->>'PESO_LIQUIDO_NPR', '') AS NUMERIC), 0) = 0
-                AND w.peso IS NULL
-            `;
-            const resultOrderZero = await pool.query(queryOrderZero);
-            const orderCount = parseInt(resultOrderZero.rows[0].count);
-
-            if (orderCount > 0) {
-                totalCount += orderCount;
-
-                // Fetch samples for orders
-                const orderSamplesQuery = `
-                    SELECT 
-                        p.data->>'CODIGO_PPR' as pedido,
-                        p.data->>'PRODUTO_PPR' as produto_cod,
-                        p.data->>'NOME_PRODUTO_PPR' as produto_nome
-                    FROM firebird_sync_pedidos p
-                    INNER JOIN (
-                        SELECT DISTINCT pedido, codigo FROM carteira
-                    ) c ON (p.data->>'CODIGO_PPR') = c.pedido AND (p.data->>'PRODUTO_PPR') = c.codigo
-                    LEFT JOIN pesos_customizados w ON (p.data->>'PRODUTO_PPR') = w.codigo
-                    WHERE (p.data->>'OP_PCS') IS NOT NULL AND (p.data->>'OP_PCS') <> ''
-                    AND COALESCE(CAST(NULLIF(p.data->>'PESO_LIQUIDO_NPR', '') AS NUMERIC), 0) = 0
-                    AND w.peso IS NULL
-                    LIMIT 2
-                `;
-                const orderSamplesResult = await pool.query(orderSamplesQuery);
-                const orderSamples = orderSamplesResult.rows.map(r => `• Pedido ${r.pedido}: ${r.produto_cod} - ${r.produto_nome.substring(0, 25)}...`);
-
-                let orderDesc = `Existem ${orderCount} itens na carteira de pedidos com peso unitário zerado.`;
-                if (orderSamples.length > 0) {
-                    orderDesc += `<br><br><strong>Amostras:</strong><br>${orderSamples.join('<br>')}`;
-                }
-
-                tasks.push({
-                    id: `order-zero-weight`,
-                    type: 'order',
-                    sector: 'COMERCIAL',
-                    title: `Carteira: Pesos Zerados`,
-                    description: orderDesc,
-                    actionUrl: `pedidos.html?filter=zero-weight`,
-                    priority: 'high',
-                    count: orderCount
                 });
             }
 
