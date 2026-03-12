@@ -233,9 +233,7 @@ async function syncData() {
 
             // ATUALIZAR STATUS DE SINCRONIZAÇÃO
             try {
-                // Usando o pool diretamente ou através do cliente? 
-                // Já que cliente.release() foi chamado, usaremos pool se disponível ou passaremos o cliente.
-                // Na estrutura original, client.release() está no finally.
+                await client.query("SET TIME ZONE 'America/Sao_Paulo'");
                 await client.query(`
                     INSERT INTO sync_status (screen_name, last_sync_at)
                     VALUES ('Custos', NOW())

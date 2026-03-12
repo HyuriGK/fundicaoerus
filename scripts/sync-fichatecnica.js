@@ -267,6 +267,7 @@ async function syncFichas() {
 
             // ATUALIZAR STATUS DE SINCRONIZAÇÃO
             try {
+                await pool.query("SET TIME ZONE 'America/Sao_Paulo'");
                 await pool.query(`
                     INSERT INTO sync_status (screen_name, last_sync_at)
                     VALUES ('Ficha Técnica', NOW())

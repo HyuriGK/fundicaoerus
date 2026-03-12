@@ -138,6 +138,7 @@ async function syncEmissoes() {
 
                 // ATUALIZAR STATUS DE SINCRONIZAÇÃO
                 try {
+                    await pgClient.query("SET TIME ZONE 'America/Sao_Paulo'");
                     await pgClient.query(`
                         INSERT INTO sync_status (screen_name, last_sync_at)
                         VALUES ('Emissões', NOW())

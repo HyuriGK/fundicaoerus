@@ -60,28 +60,35 @@ router.get('/', async (req, res) => {
             }
 
             // 3. Adicionar alertas de Sincronização Atrasada (> 2 horas)
-            const syncStatusResult = await pool.query(`
-                SELECT 
-                    screen_name, 
-                    last_sync_at,
-                    EXTRACT(EPOCH FROM (NOW() - last_sync_at))/3600 as hours_diff
-                FROM sync_status
-            `);
+            try {
+                // Garantir fuso horário de Brasília para a sessão
+                await pool.query("SET TIME ZONE 'America/Sao_Paulo'");
+                
+                const syncStatusResult = await pool.query(`
+                    SELECT 
+                        screen_name, 
+                        last_sync_at,
+                        EXTRACT(EPOCH FROM (NOW() - last_sync_at))/3600 as hours_diff
+                    FROM sync_status
+                `);
 
-            for (const sync of syncStatusResult.rows) {
-                if (sync.hours_diff > 2) {
-                    const lastSync = new Date(sync.last_sync_at).toLocaleString('pt-BR');
-                    tasks.push({
-                        id: `sync-delay-${sync.screen_name.toLowerCase()}`,
-                        sector: 'Sincronização',
-                        title: `Dados Desatualizados: ${sync.screen_name}`,
-                        description: `A sincronização de <strong>${sync.screen_name}</strong> está atrasada.<br>Última atualização: ${lastSync} (${Math.floor(sync.hours_diff)}h atrás).`,
-                        actionUrl: '#', // Ou link para script se houver interface
-                        priority: 'high',
-                        count: 1
-                    });
-                    totalCount++;
+                for (const sync of syncStatusResult.rows) {
+                    if (sync.hours_diff > 2) {
+                        const lastSync = new Date(sync.last_sync_at).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+                        tasks.push({
+                            id: `sync-delay-${sync.screen_name.toLowerCase()}`,
+                            sector: 'Sincronização',
+                            title: `Dados Desatualizados: ${sync.screen_name}`,
+                            description: `A sincronização de <strong>${sync.screen_name}</strong> está atrasada.<br>Última atualização: ${lastSync} (${Math.floor(sync.hours_diff)}h atrás).`,
+                            actionUrl: '#',
+                            priority: 'high',
+                            count: 1
+                        });
+                        totalCount++;
+                    }
                 }
+            } catch (err) {
+                console.error('⚠️ Erro ao verificar status de sincronização:', err.message);
             }
 
             return res.status(200).json({ 
