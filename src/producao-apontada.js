@@ -54,7 +54,7 @@ router.get('/', async (req, res) => { // O "async" aqui é obrigatório!
                         id: 'zero-weight',
                         title: 'Pesos Unitários Zerados',
                         description: `Existem ${result.rows[0].count} registros de produção com peso unitário não definido.`,
-                        actionUrl: 'producao_apontada.html?filter=zero-weight',
+                        actionUrl: 'apontamentos_produtivos.html?filter=zero-weight',
                         priority: 'high',
                         count: parseInt(result.rows[0].count)
                     }
