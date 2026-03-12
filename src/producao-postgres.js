@@ -7,6 +7,33 @@ const pool = require('../lib/db');
 // Returns filtered productio records from the synced table
 router.get('/', async (req, res) => {
     try {
+        // 2. Verificar tarefas (registros com peso zero na tabela sincronizada)
+        if (req.query.action === 'check-tasks') {
+            const queryTasks = `
+                SELECT 
+                    COUNT(*) as count
+                FROM producao_apontada_sincronizada t
+                LEFT JOIN produto_pesos_producao p ON t.codigo_peca = p.codigo_peca
+                WHERE COALESCE(NULLIF(t.peso_un, 0), p.peso, 0) = 0
+            `;
+            const resultTasks = await pool.query(queryTasks);
+            const count = parseInt(resultTasks.rows[0].count);
+            
+            return res.status(200).json({ 
+                count: count,
+                tasks: [
+                    {
+                        id: 'zero-weight',
+                        title: 'Pesos Unitários Zerados',
+                        description: `Existem ${count} registros vinculados a peças sem peso definido.`,
+                        actionUrl: 'apontamentos_produtivos.html?filter=zero-weight',
+                        priority: 'high',
+                        count: count
+                    }
+                ].filter(t => t.count > 0)
+            });
+        }
+
         const { startDate, endDate, sector, search, limit = 100000 } = req.query;
 
         let query = `
