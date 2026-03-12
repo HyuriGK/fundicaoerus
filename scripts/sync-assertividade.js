@@ -110,6 +110,18 @@ async function syncAssertividade() {
                 console.log(`Sucesso: ${successCount}`);
                 console.log(`Erros: ${errorCount}`);
 
+                // ATUALIZAR STATUS DE SINCRONIZAÇÃO
+                try {
+                    await pool.query(`
+                        INSERT INTO sync_status (screen_name, last_sync_at)
+                        VALUES ('Assertividade', NOW())
+                        ON CONFLICT (screen_name) DO UPDATE SET last_sync_at = NOW();
+                    `);
+                    console.log('📊 Status de sincronização atualizado para: Assertividade');
+                } catch (statusErr) {
+                    console.error('⚠️ Erro ao atualizar status de sincronização:', statusErr.message);
+                }
+
             } finally {
                 db.detach();
                 process.exit(0);

@@ -231,6 +231,21 @@ async function syncData() {
 
             console.log(`\n✨ Sincronização concluída com sucesso! ${totalInseridos} registros totais armazenados.`);
 
+            // ATUALIZAR STATUS DE SINCRONIZAÇÃO
+            try {
+                // Usando o pool diretamente ou através do cliente? 
+                // Já que cliente.release() foi chamado, usaremos pool se disponível ou passaremos o cliente.
+                // Na estrutura original, client.release() está no finally.
+                await client.query(`
+                    INSERT INTO sync_status (screen_name, last_sync_at)
+                    VALUES ('Custos', NOW())
+                    ON CONFLICT (screen_name) DO UPDATE SET last_sync_at = NOW();
+                `);
+                console.log('📊 Status de sincronização atualizado para: Custos');
+            } catch (statusErr) {
+                console.error('⚠️ Erro ao atualizar status de sincronização:', statusErr.message);
+            }
+
         } catch (dbErr) {
             await client.query('ROLLBACK');
             throw dbErr;

@@ -264,6 +264,18 @@ async function syncFichas() {
                 }
             }
             console.log(`✅ Sincronização concluída: ${count} registros.`);
+
+            // ATUALIZAR STATUS DE SINCRONIZAÇÃO
+            try {
+                await pool.query(`
+                    INSERT INTO sync_status (screen_name, last_sync_at)
+                    VALUES ('Ficha Técnica', NOW())
+                    ON CONFLICT (screen_name) DO UPDATE SET last_sync_at = NOW();
+                `);
+                console.log('📊 Status de sincronização atualizado para: Ficha Técnica');
+            } catch (statusErr) {
+                console.error('⚠️ Erro ao atualizar status de sincronização:', statusErr.message);
+            }
             db.detach();
         });
     });

@@ -148,6 +148,18 @@ async function syncFaturamento() {
         console.log(`\n✅ Sincronização concluída!`);
         console.log(`📊 Total inserido/atualizado: ${insertedCount} registros`);
 
+        // ATUALIZAR STATUS DE SINCRONIZAÇÃO
+        try {
+            await pgClient.query(`
+                INSERT INTO sync_status (screen_name, last_sync_at)
+                VALUES ('Faturamento', NOW())
+                ON CONFLICT (screen_name) DO UPDATE SET last_sync_at = NOW();
+            `);
+            console.log('📊 Status de sincronização atualizado para: Faturamento');
+        } catch (statusErr) {
+            console.error('⚠️ Erro ao atualizar status de sincronização:', statusErr.message);
+        }
+
         // 7. Verificar total no Neon
         const countResult = await pgClient.query(`
             SELECT COUNT(*) as total, 

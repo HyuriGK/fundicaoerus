@@ -315,6 +315,18 @@ function chunkArray(myArray, chunk_size) {
                 console.log(`   Processed: ${inserted}`);
                 console.log(`   Errors: ${errors}`);
 
+                // ATUALIZAR STATUS DE SINCRONIZAÇÃO
+                try {
+                    await pool.query(`
+                        INSERT INTO sync_status (screen_name, last_sync_at)
+                        VALUES ('Produção', NOW())
+                        ON CONFLICT (screen_name) DO UPDATE SET last_sync_at = NOW();
+                    `);
+                    console.log('📊 Status de sincronização atualizado para: Produção');
+                } catch (statusErr) {
+                    console.error('⚠️ Erro ao atualizar status de sincronização:', statusErr.message);
+                }
+
                 db.detach();
                 await pool.end();
                 process.exit(0);

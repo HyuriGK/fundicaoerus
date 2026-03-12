@@ -225,6 +225,18 @@ async function startSync() {
         }
 
         console.log(`\n🎉 Sincronização Finalizada: ${inserted} registros inseridos/atualizados.`);
+
+        // ATUALIZAR STATUS DE SINCRONIZAÇÃO
+        try {
+            await pool.query(`
+                INSERT INTO sync_status (screen_name, last_sync_at)
+                VALUES ('Refugos', NOW())
+                ON CONFLICT (screen_name) DO UPDATE SET last_sync_at = NOW();
+            `);
+            console.log('📊 Status de sincronização atualizado para: Refugos');
+        } catch (statusErr) {
+            console.error('⚠️ Erro ao atualizar status de sincronização:', statusErr.message);
+        }
         db.detach();
         process.exit(0);
 

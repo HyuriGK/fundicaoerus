@@ -129,6 +129,18 @@ async function sincronizar() {
                 }
 
                 console.log('✅ Sincronização de devoluções concluída com sucesso!');
+
+                // ATUALIZAR STATUS DE SINCRONIZAÇÃO
+                try {
+                    await pool.query(`
+                        INSERT INTO sync_status (screen_name, last_sync_at)
+                        VALUES ('Devoluções', NOW())
+                        ON CONFLICT (screen_name) DO UPDATE SET last_sync_at = NOW();
+                    `);
+                    console.log('📊 Status de sincronização atualizado para: Devoluções');
+                } catch (statusErr) {
+                    console.error('⚠️ Erro ao atualizar status de sincronização:', statusErr.message);
+                }
             } catch (pgErr) {
                 console.error('❌ Erro ao salvar no Postgres:', pgErr);
             } finally {
