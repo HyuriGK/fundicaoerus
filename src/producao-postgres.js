@@ -70,8 +70,12 @@ router.get('/', async (req, res) => {
                 INNER JOIN (
                     SELECT DISTINCT pedido, codigo FROM carteira
                 ) c ON (p.data->>'CODIGO_PPR') = c.pedido AND (p.data->>'PRODUTO_PPR') = c.codigo
+                -- LEFT JOIN with weights to exclude those already corrected
+                LEFT JOIN pesos_customizados w ON (p.data->>'PRODUTO_PPR') = w.codigo
                 WHERE (p.data->>'OP_PCS') IS NOT NULL AND (p.data->>'OP_PCS') <> ''
+                -- Must have 0 weight in ERP AND no custom weight set
                 AND COALESCE(CAST(NULLIF(p.data->>'PESO_LIQUIDO_NPR', '') AS NUMERIC), 0) = 0
+                AND w.peso IS NULL
             `;
             const resultOrderZero = await pool.query(queryOrderZero);
             const orderCount = parseInt(resultOrderZero.rows[0].count);
@@ -89,8 +93,10 @@ router.get('/', async (req, res) => {
                     INNER JOIN (
                         SELECT DISTINCT pedido, codigo FROM carteira
                     ) c ON (p.data->>'CODIGO_PPR') = c.pedido AND (p.data->>'PRODUTO_PPR') = c.codigo
+                    LEFT JOIN pesos_customizados w ON (p.data->>'PRODUTO_PPR') = w.codigo
                     WHERE (p.data->>'OP_PCS') IS NOT NULL AND (p.data->>'OP_PCS') <> ''
                     AND COALESCE(CAST(NULLIF(p.data->>'PESO_LIQUIDO_NPR', '') AS NUMERIC), 0) = 0
+                    AND w.peso IS NULL
                     LIMIT 2
                 `;
                 const orderSamplesResult = await pool.query(orderSamplesQuery);
