@@ -1215,8 +1215,6 @@
                         data-tooltip="Qualidade" onclick="filterByStage('qualidade')"></div>
                     <div id="barExpedicao" class="bar-segment segment-expedicao" style="width: 0%"
                         data-tooltip="Expedição" onclick="filterByStage('expedicao')"></div>
-                    <div id="barFaturamento" class="bar-segment segment-faturamento" style="width: 0%"
-                        data-tooltip="Faturamento" onclick="filterByStage('faturamento')"></div>
                 </div>
             </div>
 
@@ -2719,7 +2717,7 @@
             let kpiUsinagem = { qtd: 0, peso: 0, valor: 0 };
             let kpiQualidade = { qtd: 0, peso: 0, valor: 0 };
             let kpiExpedicao = { qtd: 0, peso: 0, valor: 0 };
-            let kpiFaturamento = { qtd: 0, peso: 0, valor: 0 };
+
 
             list.forEach(item => {
                 const itemTotalWeight = getCorrectedWeight(item);
@@ -2745,12 +2743,11 @@
                 // Quantities for Progress Calculation (Limited by Commercial Order)
                 const totalInitialQty = Number(item.QUANTIDADE_PPR) || 0;
                 const currentBalance = Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0;
-                const commercialInvoiced = Math.max(0, totalInitialQty - currentBalance);
                 const targetTotalQty = totalInitialQty; // The Goal is the Order
                 
                 // 1. Get Cumulative Totals (Limited to Order Qty to avoid inflation)
-                const cFat  = Math.min(targetTotalQty, Math.max(commercialInvoiced, Number(item.QTY_FATURAMENTO) || 0));
-                const cExp  = Math.min(targetTotalQty, Math.max(cFat,  Number(item.QTY_EXPEDICAO) || 0));
+                // Hierarchy: Expedição → Qualidade → Usinagem → TT → Acabamento → Fusão → Moldada → Aguardando
+                const cExp  = Math.min(targetTotalQty, Number(item.QTY_EXPEDICAO) || 0);
                 const cQual = Math.min(targetTotalQty, Math.max(cExp,  Number(item.QTY_QUALIDADE) || 0));
                 const cUsi  = Math.min(targetTotalQty, Math.max(cQual, Number(item.QTY_USINAGEM) || 0));
                 const cTT   = Math.min(targetTotalQty, Math.max(cUsi,  Number(item.QTY_TT) || 0));
@@ -2759,8 +2756,7 @@
                 const cMold = Math.min(targetTotalQty, Math.max(cFus,  Number(item.QTY_MOLDADA) || 0));
 
                 // 2. Differential Logic (Current = Cumulative - Next)
-                let qFaturamento = Math.max(0, cFat);
-                let qExpedicao   = Math.max(0, cExp - cFat);
+                let qExpedicao   = Math.max(0, cExp);
                 let qQualidade   = Math.max(0, cQual - cExp);
                 let qUsinagem    = Math.max(0, cUsi - cQual);
                 let qTT          = Math.max(0, cTT - cUsi);
@@ -2770,7 +2766,6 @@
                 let qAguardando  = Math.max(0, targetTotalQty - cMold);
 
                 // Threshold filter (suppress noise < 0.01 units)
-                if (qFaturamento < 0.01) qFaturamento = 0;
                 if (qExpedicao < 0.01) qExpedicao = 0;
                 if (qQualidade < 0.01) qQualidade = 0;
                 if (qUsinagem < 0.01) qUsinagem = 0;
@@ -2789,7 +2784,6 @@
                     kpi.valor += itemTotalValue * factor;
                 };
 
-                addKpi(kpiFaturamento, qFaturamento);
                 addKpi(kpiExpedicao, qExpedicao);
                 addKpi(kpiQualidade, qQualidade);
                 addKpi(kpiUsinagem, qUsinagem);
@@ -2844,7 +2838,6 @@
             updateStageCard('kpiUsinagem', kpiUsinagem, totalWeight);
             updateStageCard('kpiQualidade', kpiQualidade, totalWeight);
             updateStageCard('kpiExpedicao', kpiExpedicao, totalWeight);
-            updateStageCard('kpiFaturamento', kpiFaturamento, totalWeight);
 
             // 4. Footer Avg Weight
             if (document.getElementById('avgWeightFooter')) document.getElementById('avgWeightFooter').innerText = formatNumber(avgWeight);
@@ -2866,7 +2859,6 @@
                 'kpiUsinagem': { barId: 'barUsinagem', name: 'Usinagem', icon: 'fa-gears' },
                 'kpiQualidade': { barId: 'barQualidade', name: 'Qualidade', icon: 'fa-check-double' },
                 'kpiExpedicao': { barId: 'barExpedicao', name: 'Expedição', icon: 'fa-truck-loading' },
-                'kpiFaturamento': { barId: 'barFaturamento', name: 'Faturamento', icon: 'fa-file-invoice-dollar' }
             };
 
             const config = map[idPrefix];
@@ -3231,11 +3223,9 @@
                     // Hierarchical Logic: Limited by Commercial Order
                     const totalInitialQty = Number(item.QUANTIDADE_PPR) || 0;
                     const currentBalance = Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0;
-                    const commercialInvoiced = Math.max(0, totalInitialQty - currentBalance);
                     const targetTotalQty = totalInitialQty; // The Goal is the Order
 
-                    const cFat  = Math.min(targetTotalQty, Math.max(commercialInvoiced, Number(item.QTY_FATURAMENTO) || 0));
-                    const cExp  = Math.min(targetTotalQty, Math.max(cFat,  Number(item.QTY_EXPEDICAO) || 0));
+                    const cExp  = Math.min(targetTotalQty, Number(item.QTY_EXPEDICAO) || 0);
                     const cQual = Math.min(targetTotalQty, Math.max(cExp,  Number(item.QTY_QUALIDADE) || 0));
                     const cUsi  = Math.min(targetTotalQty, Math.max(cQual, Number(item.QTY_USINAGEM) || 0));
                     const cTT   = Math.min(targetTotalQty, Math.max(cUsi,  Number(item.QTY_TT) || 0));
@@ -3243,8 +3233,7 @@
                     const cFus  = Math.min(targetTotalQty, Math.max(cAcab, Number(item.QTY_FUSAO) || 0));
                     const cMold = Math.min(targetTotalQty, Math.max(cFus,  Number(item.QTY_MOLDADA) || 0));
 
-                    let qFaturamento = Math.max(0, cFat);
-                    let qExpedicao   = Math.max(0, cExp - cFat);
+                    let qExpedicao   = Math.max(0, cExp);
                     let qQualidade   = Math.max(0, cQual - cExp);
                     let qUsinagem    = Math.max(0, cUsi - cQual);
                     let qTT          = Math.max(0, cTT - cUsi);
@@ -3254,7 +3243,6 @@
                     let qAguardando  = Math.max(0, targetTotalQty - cMold);
 
                     // Suppress noise
-                    if (qFaturamento < 0.01) qFaturamento = 0;
                     if (qExpedicao < 0.01) qExpedicao = 0;
                     if (qQualidade < 0.01) qQualidade = 0;
                     if (qUsinagem < 0.01) qUsinagem = 0;
@@ -3272,7 +3260,6 @@
                     if (s === 'usinagem') return qUsinagem > 0.01;
                     if (s === 'qualidade') return qQualidade > 0.01;
                     if (s === 'expedicao') return qExpedicao > 0.01;
-                    if (s === 'faturamento') return qFaturamento > 0.01;
                 }
 
                 // 5. History Filter (By default, HIDE fully billed orders for the Table)
