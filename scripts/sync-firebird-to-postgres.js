@@ -496,6 +496,19 @@ async function sincronizar() {
                 console.log('✅ SINCRONIZAÇÃO CONCLUÍDA COM SUCESSO!');
                 console.log('='.repeat(60));
 
+                // Atualizar status de sincronização
+                try {
+                    await pool.query("SET TIME ZONE 'America/Sao_Paulo'");
+                    await pool.query(`
+                        INSERT INTO sync_status (screen_name, last_sync_at)
+                        VALUES ('Faturamento', NOW())
+                        ON CONFLICT (screen_name) DO UPDATE SET last_sync_at = NOW();
+                    `);
+                    console.log('📊 Status de sincronização atualizado para: Faturamento');
+                } catch (statusErr) {
+                    console.error('⚠️ Erro ao atualizar status de sincronização:', statusErr.message);
+                }
+
             } catch (error) {
                 console.error('❌ Erro durante sincronização:', error);
             } finally {
