@@ -1135,12 +1135,26 @@
                 }
             });
 
+            // Calculate Meta Dates for all sectors
+            const metaDates = {};
+            let baselineDate = emissionDate ? toLocalDate(emissionDate) : toLocalDate(new Date());
+            orderedStages.forEach((stage) => {
+                const configKey = configKeyMap[stage];
+                const lt = leadTimes[configKey] || 0;
+                let currentMeta = toLocalDate(baselineDate);
+                let daysToAdd = lt;
+                while (daysToAdd > 0) {
+                    currentMeta.setDate(currentMeta.getDate() + 1);
+                    const day = currentMeta.getDay();
+                    if (day !== 0 && day !== 6) daysToAdd--;
+                }
+                metaDates[stage] = toLocalDate(currentMeta);
+                baselineDate = toLocalDate(currentMeta);
+            });
+
             const activeStages = [];
             const now = toLocalDate(new Date());
-            
-            // First stage baseline is totalQty and emissionDate
             let prevStageQty = totalQty;
-            let prevStageLastDate = emissionDate ? toLocalDate(emissionDate) : null;
 
             for (let i = 0; i < orderedStages.length; i++) {
                 const stage = orderedStages[i];
@@ -1149,29 +1163,51 @@
                 const qtyStayingInStage = Math.max(0, prevStageQty - qtyMovingToNext);
 
                 if (qtyStayingInStage > 0.001) {
-                    const entryDate = prevStageLastDate || toLocalDate(new Date(new Date().setDate(new Date().getDate() - 1)));
-                    const diffDays = Math.abs(getBusinessDaysDiff(now, entryDate));
+                    const metaDate = metaDates[stage];
+                    const diff = getBusinessDaysDiff(metaDate, now);
+                    
+                    let statusText = '';
+                    let isDelayed = false;
+                    let statusColor = 'var(--text-muted)';
+
+                    if (diff > 0) {
+                        statusText = `ATRASADO HÁ ${diff} ${diff === 1 ? 'DIA' : 'DIAS'}`;
+                        isDelayed = true;
+                        statusColor = 'var(--status-danger)';
+                    } else if (diff < 0) {
+                        const absDiff = Math.abs(diff);
+                        statusText = `ADIANTADO HÁ ${absDiff} ${absDiff === 1 ? 'DIA' : 'DIAS'}`;
+                        statusColor = 'var(--status-success)';
+                    } else {
+                        statusText = `NO PRAZO (HOJE)`;
+                        statusColor = 'var(--status-info)';
+                    }
+
                     activeStages.push({
                         stage: stage,
                         qty: qtyStayingInStage,
-                        days: diffDays
+                        statusText: statusText,
+                        isDelayed: isDelayed,
+                        statusColor: statusColor
                     });
                 }
 
-                // Prepare for next stage
                 prevStageQty = qtyMovingToNext;
-                prevStageLastDate = groupStatus[stage].lastDate;
             }
 
             // Special Case: If everything is pointed in the last stage, keep it in the last stage
             if (activeStages.length === 0 && prevStageQty > 0) {
-                const lastStage = orderedStages[orderedStages.length - 1];
-                const entryDate = prevStageLastDate || toLocalDate(new Date(new Date().setDate(new Date().getDate() - 1)));
-                const diffDays = Math.abs(getBusinessDaysDiff(now, entryDate));
+                const stage = orderedStages[orderedStages.length - 1];
+                const metaDate = metaDates[stage];
+                const diff = getBusinessDaysDiff(metaDate, now);
+                let statusText = diff > 0 ? `ATRASADO HÁ ${diff} D` : (diff < 0 ? `ADIANTADO HÁ ${Math.abs(diff)} D` : `NO PRAZO`);
+                
                 activeStages.push({
-                    stage: lastStage,
+                    stage: stage,
                     qty: prevStageQty,
-                    days: diffDays
+                    statusText: statusText,
+                    isDelayed: diff > 0,
+                    statusColor: diff > 0 ? 'var(--status-danger)' : 'var(--status-success)'
                 });
             }
 
@@ -1195,7 +1231,7 @@
                 const statusList = getOpStages(op.OP_PCS, totalQtyAll, op.OP_EMISSAO || op.DATA_EMISSAO_PEDIDO);
 
                 statusList.forEach(status => {
-                    const { stage, qty, days } = status;
+                    const { stage, qty, statusText, isDelayed, statusColor } = status;
                     const columnKey = configKeyMap[stage];
                     const list = document.getElementById(`list-${columnKey}`);
                     if (!list) return;
@@ -1220,42 +1256,35 @@
 
                     counts[stage]++;
 
-                    const limit = leadTimes[columnKey] || 0;
-                    const isDelayed = days > limit;
-                    let timeText = `${days} ${days === 1 ? 'dia' : 'dias'}`;
-
                     const prodCode = op.PRODUTO_PPR || '';
                     const prodName = op.NOME_PRODUTO_PPR || '';
-                    const prodMat = op.NOME_MATERIAL ? ` - ${op.NOME_MATERIAL}` : '';
-                    let fullDesc = `${prodCode} - ${prodName}${prodMat}`;
-
-                    // Truncate to 50 characters
-                    if (fullDesc.length > 50) {
-                        fullDesc = fullDesc.substring(0, 47) + '...';
-                    }
+                    const clientName = (op.NOME_CLIENTE || 'N/A');
 
                     const isPartial = qty < totalQtyAll;
-                    const qtyDisplay = isPartial ? `${Math.round(qty)} de ${totalQtyAll}` : `${totalQtyAll}`;
+                    const qtyDisplay = isPartial ? `${Math.round(qty)} DE ${totalQtyAll}` : `${totalQtyAll}`;
 
                     const card = document.createElement('div');
                     card.className = `op-card ${isDelayed ? 'delayed' : ''}`;
                     card.innerHTML = `
-                        <div class="card-header">
-                            <span class="op-number">OP ${op.OP_PCS}</span>
-                            <span class="client-name">${(op.NOME_CLIENTE || 'N/A').split(' ')[0]}</span>
+                        <div class="card-header" style="justify-content: flex-start; gap: 8px;">
+                            <span class="op-number" style="background: var(--color-primary); color: #000; padding: 2px 6px; border-radius: 4px; font-weight: 800;">OP ${op.OP_PCS}</span>
+                            <span class="client-name" style="color: #fff; font-weight: 700; font-size: 1rem;">${clientName.split(' ')[0]}</span>
                         </div>
-                        <div class="product-desc" title="${fullDesc}">${fullDesc}</div>
-                        <div class="card-footer">
-                            <span class="op-qty" style="${isPartial ? 'color: var(--color-primary); font-weight: 700;' : ''}">Qtd: ${qtyDisplay} pçs</span>
-                            <span class="days-counter ${isDelayed ? 'danger' : ''}">
-                                <i class="fa-solid fa-clock" ${isDelayed ? 'title="Atrasado"' : ''}></i> ${timeText}
-                            </span>
+                        <div class="product-desc" style="margin: 8px 0; font-weight: 600; color: rgba(255,255,255,0.9); font-size: 0.95rem;">
+                            ${prodCode} - ${prodName}
+                        </div>
+                        <div class="card-footer" style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px; margin-top: auto; display: flex; flex-direction: column; align-items: flex-start; gap: 4px;">
+                            <div style="font-size: 0.85rem; font-weight: 700;">
+                                <span style="color: var(--text-muted);">QTD:</span> 
+                                <span style="color: ${isPartial ? 'var(--color-primary)' : '#fff'};">${qtyDisplay} PÇS</span>
+                            </div>
+                            <div style="font-size: 0.8rem; font-weight: 800; color: ${statusColor};">
+                                <i class="fa-solid ${isDelayed ? 'fa-triangle-exclamation' : 'fa-check-circle'}"></i> ${statusText}
+                            </div>
                         </div>
                     `;
 
-                    // Add click event to show details
                     card.onclick = () => showOPDetails(op);
-
                     list.appendChild(card);
                 });
             });
