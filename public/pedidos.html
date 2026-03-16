@@ -2736,11 +2736,14 @@
                 }
                 const itemTotalValue = unitPrice * realQty;
 
-                // Sector Quantities from Sync (Cumulative)
-                const targetTotalQty = Number(item.OP_QUANTIDADE) || realQty;
+                // Quantities for Progress Calculation (Limited by Commercial Order)
+                const totalInitialQty = Number(item.QUANTIDADE_PPR) || 0;
+                const currentBalance = Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0;
+                const commercialInvoiced = Math.max(0, totalInitialQty - currentBalance);
+                const targetTotalQty = totalInitialQty; // The Goal is the Order
                 
-                // 1. Get Cumulative Totals (Ensuring Monotonicity: Fat <= Exp <= Qual...)
-                const cFat  = Math.min(targetTotalQty, Number(item.QTY_FATURAMENTO) || 0);
+                // 1. Get Cumulative Totals (Limited to Order Qty to avoid inflation)
+                const cFat  = Math.min(targetTotalQty, Math.max(commercialInvoiced, Number(item.QTY_FATURAMENTO) || 0));
                 const cExp  = Math.min(targetTotalQty, Math.max(cFat,  Number(item.QTY_EXPEDICAO) || 0));
                 const cQual = Math.min(targetTotalQty, Math.max(cExp,  Number(item.QTY_QUALIDADE) || 0));
                 const cUsi  = Math.min(targetTotalQty, Math.max(cQual, Number(item.QTY_USINAGEM) || 0));
@@ -3207,13 +3210,14 @@
                 // 4. Stage Filter (Proportional hierarchical sync)
                 if (activeChartFilters.stage) {
                     const s = activeChartFilters.stage;
-                    const saldo = Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0;
-                    const qtdOriginal = Number(item.QUANTIDADE_PPR) || 0;
-                    const realQty = saldo > 0 ? saldo : qtdOriginal;
-                    const targetTotalQty = Number(item.OP_QUANTIDADE) || realQty;
+                    
+                    // Hierarchical Logic: Limited by Commercial Order
+                    const totalInitialQty = Number(item.QUANTIDADE_PPR) || 0;
+                    const currentBalance = Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0;
+                    const commercialInvoiced = Math.max(0, totalInitialQty - currentBalance);
+                    const targetTotalQty = totalInitialQty; // The Goal is the Order
 
-                    // Hierarchical Logic: Cumulative - Next
-                    const cFat  = Math.min(targetTotalQty, Number(item.QTY_FATURAMENTO) || 0);
+                    const cFat  = Math.min(targetTotalQty, Math.max(commercialInvoiced, Number(item.QTY_FATURAMENTO) || 0));
                     const cExp  = Math.min(targetTotalQty, Math.max(cFat,  Number(item.QTY_EXPEDICAO) || 0));
                     const cQual = Math.min(targetTotalQty, Math.max(cExp,  Number(item.QTY_QUALIDADE) || 0));
                     const cUsi  = Math.min(targetTotalQty, Math.max(cQual, Number(item.QTY_USINAGEM) || 0));
