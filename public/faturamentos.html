@@ -1141,7 +1141,7 @@
     </footer>
 
     <script>
-        let globalValid = [];
+        let allData = [];
         let excludedClients = new Set();
         let clientStats = {};
         let colFilters = {};
@@ -1230,14 +1230,14 @@
             const startInput = document.getElementById('startDate').value;
             const endInput = document.getElementById('endDate').value;
 
-            // 1. Base Data (Global Valid - Year Context)
-            const globalValid = data.filter(item => !excludedClients.has((item.clienteNome || 'Desconhecido').trim()) && !item.excluido_manualmente);
+            // 1. Base Data (Filtered for Exclusions)
+            const filteredAll = data.filter(item => !excludedClients.has((item.clienteNome || 'Desconhecido').trim()) && !item.excluido_manualmente);
 
             // Populate Year Selector with any additional years found in data
             const yearSelector = document.getElementById('yearSelector');
             if (yearSelector) {
                 const existingYears = new Set([...yearSelector.options].map(o => o.value));
-                const dataYears = [...new Set(globalValid.map(item => item.data ? item.data.substring(0, 4) : null).filter(y => y))];
+                const dataYears = [...new Set(filteredAll.map(item => item.data ? item.data.substring(0, 4) : null).filter(y => y))];
 
                 dataYears.forEach(y => {
                     if (!existingYears.has(y)) {
@@ -1251,10 +1251,10 @@
             }
 
             const selectedYear = yearSelector ? yearSelector.value : new Date().getFullYear().toString();
-            const annualFilteredData = globalValid.filter(item => item.data && item.data.startsWith(selectedYear));
+            const annualFilteredData = filteredAll.filter(item => item.data && item.data.startsWith(selectedYear));
 
             // 2. Filter for Range (Drivers Table & KPIs)
-            const rangeData = globalValid.filter(item => {
+            const rangeData = filteredAll.filter(item => {
                 if (startInput && item.data < startInput) return false;
                 if (endInput && item.data > endInput) return false;
                 return true;
@@ -1330,7 +1330,7 @@
             const monthStartStr = fmt(monthStart);
             const monthEndStr = fmt(monthEnd);
 
-            const dailyContextData = globalValid.filter(item => {
+            const dailyContextData = filteredAll.filter(item => {
                 return item.data >= monthStartStr && item.data <= monthEndStr;
             });
 
@@ -1515,11 +1515,11 @@
                 let url = `/api/faturamento-postgres/detalhado?limit=100000&startDate=${fullStart}&endDate=${fullEnd}`;
                 const res = await (await fetch(url)).json();
                 if (res.success) {
-                    globalValid = res.data;
-                    processClients(globalValid);
+                    allData = res.data;
+                    processClients(allData);
 
                     renderTable();
-                    updateDashboardfromRecords(globalValid);
+                    updateDashboardfromRecords(allData);
                 }
             } catch (e) { console.error(e); } finally { hideSpinner(); }
         }
@@ -1528,7 +1528,7 @@
         async function saveClientExclusion() { await fetch('/api/preferences/excluded_clients', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ value: Array.from(excludedClients) }) }); }
 
         async function toggleRowExclusion(idx) {
-            const item = globalValid[idx];
+            const item = allData[idx];
             const newState = !item.excluido_manualmente;
 
             // Fixed Key Generation (Detailed Logic: Nota-Codigo-Pedido-Data-Quant)
@@ -1578,7 +1578,7 @@
 
         function renderTable() {
             const list = document.getElementById('clientList');
-            const data = globalValid;
+            const data = allData;
             const startInput = document.getElementById('startDate').value;
             const endInput = document.getElementById('endDate').value;
             const isDev = (localStorage.getItem('erus_role') || 'Visitante').toLowerCase() === 'desenvolvedor';
@@ -1593,7 +1593,7 @@
             if (clientBtn) clientBtn.style.display = isDev ? 'flex' : 'none';
 
             // Filter for display
-            let filteredClients = globalValid.filter(item => {
+            let filteredClients = allData.filter(item => {
                 if (excludedClients.has((item.clienteNome || 'Desconhecido').trim())) return false;
                 if (startInput && item.data < startInput) return false;
                 if (endInput && item.data > endInput) return false;
@@ -1628,7 +1628,7 @@
             const isVisible = document.getElementById('cardValorTotal').getAttribute('data-visible') === 'true';
 
             tbody.innerHTML = filteredClients.map((item) => {
-                const globalIdx = globalValid.indexOf(item);
+                const globalIdx = allData.indexOf(item);
                 const calculatedTotal = calculateCalculatedTotal(item);
 
                 const valorUnit = isVisible ? formatCurrency(item.valorUnitario || 0) : 'R$ ---';
@@ -1664,6 +1664,7 @@
             }
         }
 
+        function processClients(data) { clientStats = {}; data.forEach(item => { const n = (item.clienteNome || 'Desconhecido').trim(); clientStats[n] = (clientStats[n] || 0) + 1; }); }
 
         function applyLocalFilters() {
             renderTable();
