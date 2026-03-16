@@ -1336,69 +1336,99 @@
                         <table style="width: 100%; border-collapse: collapse; font-size: 0.95rem;">
                             <thead>
                                 <tr style="background: rgba(255,255,255,0.05); text-align: left; color: var(--text-muted); text-transform: uppercase; font-size: 0.75rem; letter-spacing: 1px;">
-                                    <th style="padding: 15px 25px;">Etapa</th>
+                                    <th style="padding: 15px 25px;">Etapa / Status</th>
                                     <th style="padding: 15px 25px; text-align: center;">Quantidade</th>
                                     <th style="padding: 15px 25px; text-align: center;">Meta (Prazo)</th>
-                                    <th style="padding: 15px 25px; text-align: center;">Status</th>
+                                    <th style="padding: 15px 25px; text-align: center;">Observação</th>
                                 </tr>
                             </thead>
                             <tbody>
                 `;
 
                 ordered.forEach(sector => {
-                    const qty = aggregated[sector];
-                    const isZero = qty === 0;
+                    const qtyPointed = aggregated[sector];
+                    const qtyPending = Math.max(0, totalQty - qtyPointed);
                     const meta = metaDates[sector];
-                    const isFinished = qty >= totalQty;
-
-                    // Status logic
-                    // If finished or pending (but has pointings): use actual pointing date
-                    // If no pointings at all: use Today (fallback, but actually it's 'Pendente' anyway)
-                    const referenceDate = toLocalDate(lastPointingDate[sector]);
                     const metaMidnight = toLocalDate(meta);
+                    const today = toLocalDate(new Date());
 
-                    // Use absolute strict difference (counting weekends as late too) to prevent positive diff bugs 
-                    // when getBusinessDaysDiff flips zero on weekend overlaps. Using Math.round shields from DST/Timezone ms slips.
-                    const timeDiff = referenceDate.getTime() - metaMidnight.getTime();
-                    const daysDiff = Math.round(timeDiff / (1000 * 3600 * 24)); // >0 means Late, <0 means Early, 0 means Today
+                    // 1. Linha do Realizado (se houver)
+                    if (qtyPointed > 0) {
+                        const referenceDate = toLocalDate(lastPointingDate[sector]);
+                        const timeDiff = referenceDate.getTime() - metaMidnight.getTime();
+                        const daysDiff = Math.round(timeDiff / (1000 * 3600 * 24));
 
-                    let statusHtml = '';
-                    if (isZero && !isFinished) {
-                        // Not started yet
-                        statusHtml = `<span style="color: var(--text-muted); opacity: 0.5;">Pendente</span>`;
-                    } else if (daysDiff > 0) { // Apontado depois da Meta (Atrasou)
-                        const bizDelay = Math.abs(getBusinessDaysDiff(metaMidnight, referenceDate));
-                        statusHtml = `<span style="color: var(--status-danger); font-weight: 600;"><i class="fa-solid fa-triangle-exclamation"></i> Atrasou (${bizDelay} d)</span>`;
-                    } else if (daysDiff < 0) { // Apontado antes da Meta (Adiantada)
-                        const bizAdv = Math.abs(getBusinessDaysDiff(referenceDate, metaMidnight));
-                        statusHtml = `<span style="color: var(--status-success); font-weight: 600;"><i class="fa-solid fa-check-double"></i> Adiantada (${bizAdv} d)</span>`;
-                    } else { // No Prazo
-                        statusHtml = `<span style="color: var(--status-info); font-weight: 600;">No Prazo</span>`;
+                        let statusHtml = '';
+                        if (daysDiff > 0) {
+                            const bizDelay = Math.abs(getBusinessDaysDiff(metaMidnight, referenceDate));
+                            statusHtml = `<span style="color: var(--status-danger); font-weight: 600;"><i class="fa-solid fa-clock"></i> Atrasou (${bizDelay} d)</span>`;
+                        } else {
+                            statusHtml = `<span style="color: var(--status-success); font-weight: 600;"><i class="fa-solid fa-check"></i> No Prazo</span>`;
+                        }
+
+                        html += `
+                            <tr class="op-detail-row" 
+                                 style="border-bottom: 1px solid var(--border-subtle); color: #fff; background: rgba(16, 185, 129, 0.03);"
+                                 onclick="showSectorHistory('${op}', '${sector}')">
+                                <td style="padding: 15px 25px;">
+                                    <div style="display: flex; align-items: center; gap: 12px;">
+                                        <div style="width: 8px; height: 8px; border-radius: 50%; background: var(--status-success);"></div>
+                                        <span style="font-weight: 600;">${sector} (Realizado)</span>
+                                    </div>
+                                </td>
+                                <td style="padding: 15px 25px; text-align: center;">
+                                    <span style="font-weight: 700; color: var(--status-success);">
+                                        ${qtyPointed.toLocaleString('pt-BR')} <small style="font-size: 0.7em;">PÇS</small>
+                                    </span>
+                                </td>
+                                <td style="padding: 15px 25px; text-align: center; font-family: var(--font-mono); font-size: 0.85rem;">
+                                    ${meta.toLocaleDateString('pt-BR')}
+                                </td>
+                                <td style="padding: 15px 25px; text-align: center; font-size: 0.85rem;">
+                                    ${statusHtml}
+                                </td>
+                            </tr>
+                        `;
                     }
 
-                    html += `
-                        <tr class="op-detail-row ${isZero ? 'is-zero' : ''}" 
-                             style="border-bottom: 1px solid var(--border-separator); color: ${isZero ? 'var(--text-muted)' : '#fff'}; cursor: ${isZero ? 'default' : 'pointer'}; transition: background 0.2s;"
-                             ${!isZero ? `onclick="showSectorHistory('${op}', '${sector}')"` : ''}>
-                            <td style="padding: 20px 25px;">
-                                <div style="display: flex; align-items: center; gap: 12px;">
-                                    <div style="width: 8px; height: 8px; border-radius: 50%; background: ${isFinished ? 'var(--status-success)' : (isZero ? 'var(--text-muted)' : 'var(--status-warning)')};"></div>
-                                    <span style="font-weight: 600;">${sector}</span>
-                                </div>
-                            </td>
-                            <td style="padding: 20px 25px; text-align: center;">
-                                <span style="font-weight: 700; color: ${isZero ? 'var(--text-muted)' : 'var(--color-primary)'};">
-                                    ${qty.toLocaleString('pt-BR')} <small style="font-size: 0.7em; opacity: 0.6;">PÇS</small>
-                                </span>
-                            </td>
-                            <td style="padding: 20px 25px; text-align: center; font-family: var(--font-mono); font-size: 0.85rem;">
-                                ${meta.toLocaleDateString('pt-BR')}
-                            </td>
-                            <td style="padding: 20px 25px; text-align: center; font-size: 0.85rem;">
-                                ${statusHtml}
-                            </td>
-                        </tr>
-                    `;
+                    // 2. Linha do Pendente (se houver saldo)
+                    if (qtyPending > 0) {
+                        const timeDiff = today.getTime() - metaMidnight.getTime();
+                        const daysDiff = Math.round(timeDiff / (1000 * 3600 * 24));
+
+                        let statusHtml = '';
+                        let isDelayed = false;
+                        if (daysDiff > 0) {
+                            const bizDelay = Math.abs(getBusinessDaysDiff(metaMidnight, today));
+                            isDelayed = true;
+                            statusHtml = `<span style="color: var(--status-danger); font-weight: 600;"><i class="fa-solid fa-triangle-exclamation"></i> Atrasado (${bizDelay} d)</span>`;
+                        } else {
+                            statusHtml = `<span style="color: var(--text-muted);">Aguardando</span>`;
+                        }
+
+                        html += `
+                            <tr class="op-detail-row is-zero" 
+                                 style="border-bottom: 1px solid var(--border-subtle); color: var(--text-muted); background: ${isDelayed ? 'rgba(239, 68, 68, 0.03)' : 'transparent'};">
+                                <td style="padding: 15px 25px;">
+                                    <div style="display: flex; align-items: center; gap: 12px;">
+                                        <div style="width: 8px; height: 8px; border-radius: 50%; background: ${isDelayed ? 'var(--status-danger)' : 'var(--border-subtle)'};"></div>
+                                        <span style="font-weight: 600;">${sector} (Pendente)</span>
+                                    </div>
+                                </td>
+                                <td style="padding: 15px 25px; text-align: center;">
+                                    <span style="font-weight: 700;">
+                                        ${qtyPending.toLocaleString('pt-BR')} <small style="font-size: 0.7em;">PÇS</small>
+                                    </span>
+                                </td>
+                                <td style="padding: 15px 25px; text-align: center; font-family: var(--font-mono); font-size: 0.85rem;">
+                                    ${meta.toLocaleDateString('pt-BR')}
+                                </td>
+                                <td style="padding: 15px 25px; text-align: center; font-size: 0.85rem;">
+                                    ${statusHtml}
+                                </td>
+                            </tr>
+                        `;
+                    }
                 });
 
                 html += `
