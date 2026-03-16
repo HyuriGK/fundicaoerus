@@ -13,7 +13,8 @@ router.get('/', async (req, res) => {
                     p.sync_key, 
                     p.data,
                     p.updated_at,
-                    f.data_fic
+                    f.data_fic,
+                    f.pro_codigo_fic AS has_ficha
                 FROM firebird_sync_pedidos p
                 INNER JOIN (
                     -- Join by both Pedido and Produto to match exactly the items in the backlog
@@ -33,7 +34,8 @@ router.get('/', async (req, res) => {
                     p.sync_key, 
                     p.data,
                     p.updated_at,
-                    f.data_fic
+                    f.data_fic,
+                    f.pro_codigo_fic AS has_ficha
                 FROM firebird_sync_pedidos p
                 LEFT JOIN ficha_tecnica f ON f.pro_codigo_fic = (p.data->>'PRODUTO_PPR')
                 ORDER BY 
@@ -50,7 +52,8 @@ router.get('/', async (req, res) => {
         const pedidos = result.rows.map(row => ({
             ...row.data, // Espalha as propriedades do JSONB
             _sync_updated_at: row.updated_at, // Mantém metadata de sync
-            _data_fic: row.data_fic // Adiciona o campo de data da ficha técnica para ordenação
+            _data_fic: row.data_fic, // Adiciona o campo de data da ficha técnica para ordenação
+            _has_ficha: !!row.has_ficha // Boolean flag
         }));
 
         res.json(pedidos);
