@@ -259,11 +259,12 @@ async function syncData() {
                         AND PS.STATUS_PCS NOT IN ('C', 'N')
                 ) AS QTY_FATURAMENTO,
                 (
-                    SELECT LIST(DISTINCT FTP.SET_CODIGO_FTPC)
+                    SELECT CAST(LIST(DISTINCT FTP.SET_CODIGO_FTPC) AS VARCHAR(500))
                     FROM FICHA_TECNICA FT
                     JOIN FICHA_TECNICA_PROCEDIMENTO FTP ON FTP.FIC_CODIGO_FTPC = FT.CODIGO_FIC
                     WHERE FT.PRO_CODIGO_FIC = P.PRODUTO_PPR
-                        AND FT.ATIVO_FIC = 'S'
+                        AND FT.ATIVO_FIC LIKE 'S%'
+                        AND FT.EMP_CODIGO_FIC = 10
                         AND FTP.SET_EMPRESA_FTPC = '10'
                 ) AS ROTEIRO_PRODUCAO
             FROM PEDIDO_PRODUTO P
