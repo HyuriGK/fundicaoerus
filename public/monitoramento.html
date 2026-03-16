@@ -1171,6 +1171,8 @@
                 }
             });
 
+            const qtyExpedited = groupStatus['EXPEDIÇÃO'].qty;
+
             // Calculate Meta Dates for all sectors
             const metaDates = {};
             let baselineDate = emissionDate ? toLocalDate(emissionDate) : toLocalDate(new Date());
@@ -1239,7 +1241,8 @@
                         qty: qtyStayingInStage,
                         statusText: statusText,
                         isDelayed: isDelayed,
-                        statusColor: statusColor
+                        statusColor: statusColor,
+                        qtyExpedited: qtyExpedited
                     });
                 }
 
@@ -1258,7 +1261,8 @@
                     qty: prevStageQty,
                     statusText: statusText,
                     isDelayed: diff > 0,
-                    statusColor: diff > 0 ? 'var(--status-danger)' : 'var(--status-success)'
+                    statusColor: diff > 0 ? 'var(--status-danger)' : 'var(--status-success)',
+                    qtyExpedited: qtyExpedited
                 });
             }
 
@@ -1282,7 +1286,7 @@
                 const statusList = getOpStages(op.OP_PCS, totalQtyAll, op.OP_EMISSAO || op.DATA_EMISSAO_PEDIDO, op.ROTEIRO_PRODUCAO);
 
                 statusList.forEach(status => {
-                    const { stage, qty, statusText, isDelayed, statusColor } = status;
+                    const { stage, qty, statusText, isDelayed, statusColor, qtyExpedited } = status;
                     const columnKey = configKeyMap[stage];
                     const list = document.getElementById(`list-${columnKey}`);
                     if (!list) return;
@@ -1312,7 +1316,12 @@
                     const clientName = (op.NOME_CLIENTE || 'N/A');
 
                     const isPartial = qty < totalQtyAll;
-                    const qtyDisplay = isPartial ? `${Math.round(qty)} DE ${totalQtyAll}` : `${totalQtyAll}`;
+                    let qtyDisplay = isPartial ? `${Math.round(qty)} DE ${totalQtyAll}` : `${totalQtyAll}`;
+                    
+                    // Add expedited indicator if in an earlier stage
+                    if (stage !== 'EXPEDIÇÃO' && qtyExpedited > 0) {
+                        qtyDisplay += ` <span style="font-size: 0.7rem; color: var(--status-success); margin-left: 4px;">(${Math.round(qtyExpedited)} JÁ EXPEDIDAS)</span>`;
+                    }
 
                     const card = document.createElement('div');
                     card.className = `op-card ${isDelayed ? 'delayed' : ''}`;
@@ -1340,10 +1349,15 @@
                 });
             });
 
-            // Update counts
+            // Update counts and percentages
+            const totalCards = Object.values(counts).reduce((a, b) => a + b, 0);
+            
             Object.entries(counts).forEach(([stage, count]) => {
                 const el = document.getElementById(`count-${configKeyMap[stage]}`);
-                if (el) el.innerText = count;
+                if (el) {
+                    const percentage = totalCards > 0 ? Math.round((count / totalCards) * 100) : 0;
+                    el.innerText = `${count} (${percentage}%)`;
+                }
             });
         }
 
