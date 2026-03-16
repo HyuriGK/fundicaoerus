@@ -115,8 +115,37 @@ function getBlobs(db, fichaCodigo) {
     });
 }
 
+// Fetch Procedures (Production Route) for a single ficha
+function getProcedures(db, fichaCodigo) {
+    return new Promise((resolve) => {
+        db.query(`
+            SELECT SET_CODIGO_FTPC 
+            FROM FICHA_TECNICA_PROCEDIMENTO 
+            WHERE FIC_CODIGO_FTPC = ? AND SET_EMPRESA_FTPC = '10'
+            ORDER BY SET_CODIGO_FTPC
+        `, [fichaCodigo], (err, results) => {
+            if (err) return resolve([]);
+            resolve(results.map(r => r.SET_CODIGO_FTPC));
+        });
+    });
+}
+
 async function syncFichas() {
     console.log('🚀 Sincronização de Fichas Técnicas...');
+
+    // 0. Preparar tabela de procedimentos no Postgres
+    try {
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS ficha_tecnica_procedimento (
+                pro_codigo_fic VARCHAR(50),
+                set_codigo_fic INTEGER,
+                PRIMARY KEY (pro_codigo_fic, set_codigo_fic)
+            )
+        `);
+        console.log('✅ Tabela ficha_tecnica_procedimento verificada.');
+    } catch (e) {
+        console.error('Erro ao criar tabela de procedimentos:', e.message);
+    }
 
     Firebird.attach(firebirdOptions, function (err, db) {
         if (err) { console.error('Erro Firebird:', err); return; }
@@ -204,6 +233,18 @@ async function syncFichas() {
                         const qStr = parseFloat(finalQuant.toFixed(3));
                         return `LUVA: ${l.NOME_LUVA || '-'} - QTDE: ${qStr}`;
                     }).join('\n');
+
+                    // Fetch Procedures (Route)
+                    const procedures = await getProcedures(db, row.CODIGO_FIC);
+
+                    // Sync Procedures to Postgres
+                    if (procedures.length > 0) {
+                        // Delete old route for this product and insert new one
+                        await pool.query('DELETE FROM ficha_tecnica_procedimento WHERE pro_codigo_fic = $1', [sanitize(row.PRO_CODIGO_FIC)]);
+                        for (const setCode of procedures) {
+                            await pool.query('INSERT INTO ficha_tecnica_procedimento (pro_codigo_fic, set_codigo_fic) VALUES ($1, $2) ON CONFLICT DO NOTHING', [sanitize(row.PRO_CODIGO_FIC), setCode]);
+                        }
+                    }
 
                     // INSERT complete record into Postgres
                     await pool.query(`

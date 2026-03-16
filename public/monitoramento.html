@@ -1020,6 +1020,15 @@
             'EXPEDIÇÃO': ['EXPEDIÇÃO', 'EXPEDICAO', 'LOGÍSTICA']
         };
 
+        const stageSectorIds = {
+            'MOLDAGEM': [1, 10, 11, 12],
+            'FUSÃO': [2, 20],
+            'ACABAMENTO': [3, 30, 33, 113],
+            'TRATAMENTO TÉRMICO': [4, 7, 8, 9, 31, 40, 61],
+            'USINAGEM': [50, 51, 104, 105],
+            'EXPEDIÇÃO': [100]
+        };
+
         const orderedStages = ['MOLDAGEM', 'FUSÃO', 'ACABAMENTO', 'TRATAMENTO TÉRMICO', 'USINAGEM', 'EXPEDIÇÃO'];
 
         const configKeyMap = {
@@ -1139,8 +1148,14 @@
             }
         }
 
-        function getOpStages(opNumber, totalQty, emissionDate) {
+        function getOpStages(opNumber, totalQty, emissionDate, rawRoute) {
             const opPoints = pointingSummary[opNumber] || {};
+
+            // Parse production route (list of sector IDs)
+            let opRoute = null;
+            if (rawRoute) {
+                opRoute = String(rawRoute).split(',').map(s => parseInt(s.trim()));
+            }
 
             // Map raw sector pointings to our groups
             const groupStatus = {};
@@ -1182,7 +1197,22 @@
 
             for (let i = 0; i < orderedStages.length; i++) {
                 const stage = orderedStages[i];
+
+                // --- DYNAMIC ROUTE FILTER ---
+                // If we have a route, check if this stage is part of it.
+                // We show the stage if:
+                // 1. No route is defined (fallback)
+                // 2. Any of the stage's sector IDs are in the production route
+                // 3. There is already pointing data for this stage (it already passed through here)
                 const pointedInStage = groupStatus[stage].qty;
+                const routeExists = opRoute && opRoute.length > 0;
+                const inRoute = routeExists ? stageSectorIds[stage].some(id => opRoute.includes(id)) : true;
+
+                if (!inRoute && pointedInStage <= 0) {
+                    // Skip this stage entirely if not in route AND no production pointed yet
+                    continue;
+                }
+
                 const qtyMovingToNext = Math.min(prevStageQty, pointedInStage);
                 const qtyStayingInStage = Math.max(0, prevStageQty - qtyMovingToNext);
 
@@ -1252,7 +1282,7 @@
 
             allOps.forEach(op => {
                 const totalQtyAll = parseInt(op.OP_QUANTIDADE) || parseInt(op.QUANTIDADE_PPR) || 0;
-                const statusList = getOpStages(op.OP_PCS, totalQtyAll, op.OP_EMISSAO || op.DATA_EMISSAO_PEDIDO);
+                const statusList = getOpStages(op.OP_PCS, totalQtyAll, op.OP_EMISSAO || op.DATA_EMISSAO_PEDIDO, op.ROTEIRO_PRODUCAO);
 
                 statusList.forEach(status => {
                     const { stage, qty, statusText, isDelayed, statusColor } = status;
