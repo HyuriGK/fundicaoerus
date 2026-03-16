@@ -2564,6 +2564,7 @@
         let carteiraData = []; // Store carteira data for comparison
 
         async function loadDataFromServer() {
+            showLoadingScreen();
             try {
                 // 1. Fetch Custom Weights
                 try {
@@ -2571,10 +2572,19 @@
                     if (wRes.ok) customWeights = await wRes.json();
                 } catch (err) { console.warn('Falha ao carregar pesos customizados', err); }
 
-                // 2. Fetch Pedidos AND Carteira in parallel
+                // 2. Fetch Pedidos AND Carteira in parallel with timeout
+                const fetchWithTimeout = (url, options = {}, timeout = 30000) => {
+                    return Promise.race([
+                        fetch(url, options),
+                        new Promise((_, reject) =>
+                            setTimeout(() => reject(new Error(`Timeout: ${url}`)), timeout)
+                        )
+                    ]);
+                };
+
                 const [resPedidos, resCarteira] = await Promise.all([
-                    fetch('/api/pedidos-sync'),
-                    fetch('/api/carteira')
+                    fetchWithTimeout('/api/pedidos-sync'),
+                    fetchWithTimeout('/api/carteira')
                 ]);
 
                 if (!resPedidos.ok) throw new Error('Erro na API Pedidos');
