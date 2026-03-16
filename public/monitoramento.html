@@ -1115,7 +1115,7 @@
             }
         }
 
-        function getOpStage(opNumber, totalQty) {
+        function getOpStages(opNumber, totalQty, emissionDate) {
             const opPoints = pointingSummary[opNumber] || {};
 
             // Map raw sector pointings to our groups
@@ -1135,33 +1135,47 @@
                 }
             });
 
-            // Logic: The current stage is the FIRST stage in order that hasn't reached totalQty
-            let currentStage = orderedStages[0];
-            for (const stage of orderedStages) {
-                if (groupStatus[stage].qty < totalQty) {
-                    currentStage = stage;
-                    break;
-                }
-                // If it finished the last stage (Expedicao), stay in Expedicao but maybe handle differently?
-                // For now, if all are finished, it stays in the last stage until faturado.
-                currentStage = stage;
-            }
-
-            // Calculate days in stage
-            // If in stage index N, use the lastDate of stage N-1 as "entry date"
-            const stageIdx = orderedStages.indexOf(currentStage);
-            let entryDate = null;
-            if (stageIdx > 0) {
-                entryDate = groupStatus[orderedStages[stageIdx - 1]].lastDate;
-            }
-
-            // Fallback to today if no pointing yet
+            const activeStages = [];
             const now = toLocalDate(new Date());
-            const calcDate = entryDate ? toLocalDate(entryDate) : toLocalDate(new Date(new Date().setDate(new Date().getDate() - 1)));
+            
+            // First stage baseline is totalQty and emissionDate
+            let prevStageQty = totalQty;
+            let prevStageLastDate = emissionDate ? toLocalDate(emissionDate) : null;
 
-            const diffDays = Math.abs(getBusinessDaysDiff(now, calcDate));
+            for (let i = 0; i < orderedStages.length; i++) {
+                const stage = orderedStages[i];
+                const pointedInStage = groupStatus[stage].qty;
+                const qtyMovingToNext = Math.min(prevStageQty, pointedInStage);
+                const qtyStayingInStage = Math.max(0, prevStageQty - qtyMovingToNext);
 
-            return { stage: currentStage, days: diffDays };
+                if (qtyStayingInStage > 0.001) {
+                    const entryDate = prevStageLastDate || toLocalDate(new Date(new Date().setDate(new Date().getDate() - 1)));
+                    const diffDays = Math.abs(getBusinessDaysDiff(now, entryDate));
+                    activeStages.push({
+                        stage: stage,
+                        qty: qtyStayingInStage,
+                        days: diffDays
+                    });
+                }
+
+                // Prepare for next stage
+                prevStageQty = qtyMovingToNext;
+                prevStageLastDate = groupStatus[stage].lastDate;
+            }
+
+            // Special Case: If everything is pointed in the last stage, keep it in the last stage
+            if (activeStages.length === 0 && prevStageQty > 0) {
+                const lastStage = orderedStages[orderedStages.length - 1];
+                const entryDate = prevStageLastDate || toLocalDate(new Date(new Date().setDate(new Date().getDate() - 1)));
+                const diffDays = Math.abs(getBusinessDaysDiff(now, entryDate));
+                activeStages.push({
+                    stage: lastStage,
+                    qty: prevStageQty,
+                    days: diffDays
+                });
+            }
+
+            return activeStages;
         }
 
         function renderBoard() {
@@ -1177,67 +1191,73 @@
             orderedStages.forEach(s => counts[s] = 0);
 
             allOps.forEach(op => {
-                const totalQty = parseInt(op.OP_QUANTIDADE) || parseInt(op.QUANTIDADE_PPR) || 0;
-                const { stage, days } = getOpStage(op.OP_PCS, totalQty);
+                const totalQtyAll = parseInt(op.OP_QUANTIDADE) || parseInt(op.QUANTIDADE_PPR) || 0;
+                const statusList = getOpStages(op.OP_PCS, totalQtyAll, op.OP_EMISSAO || op.DATA_EMISSAO_PEDIDO);
 
-                const columnKey = configKeyMap[stage];
-                const list = document.getElementById(`list-${columnKey}`);
-                if (!list) return;
+                statusList.forEach(status => {
+                    const { stage, qty, days } = status;
+                    const columnKey = configKeyMap[stage];
+                    const list = document.getElementById(`list-${columnKey}`);
+                    if (!list) return;
 
-                // SEARCH LOGIC
-                const searchInput = document.getElementById(`search-${columnKey}`);
-                const searchTerm = searchInput ? searchInput.value.toLowerCase().trim() : '';
+                    // SEARCH LOGIC
+                    const searchInput = document.getElementById(`search-${columnKey}`);
+                    const searchTerm = searchInput ? searchInput.value.toLowerCase().trim() : '';
 
-                if (searchTerm) {
-                    const opNum = String(op.OP_PCS || '').toLowerCase();
-                    const prodCode = String(op.PRODUTO_PPR || '').toLowerCase();
-                    const prodDesc = String(op.NOME_PRODUTO_PPR || '').toLowerCase();
-                    const client = String(op.NOME_CLIENTE || '').toLowerCase();
+                    if (searchTerm) {
+                        const opNum = String(op.OP_PCS || '').toLowerCase();
+                        const prodCode = String(op.PRODUTO_PPR || '').toLowerCase();
+                        const prodDesc = String(op.NOME_PRODUTO_PPR || '').toLowerCase();
+                        const client = String(op.NOME_CLIENTE || '').toLowerCase();
 
-                    const matches = opNum.includes(searchTerm) ||
-                        prodCode.includes(searchTerm) ||
-                        prodDesc.includes(searchTerm) ||
-                        client.includes(searchTerm);
+                        const matches = opNum.includes(searchTerm) ||
+                            prodCode.includes(searchTerm) ||
+                            prodDesc.includes(searchTerm) ||
+                            client.includes(searchTerm);
 
-                    if (!matches) return;
-                }
+                        if (!matches) return;
+                    }
 
-                counts[stage]++;
+                    counts[stage]++;
 
-                const limit = leadTimes[columnKey] || 0;
-                const isDelayed = days > limit;
-                let timeText = `${days} ${days === 1 ? 'dia' : 'dias'}`;
+                    const limit = leadTimes[columnKey] || 0;
+                    const isDelayed = days > limit;
+                    let timeText = `${days} ${days === 1 ? 'dia' : 'dias'}`;
 
-                const prodCode = op.PRODUTO_PPR || '';
-                const prodName = op.NOME_PRODUTO_PPR || '';
-                const prodMat = op.NOME_MATERIAL ? ` - ${op.NOME_MATERIAL}` : '';
-                let fullDesc = `${prodCode} - ${prodName}${prodMat}`;
+                    const prodCode = op.PRODUTO_PPR || '';
+                    const prodName = op.NOME_PRODUTO_PPR || '';
+                    const prodMat = op.NOME_MATERIAL ? ` - ${op.NOME_MATERIAL}` : '';
+                    let fullDesc = `${prodCode} - ${prodName}${prodMat}`;
 
-                // Truncate to 50 characters
-                if (fullDesc.length > 50) {
-                    fullDesc = fullDesc.substring(0, 47) + '...';
-                }
+                    // Truncate to 50 characters
+                    if (fullDesc.length > 50) {
+                        fullDesc = fullDesc.substring(0, 47) + '...';
+                    }
 
-                const card = document.createElement('div');
-                card.className = `op-card ${isDelayed ? 'delayed' : ''}`;
-                card.innerHTML = `
-                    <div class="card-header">
-                        <span class="op-number">OP ${op.OP_PCS}</span>
-                        <span class="client-name">${(op.NOME_CLIENTE || 'N/A').split(' ')[0]}</span>
-                    </div>
-                    <div class="product-desc" title="${fullDesc}">${fullDesc}</div>
-                    <div class="card-footer">
-                        <span class="op-qty">Qtd: ${totalQty} pçs</span>
-                        <span class="days-counter ${isDelayed ? 'danger' : ''}">
-                            <i class="fa-solid fa-clock" ${isDelayed ? 'title="Atrasado"' : ''}></i> ${timeText}
-                        </span>
-                    </div>
-                `;
+                    const isPartial = qty < totalQtyAll;
+                    const qtyDisplay = isPartial ? `${Math.round(qty)} de ${totalQtyAll}` : `${totalQtyAll}`;
 
-                // Add click event to show details
-                card.onclick = () => showOPDetails(op);
+                    const card = document.createElement('div');
+                    card.className = `op-card ${isDelayed ? 'delayed' : ''}`;
+                    card.innerHTML = `
+                        <div class="card-header">
+                            <span class="op-number">OP ${op.OP_PCS}</span>
+                            <span class="client-name">${(op.NOME_CLIENTE || 'N/A').split(' ')[0]}</span>
+                        </div>
+                        <div class="product-desc" title="${fullDesc}">${fullDesc}</div>
+                        <div class="card-footer">
+                            <span class="op-qty" style="${isPartial ? 'color: var(--color-primary); font-weight: 700;' : ''}">Qtd: ${qtyDisplay} pçs</span>
+                            <span class="days-counter ${isDelayed ? 'danger' : ''}">
+                                <i class="fa-solid fa-clock" ${isDelayed ? 'title="Atrasado"' : ''}></i> ${timeText}
+                            </span>
+                        </div>
+                    `;
 
-                list.appendChild(card);
+                    // Add click event to show details
+                    card.onclick = () => showOPDetails(op);
+
+                    list.appendChild(card);
+                });
             });
 
             // Update counts
