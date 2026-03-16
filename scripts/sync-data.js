@@ -171,7 +171,12 @@ async function syncData() {
                     AND (EXTRACT(YEAR FROM PCP.DATA_PCP) IN (2025, 2026) OR PCP.DATA_PCP IS NULL)
                 ) AS OP_ENTREGA,
                 (
-                    SELECT SUM(PS.QUANTIDADE_PCS)
+                    SELECT SUM(
+                        MAXVALUE(
+                            COALESCE((SELECT SUM(PA.QUANTIDADE_PPA) FROM PRODUCAO_APONTADA PA WHERE PA.PCP_CODIGO_PPA = PP.PCP_CODIGO_PCPR AND PA.PCP_EMPRESA_PPA = PP.PCP_EMPRESA_PCPR AND PA.SETOR_PPA IN (1, 10, 11, 12)), 0),
+                            IIF(PS.STATUS_PCS NOT IN ('C', 'N'), PS.QUANTIDADE_PCS, 0)
+                        )
+                    )
                     FROM PRODUCAO_PEDIDO PP
                     JOIN PRODUCAO_SETOR PS ON PS.CODIGO_PCS = PP.PCP_CODIGO_PCPR AND PS.EMPRESA_PCS = PP.PCP_EMPRESA_PCPR
                     WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR
@@ -179,10 +184,14 @@ async function syncData() {
                         AND PP.PPR_ITEM_PCPR = P.ITEM_PPR
                         AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR
                         AND PS.SETOR_PCS IN (1, 10, 11, 12)
-                        AND PS.STATUS_PCS NOT IN ('C', 'N')
                 ) AS QTY_MOLDADA,
                 (
-                    SELECT SUM(PS.QUANTIDADE_PCS)
+                    SELECT SUM(
+                        MAXVALUE(
+                            COALESCE((SELECT SUM(PA.QUANTIDADE_PPA) FROM PRODUCAO_APONTADA PA WHERE PA.PCP_CODIGO_PPA = PP.PCP_CODIGO_PCPR AND PA.PCP_EMPRESA_PPA = PP.PCP_EMPRESA_PCPR AND PA.SETOR_PPA IN (2, 20)), 0),
+                            IIF(PS.STATUS_PCS NOT IN ('C', 'N'), PS.QUANTIDADE_PCS, 0)
+                        )
+                    )
                     FROM PRODUCAO_PEDIDO PP
                     JOIN PRODUCAO_SETOR PS ON PS.CODIGO_PCS = PP.PCP_CODIGO_PCPR AND PS.EMPRESA_PCS = PP.PCP_EMPRESA_PCPR
                     WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR
@@ -190,10 +199,14 @@ async function syncData() {
                         AND PP.PPR_ITEM_PCPR = P.ITEM_PPR
                         AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR
                         AND PS.SETOR_PCS IN (2, 20)
-                        AND PS.STATUS_PCS NOT IN ('C', 'N')
                 ) AS QTY_FUSAO,
                 (
-                    SELECT SUM(PS.QUANTIDADE_PCS)
+                    SELECT SUM(
+                        MAXVALUE(
+                            COALESCE((SELECT SUM(PA.QUANTIDADE_PPA) FROM PRODUCAO_APONTADA PA WHERE PA.PCP_CODIGO_PPA = PP.PCP_CODIGO_PCPR AND PA.PCP_EMPRESA_PPA = PP.PCP_EMPRESA_PCPR AND PA.SETOR_PPA IN (3, 30, 33, 113)), 0),
+                            IIF(PS.STATUS_PCS NOT IN ('C', 'N'), PS.QUANTIDADE_PCS, 0)
+                        )
+                    )
                     FROM PRODUCAO_PEDIDO PP
                     JOIN PRODUCAO_SETOR PS ON PS.CODIGO_PCS = PP.PCP_CODIGO_PCPR AND PS.EMPRESA_PCS = PP.PCP_EMPRESA_PCPR
                     WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR
@@ -201,10 +214,14 @@ async function syncData() {
                         AND PP.PPR_ITEM_PCPR = P.ITEM_PPR
                         AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR
                         AND PS.SETOR_PCS IN (3, 30, 33, 113)
-                        AND PS.STATUS_PCS NOT IN ('C', 'N')
                 ) AS QTY_ACABAMENTO,
                 (
-                    SELECT SUM(PS.QUANTIDADE_PCS)
+                    SELECT SUM(
+                        MAXVALUE(
+                            COALESCE((SELECT SUM(PA.QUANTIDADE_PPA) FROM PRODUCAO_APONTADA PA WHERE PA.PCP_CODIGO_PPA = PP.PCP_CODIGO_PCPR AND PA.PCP_EMPRESA_PPA = PP.PCP_EMPRESA_PCPR AND PA.SETOR_PPA IN (4, 7, 8, 9, 31, 40, 61)), 0),
+                            IIF(PS.STATUS_PCS NOT IN ('C', 'N'), PS.QUANTIDADE_PCS, 0)
+                        )
+                    )
                     FROM PRODUCAO_PEDIDO PP
                     JOIN PRODUCAO_SETOR PS ON PS.CODIGO_PCS = PP.PCP_CODIGO_PCPR AND PS.EMPRESA_PCS = PP.PCP_EMPRESA_PCPR
                     WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR
@@ -212,10 +229,14 @@ async function syncData() {
                         AND PP.PPR_ITEM_PCPR = P.ITEM_PPR
                         AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR
                         AND PS.SETOR_PCS IN (4, 7, 8, 9, 31, 40, 61)
-                        AND PS.STATUS_PCS NOT IN ('C', 'N')
                 ) AS QTY_TT,
                 (
-                    SELECT SUM(PS.QUANTIDADE_PCS)
+                    SELECT SUM(
+                        MAXVALUE(
+                            COALESCE((SELECT SUM(PA.QUANTIDADE_PPA) FROM PRODUCAO_APONTADA PA WHERE PA.PCP_CODIGO_PPA = PP.PCP_CODIGO_PCPR AND PA.PCP_EMPRESA_PPA = PP.PCP_EMPRESA_PCPR AND PA.SETOR_PPA IN (50, 51, 104, 105)), 0),
+                            IIF(PS.STATUS_PCS NOT IN ('C', 'N'), PS.QUANTIDADE_PCS, 0)
+                        )
+                    )
                     FROM PRODUCAO_PEDIDO PP
                     JOIN PRODUCAO_SETOR PS ON PS.CODIGO_PCS = PP.PCP_CODIGO_PCPR AND PS.EMPRESA_PCS = PP.PCP_EMPRESA_PCPR
                     WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR
@@ -223,10 +244,14 @@ async function syncData() {
                         AND PP.PPR_ITEM_PCPR = P.ITEM_PPR
                         AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR
                         AND PS.SETOR_PCS IN (50, 51, 104, 105)
-                        AND PS.STATUS_PCS NOT IN ('C', 'N')
                 ) AS QTY_USINAGEM,
                 (
-                    SELECT SUM(PS.QUANTIDADE_PCS)
+                    SELECT SUM(
+                        MAXVALUE(
+                            COALESCE((SELECT SUM(PA.QUANTIDADE_PPA) FROM PRODUCAO_APONTADA PA WHERE PA.PCP_CODIGO_PPA = PP.PCP_CODIGO_PCPR AND PA.PCP_EMPRESA_PPA = PP.PCP_EMPRESA_PCPR AND PA.SETOR_PPA IN (6, 60)), 0),
+                            IIF(PS.STATUS_PCS NOT IN ('C', 'N'), PS.QUANTIDADE_PCS, 0)
+                        )
+                    )
                     FROM PRODUCAO_PEDIDO PP
                     JOIN PRODUCAO_SETOR PS ON PS.CODIGO_PCS = PP.PCP_CODIGO_PCPR AND PS.EMPRESA_PCS = PP.PCP_EMPRESA_PCPR
                     WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR
@@ -234,10 +259,14 @@ async function syncData() {
                         AND PP.PPR_ITEM_PCPR = P.ITEM_PPR
                         AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR
                         AND PS.SETOR_PCS IN (6, 60)
-                        AND PS.STATUS_PCS NOT IN ('C', 'N')
                 ) AS QTY_QUALIDADE,
                 (
-                    SELECT SUM(PS.QUANTIDADE_PCS)
+                    SELECT SUM(
+                        MAXVALUE(
+                            COALESCE((SELECT SUM(PA.QUANTIDADE_PPA) FROM PRODUCAO_APONTADA PA WHERE PA.PCP_CODIGO_PPA = PP.PCP_CODIGO_PCPR AND PA.PCP_EMPRESA_PPA = PP.PCP_EMPRESA_PCPR AND PA.SETOR_PPA IN (100)), 0),
+                            IIF(PS.STATUS_PCS NOT IN ('C', 'N'), PS.QUANTIDADE_PCS, 0)
+                        )
+                    )
                     FROM PRODUCAO_PEDIDO PP
                     JOIN PRODUCAO_SETOR PS ON PS.CODIGO_PCS = PP.PCP_CODIGO_PCPR AND PS.EMPRESA_PCS = PP.PCP_EMPRESA_PCPR
                     WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR
@@ -245,10 +274,14 @@ async function syncData() {
                         AND PP.PPR_ITEM_PCPR = P.ITEM_PPR
                         AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR
                         AND PS.SETOR_PCS IN (100)
-                        AND PS.STATUS_PCS NOT IN ('C', 'N')
                 ) AS QTY_EXPEDICAO,
                 (
-                    SELECT SUM(PS.QUANTIDADE_PCS)
+                    SELECT SUM(
+                        MAXVALUE(
+                            COALESCE((SELECT SUM(PA.QUANTIDADE_PPA) FROM PRODUCAO_APONTADA PA WHERE PA.PCP_CODIGO_PPA = PP.PCP_CODIGO_PCPR AND PA.PCP_EMPRESA_PPA = PP.PCP_EMPRESA_PCPR AND PA.SETOR_PPA IN (101)), 0),
+                            IIF(PS.STATUS_PCS NOT IN ('C', 'N'), PS.QUANTIDADE_PCS, 0)
+                        )
+                    )
                     FROM PRODUCAO_PEDIDO PP
                     JOIN PRODUCAO_SETOR PS ON PS.CODIGO_PCS = PP.PCP_CODIGO_PCPR AND PS.EMPRESA_PCS = PP.PCP_EMPRESA_PCPR
                     WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR
@@ -256,7 +289,6 @@ async function syncData() {
                         AND PP.PPR_ITEM_PCPR = P.ITEM_PPR
                         AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR
                         AND PS.SETOR_PCS IN (101)
-                        AND PS.STATUS_PCS NOT IN ('C', 'N')
                 ) AS QTY_FATURAMENTO
             FROM PEDIDO_PRODUTO P
             LEFT JOIN PEDIDO_PRODUTO_ENTREGA E 

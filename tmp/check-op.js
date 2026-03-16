@@ -1,7 +1,7 @@
 const pool = require('../lib/db');
 (async () => {
     try {
-        const res = await pool.query("SELECT data FROM firebird_sync_pedidos WHERE (data->>'OP_PCS') = '3951' OR (data->>'CODIGO_PPR') = '3951' LIMIT 1");
+        const res = await pool.query("SELECT data FROM firebird_sync_pedidos WHERE (data->>'OP_PCS') = '3945' OR (data->>'CODIGO_PPR') = '3945' LIMIT 1");
         if (res.rows.length > 0) {
             console.log(JSON.stringify(res.rows[0].data, null, 2));
         } else {
