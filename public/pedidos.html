@@ -1107,54 +1107,6 @@
             color: var(--color-primary);
             font-size: 1.1rem;
         }
-
-        /* Sessões agrupadas por etapa (Aguardando / Moldado / Fusão em diante) */
-        .stage-groups-row {
-            display: flex;
-            gap: 12px;
-            margin: 18px 0 28px;
-        }
-
-        .stage-group-card {
-            flex: 1;
-            padding: 18px 18px;
-            border-radius: 14px;
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.12);
-            cursor: pointer;
-            transition: transform 0.2s, background 0.2s;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        .stage-group-card:hover {
-            transform: translateY(-2px);
-            background: rgba(255, 255, 255, 0.08);
-        }
-
-        .stage-group-title {
-            font-weight: 700;
-            color: #fff;
-            font-size: 0.9rem;
-        }
-
-        .stage-group-metric {
-            display: flex;
-            align-items: flex-end;
-            justify-content: space-between;
-            gap: 10px;
-        }
-
-        .stage-group-value {
-            font-size: 1.5rem;
-            font-weight: 700;
-        }
-
-        .stage-group-pct {
-            font-size: 0.9rem;
-            color: var(--text-muted);
-        }
     </style>
 </head>
 
@@ -1263,31 +1215,6 @@
                         data-tooltip="Qualidade" onclick="filterByStage('qualidade')"></div>
                     <div id="barExpedicao" class="bar-segment segment-expedicao" style="width: 0%"
                         data-tooltip="Expedição" onclick="filterByStage('expedicao')"></div>
-                </div>
-            </div>
-
-            <!-- SESSÕES: Agrupamento por etapa -->
-            <div class="stage-groups-row">
-                <div class="stage-group-card" onclick="filterByStage('aguardando')">
-                    <div class="stage-group-title">Aguardando Moldagem</div>
-                    <div class="stage-group-metric">
-                        <div class="stage-group-value" id="stageAguardandoWeight">0,00 kg</div>
-                        <div class="stage-group-pct" id="stageAguardandoPct">0%</div>
-                    </div>
-                </div>
-                <div class="stage-group-card" onclick="filterByStage('moldagem')">
-                    <div class="stage-group-title">Apenas Moldado</div>
-                    <div class="stage-group-metric">
-                        <div class="stage-group-value" id="stageMoldadoWeight">0,00 kg</div>
-                        <div class="stage-group-pct" id="stageMoldadoPct">0%</div>
-                    </div>
-                </div>
-                <div class="stage-group-card" onclick="filterByStage('fusao_em_diante')">
-                    <div class="stage-group-title">Fusão em diante</div>
-                    <div class="stage-group-metric">
-                        <div class="stage-group-value" id="stageFusaoWeight">0,00 kg</div>
-                        <div class="stage-group-pct" id="stageFusaoPct">0%</div>
-                    </div>
                 </div>
             </div>
 
@@ -1431,7 +1358,7 @@
                             <th style="width: 6%;">PEDIDO</th>
                             <th style="width: 7%;">ENTREGA</th>
                             <th style="width: 14%;">CLIENTE</th>
-                            <th style="width: 7%; text-align: center;">CÓDIGO</th>
+                            <th style="width: 7%;">CÓDIGO</th>
                             <th style="width: 18%;">PRODUTO</th>
                             <th style="width: 4%;">SALDO</th>
                             <th style="width: 7%;">PESO UN</th>
@@ -2564,7 +2491,6 @@
         let carteiraData = []; // Store carteira data for comparison
 
         async function loadDataFromServer() {
-            showLoadingScreen();
             try {
                 // 1. Fetch Custom Weights
                 try {
@@ -2572,19 +2498,10 @@
                     if (wRes.ok) customWeights = await wRes.json();
                 } catch (err) { console.warn('Falha ao carregar pesos customizados', err); }
 
-                // 2. Fetch Pedidos AND Carteira in parallel with timeout
-                const fetchWithTimeout = (url, options = {}, timeout = 30000) => {
-                    return Promise.race([
-                        fetch(url, options),
-                        new Promise((_, reject) =>
-                            setTimeout(() => reject(new Error(`Timeout: ${url}`)), timeout)
-                        )
-                    ]);
-                };
-
+                // 2. Fetch Pedidos AND Carteira in parallel
                 const [resPedidos, resCarteira] = await Promise.all([
-                    fetchWithTimeout('/api/pedidos-sync'),
-                    fetchWithTimeout('/api/carteira')
+                    fetch('/api/pedidos-sync'),
+                    fetch('/api/carteira')
                 ]);
 
                 if (!resPedidos.ok) throw new Error('Erro na API Pedidos');
@@ -2918,24 +2835,15 @@
             updateStageCard('kpiQualidade', kpiQualidade, totalWeight);
             updateStageCard('kpiExpedicao', kpiExpedicao, totalWeight);
 
-                    // 3. Sessões agrupadas (Aguardando / Moldado / Fusão em diante)
-                    const kpiFusaoEmDiante = {
-                        qtd: kpiFusao.qtd + kpiAcabamento.qtd + kpiTT.qtd + kpiUsinagem.qtd + kpiQualidade.qtd + kpiExpedicao.qtd,
-                        peso: kpiFusao.peso + kpiAcabamento.peso + kpiTT.peso + kpiUsinagem.peso + kpiQualidade.peso + kpiExpedicao.peso,
-                        valor: kpiFusao.valor + kpiAcabamento.valor + kpiTT.valor + kpiUsinagem.valor + kpiQualidade.valor + kpiExpedicao.valor
-                    };
+            // 4. Footer Avg Weight
+            if (document.getElementById('avgWeightFooter')) document.getElementById('avgWeightFooter').innerText = formatNumber(avgWeight);
+        }
 
-                    const updateStageGroup = (weightId, pctId, data) => {
-                        const pct = totalWeight > 0 ? (data.peso / totalWeight) * 100 : 0;
-                        if (document.getElementById(weightId)) document.getElementById(weightId).innerText = `${formatNumber(data.peso)} kg`;
-                        if (document.getElementById(pctId)) document.getElementById(pctId).innerText = `${pct.toFixed(1)}%`;
-                    };
-
-                    updateStageGroup('stageAguardandoWeight', 'stageAguardandoPct', kpiAguardando);
-                    updateStageGroup('stageMoldadoWeight', 'stageMoldadoPct', kpiMoldagem);
-                    updateStageGroup('stageFusaoWeight', 'stageFusaoPct', kpiFusaoEmDiante);
-
-                }
+        function updateTotals(list) {
+            // Legacy function kept if called elsewhere, but we moved logic to calculateKPIs
+            // to avoid double iteration.
+            calculateKPIs(list);
+        }
 
         function updateStageCard(idPrefix, data, totalWeight) {
             const map = {
@@ -3342,7 +3250,6 @@
                     if (s === 'aguardando') return qAguardando > 0.01;
                     if (s === 'moldagem') return qMoldada > 0.01;
                     if (s === 'fusao') return qFusao > 0.01;
-                    if (s === 'fusao_em_diante') return (qFusao + qAcabamento + qTT + qUsinagem + qQualidade + qExpedicao) > 0.01;
                     if (s === 'acabamento') return qAcabamento > 0.01;
                     if (s === 'tt') return qTT > 0.01;
                     if (s === 'usinagem') return qUsinagem > 0.01;
