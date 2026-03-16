@@ -189,9 +189,75 @@ async function syncData() {
                         AND PP.PPR_ANO_PCPR = P.ANO_PPR
                         AND PP.PPR_ITEM_PCPR = P.ITEM_PPR
                         AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR
-                        AND PS.SETOR_PCS NOT IN (1, 10, 11, 12, 101, 110, 111, 112, 99)
+                        AND PS.SETOR_PCS IN (2, 20)
                         AND PS.STATUS_PCS NOT IN ('T', 'C')
-                ) AS QTY_FUNDIDA
+                ) AS QTY_FUSAO,
+                (
+                    SELECT SUM(PS.QUANTIDADE_PCS)
+                    FROM PRODUCAO_PEDIDO PP
+                    JOIN PRODUCAO_SETOR PS ON PS.CODIGO_PCS = PP.PCP_CODIGO_PCPR AND PS.EMPRESA_PCS = PP.PCP_EMPRESA_PCPR
+                    WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR
+                        AND PP.PPR_ANO_PCPR = P.ANO_PPR
+                        AND PP.PPR_ITEM_PCPR = P.ITEM_PPR
+                        AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR
+                        AND PS.SETOR_PCS IN (3, 30, 33, 113)
+                        AND PS.STATUS_PCS NOT IN ('T', 'C')
+                ) AS QTY_ACABAMENTO,
+                (
+                    SELECT SUM(PS.QUANTIDADE_PCS)
+                    FROM PRODUCAO_PEDIDO PP
+                    JOIN PRODUCAO_SETOR PS ON PS.CODIGO_PCS = PP.PCP_CODIGO_PCPR AND PS.EMPRESA_PCS = PP.PCP_EMPRESA_PCPR
+                    WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR
+                        AND PP.PPR_ANO_PCPR = P.ANO_PPR
+                        AND PP.PPR_ITEM_PCPR = P.ITEM_PPR
+                        AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR
+                        AND PS.SETOR_PCS IN (4, 7, 8, 9, 31, 40, 61)
+                        AND PS.STATUS_PCS NOT IN ('T', 'C')
+                ) AS QTY_TT,
+                (
+                    SELECT SUM(PS.QUANTIDADE_PCS)
+                    FROM PRODUCAO_PEDIDO PP
+                    JOIN PRODUCAO_SETOR PS ON PS.CODIGO_PCS = PP.PCP_CODIGO_PCPR AND PS.EMPRESA_PCS = PP.PCP_EMPRESA_PCPR
+                    WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR
+                        AND PP.PPR_ANO_PCPR = P.ANO_PPR
+                        AND PP.PPR_ITEM_PCPR = P.ITEM_PPR
+                        AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR
+                        AND PS.SETOR_PCS IN (50, 51, 104, 105)
+                        AND PS.STATUS_PCS NOT IN ('T', 'C')
+                ) AS QTY_USINAGEM,
+                (
+                    SELECT SUM(PS.QUANTIDADE_PCS)
+                    FROM PRODUCAO_PEDIDO PP
+                    JOIN PRODUCAO_SETOR PS ON PS.CODIGO_PCS = PP.PCP_CODIGO_PCPR AND PS.EMPRESA_PCS = PP.PCP_EMPRESA_PCPR
+                    WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR
+                        AND PP.PPR_ANO_PCPR = P.ANO_PPR
+                        AND PP.PPR_ITEM_PCPR = P.ITEM_PPR
+                        AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR
+                        AND PS.SETOR_PCS IN (6, 60)
+                        AND PS.STATUS_PCS NOT IN ('T', 'C')
+                ) AS QTY_QUALIDADE,
+                (
+                    SELECT SUM(PS.QUANTIDADE_PCS)
+                    FROM PRODUCAO_PEDIDO PP
+                    JOIN PRODUCAO_SETOR PS ON PS.CODIGO_PCS = PP.PCP_CODIGO_PCPR AND PS.EMPRESA_PCS = PP.PCP_EMPRESA_PCPR
+                    WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR
+                        AND PP.PPR_ANO_PCPR = P.ANO_PPR
+                        AND PP.PPR_ITEM_PCPR = P.ITEM_PPR
+                        AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR
+                        AND PS.SETOR_PCS IN (100)
+                        AND PS.STATUS_PCS NOT IN ('T', 'C')
+                ) AS QTY_EXPEDICAO,
+                (
+                    SELECT SUM(PS.QUANTIDADE_PCS)
+                    FROM PRODUCAO_PEDIDO PP
+                    JOIN PRODUCAO_SETOR PS ON PS.CODIGO_PCS = PP.PCP_CODIGO_PCPR AND PS.EMPRESA_PCS = PP.PCP_EMPRESA_PCPR
+                    WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR
+                        AND PP.PPR_ANO_PCPR = P.ANO_PPR
+                        AND PP.PPR_ITEM_PCPR = P.ITEM_PPR
+                        AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR
+                        AND PS.SETOR_PCS IN (101)
+                        AND PS.STATUS_PCS NOT IN ('T', 'C')
+                ) AS QTY_FATURAMENTO
             FROM PEDIDO_PRODUTO P
             LEFT JOIN PEDIDO_PRODUTO_ENTREGA E 
                 ON P.CODIGO_PPR = E.PPR_CODIGO_PETR 

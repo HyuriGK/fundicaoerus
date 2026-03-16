@@ -531,15 +531,39 @@
         }
 
         .segment-aguardando {
-            background: linear-gradient(90deg, #eab308, #ca8a04);
+            background: linear-gradient(90deg, #ca8a04, #a16207); /* Amber 600-800 */
         }
 
         .segment-moldado {
-            background: linear-gradient(90deg, #3b82f6, #2563eb);
+            background: linear-gradient(90deg, #3b82f6, #1d4ed8); /* Blue 500-700 */
         }
 
-        .segment-fundido {
-            background: linear-gradient(90deg, #10b981, #059669);
+        .segment-fusao {
+            background: linear-gradient(90deg, #06b6d4, #0891b2); /* Cyan 500-600 */
+        }
+
+        .segment-acabamento {
+            background: linear-gradient(90deg, #10b981, #059669); /* Emerald 500-600 */
+        }
+
+        .segment-tt {
+            background: linear-gradient(90deg, #f59e0b, #d97706); /* Orange 500-600 */
+        }
+
+        .segment-usinagem {
+            background: linear-gradient(90deg, #a855f7, #7e22ce); /* Purple 500-700 */
+        }
+
+        .segment-qualidade {
+            background: linear-gradient(90deg, #ec4899, #be185d); /* Pink 500-700 */
+        }
+
+        .segment-expedicao {
+            background: linear-gradient(90deg, #6366f1, #4338ca); /* Indigo 500-700 */
+        }
+
+        .segment-faturamento {
+            background: linear-gradient(90deg, #ffffff, #d1d5db); /* White-Zinc 300 */
         }
 
         /* Dynamic Floating Tooltip */
@@ -1179,9 +1203,20 @@
                         onclick="filterByStage('aguardando')"></div>
                     <div id="barMoldado" class="bar-segment segment-moldado" style="width: 0%"
                         data-tooltip="Apenas Moldado" onclick="filterByStage('moldagem')"></div>
-                    <div id="barFundido" class="bar-segment segment-fundido"
-                        style="width: 0%;" data-tooltip="Fundido"
-                        onclick="filterByStage('fundido')"></div>
+                    <div id="barFusao" class="bar-segment segment-fusao" style="width: 0%"
+                        data-tooltip="Fusão" onclick="filterByStage('fusao')"></div>
+                    <div id="barAcabamento" class="bar-segment segment-acabamento" style="width: 0%"
+                        data-tooltip="Acabamento" onclick="filterByStage('acabamento')"></div>
+                    <div id="barTT" class="bar-segment segment-tt" style="width: 0%"
+                        data-tooltip="Tratamento Térmico" onclick="filterByStage('tt')"></div>
+                    <div id="barUsinagem" class="bar-segment segment-usinagem" style="width: 0%"
+                        data-tooltip="Usinagem" onclick="filterByStage('usinagem')"></div>
+                    <div id="barQualidade" class="bar-segment segment-qualidade" style="width: 0%"
+                        data-tooltip="Qualidade" onclick="filterByStage('qualidade')"></div>
+                    <div id="barExpedicao" class="bar-segment segment-expedicao" style="width: 0%"
+                        data-tooltip="Expedição" onclick="filterByStage('expedicao')"></div>
+                    <div id="barFaturamento" class="bar-segment segment-faturamento" style="width: 0%"
+                        data-tooltip="Faturamento" onclick="filterByStage('faturamento')"></div>
                 </div>
             </div>
 
@@ -2675,29 +2710,27 @@
             let totalQty = 0;
             let releasedWeight = 0; // Com data de entrega
 
-            // Stage KPIs
+            // Stage KPIs (Now detailed by sector)
             let kpiAguardando = { qtd: 0, peso: 0, valor: 0 };
             let kpiMoldagem = { qtd: 0, peso: 0, valor: 0 };
-            let kpiFundido = { qtd: 0, peso: 0, valor: 0 };
+            let kpiFusao = { qtd: 0, peso: 0, valor: 0 };
+            let kpiAcabamento = { qtd: 0, peso: 0, valor: 0 };
+            let kpiTT = { qtd: 0, peso: 0, valor: 0 };
+            let kpiUsinagem = { qtd: 0, peso: 0, valor: 0 };
+            let kpiQualidade = { qtd: 0, peso: 0, valor: 0 };
+            let kpiExpedicao = { qtd: 0, peso: 0, valor: 0 };
+            let kpiFaturamento = { qtd: 0, peso: 0, valor: 0 };
 
             list.forEach(item => {
-                // Use helper for weight to respect custom weights and unit logic
                 const itemTotalWeight = getCorrectedWeight(item);
-
-                // Saldo vs Original Logic (needed for Qty and Value)
                 const saldo = Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0;
                 const qtdOriginal = Number(item.QUANTIDADE_PPR) || 0;
                 const realQty = saldo > 0 ? saldo : qtdOriginal;
 
-                // Main Accumulators
                 totalWeight += itemTotalWeight;
 
-                // Recalculate Value based on custom weight if applicable
                 let unitPrice = parseFloat(item.VALOR_PPR || 0);
                 if (item.PRECO_KG && parseFloat(item.PRECO_KG) > 0 && customWeights[item.PRODUTO_PPR]) {
-                    // Check if we are using custom weight
-                    // getCorrectedWeight uses custom weight if present.
-                    // Calculate Unit Weight for this item
                     let unitW = realQty > 0 ? (itemTotalWeight / realQty) : 0;
                     unitPrice = parseFloat(item.PRECO_KG) * unitW;
                 }
@@ -2706,44 +2739,44 @@
                 totalValue += itemTotalValue;
                 totalQty += realQty;
 
-                // Released Info (Has Delivery Date)
                 const hasDate = item.ENTREGA_PETR || item.DATA_ENTREGA_PPR;
-                if (hasDate) {
-                    releasedWeight += itemTotalWeight;
-                }
+                if (hasDate) releasedWeight += itemTotalWeight;
 
-                // --- STAGE CATEGORIZATION (Refined Proportional) ---
+                // Sector Quantities from Sync
                 const targetTotalQty = Number(item.OP_QUANTIDADE) || realQty;
-                const rawFundida = Number(item.QTY_FUNDIDA) || 0;
-                const rawMoldada = Number(item.QTY_MOLDADA) || 0;
+                
+                // Hierarchical Logic: Advanced → Earlier
+                // We assume QTY_XX is cumulative of THAT stage and BEYOND? 
+                // No, based on Firebird queries, they are snapshots of that sector.
+                // But the dashboard wants a PROPORTIONAL progress view.
+                
+                const qFaturamento = Math.min(targetTotalQty, Number(item.QTY_FATURAMENTO) || 0);
+                const qExpedicao = Math.min(targetTotalQty - qFaturamento, Number(item.QTY_EXPEDICAO) || 0);
+                const qQualidade = Math.min(targetTotalQty - qFaturamento - qExpedicao, Number(item.QTY_QUALIDADE) || 0);
+                const qUsinagem = Math.min(targetTotalQty - qFaturamento - qExpedicao - qQualidade, Number(item.QTY_USINAGEM) || 0);
+                const qTT = Math.min(targetTotalQty - qFaturamento - qExpedicao - qQualidade - qUsinagem, Number(item.QTY_TT) || 0);
+                const qAcabamento = Math.min(targetTotalQty - qFaturamento - qExpedicao - qQualidade - qUsinagem - qTT, Number(item.QTY_ACABAMENTO) || 0);
+                const qFusao = Math.min(targetTotalQty - qFaturamento - qExpedicao - qQualidade - qUsinagem - qTT - qAcabamento, Number(item.QTY_FUSAO) || 0);
+                const qMoldada = Math.min(targetTotalQty - qFaturamento - qExpedicao - qQualidade - qUsinagem - qTT - qAcabamento - qFusao, Number(item.QTY_MOLDADA) || 0);
+                const qAguardando = Math.max(0, targetTotalQty - qFaturamento - qExpedicao - qQualidade - qUsinagem - qTT - qAcabamento - qFusao - qMoldada);
 
-                // Hierarchical Bucketing: Fundido → Moldado → Aguardando
-                const qFundida = Math.min(targetTotalQty, rawFundida);
-                const qTotalMoldadaReal = Math.max(qFundida, Math.min(targetTotalQty, rawMoldada));
+                // Helper to add proportional data
+                const addKpi = (kpi, q) => {
+                    const factor = targetTotalQty > 0 ? (q / targetTotalQty) : 0;
+                    kpi.qtd += q;
+                    kpi.peso += itemTotalWeight * factor;
+                    kpi.valor += itemTotalValue * factor;
+                };
 
-                const qApenasMoldada = qTotalMoldadaReal - qFundida;
-                const qAguardando = targetTotalQty - qTotalMoldadaReal;
-
-                // Proportional factors
-                const factorFundido = targetTotalQty > 0 ? (qFundida / targetTotalQty) : 0;
-                const factorMoldado = targetTotalQty > 0 ? (qApenasMoldada / targetTotalQty) : 0;
-                const factorAguardando = targetTotalQty > 0 ? (qAguardando / targetTotalQty) : 0;
-
-                if (qFundida > 0) {
-                    kpiFundido.qtd += qFundida;
-                    kpiFundido.peso += itemTotalWeight * factorFundido;
-                    kpiFundido.valor += itemTotalValue * factorFundido;
-                }
-                if (qApenasMoldada > 0) {
-                    kpiMoldagem.qtd += qApenasMoldada;
-                    kpiMoldagem.peso += itemTotalWeight * factorMoldado;
-                    kpiMoldagem.valor += itemTotalValue * factorMoldado;
-                }
-                if (qAguardando > 0) {
-                    kpiAguardando.qtd += qAguardando;
-                    kpiAguardando.peso += itemTotalWeight * factorAguardando;
-                    kpiAguardando.valor += itemTotalValue * factorAguardando;
-                }
+                addKpi(kpiFaturamento, qFaturamento);
+                addKpi(kpiExpedicao, qExpedicao);
+                addKpi(kpiQualidade, qQualidade);
+                addKpi(kpiUsinagem, qUsinagem);
+                addKpi(kpiTT, qTT);
+                addKpi(kpiAcabamento, qAcabamento);
+                addKpi(kpiFusao, qFusao);
+                addKpi(kpiMoldagem, qMoldada);
+                addKpi(kpiAguardando, qAguardando);
             });
 
             // "Blocked" Weight = Total - Released (Items without delivery date)
@@ -2784,7 +2817,13 @@
             // 3. Stage KPIs (New Cards) - with percentages
             updateStageCard('kpiAguardando', kpiAguardando, totalWeight);
             updateStageCard('kpiMoldagem', kpiMoldagem, totalWeight);
-            updateStageCard('kpiFundido', kpiFundido, totalWeight);
+            updateStageCard('kpiFusao', kpiFusao, totalWeight);
+            updateStageCard('kpiAcabamento', kpiAcabamento, totalWeight);
+            updateStageCard('kpiTT', kpiTT, totalWeight);
+            updateStageCard('kpiUsinagem', kpiUsinagem, totalWeight);
+            updateStageCard('kpiQualidade', kpiQualidade, totalWeight);
+            updateStageCard('kpiExpedicao', kpiExpedicao, totalWeight);
+            updateStageCard('kpiFaturamento', kpiFaturamento, totalWeight);
 
             // 4. Footer Avg Weight
             if (document.getElementById('avgWeightFooter')) document.getElementById('avgWeightFooter').innerText = formatNumber(avgWeight);
@@ -2797,31 +2836,32 @@
         }
 
         function updateStageCard(idPrefix, data, totalWeight) {
-            const barId = idPrefix === 'kpiAguardando' ? 'barAguardando' :
-                idPrefix === 'kpiMoldagem' ? 'barMoldado' :
-                    idPrefix === 'kpiFundido' ? 'barFundido' : null;
+            const map = {
+                'kpiAguardando': { barId: 'barAguardando', name: 'Aguardando Moldagem', icon: 'fa-hourglass-half' },
+                'kpiMoldagem': { barId: 'barMoldado', name: 'Moldado', icon: 'fa-layer-group' },
+                'kpiFusao': { barId: 'barFusao', name: 'Fusão', icon: 'fa-fire-burner' },
+                'kpiAcabamento': { barId: 'barAcabamento', name: 'Acabamento', icon: 'fa-broom' },
+                'kpiTT': { barId: 'barTT', name: 'Tratamento Térmico', icon: 'fa-temperature-arrow-up' },
+                'kpiUsinagem': { barId: 'barUsinagem', name: 'Usinagem', icon: 'fa-gears' },
+                'kpiQualidade': { barId: 'barQualidade', name: 'Qualidade', icon: 'fa-check-double' },
+                'kpiExpedicao': { barId: 'barExpedicao', name: 'Expedição', icon: 'fa-truck-loading' },
+                'kpiFaturamento': { barId: 'barFaturamento', name: 'Faturamento', icon: 'fa-file-invoice-dollar' }
+            };
 
-            if (!barId) return;
+            const config = map[idPrefix];
+            if (!config) return;
 
-            const barEl = document.getElementById(barId);
+            const barEl = document.getElementById(config.barId);
             const pct = totalWeight > 0 ? ((data.peso / totalWeight) * 100) : 0;
 
             if (barEl) {
                 barEl.style.width = pct.toFixed(1) + '%';
-
-                const stageName = idPrefix === 'kpiAguardando' ? 'Aguardando Moldagem' :
-                    idPrefix === 'kpiMoldagem' ? 'Apenas Moldado' : 'Fundido';
-                
-                const icon = idPrefix === 'kpiAguardando' ? 'fa-hourglass-half' :
-                             idPrefix === 'kpiMoldagem' ? 'fa-layer-group' : 'fa-fire-burner';
-
                 const valContent = valorVisible ? formatCurrency(data.valor) : '-----';
 
-                // Detailed Tooltip content (HTML)
                 const tooltipHtml = `
                     <div class="tooltip-header">
-                        <i class="fa-solid ${icon}"></i>
-                        ${stageName}
+                        <i class="fa-solid ${config.icon}"></i>
+                        ${config.name}
                     </div>
                     <div class="tooltip-row">
                         <span class="tooltip-label">Representatividade</span>
@@ -2844,14 +2884,7 @@
                         Clique sobre esta barra para ver os registros
                     </div>
                 `;
-
                 barEl.setAttribute('data-tooltip', tooltipHtml);
-            }
-
-            // Also update the status text summary
-            if (idPrefix === 'kpiFundido') {
-                const statusText = document.getElementById('industrialStatusText');
-                if (statusText) statusText.innerText = 'Atualizado com sucesso';
             }
         }
 
@@ -3190,9 +3223,21 @@
                     if (s === 'aguardando') {
                         return qAguardando > 0.01;
                     } else if (s === 'moldagem') {
-                        return qApenasMoldada > 0.01;
-                    } else if (s === 'fundido') {
-                        return qFundida > 0.01;
+                        return qMoldada > 0.01;
+                    } else if (s === 'fusao') {
+                        return qFusao > 0.01;
+                    } else if (s === 'acabamento') {
+                        return qAcabamento > 0.01;
+                    } else if (s === 'tt') {
+                        return qTT > 0.01;
+                    } else if (s === 'usinagem') {
+                        return qUsinagem > 0.01;
+                    } else if (s === 'qualidade') {
+                        return qQualidade > 0.01;
+                    } else if (s === 'expedicao') {
+                        return qExpedicao > 0.01;
+                    } else if (s === 'faturamento') {
+                        return qFaturamento > 0.01;
                     }
                 }
 
