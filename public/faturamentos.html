@@ -984,10 +984,6 @@
                 <button class="btn-modern" onclick="openClientModal()">
                     <i class="fa-solid fa-user-slash"></i> Clientes (Filtrar)
                 </button>
-                <div style="flex:1;"></div>
-                <button class="btn-modern" style="background: var(--status-success); color:#000; border:none;" onclick="refreshAll()">
-                    <i class="fa-solid fa-sync"></i> Sincronizar Tudo
-                </button>
             </div>
 
             <div class="table-container">
@@ -1145,7 +1141,7 @@
     </footer>
 
     <script>
-        let allData = [];
+        let globalValid = [];
         let excludedClients = new Set();
         let clientStats = {};
         let colFilters = {};
@@ -1500,7 +1496,11 @@
             });
         }
 
-        async function openRecordsModal() { document.getElementById('recordsModal').style.display = 'flex'; document.body.style.overflow = 'hidden'; if (allData.length === 0) await loadRecordsData(); }
+        async function openRecordsModal() { 
+            document.getElementById('recordsModal').style.display = 'flex'; 
+            document.body.style.overflow = 'hidden'; 
+            renderTable(); // Ensure table is rendered with latest data
+        }
         function closeRecordsModal() { document.getElementById('recordsModal').style.display = 'none'; document.body.style.overflow = ''; }
 
         async function loadRecordsData() {
@@ -1515,11 +1515,11 @@
                 let url = `/api/faturamento-postgres/detalhado?limit=100000&startDate=${fullStart}&endDate=${fullEnd}`;
                 const res = await (await fetch(url)).json();
                 if (res.success) {
-                    allData = res.data;
-                    processClients(allData);
+                    globalValid = res.data;
+                    processClients(globalValid);
 
                     renderTable();
-                    updateDashboardfromRecords(allData);
+                    updateDashboardfromRecords(globalValid);
                 }
             } catch (e) { console.error(e); } finally { hideSpinner(); }
         }
@@ -1528,7 +1528,7 @@
         async function saveClientExclusion() { await fetch('/api/preferences/excluded_clients', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ value: Array.from(excludedClients) }) }); }
 
         async function toggleRowExclusion(idx) {
-            const item = allData[idx];
+            const item = globalValid[idx];
             const newState = !item.excluido_manualmente;
 
             // Fixed Key Generation (Detailed Logic: Nota-Codigo-Pedido-Data-Quant)
@@ -1572,12 +1572,13 @@
             if (isNaN(val) || !mesAno) return;
             try {
                 const res = await fetch('/api/metas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mes_ano: mesAno, meta_peso: val }) });
-                if (res.ok) { currentMeta = val; updateDashboardfromRecords(allData); }
+            if (res.ok) { currentMeta = val; updateDashboardfromRecords(allData); }
             } catch (e) { console.error(e); }
         }
 
         function renderTable() {
-            const tbody = document.getElementById('tableBody');
+            const list = document.getElementById('clientList');
+            const data = globalValid;
             const startInput = document.getElementById('startDate').value;
             const endInput = document.getElementById('endDate').value;
             const isDev = (localStorage.getItem('erus_role') || 'Visitante').toLowerCase() === 'desenvolvedor';
@@ -1592,7 +1593,7 @@
             if (clientBtn) clientBtn.style.display = isDev ? 'flex' : 'none';
 
             // Filter for display
-            let filteredClients = allData.filter(item => {
+            let filteredClients = globalValid.filter(item => {
                 if (excludedClients.has((item.clienteNome || 'Desconhecido').trim())) return false;
                 if (startInput && item.data < startInput) return false;
                 if (endInput && item.data > endInput) return false;
@@ -1627,7 +1628,7 @@
             const isVisible = document.getElementById('cardValorTotal').getAttribute('data-visible') === 'true';
 
             tbody.innerHTML = filteredClients.map((item) => {
-                const globalIdx = allData.indexOf(item);
+                const globalIdx = globalValid.indexOf(item);
                 const calculatedTotal = calculateCalculatedTotal(item);
 
                 const valorUnit = isVisible ? formatCurrency(item.valorUnitario || 0) : 'R$ ---';
@@ -1663,7 +1664,6 @@
             }
         }
 
-        function processClients(data) { clientStats = {}; data.forEach(item => { const n = (item.clienteNome || 'Desconhecido').trim(); clientStats[n] = (clientStats[n] || 0) + 1; }); }
 
         function applyLocalFilters() {
             renderTable();
