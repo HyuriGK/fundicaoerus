@@ -210,8 +210,8 @@ router.get('/detalhado', async (req, res) => {
                 f.peso_total,
                 f.status,
                 f.pedido,
-                -- Priority: Preference Table > Current Table > Default (Excluded if no order)
-                COALESCE(p.excluido, f.excluido_manualmente, (f.pedido IS NULL OR f.pedido = '' OR f.pedido = ' ')) as excluido_manualmente
+                -- Priority: Preference Table > (Current Table OR Default to excluded if no order)
+                COALESCE(p.excluido, f.excluido_manualmente OR f.pedido IS NULL OR f.pedido = '' OR f.pedido = ' ') as excluido_manualmente
             FROM faturamento_firebird f
             LEFT JOIN faturamento_firebird_preferencias p 
                 ON p.nota_fiscal = f.nota_fiscal
