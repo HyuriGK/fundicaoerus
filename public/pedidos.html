@@ -2736,33 +2736,34 @@
                 }
                 const itemTotalValue = unitPrice * realQty;
 
-                totalValue += itemTotalValue;
-                totalQty += realQty;
-
-                const hasDate = item.ENTREGA_PETR || item.DATA_ENTREGA_PPR;
-                if (hasDate) releasedWeight += itemTotalWeight;
-
-                // Sector Quantities from Sync
+                // Sector Quantities from Sync (Cumulative)
                 const targetTotalQty = Number(item.OP_QUANTIDADE) || realQty;
                 
-                // Hierarchical Logic: Advanced → Earlier
-                // We assume QTY_XX is cumulative of THAT stage and BEYOND? 
-                // No, based on Firebird queries, they are snapshots of that sector.
-                // But the dashboard wants a PROPORTIONAL progress view.
-                
-                const qFaturamento = Math.min(targetTotalQty, Number(item.QTY_FATURAMENTO) || 0);
-                const qExpedicao = Math.min(targetTotalQty - qFaturamento, Number(item.QTY_EXPEDICAO) || 0);
-                const qQualidade = Math.min(targetTotalQty - qFaturamento - qExpedicao, Number(item.QTY_QUALIDADE) || 0);
-                const qUsinagem = Math.min(targetTotalQty - qFaturamento - qExpedicao - qQualidade, Number(item.QTY_USINAGEM) || 0);
-                const qTT = Math.min(targetTotalQty - qFaturamento - qExpedicao - qQualidade - qUsinagem, Number(item.QTY_TT) || 0);
-                const qAcabamento = Math.min(targetTotalQty - qFaturamento - qExpedicao - qQualidade - qUsinagem - qTT, Number(item.QTY_ACABAMENTO) || 0);
-                const qFusao = Math.min(targetTotalQty - qFaturamento - qExpedicao - qQualidade - qUsinagem - qTT - qAcabamento, Number(item.QTY_FUSAO) || 0);
-                const qMoldada = Math.min(targetTotalQty - qFaturamento - qExpedicao - qQualidade - qUsinagem - qTT - qAcabamento - qFusao, Number(item.QTY_MOLDADA) || 0);
-                const qAguardando = Math.max(0, targetTotalQty - qFaturamento - qExpedicao - qQualidade - qUsinagem - qTT - qAcabamento - qFusao - qMoldada);
+                // 1. Get Cumulative Totals (Ensuring Monotonicity: Fat <= Exp <= Qual...)
+                const cFat  = Math.min(targetTotalQty, Number(item.QTY_FATURAMENTO) || 0);
+                const cExp  = Math.min(targetTotalQty, Math.max(cFat,  Number(item.QTY_EXPEDICAO) || 0));
+                const cQual = Math.min(targetTotalQty, Math.max(cExp,  Number(item.QTY_QUALIDADE) || 0));
+                const cUsi  = Math.min(targetTotalQty, Math.max(cQual, Number(item.QTY_USINAGEM) || 0));
+                const cTT   = Math.min(targetTotalQty, Math.max(cUsi,  Number(item.QTY_TT) || 0));
+                const cAcab = Math.min(targetTotalQty, Math.max(cTT,   Number(item.QTY_ACABAMENTO) || 0));
+                const cFus  = Math.min(targetTotalQty, Math.max(cAcab, Number(item.QTY_FUSAO) || 0));
+                const cMold = Math.min(targetTotalQty, Math.max(cFus,  Number(item.QTY_MOLDADA) || 0));
+
+                // 2. Differential Logic (Current = Cumulative - Next)
+                const qFaturamento = cFat;
+                const qExpedicao   = cExp - cFat;
+                const qQualidade   = cQual - cExp;
+                const qUsinagem    = cUsi - cQual;
+                const qTT          = cTT - cUsi;
+                const qAcabamento  = cAcab - cTT;
+                const qFusao       = cFus - cAcab;
+                const qMoldada     = cMold - cFus;
+                const qAguardando  = Math.max(0, targetTotalQty - cMold);
 
                 // Helper to add proportional data
                 const addKpi = (kpi, q) => {
                     const factor = targetTotalQty > 0 ? (q / targetTotalQty) : 0;
+                    if (q <= 0) return;
                     kpi.qtd += q;
                     kpi.peso += itemTotalWeight * factor;
                     kpi.valor += itemTotalValue * factor;
@@ -3211,16 +3212,25 @@
                     const realQty = saldo > 0 ? saldo : qtdOriginal;
                     const targetTotalQty = Number(item.OP_QUANTIDADE) || realQty;
 
-                    // Hierarchical Logic: Advanced → Earlier
-                    const qFaturamento = Math.min(targetTotalQty, Number(item.QTY_FATURAMENTO) || 0);
-                    const qExpedicao = Math.min(targetTotalQty - qFaturamento, Number(item.QTY_EXPEDICAO) || 0);
-                    const qQualidade = Math.min(targetTotalQty - qFaturamento - qExpedicao, Number(item.QTY_QUALIDADE) || 0);
-                    const qUsinagem = Math.min(targetTotalQty - qFaturamento - qExpedicao - qQualidade, Number(item.QTY_USINAGEM) || 0);
-                    const qTT = Math.min(targetTotalQty - qFaturamento - qExpedicao - qQualidade - qUsinagem, Number(item.QTY_TT) || 0);
-                    const qAcabamento = Math.min(targetTotalQty - qFaturamento - qExpedicao - qQualidade - qUsinagem - qTT, Number(item.QTY_ACABAMENTO) || 0);
-                    const qFusao = Math.min(targetTotalQty - qFaturamento - qExpedicao - qQualidade - qUsinagem - qTT - qAcabamento, Number(item.QTY_FUSAO) || 0);
-                    const qMoldada = Math.min(targetTotalQty - qFaturamento - qExpedicao - qQualidade - qUsinagem - qTT - qAcabamento - qFusao, Number(item.QTY_MOLDADA) || 0);
-                    const qAguardando = Math.max(0, targetTotalQty - qFaturamento - qExpedicao - qQualidade - qUsinagem - qTT - qAcabamento - qFusao - qMoldada);
+                    // Hierarchical Logic: Cumulative - Next
+                    const cFat  = Math.min(targetTotalQty, Number(item.QTY_FATURAMENTO) || 0);
+                    const cExp  = Math.min(targetTotalQty, Math.max(cFat,  Number(item.QTY_EXPEDICAO) || 0));
+                    const cQual = Math.min(targetTotalQty, Math.max(cExp,  Number(item.QTY_QUALIDADE) || 0));
+                    const cUsi  = Math.min(targetTotalQty, Math.max(cQual, Number(item.QTY_USINAGEM) || 0));
+                    const cTT   = Math.min(targetTotalQty, Math.max(cUsi,  Number(item.QTY_TT) || 0));
+                    const cAcab = Math.min(targetTotalQty, Math.max(cTT,   Number(item.QTY_ACABAMENTO) || 0));
+                    const cFus  = Math.min(targetTotalQty, Math.max(cAcab, Number(item.QTY_FUSAO) || 0));
+                    const cMold = Math.min(targetTotalQty, Math.max(cFus,  Number(item.QTY_MOLDADA) || 0));
+
+                    const qFaturamento = cFat;
+                    const qExpedicao   = cExp - cFat;
+                    const qQualidade   = cQual - cExp;
+                    const qUsinagem    = cUsi - cQual;
+                    const qTT          = cTT - cUsi;
+                    const qAcabamento  = cAcab - cTT;
+                    const qFusao       = cFus - cAcab;
+                    const qMoldada     = cMold - cFus;
+                    const qAguardando  = Math.max(0, targetTotalQty - cMold);
 
                     if (s === 'aguardando') return qAguardando > 0.01;
                     if (s === 'moldagem') return qMoldada > 0.01;
