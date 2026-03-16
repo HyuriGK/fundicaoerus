@@ -2148,6 +2148,30 @@
             document.getElementById('emailPreviewText').value = text;
         }
 
+        function calculateBusinessDays(startDate, endDate) {
+            if (!startDate || isNaN(new Date(startDate).getTime())) return '0';
+            const start = new Date(startDate);
+            const end = new Date(endDate);
+            
+            // Normalize to start of day for accurate day counting
+            start.setHours(0, 0, 0, 0);
+            end.setHours(0, 0, 0, 0);
+            
+            if (start > end) return '0';
+            
+            let count = 0;
+            let curDate = new Date(start.getTime());
+            
+            while (curDate < end) {
+                curDate.setDate(curDate.getDate() + 1);
+                const dayOfWeek = curDate.getDay();
+                if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+                    count++;
+                }
+            }
+            return count.toString();
+        }
+
         function generateEmailTextNovos(list, targetDate, generationDate) {
             // 1. Totals
             const uniqueOrderCodes = new Set(list.map(item => item.CODIGO_PPR)).size;
@@ -2266,7 +2290,7 @@
             text += `Segue o resumo de todos os itens atualmente bloqueados na carteira de pedidos:\n\n`;
             text += `• Total de Pedidos Bloqueados: ${uniqueOrderCodes}\n`;
             text += `• Quantidade Bloqueada Total: ${totalQtd} pçs\n`;
-            text += `• Peso Bloqueado Total: ${formatNumber(totalPeso)} kg\n\n`;
+            text += `• Peso Bloqueado Total: ${formatNumber(totalPeso)} kg (podem ter pesos zerados)\n\n`;
             text += `Lista de Bloqueios Pendentes:\n`;
 
             // 3. Build Client Sections
@@ -2302,8 +2326,9 @@
 
                     const qtd = i._qtd;
                     const pesoTotal = i._weight;
+                    const diasBloqueado = calculateBusinessDays(i.DATA_EMISSAO_PEDIDO, generationDate);
 
-                    text += `• Ped: ${cod} | Cód: ${codProd} | Emissão: ${emissao}\n`;
+                    text += `• Ped: ${cod} | Cód: ${codProd} | Emissão: ${emissao} | Dias Bloqueado: ${diasBloqueado}\n`;
                     text += `Desc: ${truncDesc}\n`;
                     text += `MOTIVO DO BLOQUEIO: ${motivo}\n`;
                     text += `Qtd: ${qtd} | Peso Total Bloqueado: ${formatNumber(pesoTotal)} kg\n\n`;
