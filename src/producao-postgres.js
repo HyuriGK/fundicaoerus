@@ -9,6 +9,10 @@ router.get('/', async (req, res) => {
     try {
         // 2. Verificar tarefas (registros com peso zero na tabela sincronizada - Agrupado por Setor)
         if (req.query.action === 'check-tasks') {
+            const tasks = [];
+            let totalCount = 0;
+
+            // --- TIPA 1: Pesos Zerados na PRODUÇÃO (Tabela sincronizada) ---
             const queryGrouped = `
                 SELECT 
                     t.setor,
@@ -21,9 +25,6 @@ router.get('/', async (req, res) => {
             `;
             const resultGrouped = await pool.query(queryGrouped);
             
-            const tasks = [];
-            let totalCount = 0;
-
             for (const row of resultGrouped.rows) {
                 const count = parseInt(row.count);
                 totalCount += count;
@@ -49,14 +50,52 @@ router.get('/', async (req, res) => {
                 }
 
                 tasks.push({
-                    id: `zero-weight-${row.setor.replace(/\s+/g, '-').toLowerCase()}`,
+                    id: `zero-weight-prod-${row.setor.replace(/\s+/g, '-').toLowerCase()}`,
                     sector: row.setor,
-                    title: `Pesos Zerados - ${row.setor}`,
+                    title: `Pesos Zerados (Produção) - ${row.setor}`,
                     description: desc,
                     actionUrl: `apontamentos_produtivos.html?filter=zero-weight&sector=${encodeURIComponent(row.setor)}`,
                     priority: 'high',
                     count: count
                 });
+            }
+
+            // --- TIPA 2: Pesos Zerados na CARTEIRA DE PEDIDOS (Novidade) ---
+            try {
+                // Localiza itens na carteira (backlog) que estão no firebird_sync_pedidos e pesam zero
+                const queryPedidosZero = `
+                    WITH items_backlog AS (
+                        SELECT DISTINCT pedido, codigo FROM carteira
+                    )
+                    SELECT 
+                        count(*) as count
+                    FROM firebird_sync_pedidos p
+                    INNER JOIN items_backlog c ON (p.data->>'CODIGO_PPR') = c.pedido AND (p.data->>'PRODUTO_PPR') = c.codigo
+                    LEFT JOIN produto_pesos_producao weight_ref ON (p.data->>'PRODUTO_PPR') = weight_ref.codigo_peca
+                    WHERE 
+                        COALESCE(
+                            NULLIF(CAST(COALESCE(p.data->>'PESO_LIQUIDO_NPR', '0') AS NUMERIC), 0),
+                            weight_ref.peso,
+                            0
+                        ) = 0
+                `;
+                const resultPedidosZero = await pool.query(queryPedidosZero);
+                const countP = parseInt(resultPedidosZero.rows[0].count || 0);
+
+                if (countP > 0) {
+                    totalCount += countP;
+                    tasks.push({
+                        id: 'zero-weight-pedidos',
+                        sector: 'Comercial',
+                        title: 'Pesos Zerados (Carteira)',
+                        description: `Existem <strong>${countP}</strong> itens na Carteira de Pedidos com peso unitário "0,00".<br>Isso afeta o cálculo do faturamento previsto.`,
+                        actionUrl: 'pedidos.html',
+                        priority: 'high',
+                        count: countP
+                    });
+                }
+            } catch (errP) {
+                console.error('⚠️ Erro ao verificar pesos zerados na carteira:', errP.message);
             }
 
             // 3. Adicionar alertas de Sincronização Atrasada (> 2 horas)
