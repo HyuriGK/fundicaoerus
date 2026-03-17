@@ -1797,7 +1797,10 @@
         let isModelosHidden = true; // Inicia OCULTO por padrão
 
         // --- FUNÇÕES MODAL ---
-        function openModal() { document.getElementById('recordsModal').style.display = 'flex'; }
+        function openModal() { 
+            document.getElementById('recordsModal').classList.remove('hide-op-column');
+            document.getElementById('recordsModal').style.display = 'flex'; 
+        }
         function closeModal() {
             document.getElementById('recordsModal').style.display = 'none';
             // Clear stage filter when closing modal to return to full dashboard view
@@ -2650,7 +2653,7 @@
 
                 const valorTotal = valorUnit * saldoReal;
 
-                const valStr = unitWeight > 0 ? formatNumber(unitWeight) : '';
+                const valStr = formatNumber(unitWeight);
                 const isDev = localStorage.getItem('erus_role') === 'desenvolvedor';
 
                 let weightInputHtml = isDev ? `
@@ -2662,7 +2665,7 @@
                         onkeydown="saveWeight(event, '${item.PRODUTO_PPR}')"
                         onclick="this.select()"
                     />
-                ` : `<span style="color: var(--text-main);">${valStr || '-'}</span>`;
+                ` : `<span style="color: var(--text-main);">${valStr}</span>`;
 
                 // Blocked Logic
                 // Check multiple fields potentially indicating a block
@@ -2689,11 +2692,11 @@
                     </td>
                     <td style="text-align:center;">${entrega}</td>
                     <td style="color:var(--text-main); text-align:left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 250px;" title="${item.NOME_CLIENTE || '-'}">${item.NOME_CLIENTE || '-'}</td>
-                    <td style="text-align:center;" class="copyable" onclick="copyToClipboard('${item.PRODUTO_PPR || item.CODIGO_PECA || ''}', 'Código')">
-                        ${item.PRODUTO_PPR || item.CODIGO_PECA || '-'} <i class="fa-regular fa-copy" style="font-size:0.7em; margin-left:5px; opacity:0.5;"></i>
+                    <td style="text-align:center;" class="copyable" onclick="copyToClipboard('${item.PRODUTO_PPR || item.CODIGO_PECA || item.sync_key || ''}', 'Código')">
+                        ${item.PRODUTO_PPR || item.CODIGO_PECA || item.sync_key || '-'} <i class="fa-regular fa-copy" style="font-size:0.7em; margin-left:5px; opacity:0.5;"></i>
                     </td>
                     <td style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 300px;" title="${item.NOME_PRODUTO_PPR || ''}">
-                        ${item.NOME_PRODUTO_PPR || item.PRODUTO_PPR || item.CODIGO_PECA || '-'}
+                        ${item.NOME_PRODUTO_PPR || item.PRODUTO_PPR || item.CODIGO_PECA || item.sync_key || '-'}
                     </td>
                     <td style="text-align:center;">${saldoReal}</td>
                     <td style="text-align:center;">${weightInputHtml}</td>
@@ -3794,33 +3797,32 @@
         }
 
         async function showHistoricalDetails(records, title) {
-            // Reutilizar lógica de renderTable para preencher o modal de registros
-            const tbody = document.getElementById('table-body');
-            if (!tbody) return;
+            const titleEl = document.querySelector('#recordsModal .modal-title');
+            if (titleEl) titleEl.innerHTML = `<i class="fa-solid fa-history" style="margin-right: 15px;"></i>${title}`;
 
-            tbody.innerHTML = '';
-            records.forEach(item => {
-                const tr = document.createElement('tr');
-                const valStr = valorVisible ? (item.VALOR_PPR ? item.VALOR_PPR.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-') : '-----';
-                const weightStr = item.PESO_LIQUIDO_NPR ? item.PESO_LIQUIDO_NPR.toLocaleString('pt-BR') : '0';
+            // Add class to hide OP column
+            document.getElementById('recordsModal').classList.add('hide-op-column');
 
-                tr.innerHTML = `
-                    <td>${item.CODIGO_PPR}</td>
-                    <td>${item.DATA_EMISSAO_PEDIDO ? new Date(item.DATA_EMISSAO_PEDIDO).toLocaleDateString() : '-'}</td>
-                    <td>${item.ID_CLIENTE_CORE} - ${item.NOME_CLIENTE}</td>
-                    <td>-</td> <!-- CÓDIGO PRODUTO -->
-                    <td>${item.NOME_PRODUTO_PPR || '-'}</td>
-                    <td>${item.QUANTIDADE_PPR || 0}</td>
-                    <td>-</td> <!-- PESO UN -->
-                    <td>${weightStr}</td>
-                    <td>${valStr}</td>
-                    <td>-</td> <!-- OP -->
-                `;
-                tbody.appendChild(tr);
-            });
+            // Normalizar registros para o formato da tabela
+            const normalized = records.map(r => ({
+                ...r,
+                VALOR_TOTAL: parseFloat(r.VALOR_PPR || 0) * parseFloat(r.QUANTIDADE_PPR || 0),
+                ENTREGA_PETR: r.DATA_EMISSAO_PEDIDO 
+            }));
 
-            document.getElementById('recordsModalTitle').innerText = title;
+            // Abrir modal e renderizar
             openModal();
+            renderTable(normalized);
+            if (typeof updateTotals === 'function') updateTotals(normalized);
+
+            // Override close modal logic once to restore title and cleanup
+            const originalClose = window.closeModal;
+            window.closeModal = function () {
+                document.getElementById('recordsModal').classList.remove('hide-op-column');
+                if (titleEl) titleEl.innerHTML = `<i class="fa-solid fa-list-check" style="margin-right: 15px;"></i>Registros de Pedidos`;
+                originalClose();
+                window.closeModal = originalClose; // Reset
+            };
         }
 
         async function showHistoricalRecords(year, month) {
@@ -3830,39 +3832,8 @@
                 if (!res.ok) throw new Error('Erro ao buscar registros históricos');
                 const records = await res.json();
 
-                // Add class to hide OP column
-                document.getElementById('recordsModal').classList.add('hide-op-column');
-
-                if (records.length === 0) {
-                    showToast("Atenção", "Nenhum registro encontrado para este período.", "warning");
-                    return;
-                }
-
-                // Normalizar registros para o formato da tabela se necessário
-                const normalized = records.map(r => ({
-                    ...r,
-                    // Garante campos virtuais/esperados pela renderTable
-                    VALOR_TOTAL: parseFloat(r.VALOR_PPR || 0) * parseFloat(r.QUANTIDADE_PPR || 0),
-                    ENTREGA_PETR: r.DATA_EMISSAO_PEDIDO // Usar emissão como fallback de data se não houver entrega
-                }));
-
-                // Abrir modal e renderizar
-                openModal();
-                const titleEl = document.querySelector('#recordsModal .modal-title');
-                const originalTitle = titleEl.innerHTML;
-                titleEl.innerHTML = `<i class="fa-solid fa-history" style="margin-right: 15px;"></i>Emissões - ${month < 10 ? '0' + month : month}/${year}`;
-
-                renderTable(normalized);
-                updateTotals(normalized);
-
-                // Override close modal logic once to restore title (optional quality of life)
-                const originalClose = window.closeModal;
-                window.closeModal = function () {
-                    document.getElementById('recordsModal').classList.remove('hide-op-column');
-                    titleEl.innerHTML = `<i class="fa-solid fa-list-check" style="margin-right: 15px;"></i>Registros de Pedidos`;
-                    originalClose();
-                    window.closeModal = originalClose; // Reset
-                };
+                const title = `Emissões - ${month < 10 ? '0' + month : month}/${year}`;
+                showHistoricalDetails(records, title);
 
             } catch (err) {
                 console.error(err);
