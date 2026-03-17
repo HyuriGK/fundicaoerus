@@ -108,7 +108,10 @@ router.get('/resumo', async (req, res) => {
         const ccTotals = {};
         const ccFornecedores = {}; // We'll keep supplier level for high-level modal
         registros.forEach(r => {
-            const cc = mapCC[`${r.fornecedor}|${r.produto || ''}`] || 'SEM';
+            const keyExact = `${r.fornecedor}|${r.produto || ''}`;
+            const keyDefault = `${r.fornecedor}|`; // Default mapping for supplier
+            
+            const cc = mapCC[keyExact] || mapCC[keyDefault] || 'SEM';
             const val = Number(r.total) || 0;
             ccTotals[cc] = (ccTotals[cc] || 0) + val;
             
@@ -119,7 +122,7 @@ router.get('/resumo', async (req, res) => {
                 ccFornecedores[cc].push(fEntry);
             }
             fEntry.total += val;
-            fEntry.produtos.push(r.produto);
+            if (!fEntry.produtos.includes(r.produto)) fEntry.produtos.push(r.produto);
         });
 
         // Build result array
