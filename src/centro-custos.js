@@ -21,6 +21,7 @@ const CENTROS_CUSTO = [
     { codigo: 'MAN', nome: 'Manutenção' },
     { codigo: 'ADM', nome: 'Administrativo' },
     { codigo: 'LOG', nome: 'Expedição' },
+    { codigo: 'CIF', nome: 'Frete CIF' },
     { codigo: 'RH', nome: 'Recursos Humanos' },
     { codigo: 'COM', nome: 'Comercial' },
     { codigo: 'TER', nome: 'Terceirização' },
