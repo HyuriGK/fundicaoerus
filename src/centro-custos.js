@@ -23,6 +23,7 @@ const CENTROS_CUSTO = [
     { codigo: 'LOG', nome: 'Expedição' },
     { codigo: 'CIF', nome: 'Frete CIF' },
     { codigo: 'REF', nome: 'Reformas' },
+    { codigo: 'AMS', nome: 'Amostra' },
     { codigo: 'RH', nome: 'Recursos Humanos' },
     { codigo: 'COM', nome: 'Comercial' },
     { codigo: 'TER', nome: 'Terceirização' },
