@@ -7,12 +7,13 @@ router.get('/monthly-summary', async (req, res) => {
     try {
         const query = `
             SELECT 
-                EXTRACT(YEAR FROM (data->>'DATA_EMISSAO_PEDIDO')::date) as ano,
-                EXTRACT(MONTH FROM (data->>'DATA_EMISSAO_PEDIDO')::date) as mes,
-                SUM(CAST(COALESCE(data->>'PESO_LIQUIDO_NPR', '0') AS NUMERIC)) as total_peso,
-                SUM(CAST(COALESCE(data->>'VALOR_PPR', '0') AS NUMERIC) * CAST(COALESCE(data->>'QUANTIDADE_PPR', '0') AS NUMERIC)) as total_valor
-            FROM firebird_sync_emissoes
-            WHERE data->>'DATA_EMISSAO_PEDIDO' IS NOT NULL
+                EXTRACT(YEAR FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) as ano,
+                EXTRACT(MONTH FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) as mes,
+                SUM(COALESCE(pc.peso * CAST(COALESCE(p.data->>'QUANTIDADE_PPR', '0') AS NUMERIC), CAST(COALESCE(p.data->>'PESO_LIQUIDO_NPR', '0') AS NUMERIC))) as total_peso,
+                SUM(CAST(COALESCE(p.data->>'VALOR_PPR', '0') AS NUMERIC) * CAST(COALESCE(p.data->>'QUANTIDADE_PPR', '0') AS NUMERIC)) as total_valor
+            FROM firebird_sync_emissoes p
+            LEFT JOIN pesos_customizados pc ON TRIM(p.data->>'PRODUTO_PPR') = pc.codigo
+            WHERE p.data->>'DATA_EMISSAO_PEDIDO' IS NOT NULL
             GROUP BY 1, 2
             ORDER BY 1 DESC, 2 DESC
         `;
@@ -41,21 +42,22 @@ router.get('/client-summary', async (req, res) => {
             return res.status(400).json({ error: 'Ano é obrigatório.' });
         }
 
-        let whereClause = "WHERE EXTRACT(YEAR FROM (data->>'DATA_EMISSAO_PEDIDO')::date) = $1";
+        let whereClause = "WHERE EXTRACT(YEAR FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) = $1";
         const params = [ano];
 
         if (mes && mes !== 'Todos') {
-            whereClause += " AND EXTRACT(MONTH FROM (data->>'DATA_EMISSAO_PEDIDO')::date) = $2";
+            whereClause += " AND EXTRACT(MONTH FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) = $2";
             params.push(mes);
         }
 
         const query = `
             SELECT 
-                data->>'NOME_CLIENTE' as cliente,
-                data->>'ID_CLIENTE_CORE' as id_cliente,
-                SUM(CAST(COALESCE(data->>'PESO_LIQUIDO_NPR', '0') AS NUMERIC)) as total_peso,
-                SUM(CAST(COALESCE(data->>'VALOR_PPR', '0') AS NUMERIC) * CAST(COALESCE(data->>'QUANTIDADE_PPR', '0') AS NUMERIC)) as total_valor
-            FROM firebird_sync_emissoes
+                p.data->>'NOME_CLIENTE' as cliente,
+                p.data->>'ID_CLIENTE_CORE' as id_cliente,
+                SUM(COALESCE(pc.peso * CAST(COALESCE(p.data->>'QUANTIDADE_PPR', '0') AS NUMERIC), CAST(COALESCE(p.data->>'PESO_LIQUIDO_NPR', '0') AS NUMERIC))) as total_peso,
+                SUM(CAST(COALESCE(p.data->>'VALOR_PPR', '0') AS NUMERIC) * CAST(COALESCE(p.data->>'QUANTIDADE_PPR', '0') AS NUMERIC)) as total_valor
+            FROM firebird_sync_emissoes p
+            LEFT JOIN pesos_customizados pc ON TRIM(p.data->>'PRODUTO_PPR') = pc.codigo
             ${whereClause}
             GROUP BY 1, 2
             ORDER BY 3 DESC
@@ -85,23 +87,35 @@ router.get('/list', async (req, res) => {
             return res.status(400).json({ error: 'Ano é obrigatório.' });
         }
 
-        let whereClause = "WHERE EXTRACT(YEAR FROM (data->>'DATA_EMISSAO_PEDIDO')::date) = $1";
+        let whereClause = "WHERE EXTRACT(YEAR FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) = $1";
         const params = [ano];
 
         if (mes && mes !== 'Todos') {
-            whereClause += " AND EXTRACT(MONTH FROM (data->>'DATA_EMISSAO_PEDIDO')::date) = $2";
+            whereClause += " AND EXTRACT(MONTH FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) = $2";
             params.push(mes);
         }
 
         const query = `
-            SELECT data
-            FROM firebird_sync_emissoes
+            SELECT 
+                p.data,
+                pc.peso as peso_customizado
+            FROM firebird_sync_emissoes p
+            LEFT JOIN pesos_customizados pc ON TRIM(p.data->>'PRODUTO_PPR') = pc.codigo
             ${whereClause}
-            ORDER BY (data->>'DATA_EMISSAO_PEDIDO')::date DESC
+            ORDER BY (p.data->>'DATA_EMISSAO_PEDIDO')::date DESC
         `;
 
         const result = await pool.query(query, params);
-        const records = result.rows.map(row => row.data);
+        const records = result.rows.map(row => {
+            const data = row.data;
+            if (row.peso_customizado !== null) {
+                // Return corrected weight in the data object
+                data.PESO_LIQUIDO_NPR = row.peso_customizado * (parseFloat(data.QUANTIDADE_PPR) || 0);
+                data.PESO_UNIT_ORIGINAL = data.PESO_UNIT; // Preserve original for debug if needed
+                data.PESO_UNIT = row.peso_customizado;
+            }
+            return data;
+        });
 
         res.json(records);
     } catch (error) {
