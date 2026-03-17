@@ -356,6 +356,33 @@
                 <p class="section-subtitle">Dashboard de Alinhamento Estratégico</p>
             </div>
         </div>
+
+        <div class="header-filters" style="display: flex; gap: 10px; align-items: center; background: rgba(255,255,255,0.03); padding: 8px 15px; border-radius: 12px; border: 1px solid var(--border-subtle);">
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <i class="fa-regular fa-calendar-days" style="color: var(--color-primary); font-size: 0.9rem;"></i>
+                <select id="select-year" onchange="refreshAll()" style="background: transparent; border: none; color: #fff; font-family: var(--font-main); font-size: 0.9rem; font-weight: 600; cursor: pointer; outline: none;">
+                    <option value="2024" style="background:#111827">2024</option>
+                    <option value="2025" selected style="background:#111827">2025</option>
+                    <option value="2026" style="background:#111827">2026</option>
+                </select>
+            </div>
+            <div style="width: 1px; height: 20px; background: var(--border-subtle);"></div>
+            <select id="select-month" onchange="refreshAll()" style="background: transparent; border: none; color: #fff; font-family: var(--font-main); font-size: 0.9rem; font-weight: 600; cursor: pointer; outline: none;">
+                <option value="0" style="background:#111827">Janeiro</option>
+                <option value="1" style="background:#111827">Fevereiro</option>
+                <option value="2" style="background:#111827">Março</option>
+                <option value="3" style="background:#111827">Abril</option>
+                <option value="4" style="background:#111827">Maio</option>
+                <option value="5" style="background:#111827">Junho</option>
+                <option value="6" style="background:#111827">Julho</option>
+                <option value="7" style="background:#111827">Agosto</option>
+                <option value="8" style="background:#111827">Setembro</option>
+                <option value="9" style="background:#111827">Outubro</option>
+                <option value="10" style="background:#111827">Novembro</option>
+                <option value="11" style="background:#111827">Dezembro</option>
+            </select>
+        </div>
+
         <div class="sync-info">
             <button onclick="refreshAll()" style="background: none; border: none; color: var(--color-primary); cursor: pointer; font-size: 1.1rem; padding: 5px; transition: transform 0.2s;" onmouseover="this.style.transform='rotate(180deg)'" onmouseout="this.style.transform='rotate(0deg)'">
                 <i class="fa-solid fa-arrows-rotate"></i>
@@ -610,6 +637,14 @@
         const formatWeight = (val) => (parseFloat(val) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' Kg';
         const formatPercent = (val) => (parseFloat(val) || 0).toFixed(2).replace('.', ',') + '%';
 
+        function getSelectedPeriod() {
+            const year = parseInt(document.getElementById('select-year').value);
+            const month = parseInt(document.getElementById('select-month').value);
+            const startDate = `${year}-${(month + 1).toString().padStart(2, '0')}-01`;
+            const endDate = new Date(year, month + 1, 0).toISOString().split('T')[0];
+            return { year, month, startDate, endDate };
+        }
+
         function showLoading(cardId, active) {
             const el = document.querySelector(`#${cardId} .loading-overlay`);
             if (el) {
@@ -628,17 +663,29 @@
         async function fetchRefugo() {
             showLoading('card-refugo', true);
             try {
+                const { year, month } = getSelectedPeriod();
                 const res = await fetch('/api/refugos');
                 const data = await res.json();
                 const raw = data.refugoRawData || [];
                 
+                // Filter by year and month
+                const filtered = raw.filter(r => {
+                    const [y, m] = r.data.split('-').map(Number);
+                    return y === year && (m - 1) === month;
+                });
+
+                // Month Production from API
+                const prodMap = data.refugoMonthlyProduction || {};
+                const periodKey = `${year}-${(month + 1).toString().padStart(2, '0')}`;
+                window.currentMonthProduction = prodMap[periodKey] || 0;
+
                 // Aggregate by motive
                 const motives = {};
-                let totalWeight = 0;
-                raw.forEach(row => {
+                let totalRefugoWeight = 0;
+                filtered.forEach(row => {
                     const motif = row.motivo || 'N/A';
                     motives[motif] = (motives[motif] || 0) + parseFloat(row.peso_total || 0);
-                    totalWeight += parseFloat(row.peso_total || 0);
+                    totalRefugoWeight += parseFloat(row.peso_total || 0);
                 });
 
                 const sorted = Object.entries(motives).sort((a, b) => b[1] - a[1]).slice(0, 7);
@@ -647,28 +694,36 @@
                     <tr>
                         <td>${motif}</td>
                         <td style="text-align: right;" class="value-highlight">${formatWeight(weight)}</td>
-                        <td style="text-align: right;"><span class="badge badge-warning">${((weight/totalWeight)*100).toFixed(1)}%</span></td>
+                        <td style="text-align: right;"><span class="badge badge-warning">${totalRefugoWeight > 0 ? ((weight/totalRefugoWeight)*100).toFixed(1) : 0}%</span></td>
                     </tr>
                 `).join('');
 
-                window.totalRefugoWeight = totalWeight;
+                window.totalRefugoWeight = totalRefugoWeight;
+                updateRefugoKPI();
             } catch (e) { console.error('Error Refugo:', e); }
             showLoading('card-refugo', false);
+        }
+
+        function updateRefugoKPI() {
+            if (window.totalRefugoWeight !== undefined && window.currentMonthProduction !== undefined) {
+                const totalRef = window.totalRefugoWeight;
+                const totalProd = window.currentMonthProduction;
+                const pct = totalProd > 0 ? (totalRef / totalProd) * 100 : 0;
+                
+                const pctEl = document.getElementById('kpi-refugo');
+                pctEl.innerText = pct.toFixed(2).replace('.', ',') + '%';
+                pctEl.style.color = pct > 10 ? 'var(--status-danger)' : (pct > 5 ? 'var(--status-warning)' : 'var(--status-success)');
+            }
         }
 
         async function fetchProducao() {
             showLoading('card-producao', true);
             try {
-                // Fetch stats for all sectors (need to get the list of sectors)
+                const { year, month, startDate, endDate } = getSelectedPeriod();
                 const sectors = ['MOLDAGEM', 'FUSÃO', 'ACABAMENTO', 'USINAGEM', 'TRATAMENTO TÉRMICO', 'EXPEDIÇÃO'];
-                const now = new Date();
-                const month = (now.getMonth() + 1).toString().padStart(2, '0');
-                const year = now.getFullYear();
-                const startOfMonth = `${year}-${month}-01`;
-                const endOfMonth = new Date(year, now.getMonth() + 1, 0).toISOString().split('T')[0];
 
                 const promises = sectors.map(s => 
-                    fetch(`/api/producao-postgres/stats?sector=${encodeURIComponent(s)}&startDate=${startOfMonth}&endDate=${endOfMonth}`)
+                    fetch(`/api/producao-postgres/stats?sector=${encodeURIComponent(s)}&startDate=${startDate}&endDate=${endDate}`)
                     .then(r => r.ok ? r.json() : { stats: { totalWeight: 0, totalQty: 0 } })
                     .catch(() => ({ stats: { totalWeight: 0, totalQty: 0 } }))
                 );
@@ -690,13 +745,6 @@
                 }).join('');
 
                 document.getElementById('kpi-producao').innerText = formatWeight(totalProdWeight);
-                window.totalProdWeight = totalProdWeight;
-                
-                // Calculate refugo % if possible
-                if (window.totalRefugoWeight !== undefined) {
-                    const refugoPercent = (window.totalRefugoWeight / (totalProdWeight + window.totalRefugoWeight)) * 100;
-                    document.getElementById('kpi-refugo').innerText = refugoPercent.toFixed(2).replace('.', ',') + '%';
-                }
             } catch (e) { console.error('Error Producao:', e); }
             showLoading('card-producao', false);
         }
@@ -741,17 +789,22 @@
                 const res = await fetch('/api/emissoes/monthly-summary');
                 const data = await res.json();
                 
-                // Only show last 5 months
+                const { year, month } = getSelectedPeriod();
+                
+                // Only show last 8 months to give more context
                 const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-                const sorted = data.slice(0, 5);
+                const sorted = data.slice(0, 8);
                 const tbody = document.querySelector('#table-emissao tbody');
-                tbody.innerHTML = sorted.map(row => `
-                    <tr>
-                        <td><span class="badge badge-info">${months[row.mes - 1]} / ${row.ano}</span></td>
-                        <td style="text-align: right;" class="value-highlight">${formatWeight(row.totalPeso)}</td>
-                        <td style="text-align: right;">${formatCurrency(row.totalValor)}</td>
-                    </tr>
-                `).join('');
+                tbody.innerHTML = sorted.map(row => {
+                    const isSelected = row.ano === year && row.mes === (month + 1);
+                    return `
+                        <tr style="${isSelected ? 'background: rgba(16, 185, 129, 0.1);' : ''}">
+                            <td><span class="badge ${isSelected ? 'badge-success' : 'badge-info'}">${months[row.mes - 1]} / ${row.ano}</span></td>
+                            <td style="text-align: right;" class="value-highlight">${formatWeight(row.totalPeso)}</td>
+                            <td style="text-align: right;">${formatCurrency(row.totalValor)}</td>
+                        </tr>
+                    `;
+                }).join('');
             } catch (e) { console.error('Error Emissoes:', e); }
             showLoading('card-emissao', false);
         }
@@ -782,9 +835,8 @@
         async function fetchDevolucoes() {
             showLoading('card-devolucoes', true);
             try {
-                const now = new Date();
-                const startOfMonth = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}-01`;
-                const res = await fetch(`/api/devolucoes?startDate=${startOfMonth}`);
+                const { startDate, endDate } = getSelectedPeriod();
+                const res = await fetch(`/api/devolucoes?startDate=${startDate}&endDate=${endDate}`);
                 const data = await res.json();
                 
                 const list = (data.data || []).slice(0, 7);
@@ -804,44 +856,39 @@
         async function fetchFaturamento() {
             showLoading('card-faturamento', true);
             try {
-                const res = await fetch('/api/faturamento-postgres/diario?limit=25');
-                const data = await res.json();
-                const list = data.data || [];
+                const { startDate, endDate, year, month } = getSelectedPeriod();
+
+                // Call DETALHADO for KPI (respecting manual exclusions)
+                const detRes = await fetch(`/api/faturamento-postgres/detalhado?startDate=${startDate}&endDate=${endDate}`);
+                const detData = await detRes.json();
+                const rawItems = detData.data || [];
+
+                // Filter items NOT manually excluded
+                const validItems = rawItems.filter(item => item.excluido_manualmente !== true);
                 
-                // Show last 10 days in the table
-                const tableList = list.slice(0, 10);
+                const monthTotalValor = validItems.reduce((acc, curr) => acc + parseFloat(curr.valor_total || 0), 0);
+                const monthTotalPeso = validItems.reduce((acc, curr) => acc + parseFloat(curr.peso_total || 0), 0);
+
+                document.getElementById('kpi-faturamento').innerText = formatCurrency(monthTotalValor);
+                document.getElementById('trend-faturamento').innerHTML = `<i class="fa-solid fa-scale-balanced"></i> ${formatWeight(monthTotalPeso)} faturados no mês`;
+
+                // For the table, we can show daily totals for the selected month
+                const res = await fetch(`/api/faturamento-postgres/diario?limit=31`);
+                const data = await res.json();
+                const list = (data.data || []).filter(r => {
+                    const d = new Date(r.data);
+                    return d.getUTCFullYear() === year && d.getUTCMonth() === month;
+                });
+                
                 const tbody = document.querySelector('#table-faturamento tbody');
-                tbody.innerHTML = tableList.map(r => `
+                tbody.innerHTML = list.map(r => `
                     <tr>
-                        <td>${new Date(r.data).toLocaleDateString('pt-BR')}</td>
+                        <td>${new Date(r.data).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</td>
                         <td style="text-align: right;" class="value-highlight">${formatWeight(r.pesoTotal)}</td>
                         <td style="text-align: right;">${formatCurrency(r.valorTotal)}</td>
                     </tr>
                 `).join('');
-
-                // Update Total Faturamento KPI for current month
-                const now = new Date();
-                const currentMonth = now.getMonth();
-                const currentYear = now.getFullYear();
-                
-                const monthTotal = list.reduce((acc, curr) => {
-                    const d = new Date(curr.data);
-                    if (d.getUTCMonth() === currentMonth && d.getUTCFullYear() === currentYear) {
-                        return acc + parseFloat(curr.valorTotal);
-                    }
-                    return acc;
-                }, 0);
-                document.getElementById('kpi-faturamento').innerText = formatCurrency(monthTotal);
-                
-                // Also update Total Weight if possible
-                const monthWeight = list.reduce((acc, curr) => {
-                    const d = new Date(curr.data);
-                    if (d.getUTCMonth() === currentMonth && d.getUTCFullYear() === currentYear) {
-                        return acc + parseFloat(curr.pesoTotal || 0);
-                    }
-                    return acc;
-                }, 0);
-                document.getElementById('trend-faturamento').innerHTML = `<i class="fa-solid fa-scale-balanced"></i> ${formatWeight(monthWeight)} faturados no mês`;
+                if (list.length === 0) tbody.innerHTML = '<tr><td colspan="3" style="text-align: center;">Nenhum faturamento no período</td></tr>';
 
             } catch (e) { console.error('Error Faturamento:', e); }
             showLoading('card-faturamento', false);
@@ -887,6 +934,11 @@
 
         // --- INIT ---
         document.addEventListener('DOMContentLoaded', () => {
+            // Set current month/year
+            const now = new Date();
+            document.getElementById('select-year').value = now.getFullYear();
+            document.getElementById('select-month').value = now.getMonth();
+
             // Role check safety (fallback)
             const role = localStorage.getItem('erus_role');
             if (role !== 'desenvolvedor' && role !== 'admin') {
