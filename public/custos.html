@@ -1926,7 +1926,7 @@
                     const safeForn = (f.fornecedor || '').replace(/'/g, "\\'");
                     const pct = total > 0 ? ((f.total / total) * 100).toFixed(1) : '0';
                     return `
-                    <tr class="clickable" onclick="openDrilldownCosts('fornecedores', '${safeForn}')" title="Clique para ver itens deste fornecedor e definir Centro de Custo">
+                    <tr class="clickable" onclick="openDrilldownCosts('fornecedores', '${safeForn}', '${ccCode}')" title="Clique para ver itens deste fornecedor e definir Centro de Custo">
                         <td class="name truncate" title="${f.fornecedor}" style="max-width:250px;">${f.fornecedor}</td>
                         <td class="val" style="font-weight:600;">${fmtBRL(f.total)}</td>
                         <td style="text-align:right; color:var(--text-muted); font-size:0.75rem;">${pct}%</td>
@@ -1954,7 +1954,7 @@
             document.getElementById('ccDrilldownModal').style.display = 'none';
         }
 
-        async function openDrilldownCosts(category, name) {
+        async function openDrilldownCosts(category, name, ccFilter = null) {
             document.getElementById('drilldownModal').style.display = 'flex';
             const periodStr = currentMonth ? `${FULL_MONTH_NAMES[currentMonth - 1]} / ${currentYear}` : '';
 
@@ -1967,6 +1967,10 @@
                     'setores': 'Todos os Setores'
                 };
                 displayTitle = catNames[category] || 'Visão Geral';
+            }
+
+            if (ccFilter) {
+                displayTitle += ` [Centro: ${ccFilter}]`;
             }
 
             document.getElementById('drilldownTitle').textContent = `${displayTitle} (${periodStr})`;
@@ -1992,13 +1996,31 @@
                 }
 
                 if (isGroupable) {
+                    // Filter by CC if requested
+                    let data = json.data;
+                    if (ccFilter) {
+                        data = data.filter(r => {
+                            const keyExact = `${r.fornecedor}|${r.produto || ''}`;
+                            const keyDefault = `${r.fornecedor}|`;
+                            const cc = mapeamentosCentro[keyExact] || mapeamentosCentro[keyDefault] || 'SEM';
+                            return cc === ccFilter;
+                        });
+                    }
+
+                    if (data.length === 0) {
+                        body.innerHTML = `<div style="text-align: center; color: var(--text-muted); padding: 40px;">
+                            Nenhum item deste fornecedor mapeado para o centro <b>${ccFilter}</b>.
+                        </div>`;
+                        return;
+                    }
+
                     // Build CC options for item-level mapping
                     const isFornCategory = category === 'fornecedores';
                     const ccOpts = isFornCategory ? centrosCusto.map(c =>
                         `<option value="${c.codigo}">${c.codigo} - ${c.nome}</option>`
                     ).join('') : '';
 
-                    let rows = json.data.map(r => {
+                    let rows = data.map(r => {
                         const safeForn = (r.fornecedor || '').replace(/'/g, "\\'");
                         const safeProd = (r.produto || '').replace(/'/g, "\\'");
                         const ccCol = isFornCategory ? `
