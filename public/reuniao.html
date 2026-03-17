@@ -947,12 +947,18 @@
         async function fetchTerceirizacao() {
             showLoading('card-terceirizacao', true);
             try {
+                const { startDate, endDate } = getSelectedPeriod();
                 const res = await fetch('/api/acabamento-externo');
                 const data = await res.json();
                 
                 // Group by charge (carga)
                 const charges = {};
                 (data.registros || []).forEach(r => {
+                    // 1. Filter by Period (if not "Tudo")
+                    if (startDate && endDate && r.data) {
+                        if (r.data < startDate || r.data > endDate) return;
+                    }
+
                     const isReceived = (data.recebidos || []).some(rec => rec.id === r.id);
                     if (!isReceived) {
                         const chargeId = r.carga || 'S/N';
@@ -969,7 +975,8 @@
                     }
                 });
 
-                const sortedCharges = Object.values(charges).sort((a, b) => b.carga - a.carga).slice(0, 8);
+                // Show all charges within the month, sorted by carga descending
+                const sortedCharges = Object.values(charges).sort((a, b) => b.carga - a.carga);
 
                 const tbody = document.querySelector('#table-terceirizacao tbody');
                 tbody.innerHTML = sortedCharges.map(c => `
@@ -979,7 +986,7 @@
                         <td style="text-align: right;" class="value-highlight">${formatWeight(c.peso)}</td>
                     </tr>
                 `).join('');
-                if (sortedCharges.length === 0) tbody.innerHTML = '<tr><td colspan="3" style="text-align: center;">Nenhuma carga pendente</td></tr>';
+                if (sortedCharges.length === 0) tbody.innerHTML = '<tr><td colspan="3" style="text-align: center;">Nenhuma carga pendente no período</td></tr>';
             } catch (e) { console.error('Error Terceirizacao:', e); }
             showLoading('card-terceirizacao', false);
         }
