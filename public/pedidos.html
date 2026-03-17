@@ -1796,7 +1796,8 @@
         }
         let isModelosHidden = true; // Inicia OCULTO por padrão
 
-        // --- FUNÇÕES MODAL ---
+        let backlogDataState = null; // Backup for commercial backlog when viewing history
+
         function openModal(hideOP = false) { 
             const modal = document.getElementById('recordsModal');
             if (hideOP) {
@@ -1806,8 +1807,23 @@
             }
             modal.style.display = 'flex'; 
         }
+
+        function clearTableFilters() {
+            const inputs = document.querySelectorAll('.filter-input-table');
+            inputs.forEach(inp => inp.value = '');
+        }
+
         function closeModal() {
             document.getElementById('recordsModal').style.display = 'none';
+            
+            // Restore backlog if we were in historical view
+            if (backlogDataState) {
+                allData = [...backlogDataState];
+                backlogDataState = null;
+                clearTableFilters();
+                applyColumnFilters();
+            }
+
             // Clear stage filter when closing modal to return to full dashboard view
             if (activeChartFilters.stage) {
                 activeChartFilters.stage = null;
@@ -3073,10 +3089,12 @@
         function applyColumnFilters() {
             const inputs = document.querySelectorAll('.filter-input-table');
 
+            const isHistorical = document.getElementById('recordsModal').classList.contains('hide-op-column');
+
             // Map numeric data-col to field names (updated for new column structure)
             const fieldMap = {
                 '0': 'CODIGO_PPR',
-                '1': 'ENTREGA_PETR',
+                '1': isHistorical ? 'DATA_EMISSAO_PEDIDO' : 'ENTREGA_PETR',
                 '2': 'NOME_CLIENTE',
                 '3': 'PRODUTO_PPR',
                 '4': 'NOME_PRODUTO_PPR',
@@ -3244,8 +3262,8 @@
                     // Defaults
                     let itemVal = String(item[key] || '');
 
-                    if (key === 'ENTREGA_PETR' && item.ENTREGA_PETR) {
-                        itemVal += ' ' + new Date(item.ENTREGA_PETR).toLocaleDateString();
+                    if ((key === 'ENTREGA_PETR' || key === 'DATA_EMISSAO_PEDIDO') && item[key]) {
+                        itemVal += ' ' + new Date(item[key]).toLocaleDateString();
                     }
 
                     // O usuário pediu "filtrar os registros que estão exatamente escritos" -> Mudado para "contém" para facilitar uso
@@ -3815,17 +3833,22 @@
                 ENTREGA_PETR: r.DATA_EMISSAO_PEDIDO 
             }));
 
+            // Sync with global state for filtering
+            if (!backlogDataState) backlogDataState = [...allData];
+            allData = normalized;
+            clearTableFilters();
+
             // Abrir modal e renderizar
             openModal(true);
-            renderTable(normalized);
+            applyColumnFilters(); // This will call renderTable(normalized) via flow
             if (typeof updateTotals === 'function') updateTotals(normalized);
 
             // Override close modal logic once to restore title and cleanup
             const originalClose = window.closeModal;
             window.closeModal = function () {
                 if (headerDate) headerDate.innerText = 'ENTREGA';
-                document.getElementById('recordsModal').classList.remove('hide-op-column');
-                if (titleEl) titleEl.innerHTML = `<i class="fa-solid fa-list-check" style="margin-right: 15px;"></i>Registros de Pedidos`;
+                
+                // Restore logic handled in main closeModal
                 originalClose();
                 window.closeModal = originalClose; // Reset
             };
