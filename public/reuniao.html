@@ -296,6 +296,51 @@
         .badge-success { background: rgba(16, 185, 129, 0.15); color: var(--status-success); }
         .badge-info { background: rgba(59, 130, 246, 0.15); color: var(--status-info); }
 
+        .year-select {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-subtle);
+            color: var(--color-primary);
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-family: var(--font-display);
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .months-group {
+            display: flex;
+            gap: 4px;
+            background: rgba(255, 255, 255, 0.03);
+            padding: 4px;
+            border-radius: 10px;
+            border: 1px solid var(--border-subtle);
+        }
+
+        .month-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-dim);
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+        }
+
+        .month-btn:hover {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-main);
+        }
+
+        .month-btn.active {
+            background: var(--color-primary);
+            color: #000;
+            font-weight: 700;
+        }
+
         .loading-overlay {
             position: absolute;
             top: 0;
@@ -380,29 +425,30 @@
             </div>
         </div>
 
-        <div class="header-filters" style="display: flex; gap: 10px; align-items: center; background: rgba(255,255,255,0.03); padding: 8px 15px; border-radius: 12px; border: 1px solid var(--border-subtle);">
-            <div style="display: flex; align-items: center; gap: 8px;">
-                <i class="fa-regular fa-calendar-days" style="color: var(--color-primary); font-size: 0.9rem;"></i>
-                <select id="select-year" onchange="refreshAll()" style="background: transparent; border: none; color: #fff; font-family: var(--font-main); font-size: 0.9rem; font-weight: 600; cursor: pointer; outline: none;">
-                    <option value="all" style="background:#111827">Tudo</option>
-                    <option value="2024" style="background:#111827">2024</option>
-                    <option value="2025" selected style="background:#111827">2025</option>
-                    <option value="2026" style="background:#111827">2026</option>
-                </select>
+        <div style="display: flex; gap: 15px; align-items: center;">
+            <select id="select-year" onchange="refreshAll()" class="year-select">
+                <option value="all">Sempre</option>
+                <option value="2024">2024</option>
+                <option value="2025" selected>2025</option>
+                <option value="2026">2026</option>
+            </select>
+            
+            <div class="months-group" id="months-group">
+                <button class="month-btn" data-month="0" onclick="selectMonth(0)">Jan</button>
+                <button class="month-btn" data-month="1" onclick="selectMonth(1)">Fev</button>
+                <button class="month-btn" data-month="2" onclick="selectMonth(2)">Mar</button>
+                <button class="month-btn" data-month="3" onclick="selectMonth(3)">Abr</button>
+                <button class="month-btn" data-month="4" onclick="selectMonth(4)">Mai</button>
+                <button class="month-btn" data-month="5" onclick="selectMonth(5)">Jun</button>
+                <button class="month-btn" data-month="6" onclick="selectMonth(6)">Jul</button>
+                <button class="month-btn" data-month="7" onclick="selectMonth(7)">Ago</button>
+                <button class="month-btn" data-month="8" onclick="selectMonth(8)">Set</button>
+                <button class="month-btn" data-month="9" onclick="selectMonth(9)">Out</button>
+                <button class="month-btn" data-month="10" onclick="selectMonth(10)">Nov</button>
+                <button class="month-btn" data-month="11" onclick="selectMonth(11)">Dez</button>
+                <button class="month-btn all-btn" data-month="all" onclick="selectMonth('all')">Tudo</button>
             </div>
-            <div style="width: 1px; height: 20px; background: var(--border-subtle);"></div>
-            <select id="select-month" onchange="refreshAll()" style="background: transparent; border: none; color: #fff; font-family: var(--font-main); font-size: 0.9rem; font-weight: 600; cursor: pointer; outline: none;">
-                <option value="all" style="background:#111827">Tudo</option>
-                <option value="0" style="background:#111827">Janeiro</option>
-                <option value="1" style="background:#111827">Fevereiro</option>
-                <option value="2" style="background:#111827">Março</option>
-                <option value="3" style="background:#111827">Abril</option>
-                <option value="4" style="background:#111827">Maio</option>
-                <option value="5" style="background:#111827">Junho</option>
-                <option value="6" style="background:#111827">Julho</option>
-                <option value="7" style="background:#111827">Agosto</option>
-                <option value="8" style="background:#111827">Setembro</option>
-                <option value="9" style="background:#111827">Outubro</option>
+        </div>
                 <option value="10" style="background:#111827">Novembro</option>
                 <option value="11" style="background:#111827">Dezembro</option>
             </select>
@@ -735,6 +781,70 @@
             document.getElementById('last-sync-text').innerText = 'Atualizado às ' + now.toLocaleTimeString('pt-BR');
         }
 
+        // --- NEW GLOBALS FOR DYNAMIC KPI ---
+        let currentSectorIndex = 0;
+        let sectorDataForKPI = [];
+        let kpiRotationInterval = null;
+        let currentMonthValue = new Date().getMonth();
+        let currentYearValue = new Date().getFullYear();
+
+        function selectMonth(m) {
+            currentMonthValue = m;
+            document.querySelectorAll('.month-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.month ==String(m));
+            });
+            refreshAll();
+        }
+
+        function getSelectedPeriod() {
+            const yearVal = document.getElementById('select-year').value;
+            const year = yearVal === 'all' ? null : parseInt(yearVal);
+            const month = currentMonthValue === 'all' ? null : parseInt(currentMonthValue);
+            
+            if (year === null && month === null) return { startDate: null, endDate: null, year: null, month: null };
+            
+            const startYear = year || new Date().getFullYear();
+            const startMonth = month !== null ? month : 0;
+            const endMonth = month !== null ? month : 11;
+            
+            const startDate = new Date(Date.UTC(startYear, startMonth, 1)).toISOString().split('T')[0];
+            const endDate = new Date(Date.UTC(startYear, endMonth + 1, 0)).toISOString().split('T')[0];
+            
+            return { startDate, endDate, year, month };
+        }
+
+        function startKPIRotation() {
+            if (kpiRotationInterval) clearInterval(kpiRotationInterval);
+            
+            rotateKPI(); // Initial run
+            kpiRotationInterval = setInterval(rotateKPI, 10000); // 10 seconds
+        }
+
+        function rotateKPI() {
+            if (sectorDataForKPI.length === 0) return;
+            
+            const data = sectorDataForKPI[currentSectorIndex];
+            const labelEl = document.querySelector('.kpi-card[style*="var(--status-info)"] .kpi-label');
+            const valueEl = document.getElementById('kpi-producao');
+            const trendEl = document.getElementById('trend-producao');
+
+            if (labelEl && valueEl) {
+                labelEl.style.opacity = '0';
+                valueEl.style.opacity = '0';
+                
+                setTimeout(() => {
+                    labelEl.innerText = `Produção: ${data.name}`;
+                    valueEl.innerText = formatWeight(data.weight);
+                    trendEl.innerHTML = `<i class="fa-solid fa-industry"></i> Média: ${formatWeight(data.avg)}`;
+                    
+                    labelEl.style.opacity = '1';
+                    valueEl.style.opacity = '1';
+                }, 300);
+            }
+
+            currentSectorIndex = (currentSectorIndex + 1) % sectorDataForKPI.length;
+        }
+
         // --- DATA FETCHING ---
 
         async function fetchRefugo() {
@@ -841,33 +951,20 @@
                 });
 
                 // Sector order/list for display
-                const displaySectors = ['MOLDAGEM GERAL', 'FUSAO', 'ACABAMENTO', 'USINAGEM', 'TRATAMENTO TERMICO', 'EXPEDICAO'];
+                const displaySectors = ['MOLDAGEM MANUAL', 'MOLDAGEM LEVE', 'MOLDAGEM PESADA', 'FUSAO', 'ACABAMENTO', 'USINAGEM', 'TRATAMENTO TERMICO', 'EXPEDICAO'];
                 
-                // Handle MOLDAGEM GERAL special case (sum of sub-types if any)
-                // In some systems MOLDAGEM GERAL is a virtual sector
-                const moldTypes = ['MOLDAGEM MANUAL', 'MOLDAGEM LEVE', 'MOLDAGEM PESADA', 'MOLDAGEM GERAL'];
-                let moldWeight = 0;
-                let moldDates = new Set();
-                let moldQty = 0;
-                
-                Object.keys(sectorStats).forEach(s => {
-                    if (moldTypes.includes(s)) {
-                        moldWeight += sectorStats[s].weight;
-                        moldQty += sectorStats[s].qty;
-                        sectorStats[s].dates.forEach(d => moldDates.add(d));
-                    }
-                });
-
-                if (moldWeight > 0) {
-                    sectorStats['MOLDAGEM GERAL'] = { weight: moldWeight, dates: moldDates, qty: moldQty };
-                }
-
                 const grid = document.getElementById('prod-sectors-grid');
+                sectorDataForKPI = []; // Reset rotation data
+                
                 grid.innerHTML = displaySectors.map(s => {
                     const stats = sectorStats[s] || { weight: 0, dates: new Set(), qty: 0 };
                     const days = stats.dates.size;
                     const avg = days > 0 ? (stats.weight / days) : 0;
                     
+                    if (stats.weight > 0) {
+                        sectorDataForKPI.push({ name: s, weight: stats.weight, avg: avg });
+                    }
+
                     return `
                         <div style="background: rgba(16, 185, 129, 0.05); padding: 12px 15px; border-radius: 12px; border: 1px solid rgba(16, 185, 129, 0.2); display: flex; flex-direction: column; gap: 6px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
                             <div class="kpi-label" style="font-size: 0.65rem; color: var(--color-primary); font-weight: 700;">${s}</div>
@@ -883,7 +980,7 @@
                     `;
                 }).join('');
 
-                document.getElementById('kpi-producao').innerText = formatWeight(totalProdWeight);
+                startKPIRotation();
             } catch (e) { console.error('Error Producao:', e); }
             showLoading('card-producao', false);
         }
@@ -954,7 +1051,7 @@
                 const res = await fetch(`/api/emissoes/client-summary?ano=${queryYear}${month !== null ? '&mes=' + queryMonth : ''}`);
                 const data = await res.json();
                 
-                const sorted = (data || []).slice(0, 5);
+                const sorted = (data || []).slice(0, 10);
                 const tbody = document.querySelector('#table-emissao tbody');
                 tbody.innerHTML = sorted.map(row => `
                     <tr>
@@ -1024,11 +1121,30 @@
                     `;
                 }).join('');
                 
-                if (sortedCharges.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="3" style="text-align: center; opacity: 0.5;">Nenhuma carga no período</td></tr>';
+                if (sortedCharges.length > 0) {
+                    startAutoScroll('card-terceirizacao');
                 }
             } catch (e) { console.error('Error Terceirizacao:', e); }
             showLoading('card-terceirizacao', false);
+        }
+
+        function startAutoScroll(cardId) {
+            const container = document.querySelector(`#${cardId} .section-content`);
+            if (!container) return;
+            
+            // Clear existing interval if any
+            if (container._scrollInterval) clearInterval(container._scrollInterval);
+            
+            // Reset scroll
+            container.scrollTop = 0;
+            
+            container._scrollInterval = setInterval(() => {
+                if (container.scrollTop + container.clientHeight >= container.scrollHeight - 2) {
+                    container.scrollTop = 0; // Return to top
+                } else {
+                    container.scrollTop += 1; // Smooth scroll
+                }
+            }, 50); // Speed: 1px every 50ms (adjust as needed)
         }
 
         async function fetchDevolucoes() {
@@ -1152,7 +1268,9 @@
             // Set current month/year
             const now = new Date();
             document.getElementById('select-year').value = now.getFullYear();
-            document.getElementById('select-month').value = now.getMonth();
+            
+            // Re-select month in buttons
+            selectMonth(now.getMonth());
 
             // Role check safety (fallback)
             const role = localStorage.getItem('erus_role');
