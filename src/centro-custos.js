@@ -20,7 +20,7 @@ const CENTROS_CUSTO = [
     { codigo: 'LAB', nome: 'Laboratório / Qualidade' },
     { codigo: 'MAN', nome: 'Manutenção' },
     { codigo: 'ADM', nome: 'Administrativo' },
-    { codigo: 'LOG', nome: 'Logística / Expedição' },
+    { codigo: 'LOG', nome: 'Expedição' },
     { codigo: 'RH', nome: 'Recursos Humanos' },
     { codigo: 'COM', nome: 'Comercial' },
     { codigo: 'TER', nome: 'Terceirização' },
