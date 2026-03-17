@@ -634,6 +634,7 @@
         let refreshTimer = 300; // 5 minutes
         const REFRESH_INTERVAL_SEC = 300;
         let excludedClients = new Set();
+        let customWeights = {};
         
         // --- HELPERS ---
         const formatCurrency = (val) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val || 0);
@@ -663,10 +664,36 @@
 
         async function loadPreferences() {
             try {
-                const res = await fetch('/api/preferences/excluded_clients');
-                const json = await res.json();
-                if (json.success) excludedClients = new Set(json.data || []);
-            } catch (e) { console.error('Error loading preferences:', e); }
+                const [resClients, resWeights] = await Promise.all([
+                    fetch('/api/preferences/excluded_clients'),
+                    fetch('/api/weights/list')
+                ]);
+                
+                const jsonClients = await resClients.json();
+                if (jsonClients.success) excludedClients = new Set(jsonClients.data || []);
+                
+                if (resWeights.ok) customWeights = await resWeights.json();
+            } catch (e) { console.error('Error loading preferences/weights:', e); }
+        }
+
+        function getCorrectedWeight(item) {
+            const saldoLiberado = Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0;
+            const qtdOriginal = Number(item.QUANTIDADE_PPR) || 0;
+            const saldoReal = saldoLiberado > 0 ? saldoLiberado : qtdOriginal;
+
+            let unitWeight = 0;
+            const prodCode = String(item.PRODUTO_PPR || item.CODIGO_PECA || '').trim();
+
+            if (item.PESO_UNIT !== undefined && item.PESO_UNIT !== null && item.PESO_UNIT !== '') {
+                unitWeight = Number(item.PESO_UNIT);
+            } else if (customWeights[prodCode]) {
+                unitWeight = customWeights[prodCode];
+            } else {
+                const pesoNpr = Number(item.PESO_LIQUIDO_NPR) || 0;
+                unitWeight = qtdOriginal > 0 ? (pesoNpr / qtdOriginal) : 0;
+            }
+
+            return unitWeight * saldoReal;
         }
 
         function showLoading(cardId, active) {
@@ -837,10 +864,29 @@
                 
                 const clients = {};
                 let totalWeight = 0;
-                raw.forEach(op => {
-                    const client = op.NOME_CLIENTE || 'N/A';
-                    const weight = parseFloat(op.VALOR_PESO_TOTAL || 0);
-                    const value = parseFloat(op.VALOR_PEDIDO_ITEM || 0) * (parseInt(op.OP_QUANTIDADE) || 0);
+                
+                raw.forEach(item => {
+                    // 1. Filter Modelos (Ends with '1') - Consistent with pedidos.html
+                    const prodCode = String(item.PRODUTO_PPR || '').trim();
+                    if (prodCode.endsWith('1')) return;
+
+                    const client = item.NOME_CLIENTE || 'N/A';
+                    
+                    // 2. Corrected Weight Logic
+                    const weight = getCorrectedWeight(item);
+                    
+                    // 3. Value Logic
+                    const saldo = Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0;
+                    const qtdOriginal = Number(item.QUANTIDADE_PPR) || 0;
+                    const realQty = saldo > 0 ? saldo : qtdOriginal;
+                    
+                    let unitPrice = parseFloat(item.VALOR_PPR || 0);
+                    // Price per KG logic if applicable
+                    if (item.PRECO_KG && parseFloat(item.PRECO_KG) > 0 && customWeights[prodCode]) {
+                        let unitW = realQty > 0 ? (weight / realQty) : 0;
+                        unitPrice = parseFloat(item.PRECO_KG) * unitW;
+                    }
+                    const value = unitPrice * realQty;
                     
                     if (!clients[client]) clients[client] = { weight: 0, value: 0 };
                     clients[client].weight += weight;
