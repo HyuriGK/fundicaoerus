@@ -756,27 +756,70 @@
         async function fetchProducao() {
             showLoading('card-producao', true);
             try {
-                const { year, month, startDate, endDate } = getSelectedPeriod();
-                const sectors = ['MOLDAGEM', 'FUSÃO', 'ACABAMENTO', 'USINAGEM', 'TRATAMENTO TÉRMICO', 'EXPEDIÇÃO'];
-
-                const promises = sectors.map(s => 
-                    fetch(`/api/producao-postgres/stats?sector=${encodeURIComponent(s)}&startDate=${startDate}&endDate=${endDate}`)
-                    .then(r => r.ok ? r.json() : { stats: { totalWeight: 0, totalQty: 0 } })
-                    .catch(() => ({ stats: { totalWeight: 0, totalQty: 0 } }))
-                );
+                const { startDate, endDate } = getSelectedPeriod();
                 
-                const results = await Promise.all(promises);
+                let url = '/api/producao-postgres?limit=100000';
+                if (startDate) url += `&startDate=${startDate}&endDate=${endDate}`;
+                
+                const res = await fetch(url);
+                const result = await res.json();
+                const data = result.data || [];
+
+                // Group by Sector
+                const sectorStats = {};
                 let totalProdWeight = 0;
 
+                data.forEach(row => {
+                    const s = (row.setor || 'OUTROS').toUpperCase();
+                    if (!sectorStats[s]) {
+                        sectorStats[s] = { weight: 0, dates: new Set(), qty: 0 };
+                    }
+                    const w = parseFloat(row.pesoTotal || 0);
+                    sectorStats[s].weight += w;
+                    sectorStats[s].qty += parseFloat(row.quantidade || 0);
+                    sectorStats[s].dates.add(row.data);
+                    totalProdWeight += w;
+                });
+
+                // Sector order/list for display
+                const displaySectors = ['MOLDAGEM GERAL', 'FUSAO', 'ACABAMENTO', 'USINAGEM', 'TRATAMENTO TERMICO', 'EXPEDICAO'];
+                
+                // Handle MOLDAGEM GERAL special case (sum of sub-types if any)
+                // In some systems MOLDAGEM GERAL is a virtual sector
+                const moldTypes = ['MOLDAGEM MANUAL', 'MOLDAGEM LEVE', 'MOLDAGEM PESADA', 'MOLDAGEM GERAL'];
+                let moldWeight = 0;
+                let moldDates = new Set();
+                let moldQty = 0;
+                
+                Object.keys(sectorStats).forEach(s => {
+                    if (moldTypes.includes(s)) {
+                        moldWeight += sectorStats[s].weight;
+                        moldQty += sectorStats[s].qty;
+                        sectorStats[s].dates.forEach(d => moldDates.add(d));
+                    }
+                });
+
+                if (moldWeight > 0) {
+                    sectorStats['MOLDAGEM GERAL'] = { weight: moldWeight, dates: moldDates, qty: moldQty };
+                }
+
                 const grid = document.getElementById('prod-sectors-grid');
-                grid.innerHTML = results.map((res, i) => {
-                    const weight = res.stats?.totalWeight || 0;
-                    totalProdWeight += weight;
+                grid.innerHTML = displaySectors.map(s => {
+                    const stats = sectorStats[s] || { weight: 0, dates: new Set(), qty: 0 };
+                    const days = stats.dates.size;
+                    const avg = days > 0 ? (stats.weight / days) : 0;
+                    
                     return `
-                        <div style="background: rgba(255,255,255,0.03); padding: 15px; border-radius: 12px; border: 1px solid var(--border-subtle);">
-                            <div class="kpi-label" style="font-size: 0.65rem;">${sectors[i]}</div>
-                            <div class="value-highlight" style="font-size: 1.1rem; margin-top: 5px;">${formatWeight(weight)}</div>
-                            <div style="font-size: 0.7rem; color: var(--text-dim); margin-top: 5px;">${parseInt(res.stats?.totalQty || 0)} peças</div>
+                        <div style="background: rgba(255,255,255,0.03); padding: 12px; border-radius: 12px; border: 1px solid var(--border-subtle); display: flex; flex-direction: column; gap: 5px;">
+                            <div class="kpi-label" style="font-size: 0.65rem; color: var(--color-primary);">${s}</div>
+                            <div style="display: flex; justify-content: space-between; align-items: baseline;">
+                                <div class="value-highlight" style="font-size: 1.05rem;">${formatWeight(stats.weight)}</div>
+                                <div style="font-size: 0.7rem; color: var(--text-dim);">${parseInt(stats.qty)} pçs</div>
+                            </div>
+                            <div style="font-size: 0.75rem; color: #fff; margin-top: 2px; padding-top: 5px; border-top: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between;">
+                                <span style="opacity: 0.6;">Média Diária:</span>
+                                <strong>${formatWeight(avg)}</strong>
+                            </div>
                         </div>
                     `;
                 }).join('');
