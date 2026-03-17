@@ -924,11 +924,18 @@
             text-align: center;
         }
 
-        /* 10. ENTREGA */
+        /* 10. ENTREGA / OP */
         th:nth-child(10),
         td:nth-child(10) {
             width: 17%;
             text-align: center;
+        }
+
+        /* Ocultar OP no modal de emissões */
+        .hide-op-column th:nth-child(10),
+        .hide-op-column td:nth-child(10),
+        .hide-op-column tr#filterRow th:nth-child(10) {
+            display: none !important;
         }
 
         .filter-input-table {
@@ -1373,19 +1380,19 @@
                         </tr>
                         <tr id="filterRow">
                             <th><input class="filter-input-table" data-col="0" placeholder="..."></th>
+                            <th><input class="filter-input-table" data-col="1" placeholder="..."></th>
                             <th><input class="filter-input-table" data-col="2" placeholder="..."></th>
                             <th><input class="filter-input-table" data-col="3" placeholder="..."></th>
                             <th><input class="filter-input-table" data-col="4" placeholder="..."></th>
                             <th><input class="filter-input-table" data-col="5" placeholder="..."></th>
-                            <th><input class="filter-input-table" data-col="9" placeholder="..."></th>
+                            <th><input class="filter-input-table" data-col="6" placeholder="..."></th>
                             <th><input class="filter-input-table" data-col="7" placeholder="..."></th>
-                            <th><input class="filter-input-table" data-col="8" placeholder="..."></th>
 
                             <!-- Total R$ -->
-                            <th><input class="filter-input-table" data-col="10" placeholder="...">
+                            <th><input class="filter-input-table" data-col="8" placeholder="...">
                             </th>
                             <!-- OP -->
-                            <th><input class="filter-input-table" data-col="11" placeholder="..."></th>
+                            <th><input class="filter-input-table" data-col="9" placeholder="..."></th>
                         </tr>
                     </thead>
                     <tbody id="table-body"></tbody>
@@ -1950,7 +1957,7 @@
                     <div style="display: grid; grid-template-columns: 1fr 1.2fr 1fr 1fr 1fr; gap: 25px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 20px;">
                         <div>
                             <div class="detail-label">Cód. Produto</div>
-                            <div class="detail-value clickable-code" style="font-weight: bold;" title="Clique para copiar" onclick="copyToClipboard('${item.PRODUTO_PPR}')">${item.PRODUTO_PPR}</div>
+                            <div class="detail-value clickable-code" style="font-weight: bold;" title="Clique para copiar" onclick="copyToClipboard('${item.PRODUTO_PPR || item.CODIGO_PECA || ''}')">${item.PRODUTO_PPR || item.CODIGO_PECA || '-'}</div>
                         </div>
                         <div>
                             <div class="detail-label">Material</div>
@@ -1979,7 +1986,7 @@
                     <!-- LINHA 4: DESCRIÇÃO (LINHA PRÓPRIA) -->
                     <div style="border-top: 1px solid rgba(255,255,255,0.05); padding-top: 20px;">
                         <div class="detail-label">Descrição do Produto</div>
-                        <div class="detail-value" style="font-size: 1.2rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${item.NOME_PRODUTO_PPR || item.PRODUTO_PPR}">${item.NOME_PRODUTO_PPR || item.PRODUTO_PPR}</div>
+                        <div class="detail-value" style="font-size: 1.2rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${item.NOME_PRODUTO_PPR || item.PRODUTO_PPR}">${item.NOME_PRODUTO_PPR || item.PRODUTO_PPR || item.CODIGO_PECA || '-'}</div>
                     </div>
 
                     <!-- LINHA 5: VALORES E PESOS -->
@@ -2483,13 +2490,18 @@
             // Regra: se liberado > 0 usa ele, senão usa original (bloqueado)
             const saldoReal = saldoLiberado > 0 ? saldoLiberado : qtdOriginal;
 
-            let pesoUnitario = qtdOriginal > 0 ? (Number(item.PESO_LIQUIDO_NPR) || 0) / qtdOriginal : 0;
+            let unitWeight = 0;
+            const prodCode = String(item.PRODUTO_PPR || '').trim();
 
-            if (customWeights[item.PRODUTO_PPR]) {
-                pesoUnitario = customWeights[item.PRODUTO_PPR];
+            if (item.PESO_UNIT !== undefined && item.PESO_UNIT !== null && item.PESO_UNIT !== '') {
+                unitWeight = Number(item.PESO_UNIT);
+            } else if (customWeights[prodCode]) {
+                unitWeight = customWeights[prodCode];
+            } else {
+                unitWeight = qtdOriginal > 0 ? (Number(item.PESO_LIQUIDO_NPR) || 0) / qtdOriginal : 0;
             }
 
-            return pesoUnitario * saldoReal;
+            return unitWeight * saldoReal;
         }
 
         let carteiraData = []; // Store carteira data for comparison
@@ -2615,16 +2627,24 @@
                 const saldoReal = saldoLiberado > 0 ? saldoLiberado : qtdOriginal;
 
                 let totalWeightOriginal = Number(item.PESO_LIQUIDO_NPR) || 0;
-                let unitWeight = qtdOriginal > 0 ? (totalWeightOriginal / qtdOriginal) : 0;
-                if (customWeights[item.PRODUTO_PPR]) {
-                    unitWeight = customWeights[item.PRODUTO_PPR];
+                let unitWeight = 0;
+                
+                // Prioritize field from API (which already includes manual corrections)
+                if (item.PESO_UNIT !== undefined && item.PESO_UNIT !== null && item.PESO_UNIT !== '') {
+                    unitWeight = Number(item.PESO_UNIT);
+                } else if (customWeights[String(item.PRODUTO_PPR || '').trim()]) {
+                    unitWeight = customWeights[String(item.PRODUTO_PPR || '').trim()];
+                } else {
+                    unitWeight = qtdOriginal > 0 ? (totalWeightOriginal / qtdOriginal) : 0;
                 }
+                
                 const totalWeightReal = unitWeight * saldoReal;
 
                 // VALOR Logic
                 let valorUnit = parseFloat(item.VALOR_PPR || 0);
                 // Dynamically calculate price if custom weight is used and PRECO_KG is available
-                if (item.PRECO_KG && parseFloat(item.PRECO_KG) > 0 && customWeights[item.PRODUTO_PPR]) {
+                const prodCodeTrim = String(item.PRODUTO_PPR || '').trim();
+                if (item.PRECO_KG && parseFloat(item.PRECO_KG) > 0 && customWeights[prodCodeTrim]) {
                     valorUnit = parseFloat(item.PRECO_KG) * unitWeight;
                 }
 
@@ -2642,7 +2662,7 @@
                         onkeydown="saveWeight(event, '${item.PRODUTO_PPR}')"
                         onclick="this.select()"
                     />
-                ` : `<span style="color: var(--text-muted);">${valStr || '-'}</span>`;
+                ` : `<span style="color: var(--text-main);">${valStr || '-'}</span>`;
 
                 // Blocked Logic
                 // Check multiple fields potentially indicating a block
@@ -2663,17 +2683,17 @@
                 <tr style="">
                     <td style="text-align:center;">
                         <span class="clickable-id" onclick="showItemDetails(this)" data-json='${jsonData}'>
-                            ${item.CODIGO_PPR}
+                            ${item.CODIGO_PPR || item.sync_key || '-'}
                         </span>
                         ${blockedHtml}
                     </td>
                     <td style="text-align:center;">${entrega}</td>
-                    <td style="color:var(--text-muted); text-align:left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 250px;" title="${item.NOME_CLIENTE || '-'}">${item.NOME_CLIENTE || '-'}</td>
-                    <td style="text-align:center;" class="copyable" onclick="copyToClipboard('${item.PRODUTO_PPR}', 'Código')">
-                        ${item.PRODUTO_PPR} <i class="fa-regular fa-copy" style="font-size:0.7em; margin-left:5px; opacity:0.5;"></i>
+                    <td style="color:var(--text-main); text-align:left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 250px;" title="${item.NOME_CLIENTE || '-'}">${item.NOME_CLIENTE || '-'}</td>
+                    <td style="text-align:center;" class="copyable" onclick="copyToClipboard('${item.PRODUTO_PPR || item.CODIGO_PECA || ''}', 'Código')">
+                        ${item.PRODUTO_PPR || item.CODIGO_PECA || '-'} <i class="fa-regular fa-copy" style="font-size:0.7em; margin-left:5px; opacity:0.5;"></i>
                     </td>
                     <td style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 300px;" title="${item.NOME_PRODUTO_PPR || ''}">
-                        ${item.NOME_PRODUTO_PPR || item.PRODUTO_PPR}
+                        ${item.NOME_PRODUTO_PPR || item.PRODUTO_PPR || item.CODIGO_PECA || '-'}
                     </td>
                     <td style="text-align:center;">${saldoReal}</td>
                     <td style="text-align:center;">${weightInputHtml}</td>
@@ -3048,15 +3068,15 @@
             // Map numeric data-col to field names (updated for new column structure)
             const fieldMap = {
                 '0': 'CODIGO_PPR',
-                '2': 'ENTREGA_PETR',
-                '3': 'NOME_CLIENTE',
-                '4': 'PRODUTO_PPR',
-                '5': 'NOME_PRODUTO_PPR',
-                '7': 'PESO_UNIT', // Virtual
-                '8': 'PESO_LIQUIDO_NPR', // PESO TOTAL
-                '9': 'VALOR_PPR',
-                '10': 'VALOR_TOTAL', // Virtual
-                '11': 'OP_PCS'
+                '1': 'ENTREGA_PETR',
+                '2': 'NOME_CLIENTE',
+                '3': 'PRODUTO_PPR',
+                '4': 'NOME_PRODUTO_PPR',
+                '5': 'QUANTIDADE_PPR',
+                '6': 'PESO_UNIT',
+                '7': 'PESO_LIQUIDO_NPR',
+                '8': 'VALOR_TOTAL',
+                '9': 'OP_PCS'
             };
 
             // Collect individual column filters
@@ -3810,6 +3830,9 @@
                 if (!res.ok) throw new Error('Erro ao buscar registros históricos');
                 const records = await res.json();
 
+                // Add class to hide OP column
+                document.getElementById('recordsModal').classList.add('hide-op-column');
+
                 if (records.length === 0) {
                     showToast("Atenção", "Nenhum registro encontrado para este período.", "warning");
                     return;
@@ -3835,6 +3858,7 @@
                 // Override close modal logic once to restore title (optional quality of life)
                 const originalClose = window.closeModal;
                 window.closeModal = function () {
+                    document.getElementById('recordsModal').classList.remove('hide-op-column');
                     titleEl.innerHTML = `<i class="fa-solid fa-list-check" style="margin-right: 15px;"></i>Registros de Pedidos`;
                     originalClose();
                     window.closeModal = originalClose; // Reset
