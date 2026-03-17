@@ -449,10 +449,6 @@
                 <button class="month-btn all-btn" data-month="all" onclick="selectMonth('all')">Tudo</button>
             </div>
         </div>
-                <option value="10" style="background:#111827">Novembro</option>
-                <option value="11" style="background:#111827">Dezembro</option>
-            </select>
-        </div>
 
         <div class="sync-info">
             <button onclick="refreshAll()" style="background: none; border: none; color: var(--color-primary); cursor: pointer; font-size: 1.1rem; padding: 5px; transition: transform 0.2s;" onmouseover="this.style.transform='rotate(180deg)'" onmouseout="this.style.transform='rotate(0deg)'">
@@ -1025,9 +1021,9 @@
 
                 const sorted = Object.entries(clients).sort((a, b) => b[1].weight - a[1].weight).slice(0, 10);
                 const tbody = document.querySelector('#table-carteira tbody');
-                tbody.innerHTML = sorted.map(([name, data]) => `
+                tbody.innerHTML = sorted.map(([name, data], index) => `
                     <tr>
-                        <td title="${name}">${name.substring(0, 20)}${name.length > 20 ? '...' : ''}</td>
+                        <td title="${name}">${index + 1}º ${name.substring(0, 20)}${name.length > 20 ? '...' : ''}</td>
                         <td style="text-align: right;" class="value-highlight">${formatWeight(data.weight)}</td>
                         <td style="text-align: right;">${formatCurrency(data.value)}</td>
                     </tr>
@@ -1053,9 +1049,9 @@
                 
                 const sorted = (data || []).slice(0, 10);
                 const tbody = document.querySelector('#table-emissao tbody');
-                tbody.innerHTML = sorted.map(row => `
+                tbody.innerHTML = sorted.map((row, index) => `
                     <tr>
-                        <td title="${row.name}">${row.name.substring(0, 20)}${row.name.length > 20 ? '...' : ''}</td>
+                        <td title="${row.name}">${index + 1}º ${row.name.substring(0, 20)}${row.name.length > 20 ? '...' : ''}</td>
                         <td style="text-align: right;" class="value-highlight">${formatWeight(row.totalPeso)}</td>
                         <td style="text-align: right;">${formatCurrency(row.totalValor)}</td>
                     </tr>
@@ -1132,19 +1128,24 @@
             const container = document.querySelector(`#${cardId} .section-content`);
             if (!container) return;
             
-            // Clear existing interval if any
-            if (container._scrollInterval) clearInterval(container._scrollInterval);
-            
-            // Reset scroll
+            clearInterval(container._scrollInterval);
             container.scrollTop = 0;
             
-            container._scrollInterval = setInterval(() => {
-                if (container.scrollTop + container.clientHeight >= container.scrollHeight - 2) {
-                    container.scrollTop = 0; // Return to top
-                } else {
-                    container.scrollTop += 1; // Smooth scroll
-                }
-            }, 50); // Speed: 1px every 50ms (adjust as needed)
+            // Wait a bit before starting
+            setTimeout(() => {
+                const scrollStep = () => {
+                    if (container.scrollTop + container.clientHeight >= container.scrollHeight - 2) {
+                        // Smooth return to top
+                        container.scrollTo({ top: 0, behavior: 'smooth' });
+                        // Pause at top
+                        clearInterval(container._scrollInterval);
+                        setTimeout(() => startAutoScroll(cardId), 3000); 
+                    } else {
+                        container.scrollTop += 1;
+                    }
+                };
+                container._scrollInterval = setInterval(scrollStep, 50);
+            }, 2000);
         }
 
         async function fetchDevolucoes() {
@@ -1207,7 +1208,7 @@
                     if (year !== null && d.getUTCFullYear() !== year) return false;
                     if (month !== null && d.getUTCMonth() !== month) return false;
                     return true;
-                }).slice(0, 5); // Show last 5 days of period
+                }); // Show all days of period
                 
                 const tbody = document.querySelector('#table-faturamento tbody');
                 tbody.innerHTML = list.map(r => `
@@ -1217,6 +1218,11 @@
                         <td style="text-align: right;">${formatCurrency(r.valorTotal)}</td>
                     </tr>
                 `).join('');
+                
+                if (list.length > 0) {
+                    startAutoScroll('card-faturamento');
+                }
+                
                 if (list.length === 0) tbody.innerHTML = '<tr><td colspan="3" style="text-align: center;">Nenhum faturamento no período</td></tr>';
 
             } catch (e) { console.error('Error Faturamento:', e); }
