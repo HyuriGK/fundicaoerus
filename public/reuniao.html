@@ -6,6 +6,7 @@
     <title>Tela de Reunião - Fundição Erus</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
     <style>
         :root {
             --color-primary: #10b981;
@@ -714,19 +715,8 @@
                         </div>
                     </div>
                 </div>
-                <div class="section-content">
-                    <table class="card-table" id="table-faturamento">
-                        <thead>
-                            <tr>
-                                <th>Data</th>
-                                <th style="text-align: right;">Peso faturado</th>
-                                <th style="text-align: right;">Valor</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <!-- Data injected here -->
-                        </tbody>
-                    </table>
+                <div class="section-content" style="display: flex; align-items: center; justify-content: center; padding: 10px;">
+                    <canvas id="chart-faturamento" style="max-height: 100%; width: 100%;"></canvas>
                 </div>
             </div>
 
@@ -743,6 +733,7 @@
         const REFRESH_INTERVAL_SEC = 300;
         let excludedClients = new Set();
         let customWeights = {};
+        let faturamentoChart = null;
         
         // --- HELPERS ---
         const formatCurrency = (val) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val || 0);
@@ -1273,9 +1264,8 @@
         async function fetchFaturamento() {
             showLoading('card-faturamento', true);
             try {
-                const { startDate, endDate, year, month } = getSelectedPeriod();
+                const { startDate, endDate } = getSelectedPeriod();
 
-                // Detailed data for KPI (accounting for manual exclusions)
                 let url = '/api/faturamento-postgres/detalhado?limit=10000';
                 if (startDate) url += `&startDate=${startDate}&endDate=${endDate}`;
                 
@@ -1283,7 +1273,6 @@
                 const detData = await detRes.json();
                 const rawItems = detData.data || [];
 
-                // Filter items NOT manually excluded and NOT from excluded clients
                 const validItems = rawItems.filter(item => {
                     if (item.excluido_manualmente === true) return false;
                     const client = (item.clienteNome || 'Desconhecido').trim();
@@ -1291,40 +1280,85 @@
                     return true;
                 });
                 
-                // calculation logic: (unit * qty * 100) exactly like faturamentos.html
-                const totalValor = validItems.reduce((acc, curr) => {
-                    const calculated = (curr.valorUnitario || 0) * (curr.quantidade || 0) * 100;
-                    return acc + calculated;
-                }, 0);
+                const totalValor = validItems.reduce((acc, curr) => acc + ((curr.valorUnitario || 0) * (curr.quantidade || 0) * 100), 0);
                 const totalPeso = validItems.reduce((acc, curr) => acc + parseFloat(curr.pesoTotal || 0), 0);
 
                 document.getElementById('kpi-faturamento-weight').innerText = formatWeight(totalPeso);
                 document.getElementById('kpi-faturamento-value').innerHTML = `<i class="fa-solid fa-sack-dollar"></i> ${formatCurrency(totalValor)}`;
-
-                // FOR RECURSIVE UPDATES: Store shared weight
                 window.totalFaturamentoWeight = totalPeso;
 
-                // Sync Daily Table EXACTLY with filtered items
                 const dailyMap = {};
                 validItems.forEach(item => {
                     const d = item.data.substring(0, 10);
-                    if (!dailyMap[d]) dailyMap[d] = { peso: 0, valor: 0 };
+                    if (!dailyMap[d]) dailyMap[d] = { peso: 0 };
                     dailyMap[d].peso += parseFloat(item.pesoTotal || 0);
-                    dailyMap[d].valor += (item.valorUnitario || 0) * (item.quantidade || 0) * 100;
                 });
 
-                const sortedDays = Object.entries(dailyMap).sort((a,b) => b[0].localeCompare(a[0]));
+                const sortedDays = Object.entries(dailyMap)
+                    .sort((a,b) => a[0].localeCompare(b[0])) // ASC for chart trend
+                    .slice(-10); // Last 10 days
                 
-                const tbody = document.querySelector('#table-faturamento tbody');
-                tbody.innerHTML = sortedDays.map(([date, stats]) => `
-                    <tr>
-                        <td style="font-weight: 600; color: var(--text-muted);">${new Date(date + 'T12:00:00Z').toLocaleDateString('pt-BR').substring(0, 5)}</td>
-                        <td style="text-align: right;" class="value-highlight">${formatWeight(stats.peso)}</td>
-                        <td style="text-align: right;" class="value-highlight" style="color: var(--color-primary);">${formatCurrency(stats.valor)}</td>
-                    </tr>
-                `).join('');
+                const labels = sortedDays.map(([date]) => new Date(date + 'T12:00:00Z').toLocaleDateString('pt-BR').substring(0, 5));
+                const dataValues = sortedDays.map(([, stats]) => stats.peso);
+
+                const ctx = document.getElementById('chart-faturamento').getContext('2d');
                 
-                if (sortedDays.length === 0) tbody.innerHTML = '<tr><td colspan="3" style="text-align: center;">Nenhum faturamento no período</td></tr>';
+                if (faturamentoChart) {
+                    faturamentoChart.data.labels = labels;
+                    faturamentoChart.data.datasets[0].data = dataValues;
+                    faturamentoChart.update();
+                } else {
+                    faturamentoChart = new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                label: 'Peso (Kg)',
+                                data: dataValues,
+                                backgroundColor: 'rgba(16, 185, 129, 0.4)',
+                                borderColor: '#10b981',
+                                borderWidth: 2,
+                                borderRadius: 6,
+                                hoverBackgroundColor: 'rgba(16, 185, 129, 0.6)',
+                                barPercentage: 0.6
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: { display: false },
+                                tooltip: {
+                                    backgroundColor: 'rgba(9, 9, 11, 0.9)',
+                                    titleFont: { family: 'Outfit', size: 14, weight: '800' },
+                                    bodyFont: { family: 'Inter', size: 13 },
+                                    padding: 12,
+                                    displayColors: false,
+                                    callbacks: {
+                                        label: (context) => `Peso: ${formatWeight(context.parsed.y)}`
+                                    }
+                                }
+                            },
+                            scales: {
+                                x: {
+                                    grid: { display: false },
+                                    ticks: { 
+                                        color: '#71717a',
+                                        font: { family: 'Inter', size: 11, weight: '600' }
+                                    }
+                                },
+                                y: {
+                                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                                    ticks: {
+                                        color: '#71717a',
+                                        font: { family: 'Inter', size: 10 },
+                                        callback: (value) => value >= 1000 ? (value/1000).toFixed(1) + 't' : value + 'kg'
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
 
             } catch (e) { console.error('Error Faturamento:', e); }
             showLoading('card-faturamento', false);
