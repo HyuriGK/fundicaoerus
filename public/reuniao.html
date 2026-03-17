@@ -556,7 +556,7 @@
                         <div class="section-icon"><i class="fa-solid fa-box-archive"></i></div>
                         <div>
                             <h2>Carteira Atual</h2>
-                            <p class="section-subtitle">Top 5 clientes por volume</p>
+                            <p class="section-subtitle">Top Clientes por Volume</p>
                         </div>
                     </div>
                 </div>
@@ -583,7 +583,7 @@
                     <div class="section-title">
                         <div class="section-icon"><i class="fa-solid fa-file-invoice-dollar"></i></div>
                         <div>
-                            <h2>Top 5 Emissões</h2>
+                            <h2>Top Clientes em Emissões de Pedido</h2>
                             <p class="section-subtitle">Maiores volumes emitidos no mês</p>
                         </div>
                     </div>
@@ -640,7 +640,7 @@
                         <div class="section-icon"><i class="fa-solid fa-rotate-left"></i></div>
                         <div>
                             <h2>Devoluções</h2>
-                            <p class="section-subtitle">Créditos de devolução (Mês Atual)</p>
+                            <p class="section-subtitle">Por cliente e representatividade (Mês)</p>
                         </div>
                     </div>
                 </div>
@@ -649,8 +649,9 @@
                         <thead>
                             <tr>
                                 <th>Cliente</th>
-                                <th>Motivo</th>
+                                <th style="text-align: right;">Peso</th>
                                 <th style="text-align: right;">Valor</th>
+                                <th style="text-align: right;">%</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -1177,17 +1178,39 @@
                 const { startDate, endDate } = getSelectedPeriod();
                 const res = await fetch(`/api/devolucoes?startDate=${startDate}&endDate=${endDate}`);
                 const data = await res.json();
-                
-                const list = (data.data || []).slice(0, 5);
+                const raw = data.data || [];
+
+                // Group by client
+                const grouped = {};
+                let totalDevWeight = 0;
+                raw.forEach(r => {
+                    const client = r.cliente_nome || 'N/A';
+                    if (!grouped[client]) grouped[client] = { peso: 0, valor: 0 };
+                    grouped[client].peso += parseFloat(r.peso_total || 0);
+                    grouped[client].valor += parseFloat(r.valor_total || 0);
+                    totalDevWeight += parseFloat(r.peso_total || 0);
+                });
+
+                // Get total faturamento weight for % calc
+                const faturWeight = window.totalFaturamentoWeight || 1; 
+
+                const sorted = Object.entries(grouped)
+                    .sort((a, b) => b[1].peso - a[1].peso)
+                    .slice(0, 10);
+
                 const tbody = document.querySelector('#table-devolucoes tbody');
-                tbody.innerHTML = list.map(r => `
-                    <tr>
-                        <td title="${r.cliente_nome}">${r.cliente_nome.split(' ')[0]}</td>
-                        <td style="font-size: 0.7rem;">${r.motivo || '-'}</td>
-                        <td style="text-align: right;" class="value-highlight">${formatCurrency(r.valor_total)}</td>
-                    </tr>
-                `).join('');
-                if (list.length === 0) tbody.innerHTML = '<tr><td colspan="3" style="text-align: center;">Nenhuma devolução no mês</td></tr>';
+                tbody.innerHTML = sorted.map(([cliente, stats]) => {
+                    const pct = faturWeight > 0 ? (stats.peso / faturWeight) * 100 : 0;
+                    return `
+                        <tr>
+                            <td title="${cliente}">${cliente.split(' ')[0]}</td>
+                            <td style="text-align: right;" class="value-highlight">${formatWeight(stats.peso)}</td>
+                            <td style="text-align: right;">${formatCurrency(stats.valor)}</td>
+                            <td style="text-align: right;"><span class="badge ${pct > 1 ? 'badge-danger' : 'badge-success'}" style="font-size: 0.6rem;">${pct.toFixed(2)}%</span></td>
+                        </tr>
+                    `;
+                }).join('');
+                if (sorted.length === 0) tbody.innerHTML = '<tr><td colspan="4" style="text-align: center;">Nenhuma devolução no mês</td></tr>';
             } catch (e) { console.error('Error Devolucoes:', e); }
             showLoading('card-devolucoes', false);
         }
@@ -1223,28 +1246,30 @@
                 document.getElementById('kpi-faturamento-weight').innerText = formatWeight(totalPeso);
                 document.getElementById('kpi-faturamento-value').innerHTML = `<i class="fa-solid fa-sack-dollar"></i> ${formatCurrency(totalValor)}`;
 
-                // For the table, show daily totals for the filtered period
-                const res = await fetch(`/api/faturamento-postgres/diario?limit=90`);
-                const data = await res.json();
-                const list = (data.data || []).filter(r => {
-                    const d = new Date(r.data);
-                    if (year !== null && d.getUTCFullYear() !== year) return false;
-                    if (month !== null && d.getUTCMonth() !== month) return false;
-                    return true;
-                }); // Show all days of period
+                // FOR RECURSIVE UPDATES: Store shared weight
+                window.totalFaturamentoWeight = totalPeso;
+
+                // Sync Daily Table EXACTLY with filtered items
+                const dailyMap = {};
+                validItems.forEach(item => {
+                    const d = item.data.substring(0, 10);
+                    if (!dailyMap[d]) dailyMap[d] = { peso: 0, valor: 0 };
+                    dailyMap[d].peso += parseFloat(item.pesoTotal || 0);
+                    dailyMap[d].valor += (item.valorUnitario || 0) * (item.quantidade || 0) * 100;
+                });
+
+                const sortedDays = Object.entries(dailyMap).sort((a,b) => b[0].localeCompare(a[0]));
                 
                 const tbody = document.querySelector('#table-faturamento tbody');
-                tbody.innerHTML = list.map(r => `
+                tbody.innerHTML = sortedDays.map(([date, stats]) => `
                     <tr>
-                        <td>${new Date(r.data).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</td>
-                        <td style="text-align: right;" class="value-highlight">${formatWeight(r.pesoTotal)}</td>
-                        <td style="text-align: right;">${formatCurrency(r.valorTotal)}</td>
+                        <td>${new Date(date + 'T12:00:00Z').toLocaleDateString('pt-BR')}</td>
+                        <td style="text-align: right;" class="value-highlight">${formatWeight(stats.peso)}</td>
+                        <td style="text-align: right;">${formatCurrency(stats.valor)}</td>
                     </tr>
                 `).join('');
                 
-                // Auto-scroll removed as per user request
-                
-                if (list.length === 0) tbody.innerHTML = '<tr><td colspan="3" style="text-align: center;">Nenhum faturamento no período</td></tr>';
+                if (sortedDays.length === 0) tbody.innerHTML = '<tr><td colspan="3" style="text-align: center;">Nenhum faturamento no período</td></tr>';
 
             } catch (e) { console.error('Error Faturamento:', e); }
             showLoading('card-faturamento', false);
@@ -1265,8 +1290,7 @@
                     fetchCarteira(),
                     fetchEmissoes(),
                     fetchTerceirizacao(),
-                    fetchDevolucoes(),
-                    fetchFaturamento()
+                    fetchFaturamento().then(() => fetchDevolucoes()) // Ensure weight is ready
                 ]);
 
                 updateSyncTime();
