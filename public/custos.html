@@ -1665,13 +1665,14 @@
             }
         }
 
-        async function saveCentroCusto(fornecedor, centroCusto) {
+        async function saveCentroCusto(fornecedor, produto, centroCusto) {
             try {
-                mapeamentosCentro[fornecedor] = centroCusto;
+                const key = `${fornecedor}|${produto || ''}`;
+                mapeamentosCentro[key] = centroCusto;
                 await fetch('/api/centro-custos', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ fornecedor, centro_custo: centroCusto })
+                    body: JSON.stringify({ fornecedor, produto, centro_custo: centroCusto })
                 });
             } catch (e) {
                 console.error('Erro ao salvar centro de custo:', e);
@@ -1683,39 +1684,16 @@
 
             const tbody = document.getElementById('fornecedoresBody');
             if (!fornecedores.length) {
-                tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:var(--text-muted); padding:20px;">Sem dados</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="2" style="text-align:center; color:var(--text-muted); padding:20px;">Sem dados</td></tr>';
                 return;
             }
 
-            const optionsHtml = centrosCusto.map(c =>
-                `<option value="${c.codigo}">${c.codigo} - ${c.nome}</option>`
-            ).join('');
-
             tbody.innerHTML = fornecedores.map((f, i) => {
-                const cc = mapeamentosCentro[f.fornecedor] || '';
-                const ccInfo = CC_COLORS[cc];
-                const badgeHtml = cc && ccInfo
-                    ? `<span class="cc-badge" style="background:${ccInfo.bg}; color:${ccInfo.color};">${cc}</span>`
-                    : '';
-
-                return `<tr>
+                return `<tr onclick="openDrilldownCosts('fornecedores', '${f.fornecedor.replace(/'/g, "\\'")}')" style="cursor: pointer;">
                     <td class="forn-name" title="${f.fornecedor}">${f.fornecedor}</td>
                     <td class="forn-val">${fmtBRL(f.total)}</td>
-                    <td>
-                        <select class="cc-select" onchange="saveCentroCusto('${f.fornecedor.replace(/'/g, "\\'")}', this.value)">
-                            <option value="">—</option>
-                            ${optionsHtml}
-                        </select>
-                    </td>
                 </tr>`;
             }).join('');
-
-            // Set current values
-            const selects = tbody.querySelectorAll('.cc-select');
-            fornecedores.forEach((f, i) => {
-                const cc = mapeamentosCentro[f.fornecedor] || '';
-                if (selects[i]) selects[i].value = cc;
-            });
         }
 
         // ========================
@@ -1774,19 +1752,12 @@
 
                 let rows = items.slice(0, 10).map(i => {
                     const safeName = (i.nome || '').replace(/'/g, "\\'");
-                    const ccCol = isFornecedores ? `
-                        <td style="width:140px;">
-                            <select class="cc-select" onchange="saveCentroCusto('${safeName}', this.value)">
-                                <option value="">—</option>
-                                ${ccOptionsHtml}
-                            </select>
-                        </td>` : '';
-
+                    const ccKey = isFornecedores ? `${safeName}|` : ''; // At this level we don't have product yet, so it's just supplier|
+                    
                     return `
-                    <tr onclick="openDrilldownCosts('${catTag}', '${safeName}')" style="cursor: pointer;" title="Clique para ver recibos">
+                    <tr onclick="openDrilldownCosts('${catTag}', '${safeName}')" style="cursor: pointer;" title="Clique para ver itens e definir Centro de Custo">
                         <td class="name" title="${i.nome}">${i.nome}</td>
                         <td class="val">${fmtBRL(i.total)}</td>
-                        ${ccCol}
                     </tr>`;
                 }).join('');
 
@@ -1795,7 +1766,7 @@
                     rows = `<tr><td colspan="${cols}" style="text-align: center; color: var(--text-muted);">Nenhum gasto neste mês</td></tr>`;
                 }
 
-                const extraTh = isFornecedores ? '<th style="width:140px;">Centro Custo</th>' : '';
+                const extraTh = '';
 
                 return `
                     <div class="costs-table-section">
@@ -2036,7 +2007,7 @@
                 }
 
                 if (isGroupable) {
-                    // Build CC options for fornecedores
+                    // Build CC options for item-level mapping
                     const isFornCategory = category === 'fornecedores';
                     const ccOpts = isFornCategory ? centrosCusto.map(c =>
                         `<option value="${c.codigo}">${c.codigo} - ${c.nome}</option>`
@@ -2044,9 +2015,10 @@
 
                     let rows = json.data.map(r => {
                         const safeForn = (r.fornecedor || '').replace(/'/g, "\\'");
+                        const safeProd = (r.produto || '').replace(/'/g, "\\'");
                         const ccCol = isFornCategory ? `
                             <td onclick="event.stopPropagation()">
-                                <select class="cc-select" onchange="saveCentroCusto('${safeForn}', this.value)">
+                                <select class="cc-select" onchange="saveCentroCusto('${safeForn}', '${safeProd}', this.value)">
                                     <option value="">—</option>
                                     ${ccOpts}
                                 </select>
@@ -2081,15 +2053,18 @@
                         </table>
                     `;
 
-                    // Set CC dropdown values
+                    // Set CC dropdown values level 2 (Drilldown)
                     if (isFornCategory) {
                         setTimeout(() => {
                             body.querySelectorAll('.cc-select').forEach(sel => {
                                 const row = sel.closest('tr');
-                                const fornCell = row?.querySelector('.truncate');
-                                if (fornCell) {
+                                const fornCell = row?.querySelector('td:nth-child(2)');
+                                const prodCell = row?.querySelector('td:nth-child(3)');
+                                if (fornCell && prodCell) {
                                     const fname = fornCell.getAttribute('title') || fornCell.textContent;
-                                    sel.value = mapeamentosCentro[fname] || '';
+                                    const pname = prodCell.getAttribute('title') || prodCell.textContent;
+                                    const key = `${fname}|${pname === 'DIVERSOS' ? '' : pname}`;
+                                    sel.value = mapeamentosCentro[key] || '';
                                 }
                             });
                         }, 50);

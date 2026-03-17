@@ -36,19 +36,21 @@ const CENTROS_CUSTO = [
     { codigo: 'OUT', nome: 'Outros' }
 ];
 
-// Ensure table exists
+// Ensure table exists (Updated for Item-Level Mapping)
 async function ensureTable() {
     try {
         await pool.query(`
-            CREATE TABLE IF NOT EXISTS centro_custos_mapeamento (
-                id SERIAL PRIMARY KEY,
-                fornecedor VARCHAR(255) UNIQUE NOT NULL,
-                centro_custo VARCHAR(10) NOT NULL,
-                atualizado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );
+            DO $$ 
+            BEGIN 
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='centro_custos_mapeamento' AND column_name='produto') THEN
+                    ALTER TABLE centro_custos_mapeamento ADD COLUMN produto VARCHAR(255) DEFAULT '';
+                    ALTER TABLE centro_custos_mapeamento DROP CONSTRAINT IF EXISTS centro_custos_mapeamento_fornecedor_key;
+                    ALTER TABLE centro_custos_mapeamento ADD CONSTRAINT cc_fornecedor_produto_unique UNIQUE (fornecedor, produto);
+                END IF;
+            END $$;
         `);
     } catch (e) {
-        console.error('Erro ao criar tabela centro_custos_mapeamento:', e.message);
+        console.error('Erro ao migrar tabela centro_custos_mapeamento:', e.message);
     }
 }
 
@@ -58,9 +60,12 @@ ensureTable();
 // GET /api/centro-custos — Lista centros disponíveis + mapeamentos existentes
 router.get('/', async (req, res) => {
     try {
-        const { rows } = await pool.query('SELECT fornecedor, centro_custo FROM centro_custos_mapeamento');
+        const { rows } = await pool.query('SELECT fornecedor, produto, centro_custo FROM centro_custos_mapeamento');
         const mapeamentos = {};
-        rows.forEach(r => { mapeamentos[r.fornecedor] = r.centro_custo; });
+        rows.forEach(r => { 
+            const key = `${r.fornecedor}|${r.produto || ''}`;
+            mapeamentos[key] = r.centro_custo; 
+        });
 
         res.json({
             success: true,
@@ -78,33 +83,43 @@ router.get('/resumo', async (req, res) => {
     try {
         const { mes, ano } = req.query;
 
-        // Get all fornecedores with values for the period
+        // Get all items with values for the period
         let query = `
-            SELECT nome as fornecedor, SUM(valor) as total, STRING_AGG(DISTINCT produto, ', ') as produtos
+            SELECT nome as fornecedor, produto, SUM(valor) as total
             FROM custos_registros
             WHERE categoria = 'fornecedores'
         `;
         const params = [];
         if (mes) { params.push(Number(mes)); query += ` AND mes = $${params.length}`; }
         if (ano) { params.push(Number(ano)); query += ` AND ano = $${params.length}`; }
-        query += ' GROUP BY nome ORDER BY total DESC';
+        query += ' GROUP BY nome, produto ORDER BY total DESC';
 
-        const { rows: fornecedores } = await pool.query(query, params);
+        const { rows: registros } = await pool.query(query, params);
 
         // Get mappings
-        const { rows: mappings } = await pool.query('SELECT fornecedor, centro_custo FROM centro_custos_mapeamento');
+        const { rows: mappings } = await pool.query('SELECT fornecedor, produto, centro_custo FROM centro_custos_mapeamento');
         const mapCC = {};
-        mappings.forEach(m => { mapCC[m.fornecedor] = m.centro_custo; });
+        mappings.forEach(m => { 
+            const key = `${m.fornecedor}|${m.produto || ''}`;
+            mapCC[key] = m.centro_custo; 
+        });
 
         // Aggregate by CC
         const ccTotals = {};
-        const ccFornecedores = {};
-        fornecedores.forEach(f => {
-            const cc = mapCC[f.fornecedor] || 'SEM';
-            const val = Number(f.total) || 0;
+        const ccFornecedores = {}; // We'll keep supplier level for high-level modal
+        registros.forEach(r => {
+            const cc = mapCC[`${r.fornecedor}|${r.produto || ''}`] || 'SEM';
+            const val = Number(r.total) || 0;
             ccTotals[cc] = (ccTotals[cc] || 0) + val;
+            
             if (!ccFornecedores[cc]) ccFornecedores[cc] = [];
-            ccFornecedores[cc].push({ fornecedor: f.fornecedor, total: val, produtos: f.produtos });
+            let fEntry = ccFornecedores[cc].find(x => x.fornecedor === r.fornecedor);
+            if (!fEntry) {
+                fEntry = { fornecedor: r.fornecedor, total: 0, produtos: [] };
+                ccFornecedores[cc].push(fEntry);
+            }
+            fEntry.total += val;
+            fEntry.produtos.push(r.produto);
         });
 
         // Build result array
@@ -128,21 +143,22 @@ router.get('/resumo', async (req, res) => {
     }
 });
 
-// POST /api/centro-custos — Salvar/atualizar centro de custo de um fornecedor
+// POST /api/centro-custos — Salvar/atualizar centro de custo de um item specifico
 router.post('/', async (req, res) => {
     try {
-        const { fornecedor, centro_custo } = req.body;
+        const { fornecedor, produto, centro_custo } = req.body;
         if (!fornecedor) return res.status(400).json({ success: false, error: 'Fornecedor é obrigatório' });
+        const prodName = produto || '';
 
         if (!centro_custo || centro_custo === '') {
-            await pool.query('DELETE FROM centro_custos_mapeamento WHERE fornecedor = $1', [fornecedor]);
+            await pool.query('DELETE FROM centro_custos_mapeamento WHERE fornecedor = $1 AND produto = $2', [fornecedor, prodName]);
         } else {
             await pool.query(`
-                INSERT INTO centro_custos_mapeamento (fornecedor, centro_custo, atualizado_em)
-                VALUES ($1, $2, CURRENT_TIMESTAMP)
-                ON CONFLICT (fornecedor) 
-                DO UPDATE SET centro_custo = $2, atualizado_em = CURRENT_TIMESTAMP
-            `, [fornecedor, centro_custo]);
+                INSERT INTO centro_custos_mapeamento (fornecedor, produto, centro_custo, atualizado_em)
+                VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+                ON CONFLICT (fornecedor, produto) 
+                DO UPDATE SET centro_custo = $3, atualizado_em = CURRENT_TIMESTAMP
+            `, [fornecedor, prodName, centro_custo]);
         }
 
         res.json({ success: true });
