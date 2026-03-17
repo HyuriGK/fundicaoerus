@@ -7,7 +7,9 @@ const pool = require('../lib/db');
 // Lista fixa de centros de custo para fundição
 const CENTROS_CUSTO = [
     { codigo: 'MTP', nome: 'Matéria-Prima' },
-    { codigo: 'ENE', nome: 'Energia Elétrica' },
+    { codigo: 'ARE', nome: 'Areia' },
+    { codigo: 'RES', nome: 'Resina' },
+    { codigo: 'CAT', nome: 'Catalisador' },
     { codigo: 'FUS', nome: 'Fusão' },
     { codigo: 'MOL', nome: 'Moldagem' },
     { codigo: 'ACB', nome: 'Acabamento' },
