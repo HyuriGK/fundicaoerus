@@ -536,15 +536,15 @@
                 </div>
             </div>
 
-            <!-- EMISSÃO DE PEDIDOS -->
+            <!-- EMISSÃO DE PEDIDOS (TOP CLIENTES) -->
             <div class="section-card" id="card-emissao">
                 <div class="loading-overlay active"> <div class="spinner"></div> </div>
                 <div class="section-header">
                     <div class="section-title">
                         <div class="section-icon"><i class="fa-solid fa-file-invoice-dollar"></i></div>
                         <div>
-                            <h2>Emissão de Pedidos</h2>
-                            <p class="section-subtitle">Últimos meses comparativo</p>
+                            <h2>Top 5 Emissões</h2>
+                            <p class="section-subtitle">Maiores volumes emitidos no mês</p>
                         </div>
                     </div>
                 </div>
@@ -552,9 +552,9 @@
                     <table class="card-table" id="table-emissao">
                         <thead>
                             <tr>
-                                <th>Período</th>
+                                <th>Cliente</th>
                                 <th style="text-align: right;">Peso</th>
-                                <th style="text-align: right;">Valor Total</th>
+                                <th style="text-align: right;">Valor</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -869,15 +869,15 @@
                     const avg = days > 0 ? (stats.weight / days) : 0;
                     
                     return `
-                        <div style="background: rgba(255,255,255,0.03); padding: 8px 12px; border-radius: 10px; border: 1px solid var(--border-subtle); display: flex; flex-direction: column; gap: 4px;">
-                            <div class="kpi-label" style="font-size: 0.6rem; color: var(--color-primary);">${s}</div>
+                        <div style="background: rgba(16, 185, 129, 0.05); padding: 12px 15px; border-radius: 12px; border: 1px solid rgba(16, 185, 129, 0.2); display: flex; flex-direction: column; gap: 6px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+                            <div class="kpi-label" style="font-size: 0.65rem; color: var(--color-primary); font-weight: 700;">${s}</div>
                             <div style="display: flex; justify-content: space-between; align-items: baseline;">
-                                <div class="value-highlight" style="font-size: 1rem;">${formatWeight(stats.weight)}</div>
-                                <div style="font-size: 0.65rem; color: var(--text-dim);">${parseInt(stats.qty)} pçs</div>
+                                <div class="value-highlight" style="font-size: 1.3rem; letter-spacing: -0.5px;">${formatWeight(stats.weight)}</div>
+                                <div style="font-size: 0.75rem; color: var(--text-dim); font-weight: 500;">${parseInt(stats.qty)} pçs</div>
                             </div>
-                            <div style="font-size: 0.72rem; color: #fff; margin-top: 1px; padding-top: 4px; border-top: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between;">
-                                <span style="opacity: 0.6;">Média:</span>
-                                <strong>${formatWeight(avg)}</strong>
+                            <div style="font-size: 0.85rem; color: #fff; margin-top: 2px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.08); display: flex; justify-content: space-between; align-items: center;">
+                                <span style="opacity: 0.7; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px;">Média Diária:</span>
+                                <strong style="color: var(--color-primary); font-size: 0.95rem;">${formatWeight(avg)}</strong>
                             </div>
                         </div>
                     `;
@@ -926,7 +926,7 @@
                     totalWeight += weight;
                 });
 
-                const sorted = Object.entries(clients).sort((a, b) => b[1].weight - a[1].weight).slice(0, 5);
+                const sorted = Object.entries(clients).sort((a, b) => b[1].weight - a[1].weight).slice(0, 10);
                 const tbody = document.querySelector('#table-carteira tbody');
                 tbody.innerHTML = sorted.map(([name, data]) => `
                     <tr>
@@ -944,25 +944,29 @@
         async function fetchEmissoes() {
             showLoading('card-emissao', true);
             try {
-                const res = await fetch('/api/emissoes/monthly-summary');
-                const data = await res.json();
-                
                 const { year, month } = getSelectedPeriod();
                 
-                // Only show last 8 months to give more context
-                const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-                const sorted = data.slice(0, 5);
+                // If year is null (Tudo), we can't easily show Top Clients, 
+                // but let's assume current year or just handle it.
+                const queryYear = year || new Date().getFullYear();
+                const queryMonth = (month !== null) ? (month + 1) : 'Todos';
+
+                const res = await fetch(`/api/emissoes/client-summary?ano=${queryYear}${month !== null ? '&mes=' + queryMonth : ''}`);
+                const data = await res.json();
+                
+                const sorted = (data || []).slice(0, 5);
                 const tbody = document.querySelector('#table-emissao tbody');
-                tbody.innerHTML = sorted.map(row => {
-                    const isSelected = row.ano === year && row.mes === (month + 1);
-                    return `
-                        <tr style="${isSelected ? 'background: rgba(16, 185, 129, 0.1);' : ''}">
-                            <td><span class="badge ${isSelected ? 'badge-success' : 'badge-info'}">${months[row.mes - 1]} / ${row.ano}</span></td>
-                            <td style="text-align: right;" class="value-highlight">${formatWeight(row.totalPeso)}</td>
-                            <td style="text-align: right;">${formatCurrency(row.totalValor)}</td>
-                        </tr>
-                    `;
-                }).join('');
+                tbody.innerHTML = sorted.map(row => `
+                    <tr>
+                        <td title="${row.name}">${row.name.substring(0, 20)}${row.name.length > 20 ? '...' : ''}</td>
+                        <td style="text-align: right;" class="value-highlight">${formatWeight(row.totalPeso)}</td>
+                        <td style="text-align: right;">${formatCurrency(row.totalValor)}</td>
+                    </tr>
+                `).join('');
+                
+                if (sorted.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="3" style="text-align: center; opacity: 0.5;">Sem emissões no período</td></tr>';
+                }
             } catch (e) { console.error('Error Emissoes:', e); }
             showLoading('card-emissao', false);
         }
