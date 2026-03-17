@@ -951,42 +951,55 @@
                 const res = await fetch('/api/acabamento-externo');
                 const data = await res.json();
                 
-                // Group by charge (carga)
                 const charges = {};
                 (data.registros || []).forEach(r => {
-                    // 1. Filter by Period (if not "Tudo")
-                    if (startDate && endDate && r.data) {
-                        if (r.data < startDate || r.data > endDate) return;
+                    // Robust date filtering (database returns ISO strings with timezone)
+                    const rDate = r.data ? r.data.substring(0, 10) : '';
+                    if (startDate && endDate && rDate) {
+                        if (rDate < startDate || rDate > endDate) return;
                     }
 
-                    const isReceived = (data.recebidos || []).some(rec => rec.id === r.id);
-                    if (!isReceived) {
-                        const chargeId = r.carga || 'S/N';
-                        if (!charges[chargeId]) {
-                            charges[chargeId] = {
-                                carga: chargeId,
-                                terceiro: r.terceiro || 'N/A',
-                                peso: 0,
-                                qtd: 0
-                            };
-                        }
-                        charges[chargeId].peso += parseFloat(r.peso || 0);
-                        charges[chargeId].qtd += 1;
+                    const chargeId = r.carga || 'S/N';
+                    if (!charges[chargeId]) {
+                        charges[chargeId] = {
+                            carga: chargeId,
+                            terceiro: r.terceiro || 'N/A',
+                            peso: 0,
+                            qtd: 0,
+                            itemsReceived: 0
+                        };
                     }
+                    
+                    const isReceived = (data.recebidos || []).some(rec => rec.id === r.id);
+                    charges[chargeId].peso += parseFloat(r.peso || 0);
+                    charges[chargeId].qtd += 1;
+                    if (isReceived) charges[chargeId].itemsReceived += 1;
                 });
 
-                // Show all charges within the month, sorted by carga descending
-                const sortedCharges = Object.values(charges).sort((a, b) => b.carga - a.carga);
+                // Sort by charge descending
+                const sortedCharges = Object.values(charges).sort((a, b) => b.carga.localeCompare(a.carga, undefined, { numeric: true }));
 
                 const tbody = document.querySelector('#table-terceirizacao tbody');
-                tbody.innerHTML = sortedCharges.map(c => `
-                    <tr>
-                        <td>#${c.carga} <small style="opacity:0.6; font-size:0.7rem;">(${c.qtd} itens)</small></td>
-                        <td>${c.terceiro}</td>
-                        <td style="text-align: right;" class="value-highlight">${formatWeight(c.peso)}</td>
-                    </tr>
-                `).join('');
-                if (sortedCharges.length === 0) tbody.innerHTML = '<tr><td colspan="3" style="text-align: center;">Nenhuma carga pendente no período</td></tr>';
+                tbody.innerHTML = sortedCharges.map(c => {
+                    const isFullyReceived = c.itemsReceived === c.qtd;
+                    const statusClass = isFullyReceived ? 'badge-success' : (c.itemsReceived > 0 ? 'badge-warning' : 'badge-danger');
+                    const statusText = isFullyReceived ? 'Retornada' : (c.itemsReceived > 0 ? 'Parcial' : 'Pendente');
+
+                    return `
+                        <tr>
+                            <td>#${c.carga} <div style="font-size: 0.65rem; opacity: 0.6;">${c.qtd} itens</div></td>
+                            <td>${c.terceiro}</td>
+                            <td style="text-align: right;">
+                                <div class="value-highlight">${formatWeight(c.peso)}</div>
+                                <span class="badge ${statusClass}" style="font-size: 0.6rem; padding: 2px 6px;">${statusText}</span>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+                
+                if (sortedCharges.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="3" style="text-align: center; opacity: 0.5;">Nenhuma carga no período</td></tr>';
+                }
             } catch (e) { console.error('Error Terceirizacao:', e); }
             showLoading('card-terceirizacao', false);
         }
