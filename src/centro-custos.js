@@ -12,6 +12,7 @@ const CENTROS_CUSTO = [
     { codigo: 'CAT', nome: 'Catalisador' },
     { codigo: 'LIG', nome: 'Liga' },
     { codigo: 'CMB', nome: 'Combustível' },
+    { codigo: 'ENE', nome: 'Energia' },
     { codigo: 'FUS', nome: 'Fusão' },
     { codigo: 'MOL', nome: 'Moldagem' },
     { codigo: 'ACB', nome: 'Acabamento' },
