@@ -555,19 +555,8 @@
                         </div>
                     </div>
                 </div>
-                <div class="section-content">
-                    <table class="card-table" id="table-refugo">
-                        <thead>
-                            <tr>
-                                <th>Motivo</th>
-                                <th style="text-align: right;">Peso (Kg)</th>
-                                <th style="text-align: right;">%</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <!-- Data injected here -->
-                        </tbody>
-                    </table>
+                <div class="section-content" style="display: flex; align-items: center; justify-content: center; padding: 10px;">
+                    <canvas id="chart-refugo" style="max-height: 100%; width: 100%;"></canvas>
                 </div>
             </div>
 
@@ -734,6 +723,7 @@
         let excludedClients = new Set();
         let customWeights = {};
         let faturamentoChart = null;
+        let refugoChart = null;
         
         // --- HELPERS ---
         const formatCurrency = (val) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val || 0);
@@ -914,23 +904,67 @@
                     motives[motif] = (motives[motif] || 0) + parseFloat(row.peso_total || 0);
                     totalRefugoWeight += parseFloat(row.peso_total || 0);
                 });
-
                 const sorted = Object.entries(motives).sort((a, b) => b[1] - a[1]).slice(0, 5);
-                const tbody = document.querySelector('#table-refugo tbody');
-                tbody.innerHTML = sorted.map(([motif, weight]) => {
-                    const pct = totalRefugoWeight > 0 ? (weight / totalRefugoWeight) * 100 : 0;
-                    return `
-                        <tr>
-                            <td style="font-weight: 500;">${motif}</td>
-                            <td style="text-align: right;" class="value-highlight">${formatWeight(weight)}</td>
-                            <td style="text-align: right;">
-                                <span class="badge ${pct > 10 ? 'badge-danger' : 'badge-success'}">
-                                    ${pct.toFixed(1)}%
-                                </span>
-                            </td>
-                        </tr>
-                    `;
-                }).join('');
+                
+                const labels = sorted.map(([motif]) => motif);
+                const dataValues = sorted.map(([, weight]) => weight);
+
+                const ctx = document.getElementById('chart-refugo').getContext('2d');
+                
+                if (refugoChart) {
+                    refugoChart.data.labels = labels;
+                    refugoChart.data.datasets[0].data = dataValues;
+                    refugoChart.update();
+                } else {
+                    refugoChart = new Chart(ctx, {
+                        type: 'doughnut', // Pie or Doughnut looks more premium
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                data: dataValues,
+                                backgroundColor: [
+                                    'rgba(239, 68, 68, 0.6)', // Danger
+                                    'rgba(245, 158, 11, 0.6)', // Warning
+                                    'rgba(99, 102, 241, 0.6)', // Indigo
+                                    'rgba(16, 185, 129, 0.6)', // Success
+                                    'rgba(59, 130, 246, 0.6)'  // Info
+                                ],
+                                borderColor: 'rgba(255, 255, 255, 0.1)',
+                                borderWidth: 1
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            cutout: '65%', // Premium doughnut look
+                            plugins: {
+                                legend: {
+                                    position: 'right',
+                                    labels: {
+                                        color: '#a1a1aa',
+                                        font: { family: 'Inter', size: 10, weight: '500' },
+                                        padding: 10,
+                                        usePointStyle: true,
+                                        pointStyle: 'circle'
+                                    }
+                                },
+                                tooltip: {
+                                    backgroundColor: 'rgba(9, 9, 11, 0.9)',
+                                    titleFont: { family: 'Outfit', size: 13, weight: '800' },
+                                    bodyFont: { family: 'Inter', size: 12 },
+                                    padding: 10,
+                                    callbacks: {
+                                        label: (context) => {
+                                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                            const pct = ((context.parsed / total) * 100).toFixed(1);
+                                            return `${context.label}: ${formatWeight(context.parsed)} (${pct}%)`;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
 
                 window.totalRefugoWeight = totalRefugoWeight;
                 updateRefugoKPI();
@@ -1086,7 +1120,9 @@
                 const tbody = document.querySelector('#table-carteira tbody');
                 tbody.innerHTML = sorted.map(([name, data], index) => `
                     <tr>
-                        <td title="${name}">${index + 1}º ${name.substring(0, 20)}${name.length > 20 ? '...' : ''}</td>
+                        <td title="${name}" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px;">
+                            ${index + 1}º ${name}
+                        </td>
                         <td style="text-align: right;" class="value-highlight">${formatWeight(data.weight)}</td>
                         <td style="text-align: right;">${formatCurrency(data.value)}</td>
                     </tr>
