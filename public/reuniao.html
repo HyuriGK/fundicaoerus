@@ -425,7 +425,10 @@
             </div>
             <div class="kpi-card" style="border-left: 4px solid var(--status-danger);">
                 <div class="kpi-label">Refugo Acumulado</div>
-                <div class="kpi-value" id="kpi-refugo">0,00%</div>
+                <div style="display: flex; align-items: baseline; gap: 10px;">
+                    <div class="kpi-value" id="kpi-refugo-weight" style="font-size: 1.5rem;">0 kg</div>
+                    <div class="kpi-value" id="kpi-refugo-pct" style="font-size: 1rem; opacity: 0.8;">(0,00%)</div>
+                </div>
                 <div class="kpi-trend" id="trend-refugo">
                     <i class="fa-solid fa-triangle-exclamation"></i> % em relação à produção
                 </div>
@@ -774,9 +777,15 @@
                 const totalProd = window.currentProductionForRefugo;
                 const pct = totalProd > 0 ? (totalRef / totalProd) * 100 : 0;
                 
-                const pctEl = document.getElementById('kpi-refugo');
-                pctEl.innerText = pct.toFixed(2).replace('.', ',') + '%';
-                pctEl.style.color = pct > 10 ? 'var(--status-danger)' : (pct > 5 ? 'var(--status-warning)' : 'var(--status-success)');
+                const weightEl = document.getElementById('kpi-refugo-weight');
+                const pctEl = document.getElementById('kpi-refugo-pct');
+                
+                weightEl.innerText = formatWeight(totalRef);
+                pctEl.innerText = `(${pct.toFixed(2).replace('.', ',')}%)`;
+                
+                const color = pct > 10 ? 'var(--status-danger)' : (pct > 5 ? 'var(--status-warning)' : 'var(--status-success)');
+                weightEl.style.color = color;
+                pctEl.style.color = color;
             }
         }
 
@@ -941,19 +950,36 @@
                 const res = await fetch('/api/acabamento-externo');
                 const data = await res.json();
                 
-                const pending = data.registros
-                    .filter(r => !data.recebidos.some(rec => rec.id === r.id))
-                    .slice(0, 8);
+                // Group by charge (carga)
+                const charges = {};
+                (data.registros || []).forEach(r => {
+                    const isReceived = (data.recebidos || []).some(rec => rec.id === r.id);
+                    if (!isReceived) {
+                        const chargeId = r.carga || 'S/N';
+                        if (!charges[chargeId]) {
+                            charges[chargeId] = {
+                                carga: chargeId,
+                                terceiro: r.terceiro || 'N/A',
+                                peso: 0,
+                                qtd: 0
+                            };
+                        }
+                        charges[chargeId].peso += parseFloat(r.peso || 0);
+                        charges[chargeId].qtd += 1;
+                    }
+                });
+
+                const sortedCharges = Object.values(charges).sort((a, b) => b.carga - a.carga).slice(0, 8);
 
                 const tbody = document.querySelector('#table-terceirizacao tbody');
-                tbody.innerHTML = pending.map(r => `
+                tbody.innerHTML = sortedCharges.map(c => `
                     <tr>
-                        <td>#${r.carga}</td>
-                        <td>${r.terceiro}</td>
-                        <td style="text-align: right;" class="value-highlight">${formatWeight(r.peso)}</td>
+                        <td>#${c.carga} <small style="opacity:0.6; font-size:0.7rem;">(${c.qtd} itens)</small></td>
+                        <td>${c.terceiro}</td>
+                        <td style="text-align: right;" class="value-highlight">${formatWeight(c.peso)}</td>
                     </tr>
                 `).join('');
-                if (pending.length === 0) tbody.innerHTML = '<tr><td colspan="3" style="text-align: center;">Nenhuma carga pendente</td></tr>';
+                if (sortedCharges.length === 0) tbody.innerHTML = '<tr><td colspan="3" style="text-align: center;">Nenhuma carga pendente</td></tr>';
             } catch (e) { console.error('Error Terceirizacao:', e); }
             showLoading('card-terceirizacao', false);
         }
