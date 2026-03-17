@@ -10,6 +10,7 @@ const CENTROS_CUSTO = [
     { codigo: 'ARE', nome: 'Areia' },
     { codigo: 'RES', nome: 'Resina' },
     { codigo: 'CAT', nome: 'Catalisador' },
+    { codigo: 'LIG', nome: 'Liga' },
     { codigo: 'FUS', nome: 'Fusão' },
     { codigo: 'MOL', nome: 'Moldagem' },
     { codigo: 'ACB', nome: 'Acabamento' },
