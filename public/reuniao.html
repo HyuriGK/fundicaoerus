@@ -944,7 +944,29 @@
                 });
 
                 // Sector order/list for display
-                const displaySectors = ['MOLDAGEM MANUAL', 'MOLDAGEM LEVE', 'MOLDAGEM PESADA', 'FUSAO', 'ACABAMENTO', 'USINAGEM', 'TRATAMENTO TERMICO', 'EXPEDICAO'];
+                const displaySectors = [
+                    'MOLDAGEM GERAL', 'FUSAO', 'ACABAMENTO',
+                    'MOLDAGEM LEVE', 'MOLDAGEM MANUAL', 'MOLDAGEM PESADA',
+                    'USINAGEM', 'TRATAMENTO TERMICO', 'EXPEDICAO'
+                ];
+
+                // Moldagem Geral calculation (Sum of parts)
+                const moldTypes = ['MOLDAGEM MANUAL', 'MOLDAGEM LEVE', 'MOLDAGEM PESADA'];
+                let moldWeight = 0;
+                let moldDates = new Set();
+                let moldQty = 0;
+                
+                Object.keys(sectorStats).forEach(s => {
+                    if (moldTypes.includes(s)) {
+                        moldWeight += sectorStats[s].weight;
+                        moldQty += sectorStats[s].qty;
+                        sectorStats[s].dates.forEach(d => moldDates.add(d));
+                    }
+                });
+
+                if (moldWeight > 0) {
+                    sectorStats['MOLDAGEM GERAL'] = { weight: moldWeight, dates: moldDates, qty: moldQty };
+                }
                 
                 const grid = document.getElementById('prod-sectors-grid');
                 sectorDataForKPI = []; // Reset rotation data
@@ -958,16 +980,19 @@
                         sectorDataForKPI.push({ name: s, weight: stats.weight, avg: avg });
                     }
 
+                    const isMainRow = ['MOLDAGEM GERAL', 'FUSAO', 'ACABAMENTO'].includes(s);
+                    const bgColor = isMainRow ? 'rgba(16, 185, 129, 0.08)' : 'rgba(255, 255, 255, 0.02)';
+
                     return `
-                        <div style="background: rgba(16, 185, 129, 0.05); padding: 12px 15px; border-radius: 12px; border: 1px solid rgba(16, 185, 129, 0.2); display: flex; flex-direction: column; gap: 6px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
-                            <div class="kpi-label" style="font-size: 0.65rem; color: var(--color-primary); font-weight: 700;">${s}</div>
+                        <div style="background: ${bgColor}; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(16, 185, 129, 0.2); display: flex; flex-direction: column; gap: 4px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+                            <div class="kpi-label" style="font-size: 0.6rem; color: var(--color-primary); font-weight: 700; text-transform: uppercase;">${s}</div>
                             <div style="display: flex; justify-content: space-between; align-items: baseline;">
-                                <div class="value-highlight" style="font-size: 1.3rem; letter-spacing: -0.5px;">${formatWeight(stats.weight)}</div>
-                                <div style="font-size: 0.75rem; color: var(--text-dim); font-weight: 500;">${parseInt(stats.qty)} pçs</div>
+                                <div class="value-highlight" style="font-size: 1.2rem; letter-spacing: -0.5px;">${formatWeight(stats.weight)}</div>
+                                <div style="font-size: 0.7rem; color: var(--text-dim); font-weight: 500;">${parseInt(stats.qty)} pçs</div>
                             </div>
-                            <div style="font-size: 0.85rem; color: #fff; margin-top: 2px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.08); display: flex; justify-content: space-between; align-items: center;">
-                                <span style="opacity: 0.7; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px;">Média Diária:</span>
-                                <strong style="color: var(--color-primary); font-size: 0.95rem;">${formatWeight(avg)}</strong>
+                            <div style="font-size: 0.8rem; color: #fff; margin-top: 2px; padding-top: 4px; border-top: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center;">
+                                <span style="opacity: 0.6; font-size: 0.65rem;">MÉDIA:</span>
+                                <strong style="color: var(--color-primary); font-size: 0.85rem;">${formatWeight(avg)}</strong>
                             </div>
                         </div>
                     `;
