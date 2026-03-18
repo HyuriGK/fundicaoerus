@@ -28,6 +28,7 @@ const CENTROS_CUSTO = [
     { codigo: 'RH', nome: 'Recursos Humanos' },
     { codigo: 'COM', nome: 'Comercial' },
     { codigo: 'TER', nome: 'Terceirização do Acabamento' },
+    { codigo: 'DEV', nome: 'Devolução' },
     { codigo: 'UNI', nome: 'Uniformes' },
     { codigo: 'INV', nome: 'Investimentos' },
     { codigo: 'MDL', nome: 'Modelação' },
