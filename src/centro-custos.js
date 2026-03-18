@@ -27,6 +27,7 @@ const CENTROS_CUSTO = [
     { codigo: 'REF', nome: 'Reformas' },
     { codigo: 'AMS', nome: 'Amostra' },
     { codigo: 'RH', nome: 'Recursos Humanos' },
+    { codigo: 'ENF', nome: 'Enfermaria' },
     { codigo: 'COM', nome: 'Comercial' },
     { codigo: 'TER', nome: 'Terceirização do Acabamento' },
     { codigo: 'DEV', nome: 'Devolução' },
