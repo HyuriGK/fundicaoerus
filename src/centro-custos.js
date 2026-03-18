@@ -11,6 +11,7 @@ const CENTROS_CUSTO = [
     { codigo: 'RES', nome: 'Resina' },
     { codigo: 'CAT', nome: 'Catalisador' },
     { codigo: 'LIG', nome: 'Liga' },
+    { codigo: 'LUV', nome: 'Luva Exotérmica' },
     { codigo: 'CMB', nome: 'Combustível' },
     { codigo: 'ENE', nome: 'Energia' },
     { codigo: 'FUS', nome: 'Fusão' },
