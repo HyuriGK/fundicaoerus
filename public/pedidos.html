@@ -568,10 +568,11 @@
 
         /* --- INDUSTRIAL GROUPS GRID --- */
         .industrial-groups-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
+            display: flex;
             gap: 12px;
             margin-top: 8px;
+            width: 100%;
+            align-items: stretch;
         }
 
         .industrial-group {
@@ -583,7 +584,10 @@
             flex-direction: column;
             gap: 8px;
             cursor: pointer;
-            transition: all 0.2s ease;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            overflow: hidden;
+            flex: 1; /* Default, overridden by JS */
+            min-width: 0; /* Important for flex-shrink */
         }
 
         .industrial-group:hover {
@@ -1268,7 +1272,7 @@
                 
                 <div class="industrial-groups-grid">
                     <!-- Group 1: Aguardando -->
-                    <div class="industrial-group" onclick="filterByStage('aguardando')">
+                    <div id="groupAguardandoContainer" class="industrial-group" onclick="filterByStage('aguardando')">
                         <div class="group-header">
                             <span class="group-name">Aguardando Moldagem</span>
                             <span id="groupAguardandoTotals" class="group-totals-mini">0 pçs | 0 kg | -----</span>
@@ -1279,7 +1283,7 @@
                     </div>
 
                     <!-- Group 2: Moldado -->
-                    <div class="industrial-group" onclick="filterByStage('moldagem')">
+                    <div id="groupMoldadoContainer" class="industrial-group" onclick="filterByStage('moldagem')">
                         <div class="group-header">
                             <span class="group-name">Apenas Moldado</span>
                             <span id="groupMoldadoTotals" class="group-totals-mini">0 pçs | 0 kg | -----</span>
@@ -1290,7 +1294,7 @@
                     </div>
 
                     <!-- Group 3: Fundido -->
-                    <div class="industrial-group" style="cursor: default;">
+                    <div id="groupFundidoContainer" class="industrial-group" style="cursor: default;">
                         <div class="group-header" onclick="filterByStage('fusao')" style="cursor: pointer;">
                             <span class="group-name">Fundido e Seguintes</span>
                             <span id="groupFundidoTotals" class="group-totals-mini">0 pçs | 0 kg | -----</span>
@@ -2962,17 +2966,7 @@
             if (document.getElementById('avgWeightCard')) document.getElementById('avgWeightCard').innerText = formatNumber(avgWeight);
 
 
-            // 3. Stage KPIs (New Cards) - with percentages
-            updateStageCard('kpiAguardando', kpiAguardando, totalWeight);
-            updateStageCard('kpiMoldagem', kpiMoldagem, totalWeight);
-            updateStageCard('kpiFusao', kpiFusao, totalWeight);
-            updateStageCard('kpiAcabamento', kpiAcabamento, totalWeight);
-            updateStageCard('kpiTT', kpiTT, totalWeight);
-            updateStageCard('kpiUsinagem', kpiUsinagem, totalWeight);
-            updateStageCard('kpiQualidade', kpiQualidade, totalWeight);
-            updateStageCard('kpiExpedicao', kpiExpedicao, totalWeight);
-
-            // 5. Update Group Totals in Industrial Bar Area
+            // 5. Update Group Totals and Proportional Layout in Industrial Bar Area
             const fundidoGroup = {
                 qtd: kpiFusao.qtd + kpiAcabamento.qtd + kpiTT.qtd + kpiUsinagem.qtd + kpiQualidade.qtd + kpiExpedicao.qtd,
                 peso: kpiFusao.peso + kpiAcabamento.peso + kpiTT.peso + kpiUsinagem.peso + kpiQualidade.peso + kpiExpedicao.peso,
@@ -2993,6 +2987,35 @@
             if (document.getElementById('groupFundidoTotals')) {
                 document.getElementById('groupFundidoTotals').innerText = formatG(fundidoGroup);
             }
+
+            // Set Proportional Flex Basis
+            const totalW = kpiAguardando.peso + kpiMoldagem.peso + fundidoGroup.peso;
+            const setFlex = (id, peso) => {
+                const el = document.getElementById(id);
+                if (el) {
+                    // Use a small minimum flex (e.g. 0.1) if peso is 0 to keep the label clickable/visible if desired,
+                    // or flex 0 to hide it. Given user request, flex proportional is best.
+                    const fValue = totalW > 0 ? (peso / totalW) : 1;
+                    el.style.flex = fValue > 0 ? fValue.toString() : "0";
+                    // If weight is very small, we might want a min-width in CSS, which we already added (min-width: 0 for shrink, but maybe min-width: 80px is better)
+                }
+            };
+            setFlex('groupAguardandoContainer', kpiAguardando.peso);
+            setFlex('groupMoldadoContainer', kpiMoldagem.peso);
+            setFlex('groupFundidoContainer', fundidoGroup.peso);
+
+            // 3. Stage KPIs (Segment Updates)
+            // For Group 1 & 2, passing their own group weight makes them 100% full
+            updateStageCard('kpiAguardando', kpiAguardando, kpiAguardando.peso);
+            updateStageCard('kpiMoldagem', kpiMoldagem, kpiMoldagem.peso);
+            
+            // For Group 3 (Fundido+), passing the group total weight makes internal segments sum to 100%
+            updateStageCard('kpiFusao', kpiFusao, fundidoGroup.peso);
+            updateStageCard('kpiAcabamento', kpiAcabamento, fundidoGroup.peso);
+            updateStageCard('kpiTT', kpiTT, fundidoGroup.peso);
+            updateStageCard('kpiUsinagem', kpiUsinagem, fundidoGroup.peso);
+            updateStageCard('kpiQualidade', kpiQualidade, fundidoGroup.peso);
+            updateStageCard('kpiExpedicao', kpiExpedicao, fundidoGroup.peso);
 
             // 4. Footer Avg Weight
             if (document.getElementById('avgWeightFooter')) document.getElementById('avgWeightFooter').innerText = formatNumber(avgWeight);
