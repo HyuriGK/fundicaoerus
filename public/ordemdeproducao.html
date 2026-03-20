@@ -658,9 +658,10 @@
             
             try {
                 // Fetch points and route in parallel
+                console.log(`🔍 Buscando dados para OP ${op.OP_PCS} (Produto: ${op.PRODUTO_PPR})`);
                 const [pointsRes, routeRes] = await Promise.all([
                     fetch(`${API_APONTAMENTOS}?op=${op.OP_PCS}`),
-                    fetch(`/api/pedidos-firebird/op-roteiro?produto=${op.PRODUTO_PPR}`)
+                    fetch(`/api/pedidos-firebird/op-roteiro?produto=${encodeURIComponent(op.PRODUTO_PPR)}`)
                 ]);
 
                 const pointings = await pointsRes.json();
@@ -714,17 +715,18 @@
             const container = document.getElementById('stagesContainer');
             container.innerHTML = '';
 
-            // Garantir que roteiro seja um array
+            // Se roteiro for um array mas estiver vazio, podemos querer manter vazio ou mostrar erro
+            if (Array.isArray(roteiro) && roteiro.length === 0) {
+                console.warn("Roteiro vazio para este produto.");
+                container.innerHTML = '<div style="grid-column: 1/-1; text-align: center; padding: 40px; color: var(--text-dim);"><i class="fas fa-exclamation-circle" style="font-size: 2rem; margin-bottom: 15px; display: block;"></i>Roteiro de produção não cadastrado para esta peça.</div>';
+                return;
+            }
+
+            // Garantir que roteiro seja um array para evitar erro no forEach se a API falhar (não retornar array)
             if (!Array.isArray(roteiro)) {
-                console.warn("Roteiro recebido não é um array válido:", roteiro);
-                roteiro = [
-                    { sequencia: 1, setor: 'MOLDAGEM' },
-                    { sequencia: 2, setor: 'FUSÃO' },
-                    { sequencia: 3, setor: 'ACABAMENTO' },
-                    { sequencia: 4, setor: 'TRATAMENTO TÉRMICO' },
-                    { sequencia: 5, setor: 'USINAGEM' },
-                    { sequencia: 6, setor: 'EXPEDIÇÃO' }
-                ];
+                console.error("Erro na API de roteiro:", roteiro);
+                container.innerHTML = '<div style="grid-column: 1/-1; text-align: center; padding: 40px; color: var(--status-error);"><i class="fas fa-times-circle" style="font-size: 2rem; margin-bottom: 15px; display: block;"></i>Erro ao carregar roteiro de produção.</div>';
+                return;
             }
 
             // Agrega apontamentos por setor (normalizado)

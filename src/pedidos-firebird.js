@@ -261,16 +261,21 @@ router.get('/op-roteiro', async (req, res) => {
             JOIN PROCEDIMENTO P ON P.CODIGO_PDT = FT.PDT_CODIGO_FIC
             JOIN PROCEDIMENTO_SETOR PS ON PS.PDT_CODIGO_PDS = P.CODIGO_PDT
             JOIN SETOR S ON S.CODIGO_SET = PS.SET_CODIGO_PDS
-            WHERE FT.PRO_CODIGO_FIC = ? 
+            WHERE (FT.PRO_CODIGO_FIC = ? OR TRIM(FT.PRO_CODIGO_FIC) = ?)
               AND FT.ATIVO_FIC = 'S'
               AND PS.SET_EMPRESA_PDS = 10
               AND S.NOME_SET NOT LIKE 'NAO USAR%'
             ORDER BY PS.SEQUENCIA_PDS
         `;
 
-        const result = await executeQuery(query, [produto]);
+        const result = await executeQuery(query, [produto, produto.trim()]);
 
         console.log(`✅ [Firebird] Roteiro para ${produto}: ${Array.isArray(result) ? result.length : 0} etapas encontradas.`);
+        
+        if (Array.isArray(result) && result.length === 0) {
+            console.warn(`⚠️ [Firebird] Roteiro vazio para produto ${produto}. Verificando sem filtro ATIVO_FIC...`);
+            // Tentativa secundária sem o filtro ATIVO_FIC ou com TRIM avançado?
+        }
 
         if (!Array.isArray(result)) {
             console.error('❌ [Firebird] Resultado inesperado (não é array):', result);
