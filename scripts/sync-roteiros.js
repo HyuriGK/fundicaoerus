@@ -8,10 +8,10 @@ const firebirdOptions = {
 };
 
 async function syncRoteiros() {
-    console.log('🚀 Iniciando sincronização de Roteiros (Firebird -> Postgres)...');
+    const startTime = Date.now();
+    console.log('🚀 Iniciando sincronização OTIMIZADA (Firebird -> Postgres)...');
 
     try {
-        // 1. Criar tabelas no Postgres
         await pool.query(`
             CREATE TABLE IF NOT EXISTS roteiros_tecnicos (
                 ficha_id INTEGER,
@@ -19,73 +19,85 @@ async function syncRoteiros() {
                 setor_nome VARCHAR(255),
                 PRIMARY KEY (ficha_id, sequencia)
             );
-            
             CREATE TABLE IF NOT EXISTS producao_fichas (
                 op_codigo VARCHAR(50) PRIMARY KEY,
                 ficha_id INTEGER
             );
         `);
-        console.log('✅ Tabelas no Postgres prontas.');
 
         Firebird.attach(firebirdOptions, async function (err, db) {
             if (err) {
                 console.error('❌ Erro Firebird:', err.message);
-                return;
+                process.exit(1);
             }
 
-            // 2. Sincronizar Vínculo OP -> Ficha
-            console.log('📥 Buscando vínculos OP -> Ficha...');
+            // 1. Sincronizar Vínculo OP -> Ficha em Batch
             db.query(`
                 SELECT CODIGO_PCP, FIC_CODIGO_PCP 
                 FROM PRODUCAO 
                 WHERE FIC_CODIGO_PCP IS NOT NULL AND STATUS_PCP <> 'C'
-                AND DATA_PCP > '2025-01-01'
+                AND DATA_PCP > '2024-06-01'
             `, async (err, ops) => {
-                if (err) console.error('Erro query PRODUCAO:', err);
-                else {
-                    console.log(`📊 Sincronizando ${ops.length} vínculos de OP...`);
-                    for (const op of ops) {
-                        await pool.query(`
-                            INSERT INTO producao_fichas (op_codigo, ficha_id)
-                            VALUES ($1, $2)
-                            ON CONFLICT (op_codigo) DO UPDATE SET ficha_id = EXCLUDED.ficha_id
-                        `, [String(op.CODIGO_PCP).trim(), op.FIC_CODIGO_PCP]);
+                if (!err && ops.length > 0) {
+                    console.log(`📥 Processando ${ops.length} vínculos de OP...`);
+                    const client = await pool.connect();
+                    try {
+                        await client.query('BEGIN');
+                        for (let i = 0; i < ops.length; i += 500) {
+                            const chunk = ops.slice(i, i + 500);
+                            const values = chunk.map((op, idx) => `($${idx * 2 + 1}, $${idx * 2 + 2})`).join(',');
+                            const params = chunk.flatMap(op => [String(op.CODIGO_PCP).trim(), op.FIC_CODIGO_PCP]);
+                            await client.query(`
+                                INSERT INTO producao_fichas (op_codigo, ficha_id)
+                                VALUES ${values}
+                                ON CONFLICT (op_codigo) DO UPDATE SET ficha_id = EXCLUDED.ficha_id
+                            `, params);
+                        }
+                        await client.query('COMMIT');
+                    } catch (e) {
+                        await client.query('ROLLBACK');
+                        console.error('Erro no batch de OPs:', e.message);
+                    } finally {
+                        client.release();
                     }
                 }
 
-                // 3. Sincronizar Roteiros (Ficha -> Setores)
-                console.log('📥 Buscando Roteiros (Ficha Técnica -> Procedimentos)...');
+                // 2. Sincronizar Roteiros em Batch
                 db.query(`
-                    SELECT 
-                        FT.CODIGO_FIC,
-                        PS.SEQUENCIA_PDS as SEQUENCIA, 
-                        S.NOME_SET as SETOR
+                    SELECT FT.CODIGO_FIC, PS.SEQUENCIA_PDS as SEQUENCIA, S.NOME_SET as SETOR
                     FROM FICHA_TECNICA FT
                     JOIN PROCEDIMENTO P ON P.CODIGO_PDT = FT.PDT_CODIGO_FIC
                     JOIN PROCEDIMENTO_SETOR PS ON PS.PDT_CODIGO_PDS = P.CODIGO_PDT
                     JOIN SETOR S ON S.CODIGO_SET = PS.SET_CODIGO_PDS
-                    WHERE FT.ATIVO_FIC = 'S'
-                      AND PS.SET_EMPRESA_PDS = 10
-                      AND S.NOME_SET NOT LIKE 'NAO USAR%'
-                    ORDER BY FT.CODIGO_FIC, PS.SEQUENCIA_PDS
+                    WHERE FT.ATIVO_FIC = 'S' AND PS.SET_EMPRESA_PDS = 10 AND S.NOME_SET NOT LIKE 'NAO USAR%'
                 `, async (err, rts) => {
-                    if (err) console.error('Erro query ROTEIROS:', err);
-                    else {
-                        console.log(`📊 Sincronizando ${rts.length} etapas de roteiros...`);
-                        
-                        // Limpar roteiros antigos para garantir integridade
-                        await pool.query('DELETE FROM roteiros_tecnicos');
-
-                        for (const rt of rts) {
-                            await pool.query(`
-                                INSERT INTO roteiros_tecnicos (ficha_id, sequencia, setor_nome)
-                                VALUES ($1, $2, $3)
-                                ON CONFLICT (ficha_id, sequencia) DO UPDATE SET setor_nome = EXCLUDED.setor_nome
-                            `, [rt.CODIGO_FIC, rt.SEQUENCIA, String(rt.SETOR).trim().toUpperCase()]);
+                    if (!err && rts.length > 0) {
+                        console.log(`📥 Processando ${rts.length} etapas de roteiros...`);
+                        const client = await pool.connect();
+                        try {
+                            await client.query('BEGIN');
+                            await client.query('DELETE FROM roteiros_tecnicos'); // Reset para integridade
+                            for (let i = 0; i < rts.length; i += 300) {
+                                const chunk = rts.slice(i, i + 300);
+                                const values = chunk.map((rt, idx) => `($${idx * 3 + 1}, $${idx * 3 + 2}, $${idx * 3 + 3})`).join(',');
+                                const params = chunk.flatMap(rt => [rt.CODIGO_FIC, rt.SEQUENCIA, String(rt.SETOR).trim().toUpperCase()]);
+                                await client.query(`
+                                    INSERT INTO roteiros_tecnicos (ficha_id, sequencia, setor_nome)
+                                    VALUES ${values}
+                                    ON CONFLICT (ficha_id, sequencia) DO UPDATE SET setor_nome = EXCLUDED.setor_nome
+                                `, params);
+                            }
+                            await client.query('COMMIT');
+                        } catch (e) {
+                            await client.query('ROLLBACK');
+                            console.error('Erro no batch de Roteiros:', e.message);
+                        } finally {
+                            client.release();
                         }
                     }
 
-                    console.log('✅ Sincronização concluída!');
+                    const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+                    console.log(`✅ Sincronização concluída em ${duration}s!`);
                     db.detach();
                     process.exit(0);
                 });
@@ -93,7 +105,7 @@ async function syncRoteiros() {
         });
 
     } catch (e) {
-        console.error('❌ Erro fatal na sincronização:', e.message);
+        console.error('❌ Erro fatal:', e.message);
         process.exit(1);
     }
 }
