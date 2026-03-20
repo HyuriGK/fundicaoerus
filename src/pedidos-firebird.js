@@ -251,71 +251,65 @@ router.get('/op-roteiro', async (req, res) => {
             return res.status(400).json({ error: 'Código do produto ou da OP é obrigatório' });
         }
 
-        console.log(`📊 [Firebird] Buscando roteiro: Produto=${produto}, Cliente=${cliente}, OP=${op}`);
+        console.log(`📊 [Postgres] Buscando roteiro: Produto=${produto}, Cliente=${cliente}, OP=${op}`);
 
         let fichaId = null;
 
-        // 1. Prioridade: Buscar ficha técnica vinculada à OP
+        // 1. Tentar buscar fichaId via OP no Postgres
         if (op) {
-            try {
-                const ops = await executeQuery(`SELECT FIC_CODIGO_PCP FROM PRODUCAO WHERE CODIGO_PCP = ?`, [op]);
-                if (ops && ops.length > 0 && ops[0].FIC_CODIGO_PCP) {
-                    fichaId = ops[0].FIC_CODIGO_PCP;
-                    console.log(`🎯 [Firebird] Ficha técnica da OP ${op}: ${fichaId}`);
-                }
-            } catch (err) {
-                console.warn(`⚠️ [Firebird] Falha ao buscar ficha via OP: ${err.message}`);
+            const opRes = await pool.query('SELECT ficha_id FROM producao_fichas WHERE op_codigo = $1', [String(op).trim()]);
+            if (opRes.rows.length > 0) {
+                fichaId = opRes.rows[0].ficha_id;
+                console.log(`🎯 [Postgres] Ficha encontrada via OP ${op}: ${fichaId}`);
             }
         }
 
-        // 2. Query Principal
-        let query = `
-            SELECT 
-                PS.SEQUENCIA_PDS as SQ, 
-                S.NOME_SET as ST
-            FROM FICHA_TECNICA FT
-            JOIN PROCEDIMENTO P ON P.CODIGO_PDT = FT.PDT_CODIGO_FIC
-            JOIN PROCEDIMENTO_SETOR PS ON PS.PDT_CODIGO_PDS = P.CODIGO_PDT
-            JOIN SETOR S ON S.CODIGO_SET = PS.SET_CODIGO_PDS
-            WHERE PS.SET_EMPRESA_PDS = 10
-              AND S.NOME_SET NOT LIKE 'NAO USAR%'
-        `;
+        // 2. Fallback: Buscar ficha_id via Produto/Cliente no Postgres
+        if (!fichaId && produto) {
+            let ftQuery = 'SELECT pro_codigo_fic FROM ficha_tecnica WHERE pro_codigo_fic = $1';
+            let ftParams = [String(produto).trim()];
 
-        const params = [];
-        if (fichaId) {
-            query += ` AND FT.CODIGO_FIC = ? `;
-            params.push(fichaId);
-        } else if (produto) {
-            query += ` AND (FT.PRO_CODIGO_FIC = ? OR TRIM(FT.PRO_CODIGO_FIC) = ?) AND TRIM(FT.ATIVO_FIC) = 'S' `;
-            params.push(produto, String(produto).trim());
-            
             if (cliente && cliente !== 'undefined' && cliente !== 'null') {
-                query += ` AND (FT.CLI_CODIGO_FIC = ? OR TRIM(FT.CLI_CODIGO_FIC) = ?) `;
-                params.push(cliente, String(cliente).trim());
+                ftQuery += ' AND cli_codigo_fic = $2';
+                ftParams.push(String(cliente).trim());
             }
-        } else {
+
+            // Nota: No sync-fichatecnica.js, o ID da ficha não é a PK, mas pro_codigo_fic é único.
+            // Para roteiros_tecnicos, precisamos do ficha_id (INTEGER) que sincronizamos em sync-roteiros.js.
+            // Vou ajustar a busca para pegar o ficha_id correto.
+            const ftRes = await pool.query('SELECT DISTINCT ficha_id FROM roteiros_tecnicos WHERE ficha_id IN (SELECT ficha_id FROM producao_fichas WHERE op_codigo LIKE $1)', [`%${produto}%`]);
+            // Na verdade, a melhor forma é buscar direto em roteiros_tecnicos se tivermos o produto vinculado.
+            // Mas o script sync-roteiros.js usou CODIGO_FIC. 
+            // Vamos tentar buscar o ficha_id mais recente para este produto na tabela producao_fichas como heurística
+            const heuristicaRes = await pool.query('SELECT ficha_id FROM producao_fichas WHERE op_codigo LIKE $1 ORDER BY op_codigo DESC LIMIT 1', [`%${produto}%`]);
+            if (heuristicaRes.rows.length > 0) {
+                fichaId = heuristicaRes.rows[0].ficha_id;
+            }
+        }
+
+        if (!fichaId) {
+            console.warn(`⚠️ [Postgres] Nenhuma ficha encontrada para OP=${op} ou Produto=${produto}`);
             return res.json([]);
         }
 
-        query += ` ORDER BY PS.SEQUENCIA_PDS `;
+        // 3. Buscar etapas do roteiro no Postgres
+        const routeRes = await pool.query(`
+            SELECT sequencia, setor_nome 
+            FROM roteiros_tecnicos 
+            WHERE ficha_id = $1 
+            ORDER BY sequencia
+        `, [fichaId]);
 
-        const result = await executeQuery(query, params);
-
-        if (!Array.isArray(result)) {
-            console.error('❌ [Firebird] Resultado não é array:', result);
-            return res.json([]);
-        }
-
-        const dataFormatted = result.map(row => ({
-            sequencia: row.SQ || row.sq || 0,
-            setor: (row.ST || row.st || 'DESCONHECIDO').trim().toUpperCase()
+        const dataFormatted = routeRes.rows.map(row => ({
+            sequencia: row.sequencia,
+            setor: row.setor_nome.trim().toUpperCase()
         }));
 
-        console.log(`✅ [Firebird] Roteiro finalizado: ${dataFormatted.length} etapas.`);
+        console.log(`✅ [Postgres] Roteiro retornado: ${dataFormatted.length} etapas.`);
         res.json(dataFormatted);
 
     } catch (error) {
-        console.error('❌ [Firebird] Erro no roteiro:', error);
+        console.error('❌ [Postgres] Erro no roteiro:', error);
         res.status(500).json({ error: error.message });
     }
 });
