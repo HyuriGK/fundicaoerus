@@ -264,26 +264,12 @@ router.get('/op-roteiro', async (req, res) => {
             }
         }
 
-        // 2. Fallback: Buscar ficha_id via Produto/Cliente no Postgres
+        // 2. Fallback: Buscar ficha_id via Produto no Postgres (usando o novo codigo_fic)
         if (!fichaId && produto) {
-            let ftQuery = 'SELECT pro_codigo_fic FROM ficha_tecnica WHERE pro_codigo_fic = $1';
-            let ftParams = [String(produto).trim()];
-
-            if (cliente && cliente !== 'undefined' && cliente !== 'null') {
-                ftQuery += ' AND cli_codigo_fic = $2';
-                ftParams.push(String(cliente).trim());
-            }
-
-            // Nota: No sync-fichatecnica.js, o ID da ficha não é a PK, mas pro_codigo_fic é único.
-            // Para roteiros_tecnicos, precisamos do ficha_id (INTEGER) que sincronizamos em sync-roteiros.js.
-            // Vou ajustar a busca para pegar o ficha_id correto.
-            const ftRes = await pool.query('SELECT DISTINCT ficha_id FROM roteiros_tecnicos WHERE ficha_id IN (SELECT ficha_id FROM producao_fichas WHERE op_codigo LIKE $1)', [`%${produto}%`]);
-            // Na verdade, a melhor forma é buscar direto em roteiros_tecnicos se tivermos o produto vinculado.
-            // Mas o script sync-roteiros.js usou CODIGO_FIC. 
-            // Vamos tentar buscar o ficha_id mais recente para este produto na tabela producao_fichas como heurística
-            const heuristicaRes = await pool.query('SELECT ficha_id FROM producao_fichas WHERE op_codigo LIKE $1 ORDER BY op_codigo DESC LIMIT 1', [`%${produto}%`]);
-            if (heuristicaRes.rows.length > 0) {
-                fichaId = heuristicaRes.rows[0].ficha_id;
+            const ftRes = await pool.query('SELECT codigo_fic FROM ficha_tecnica WHERE pro_codigo_fic = $1 LIMIT 1', [String(produto).trim()]);
+            if (ftRes.rows.length > 0) {
+                fichaId = ftRes.rows[0].codigo_fic;
+                console.log(`🔍 [Postgres] Ficha encontrada via Produto ${produto}: ${fichaId}`);
             }
         }
 
