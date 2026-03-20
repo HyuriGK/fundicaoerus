@@ -246,65 +246,77 @@ router.get('/op-apontamentos-resumo', async (req, res) => {
 // Retorna o roteiro de produção (sequência de setores) de um produto via Ficha Técnica
 router.get('/op-roteiro', async (req, res) => {
     try {
-        const { produto, cliente } = req.query;
-        if (!produto) {
-            return res.status(400).json({ error: 'Código do produto é obrigatório' });
+        const { produto, cliente, op } = req.query;
+        if (!produto && !op) {
+            return res.status(400).json({ error: 'Código do produto ou da OP é obrigatório' });
         }
 
-        console.log(`📊 [Firebird] Buscando roteiro para produto: ${produto}${cliente ? ` (Cliente: ${cliente})` : ''}`);
+        console.log(`📊 [Firebird] Buscando roteiro: Produto=${produto}, Cliente=${cliente}, OP=${op}`);
 
-        // O PDT_CODIGO_FIC está em FICHA_TECNICA. Para achar o nome, join com PROCEDIMENTO. 
-        // Para etapas, PROCEDIMENTO_SETOR. 
-        // Filtramos por ATIVO_FIC = 'S' (usando TRIM para evitar problemas de CHAR).
+        let fichaId = null;
+
+        // 1. Prioridade: Buscar ficha técnica vinculada à OP
+        if (op) {
+            try {
+                const ops = await executeQuery(`SELECT FIC_CODIGO_PCP FROM PRODUCAO WHERE CODIGO_PCP = ?`, [op]);
+                if (ops && ops.length > 0 && ops[0].FIC_CODIGO_PCP) {
+                    fichaId = ops[0].FIC_CODIGO_PCP;
+                    console.log(`🎯 [Firebird] Ficha técnica da OP ${op}: ${fichaId}`);
+                }
+            } catch (err) {
+                console.warn(`⚠️ [Firebird] Falha ao buscar ficha via OP: ${err.message}`);
+            }
+        }
+
+        // 2. Query Principal
         let query = `
             SELECT 
-                PS.SEQUENCIA_PDS as "sequencia", 
-                S.NOME_SET as "setor"
+                PS.SEQUENCIA_PDS as SQ, 
+                S.NOME_SET as ST
             FROM FICHA_TECNICA FT
             JOIN PROCEDIMENTO P ON P.CODIGO_PDT = FT.PDT_CODIGO_FIC
             JOIN PROCEDIMENTO_SETOR PS ON PS.PDT_CODIGO_PDS = P.CODIGO_PDT
             JOIN SETOR S ON S.CODIGO_SET = PS.SET_CODIGO_PDS
-            WHERE (FT.PRO_CODIGO_FIC = ? OR TRIM(FT.PRO_CODIGO_FIC) = ?)
-              AND TRIM(FT.ATIVO_FIC) = 'S'
-              AND PS.SET_EMPRESA_PDS = 10
+            WHERE PS.SET_EMPRESA_PDS = 10
               AND S.NOME_SET NOT LIKE 'NAO USAR%'
         `;
 
-        const params = [produto, produto.trim()];
-
-        // Se tiver cliente, tenta filtrar por ele para ser mais específico
-        if (cliente) {
-            query += ` AND (FT.CLI_CODIGO_FIC = ? OR TRIM(FT.CLI_CODIGO_FIC) = ?) `;
-            params.push(cliente, String(cliente).trim());
+        const params = [];
+        if (fichaId) {
+            query += ` AND FT.CODIGO_FIC = ? `;
+            params.push(fichaId);
+        } else if (produto) {
+            query += ` AND (FT.PRO_CODIGO_FIC = ? OR TRIM(FT.PRO_CODIGO_FIC) = ?) AND TRIM(FT.ATIVO_FIC) = 'S' `;
+            params.push(produto, String(produto).trim());
+            
+            if (cliente && cliente !== 'undefined' && cliente !== 'null') {
+                query += ` AND (FT.CLI_CODIGO_FIC = ? OR TRIM(FT.CLI_CODIGO_FIC) = ?) `;
+                params.push(cliente, String(cliente).trim());
+            }
+        } else {
+            return res.json([]);
         }
 
         query += ` ORDER BY PS.SEQUENCIA_PDS `;
 
         const result = await executeQuery(query, params);
 
-        console.log(`✅ [Firebird] Roteiro para ${produto}: ${Array.isArray(result) ? result.length : 0} etapas encontradas.`);
-        
-        if (Array.isArray(result) && result.length === 0) {
-            console.warn(`⚠️ [Firebird] Roteiro vazio para produto ${produto}. Verificando sem filtro ATIVO_FIC...`);
-            // Tentativa secundária sem o filtro ATIVO_FIC ou com TRIM avançado?
-        }
-
         if (!Array.isArray(result)) {
-            console.error('❌ [Firebird] Resultado inesperado (não é array):', result);
+            console.error('❌ [Firebird] Resultado não é array:', result);
             return res.json([]);
         }
 
         const dataFormatted = result.map(row => ({
-            // Tenta tanto minúsculo quanto maiúsculo para ser robusto
-            sequencia: row.sequencia || row.SEQUENCIA || row.SEQUENCIA_FTPC,
-            setor: (row.setor || row.SETOR || row.NOME_SET || 'DESCONHECIDO').trim().toUpperCase()
+            sequencia: row.SQ || row.sq || 0,
+            setor: (row.ST || row.st || 'DESCONHECIDO').trim().toUpperCase()
         }));
 
+        console.log(`✅ [Firebird] Roteiro finalizado: ${dataFormatted.length} etapas.`);
         res.json(dataFormatted);
 
     } catch (error) {
-        console.error('❌ [Firebird] Erro ao buscar roteiro:', error);
-        res.status(500).json({ error: 'Erro ao buscar roteiro no Firebird', details: error.message });
+        console.error('❌ [Firebird] Erro no roteiro:', error);
+        res.status(500).json({ error: error.message });
     }
 });
 
