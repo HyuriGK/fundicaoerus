@@ -246,14 +246,17 @@ router.get('/op-apontamentos-resumo', async (req, res) => {
 // Retorna o roteiro de produção (sequência de setores) de um produto via Ficha Técnica
 router.get('/op-roteiro', async (req, res) => {
     try {
-        const { produto } = req.query;
+        const { produto, cliente } = req.query;
         if (!produto) {
             return res.status(400).json({ error: 'Código do produto é obrigatório' });
         }
 
-        console.log(`📊 [Firebird] Buscando roteiro para produto: ${produto}`);
+        console.log(`📊 [Firebird] Buscando roteiro para produto: ${produto}${cliente ? ` (Cliente: ${cliente})` : ''}`);
 
-        const query = `
+        // O PDT_CODIGO_FIC está em FICHA_TECNICA. Para achar o nome, join com PROCEDIMENTO. 
+        // Para etapas, PROCEDIMENTO_SETOR. 
+        // Filtramos por ATIVO_FIC = 'S' (usando TRIM para evitar problemas de CHAR).
+        let query = `
             SELECT 
                 PS.SEQUENCIA_PDS as "sequencia", 
                 S.NOME_SET as "setor"
@@ -262,13 +265,22 @@ router.get('/op-roteiro', async (req, res) => {
             JOIN PROCEDIMENTO_SETOR PS ON PS.PDT_CODIGO_PDS = P.CODIGO_PDT
             JOIN SETOR S ON S.CODIGO_SET = PS.SET_CODIGO_PDS
             WHERE (FT.PRO_CODIGO_FIC = ? OR TRIM(FT.PRO_CODIGO_FIC) = ?)
-              AND FT.ATIVO_FIC = 'S'
+              AND TRIM(FT.ATIVO_FIC) = 'S'
               AND PS.SET_EMPRESA_PDS = 10
               AND S.NOME_SET NOT LIKE 'NAO USAR%'
-            ORDER BY PS.SEQUENCIA_PDS
         `;
 
-        const result = await executeQuery(query, [produto, produto.trim()]);
+        const params = [produto, produto.trim()];
+
+        // Se tiver cliente, tenta filtrar por ele para ser mais específico
+        if (cliente) {
+            query += ` AND (FT.CLI_CODIGO_FIC = ? OR TRIM(FT.CLI_CODIGO_FIC) = ?) `;
+            params.push(cliente, String(cliente).trim());
+        }
+
+        query += ` ORDER BY PS.SEQUENCIA_PDS `;
+
+        const result = await executeQuery(query, params);
 
         console.log(`✅ [Firebird] Roteiro para ${produto}: ${Array.isArray(result) ? result.length : 0} etapas encontradas.`);
         
