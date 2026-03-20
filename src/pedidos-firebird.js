@@ -266,11 +266,17 @@ router.get('/op-roteiro', async (req, res) => {
 
         const result = await executeQuery(query, [produto]);
 
-        console.log(`✅ [Firebird] Roteiro para ${produto}: ${result.length} etapas encontradas.`);
+        console.log(`✅ [Firebird] Roteiro para ${produto}: ${Array.isArray(result) ? result.length : 0} etapas encontradas.`);
+
+        if (!Array.isArray(result)) {
+            console.error('❌ [Firebird] Resultado inesperado (não é array):', result);
+            return res.json([]);
+        }
 
         const dataFormatted = result.map(row => ({
-            sequencia: row.sequencia,
-            setor: (row.setor || 'DESCONHECIDO').trim().toUpperCase()
+            // Tenta tanto minúsculo quanto maiúsculo para ser robusto
+            sequencia: row.sequencia || row.SEQUENCIA || row.SEQUENCIA_FTPC,
+            setor: (row.setor || row.SETOR || row.NOME_SET || 'DESCONHECIDO').trim().toUpperCase()
         }));
 
         res.json(dataFormatted);
