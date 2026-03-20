@@ -3,8 +3,8 @@ const pool = require('../lib/db');
 require('dotenv').config({ path: '.env.local' });
 
 /**
- * MASTER SYNC (SIMPLIFICADA v2)
- * Foco: Roteiros Produtivos + Vínculos por Produto (Fallback)
+ * MASTER SYNC (SIMPLIFICADA v4)
+ * Foco: Sincronizar TODAS as OPs Ativas (A, N, P) da Empresa 10 diretamente do Firebird.
  * Firebird: Apenas Consulta (Read-Only).
  */
 
@@ -16,77 +16,81 @@ const firebirdOptions = {
 async function syncMaster() {
     const startTime = Date.now();
     console.log('\n======================================================');
-    console.log('🚀 INICIANDO SINCRONIZAÇÃO MASTER (V2)');
+    console.log('🚀 INICIANDO SINCRONIZAÇÃO MASTER (V4)');
     console.log('======================================================\n');
 
     try {
-        console.log('🔍 [1/4] Identificando produtos ativos na Carteira...');
-        const carteiraRes = await pool.query('SELECT DISTINCT codigo FROM carteira WHERE codigo IS NOT NULL');
-        const activeProducts = carteiraRes.rows.map(r => String(r.codigo).trim());
-
-        if (activeProducts.length === 0) {
-            console.log('⚠️ [Aviso] Nenhuma OP ativa na carteira. Nada para sincronizar.');
-            process.exit(0);
-        }
-        console.log(`📦 [Status] ${activeProducts.length} produtos ativos encontrados.`);
-
         Firebird.attach(firebirdOptions, async function (err, db) {
             if (err) { console.error('❌ [Erro] Falha ao conectar no Firebird:', err.message); process.exit(1); }
 
-            const placeholders = activeProducts.map(c => `'${c}'`).join(',');
+            // 1. Buscar TODAS as OPs Ativas (A, N, P) da Empresa 10
+            console.log('📥 [1/4] Coletando OPs Ativas (A, N, P) da Empresa 10...');
+            const opsResults = await new Promise((res, rej) => {
+                db.query(`
+                    SELECT 
+                        P.CODIGO_PCP as OP_PCS,
+                        P.PRODUTO_PCP as PRODUTO_PPR,
+                        PR.NOME_PRO as NOME_PRODUTO_PPR,
+                        P.QUANTIDADE_PCP as OP_QUANTIDADE,
+                        P.DATA_PCP as OP_EMISSAO,
+                        P.ENTREGA_PCP as OP_ENTREGA,
+                        P.STATUS_PCP,
+                        CAST(NULL AS VARCHAR(1)) as LOTE_PCS,
+                        C.RAZAO_SOCIAL_CLI as NOME_CLIENTE
+                    FROM PRODUCAO P
+                    LEFT JOIN PRODUTO PR ON PR.CODIGO_PRO = P.PRODUTO_PCP
+                    LEFT JOIN PEDIDO D ON D.CODIGO_PED = P.PEDIDO_PCP AND D.ANO_PED = P.ANO_PCP AND D.EMPRESA_PED = P.EMPRESA_PCP
+                    LEFT JOIN CLIENTE C ON C.CODIGO_CLI = D.CLIENTE_PED AND C.EMPRESA_CLI = D.CLI_EMPRESA_PED
+                    WHERE P.EMPRESA_PCP = 10 
+                    AND P.STATUS_PCP IN ('A', 'N', 'P')
+                `, (e, r) => e ? rej(e) : res(r));
+            });
 
-            // PASSO A: Sincronizar Vínculo Produto -> Ficha (Para o Fallback do Front)
-            console.log('📥 [2/4] Sincronizando vínculos Produto -> Ficha...');
-            db.query(`
-                SELECT PRO_CODIGO_FIC, CODIGO_FIC 
-                FROM FICHA_TECNICA 
-                WHERE ATIVO_FIC = 'S' AND PRO_CODIGO_FIC IN (${placeholders})
-            `, async (err, fts) => {
-                if (!err && fts && fts.length > 0) {
-                    const client = await pool.connect();
-                    try {
-                        await client.query('BEGIN');
-                        for (const ft of fts) {
-                            await client.query(`
-                                INSERT INTO ficha_tecnica (pro_codigo_fic, codigo_fic, updated_at) 
-                                VALUES ($1, $2, NOW())
-                                ON CONFLICT (pro_codigo_fic) DO UPDATE SET codigo_fic = EXCLUDED.codigo_fic, updated_at = NOW()
-                            `, [String(ft.PRO_CODIGO_FIC).trim(), ft.CODIGO_FIC]);
-                        }
-                        await client.query('COMMIT');
-                        console.log(`✅ [Produtos] ${fts.length} vínculos Produto->Ficha atualizados.`);
-                    } catch (e) { await client.query('ROLLBACK'); }
-                    finally { client.release(); }
+            console.log(`📦 [Status] ${opsResults.length} OPs ativas encontradas no Firebird.`);
+
+            const pgClient = await pool.connect();
+            try {
+                await pgClient.query('BEGIN');
+                
+                // 2. Upsert OPs na tabela do dashboard
+                console.log('📤 [2/4] Atualizando Dashboard (firebird_sync_pedidos)...');
+                for (const op of opsResults) {
+                    const syncKey = `OP-${op.OP_PCS}`;
+                    await pgClient.query(`
+                        INSERT INTO firebird_sync_pedidos (sync_key, data, updated_at)
+                        VALUES ($1, $2, NOW())
+                        ON CONFLICT (sync_key) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()
+                    `, [syncKey, JSON.stringify(op)]);
                 }
 
-                // PASSO B: Sincronizar Etapa das OPs (Produção)
-                console.log('📥 [3/4] Sincronizando vínculos OP -> Ficha...');
-                db.query(`
-                    SELECT CODIGO_PCP, FIC_CODIGO_PCP 
-                    FROM PRODUCAO 
-                    WHERE FIC_CODIGO_PCP IS NOT NULL 
-                    AND PRODUTO_PCP IN (${placeholders})
-                    AND STATUS_PCP <> 'C'
-                `, async (err, ops) => {
-                    if (!err && ops && ops.length > 0) {
-                        const client = await pool.connect();
-                        try {
-                            await client.query('BEGIN');
-                            for (let i = 0; i < ops.length; i += 500) {
-                                const chunk = ops.slice(i, i + 500);
-                                const valStr = chunk.map((op, idx) => `($${idx * 2 + 1}, $${idx * 2 + 2})`).join(',');
-                                const params = chunk.flatMap(op => [String(op.CODIGO_PCP).trim(), op.FIC_CODIGO_PCP]);
-                                await client.query(`INSERT INTO producao_fichas (op_codigo, ficha_id) VALUES ${valStr} ON CONFLICT (op_codigo) DO UPDATE SET ficha_id = EXCLUDED.ficha_id`, params);
-                            }
-                            await client.query('COMMIT');
-                            console.log(`✅ [OPs] ${ops.length} vínculos OP->Ficha sincronizados.`);
-                        } catch (e) { await client.query('ROLLBACK'); }
-                        finally { client.release(); }
+                // 3. Sincronizar Roteiros para esses produtos
+                const uniqueProducts = [...new Set(opsResults.map(op => String(op.PRODUTO_PPR).trim()))];
+                console.log(`📥 [3/4] Sincronizando roteiros para ${uniqueProducts.length} produtos...`);
+
+                const productChunks = [];
+                for (let i = 0; i < uniqueProducts.length; i += 100) productChunks.push(uniqueProducts.slice(i, i + 100));
+
+                for (const chunk of productChunks) {
+                    const placeholders = chunk.map(c => `'${c}'`).join(',');
+
+                    // Vínculo Produto -> Ficha
+                    const fts = await new Promise(res => db.query(`SELECT PRO_CODIGO_FIC, CODIGO_FIC FROM FICHA_TECNICA WHERE ATIVO_FIC = 'S' AND PRO_CODIGO_FIC IN (${placeholders})`, (e, r) => res(r || [])));
+                    for (const ft of fts) {
+                        await pgClient.query(`
+                            INSERT INTO ficha_tecnica (pro_codigo_fic, codigo_fic, updated_at) 
+                            VALUES ($1, $2, NOW())
+                            ON CONFLICT (pro_codigo_fic) DO UPDATE SET codigo_fic = EXCLUDED.codigo_fic, updated_at = NOW()
+                        `, [String(ft.PRO_CODIGO_FIC).trim(), ft.CODIGO_FIC]);
                     }
 
-                    // PASSO C: Sincronizar Roteiros Produtivos (Passo a Passo)
-                    console.log('📥 [4/4] Sincronizando Etapas do Roteiro...');
-                    db.query(`
+                    // Vínculo OP -> Ficha
+                    const opFichas = await new Promise(res => db.query(`SELECT CODIGO_PCP, FIC_CODIGO_PCP FROM PRODUCAO WHERE FIC_CODIGO_PCP IS NOT NULL AND PRODUTO_PCP IN (${placeholders}) AND STATUS_PCP IN ('A', 'N', 'P')`, (e, r) => res(r || [])));
+                    for (const opF of opFichas) {
+                        await pgClient.query(`INSERT INTO producao_fichas (op_codigo, ficha_id) VALUES ($1, $2) ON CONFLICT (op_codigo) DO UPDATE SET ficha_id = EXCLUDED.ficha_id`, [String(opF.CODIGO_PCP).trim(), opF.FIC_CODIGO_PCP]);
+                    }
+
+                    // Etapas do Roteiro
+                    const rts = await new Promise(res => db.query(`
                         SELECT FT.CODIGO_FIC, PS.SEQUENCIA_PDS as SEQUENCIA, S.NOME_SET as SETOR
                         FROM FICHA_TECNICA FT
                         JOIN PROCEDIMENTO P ON P.CODIGO_PDT = FT.PDT_CODIGO_FIC
@@ -94,31 +98,27 @@ async function syncMaster() {
                         JOIN SETOR S ON S.CODIGO_SET = PS.SET_CODIGO_PDS
                         WHERE FT.ATIVO_FIC = 'S' AND PS.SET_EMPRESA_PDS = 10 AND S.NOME_SET NOT LIKE 'NAO USAR%'
                         AND FT.PRO_CODIGO_FIC IN (${placeholders})
-                    `, async (err, rts) => {
-                        if (!err && rts && rts.length > 0) {
-                            const client = await pool.connect();
-                            try {
-                                await client.query('BEGIN');
-                                for (let i = 0; i < rts.length; i += 300) {
-                                    const chunk = rts.slice(i, i + 300);
-                                    const valStr = chunk.map((rt, idx) => `($${idx * 3 + 1}, $${idx * 3 + 2}, $${idx * 3 + 3})`).join(',');
-                                    const params = chunk.flatMap(rt => [rt.CODIGO_FIC, rt.SEQUENCIA, String(rt.SETOR).trim().toUpperCase()]);
-                                    await client.query(`INSERT INTO roteiros_tecnicos (ficha_id, sequencia, setor_nome) VALUES ${valStr} ON CONFLICT (ficha_id, sequencia) DO UPDATE SET setor_nome = EXCLUDED.setor_nome`, params);
-                                }
-                                await client.query('COMMIT');
-                                console.log(`✅ [Roteiros] ${rts.length} etapas sincronizadas.`);
-                            } catch (e) { await client.query('ROLLBACK'); }
-                            finally { client.release(); }
-                        }
+                    `, (e, r) => res(r || [])));
+                    for (const rt of rts) {
+                        await pgClient.query(`INSERT INTO roteiros_tecnicos (ficha_id, sequencia, setor_nome) VALUES ($1, $2, $3) ON CONFLICT (ficha_id, sequencia) DO UPDATE SET setor_nome = EXCLUDED.setor_nome`, [rt.CODIGO_FIC, rt.SEQUENCIA, String(rt.SETOR).trim().toUpperCase()]);
+                    }
+                    process.stdout.write('.');
+                }
 
-                        console.log('\n======================================================');
-                        console.log(`🎉 SINCRONIZAÇÃO V2 CONCLUÍDA EM ${((Date.now() - startTime) / 1000).toFixed(1)}S!`);
-                        console.log('======================================================\n');
-                        db.detach();
-                        process.exit(0);
-                    });
-                });
-            });
+                await pgClient.query('COMMIT');
+            } catch (e) {
+                await pgClient.query('ROLLBACK');
+                console.error('\n❌ [Erro Postgres]:', e.message);
+            } finally {
+                pgClient.release();
+            }
+
+            const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+            console.log('\n\n======================================================');
+            console.log(`🎉 SINCRONIZAÇÃO V4 CONCLUÍDA EM ${duration}S!`);
+            console.log('======================================================\n');
+            db.detach();
+            process.exit(0);
         });
     } catch (e) { console.error('❌ [Erro Crítico]:', e.message); process.exit(1); }
 }
