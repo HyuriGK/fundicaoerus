@@ -3,20 +3,17 @@ setlocal
 cd /d %~dp0
 
 echo ======================================================
-echo   Sincronizador de Dados de Producao (Firebird -> Postgres)
+echo   Sincronizador de Producao (Focado em Roteiros)
 echo ======================================================
 echo.
 
-echo [1/2] Sincronizando Fichas Tecnicas...
-node scripts/sync-fichatecnica.js
-
-echo.
-echo [2/2] Sincronizando Roteiros de Producao e OPs...
-node scripts/sync-roteiros.js
+echo [1/1] Sincronizando Roteiros das OPs em aberto...
+node scripts/sync-master.js
 
 echo.
 echo ======================================================
-echo   Sincronizacao concluida com sucesso!
+echo   SINCRO PARADA: Roteiros carregados para o Postgres.
+echo   Seus dados estao prontos no dashboard!
 echo ======================================================
 echo.
 pause
