@@ -255,13 +255,17 @@ router.get('/op-roteiro', async (req, res) => {
 
         const query = `
             SELECT 
-                F.SEQUENCIA_FTPC as "sequencia", 
+                PS.SEQUENCIA_PDS as "sequencia", 
                 S.NOME_SET as "setor"
-            FROM FICHA_TECNICA_PROCEDIMENTO F
-            JOIN SETOR S ON S.CODIGO_SET = F.SET_CODIGO_FTPC
-            JOIN FICHA_TECNICA FT ON FT.CODIGO_FIC = F.FIC_CODIGO_FTPC
-            WHERE FT.PRO_CODIGO_FIC = ? AND FT.ATIVO_FIC = 'S'
-            ORDER BY F.SEQUENCIA_FTPC
+            FROM FICHA_TECNICA FT
+            JOIN PROCEDIMENTO P ON P.CODIGO_PDT = FT.PDT_CODIGO_FIC
+            JOIN PROCEDIMENTO_SETOR PS ON PS.PDT_CODIGO_PDS = P.CODIGO_PDT
+            JOIN SETOR S ON S.CODIGO_SET = PS.SET_CODIGO_PDS
+            WHERE FT.PRO_CODIGO_FIC = ? 
+              AND FT.ATIVO_FIC = 'S'
+              AND PS.SET_EMPRESA_PDS = 10
+              AND S.NOME_SET NOT LIKE 'NAO USAR%'
+            ORDER BY PS.SEQUENCIA_PDS
         `;
 
         const result = await executeQuery(query, [produto]);
