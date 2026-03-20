@@ -242,4 +242,43 @@ router.get('/op-apontamentos-resumo', async (req, res) => {
     }
 });
 
+// GET /api/pedidos-firebird/op-roteiro
+// Retorna o roteiro de produção (sequência de setores) de um produto via Ficha Técnica
+router.get('/op-roteiro', async (req, res) => {
+    try {
+        const { produto } = req.query;
+        if (!produto) {
+            return res.status(400).json({ error: 'Código do produto é obrigatório' });
+        }
+
+        console.log(`📊 [Firebird] Buscando roteiro para produto: ${produto}`);
+
+        const query = `
+            SELECT 
+                F.SEQUENCIA_FTPC as "sequencia", 
+                S.NOME_SET as "setor"
+            FROM FICHA_TECNICA_PROCEDIMENTO F
+            JOIN SETOR S ON S.CODIGO_SET = F.SET_CODIGO_FTPC
+            JOIN FICHA_TECNICA FT ON FT.CODIGO_FIC = F.FIC_CODIGO_FTPC
+            WHERE FT.PRO_CODIGO_FIC = ? AND FT.ATIVO_FIC = 'S'
+            ORDER BY F.SEQUENCIA_FTPC
+        `;
+
+        const result = await executeQuery(query, [produto]);
+
+        console.log(`✅ [Firebird] Roteiro para ${produto}: ${result.length} etapas encontradas.`);
+
+        const dataFormatted = result.map(row => ({
+            sequencia: row.sequencia,
+            setor: (row.setor || 'DESCONHECIDO').trim().toUpperCase()
+        }));
+
+        res.json(dataFormatted);
+
+    } catch (error) {
+        console.error('❌ [Firebird] Erro ao buscar roteiro:', error);
+        res.status(500).json({ error: 'Erro ao buscar roteiro no Firebird', details: error.message });
+    }
+});
+
 module.exports = router;

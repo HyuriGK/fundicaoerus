@@ -574,14 +574,6 @@
         let allOps = [];
         let selectedOp = null;
 
-        const sectorGroups = {
-            'MOLDAGEM': ['MOLDAGEM', 'MOL'],
-            'FUSÃO': ['FUSÃO', 'FUSSAO', 'FUS'],
-            'ACABAMENTO': ['ACABAMENTO', 'ACAB'],
-            'TRATAMENTO TÉRMICO': ['TRATAMENTO TÉRMICO', 'TRAT. TERMICO', 'TT'],
-            'USINAGEM': ['USINAGEM', 'USIN'],
-            'EXPEDIÇÃO': ['EXPEDIÇÃO', 'EXPEDICAO', 'EXP']
-        };
 
         const stageIcons = {
             'MOLDAGEM': 'fa-box-open',
@@ -647,7 +639,8 @@
             
             // UI Updates
             document.querySelectorAll('.op-item').forEach(el => el.classList.remove('active'));
-            event.currentTarget.classList.add('active');
+            const activeItem = Array.from(document.querySelectorAll('.op-item')).find(el => el.querySelector('.op-item-number').textContent == op.OP_PCS);
+            if (activeItem) activeItem.classList.add('active');
             
             document.getElementById('noSelection').style.display = 'none';
             document.getElementById('detailsContainer').style.display = 'flex';
@@ -660,16 +653,36 @@
             document.getElementById('detQty').textContent = `${op.OP_QUANTIDADE || op.QUANTIDADE_PPR} pçs`;
             document.getElementById('detDate').textContent = op.DATA_EMISSAO_PPR ? new Date(op.DATA_EMISSAO_PPR).toLocaleDateString('pt-BR') : '-';
 
-            // Fetch progress
+            // Fetch roteiro and progress
             renderStagesLoading();
             
             try {
-                const response = await fetch(`${API_APONTAMENTOS}?op=${op.OP_PCS}`);
-                const pointings = await response.json();
-                renderStages(pointings, op.OP_QUANTIDADE || op.QUANTIDADE_PPR);
+                // Fetch points and route in parallel
+                const [pointsRes, routeRes] = await Promise.all([
+                    fetch(`${API_APONTAMENTOS}?op=${op.OP_PCS}`),
+                    fetch(`/api/pedidos-firebird/op-roteiro?produto=${op.PRODUTO_PPR}`)
+                ]);
+
+                const pointings = await pointsRes.json();
+                let roteiro = await routeRes.json();
+
+                // Fallback sequence if route is empty
+                if (!roteiro || roteiro.length === 0) {
+                    console.log("Roteiro não encontrado para este produto. Usando roteiro padrão.");
+                    roteiro = [
+                        { sequencia: 1, setor: 'MOLDAGEM' },
+                        { sequencia: 2, setor: 'FUSÃO' },
+                        { sequencia: 3, setor: 'ACABAMENTO' },
+                        { sequencia: 4, setor: 'TRATAMENTO TÉRMICO' },
+                        { sequencia: 5, setor: 'USINAGEM' },
+                        { sequencia: 6, setor: 'EXPEDIÇÃO' }
+                    ];
+                }
+
+                renderStages(pointings, roteiro, op.OP_QUANTIDADE || op.QUANTIDADE_PPR);
             } catch (error) {
                 console.error("Erro ao carregar detalhes da OP:", error);
-                document.getElementById('stagesContainer').innerHTML = '<p style="color: var(--status-danger);">Erro ao carregar estágios de produção.</p>';
+                document.getElementById('stagesContainer').innerHTML = '<p style="color: var(--status-danger); text-align: center; padding: 20px;">Erro ao carregar roteiro ou apontamentos.</p>';
             }
         }
 
@@ -678,43 +691,62 @@
             container.innerHTML = `
                 <div style="text-align: center; padding: 40px; color: var(--text-dim);">
                     <i class="fa-solid fa-circle-notch fa-spin" style="font-size: 2rem; margin-bottom: 10px;"></i>
-                    <p>Buscando apontamentos...</p>
+                    <p>Buscando roteiro e apontamentos...</p>
                 </div>
             `;
         }
 
-        function renderStages(pointings, totalQty) {
+        function normalizeSectorName(name) {
+            if (!name) return '';
+            const n = name.toUpperCase().trim();
+            // Mapeamentos comuns para garantir batimento
+            if (n.includes('MOLDA')) return 'MOLDAGEM';
+            if (n.includes('FUS')) return 'FUSÃO';
+            if (n.includes('ACABAM')) return 'ACABAMENTO';
+            if (n.includes('TRAT') && n.includes('TERM')) return 'TRATAMENTO TÉRMICO';
+            if (n.includes('USINA')) return 'USINAGEM';
+            if (n.includes('EXPED')) return 'EXPEDIÇÃO';
+            if (n.includes('REBARBA')) return 'ACABAMENTO'; // Rebarbação entra no acabamento se não houver etapa específica
+            return n;
+        }
+
+        function renderStages(pointings, roteiro, totalQty) {
             const container = document.getElementById('stagesContainer');
             container.innerHTML = '';
 
-            const stagesData = {};
-            Object.keys(sectorGroups).forEach(stage => {
-                stagesData[stage] = 0;
-            });
-
-            // Agrega apontamentos por grupo de setor
+            // Agrega apontamentos por setor (normalizado)
+            const pointsBySector = {};
             pointings.forEach(p => {
-                const sector = (p.SETOR || '').toUpperCase().trim();
-                for (const [groupName, aliases] of Object.entries(sectorGroups)) {
-                    if (aliases.some(a => sector.includes(a))) {
-                        stagesData[groupName] += parseFloat(p.QUANTIDADE || 0);
-                        break;
-                    }
-                }
+                const normSetor = normalizeSectorName(p.SETOR || p.setor);
+                pointsBySector[normSetor] = (pointsBySector[normSetor] || 0) + parseFloat(p.quantidade || p.QUANTIDADE || 0);
             });
 
-            Object.entries(sectorGroups).forEach(([stageName, aliases]) => {
-                const qty = stagesData[stageName] || 0;
+            let allCompleted = roteiro.length > 0;
+            let anyStarted = false;
+
+            roteiro.forEach(stage => {
+                const stageName = stage.setor;
+                const normStageName = normalizeSectorName(stageName);
+                
+                const qty = pointsBySector[normStageName] || 0;
                 const percent = Math.min(100, (qty / totalQty) * 100);
+                
+                if (qty < totalQty) allCompleted = false;
+                if (qty > 0) anyStarted = true;
+
                 const isCompleted = qty >= totalQty && totalQty > 0;
                 const isActive = qty > 0 && !isCompleted;
+                // ... (rest of the loop content)
 
                 const card = document.createElement('div');
                 card.className = `stage-card ${isCompleted ? 'completed' : (isActive ? 'active' : '')}`;
                 
+                // Determina ícone
+                let iconClass = stageIcons[normStageName] || 'fa-industry';
+                
                 card.innerHTML = `
                     <div class="stage-icon">
-                        <i class="fa-solid ${stageIcons[stageName] || 'fa-industry'}"></i>
+                        <i class="fa-solid ${iconClass}"></i>
                     </div>
                     <div class="stage-info">
                         <div class="stage-name">
@@ -733,6 +765,19 @@
                 `;
                 container.appendChild(card);
             });
+
+            // Update Overall Status
+            const statusEl = document.getElementById('overallStatus');
+            if (allCompleted) {
+                statusEl.textContent = 'CONCLUÍDA';
+                statusEl.style.color = 'var(--status-success)';
+            } else if (anyStarted) {
+                statusEl.textContent = 'EM PRODUÇÃO';
+                statusEl.style.color = 'var(--status-warning)';
+            } else {
+                statusEl.textContent = 'AGUARDANDO';
+                statusEl.style.color = 'var(--text-dim)';
+            }
         }
 
         window.onload = init;
