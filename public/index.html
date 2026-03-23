@@ -1590,7 +1590,7 @@
                             <div class="section-title">
                                 <div class="section-icon"><i class="fa-solid fa-file-invoice-dollar"></i></div>
                                 <div>
-                                    <h2>Novos Pedidos</h2>
+                                    <h2>Novos Pedidos Emitidos</h2>
                                     <p class="section-subtitle">Volumes emitidos no mês</p>
                                 </div>
                             </div>
@@ -2487,11 +2487,21 @@
                                 options: {
                                     responsive: true,
                                     maintainAspectRatio: false,
-                                    cutout: 0,
                                     plugins: {
-                                        legend: { position: 'right', labels: { color: '#a1a1aa', font: { size: 9 }, usePointStyle: true } }
+                                        legend: { position: 'right', labels: { color: '#71717a', font: { size: 10 } } },
+                                        datalabels: {
+                                            color: '#fff',
+                                            font: { weight: 'bold', size: 11 },
+                                            formatter: (value) => formatWeight(value)
+                                        },
+                                        tooltip: {
+                                            callbacks: {
+                                                label: (context) => ` ${context.label}: ${formatWeight(context.parsed)}`
+                                            }
+                                        }
                                     }
-                                }
+                                },
+                                plugins: [ChartDataLabels]
                             });
                         }
                         updateRefugoKPI(totalRefugoWeight, totalProdWeight);
@@ -2558,15 +2568,16 @@
                                         <div style="font-size:1.1rem; font-weight:800; color:#fff;">${formatWeight(st.weight)}</div>
                                     </div>
                                     <div style="font-size:0.65rem; color:var(--text-dim); font-weight:600; border-top:1px solid rgba(255,255,255,0.05); padding-top:4px;">
-                                        MÉDIA: <span style="color:var(--color-primary)">${formatWeight(avg)}</span>
+                                        MÉDIA DIÁRIA: <span style="color:var(--color-primary)">${formatWeight(avg)}</span>
                                     </div>
                                 </div>
                             `;
                         }).join('');
 
-                        const totalP = Object.values(sectorStats).reduce((acc, v) => acc + v.weight, 0);
-                        document.getElementById('kpi-producao').innerText = formatWeight(totalP);
-                        startKPIRotation();
+                        const fusaoStat = sectorStats['FUSAO'] || { weight: 0 };
+                        document.getElementById('kpi-producao').innerText = formatWeight(fusaoStat.weight);
+                        document.getElementById('trend-producao').innerHTML = `<i class="fa-solid fa-fire-burner"></i> Somente Fusão`;
+                        // startKPIRotation(); // Disabled as requested
                     } catch (e) { console.error('Error Producao:', e); }
                     showLoading('card-producao', false);
                 }
@@ -2629,21 +2640,35 @@
                     showLoading('card-emissao', false);
                 }
 
-                async function fetchTerceirizacao() {
+async function fetchTerceirizacao() {
                     showLoading('card-terceirizacao', true);
                     try {
                         const res = await fetch('/api/acabamento-externo');
                         const data = await res.json();
+                        const recIds = new Set((data.recebidos || []).map(r => r.id));
                         const charges = {};
                         (data.registros || []).forEach(r => {
                             const cid = r.carga || 'S/N';
-                            if (!charges[cid]) charges[cid] = { id: cid, terceiro: r.terceiro || 'N/A', peso: 0 };
+                            if (!charges[cid]) charges[cid] = { id: cid, terceiro: r.terceiro || 'N/A', peso: 0, receivedCount: 0, totalCount: 0 };
                             charges[cid].peso += parseFloat(r.peso || 0) * parseInt(r.quant || 1);
+                            charges[cid].totalCount++;
+                            if (recIds.has(r.id)) charges[cid].receivedCount++;
                         });
                         const sorted = Object.values(charges).sort((a,b) => b.id.localeCompare(a.id, undefined, {numeric:true})).slice(0, 8);
-                        document.querySelector('#table-terceirizacao tbody').innerHTML = sorted.map(c => `
-                            <tr><td style="color:var(--color-indigo); font-weight:700;">#${c.id}</td><td>${c.terceiro.split(' ')[0]}</td><td style="text-align:right; color:#fff;">${formatWeight(c.peso)}</td></tr>
-                        `).join('');
+                        document.querySelector('#table-terceirizacao tbody').innerHTML = sorted.map(c => {
+                            const isRec = c.receivedCount === c.totalCount;
+                            const badge = isRec ? `<span style="font-size:0.6rem; padding:2px 6px; background:rgba(34,197,94,0.1); color:#22c55e; border-radius:4px; font-weight:700; margin-left:8px;">RECEBIDO</span>` :
+                                          `<span style="font-size:0.6rem; padding:2px 6px; background:rgba(234,88,12,0.1); color:#ea580c; border-radius:4px; font-weight:700; margin-left:8px;">PENDENTE</span>`;
+                            return `
+                                <tr>
+                                    <td>
+                                        <div style="color:var(--color-indigo); font-weight:700;">#${c.id} ${badge}</div>
+                                        <div style="font-size:0.7rem; color:var(--text-dim);">${c.terceiro.split(' ')[0]}</div>
+                                    </td>
+                                    <td style="text-align:right; color:#fff; vertical-align:middle;">${formatWeight(c.peso)}</td>
+                                </tr>
+                            `;
+                        }).join('');
                     } catch (e) { console.error('Error Terceirizacao:', e); }
                     showLoading('card-terceirizacao', false);
                 }
@@ -2663,11 +2688,11 @@
                             grouped[c].peso += parseFloat(r.peso_total || 0);
                         });
                         const faturW = window.totalFaturamentoWeight || 1;
-                        const sorted = Object.entries(grouped).sort((a,b) => b[1].weight - a[1].weight).slice(0, 8);
-                        document.querySelector('#table-devolucoes tbody').innerHTML = sorted.map(([n, s]) => {
-                            const pct = (s.peso / faturW) * 100;
-                            return `<tr><td>${n.split(' ')[0]}</td><td style="text-align:right;">${pct.toFixed(1)}%</td></tr>`;
-                        }).join('');
+                        const dataWithPct = Object.entries(grouped).map(([n, s]) => ({ name: n, peso: s.peso, pct: (s.peso / faturW) * 100 }));
+                        const sorted = dataWithPct.sort((a, b) => b.pct - a.pct).slice(0, 8);
+                        document.querySelector('#table-devolucoes tbody').innerHTML = sorted.map(r => `
+                            <tr><td>${r.name.split(' ')[0]}</td><td style="text-align:right; font-weight:700; color:var(--status-danger);">${r.pct.toFixed(1)}%</td></tr>
+                        `).join('');
                     } catch (e) { console.error('Error Devolucoes:', e); }
                     showLoading('card-devolucoes', false);
                 }
