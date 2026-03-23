@@ -2362,7 +2362,7 @@
 
                 // --- HELPERS ---
                 const formatCurrency = (val) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val || 0);
-                const formatWeight = (val) => (parseFloat(val) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' Kg';
+                const formatWeight = (val) => (val || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kg';
                 const formatPercent = (val) => (parseFloat(val) || 0).toFixed(2).replace('.', ',') + '%';
 
                 function showLoading(cardId, active) {
@@ -2638,15 +2638,19 @@
                 }
 
                 async function fetchFaturamento() {
+                    const now = new Date();
+                    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+                    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+
                     showLoading('card-faturamento', true);
                     try {
-                        const res = await fetch('/api/faturamento-postgres/detalhado?limit=10000');
+                        const res = await fetch(`/api/faturamento-postgres/detalhado?limit=10000&startDate=${startOfMonth}&endDate=${endOfMonth}`);
                         const json = await res.json();
                         const raw = json.data || [];
                         const valid = raw.filter(item => !item.excluido_manualmente && !excludedClients.has((item.clienteNome||'').trim()));
                         
                         const totalW = valid.reduce((acc, i) => acc + parseFloat(i.pesoTotal || 0), 0);
-                        const totalV = valid.reduce((acc, i) => acc + ((i.valorUnitario || 0) * (i.quantidade || 0)), 0);
+                        const totalV = valid.reduce((acc, i) => acc + (parseFloat(i.valorTotal || 0)), 0);
                         window.totalFaturamentoWeight = totalW;
 
                         document.getElementById('kpi-faturamento-weight').innerText = formatWeight(totalW);
