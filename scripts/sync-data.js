@@ -9,11 +9,10 @@ const FIREBIRD_OPTIONS = {
     database: '/home/lm/LM-Sistemas/SIGE2.0/Dados/sige.fdb',
     user: 'SYSDBA',
     password: 'masterkey',
-    lowercase_keys: false, // Manter original para bater com nomes do inspetor
+    lowercase_keys: false,
     pageSize: 4096
 };
 
-// Função para limpar string de conexão (igual ao lib/db.js)
 function cleanConnectionString(str) {
     if (!str) return '';
     let cleaned = str.trim();
@@ -21,397 +20,263 @@ function cleanConnectionString(str) {
     return cleaned.replace(/^['"]|['"]$/g, '');
 }
 
-// Configuração do Postgres
 const pgPool = new Pool({
     connectionString: cleanConnectionString(process.env.DATABASE_URL),
     ssl: { rejectUnauthorized: false }
 });
 
-async function syncData() {
-    console.log('🚀 Iniciando sincronização (PEDIDOS 2026)...');
+// Helper for Firebird queries with Promises
+function queryFB(db, sql, params = []) {
+    return new Promise((resolve, reject) => {
+        db.query(sql, params, (err, result) => {
+            if (err) reject(err);
+            else resolve(result);
+        });
+    });
+}
 
-    // 1. Preparar tabela no Postgres
-    const client = await pgPool.connect();
+async function syncData() {
+    console.log('🚀 Iniciando sincronização OTIMIZADA (PEDIDOS 2026)...');
+    const startTime = Date.now();
+
+    const pgClient = await pgPool.connect();
+    let db;
+
     try {
-        await client.query(`
+        // 1. Preparar tabela no Postgres
+        await pgClient.query(`
             CREATE TABLE IF NOT EXISTS firebird_sync_pedidos (
                 sync_key TEXT PRIMARY KEY,
                 data JSONB,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
-        // Limpar tabela para garantir que registros excluídos no filtro (Cancelados/Faturados) não permaneçam
-        await client.query('DELETE FROM firebird_sync_pedidos');
-        console.log('✅ Tabela Postgres verificada e limpa.');
-    } catch (e) {
-        console.error('Erro ao criar tabela Postgres:', e);
-        return;
-    } finally {
-        client.release();
-    }
 
-    // 2. Conectar no Firebird
-    Firebird.attach(FIREBIRD_OPTIONS, function (err, db) {
-        if (err) {
-            console.error('❌ Erro ao conectar no Firebird:', err);
-            return;
-        }
+        // 2. Conectar no Firebird
+        db = await new Promise((resolve, reject) => {
+            Firebird.attach(FIREBIRD_OPTIONS, (err, d) => {
+                if (err) reject(err);
+                else resolve(d);
+            });
+        });
         console.log('✅ Conectado ao Firebird');
 
-        // 3. Ler dados (JOIN entre PEDIDO_PRODUTO e PEDIDO_PRODUTO_ENTREGA)
-        console.log('📥 Lendo dados com JOIN (ANO 2026)...');
-
-        const query = `
+        // 3. FETCH DATA IN BULK
+        
+        // --- 3.1 BASE ORDERS ---
+        console.log('📥 Lendo base de Pedidos (2025/2026)...');
+        const baseOrdersSql = `
             SELECT 
-                P.CODIGO_PPR,
-                P.PRODUTO_PPR,
-                P.NOME_PRODUTO_PPR,
+                P.CODIGO_PPR, P.PRODUTO_PPR, P.NOME_PRODUTO_PPR,
+                P.QUANTIDADE_PPR, P.QUANTIDADE_FATURADA_PPR, P.SALDO_LIBERADO_FATURAR_PPR,
+                P.PESO_LIQUIDO_NPR, P.EMPRESA_PPR, P.ANO_PPR, P.ITEM_PPR,
+                P.ORDEM_COMPRA_PPR, P.STATUS_PPR,
+                D.STATUS_PED, D.STATUS_DESC_PED, D.CLIENTE_PED AS ID_CLIENTE_CORE, D.EMISSAO_PED AS DATA_EMISSAO_PEDIDO,
+                C.RAZAO_SOCIAL_CLI AS NOME_CLIENTE, M.MATERIAL_MAT AS NOME_MATERIAL,
+                E.ENTREGA_PETR,
+                CAST(PC.PRECO_POR_KG_PPRC AS DECIMAL(18,4)) AS PRECO_KG,
                 CASE 
                     WHEN PC.PPR_CODIGO_PPRC IS NOT NULL THEN 
-                         CAST(PC.PRECO_POR_KG_PPRC * (
-                            CASE 
-                                WHEN COALESCE(PC.PRO_PESO_LIQUIDO_PPRC, 0) > 0 THEN PC.PRO_PESO_LIQUIDO_PPRC 
-                                ELSE COALESCE(PC.PRO_PESO_ESTIMADO_PPRC, 0) 
-                            END
-                        ) AS DECIMAL(18,4))
+                         CAST(PC.PRECO_POR_KG_PPRC * (CASE WHEN COALESCE(PC.PRO_PESO_LIQUIDO_PPRC, 0) > 0 THEN PC.PRO_PESO_LIQUIDO_PPRC ELSE COALESCE(PC.PRO_PESO_ESTIMADO_PPRC, 0) END) AS DECIMAL(18,4))
                     ELSE P.VALOR_PPR 
-                END AS VALOR_PPR,
-                CAST(PC.PRECO_POR_KG_PPRC AS DECIMAL(18,4)) AS PRECO_KG,
-                P.QUANTIDADE_PPR,
-                P.QUANTIDADE_FATURADA_PPR,
-                P.SALDO_LIBERADO_FATURAR_PPR,
-                P.PESO_LIQUIDO_NPR,
-                P.EMPRESA_PPR,
-                P.ANO_PPR,
-                P.ITEM_PPR,
-                P.ORDEM_COMPRA_PPR,
-                P.STATUS_PPR,
-                D.STATUS_PED,
-                D.STATUS_DESC_PED,
-                E.ENTREGA_PETR,
-                D.CLIENTE_PED AS ID_CLIENTE_CORE,
-                D.EMISSAO_PED AS DATA_EMISSAO_PEDIDO,
-                C.RAZAO_SOCIAL_CLI AS NOME_CLIENTE,
-                M.MATERIAL_MAT AS NOME_MATERIAL,
-                (
-                    SELECT FIRST 1 COALESCE(S.NOME_SET, CAST(PS.SETOR_PCS AS VARCHAR(20)))
-                    FROM PRODUCAO_PEDIDO PP
-                    JOIN PRODUCAO_SETOR PS 
-                        ON PS.CODIGO_PCS = PP.PCP_CODIGO_PCPR
-                        AND PS.EMPRESA_PCS = PP.PCP_EMPRESA_PCPR
-                    LEFT JOIN SETOR S
-                        ON S.CODIGO_SET = PS.SETOR_PCS
-                        AND S.EMPRESA_SET = PS.SET_EMPRESA_PCS
-                    WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR
-                        AND PP.PPR_ANO_PCPR = P.ANO_PPR
-                        AND PP.PPR_ITEM_PCPR = P.ITEM_PPR
-                        AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR
-                        AND PS.STATUS_PCS NOT IN ('C', 'N')
-                        AND PS.QUANTIDADE_PCS > 0
-                    ORDER BY PS.ID_PCS DESC
-                ) AS ANDAMENTO_PCS,
-                (
-                    SELECT FIRST 1 PS.LOTE_PCS
-                    FROM PRODUCAO_PEDIDO PP
-                    JOIN PRODUCAO_SETOR PS 
-                        ON PS.CODIGO_PCS = PP.PCP_CODIGO_PCPR
-                        AND PS.EMPRESA_PCS = PP.PCP_EMPRESA_PCPR
-                    WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR
-                        AND PP.PPR_ANO_PCPR = P.ANO_PPR
-                        AND PP.PPR_ITEM_PCPR = P.ITEM_PPR
-                        AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR
-                        AND PS.STATUS_PCS NOT IN ('T', 'C')
-                    ORDER BY PS.ID_PCS DESC
-                ) AS LOTE_PCS,
-                (
-                    SELECT FIRST 1 PP.PCP_CODIGO_PCPR
-                    FROM PRODUCAO_PEDIDO PP
-                    WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR
-                        AND PP.PPR_ANO_PCPR = P.ANO_PPR
-                        AND PP.PPR_ITEM_PCPR = P.ITEM_PPR
-                        AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR
-                ) AS OP_PCS,
-                (
-                    SELECT FIRST 1 PCP.QUANTIDADE_PCP
-                    FROM PRODUCAO PCP
-                    WHERE PCP.CODIGO_PCP = (
-                        SELECT FIRST 1 PP.PCP_CODIGO_PCPR
-                        FROM PRODUCAO_PEDIDO PP
-                        WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR
-                            AND PP.PPR_ANO_PCPR = P.ANO_PPR
-                            AND PP.PPR_ITEM_PCPR = P.ITEM_PPR
-                            AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR
-                    )
-                    AND (EXTRACT(YEAR FROM PCP.DATA_PCP) IN (2025, 2026) OR PCP.DATA_PCP IS NULL)
-                ) AS OP_QUANTIDADE,
-                (
-                    SELECT FIRST 1 PCP.DATA_PCP
-                    FROM PRODUCAO PCP
-                    WHERE PCP.CODIGO_PCP = (
-                        SELECT FIRST 1 PP.PCP_CODIGO_PCPR
-                        FROM PRODUCAO_PEDIDO PP
-                        WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR
-                            AND PP.PPR_ANO_PCPR = P.ANO_PPR
-                            AND PP.PPR_ITEM_PCPR = P.ITEM_PPR
-                            AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR
-                    )
-                    AND (EXTRACT(YEAR FROM PCP.DATA_PCP) IN (2025, 2026) OR PCP.DATA_PCP IS NULL)
-                ) AS OP_EMISSAO,
-                (
-                    SELECT FIRST 1 PCP.ENTREGA_PCP
-                    FROM PRODUCAO PCP
-                    WHERE PCP.CODIGO_PCP = (
-                        SELECT FIRST 1 PP.PCP_CODIGO_PCPR
-                        FROM PRODUCAO_PEDIDO PP
-                        WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR
-                            AND PP.PPR_ANO_PCPR = P.ANO_PPR
-                            AND PP.PPR_ITEM_PCPR = P.ITEM_PPR
-                            AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR
-                    )
-                    AND (EXTRACT(YEAR FROM PCP.DATA_PCP) IN (2025, 2026) OR PCP.DATA_PCP IS NULL)
-                ) AS OP_ENTREGA,
-                (
-                    SELECT SUM(PS.QUANTIDADE_PCS)
-                    FROM PRODUCAO_PEDIDO PP
-                    JOIN PRODUCAO_SETOR PS ON PS.CODIGO_PCS = PP.PCP_CODIGO_PCPR AND PS.EMPRESA_PCS = PP.PCP_EMPRESA_PCPR
-                    WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR
-                        AND PP.PPR_ANO_PCPR = P.ANO_PPR
-                        AND PP.PPR_ITEM_PCPR = P.ITEM_PPR
-                        AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR
-                        AND PS.SETOR_PCS IN (1, 10, 11, 12)
-                        AND PS.STATUS_PCS NOT IN ('C', 'N')
-                ) AS QTY_MOLDADA,
-                (
-                    SELECT SUM(PS.QUANTIDADE_PCS)
-                    FROM PRODUCAO_PEDIDO PP
-                    JOIN PRODUCAO_SETOR PS ON PS.CODIGO_PCS = PP.PCP_CODIGO_PCPR AND PS.EMPRESA_PCS = PP.PCP_EMPRESA_PCPR
-                    WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR
-                        AND PP.PPR_ANO_PCPR = P.ANO_PPR
-                        AND PP.PPR_ITEM_PCPR = P.ITEM_PPR
-                        AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR
-                        AND PS.SETOR_PCS IN (2, 20)
-                        AND PS.STATUS_PCS NOT IN ('C', 'N')
-                ) AS QTY_FUSAO,
-                (
-                    SELECT SUM(PS.QUANTIDADE_PCS)
-                    FROM PRODUCAO_PEDIDO PP
-                    JOIN PRODUCAO_SETOR PS ON PS.CODIGO_PCS = PP.PCP_CODIGO_PCPR AND PS.EMPRESA_PCS = PP.PCP_EMPRESA_PCPR
-                    WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR
-                        AND PP.PPR_ANO_PCPR = P.ANO_PPR
-                        AND PP.PPR_ITEM_PCPR = P.ITEM_PPR
-                        AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR
-                        AND PS.SETOR_PCS IN (3, 30, 33, 113)
-                        AND PS.STATUS_PCS NOT IN ('C', 'N')
-                ) AS QTY_ACABAMENTO,
-                (
-                    SELECT SUM(PS.QUANTIDADE_PCS)
-                    FROM PRODUCAO_PEDIDO PP
-                    JOIN PRODUCAO_SETOR PS ON PS.CODIGO_PCS = PP.PCP_CODIGO_PCPR AND PS.EMPRESA_PCS = PP.PCP_EMPRESA_PCPR
-                    WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR
-                        AND PP.PPR_ANO_PCPR = P.ANO_PPR
-                        AND PP.PPR_ITEM_PCPR = P.ITEM_PPR
-                        AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR
-                        AND PS.SETOR_PCS IN (4, 7, 8, 9, 31, 40, 61)
-                        AND PS.STATUS_PCS NOT IN ('C', 'N')
-                ) AS QTY_TT,
-                (
-                    SELECT SUM(PS.QUANTIDADE_PCS)
-                    FROM PRODUCAO_PEDIDO PP
-                    JOIN PRODUCAO_SETOR PS ON PS.CODIGO_PCS = PP.PCP_CODIGO_PCPR AND PS.EMPRESA_PCS = PP.PCP_EMPRESA_PCPR
-                    WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR
-                        AND PP.PPR_ANO_PCPR = P.ANO_PPR
-                        AND PP.PPR_ITEM_PCPR = P.ITEM_PPR
-                        AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR
-                        AND PS.SETOR_PCS IN (50, 51, 104, 105)
-                        AND PS.STATUS_PCS NOT IN ('C', 'N')
-                ) AS QTY_USINAGEM,
-                (
-                    SELECT SUM(PS.QUANTIDADE_PCS)
-                    FROM PRODUCAO_PEDIDO PP
-                    JOIN PRODUCAO_SETOR PS ON PS.CODIGO_PCS = PP.PCP_CODIGO_PCPR AND PS.EMPRESA_PCS = PP.PCP_EMPRESA_PCPR
-                    WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR
-                        AND PP.PPR_ANO_PCPR = P.ANO_PPR
-                        AND PP.PPR_ITEM_PCPR = P.ITEM_PPR
-                        AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR
-                        AND PS.SETOR_PCS IN (6, 60)
-                        AND PS.STATUS_PCS NOT IN ('C', 'N')
-                ) AS QTY_QUALIDADE,
-                (
-                    SELECT SUM(PS.QUANTIDADE_PCS)
-                    FROM PRODUCAO_PEDIDO PP
-                    JOIN PRODUCAO_SETOR PS ON PS.CODIGO_PCS = PP.PCP_CODIGO_PCPR AND PS.EMPRESA_PCS = PP.PCP_EMPRESA_PCPR
-                    WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR
-                        AND PP.PPR_ANO_PCPR = P.ANO_PPR
-                        AND PP.PPR_ITEM_PCPR = P.ITEM_PPR
-                        AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR
-                        AND PS.SETOR_PCS IN (100)
-                        AND PS.STATUS_PCS NOT IN ('C', 'N')
-                ) AS QTY_EXPEDICAO,
-                (
-                    SELECT SUM(PS.QUANTIDADE_PCS)
-                    FROM PRODUCAO_PEDIDO PP
-                    JOIN PRODUCAO_SETOR PS ON PS.CODIGO_PCS = PP.PCP_CODIGO_PCPR AND PS.EMPRESA_PCS = PP.PCP_EMPRESA_PCPR
-                    WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR
-                        AND PP.PPR_ANO_PCPR = P.ANO_PPR
-                        AND PP.PPR_ITEM_PCPR = P.ITEM_PPR
-                        AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR
-                        AND PS.SETOR_PCS IN (101)
-                        AND PS.STATUS_PCS NOT IN ('C', 'N')
-                ) AS QTY_FATURAMENTO,
-                (
-                    SELECT CAST(LIST(DISTINCT FTP.SET_CODIGO_FTPC) AS VARCHAR(500))
-                    FROM FICHA_TECNICA FT
-                    JOIN FICHA_TECNICA_PROCEDIMENTO FTP ON FTP.FIC_CODIGO_FTPC = FT.CODIGO_FIC
-                    WHERE FT.PRO_CODIGO_FIC = P.PRODUTO_PPR
-                        AND FT.ATIVO_FIC LIKE 'S%'
-                        AND FT.EMP_CODIGO_FIC = 10
-                        AND FTP.SET_EMPRESA_FTPC = '10'
-                ) AS ROTEIRO_PRODUCAO
+                END AS VALOR_PPR
             FROM PEDIDO_PRODUTO P
-            LEFT JOIN PEDIDO_PRODUTO_ENTREGA E 
-                ON P.CODIGO_PPR = E.PPR_CODIGO_PETR 
-                AND P.ANO_PPR = E.PPR_ANO_PETR
-                AND P.ITEM_PPR = E.PPR_ITEM_PETR
-            LEFT JOIN PEDIDO D
-                ON P.CODIGO_PPR = D.CODIGO_PED
-                AND P.ANO_PPR = D.ANO_PED
-                AND P.EMPRESA_PPR = D.EMPRESA_PED
-            LEFT JOIN CLIENTE C
-                ON D.CLIENTE_PED = C.CODIGO_CLI
-                AND D.CLI_EMPRESA_PED = C.EMPRESA_CLI
-            LEFT JOIN PRODUTO_MATERIAL PM 
-                ON P.PRODUTO_PPR = PM.PRODUTO_PMT
-            LEFT JOIN MATERIAL M 
-                ON PM.MAT_ID_PMT = M.ID_MAT
-            LEFT JOIN PEDIDO_PRODUTO_CALCULO_PRECO PC
-                ON P.CODIGO_PPR = PC.PPR_CODIGO_PPRC
-                AND P.ANO_PPR = PC.PPR_ANO_PPRC
-                AND P.ITEM_PPR = PC.PPR_ITEM_PPRC
-                AND P.EMPRESA_PPR = PC.PPR_EMPRESA_PPRC
+            LEFT JOIN PEDIDO_PRODUTO_ENTREGA E ON P.CODIGO_PPR = E.PPR_CODIGO_PETR AND P.ANO_PPR = E.PPR_ANO_PETR AND P.ITEM_PPR = E.PPR_ITEM_PETR
+            LEFT JOIN PEDIDO D ON P.CODIGO_PPR = D.CODIGO_PED AND P.ANO_PPR = D.ANO_PED AND P.EMPRESA_PPR = D.EMPRESA_PED
+            LEFT JOIN CLIENTE C ON D.CLIENTE_PED = C.CODIGO_CLI AND D.CLI_EMPRESA_PED = C.EMPRESA_CLI
+            LEFT JOIN PRODUTO_MATERIAL PM ON P.PRODUTO_PPR = PM.PRODUTO_PMT
+            LEFT JOIN MATERIAL M ON PM.MAT_ID_PMT = M.ID_MAT
+            LEFT JOIN PEDIDO_PRODUTO_CALCULO_PRECO PC ON P.CODIGO_PPR = PC.PPR_CODIGO_PPRC AND P.ANO_PPR = PC.PPR_ANO_PPRC AND P.ITEM_PPR = PC.PPR_ITEM_PPRC AND P.EMPRESA_PPR = PC.PPR_EMPRESA_PPRC
             WHERE P.ANO_PPR IN (2025, 2026)
             AND (P.FATURADO_PPR <> 'T' OR P.FATURADO_PPR IS NULL)
             AND (P.STATUS_PPR <> 'C' OR P.STATUS_PPR IS NULL)
         `;
+        const orders = await queryFB(db, baseOrdersSql);
+        console.log(`📊 ${orders.length} pedidos em carteira encontrados.`);
 
-        db.query(query, async function (err, results) {
-            if (err) {
-                console.error('Erro na query Firebird:', err);
-                db.detach();
-                return;
-            }
+        if (orders.length === 0) {
+            console.log('Nada para sincronizar.');
+            return;
+        }
 
-            console.log(`📊 ${results.length} registros encontrados.`);
-
-            if (results.length === 0) {
-                console.log('Nada para sincronizar.');
-                db.detach();
-                return;
-            }
-
-            // --- PREPARE POSTGRES CACHE ---
-            console.log('📦 Buscando apontamentos reais consolidados no Postgres para cruzamento...');
-            const pgClient = await pgPool.connect();
-            let prodDict = {};
-            try {
-                // Mapear Setores pelo nome limpo (os do Firebird são IDs, no Postgres local 'setor' é nome)
-                const prodQuery = `
-                    SELECT 
-                        op,
-                        SUM(CASE WHEN setor LIKE '%MOLDAGEM%' THEN quantidade ELSE 0 END) as qty_moldagem,
-                        SUM(CASE WHEN setor LIKE '%FUSAO%' OR setor LIKE '%FUNDICAO%' THEN quantidade ELSE 0 END) as qty_fusao,
-                        SUM(CASE WHEN setor LIKE '%ACABAMENTO%' OR setor LIKE '%REBARBA%' THEN quantidade ELSE 0 END) as qty_acabamento,
-                        SUM(CASE WHEN setor LIKE '%TRATAMENTO%' OR setor LIKE '%NORMALIZA%' OR setor LIKE '%TEMPERA%' OR setor LIKE '%REVENIMENTO%' THEN quantidade ELSE 0 END) as qty_tt,
-                        SUM(CASE WHEN setor LIKE '%USINAGEM%' THEN quantidade ELSE 0 END) as qty_usinagem,
-                        SUM(CASE WHEN setor LIKE '%INSPECAO%' OR setor LIKE '%QUALIDADE%' THEN quantidade ELSE 0 END) as qty_qualidade,
-                        SUM(CASE WHEN setor LIKE '%EXPEDICAO%' THEN quantidade ELSE 0 END) as qty_expedicao,
-                        SUM(CASE WHEN setor LIKE '%FATURAMENTO%' THEN quantidade ELSE 0 END) as qty_faturamento
-                    FROM producao_apontada_sincronizada
-                    WHERE op IS NOT NULL AND op != ''
-                    GROUP BY op
-                `;
-                const prodResult = await pgClient.query(prodQuery);
-                for (const r of prodResult.rows) {
-                    prodDict[String(r.op).trim()] = {
-                        QTY_MOLDADA: parseFloat(r.qty_moldagem || 0),
-                        QTY_FUSAO: parseFloat(r.qty_fusao || 0),
-                        QTY_ACABAMENTO: parseFloat(r.qty_acabamento || 0),
-                        QTY_TT: parseFloat(r.qty_tt || 0),
-                        QTY_USINAGEM: parseFloat(r.qty_usinagem || 0),
-                        QTY_QUALIDADE: parseFloat(r.qty_qualidade || 0),
-                        QTY_EXPEDICAO: parseFloat(r.qty_expedicao || 0),
-                        QTY_FATURAMENTO: parseFloat(r.qty_faturamento || 0)
-                    };
-                }
-            } catch(e) {
-                console.error('Erro ao construir dicionário de produção local:', e);
-            }
-
-            // 4. Inserir no Postgres (Batch)
-            try {
-                console.log('📤 Enviando para o Postgres...');
-
-                let successCount = 0;
-                let errorCount = 0;
-
-                for (let row of results) {
-                    // Mapeamento e fallback para produção real local
-                    const op = String(row.OP_PCS || '').trim();
-                    if (op && prodDict[op]) {
-                        const real = prodDict[op];
-                        row.QTY_MOLDADA = Math.max(row.QTY_MOLDADA || 0, real.QTY_MOLDADA);
-                        row.QTY_FUSAO = Math.max(row.QTY_FUSAO || 0, real.QTY_FUSAO);
-                        row.QTY_ACABAMENTO = Math.max(row.QTY_ACABAMENTO || 0, real.QTY_ACABAMENTO);
-                        row.QTY_TT = Math.max(row.QTY_TT || 0, real.QTY_TT);
-                        row.QTY_USINAGEM = Math.max(row.QTY_USINAGEM || 0, real.QTY_USINAGEM);
-                        row.QTY_QUALIDADE = Math.max(row.QTY_QUALIDADE || 0, real.QTY_QUALIDADE);
-                        row.QTY_EXPEDICAO = Math.max(row.QTY_EXPEDICAO || 0, real.QTY_EXPEDICAO);
-                        row.QTY_FATURAMENTO = Math.max(row.QTY_FATURAMENTO || 0, real.QTY_FATURAMENTO);
-                    }
-
-                    // Criar chave única composta
-                    const key = `${row.EMPRESA_PPR}-${row.ANO_PPR}-${row.CODIGO_PPR}-${row.ITEM_PPR}`;
-
-                    try {
-                        await pgClient.query(`
-                            INSERT INTO firebird_sync_pedidos (sync_key, data, updated_at)
-                            VALUES ($1, $2, NOW())
-                            ON CONFLICT (sync_key) 
-                            DO UPDATE SET data = EXCLUDED.data, updated_at = NOW();
-                        `, [key, JSON.stringify(row)]);
-                        successCount++;
-                    } catch (upsertErr) {
-                        console.error(`Erro ao salvar registro ${key}:`, upsertErr.message);
-                        errorCount++;
-                    }
-
-                    // Log de progresso a cada 100 itens
-                    if (successCount % 100 === 0) process.stdout.write('.');
-                }
-
-                console.log(`\n\n✅ Sincronização concluída!`);
-                console.log(`Sucesso: ${successCount}`);
-                console.log(`Erros: ${errorCount}`);
-
-                // ATUALIZAR STATUS DE SINCRONIZAÇÃO
-                try {
-                    await pgClient.query("SET TIME ZONE 'America/Sao_Paulo'");
-                    await pgClient.query(`
-                        INSERT INTO sync_status (screen_name, last_sync_at)
-                        VALUES ('Pedidos', NOW())
-                        ON CONFLICT (screen_name) DO UPDATE SET last_sync_at = NOW();
-                    `);
-                    console.log('📊 Status de sincronização atualizado para: Pedidos');
-                } catch (statusErr) {
-                    console.error('⚠️ Erro ao atualizar status de sincronização:', statusErr.message);
-                }
-
-            } finally {
-                pgClient.release();
-                db.detach();
-                process.exit(0);
-            }
+        // --- 3.2 PRODUCTION LINKS & LATEST STATUS ---
+        console.log('📥 Lendo vínculos de Produção e status atual...');
+        const productionLinksSql = `
+            SELECT 
+                PP.PPR_CODIGO_PCPR AS COD_PED, PP.PPR_ANO_PCPR AS ANO_PED, PP.PPR_ITEM_PCPR AS ITEM_PED, PP.PPR_EMPRESA_PCPR AS EMP_PED,
+                PP.PCP_CODIGO_PCPR AS OP_CODE,
+                PCP.QUANTIDADE_PCP, PCP.DATA_PCP, PCP.ENTREGA_PCP,
+                PS.LOTE_PCS, S.NOME_SET, PS.SETOR_PCS
+            FROM PRODUCAO_PEDIDO PP
+            JOIN PRODUCAO PCP ON PCP.CODIGO_PCP = PP.PCP_CODIGO_PCPR AND PCP.EMPRESA_PCP = PP.PCP_EMPRESA_PCPR
+            LEFT JOIN PRODUCAO_SETOR PS ON PS.CODIGO_PCS = PP.PCP_CODIGO_PCPR AND PS.EMPRESA_PCS = PP.PCP_EMPRESA_PCPR AND PS.ID_PCS = (
+                SELECT MAX(ID_PCS) FROM PRODUCAO_SETOR WHERE CODIGO_PCS = PP.PCP_CODIGO_PCPR AND EMPRESA_PCS = PP.PCP_EMPRESA_PCPR AND STATUS_PCS NOT IN ('C', 'N')
+            )
+            LEFT JOIN SETOR S ON S.CODIGO_SET = PS.SETOR_PCS AND S.EMPRESA_SET = PS.SET_EMPRESA_PCS
+            WHERE PP.PPR_ANO_PCPR IN (2025, 2026)
+        `;
+        const prodLinks = await queryFB(db, productionLinksSql);
+        
+        const opMap = new Map(); // Key: EMP-ANO-COD-ITEM -> OP Info
+        const activeOPs = new Set();
+        prodLinks.forEach(p => {
+            const key = `${p.EMP_PED}-${p.ANO_PED}-${p.COD_PED}-${p.ITEM_PED}`;
+            opMap.set(key, p);
+            if (p.OP_CODE) activeOPs.add(p.OP_CODE);
         });
-    });
+
+        // --- 3.3 PRODUCTION SUMS (SECTORS) ---
+        console.log('📥 Lendo somatórios de produção por setor...');
+        const sectorSumsSql = `
+            SELECT 
+                CODIGO_PCS AS OP_CODE, SETOR_PCS, SUM(QUANTIDADE_PCS) AS QTY
+            FROM PRODUCAO_SETOR
+            WHERE EMPRESA_PCS = 10 AND STATUS_PCS NOT IN ('C', 'N') AND QUANTIDADE_PCS > 0
+            AND EXTRACT(YEAR FROM DATA_PCS) IN (2025, 2026)
+            GROUP BY CODIGO_PCS, SETOR_PCS
+        `;
+        const sectorData = await queryFB(db, sectorSumsSql);
+        
+        const sectorSumsMap = new Map(); // OP_CODE -> SectorGroupMap
+        sectorData.forEach(s => {
+            if (!sectorSumsMap.has(s.OP_CODE)) sectorSumsMap.set(s.OP_CODE, {});
+            const groups = sectorSumsMap.get(s.OP_CODE);
+            const sec = parseInt(s.SETOR_PCS);
+            const qty = parseFloat(s.QTY || 0);
+
+            if ([1, 10, 11, 12].includes(sec)) groups.QTY_MOLDADA = (groups.QTY_MOLDADA || 0) + qty;
+            else if ([2, 20].includes(sec)) groups.QTY_FUSAO = (groups.QTY_FUSAO || 0) + qty;
+            else if ([3, 30, 33, 113].includes(sec)) groups.QTY_ACABAMENTO = (groups.QTY_ACABAMENTO || 0) + qty;
+            else if ([4, 7, 8, 9, 31, 40, 61].includes(sec)) groups.QTY_TT = (groups.QTY_TT || 0) + qty;
+            else if ([50, 51, 104, 105].includes(sec)) groups.QTY_USINAGEM = (groups.QTY_USINAGEM || 0) + qty;
+            else if ([6, 60].includes(sec)) groups.QTY_QUALIDADE = (groups.QTY_QUALIDADE || 0) + qty;
+            else if ([100].includes(sec)) groups.QTY_EXPEDICAO = (groups.QTY_EXPEDICAO || 0) + qty;
+            else if ([101].includes(sec)) groups.QTY_FATURAMENTO = (groups.QTY_FATURAMENTO || 0) + qty;
+        });
+
+        // --- 3.4 ROTEIROS PRODUTO ---
+        console.log('📥 Lendo roteiros de produção...');
+        const roteirosSql = `
+            SELECT FT.PRO_CODIGO_FIC, CAST(LIST(DISTINCT FTP.SET_CODIGO_FTPC) AS VARCHAR(500)) AS ROTEIRO
+            FROM FICHA_TECNICA FT
+            JOIN FICHA_TECNICA_PROCEDIMENTO FTP ON FTP.FIC_CODIGO_FTPC = FT.CODIGO_FIC
+            WHERE FT.ATIVO_FIC LIKE 'S%' AND FT.EMP_CODIGO_FIC = 10 AND FTP.SET_EMPRESA_FTPC = '10'
+            GROUP BY FT.PRO_CODIGO_FIC
+        `;
+        const roteiros = await queryFB(db, roteirosSql);
+        const roteiroMap = new Map();
+        roteiros.forEach(r => roteiroMap.set(r.PRO_CODIGO_FIC, r.ROTEIRO));
+
+        // --- 4. JOIN IN MEMORY & PREPARE UPSERT ---
+        console.log('🔄 Cruzando dados e preparando sincronização...');
+        
+        // Mapear apontamentos locais do Postgres (fallback)
+        let prodDictLocal = {};
+        const prodQueryLocal = `
+            SELECT op,
+                SUM(CASE WHEN setor LIKE '%MOLDAGEM%' THEN quantidade ELSE 0 END) as qty_moldagem,
+                SUM(CASE WHEN setor LIKE '%FUSAO%' OR setor LIKE '%FUNDICAO%' THEN quantidade ELSE 0 END) as qty_fusao,
+                SUM(CASE WHEN setor LIKE '%ACABAMENTO%' OR setor LIKE '%REBARBA%' THEN quantidade ELSE 0 END) as qty_acabamento,
+                SUM(CASE WHEN setor LIKE '%TRATAMENTO%' OR setor LIKE '%NORMALIZA%' OR setor LIKE '%TEMPERA%' OR setor LIKE '%REVENIMENTO%' THEN quantidade ELSE 0 END) as qty_tt,
+                SUM(CASE WHEN setor LIKE '%USINAGEM%' THEN quantidade ELSE 0 END) as qty_usinagem,
+                SUM(CASE WHEN setor LIKE '%INSPECAO%' OR setor LIKE '%QUALIDADE%' THEN quantidade ELSE 0 END) as qty_qualidade,
+                SUM(CASE WHEN setor LIKE '%EXPEDICAO%' THEN quantidade ELSE 0 END) as qty_expedicao,
+                SUM(CASE WHEN setor LIKE '%FATURAMENTO%' THEN quantidade ELSE 0 END) as qty_faturamento
+            FROM producao_apontada_sincronizada
+            WHERE op IS NOT NULL AND op != ''
+            GROUP BY op
+        `;
+        const prodResultLocal = await pgClient.query(prodQueryLocal);
+        prodResultLocal.rows.forEach(r => {
+            prodDictLocal[String(r.op).trim()] = {
+                QTY_MOLDADA: parseFloat(r.qty_moldagem || 0),
+                QTY_FUSAO: parseFloat(r.qty_fusao || 0),
+                QTY_ACABAMENTO: parseFloat(r.qty_acabamento || 0),
+                QTY_TT: parseFloat(r.qty_tt || 0),
+                QTY_USINAGEM: parseFloat(r.qty_usinagem || 0),
+                QTY_QUALIDADE: parseFloat(r.qty_qualidade || 0),
+                QTY_EXPEDICAO: parseFloat(r.qty_expedicao || 0),
+                QTY_FATURAMENTO: parseFloat(r.qty_faturamento || 0)
+            };
+        });
+
+        const fbKeys = new Set();
+        const rowsToUpsert = orders.map(row => {
+            const key = `${row.EMPRESA_PPR}-${row.ANO_PPR}-${row.CODIGO_PPR}-${row.ITEM_PPR}`;
+            fbKeys.add(key);
+
+            const opInfo = opMap.get(key) || {};
+            const sums = sectorSumsMap.get(opInfo.OP_CODE) || {};
+
+            // Merge with local dict if exists
+            const local = prodDictLocal[String(opInfo.OP_CODE || '').trim()] || {};
+            
+            const finalRow = {
+                ...row,
+                ANDAMENTO_PCS: opInfo.NOME_SET || (opInfo.SETOR_PCS ? String(opInfo.SETOR_PCS) : null),
+                LOTE_PCS: opInfo.LOTE_PCS,
+                OP_PCS: opInfo.OP_CODE,
+                OP_QUANTIDADE: opInfo.QUANTIDADE_PCP,
+                OP_EMISSAO: opInfo.DATA_PCP,
+                OP_ENTREGA: opInfo.ENTREGA_PCP,
+                QTY_MOLDADA: Math.max(sums.QTY_MOLDADA || 0, local.QTY_MOLDADA || 0),
+                QTY_FUSAO: Math.max(sums.QTY_FUSAO || 0, local.QTY_FUSAO || 0),
+                QTY_ACABAMENTO: Math.max(sums.QTY_ACABAMENTO || 0, local.QTY_ACABAMENTO || 0),
+                QTY_TT: Math.max(sums.QTY_TT || 0, local.QTY_TT || 0),
+                QTY_USINAGEM: Math.max(sums.QTY_USINAGEM || 0, local.QTY_USINAGEM || 0),
+                QTY_QUALIDADE: Math.max(sums.QTY_QUALIDADE || 0, local.QTY_QUALIDADE || 0),
+                QTY_EXPEDICAO: Math.max(sums.QTY_EXPEDICAO || 0, local.QTY_EXPEDICAO || 0),
+                QTY_FATURAMENTO: Math.max(sums.QTY_FATURAMENTO || 0, local.QTY_FATURAMENTO || 0),
+                ROTEIRO_PRODUCAO: roteiroMap.get(row.PRODUTO_PPR) || null
+            };
+
+            return [key, JSON.stringify(finalRow)];
+        });
+
+        // --- 5. RECONCILIATION / PRUNING ---
+        console.log('🧹 Removendo registros obsoletos (Faturados/Cancelados)...');
+        const pgKeysResult = await pgClient.query('SELECT sync_key FROM firebird_sync_pedidos');
+        const pgKeys = pgKeysResult.rows.map(r => r.sync_key);
+        const keysToDelete = pgKeys.filter(k => !fbKeys.has(k));
+
+        if (keysToDelete.length > 0) {
+            console.log(`🗑️ Deletando ${keysToDelete.length} registros...`);
+            await pgClient.query('DELETE FROM firebird_sync_pedidos WHERE sync_key = ANY($1)', [keysToDelete]);
+        }
+
+        // --- 6. BATCH UPSERT ---
+        console.log(`📤 Enviando ${rowsToUpsert.length} registros em lotes...`);
+        const BATCH_SIZE = 500;
+        for (let i = 0; i < rowsToUpsert.length; i += BATCH_SIZE) {
+            const batch = rowsToUpsert.slice(i, i + BATCH_SIZE);
+            const keys = batch.map(b => b[0]);
+            const data = batch.map(b => b[1]);
+
+            await pgClient.query(`
+                INSERT INTO firebird_sync_pedidos (sync_key, data, updated_at)
+                SELECT unnest($1::text[]), unnest($2::jsonb[]), NOW()
+                ON CONFLICT (sync_key) DO UPDATE SET data = EXCLUDED.data, updated_at = EXCLUDED.updated_at;
+            `, [keys, data]);
+            process.stdout.write('.');
+        }
+
+        console.log(`\n\n✅ Sincronização CONCLUÍDA em ${((Date.now() - startTime)/1000).toFixed(1)}s!`);
+        
+        // 7. ATUALIZAR STATUS
+        await pgClient.query("SET TIME ZONE 'America/Sao_Paulo'");
+        await pgClient.query(`
+            INSERT INTO sync_status (screen_name, last_sync_at)
+            VALUES ('Pedidos', NOW())
+            ON CONFLICT (screen_name) DO UPDATE SET last_sync_at = NOW();
+        `);
+
+    } catch (err) {
+        console.error('❌ ERRO NA SINCRONIZAÇÃO:', err);
+    } finally {
+        if (db) db.detach();
+        pgClient.release();
+        process.exit(0);
+    }
 }
 
 syncData();
