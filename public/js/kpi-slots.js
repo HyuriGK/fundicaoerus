@@ -10,10 +10,14 @@ const KPISlotMachine = {
     animate: function(el, newValue, suffix = "") {
         if (!el) return;
 
+        // Garante que o elemento pai esteja configurado para centralizar
+        el.style.display = 'flex';
+        el.style.justifyContent = 'center';
+        el.style.alignItems = 'center';
+
         // Formata o novo valor
         let targetStr = "";
         if (typeof newValue === 'number') {
-            // Padrão do projeto: pt-BR com 2 casas decimais para pesos/valores
             targetStr = newValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         } else {
             targetStr = newValue.toString();
@@ -39,13 +43,13 @@ const KPISlotMachine = {
         const characters = targetStr.split('');
         const currentSlots = Array.from(container.children);
         
-        // Se a estrutura mudou radicalmente (mais ou menos caracteres), reinicia
+        // Se a estrutura mudou radicalmente, reinicia
         if (currentSlots.length !== characters.length) {
             container.innerHTML = characters.map(char => {
                 if (/[0-9]/.test(char)) {
-                    // Criamos 3 sets de 0-9 para permitir o efeito de "loop" infinito
+                    // 3 sets de 0-9 para loop infinito
                     const digits = [0,1,2,3,4,5,6,7,8,9,0,1,2,3,4,5,6,7,8,9,0,1,2,3,4,5,6,7,8,9];
-                    return `<div class="kpi-slot-column" data-char="${char}" style="transform: translateY(-12em);">
+                    return `<div class="kpi-slot-column" data-char="${char}" style="transform: translateY(-11em);">
                         ${digits.map(d => `<div class="kpi-slot-digit">${d}</div>`).join('')}
                     </div>`;
                 } else {
@@ -78,42 +82,31 @@ const KPISlotMachine = {
     },
 
     /**
-     * Anima uma coluna individual de dígitos com efeito aleatório de direção.
+     * Anima uma coluna individual de dígitos.
      * @private
      */
     _animateColumn: function(column, targetDigit, index) {
-        // Altura base: 1.2em. 
-        // Set 1: 0-9 (0 a -10.8em)
-        // Set 2: 10-19 (-12em a -22.8em) -> Estado normal
-        // Set 3: 20-29 (-24em a -34.8em)
+        const baseHeight = 1.1; // Sync com CSS
+        const setOffset = 10;
         
-        const baseHeight = 1.2;
-        const setOffset = 10; // 10 dígitos por set
-        
-        // Decide a direção: 50% chance de "girar para cima" ou "girar para baixo"
         const goUp = Math.random() > 0.5;
-        
         let finalY;
         if (goUp) {
-            // Vai para o dígito correspondente no TERCEIRO set
             finalY = -((targetDigit + setOffset * 2) * baseHeight);
         } else {
-            // Vai para o dígito correspondente no PRIMEIRO set
             finalY = -(targetDigit * baseHeight);
         }
 
         const delay = (index * 60) % 400;
         
-        // Aplica a animação
         setTimeout(() => {
             column.style.transition = 'transform 1.2s cubic-bezier(0.16, 1, 0.3, 1)';
-            column.style.transform = `translateY(${finalY}em)`;
+            column.style.transform = `translateY(${finalY.toFixed(2)}em)`;
             
-            // Após a animação, volta instantaneamente para o set do MEIO para manter o loop
             setTimeout(() => {
                 const resetY = -((targetDigit + setOffset) * baseHeight);
                 column.style.transition = 'none';
-                column.style.transform = `translateY(${resetY}em)`;
+                column.style.transform = `translateY(${resetY.toFixed(2)}em)`;
             }, 1250);
         }, delay);
     }
