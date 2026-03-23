@@ -539,6 +539,92 @@
         }
     }
 
+    // --- MODAL DE SAIR PERSONALIZADO ---
+    function showLogoutConfirmation() {
+        if (document.getElementById('logout-modal')) return;
+
+        // Injetar estilos do modal de logout
+        const style = document.createElement('style');
+        style.id = 'logout-modal-styles';
+        style.textContent = `
+            @keyframes logout-fadein { from { opacity: 0; } to { opacity: 1; } }
+            @keyframes logout-modal-scale {
+                from { opacity: 0; transform: scale(0.95) translateY(10px); }
+                to { opacity: 1; transform: scale(1) translateY(0); }
+            }
+            .logout-overlay {
+                position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+                background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(8px);
+                display: flex; align-items: center; justify-content: center;
+                z-index: 100000; animation: logout-fadein 0.3s ease;
+            }
+            .logout-card {
+                background: #18181b; border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 20px; padding: 32px; width: 100%; max-width: 400px;
+                text-align: center; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+                animation: logout-modal-scale 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+            }
+            .logout-icon {
+                width: 64px; height: 64px; background: rgba(239, 68, 68, 0.1);
+                border-radius: 50%; display: flex; align-items: center; justify-content: center;
+                margin: 0 auto 20px; color: #ef4444; font-size: 1.5rem;
+                border: 1px solid rgba(239, 68, 68, 0.2);
+            }
+            .logout-title { font-size: 1.25rem; font-weight: 700; color: #fff; margin-bottom: 8px; }
+            .logout-desc { color: #a1a1aa; font-size: 0.9rem; margin-bottom: 28px; line-height: 1.5; }
+            .logout-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+            .logout-btn {
+                padding: 12px; border-radius: 12px; font-weight: 600; font-size: 0.9rem;
+                cursor: pointer; transition: all 0.2s; border: none;
+            }
+            .logout-btn-cancel { background: rgba(255, 255, 255, 0.05); color: #fff; border: 1px solid rgba(255,255,255,0.1); }
+            .logout-btn-cancel:hover { background: rgba(255, 255, 255, 0.1); }
+            .logout-btn-confirm { background: #ef4444; color: #fff; }
+            .logout-btn-confirm:hover { background: #dc2626; transform: translateY(-1px); }
+        `;
+        document.head.appendChild(style);
+
+        const modal = document.createElement('div');
+        modal.id = 'logout-modal';
+        modal.className = 'logout-overlay';
+        modal.innerHTML = `
+            <div class="logout-card">
+                <div class="logout-icon"><i class="fa-solid fa-right-from-bracket"></i></div>
+                <h3 class="logout-title">Sair do Sistema?</h3>
+                <p class="logout-desc">Sua sessão será encerrada. Certifique-se de que salvou seu progresso.</p>
+                <div class="logout-actions">
+                    <button class="logout-btn logout-btn-cancel" id="logout-cancel">Cancelar</button>
+                    <button class="logout-btn logout-btn-confirm" id="logout-confirm">Sim, Sair</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+
+        document.getElementById('logout-cancel').onclick = () => {
+            modal.remove();
+            style.remove();
+        };
+
+        document.getElementById('logout-confirm').onclick = () => {
+            logActivity('LOGOUT_MANUAL');
+            redirecionarLogin();
+        };
+
+        // Close on ESC
+        const escHandler = (e) => {
+            if (e.key === 'Escape') {
+                modal.remove();
+                style.remove();
+                window.removeEventListener('keydown', escHandler);
+            }
+        };
+        window.addEventListener('keydown', escHandler);
+    }
+
+    // Expor globalmente
+    window.confirmLogout = showLogoutConfirmation;
+
     function atualizarAtividade() {
         if (localStorage.getItem('erus_auth') === 'true') {
             localStorage.setItem('erus_last_activity', Date.now().toString());
@@ -805,7 +891,7 @@
         window.addEventListener(evento, atualizarAtividade, { passive: true });
     });
 
-    // 4. Verificar sessão periodicamente (a cada 60s)
-    setInterval(verificarSessao, 60000);
+    // 4. Verificar sessão periodicamente (a cada 30s)
+    setInterval(verificarSessao, 30000);
 
 })();
