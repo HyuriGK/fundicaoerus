@@ -3,9 +3,9 @@ const pool = require('../lib/db');
 require('dotenv').config({ path: '.env.local' });
 
 /**
- * MASTER SYNC (SIMPLIFICADA v4)
+ * MASTER SYNC (v5)
  * Foco: Sincronizar TODAS as OPs Ativas (A, N, P) da Empresa 10 diretamente do Firebird.
- * Firebird: Apenas Consulta (Read-Only).
+ * Melhoria: Joins robustos via PRODUCAO_PEDIDO para recuperar Clientes e Datas de Entrega.
  */
 
 const firebirdOptions = {
@@ -16,14 +16,14 @@ const firebirdOptions = {
 async function syncMaster() {
     const startTime = Date.now();
     console.log('\n======================================================');
-    console.log('🚀 INICIANDO SINCRONIZAÇÃO MASTER (V4)');
+    console.log('🚀 INICIANDO SINCRONIZAÇÃO MASTER (V5)');
     console.log('======================================================\n');
 
     try {
         Firebird.attach(firebirdOptions, async function (err, db) {
             if (err) { console.error('❌ [Erro] Falha ao conectar no Firebird:', err.message); process.exit(1); }
 
-            // 1. Buscar TODAS as OPs Ativas (A, N, P) da Empresa 10
+            // 1. Buscar TODAS as OPs Ativas (A, N, P) da Empresa 10 com joins robustos
             console.log('📥 [1/4] Coletando OPs Ativas (A, N, P) da Empresa 10...');
             const opsResults = await new Promise((res, rej) => {
                 db.query(`
@@ -35,12 +35,22 @@ async function syncMaster() {
                         P.DATA_PCP as OP_EMISSAO,
                         P.ENTREGA_PCP as OP_ENTREGA,
                         P.STATUS_PCP,
-                        CAST(NULL AS VARCHAR(1)) as LOTE_PCS,
-                        C.RAZAO_SOCIAL_CLI as NOME_CLIENTE
+                        (SELECT FIRST 1 PS.LOTE_PCS FROM PRODUCAO_SETOR PS WHERE PS.CODIGO_PCS = P.CODIGO_PCP AND PS.EMPRESA_PCS = P.EMPRESA_PCP ORDER BY PS.ID_PCS DESC) as LOTE_PCS,
+                        (
+                            SELECT FIRST 1 C.RAZAO_SOCIAL_CLI 
+                            FROM PRODUCAO_PEDIDO PP
+                            JOIN PEDIDO D ON D.CODIGO_PED = PP.PPR_CODIGO_PCPR AND D.ANO_PED = PP.PPR_ANO_PCPR AND D.EMPRESA_PED = PP.PPR_EMPRESA_PCPR
+                            JOIN CLIENTE C ON C.CODIGO_CLI = D.CLIENTE_PED AND C.EMPRESA_CLI = D.CLI_EMPRESA_PED
+                            WHERE PP.PCP_CODIGO_PCPR = P.CODIGO_PCP AND PP.PCP_EMPRESA_PCPR = P.EMPRESA_PCP
+                        ) as NOME_CLIENTE,
+                        (
+                            SELECT FIRST 1 D.CODIGO_PED
+                            FROM PRODUCAO_PEDIDO PP
+                            JOIN PEDIDO D ON D.CODIGO_PED = PP.PPR_CODIGO_PCPR AND D.ANO_PED = PP.PPR_ANO_PCPR AND D.EMPRESA_PED = PP.PPR_EMPRESA_PCPR
+                            WHERE PP.PCP_CODIGO_PCPR = P.CODIGO_PCP AND PP.PCP_EMPRESA_PCPR = P.EMPRESA_PCP
+                        ) as PEDIDO_NUM
                     FROM PRODUCAO P
                     LEFT JOIN PRODUTO PR ON PR.CODIGO_PRO = P.PRODUTO_PCP
-                    LEFT JOIN PEDIDO D ON D.CODIGO_PED = P.PEDIDO_PCP AND D.ANO_PED = P.ANO_PCP AND D.EMPRESA_PED = P.EMPRESA_PCP
-                    LEFT JOIN CLIENTE C ON C.CODIGO_CLI = D.CLIENTE_PED AND C.EMPRESA_CLI = D.CLI_EMPRESA_PED
                     WHERE P.EMPRESA_PCP = 10 
                     AND P.STATUS_PCP IN ('A', 'N', 'P')
                 `, (e, r) => e ? rej(e) : res(r));
@@ -56,6 +66,10 @@ async function syncMaster() {
                 console.log('📤 [2/4] Atualizando Dashboard (firebird_sync_pedidos)...');
                 for (const op of opsResults) {
                     const syncKey = `OP-${op.OP_PCS}`;
+                    // Garantir que campos nulos não quebrem o dashboard
+                    op.OP_QUANTIDADE = op.OP_QUANTIDADE || 0;
+                    op.QUANTIDADE_PPR = op.OP_QUANTIDADE; 
+                    
                     await pgClient.query(`
                         INSERT INTO firebird_sync_pedidos (sync_key, data, updated_at)
                         VALUES ($1, $2, NOW())
@@ -115,7 +129,7 @@ async function syncMaster() {
 
             const duration = ((Date.now() - startTime) / 1000).toFixed(1);
             console.log('\n\n======================================================');
-            console.log(`🎉 SINCRONIZAÇÃO V4 CONCLUÍDA EM ${duration}S!`);
+            console.log(`🎉 SINCRONIZAÇÃO V5 CONCLUÍDA EM ${duration}S!`);
             console.log('======================================================\n');
             db.detach();
             process.exit(0);
