@@ -1592,30 +1592,6 @@
                         </div>
                     </div>
 
-                    <!-- DEVOLUÇOES -->
-                    <div class="section-card" id="card-devolucoes">
-                        <div class="loading-overlay active"> <div class="spinner"></div> </div>
-                        <div class="section-header">
-                            <div class="section-title">
-                                <div class="section-icon"><i class="fa-solid fa-rotate-left"></i></div>
-                                <div>
-                                    <h2>Devoluções</h2>
-                                    <p class="section-subtitle">Índice mensal</p>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="section-content">
-                            <table class="card-table" id="table-devolucoes">
-                                <thead>
-                                    <tr>
-                                        <th>Cliente</th>
-                                        <th style="text-align: right;">%</th>
-                                    </tr>
-                                </thead>
-                                <tbody></tbody>
-                            </table>
-                        </div>
-                    </div>
 
                     <!-- PRODUCAO FATURADA -->
                     <div class="section-card" id="card-faturamento">
@@ -1625,7 +1601,7 @@
                                 <div class="section-icon"><i class="fa-solid fa-receipt"></i></div>
                                 <div>
                                     <h2>Peso Total Faturado</h2>
-                                    <p class="section-subtitle">Últimos 10 dias úteis</p>
+                                    <p class="section-subtitle">Acompanhamento mensal</p>
                                 </div>
                             </div>
                         </div>
@@ -2622,29 +2598,6 @@ async function fetchTerceirizacao() {
                     showLoading('card-terceirizacao', false);
                 }
 
-                async function fetchDevolucoes() {
-                    showLoading('card-devolucoes', true);
-                    try {
-                        const now = new Date();
-                        const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-                        const end = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
-                        const res = await fetch(`/api/devolucoes?startDate=${start}&endDate=${end}`);
-                        const data = await res.json();
-                        const grouped = {};
-                        (data.data || []).forEach(r => {
-                            const c = r.cliente_nome || 'N/A';
-                            if (!grouped[c]) grouped[c] = { peso: 0 };
-                            grouped[c].peso += parseFloat(r.peso_total || 0);
-                        });
-                        const faturW = window.totalFaturamentoWeight || 1;
-                        const dataWithPct = Object.entries(grouped).map(([n, s]) => ({ name: n, peso: s.peso, pct: (s.peso / faturW) * 100 }));
-                        const sorted = dataWithPct.sort((a, b) => b.pct - a.pct).slice(0, 8);
-                        document.querySelector('#table-devolucoes tbody').innerHTML = sorted.map(r => `
-                            <tr><td>${r.name.split(' ')[0]}</td><td style="text-align:right; font-weight:700; color:var(--status-danger);">${r.pct.toFixed(1)}%</td></tr>
-                        `).join('');
-                    } catch (e) { console.error('Error Devolucoes:', e); }
-                    showLoading('card-devolucoes', false);
-                }
 
                 async function fetchFaturamento() {
                     const now = new Date();
@@ -2671,9 +2624,16 @@ async function fetchTerceirizacao() {
                             if (!daily[d]) daily[d] = 0;
                             daily[d] += parseFloat(i.pesoTotal || 0);
                         });
-                        const sorted = Object.entries(daily).sort((a,b) => a[0].localeCompare(b[0])).slice(-10);
-                        const labels = sorted.map(([d]) => d.split('-')[2] + '/' + d.split('-')[1]);
-                        const values = sorted.map(([, v]) => v);
+
+                        const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+                        const labels = [];
+                        const values = [];
+                        for (let i = 1; i <= daysInMonth; i++) {
+                            const dayStr = String(i).padStart(2, '0');
+                            labels.push(dayStr);
+                            const dateKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${dayStr}`;
+                            values.push(daily[dateKey] || 0);
+                        }
 
                         const ctx = document.getElementById('chart-faturamento').getContext('2d');
                         if (faturamentoChart) {
@@ -2719,7 +2679,7 @@ async function fetchTerceirizacao() {
                 async function refreshAll() {
                     try {
                         await loadPreferences();
-                        await Promise.all([fetchRefugo(), fetchProducao(), fetchCarteira(), fetchEmissoes(), fetchTerceirizacao(), fetchFaturamento().then(() => fetchDevolucoes())]);
+                        await Promise.all([fetchRefugo(), fetchProducao(), fetchCarteira(), fetchEmissoes(), fetchTerceirizacao(), fetchFaturamento()]);
                         refreshTimer = REFRESH_INTERVAL_SEC;
                     } catch (err) {
                         console.error('Refresh Error:', err);
