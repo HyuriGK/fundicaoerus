@@ -4412,29 +4412,17 @@
                 content.innerHTML = `<div style="text-align: center; padding: 40px; color: var(--status-danger);"><p>Erro: ${err.message}</p></div>`;
             }
         };
-
-        
         window.showSectorHistory = async function (op, category) {
-            console.log('ðŸ” showSectorHistory para category:', category, 'OP:', op);
+            console.log('🔍 showSectorHistory:', category, op);
             const modal = document.getElementById('opSectorHistoryModal');
             const content = document.getElementById('opSectorHistoryContent');
             const sectorSpan = document.getElementById('historySectorName');
 
-            if (!modal || !content) {
-                console.error('âŒ Elementos do Modal Histórico não encontrados!');
-                return;
-            }
-
+            if (!modal || !content) return;
             sectorSpan.innerText = category;
             modal.style.display = 'flex';
+            content.innerHTML = '<div style="text-align:center;padding:30px;"><i class="fa-solid fa-circle-notch fa-spin"></i></div>';
 
-            content.innerHTML = `
-                <div style="text-align: center; padding: 30px;">
-                    <i class="fa-solid fa-circle-notch fa-spin" style="font-size: 1.5rem; color: var(--color-primary);"></i>
-                </div>
-            `;
-
-            // Mapeamento inverso para a query
             const sectorMapping = {
                 'MOLDAGEM': ['MOLDAGEM', 'MOLDAGEM MANUAL', 'MOLDAGEM PESADA', 'MOLDAGEM LEVE', 'MOLDAGEM MECANIZADA', 'MOLDAGEM AUTOMÁTICA', 'MOLDAGEM EM AREIA'],
                 'FUSÃO': ['FUSÃO', 'FUSAO'],
@@ -4445,48 +4433,50 @@
                 'EXPEDIÇÃO': ['EXPEDIÇÃO', 'EXPEDICAO', 'LOGÍSTICA']
             };
 
-            const targetSectors = sectorMapping[category] || [category];
-
             try {
-                const url = `/api/pedidos-firebird/op-setor-detalhes?op=${op}&setores=${encodeURIComponent(targetSectors.join(','))}`;
-                const res = await fetch(url);
+                const targetSectors = sectorMapping[category] || [category];
+                const res = await fetch(`/api/pedidos-firebird/op-setor-detalhes?op=${op}&setores=${encodeURIComponent(targetSectors.join(','))}`);
                 const data = await res.json();
-
                 if (data.error) throw new Error(data.error);
 
                 if (!data || data.length === 0) {
-                    content.innerHTML = '<p style="text-align:center; color:var(--text-muted);">Nenhum registro detalhado encontrado.</p>';
+                    content.innerHTML = '<p style="text-align:center;color:var(--text-muted);">Nenhum registro encontrado.</p>';
                     return;
                 }
 
-                let html = `<table class="history-table"><thead><tr><th>Data</th><th style="text-align: right;">Quantidade</th></tr></thead><tbody>`;
+                let totalFisico = 0;
+                let html = `<table class="history-table"><thead><tr><th>Data</th><th style="text-align:right;">Quantidade</th></tr></thead><tbody>`;
                 data.forEach(row => {
-                    const dataFormatada = formatDateLocal(row.data);
-                    html += `<tr><td class="history-date">${dataFormatada}</td><td class="history-qty">${row.quantidade.toLocaleString('pt-BR')} pçs</td></tr>`;
+                    const q = parseFloat(row.quantidade) || 0;
+                    totalFisico += q;
+                    html += `<tr><td>${formatDateLocal(row.data)}</td><td style="text-align:right;">${q.toLocaleString('pt-BR')} pçs</td></tr>`;
                 });
-                html += '</tbody></table>';
+                html += `</tbody></table>
+                    <div style="margin-top:15px;padding-top:10px;border-top:1px dashed rgba(255,255,255,0.1);display:flex;justify-content:space-between;">
+                        <span style="color:var(--text-muted);font-size:0.85rem;">Total Físico Apontado:</span>
+                        <span style="font-weight:700;color:var(--color-primary);">${totalFisico.toLocaleString('pt-BR')} pçs</span>
+                    </div>`;
                 content.innerHTML = html;
-
             } catch (err) {
-                console.error('âŒ Erro no showSectorHistory:', err);
-                content.innerHTML = `<p style="color:var(--status-danger); text-align:center;">Erro: ${err.message}</p>`;
+                content.innerHTML = `<p style="color:var(--status-danger);text-align:center;">Erro: ${err.message}</p>`;
             }
         };
 
-        window.closeSectorHistory = function () {
-            document.getElementById('opSectorHistoryModal').style.display = 'none';
+        window.closeSectorHistory = function () { 
+            const modal = document.getElementById('opSectorHistoryModal');
+            if (modal) modal.style.display = 'none'; 
         };
 
-        window.closeOPDetails = function () {
-            document.getElementById('opDetailsModal').style.display = 'none';
+        window.closeOPDetails = function () { 
+            const modal = document.getElementById('opDetailsModal');
+            if (modal) modal.style.display = 'none'; 
         };
 
-        // ESC para fechar modais em ordem
+        // ESC listener
         const originalCloseModal = window.closeModal;
         window.closeModal = function () {
             const hModal = document.getElementById('opSectorHistoryModal');
             const dModal = document.getElementById('opDetailsModal');
-
             if (hModal && hModal.style.display === 'flex') {
                 closeSectorHistory();
             } else if (dModal && dModal.style.display === 'flex') {
@@ -4496,7 +4486,7 @@
             }
         };
     </script>
+
 </body>
 
 </html>
-
