@@ -105,7 +105,7 @@ async function syncData() {
             SELECT 
                 PP.PPR_CODIGO_PCPR AS COD_PED, PP.PPR_ANO_PCPR AS ANO_PED, PP.PPR_ITEM_PCPR AS ITEM_PED, PP.PPR_EMPRESA_PCPR AS EMP_PED,
                 PP.PCP_CODIGO_PCPR AS OP_CODE,
-                PCP.QUANTIDADE_PCP, PCP.DATA_PCP, PCP.ENTREGA_PCP,
+                PCP.QUANTIDADE_PCP, PCP.DATA_PCP, PCP.ENTREGA_PCP, PCP.STATUS_PCP, PCP.DATA_CONCLUSAO_PCP,
                 PS.LOTE_PCS, S.NOME_SET, PS.SETOR_PCS
             FROM PRODUCAO_PEDIDO PP
             JOIN PRODUCAO PCP ON PCP.CODIGO_PCP = PP.PCP_CODIGO_PCPR AND PCP.EMPRESA_PCP = PP.PCP_EMPRESA_PCPR
@@ -117,11 +117,26 @@ async function syncData() {
         `;
         const prodLinks = await queryFB(db, productionLinksSql);
         
-        const opMap = new Map(); // Key: EMP-ANO-COD-ITEM -> OP Info
+        const opMap = new Map(); // Key: EMP-ANO-COD-ITEM -> { bestOP: info, allOPs: Set }
         const activeOPs = new Set();
         prodLinks.forEach(p => {
             const key = `${p.EMP_PED}-${p.ANO_PED}-${p.COD_PED}-${p.ITEM_PED}`;
-            opMap.set(key, p);
+            
+            if (!opMap.has(key)) {
+                opMap.set(key, { bestOP: p, allOPs: new Set() });
+            }
+            
+            const current = opMap.get(key);
+            current.allOPs.add(p.OP_CODE);
+
+            // Prioritization: N (Normal) or P (Planned) are "Better" than C (Completed) or E (Encerrada)
+            const isNewBetter = (p.STATUS_PCP === 'N' || p.STATUS_PCP === 'P') && 
+                               (current.bestOP.STATUS_PCP === 'C' || current.bestOP.STATUS_PCP === 'E');
+            
+            if (isNewBetter || current.allOPs.size === 1) {
+                current.bestOP = p;
+            }
+
             if (p.OP_CODE) activeOPs.add(p.OP_CODE);
         });
 
@@ -223,12 +238,29 @@ async function syncData() {
             const key = `${row.EMPRESA_PPR}-${row.ANO_PPR}-${row.CODIGO_PPR}-${row.ITEM_PPR}`;
             fbKeys.add(key);
 
-            const opInfo = opMap.get(key) || {};
-            const sums = sectorSumsMap.get(opInfo.OP_CODE) || {};
-
-            // Merge with local dict if exists
-            const local = prodDictLocal[String(opInfo.OP_CODE || '').trim()] || {};
+            const opGroup = opMap.get(key) || { bestOP: {}, allOPs: new Set() };
+            const opInfo = opGroup.bestOP;
             
+            // AGGREGATE SECTOR QUANTITIES ACROSS ALL OPS LINKED TO THIS PEDIDO-ITEM
+            let totalSums = {
+                QTY_MOLDADA: 0, QTY_FUSAO: 0, QTY_ACABAMENTO: 0, QTY_TT: 0,
+                QTY_USINAGEM: 0, QTY_QUALIDADE: 0, QTY_EXPEDICAO: 0, QTY_FATURAMENTO: 0
+            };
+
+            opGroup.allOPs.forEach(opCode => {
+                const sums = sectorSumsMap.get(opCode) || {};
+                const local = prodDictLocal[String(opCode || '').trim()] || {};
+
+                totalSums.QTY_MOLDADA += Math.max(sums.QTY_MOLDADA || 0, local.QTY_MOLDADA || 0);
+                totalSums.QTY_FUSAO += Math.max(sums.QTY_FUSAO || 0, local.QTY_FUSAO || 0);
+                totalSums.QTY_ACABAMENTO += Math.max(sums.QTY_ACABAMENTO || 0, local.QTY_ACABAMENTO || 0);
+                totalSums.QTY_TT += Math.max(sums.QTY_TT || 0, local.QTY_TT || 0);
+                totalSums.QTY_USINAGEM += Math.max(sums.QTY_USINAGEM || 0, local.QTY_USINAGEM || 0);
+                totalSums.QTY_QUALIDADE += Math.max(sums.QTY_QUALIDADE || 0, local.QTY_QUALIDADE || 0);
+                totalSums.QTY_EXPEDICAO += Math.max(sums.QTY_EXPEDICAO || 0, local.QTY_EXPEDICAO || 0);
+                totalSums.QTY_FATURAMENTO += Math.max(sums.QTY_FATURAMENTO || 0, local.QTY_FATURAMENTO || 0);
+            });
+
             const finalRow = {
                 ...row,
                 ANDAMENTO_PCS: opInfo.NOME_SET || (opInfo.SETOR_PCS ? String(opInfo.SETOR_PCS) : null),
@@ -237,14 +269,16 @@ async function syncData() {
                 OP_QUANTIDADE: opInfo.QUANTIDADE_PCP,
                 OP_EMISSAO: opInfo.DATA_PCP,
                 OP_ENTREGA: opInfo.ENTREGA_PCP,
-                QTY_MOLDADA: Math.max(sums.QTY_MOLDADA || 0, local.QTY_MOLDADA || 0),
-                QTY_FUSAO: Math.max(sums.QTY_FUSAO || 0, local.QTY_FUSAO || 0),
-                QTY_ACABAMENTO: Math.max(sums.QTY_ACABAMENTO || 0, local.QTY_ACABAMENTO || 0),
-                QTY_TT: Math.max(sums.QTY_TT || 0, local.QTY_TT || 0),
-                QTY_USINAGEM: Math.max(sums.QTY_USINAGEM || 0, local.QTY_USINAGEM || 0),
-                QTY_QUALIDADE: Math.max(sums.QTY_QUALIDADE || 0, local.QTY_QUALIDADE || 0),
-                QTY_EXPEDICAO: Math.max(sums.QTY_EXPEDICAO || 0, local.QTY_EXPEDICAO || 0),
-                QTY_FATURAMENTO: Math.max(sums.QTY_FATURAMENTO || 0, local.QTY_FATURAMENTO || 0),
+                STATUS_PCP: opInfo.STATUS_PCP,
+                DATA_CONCLUSAO_PCP: opInfo.DATA_CONCLUSAO_PCP,
+                QTY_MOLDADA: totalSums.QTY_MOLDADA,
+                QTY_FUSAO: totalSums.QTY_FUSAO,
+                QTY_ACABAMENTO: totalSums.QTY_ACABAMENTO,
+                QTY_TT: totalSums.QTY_TT,
+                QTY_USINAGEM: totalSums.QTY_USINAGEM,
+                QTY_QUALIDADE: totalSums.QTY_QUALIDADE,
+                QTY_EXPEDICAO: totalSums.QTY_EXPEDICAO,
+                QTY_FATURAMENTO: totalSums.QTY_FATURAMENTO,
                 ROTEIRO_PRODUCAO: (roteiroOpMap.get(String(opInfo.OP_CODE || '')) || roteiroProdMap.get(String(row.PRODUTO_PPR || '')) || []).join(',')
             };
 
