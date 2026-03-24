@@ -1151,11 +1151,28 @@
             });
 
             const qtyExpedited = groupStatus['EXPEDIÇÃO'].qty;
+            const now = toLocalDate(new Date());
 
-            // Calculate Meta Dates for all sectors
+            // --- 1. Filter stages that belong to this OP's technical route ---
+            const routeExists = opRoute !== null && opRoute !== undefined;
+            const thisOpStages = orderedStages.filter(stage => {
+                const pointedInStage = groupStatus[stage].qty;
+                if (!routeExists) return true;
+                if (opRoute.length === 0) return pointedInStage > 0;
+                
+                // Route is a comma-separated string of NAMES from Postgres
+                const routeNames = String(opRoute).split(',').map(s => s.trim().toUpperCase());
+                const aliases = sectorGroups[stage].map(a => a.toUpperCase());
+                const inRoute = routeNames.some(name => 
+                    name.length > 0 && aliases.some(alias => name.includes(alias) || alias.includes(name))
+                );
+                return inRoute || pointedInStage > 0;
+            });
+
+            // --- 2. Calculate Meta Dates sequentially for these stages only ---
             const metaDates = {};
             let baselineDate = emissionDate ? toLocalDate(emissionDate) : toLocalDate(new Date());
-            orderedStages.forEach((stage) => {
+            thisOpStages.forEach((stage) => {
                 const configKey = configKeyMap[stage];
                 const lt = leadTimes[configKey] || 0;
                 let currentMeta = toLocalDate(baselineDate);
@@ -1170,35 +1187,12 @@
             });
 
             const activeStages = [];
-            const now = toLocalDate(new Date());
             let prevStageQty = totalQty;
 
-            for (let i = 0; i < orderedStages.length; i++) {
-                const stage = orderedStages[i];
-
-                // --- DYNAMIC ROUTE FILTER (POSTGRES NAMES) ---
+            // --- 3. Run the flow logic through the filtered stages ---
+            for (let i = 0; i < thisOpStages.length; i++) {
+                const stage = thisOpStages[i];
                 const pointedInStage = groupStatus[stage].qty;
-                const routeExists = opRoute !== null && opRoute !== undefined;
-                
-                let inRoute = true;
-                if (routeExists && opRoute.length > 0) {
-                    // opRoute is a comma-separated string of NAMES from Postgres
-                    const routeNames = String(opRoute).split(',').map(s => s.trim().toUpperCase());
-                    const aliases = sectorGroups[stage].map(a => a.toUpperCase());
-                    
-                    // Check if any name in the route matches any alias for this stage
-                    inRoute = routeNames.some(name => 
-                        name.length > 0 && aliases.some(alias => name.includes(alias) || alias.includes(name))
-                    );
-                } else if (routeExists && opRoute.length === 0) {
-                    // Route is defined but empty -> not in this stage
-                    inRoute = false;
-                }
-
-                if (!inRoute && pointedInStage <= 0) {
-                    // Skip if not in route AND no production pointed yet
-                    continue;
-                }
 
                 const qtyMovingToNext = Math.min(prevStageQty, pointedInStage);
                 const qtyStayingInStage = Math.max(0, prevStageQty - qtyMovingToNext);
