@@ -245,7 +245,7 @@ async function syncData() {
                 QTY_QUALIDADE: Math.max(sums.QTY_QUALIDADE || 0, local.QTY_QUALIDADE || 0),
                 QTY_EXPEDICAO: Math.max(sums.QTY_EXPEDICAO || 0, local.QTY_EXPEDICAO || 0),
                 QTY_FATURAMENTO: Math.max(sums.QTY_FATURAMENTO || 0, local.QTY_FATURAMENTO || 0),
-                ROTEIRO_PRODUCAO: (roteiroOpMap.get(String(opInfo.OP_CODE)) || roteiroProdMap.get(row.PRODUTO_PPR) || []).join(',')
+                ROTEIRO_PRODUCAO: (roteiroOpMap.get(String(opInfo.OP_CODE || '')) || roteiroProdMap.get(String(row.PRODUTO_PPR || '')) || []).join(',')
             };
 
             return [key, JSON.stringify(finalRow)];
