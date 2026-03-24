@@ -2831,7 +2831,8 @@
                     client: item.NOME_CLIENTE || '-',
                     emission: formatDateLocal(item.OP_EMISSAO || item.DATA_EMISSAO_PEDIDO),
                     delivery: formatDateLocal(item.OP_ENTREGA) || entrega,
-                    saldo: item.OP_QUANTIDADE || saldoReal,
+                    originalQty: qtdOriginal,
+                    currentSaldo: saldoReal,
                     route: item.ROTEIRO_PRODUCAO
                 }).replace(/'/g, "&apos;")})'>
                                 ${item.OP_PCS}
@@ -4241,51 +4242,82 @@
         };
 
         window.showOPDetails = async function (data) {
-            const { op, desc, client, emission, delivery, saldo, route } = data;
+            const { op, desc, client, emission, delivery, originalQty, currentSaldo, route } = data;
+            console.log('🔍 showOPDetails para OP:', op, 'Route:', route);
             const modal = document.getElementById('opDetailsModal');
             const content = document.getElementById('opDetailsContent');
+
             const opSpan = document.getElementById('opModalNumber');
             const descSpan = document.getElementById('opModalDesc');
             const clientSpan = document.getElementById('opModalClient');
             const emissionSpan = document.getElementById('opModalEmission');
             const deliverySpan = document.getElementById('opModalDelivery');
+
             if (!modal || !content) return;
+
             opSpan.innerText = op;
-            if (descSpan) descSpan.innerHTML = desc + ' <span style="margin-left: 10px; padding: 2px 10px; background: rgba(var(--color-primary-rgb), 0.1); color: var(--color-primary); border-radius: 20px; font-size: 0.8rem; border: 1px solid rgba(var(--color-primary-rgb), 0.2);">Qtd OP: ' + saldo + '</span>';
+            if (descSpan) descSpan.innerHTML = `${desc} <span style="margin-left: 10px; padding: 2px 10px; background: rgba(var(--color-primary-rgb), 0.1); color: var(--color-primary); border-radius: 20px; font-size: 0.8rem; border: 1px solid rgba(var(--color-primary-rgb), 0.2);">Qtd OP: ${originalQty}</span>`;
             if (clientSpan) clientSpan.innerText = client;
             if (emissionSpan) emissionSpan.innerText = emission;
             if (deliverySpan) deliverySpan.innerText = delivery;
+
             modal.style.display = 'flex';
-            content.innerHTML = '<div style="text-align: center; padding: 40px;"><i class="fa-solid fa-circle-notch fa-spin" style="font-size: 2rem; color: var(--color-primary);"></i><p style="margin-top: 15px; color: var(--text-muted);">Buscando apontamentos...</p></div>';
+            content.innerHTML = `
+                <div style="text-align: center; padding: 40px;">
+                    <i class="fa-solid fa-circle-notch fa-spin" style="font-size: 2rem; color: var(--color-primary);"></i>
+                    <p style="margin-top: 15px; color: var(--text-muted);">Buscando apontamentos...</p>
+                </div>
+            `;
+
             try {
-                const res = await fetch("/api/pedidos-firebird/op-apontamentos?op=" + op);
+                const res = await fetch(`/api/pedidos-firebird/op-apontamentos?op=${op}`);
                 const pointingData = await res.json();
                 if (pointingData.error) throw new Error(pointingData.error);
+
+                const totalQtyNum = Number(originalQty) || 0;
+                const currentSaldoNum = Number(currentSaldo) || 0;
+                const faturadoQty = Math.max(0, totalQtyNum - currentSaldoNum);
+
                 const allGroups = Object.keys(sectorGroups);
                 const aggregatedData = {};
                 const lastPointingDate = {};
-                allGroups.forEach(s => { aggregatedData[s] = 0; lastPointingDate[s] = null; });
+                allGroups.forEach(s => {
+                    aggregatedData[s] = 0;
+                    lastPointingDate[s] = null;
+                });
+
                 pointingData.forEach(row => {
-                    const category = allGroups.find(cat => sectorGroups[cat].some(sub => row.setor.toUpperCase().includes(sub.toUpperCase())) || row.setor.toUpperCase() === cat.toUpperCase());
+                    const category = allGroups.find(cat =>
+                        sectorGroups[cat].some(sub => row.setor.toUpperCase().includes(sub.toUpperCase())) || row.setor.toUpperCase() === cat.toUpperCase()
+                    );
                     if (category) {
                         aggregatedData[category] += row.quantidade;
                         const date = toLocalDate(row.data);
-                        if (!lastPointingDate[category] || date > lastPointingDate[category]) lastPointingDate[category] = date;
+                        if (!lastPointingDate[category] || date > lastPointingDate[category]) {
+                            lastPointingDate[category] = date;
+                        }
                     }
                 });
+
+                // --- DYNAMIC ROUTE FILTERING ---
                 const routeExists = route !== null && route !== undefined;
                 let orderedSectors = allGroups;
                 if (routeExists) {
                     const routeNames = String(route).split(',').map(s => s.trim().toUpperCase());
                     orderedSectors = allGroups.filter(stage => {
                         const aliases = sectorGroups[stage].map(a => a.toUpperCase());
-                        const inRoute = routeNames.some(name => name.length > 0 && aliases.some(alias => name.includes(alias) || alias.includes(name)));
+                        const inRoute = routeNames.some(name => 
+                            name.length > 0 && aliases.some(alias => name.includes(alias) || alias.includes(name))
+                        );
                         return stage === 'EXPEDIÇÃO' || inRoute || aggregatedData[stage] > 0;
                     });
                 }
+
+                // PROGRESSIVE DEADLINE CALCULATION
                 const metaDates = {};
                 const emissaoDate = toLocalDate(emission || new Date());
                 let baselineDate = toLocalDate(emissaoDate);
+
                 orderedSectors.forEach((sector) => {
                     const configKey = configKeyMap[sector];
                     const lt = leadTimes[configKey] || 0;
@@ -4299,47 +4331,87 @@
                     metaDates[sector] = toLocalDate(currentMeta);
                     baselineDate = toLocalDate(currentMeta);
                 });
-                const totalQtyNum = parseInt(saldo.toString().replace(/\./g, '')) || 0;
+
+                // Robust Flow Logic integrating Faturamento
                 const maxForwardModal = {};
                 for (let i = allGroups.length - 1; i >= 0; i--) {
                     const st = allGroups[i];
                     const currentQty = aggregatedData[st] || 0;
                     const nextSt = allGroups[i + 1];
-                    const nextMax = nextSt ? maxForwardModal[nextSt] : 0;
-                    maxForwardModal[st] = Math.max(currentQty, nextMax);
+                    const nextMax = nextSt ? maxForwardModal[nextSt] : faturadoQty; 
+                    maxForwardModal[st] = Math.max(currentQty, nextMax, faturadoQty);
                 }
+
                 let html = '<div style="display: flex; flex-direction: column; gap: 8px;">';
                 const today = toLocalDate(new Date());
+
                 let prevFlowQty = totalQtyNum;
                 orderedSectors.forEach(sector => {
-                    const qtyMovedOut = Math.max(aggregatedData[sector] || 0, maxForwardModal[sector] || 0);
+                    const isExpedicao = sector === 'EXPEDIÇÃO';
+                    const qtyMovedOut = isExpedicao ? faturadoQty : Math.max(aggregatedData[sector] || 0, maxForwardModal[sector] || 0);
                     const qtyInStage = Math.max(0, prevFlowQty - qtyMovedOut);
                     const meta = metaDates[sector];
                     const metaMidnight = toLocalDate(meta);
-                    if (qtyMovedOut > 0) {
+
+                    // 1. Show REALIZED if pieces passed through
+                    const realMovedOut = isExpedicao ? faturadoQty : Math.max(aggregatedData[sector] || 0, maxForwardModal[sector] || 0);
+                    if (realMovedOut > 0) {
                         const referenceDate = aggregatedData[sector] > 0 ? toLocalDate(lastPointingDate[sector]) : today;
                         const bizDelay = getBusinessDaysDiff(metaMidnight, referenceDate);
                         const isDelayed = bizDelay > 0;
-                        html += '<div class="op-detail-row is-clickable" onclick="window.showSectorHistory(\'' + op + '\', \'' + sector + '\')" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 20px; border-radius: 8px; background: rgba(16, 185, 129, 0.05); border: 1px solid rgba(16, 185, 129, 0.2);"><div style="display: flex; flex-direction: column; gap: 4px; flex: 1;"><div style="display: flex; align-items: center;"><span style="font-weight: 600; color: #fff;">' + sector + ' (Realizado)</span><span style="background: ' + (isDelayed ? '#450a0a' : '#064e3b') + '; color: ' + (isDelayed ? '#f87171' : '#34d399') + '; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: bold; margin-left:10px;">' + (isDelayed ? 'Atrasado ' + bizDelay + 'd' : 'No Prazo') + '</span></div><span style="font-size: 0.7rem; color: var(--text-muted);">Meta: ' + meta.toLocaleDateString('pt-BR') + ' | Concluiu: ' + referenceDate.toLocaleDateString('pt-BR') + '</span></div><div style="text-align: right;"><span style="font-size: 1.1rem; font-weight: 700; color: var(--status-success);">' + qtyMovedOut.toLocaleString('pt-BR') + ' <small style="font-size: 0.55em;">PÇS</small></span></div></div>';
+
+                        html += `
+                            <div class="op-detail-row is-clickable" 
+                                 style="display: flex; align-items: center; justify-content: space-between; padding: 12px 20px; border-radius: 8px; background: rgba(16, 185, 129, 0.05); border: 1px solid rgba(16, 185, 129, 0.2);"
+                                 onclick="window.showSectorHistory('${op}', '${sector}')">
+                                <div style="display: flex; flex-direction: column; gap: 4px; flex: 1;">
+                                    <div style="display: flex; align-items: center;">
+                                        <span style="font-weight: 600; color: #fff;">${sector} (Realizado)</span>
+                                        <span style="background: ${isDelayed ? '#450a0a' : '#064e3b'}; color: ${isDelayed ? '#f87171' : '#34d399'}; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: bold; margin-left:10px;">
+                                            ${isDelayed ? `Atrasado ${bizDelay}d` : 'No Prazo'}
+                                        </span>
+                                    </div>
+                                    <span style="font-size: 0.7rem; color: var(--text-muted);">Meta: ${meta.toLocaleDateString('pt-BR')} | Concluiu: ${referenceDate.toLocaleDateString('pt-BR')}</span>
+                                </div>
+                                <div style="text-align: right;">
+                                    <span style="font-size: 1.1rem; font-weight: 700; color: var(--status-success);">${realMovedOut.toLocaleString('pt-BR')} <small style="font-size: 0.55em;">PÇS</small></span>
+                                </div>
+                            </div>
+                        `;
                     }
-                    // 2. Show PENDING (Always for route stages, regardless of balance, to show roadmap)
+
+                    // 2. Show PENDING (Roadmap)
                     const bizDelay = getBusinessDaysDiff(metaMidnight, today);
                     const isDelayed = bizDelay > 0;
                     const isZero = qtyInStage <= 0.001;
 
-                    html += `<div class="op-detail-row is-zero" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 20px; border-radius: 8px; background: ${isDelayed && !isZero ? 'rgba(239, 68, 68, 0.05)' : 'rgba(255,255,255,0.02)'}; border: 1px solid ${isDelayed && !isZero ? 'rgba(239, 68, 68, 0.2)' : 'transparent'}; opacity: ${isZero ? 0.6 : 1};"><div style="display: flex; flex-direction: column; gap: 4px; flex: 1;"><div style="display: flex; align-items: center;"><span style="font-weight: 600; color: var(--text-muted);">${sector} (Pendente)</span>${isDelayed && !isZero ? `<span style="background: #450a0a; color: #f87171; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: bold; margin-left: 10px;">Atrasado ${bizDelay}d</span>` : ''}</div><span style="font-size: 0.7rem; color: var(--text-muted);">Meta: ${meta.toLocaleDateString('pt-BR')} | Status: ${isZero ? 'Aguardando' : (isDelayed ? 'Atrasado' : 'Em Produção')}</span></div><div style="text-align: right;"><span style="font-size: 1.1rem; font-weight: 700; color: var(--text-muted);">${qtyInStage.toLocaleString('pt-BR')} <small style="font-size: 0.55em;">PÇS</small></span></div></div>`;
-
+                    html += `
+                        <div class="op-detail-row is-zero" 
+                             style="display: flex; align-items: center; justify-content: space-between; padding: 12px 20px; border-radius: 8px; background: ${isDelayed && !isZero ? 'rgba(239, 68, 68, 0.05)' : 'rgba(255,255,255,0.02)'}; border: 1px solid ${isDelayed && !isZero ? 'rgba(239, 68, 68, 0.2)' : 'transparent'}; opacity: ${isZero ? 0.6 : 1};">
+                            <div style="display: flex; flex-direction: column; gap: 4px; flex: 1;">
+                                <div style="display: flex; align-items: center;">
+                                    <span style="font-weight: 600; color: var(--text-muted);">${sector} (Pendente)</span>
+                                    ${isDelayed && !isZero ? `<span style="background: #450a0a; color: #f87171; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: bold; margin-left: 10px;">Atrasado ${bizDelay}d</span>` : ''}
+                                </div>
+                                <span style="font-size: 0.7rem; color: var(--text-muted);">Meta: ${meta.toLocaleDateString('pt-BR')} | Status: ${isZero ? 'Aguardando' : (isDelayed ? 'Atrasado' : 'Em Produção')}</span>
+                            </div>
+                            <div style="text-align: right;">
+                                <span style="font-size: 1.1rem; font-weight: 700; color: var(--text-muted);">${qtyInStage.toLocaleString('pt-BR')} <small style="font-size: 0.55em;">PÇS</small></span>
+                            </div>
+                        </div>
+                    `;
                     prevFlowQty = qtyMovedOut;
                 });
                 html += '</div>';
                 content.innerHTML = html;
+
             } catch (err) {
                 console.error("Error in showOPDetails:", err);
-                content.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--status-danger);"><p>Erro: ' + err.message + '</p></div>';
+                content.innerHTML = `<div style="text-align: center; padding: 40px; color: var(--status-danger);"><p>Erro: ${err.message}</p></div>`;
             }
         };
 
-
+        
         window.showSectorHistory = async function (op, category) {
             console.log('ðŸ” showSectorHistory para category:', category, 'OP:', op);
             const modal = document.getElementById('opSectorHistoryModal');
