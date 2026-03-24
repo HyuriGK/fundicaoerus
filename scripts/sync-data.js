@@ -156,22 +156,33 @@ async function syncData() {
 
         // --- 3.4 ROTEIROS PRODUTO (POSTGRES) ---
         console.log('📥 Lendo roteiros de produção do Postgres...');
-        const roteirosRes = await pgClient.query(`
+        
+        // 1. Roteiros por PRODUTO (Fallback)
+        const roteirosProdRes = await pgClient.query(`
             SELECT FT.pro_codigo_fic, RT.setor_nome 
             FROM ficha_tecnica FT 
             JOIN roteiros_tecnicos RT ON RT.ficha_id = FT.codigo_fic 
             ORDER BY FT.pro_codigo_fic, RT.sequencia
         `);
-        const roteiroMap = new Map();
-        roteirosRes.rows.forEach(r => {
-            const current = roteiroMap.get(r.pro_codigo_fic) || [];
+        const roteiroProdMap = new Map();
+        roteirosProdRes.rows.forEach(r => {
+            const current = roteiroProdMap.get(r.pro_codigo_fic) || [];
             current.push(r.setor_nome.trim().toUpperCase());
-            roteiroMap.set(r.pro_codigo_fic, current);
+            roteiroProdMap.set(r.pro_codigo_fic, current);
         });
         
-        // Convert to comma-separated names
-        roteiroMap.forEach((val, key) => {
-            roteiroMap.set(key, val.join(','));
+        // 2. Roteiros por OP (Prioridade)
+        const roteirosOpRes = await pgClient.query(`
+            SELECT pf.op_codigo, rt.setor_nome 
+            FROM producao_fichas pf
+            JOIN roteiros_tecnicos rt ON rt.ficha_id = pf.ficha_id
+            ORDER BY pf.op_codigo, rt.sequencia
+        `);
+        const roteiroOpMap = new Map();
+        roteirosOpRes.rows.forEach(r => {
+            const current = roteiroOpMap.get(r.op_codigo) || [];
+            current.push(r.setor_nome.trim().toUpperCase());
+            roteiroOpMap.set(r.op_codigo, current);
         });
 
         // --- 4. JOIN IN MEMORY & PREPARE UPSERT ---
@@ -234,7 +245,7 @@ async function syncData() {
                 QTY_QUALIDADE: Math.max(sums.QTY_QUALIDADE || 0, local.QTY_QUALIDADE || 0),
                 QTY_EXPEDICAO: Math.max(sums.QTY_EXPEDICAO || 0, local.QTY_EXPEDICAO || 0),
                 QTY_FATURAMENTO: Math.max(sums.QTY_FATURAMENTO || 0, local.QTY_FATURAMENTO || 0),
-                ROTEIRO_PRODUCAO: roteiroMap.get(row.PRODUTO_PPR) || null
+                ROTEIRO_PRODUCAO: (roteiroOpMap.get(String(opInfo.OP_CODE)) || roteiroProdMap.get(row.PRODUTO_PPR) || []).join(',')
             };
 
             return [key, JSON.stringify(finalRow)];
