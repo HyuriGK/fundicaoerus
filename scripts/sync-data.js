@@ -154,18 +154,25 @@ async function syncData() {
             else if ([101].includes(sec)) groups.QTY_FATURAMENTO = (groups.QTY_FATURAMENTO || 0) + qty;
         });
 
-        // --- 3.4 ROTEIROS PRODUTO ---
-        console.log('📥 Lendo roteiros de produção...');
-        const roteirosSql = `
-            SELECT FT.PRO_CODIGO_FIC, CAST(LIST(DISTINCT FTP.SET_CODIGO_FTPC) AS VARCHAR(500)) AS ROTEIRO
-            FROM FICHA_TECNICA FT
-            JOIN FICHA_TECNICA_PROCEDIMENTO FTP ON FTP.FIC_CODIGO_FTPC = FT.CODIGO_FIC
-            WHERE FT.ATIVO_FIC LIKE 'S%' AND FT.EMP_CODIGO_FIC = 10 AND FTP.SET_EMPRESA_FTPC = '10'
-            GROUP BY FT.PRO_CODIGO_FIC
-        `;
-        const roteiros = await queryFB(db, roteirosSql);
+        // --- 3.4 ROTEIROS PRODUTO (POSTGRES) ---
+        console.log('📥 Lendo roteiros de produção do Postgres...');
+        const roteirosRes = await pgClient.query(`
+            SELECT FT.pro_codigo_fic, RT.setor_nome 
+            FROM ficha_tecnica FT 
+            JOIN roteiros_tecnicos RT ON RT.ficha_id = FT.codigo_fic 
+            ORDER BY FT.pro_codigo_fic, RT.sequencia
+        `);
         const roteiroMap = new Map();
-        roteiros.forEach(r => roteiroMap.set(r.PRO_CODIGO_FIC, r.ROTEIRO));
+        roteirosRes.rows.forEach(r => {
+            const current = roteiroMap.get(r.pro_codigo_fic) || [];
+            current.push(r.setor_nome.trim().toUpperCase());
+            roteiroMap.set(r.pro_codigo_fic, current);
+        });
+        
+        // Convert to comma-separated names
+        roteiroMap.forEach((val, key) => {
+            roteiroMap.set(key, val.join(','));
+        });
 
         // --- 4. JOIN IN MEMORY & PREPARE UPSERT ---
         console.log('🔄 Cruzando dados e preparando sincronização...');
