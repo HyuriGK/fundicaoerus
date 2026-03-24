@@ -2888,15 +2888,15 @@
                 const currentBalance = Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0;
                 const targetTotalQty = totalInitialQty; // The Goal is the Order
                 
-                // 1. Get Cumulative Totals (Limited to Order Qty to avoid inflation)
+                // 1. Get Cumulative Totals (Removed cap to allow industrial reality to show even if over order qty)
                 // Hierarchy: Expedição â†’ Qualidade â†’ Usinagem â†’ TT â†’ Acabamento â†’ Fusão â†’ Moldada â†’ Aguardando
-                const cExp  = Math.min(targetTotalQty, Number(item.QTY_EXPEDICAO) || 0);
-                const cQual = Math.min(targetTotalQty, Math.max(cExp,  Number(item.QTY_QUALIDADE) || 0));
-                const cUsi  = Math.min(targetTotalQty, Math.max(cQual, Number(item.QTY_USINAGEM) || 0));
-                const cTT   = Math.min(targetTotalQty, Math.max(cUsi,  Number(item.QTY_TT) || 0));
-                const cAcab = Math.min(targetTotalQty, Math.max(cTT,   Number(item.QTY_ACABAMENTO) || 0));
-                const cFus  = Math.min(targetTotalQty, Math.max(cAcab, Number(item.QTY_FUSAO) || 0));
-                const cMold = Math.min(targetTotalQty, Math.max(cFus,  Number(item.QTY_MOLDADA) || 0));
+                const cExp  = Number(item.QTY_EXPEDICAO) || 0;
+                const cQual = Math.max(cExp,  Number(item.QTY_QUALIDADE) || 0);
+                const cUsi  = Math.max(cQual, Number(item.QTY_USINAGEM) || 0);
+                const cTT   = Math.max(cUsi,  Number(item.QTY_TT) || 0);
+                const cAcab = Math.max(cTT,   Number(item.QTY_ACABAMENTO) || 0);
+                const cFus  = Math.max(cAcab, Number(item.QTY_FUSAO) || 0);
+                const cMold = Math.max(cFus,  Number(item.QTY_MOLDADA) || 0);
 
                 // 2. Differential Logic (Current = Cumulative - Next)
                 let qExpedicao   = Math.max(0, cExp);
@@ -4375,6 +4375,31 @@
                                 </div>
                                 <div style="text-align: right;">
                                     <span style="font-size: 1.1rem; font-weight: 700; color: var(--status-success);">${realMovedOut.toLocaleString('pt-BR')} <small style="font-size: 0.55em;">PÇS</small></span>
+                                </div>
+                            </div>
+                        `;
+                    }
+
+
+                    // 2. Show ROADMAP / IN-STOCK (Future stages or current inventory)
+                    const bizDelay = getBusinessDaysDiff(metaMidnight, today);
+                    const isDelayed = bizDelay > 0;
+                    const isZero = qtyInStage <= 0.001;
+
+                    // Show if there is balance or if the stage was never reached (to keep the full Technical Route visible)
+                    if (qtyInStage > 0.001 || realMovedOut <= 0) {
+                        html += `
+                            <div class="op-detail-row" 
+                                 style="display: flex; align-items: center; justify-content: space-between; padding: 12px 20px; border-radius: 8px; background: ${isDelayed && !isZero ? 'rgba(239, 68, 68, 0.05)' : 'rgba(255,255,255,0.02)'}; border: 1px solid ${isDelayed && !isZero ? 'rgba(239, 68, 68, 0.2)' : 'transparent'}; opacity: ${isZero ? 0.4 : 1};">
+                                <div style="display: flex; flex-direction: column; gap: 4px; flex: 1;">
+                                    <div style="display: flex; align-items: center;">
+                                        <span style="font-weight: 600; color: var(--text-muted);">${sector}</span>
+                                        ${isDelayed && !isZero ? `<span style="background: #450a0a; color: #f87171; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: bold; margin-left: 10px;">Atrasado ${bizDelay}d</span>` : ''}
+                                    </div>
+                                    <span style="font-size: 0.7rem; color: var(--text-muted);">Meta: ${meta.toLocaleDateString('pt-BR')} | Status: ${isZero ? 'Aguardando' : (isDelayed ? 'Atrasado' : 'No Setor')}</span>
+                                </div>
+                                <div style="text-align: right;">
+                                    <span style="font-size: 1.1rem; font-weight: 700; color: var(--text-muted);">${qtyInStage.toLocaleString('pt-BR')} <small style="font-size: 0.55em;">PÇS</small></span>
                                 </div>
                             </div>
                         `;
