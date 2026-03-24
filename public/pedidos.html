@@ -1834,9 +1834,9 @@
         // ==========================================================================
         // CONFIGURAÇÕES E CONSTANTES
         // ==========================================================================
-        Chart.defaults.color = '#a1a1aa';
+        try { Chart.defaults.color = '#a1a1aa';
         Chart.defaults.borderColor = 'rgba(255,255,255,0.05)';
-        Chart.defaults.font.family = "'JetBrains Mono', monospace";
+        Chart.defaults.font.family = "'JetBrains Mono', monospace"; } catch(e) { console.warn('Chart.js fail', e); }
 
         const chartColorAmber = '#fbbf24'; // Amber 400
 
@@ -2549,6 +2549,7 @@
         }
 
         function hideLoadingScreen() {
+            console.log('Hiding loading screen...');
             const ls = document.getElementById('loading-screen');
             if (ls) {
                 ls.style.opacity = '0';
@@ -2634,6 +2635,9 @@
 
         async function loadDataFromServer() {
             try {
+                // Safety net: Hide loading after a while anyway
+                setTimeout(() => hideLoadingScreen(), 8000);
+
                 // 1. Fetch Custom Weights
                 try {
                     const wRes = await fetch('/api/weights/list');
@@ -2643,7 +2647,7 @@
                 // 2. Fetch Pedidos AND Carteira in parallel
                 const [resPedidos, resCarteira] = await Promise.all([
                     fetch('/api/pedidos-sync'),
-                    fetch('/api/carteira')
+                    fetch('/api/carteira').catch(e => ({ok: false}))
                 ]);
 
                 if (!resPedidos.ok) throw new Error('Erro na API Pedidos');
@@ -2660,7 +2664,7 @@
                 populateMaterialSuggestions();
             } catch (e) {
                 console.error(e);
-                showToast("Erro", "Falha ao carregar dados do servidor.", "danger");
+                if (typeof showToast === 'function') showToast("Erro", "Falha ao carregar dados: " + e.message, "danger");
             } finally {
                 hideLoadingScreen();
             }
@@ -3146,6 +3150,62 @@
             renderTable(filtered);
             if (typeof calculateKPIs === 'function') calculateKPIs(filtered);
             updateCharts(filtered);
+        }
+
+        function setupFilters() {
+            const inputs = document.querySelectorAll('.filter-input-table');
+            inputs.forEach(input => {
+                input.addEventListener('input', () => {
+                    applyColumnFilters();
+                });
+            });
+        }
+
+        function applyQuickFilter(type) {
+            const today = new Date();
+            today.setHours(0,0,0,0);
+            
+            document.getElementById('filterDateStart').value = '';
+            document.getElementById('filterDateEnd').value = '';
+            document.getElementById('filterEmissionStart').value = '';
+            document.getElementById('filterEmissionEnd').value = '';
+
+            if (type === 'emission_today') {
+                const s = today.toISOString().split('T')[0];
+                document.getElementById('filterEmissionStart').value = s;
+                document.getElementById('filterEmissionEnd').value = s;
+            } else if (type === 'emission_yesterday') {
+                const yesterday = new Date(today);
+                yesterday.setDate(yesterday.getDate() - 1);
+                const s = yesterday.toISOString().split('T')[0];
+                document.getElementById('filterEmissionStart').value = s;
+                document.getElementById('filterEmissionEnd').value = s;
+            } else if (type === 'emission_week') {
+                const day = today.getDay(); 
+                const diff = today.getDate() - day + (day === 0 ? -6 : 1); 
+                const monday = new Date(today.setDate(diff));
+                document.getElementById('filterEmissionStart').value = monday.toISOString().split('T')[0];
+            } else if (type === 'emission_month') {
+                const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+                document.getElementById('filterEmissionStart').value = firstDay.toISOString().split('T')[0];
+            } else if (type === 'delivery_today') {
+                const s = new Date().toISOString().split('T')[0];
+                document.getElementById('filterDateStart').value = s;
+                document.getElementById('filterDateEnd').value = s;
+            }
+
+            applyColumnFilters();
+            if (typeof updateQuickFilterLabels === 'function') updateQuickFilterLabels();
+        }
+
+        function updateQuickFilterLabels() {
+            // Placeholder to avoid errors
+        }
+
+        function getLocalMidnight(dateStr) {
+            if (!dateStr) return null;
+            const [year, month, day] = dateStr.split('-').map(Number);
+            return new Date(year, month - 1, day, 0, 0, 0, 0);
         }
 
 function toggleProductionStage() {
@@ -3725,11 +3785,17 @@ function toggleProductionStage() {
         // INICIALIZAÇÃO
         // ==========================================================================
         document.addEventListener('DOMContentLoaded', async () => {
-            setupFilters();
-            await loadDataFromServer();
+            try {
+                // Safety net for the whole process
+                setTimeout(() => { if (typeof hideLoadingScreen === 'function') hideLoadingScreen(); }, 12000);
 
-            // Role-gated: Initial Masking for Stage KPIs (Handled by calculateKPIs respecting valorVisible)
-            // No longer hiding elements, just managing text via valorVisible
+                if (typeof setupFilters === 'function') setupFilters();
+                await loadDataFromServer();
+            } catch (err) {
+                console.error("Erro Crítico na Inicialização:", err);
+                if (typeof showToast === 'function') showToast("Erro", "Falha ao inicializar sistema.", "danger");
+                if (typeof hideLoadingScreen === 'function') hideLoadingScreen();
+            }
         });
 
         // --- VALOR VISIBILITY TOGGLE ---
