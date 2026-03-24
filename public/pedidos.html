@@ -2844,7 +2844,7 @@
             }).join('');
         }
 
-                function calculateKPIs(list) {
+        function calculateKPIs(list) {
             // Initial Totals
             let totalWeight = 0;
             let totalValue = 0;
@@ -2890,7 +2890,7 @@
                 const targetTotalQty = totalInitialQty; // The Goal is the Order
                 
                 // 1. Get Cumulative Totals (Removed cap to allow industrial reality to show even if over order qty)
-                // Hierarchy: Expedição → Qualidade → Usinagem → TT → Acabamento → Fusão → Moldada → Aguardando
+                // Hierarchy: Expedição â†’ Qualidade â†’ Usinagem â†’ TT â†’ Acabamento â†’ Fusão â†’ Moldada â†’ Aguardando
                 const cExp  = Number(item.QTY_EXPEDICAO) || 0;
                 const cQual = Math.max(cExp,  Number(item.QTY_QUALIDADE) || 0);
                 const cUsi  = Math.max(cQual, Number(item.QTY_USINAGEM) || 0);
@@ -2909,7 +2909,7 @@
                 let qMoldada     = Math.max(0, cMold - cFus);
                 let qAguardando  = Math.max(0, targetTotalQty - cMold);
 
-                // Suppress noise
+                // Threshold filter (suppress noise < 0.01 units)
                 if (qExpedicao < 0.01) qExpedicao = 0;
                 if (qQualidade < 0.01) qQualidade = 0;
                 if (qUsinagem < 0.01) qUsinagem = 0;
@@ -2919,90 +2919,303 @@
                 if (qMoldada < 0.01) qMoldada = 0;
                 if (qAguardando < 0.01) qAguardando = 0;
 
-                const unitW = realQty > 0 ? (itemTotalWeight / realQty) : 0;
-                const valW = realQty > 0 ? (itemTotalValue / realQty) : 0;
+                // Helper to add proportional data
+                const addKpi = (kpi, q) => {
+                    const factor = targetTotalQty > 0 ? (q / targetTotalQty) : 0;
+                    if (q <= 0) return;
+                    kpi.qtd += q;
+                    kpi.peso += itemTotalWeight * factor;
+                    kpi.valor += itemTotalValue * factor;
+                };
 
-                kpiAguardando.qtd += qAguardando;
-                kpiAguardando.peso += qAguardando * unitW;
-                kpiAguardando.valor += qAguardando * valW;
-
-                kpiMoldagem.qtd += qMoldada;
-                kpiMoldagem.peso += qMoldada * unitW;
-                kpiMoldagem.valor += qMoldada * valW;
-
-                kpiFusao.qtd += qFusao;
-                kpiFusao.peso += qFusao * unitW;
-                kpiFusao.valor += qFusao * valW;
-
-                kpiAcabamento.qtd += qAcabamento;
-                kpiAcabamento.peso += qAcabamento * unitW;
-                kpiAcabamento.valor += qAcabamento * valW;
-
-                kpiTT.qtd += qTT;
-                kpiTT.peso += qTT * unitW;
-                kpiTT.valor += qTT * valW;
-
-                kpiUsinagem.qtd += qUsinagem;
-                kpiUsinagem.peso += qUsinagem * unitW;
-                kpiUsinagem.valor += qUsinagem * valW;
-
-                kpiQualidade.qtd += qQualidade;
-                kpiQualidade.peso += qQualidade * unitW;
-                kpiQualidade.valor += qQualidade * valW;
-
-                kpiExpedicao.qtd += qExpedicao;
-                kpiExpedicao.peso += qExpedicao * unitW;
-                kpiExpedicao.valor += qExpedicao * valW;
+                addKpi(kpiExpedicao, qExpedicao);
+                addKpi(kpiQualidade, qQualidade);
+                addKpi(kpiUsinagem, qUsinagem);
+                addKpi(kpiTT, qTT);
+                addKpi(kpiAcabamento, qAcabamento);
+                addKpi(kpiFusao, qFusao);
+                addKpi(kpiMoldagem, qMoldada);
+                addKpi(kpiAguardando, qAguardando);
             });
 
-            // Update DOM Elements for Total Header
-            const totalWeightEl = document.getElementById('totalWeight');
-            const totalValueEl = document.getElementById('totalValue');
-            const totalQtyEl = document.getElementById('totalItems');
-            const releasedWeightEl = document.getElementById('releasedWeight');
-
-            if (totalWeightEl) totalWeightEl.innerText = formatNumber(totalWeight, 0);
-            if (totalValueEl) totalValueEl.innerText = valorVisible ? formatCurrency(totalValue) : '-----';
-            if (totalQtyEl) totalQtyEl.innerText = totalQty.toLocaleString('pt-BR');
-            if (releasedWeightEl) releasedWeightEl.innerText = formatNumber(releasedWeight, 0);
-
-            // Calculate Blocked Weight
+            // "Blocked" Weight = Total - Released (Items without delivery date)
             const blockedWeight = totalWeight - releasedWeight;
-            const blockedWeightEl = document.getElementById('blockedWeight');
-            if (blockedWeightEl) blockedWeightEl.innerText = formatNumber(blockedWeight, 0);
 
-            // Update Stage Cards
-            updateStageCard('groupAguardando', kpiAguardando, totalWeight);
-            updateStageCard('groupMoldado', kpiMoldagem, totalWeight);
-            updateStageCard('barFusao', kpiFusao, totalWeight);
-            updateStageCard('barAcabamento', kpiAcabamento, totalWeight);
-            updateStageCard('barTT', kpiTT, totalWeight);
-            updateStageCard('barUsinagem', kpiUsinagem, totalWeight);
-            updateStageCard('barQualidade', kpiQualidade, totalWeight);
-            updateStageCard('barExpedicao', kpiExpedicao, totalWeight);
-        }\n\n        function updateStageCard(idPrefix, data, globalTotalWeight) {
-            const card = document.getElementById(idPrefix + 'Container') || document.getElementById(idPrefix);
-            const totals = document.getElementById(idPrefix + 'Totals');
-            const bar = document.getElementById(idPrefix.replace('group', 'bar'));
+            // Count unique orders with OP in the current list
+            const ordersWithOP = new Set(
+                list
+                    .filter(item => item.OP_PCS && item.OP_PCS !== '-' && item.OP_PCS !== '')
+                    .map(item => item.CODIGO_PPR)
+            ).size;
 
-            if (!card || !totals) return;
-
-            const percentage = globalTotalWeight > 0 ? (data.peso / globalTotalWeight) * 100 : 0;
-            const valorStr = valorVisible ? formatCurrency(data.valor) : '-----';
-
-            totals.innerText = `${Math.round(data.qtd)} pçs | ${formatNumber(data.peso, 0)} kg | ${valorStr}`;
-            
-            if (bar) {
-                bar.style.width = percentage + '%';
-            } else if (idPrefix.includes('group')) {
-                const innerBar = card.querySelector('.bar-segment');
-                if (innerBar) innerBar.style.width = percentage + '%';
+            if (document.getElementById('totalOrdersWithOP')) {
+                document.getElementById('totalOrdersWithOP').innerText = ordersWithOP;
             }
-        }\n\n        function applyColumnFilters() {
+
+            // --- UPDATE DOM ---
+
+            // 1. Header/Footer General Stats
+            const uniqueOrders = new Set(list.map(i => i.CODIGO_PPR)).size;
+            if (document.getElementById('totalOrders')) document.getElementById('totalOrders').innerText = uniqueOrders;
+            if (document.getElementById('totalQuantity')) document.getElementById('totalQuantity').innerText = totalQty.toLocaleString('pt-BR');
+            if (document.getElementById('kpiTotalWeight')) document.getElementById('kpiTotalWeight').innerText = formatNumber(totalWeight, 0); // Old ID
+            if (document.getElementById('totalWeight')) document.getElementById('totalWeight').innerText = formatNumber(totalWeight); // New ID
+            if (document.getElementById('kpiTotalValue')) document.getElementById('kpiTotalValue').innerText = formatCurrency(totalValue); // Old ID
+
+            // 2. Main Dashboard Cards
+            if (document.getElementById('totalOrdersCard')) document.getElementById('totalOrdersCard').innerText = uniqueOrders;
+            if (document.getElementById('totalWeightCard')) document.getElementById('totalWeightCard').innerText = formatNumber(totalWeight);
+            if (document.getElementById('totalValueCard')) {
+                const valEl = document.getElementById('totalValueCard');
+                valEl.setAttribute('data-real-value', formatCurrency(totalValue));
+                if (valorVisible) valEl.innerText = formatCurrency(totalValue);
+            }
+
+            if (document.getElementById('totalReleasedWeightCard')) document.getElementById('totalReleasedWeightCard').innerText = formatNumber(releasedWeight);
+
+            if (document.getElementById('totalBlockedWeightCard')) {
+                document.getElementById('totalBlockedWeightCard').innerText = formatNumber(blockedWeight);
+                // Style adjustment for visual alert
+                document.getElementById('totalBlockedWeightCard').style.color = blockedWeight > 0 ? '#ef4444' : '#fff';
+            }
+
+            // Avg Weight
+            const avgWeight = totalQty > 0 ? (totalWeight / totalQty) : 0;
+            if (document.getElementById('avgWeightCard')) document.getElementById('avgWeightCard').innerText = formatNumber(avgWeight);
+
+
+            // 5. Update Group Headers and Consolidated Progress Bar
+            const fundidoGroup = {
+                qtd: kpiFusao.qtd + kpiAcabamento.qtd + kpiTT.qtd + kpiUsinagem.qtd + kpiQualidade.qtd + kpiExpedicao.qtd,
+                peso: kpiFusao.peso + kpiAcabamento.peso + kpiTT.peso + kpiUsinagem.peso + kpiQualidade.peso + kpiExpedicao.peso,
+                valor: kpiFusao.valor + kpiAcabamento.valor + kpiTT.valor + kpiUsinagem.valor + kpiQualidade.valor + kpiExpedicao.valor
+            };
+
+            const formatG = (kpi) => {
+                const valStr = valorVisible ? formatCurrency(kpi.valor) : '-----';
+                return `${formatNumber(kpi.qtd, 0)} pçs | ${formatNumber(kpi.peso, 0)} kg | ${valStr}`;
+            };
+
+            if (document.getElementById('groupAguardandoTotals')) document.getElementById('groupAguardandoTotals').innerText = formatG(kpiAguardando);
+            if (document.getElementById('groupMoldadoTotals')) document.getElementById('groupMoldadoTotals').innerText = formatG(kpiMoldagem);
+            if (document.getElementById('groupFundidoTotals')) document.getElementById('groupFundidoTotals').innerText = formatG(fundidoGroup);
+
+            // 3. Update all segments. 
+            // Denominator 1 (groupWeight) = for Visual Width (fill the bar)
+            // Denominator 2 (totalWeight) = for Tooltip Label (representativity vs Total)
+            
+            updateStageCard('kpiAguardando', kpiAguardando, kpiAguardando.peso, totalWeight);
+            updateStageCard('kpiMoldagem', kpiMoldagem, kpiMoldagem.peso, totalWeight);
+            
+            updateStageCard('kpiFusao', kpiFusao, fundidoGroup.peso, totalWeight);
+            updateStageCard('kpiAcabamento', kpiAcabamento, fundidoGroup.peso, totalWeight);
+            updateStageCard('kpiTT', kpiTT, fundidoGroup.peso, totalWeight);
+            updateStageCard('kpiUsinagem', kpiUsinagem, fundidoGroup.peso, totalWeight);
+            updateStageCard('kpiQualidade', kpiQualidade, fundidoGroup.peso, totalWeight);
+            updateStageCard('kpiExpedicao', kpiExpedicao, fundidoGroup.peso, totalWeight);
+
+            // 4. Footer Avg Weight
+            if (document.getElementById('avgWeightFooter')) document.getElementById('avgWeightFooter').innerText = formatNumber(avgWeight);
+        }
+
+        function updateTotals(list) {
+            // Legacy function kept if called elsewhere, but we moved logic to calculateKPIs
+            // to avoid double iteration.
+            calculateKPIs(list);
+        }
+
+        function updateStageCard(idPrefix, data, groupWeight, globalWeight) {
+            const map = {
+                'kpiAguardando': { barId: 'barAguardando', name: 'Aguardando Moldagem', icon: 'fa-hourglass-half' },
+                'kpiMoldagem': { barId: 'barMoldado', name: 'Moldado', icon: 'fa-layer-group' },
+                'kpiFusao': { barId: 'barFusao', name: 'Fusão', icon: 'fa-fire-burner' },
+                'kpiAcabamento': { barId: 'barAcabamento', name: 'Acabamento', icon: 'fa-broom' },
+                'kpiTT': { barId: 'barTT', name: 'Tratamento Térmico', icon: 'fa-temperature-arrow-up' },
+                'kpiUsinagem': { barId: 'barUsinagem', name: 'Usinagem', icon: 'fa-gears' },
+                'kpiQualidade': { barId: 'barQualidade', name: 'Qualidade', icon: 'fa-check-double' },
+                'kpiExpedicao': { barId: 'barExpedicao', name: 'Expedição', icon: 'fa-truck-loading' },
+            };
+
+            const config = map[idPrefix];
+            if (!config) return;
+
+            const barEl = document.getElementById(config.barId);
+            
+            // Visual width proportional to the group (to fill the bar)
+            const visualPct = groupWeight > 0 ? ((data.peso / groupWeight) * 100) : 0;
+            // Mathematical representativity relative to the TOTAL portfolio
+            const totalPct = globalWeight > 0 ? ((data.peso / globalWeight) * 100) : 0;
+
+            if (barEl) {
+                barEl.style.width = visualPct.toFixed(1) + '%';
+                const valContent = valorVisible ? formatCurrency(data.valor) : '-----';
+
+                const tooltipHtml = `
+                    <div class="tooltip-header">
+                        <i class="fa-solid ${config.icon}"></i>
+                        ${config.name}
+                    </div>
+                    <div class="tooltip-row">
+                        <span class="tooltip-label">Representatividade (Total)</span>
+                        <span class="tooltip-value">${totalPct.toFixed(1)}%</span>
+                    </div>
+                    <div class="tooltip-row">
+                        <span class="tooltip-label">Peso total</span>
+                        <span class="tooltip-value">${formatNumber(data.peso, 0)} kg</span>
+                    </div>
+                    <div class="tooltip-row">
+                        <span class="tooltip-label">Quantidade</span>
+                        <span class="tooltip-value">${formatNumber(data.qtd, 0)} pçs</span>
+                    </div>
+                    <div class="tooltip-row">
+                        <span class="tooltip-label">Valor total</span>
+                        <span class="tooltip-value" style="color:var(--status-purple)">${valContent}</span>
+                    </div>
+                    <div class="tooltip-footer">
+                        <i class="fa-solid fa-mouse-pointer"></i>
+                        Clique sobre esta barra para ver os registros
+                    </div>
+                `;
+                barEl.setAttribute('data-tooltip', tooltipHtml);
+            }
+        }
+
+
+
+        // ==========================================================================
+        // FILTROS E GRÁFICOS
+        // ==========================================================================
+
+        function setupFilters() {
+            document.querySelectorAll('.filter-input-table').forEach(input => {
+                input.addEventListener('input', applyColumnFilters);
+            });
+
+            // Populate Year Filters
+            const yearFilters = [
+                document.getElementById('chartYearFilter'),
+                document.getElementById('yearFilterHistorical')
+            ];
+
+            const currentYear = new Date().getFullYear();
+            const years = [currentYear - 1, currentYear, currentYear + 1];
+
+            yearFilters.forEach(el => {
+                if (el) {
+                    el.innerHTML = '';
+                    years.forEach(y => {
+                        const opt = document.createElement('option');
+                        opt.value = y;
+                        opt.innerText = y;
+                        if (y === currentYear) opt.selected = true;
+                        el.appendChild(opt);
+                    });
+                }
+            });
+        }
+
+        // Helper func to get local midnight date object from YYYY-MM-DD
+        function getLocalMidnight(dateStr) {
+            if (!dateStr) return null;
+            // Append T00:00:00 to force local time parsing (browser dependent, but safer than UTC midnight for simple comparison)
+            // Actually, safer approach: split parts
+            const parts = dateStr.split('-');
+            if (parts.length !== 3) return null;
+            return new Date(parts[0], parts[1] - 1, parts[2], 0, 0, 0, 0);
+        }
+
+        function applyQuickFilter(type) {
+            const today = new Date();
+
+            // Helper to format YYYY-MM-DD
+            const fmt = (d) => {
+                const year = d.getFullYear();
+                const month = String(d.getMonth() + 1).padStart(2, '0');
+                const day = String(d.getDate()).padStart(2, '0');
+                return `${year}-${month}-${day}`;
+            };
+
+            const setEmission = (start, end) => {
+                document.getElementById('filterEmissionStart').value = fmt(start);
+                document.getElementById('filterEmissionEnd').value = fmt(end);
+            };
+
+            const setDelivery = (start, end) => {
+                document.getElementById('filterDateStart').value = fmt(start);
+                document.getElementById('filterDateEnd').value = fmt(end);
+            };
+
+            if (type === 'emission_yesterday') {
+                const yesterday = new Date(today);
+                // Business Day Logic:
+                // If Monday (1) -> Friday (-3)
+                // If Sunday (0) -> Friday (-2)
+                // Else -> Yesterday (-1)
+                const day = today.getDay();
+                if (day === 1) yesterday.setDate(today.getDate() - 3);
+                else if (day === 0) yesterday.setDate(today.getDate() - 2);
+                else yesterday.setDate(today.getDate() - 1);
+
+                setEmission(yesterday, yesterday);
+            } else if (type === 'emission_today') {
+                setEmission(today, today);
+            } else if (type === 'emission_week') {
+                const weekAgo = new Date();
+                weekAgo.setDate(today.getDate() - 7);
+                setEmission(weekAgo, today);
+            } else if (type === 'emission_month') {
+                const monthAgo = new Date();
+                monthAgo.setMonth(today.getMonth() - 1);
+                setEmission(monthAgo, today);
+            } else if (type === 'delivery_today') {
+                setDelivery(today, today);
+            }
+
+            applyColumnFilters();
+        }
+
+        function updateQuickFilterLabels() {
+            const today = new Date();
+            const fmt = (d) => d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+
+            // 1. Yesterday (Business Day)
+            const y = new Date(today);
+            const day = today.getDay();
+            if (day === 1) y.setDate(today.getDate() - 3);
+            else if (day === 0) y.setDate(today.getDate() - 2);
+            else y.setDate(today.getDate() - 1);
+
+            const btnY = document.getElementById('btnQuickYesterday');
+            if (btnY) btnY.innerHTML = `<i class="fa-solid fa-calendar-day"></i> Ontem (${fmt(y)})`;
+
+            // 2. Today
+            const btnT = document.getElementById('btnQuickToday');
+            if (btnT) btnT.innerHTML = `<i class="fa-solid fa-calendar-day"></i> Hoje (${fmt(today)})`;
+
+            // 3. Last Week (Last 7 Days)
+            const wStart = new Date(today);
+            wStart.setDate(today.getDate() - 7);
+            const btnW = document.getElementById('btnQuickWeek');
+            if (btnW) btnW.innerHTML = `<i class="fa-solid fa-calendar-week"></i> Última Semana (${fmt(wStart)} - ${fmt(today)})`;
+
+            // 4. Last Month (Last 30 Days approx)
+            const mStart = new Date(today);
+            mStart.setMonth(today.getMonth() - 1);
+            const btnM = document.getElementById('btnQuickMonth');
+            if (btnM) btnM.innerHTML = `<i class="fa-solid fa-calendar-days"></i> Último Mês (${fmt(mStart)} - ${fmt(today)})`;
+
+            // 5. Delivery Today
+            const btnDT = document.getElementById('btnQuickDeliveryToday');
+            if (btnDT) btnDT.innerHTML = `<i class="fa-solid fa-truck"></i> Programado Hoje (${fmt(today)})`;
+
+        }
+
+        function applyColumnFilters() {
             const inputs = document.querySelectorAll('.filter-input-table');
 
             const isHistorical = document.getElementById('recordsModal').classList.contains('hide-op-column');
 
+            // Map numeric data-col to field names (updated for new column structure)
             const fieldMap = {
                 '0': 'CODIGO_PPR',
                 '1': isHistorical ? 'DATA_EMISSAO_PEDIDO' : 'ENTREGA_PETR',
@@ -3016,6 +3229,7 @@
                 '9': 'OP_PCS'
             };
 
+            // Collect individual column filters
             const filters = {};
             inputs.forEach(inp => {
                 const fieldName = fieldMap[inp.dataset.col];
@@ -3024,6 +3238,7 @@
                 }
             });
 
+            // Get toolbar filters
             const filterOC = document.getElementById('filterOC')?.value.trim().toLowerCase() || '';
             const filterMaterial = document.getElementById('filterMaterial')?.value.trim().toLowerCase() || '';
             const filterLote = document.getElementById('filterLote')?.value.trim().toLowerCase() || '';
@@ -3033,18 +3248,33 @@
             const filterEmissionEnd = document.getElementById('filterEmissionEnd')?.value || '';
 
             const filtered = allData.filter(item => {
+                // 0. Filter Modelos (Ends with '1')
                 if (isModelosHidden) {
                     const prodCode = String(item.PRODUTO_PPR || '').trim();
                     if (prodCode.endsWith('1')) return false;
                 }
 
+                // 1. Chart Filters (PowerBI Style)
                 if (activeChartFilters.month !== null) {
-                    let dateField = (chartMode === 'emission_pending') ? item.DATA_EMISSAO_PEDIDO : item.ENTREGA_PETR;
+                    let dateField;
+                    if (chartMode === 'emission_pending') {
+                        dateField = item.DATA_EMISSAO_PEDIDO;
+                    } else {
+                        // Default to delivery
+                        dateField = item.ENTREGA_PETR;
+                    }
+
                     if (!dateField) return false;
+
                     const d = new Date(dateField);
+
+                    // Check Month
                     if (d.getMonth() !== activeChartFilters.month) return false;
+
+                    // NEW: Check Year as well (from the filter dropdown)
                     const yearEl = document.getElementById('chartYearFilter');
                     const selectedYear = yearEl ? (parseInt(yearEl.value) || new Date().getFullYear()) : new Date().getFullYear();
+
                     if (d.getFullYear() !== selectedYear) return false;
                 }
 
@@ -3052,69 +3282,147 @@
                     if (item.ID_CLIENTE_CORE != activeChartFilters.client) return false;
                 }
 
-                if (filterOC && !String(item.ORDEM_COMPRA_PPR || '').toLowerCase().includes(filterOC)) return false;
-                if (filterMaterial && !String(item.NOME_MATERIAL || '').toLowerCase().includes(filterMaterial)) return false;
-                if (filterLote && !String(item.LOTE_PCS || '').toLowerCase().includes(filterLote)) return false;
-
-                if (filterDateStart || filterDateEnd) {
-                    const entregaDate = item.ENTREGA_PETR ? new Date(item.ENTREGA_PETR) : (item.DATA_ENTREGA_PPR ? new Date(item.DATA_ENTREGA_PPR) : null);
-                    if (!entregaDate) return false;
-                    entregaDate.setHours(0, 0, 0, 0);
-                    if (filterDateStart && entregaDate < getLocalMidnight(filterDateStart)) return false;
-                    if (filterDateEnd && entregaDate > getLocalMidnight(filterDateEnd)) return false;
+                // 2. Toolbar Filters
+                // OC Filter
+                if (filterOC) {
+                    const oc = String(item.ORDEM_COMPRA_PPR || '').toLowerCase();
+                    if (!oc.includes(filterOC)) return false;
                 }
 
+                // Material Filter
+                if (filterMaterial) {
+                    const mat = String(item.NOME_MATERIAL || '').toLowerCase();
+                    if (!mat.includes(filterMaterial)) return false;
+                }
+
+                // Lote Filter
+                if (filterLote) {
+                    const lote = String(item.LOTE_PCS || '').toLowerCase();
+                    if (!lote.includes(filterLote)) return false;
+                }
+
+                // Date Range Filter (Delivery Date)
+                if (filterDateStart || filterDateEnd) {
+                    const entregaDate = item.ENTREGA_PETR ? new Date(item.ENTREGA_PETR) :
+                        (item.DATA_ENTREGA_PPR ? new Date(item.DATA_ENTREGA_PPR) : null);
+
+                    if (!entregaDate) return false; // Exclude items without delivery date
+
+                    // Normalize Item Date to Midnight Local
+                    entregaDate.setHours(0, 0, 0, 0);
+
+                    if (filterDateStart) {
+                        const startDate = getLocalMidnight(filterDateStart);
+                        if (startDate && entregaDate < startDate) return false;
+                    }
+
+                    if (filterDateEnd) {
+                        const endDate = getLocalMidnight(filterDateEnd);
+                        // Inclusive Check: If end date is 17/02, we want to include 17/02.
+                        // Since entregaDate is normalized to 00:00:00, and endDate is 00:00:00:
+                        // entregaDate > endDate will work correctly (17th > 17th is False -> Keep)
+                        // But 18th > 17th is True -> Exclude.
+                        if (endDate && entregaDate > endDate) return false;
+
+                        // Old logic used setHours(23,59...) which is fine too, but comparing midnights is cleaner if we normalized item.
+                    }
+                }
+
+                // Emission Date Range Filter
                 if (filterEmissionStart || filterEmissionEnd) {
                     const emissionDate = item.DATA_EMISSAO_PEDIDO ? new Date(item.DATA_EMISSAO_PEDIDO) : null;
-                    if (!emissionDate) return false;
+
+                    if (!emissionDate) return false; // Exclude items without emission date
+
+                    // Normalize Item Date to Midnight Local
                     emissionDate.setHours(0, 0, 0, 0);
-                    if (filterEmissionStart && emissionDate < getLocalMidnight(filterEmissionStart)) return false;
-                    if (filterEmissionEnd && emissionDate > getLocalMidnight(filterEmissionEnd)) return false;
+
+                    if (filterEmissionStart) {
+                        const startDate = getLocalMidnight(filterEmissionStart);
+                        if (startDate && emissionDate < startDate) return false;
+                    }
+
+                    if (filterEmissionEnd) {
+                        const endDate = getLocalMidnight(filterEmissionEnd);
+                        if (endDate && emissionDate > endDate) return false;
+                    }
                 }
 
+                // 3. Col Filters
                 const filtersPassed = Object.entries(filters).every(([key, value]) => {
                     if (!value) return true;
+
+                    // Lógica de Filtro Exato
                     if (key === 'CODIGO_PPR') {
-                        if (value === 'block') return !item.ENTREGA_PETR && !item.DATA_ENTREGA_PPR;
+                        if (value === 'block') {
+                            return !item.ENTREGA_PETR && !item.DATA_ENTREGA_PPR;
+                        }
                         return String(item[key]) === value;
                     }
-                    if (key === 'PESO_LIQUIDO_NPR') return item[key] == value.replace(',', '.');
+
+                    if (key === 'PESO_LIQUIDO_NPR') {
+                        // Permite user digitar 10,5 e converter para 10.5
+                        const cleanValue = value.replace(',', '.');
+                        // O usuário pediu "filtrar os registros que estão exatamente escritos"
+                        return item[key] == cleanValue;
+                    }
+
+                    // For PESO_UNIT, we need to calculate it first
                     if (key === 'PESO_UNIT') {
                         const qtd = Number(item.QUANTIDADE_PPR) || 0;
-                        let uW = qtd > 0 ? ((Number(item.PESO_LIQUIDO_NPR) || 0) / qtd) : 0;
-                        if (uW === 0 && customWeights[item.PRODUTO_PPR]) uW = customWeights[item.PRODUTO_PPR];
-                        return formatNumber(uW) === value;
+                        let totalWeight = Number(item.PESO_LIQUIDO_NPR) || 0;
+                        let uW = qtd > 0 ? (totalWeight / qtd) : 0;
+
+                        if (totalWeight === 0 && customWeights[item.PRODUTO_PPR]) {
+                            uW = customWeights[item.PRODUTO_PPR];
+                        }
+                        const valStr = formatNumber(uW); // ex: "0,00" ou "1.234,56"
+
+                        // O usuário pediu "filtrar os registros que estão exatamente escritos"
+                        // Comparar strings exatas
+                        return valStr === value;
                     }
+
+                    // Defaults
                     let itemVal = String(item[key] || '');
-                    if ((key === 'ENTREGA_PETR' || key === 'DATA_EMISSAO_PEDIDO') && item[key]) itemVal += ' ' + new Date(item[key]).toLocaleDateString();
+
+                    if ((key === 'ENTREGA_PETR' || key === 'DATA_EMISSAO_PEDIDO') && item[key]) {
+                        itemVal += ' ' + new Date(item[key]).toLocaleDateString();
+                    }
+
+                    // O usuário pediu "filtrar os registros que estão exatamente escritos" -> Mudado para "contém" para facilitar uso
                     return itemVal.toLowerCase().includes(value);
                 });
 
                 if (!filtersPassed) return false;
 
+                // 4. Stage Filter (Proportional hierarchical sync)
                 if (activeChartFilters.stage) {
                     const s = activeChartFilters.stage;
+                    
+                    // Hierarchical Logic: Limited by Commercial Order
                     const totalInitialQty = Number(item.QUANTIDADE_PPR) || 0;
                     const currentBalance = Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0;
-                    const invoicedQty = Math.max(0, totalInitialQty - currentBalance);
+                    const targetTotalQty = totalInitialQty; // The Goal is the Order
 
-                    const cExp  = Number(item.QTY_EXPEDICAO) || 0;
-                    const cQual = Math.max(cExp,  Number(item.QTY_QUALIDADE) || 0);
-                    const cUsi  = Math.max(cQual, Number(item.QTY_USINAGEM) || 0);
-                    const cTT   = Math.max(cUsi,  Number(item.QTY_TT) || 0);
-                    const cAcab = Math.max(cTT,   Number(item.QTY_ACABAMENTO) || 0);
-                    const cFus  = Math.max(cAcab, Number(item.QTY_FUSAO) || 0);
-                    const cMold = Math.max(cFus,  Number(item.QTY_MOLDADA) || 0);
+                    const cExp  = Math.min(targetTotalQty, Number(item.QTY_EXPEDICAO) || 0);
+                    const cQual = Math.min(targetTotalQty, Math.max(cExp,  Number(item.QTY_QUALIDADE) || 0));
+                    const cUsi  = Math.min(targetTotalQty, Math.max(cQual, Number(item.QTY_USINAGEM) || 0));
+                    const cTT   = Math.min(targetTotalQty, Math.max(cUsi,  Number(item.QTY_TT) || 0));
+                    const cAcab = Math.min(targetTotalQty, Math.max(cTT,   Number(item.QTY_ACABAMENTO) || 0));
+                    const cFus  = Math.min(targetTotalQty, Math.max(cAcab, Number(item.QTY_FUSAO) || 0));
+                    const cMold = Math.min(targetTotalQty, Math.max(cFus,  Number(item.QTY_MOLDADA) || 0));
 
-                    let qExpedicao   = Math.max(0, cExp - invoicedQty);
+                    let qExpedicao   = Math.max(0, cExp);
                     let qQualidade   = Math.max(0, cQual - cExp);
                     let qUsinagem    = Math.max(0, cUsi - cQual);
                     let qTT          = Math.max(0, cTT - cUsi);
                     let qAcabamento  = Math.max(0, cAcab - cTT);
                     let qFusao       = Math.max(0, cFus - cAcab);
                     let qMoldada     = Math.max(0, cMold - cFus);
-                    let qAguardando  = Math.max(0, totalInitialQty - cMold);
+                    let qAguardando  = Math.max(0, targetTotalQty - cMold);
 
+                    // Suppress noise
                     if (qExpedicao < 0.01) qExpedicao = 0;
                     if (qQualidade < 0.01) qQualidade = 0;
                     if (qUsinagem < 0.01) qUsinagem = 0;
@@ -3133,16 +3441,65 @@
                     if (s === 'qualidade') return qQualidade > 0.01;
                     if (s === 'expedicao') return qExpedicao > 0.01;
                 }
-                
-                if (item.FATURADO_PPR === 'T') return false;
-                return true; 
+
+                // 5. History Filter (By default, HIDE fully billed orders for the Table)
+                // Unless we are in a specific "History" mode for the table (not implemented yet)
+                // The 'Carteira' concept implies BACKLOG (Open Orders).
+                // FATURADO_PPR = 'T' means it's done. 
+                // However, we want them for CHARTS.
+                // The charts use `filtered` list? Yes `updateCharts(filtered)`.
+                // PROBLEM: If we filter them out here, the charts won't see them either!
+                // FIX: We need TWO lists? or we allow them in `filtered` but hide them in `renderTable`?
+                // `renderTable` iterates `list`. `updateCharts` iterates `list`.
+                // User wants "Total Emission Chart" to show everything.
+                // User wants "Carteira Table" to show only open.
+
+                // Let's change the strategy:
+                // 1. keep `filtered` as the "View Data".
+                // 2. If `chartMode === 'emission_total'`, we probably WANT history in the chart.
+                // 3. But the TABLE should probably only show what's filtered.
+
+                // Let's add a "Show Completed" toggle? Or just handle it visually?
+                // User said: "visto que eu quero ter um histórico mes a mês do quanto é emitido de pedido"
+
+                // If I include them in `filtered`, they appear in the table.
+                // I will add a check:
+                // If the item is fully billed ('T'), we generally exclude it from the default view
+                // UNLESS the user explicitly wants to see history.
+                // Given the user instructions, I'll exclude them from the *default* filter
+                // BUT I need to make sure the "Total Emission" chart attempts to fetch its own data or uses a separate dataset?
+                // The "Total Emission" chart in `pedidos.html` ALREADY fetches `api/pedidos-firebird/emissao-mensal` (Historical) separately!
+                // See line ~2327: `fetch('/api/pedidos-firebird/emissao-mensal?anoInicio='...)`
+                // AND it caches it in `totalEmissionCache`.
+                // AND `updateMonthlyChart` uses `totalEmissionCache` if `chartMode === 'emission_total'`.
+
+                // THEREFORE: The chart DOES NOT rely on the `filtered` table data for the "Total Emission" view!
+                // It relies on `totalEmissionCache`.
+
+                // HOWEVER, the user might want `emission_pending` or `delivery` charts to eventually reflect history?
+                // User said: "na tabela pedido_produto para o gráfico de emissão total... os registros devem trazer faturado_ppr T e P"
+                // The "Total Emission" chart ALREADY fetches from Firebird directly (via `pedidos-firebird.js`).
+                // So... why did the user ask to change `pedidos-sync`?
+                // Maybe they want to STOP using `pedidos-firebird.js` (direct access) and use the Sync table?
+                // Or maybe they want the "Pending" chart to also start showing history?
+
+                // To be safe and compliant with "Carteira" purpose:
+                // I will **Exclude** 'T' (Total Faturado) from the main list here.
+                // This keeps the Table and the "Pending/Delivery" charts focused on the Backlog.
+                // The "Total Emission" chart (which uses a separate API) is unaffected by this filter and works fine.
+                // Wait, if I change the Sync Script, `allData` (loaded from `/api/pedidos-sync`) will now have 'T' records.
+                // If I don't filter them here, they appear in the Table.
+                // So I MUST filter them here to keep the Table clean.
+                return true;
             });
 
-            currentFilteredData = filtered; 
+            currentFilteredData = filtered; // Update global for email generation
             renderTable(filtered);
-            if (typeof calculateKPIs === 'function') calculateKPIs(filtered);
+            updateTotals(filtered);
             updateCharts(filtered);
-        }\n\nfunction toggleProductionStage() {
+        }
+
+        function toggleProductionStage() {
             // Function no longer needed, bar is fixed.
         }
 
@@ -4055,17 +4412,29 @@
                 content.innerHTML = `<div style="text-align: center; padding: 40px; color: var(--status-danger);"><p>Erro: ${err.message}</p></div>`;
             }
         };
+
+        
         window.showSectorHistory = async function (op, category) {
-            console.log('🔍 showSectorHistory:', category, op);
+            console.log('ðŸ” showSectorHistory para category:', category, 'OP:', op);
             const modal = document.getElementById('opSectorHistoryModal');
             const content = document.getElementById('opSectorHistoryContent');
             const sectorSpan = document.getElementById('historySectorName');
 
-            if (!modal || !content) return;
+            if (!modal || !content) {
+                console.error('âŒ Elementos do Modal Histórico não encontrados!');
+                return;
+            }
+
             sectorSpan.innerText = category;
             modal.style.display = 'flex';
-            content.innerHTML = '<div style="text-align:center;padding:30px;"><i class="fa-solid fa-circle-notch fa-spin"></i></div>';
 
+            content.innerHTML = `
+                <div style="text-align: center; padding: 30px;">
+                    <i class="fa-solid fa-circle-notch fa-spin" style="font-size: 1.5rem; color: var(--color-primary);"></i>
+                </div>
+            `;
+
+            // Mapeamento inverso para a query
             const sectorMapping = {
                 'MOLDAGEM': ['MOLDAGEM', 'MOLDAGEM MANUAL', 'MOLDAGEM PESADA', 'MOLDAGEM LEVE', 'MOLDAGEM MECANIZADA', 'MOLDAGEM AUTOMÁTICA', 'MOLDAGEM EM AREIA'],
                 'FUSÃO': ['FUSÃO', 'FUSAO'],
@@ -4076,50 +4445,48 @@
                 'EXPEDIÇÃO': ['EXPEDIÇÃO', 'EXPEDICAO', 'LOGÍSTICA']
             };
 
+            const targetSectors = sectorMapping[category] || [category];
+
             try {
-                const targetSectors = sectorMapping[category] || [category];
-                const res = await fetch(`/api/pedidos-firebird/op-setor-detalhes?op=${op}&setores=${encodeURIComponent(targetSectors.join(','))}`);
+                const url = `/api/pedidos-firebird/op-setor-detalhes?op=${op}&setores=${encodeURIComponent(targetSectors.join(','))}`;
+                const res = await fetch(url);
                 const data = await res.json();
+
                 if (data.error) throw new Error(data.error);
 
                 if (!data || data.length === 0) {
-                    content.innerHTML = '<p style="text-align:center;color:var(--text-muted);">Nenhum registro encontrado.</p>';
+                    content.innerHTML = '<p style="text-align:center; color:var(--text-muted);">Nenhum registro detalhado encontrado.</p>';
                     return;
                 }
 
-                let totalFisico = 0;
-                let html = `<table class="history-table"><thead><tr><th>Data</th><th style="text-align:right;">Quantidade</th></tr></thead><tbody>`;
+                let html = `<table class="history-table"><thead><tr><th>Data</th><th style="text-align: right;">Quantidade</th></tr></thead><tbody>`;
                 data.forEach(row => {
-                    const q = parseFloat(row.quantidade) || 0;
-                    totalFisico += q;
-                    html += `<tr><td>${formatDateLocal(row.data)}</td><td style="text-align:right;">${q.toLocaleString('pt-BR')} pçs</td></tr>`;
+                    const dataFormatada = formatDateLocal(row.data);
+                    html += `<tr><td class="history-date">${dataFormatada}</td><td class="history-qty">${row.quantidade.toLocaleString('pt-BR')} pçs</td></tr>`;
                 });
-                html += `</tbody></table>
-                    <div style="margin-top:15px;padding-top:10px;border-top:1px dashed rgba(255,255,255,0.1);display:flex;justify-content:space-between;">
-                        <span style="color:var(--text-muted);font-size:0.85rem;">Total Físico Apontado:</span>
-                        <span style="font-weight:700;color:var(--color-primary);">${totalFisico.toLocaleString('pt-BR')} pçs</span>
-                    </div>`;
+                html += '</tbody></table>';
                 content.innerHTML = html;
+
             } catch (err) {
-                content.innerHTML = `<p style="color:var(--status-danger);text-align:center;">Erro: ${err.message}</p>`;
+                console.error('âŒ Erro no showSectorHistory:', err);
+                content.innerHTML = `<p style="color:var(--status-danger); text-align:center;">Erro: ${err.message}</p>`;
             }
         };
 
-        window.closeSectorHistory = function () { 
-            const modal = document.getElementById('opSectorHistoryModal');
-            if (modal) modal.style.display = 'none'; 
+        window.closeSectorHistory = function () {
+            document.getElementById('opSectorHistoryModal').style.display = 'none';
         };
 
-        window.closeOPDetails = function () { 
-            const modal = document.getElementById('opDetailsModal');
-            if (modal) modal.style.display = 'none'; 
+        window.closeOPDetails = function () {
+            document.getElementById('opDetailsModal').style.display = 'none';
         };
 
-        // ESC listener
+        // ESC para fechar modais em ordem
         const originalCloseModal = window.closeModal;
         window.closeModal = function () {
             const hModal = document.getElementById('opSectorHistoryModal');
             const dModal = document.getElementById('opDetailsModal');
+
             if (hModal && hModal.style.display === 'flex') {
                 closeSectorHistory();
             } else if (dModal && dModal.style.display === 'flex') {
@@ -4129,7 +4496,7 @@
             }
         };
     </script>
-
 </body>
 
 </html>
+
