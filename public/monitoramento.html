@@ -1186,16 +1186,31 @@
                 baselineDate = toLocalDate(currentMeta);
             });
 
+            // --- 3. Robust Flow Logic: Account for skipped pointing in earlier stages ---
+            // Calculate max pointing in any LATER stage (including and after this one)
+            // This allows pieces to "flow through" stages that were bypassed in the system pointing.
+            const maxForwardPointing = {};
+            for (let i = orderedStages.length - 1; i >= 0; i--) {
+                const stage = orderedStages[i];
+                const currentQty = groupStatus[stage]?.qty || 0;
+                const nextStage = orderedStages[i + 1];
+                const nextMax = nextStage ? maxForwardPointing[nextStage] : 0;
+                maxForwardPointing[stage] = Math.max(currentQty, nextMax);
+            }
+
             const activeStages = [];
             let prevStageQty = totalQty;
 
-            // --- 3. Run the flow logic through the filtered stages ---
+            // --- 4. Run the flow logic through the filtered stages ---
             for (let i = 0; i < thisOpStages.length; i++) {
                 const stage = thisOpStages[i];
-                const pointedInStage = groupStatus[stage].qty;
-
-                const qtyMovingToNext = Math.min(prevStageQty, pointedInStage);
+                // Use the maximum of this stage's pointing OR any later stage's pointing
+                // to determine how many pieces have at least REACHED and passed this point.
+                const effectivePointed = Math.max(groupStatus[stage].qty, maxForwardPointing[stage] || 0);
+                
+                const qtyMovingToNext = Math.min(prevStageQty, effectivePointed);
                 const qtyStayingInStage = Math.max(0, prevStageQty - qtyMovingToNext);
+
 
                 if (qtyStayingInStage > 0.001) {
                     const metaDate = metaDates[stage];
@@ -1464,6 +1479,16 @@
                     baselineDate = toLocalDate(currentMeta);
                 });
 
+                // --- 3. Robust Flow Logic (Modal) ---
+                const maxForwardModal = {};
+                for (let i = allGroups.length - 1; i >= 0; i--) {
+                    const st = allGroups[i];
+                    const currentQty = aggregated[st] || 0;
+                    const nextSt = allGroups[i + 1];
+                    const nextMax = nextSt ? maxForwardModal[nextSt] : 0;
+                    maxForwardModal[st] = Math.max(currentQty, nextMax);
+                }
+
                 let html = `
                     <div style="background: rgba(255,255,255,0.02); border-radius: 12px; overflow: hidden; border: 1px solid var(--border-subtle);">
                         <table style="width: 100%; border-collapse: collapse; font-size: 0.95rem;">
@@ -1478,16 +1503,21 @@
                             <tbody>
                 `;
 
+                let prevFlowQty = totalQty;
                 ordered.forEach(sector => {
-                    const qtyPointed = aggregated[sector];
-                    const qtyPending = Math.max(0, totalQty - qtyPointed);
+                    // How many pieces have at least PASSED this point?
+                    const qtyMovedOut = Math.max(aggregated[sector] || 0, maxForwardModal[sector] || 0);
+                    // How many pieces are actually WAITING in this stage?
+                    const qtyInStage = Math.max(0, prevFlowQty - qtyMovedOut);
+                    
                     const meta = metaDates[sector];
                     const metaMidnight = toLocalDate(meta);
                     const today = toLocalDate(new Date());
 
-                    // 1. Linha do Realizado (se houver)
-                    if (qtyPointed > 0) {
-                        const referenceDate = toLocalDate(lastPointingDate[sector]);
+                    // 1. Linha do Realizado (se houver peças que passaram por aqui)
+                    if (qtyMovedOut > 0) {
+                        // For display, use either the actual pointing date or "today" if bypass
+                        const referenceDate = aggregated[sector] > 0 ? toLocalDate(lastPointingDate[sector]) : today;
                         const timeDiff = referenceDate.getTime() - metaMidnight.getTime();
                         const daysDiff = Math.round(timeDiff / (1000 * 3600 * 24));
 
@@ -1511,7 +1541,7 @@
                                 </td>
                                 <td style="padding: 15px 25px; text-align: center;">
                                     <span style="font-weight: 700; color: var(--status-success);">
-                                        ${qtyPointed.toLocaleString('pt-BR')} <small style="font-size: 0.7em;">PÇS</small>
+                                        ${qtyMovedOut.toLocaleString('pt-BR')} <small style="font-size: 0.7em;">PÇS</small>
                                     </span>
                                 </td>
                                 <td style="padding: 15px 25px; text-align: center; font-family: var(--font-mono); font-size: 0.85rem;">
@@ -1524,8 +1554,8 @@
                         `;
                     }
 
-                    // 2. Linha do Pendente (se houver saldo)
-                    if (qtyPending > 0) {
+                    // 2. Linha do Pendente (se houver saldo nesta etapa)
+                    if (qtyInStage > 0.001) {
                         const timeDiff = today.getTime() - metaMidnight.getTime();
                         const daysDiff = Math.round(timeDiff / (1000 * 3600 * 24));
 
@@ -1533,6 +1563,7 @@
                         let isDelayed = false;
                         if (daysDiff > 0) {
                             const bizDelay = Math.abs(getBusinessDaysDiff(metaMidnight, today));
+
                             isDelayed = true;
                             statusHtml = `<span style="color: var(--status-danger); font-weight: 600;"><i class="fa-solid fa-triangle-exclamation"></i> Atrasado (${bizDelay} d)</span>`;
                         } else {
@@ -1550,7 +1581,7 @@
                                 </td>
                                 <td style="padding: 15px 25px; text-align: center;">
                                     <span style="font-weight: 700;">
-                                        ${qtyPending.toLocaleString('pt-BR')} <small style="font-size: 0.7em;">PÇS</small>
+                                        ${qtyInStage.toLocaleString('pt-BR')} <small style="font-size: 0.7em;">PÇS</small>
                                     </span>
                                 </td>
                                 <td style="padding: 15px 25px; text-align: center; font-family: var(--font-mono); font-size: 0.85rem;">
@@ -1562,6 +1593,9 @@
                             </tr>
                         `;
                     }
+
+                    // For the next stage, prevFlowQty is however many pieces passed THIS stage
+                    prevFlowQty = qtyMovedOut;
                 });
 
                 html += `
