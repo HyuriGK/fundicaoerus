@@ -1403,27 +1403,27 @@
 
                 if (data.error) throw new Error(data.error);
 
-                // Group and Order sectors (Mirroring pedidos.html)
-                const sectorMapping = {
-                    'MOLDAGEM': ['MOLDAGEM', 'MOLDAGEM MANUAL', 'MOLDAGEM PESADA', 'MOLDAGEM LEVE', 'MOLDAGEM MECANIZADA', 'MOLDAGEM AUTOMÁTICA', 'MOLDAGEM EM AREIA'],
-                    'FUSÃO': ['FUSÃO', 'FUSAO'],
-                    'ACABAMENTO': ['ACABAMENTO', 'REBARBAÇÃO', 'GRALHA'],
-                    'TRATAMENTO TÉRMICO': ['TRATAMENTO TÉRMICO', 'TRATAMENTO TERMICO'],
-                    'USINAGEM': ['USINAGEM', 'TORNEARIA'],
-                    'EXPEDIÇÃO': ['EXPEDIÇÃO', 'EXPEDICAO', 'LOGÍSTICA']
-                };
-
-                const ordered = Object.keys(sectorMapping);
+                if (data.error) throw new Error(data.error);
+                
+                // --- DYNAMIC ROUTE FILTERING (MODAL) ---
+                const rawRoute = opData.ROTEIRO_PRODUCAO;
+                const routeExists = rawRoute !== null && rawRoute !== undefined;
+                
+                // Aggregated sectors based on pointing data
                 const aggregated = {};
                 const lastPointingDate = {};
-                ordered.forEach(s => {
+                
+                // Initialize all global groups
+                const allGroups = Object.keys(sectorGroups);
+                allGroups.forEach(s => {
                     aggregated[s] = 0;
                     lastPointingDate[s] = null;
                 });
-
+                
+                // Map pointing data to groups
                 data.forEach(row => {
-                    const category = ordered.find(cat =>
-                        sectorMapping[cat].some(sub => row.setor.includes(sub)) || row.setor === cat
+                    const category = allGroups.find(cat =>
+                        sectorGroups[cat].some(sub => row.setor.toUpperCase().includes(sub.toUpperCase())) || row.setor.toUpperCase() === cat.toUpperCase()
                     );
                     if (category) {
                         aggregated[category] += row.quantidade;
@@ -1433,13 +1433,29 @@
                         }
                     }
                 });
+                
+                // Define the sequence of sectors for this specific OP
+                let ordered = allGroups;
+                if (routeExists) {
+                    const routeNames = String(rawRoute).split(',').map(s => s.trim().toUpperCase());
+                    ordered = allGroups.filter(stage => {
+                        // Check if stage matches any name in technical route
+                        const aliases = sectorGroups[stage].map(a => a.toUpperCase());
+                        const inRoute = routeNames.some(name => 
+                            aliases.some(alias => name.includes(alias) || alias.includes(name))
+                        );
+                        // Also show if there is already pointing data
+                        const hasPointing = aggregated[stage] > 0;
+                        return inRoute || hasPointing;
+                    });
+                }
 
                 // PROGRESSIVE DEADLINE CALCULATION (FIXED META)
                 const metaDates = {};
                 const emissaoDate = toLocalDate(opData.OP_EMISSAO || opData.DATA_EMISSAO_PEDIDO);
                 let baselineDate = toLocalDate(emissaoDate);
 
-                ordered.forEach((sector, idx) => {
+                ordered.forEach((sector) => {
                     const configKey = configKeyMap[sector];
                     const lt = leadTimes[configKey] || 0;
 
@@ -1448,9 +1464,7 @@
                     while (daysToAdd > 0) {
                         currentMeta.setDate(currentMeta.getDate() + 1);
                         const day = currentMeta.getDay();
-                        if (day !== 0 && day !== 6) { // Skip weekends
-                            daysToAdd--;
-                        }
+                        if (day !== 0 && day !== 6) daysToAdd--;
                     }
                     metaDates[sector] = toLocalDate(currentMeta);
                     baselineDate = toLocalDate(currentMeta);
