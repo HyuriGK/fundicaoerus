@@ -4431,29 +4431,16 @@
                     baselineDate = toLocalDate(currentMeta);
                 });
 
-                // Robust Flow Logic integrating Faturamento
-                const maxForwardModal = {};
-                for (let i = allGroups.length - 1; i >= 0; i--) {
-                    const st = allGroups[i];
-                    const currentQty = aggregatedData[st] || 0;
-                    const nextSt = allGroups[i + 1];
-                    const nextMax = nextSt ? maxForwardModal[nextSt] : faturadoQty; 
-                    maxForwardModal[st] = Math.max(currentQty, nextMax, faturadoQty);
-                }
-
+                // Physical Flow (Chain by actual pointing)
                 let html = '<div style="display: flex; flex-direction: column; gap: 8px;">';
                 const today = toLocalDate(new Date());
-
+                
                 let prevFlowQty = totalQtyNum;
                 orderedSectors.forEach(sector => {
-                    const isExpedicao = sector === 'EXPEDIÇÃO';
-                    const qtyMovedOut = isExpedicao ? faturadoQty : Math.max(aggregatedData[sector] || 0, maxForwardModal[sector] || 0);
-                    const qtyInStage = Math.max(0, prevFlowQty - qtyMovedOut);
+                    const realMovedOut = (aggregatedData[sector] || 0);
+                    const qtyInStage = Math.max(0, prevFlowQty - realMovedOut);
                     const meta = metaDates[sector];
                     const metaMidnight = toLocalDate(meta);
-
-
-                    const realMovedOut = isExpedicao ? faturadoQty : Math.max(aggregatedData[sector] || 0, maxForwardModal[sector] || 0);
                     
                     if (realMovedOut > 0) {
                         // 1. Show as REALIZED stage
@@ -4485,13 +4472,15 @@
                          const isDelayed = bizDelay > 0;
                          
                          html += `
-                            <div class="op-detail-row" 
-                                 style="display: flex; align-items: center; justify-content: space-between; padding: 12px 20px; border-radius: 8px; background: rgba(255,255,255,0.01); border: 1px solid transparent; opacity: 0.4;">
+                            <div class="op-detail-row is-clickable" 
+                                 style="display: flex; align-items: center; justify-content: space-between; padding: 12px 20px; border-radius: 8px; background: rgba(255,255,255,0.01); border: 1px solid transparent; opacity: 0.6;"
+                                 onclick="window.showSectorHistory('${op}', '${sector}')">
                                 <div style="display: flex; flex-direction: column; gap: 4px; flex: 1;">
                                     <div style="display: flex; align-items: center;">
                                         <span style="font-weight: 600; color: var(--text-muted);">${sector}</span>
+                                        ${isDelayed ? `<span style="background: #450a0a; color: #f87171; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: bold; margin-left:10px;">Atrasado ${bizDelay}d</span>` : ''}
                                     </div>
-                                    <span style="font-size: 0.7rem; color: var(--text-muted);">Meta: ${meta.toLocaleDateString('pt-BR')} | Status: Aguardando</span>
+                                    <span style="font-size: 0.7rem; color: var(--text-muted);">Meta: ${meta.toLocaleDateString('pt-BR')} | Aguardando apontamento</span>
                                 </div>
                                 <div style="text-align: right;">
                                     <span style="font-size: 1.1rem; font-weight: 700; color: var(--text-muted);">0 <small style="font-size: 0.55em;">PÇS</small></span>
