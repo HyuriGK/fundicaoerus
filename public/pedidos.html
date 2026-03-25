@@ -2794,6 +2794,64 @@
             return unitWeight * saldoReal;
         }
 
+        // Helper para métricas industriais (Saldos por Setor)
+        function getItemSectorMetrics(item) {
+            const saldoLib = Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0;
+            const qtdOrig = Number(item.QUANTIDADE_PPR) || 0;
+            let targetTotalQty = saldoLib > 0 ? saldoLib : qtdOrig;
+
+            let cFat = Math.min(targetTotalQty, Number(item.QUANTIDADE_FATURADA_PPR) || 0);
+            
+            // Check if it's fully faturado (Force total flow if T)
+            if (item.FATURADO_PPR === 'T' || (cFat >= targetTotalQty && targetTotalQty > 0)) {
+                cFat = targetTotalQty;
+            }
+
+            // [NEW] RESIDUE SUPPRESSION: If partially faturado and no extra release, 
+            // cap target by the max of faturamento and industrial activity.
+            if (cFat > 0 && saldoLib <= 0 && targetTotalQty > cFat) {
+                const maxInd = Math.max(
+                    Number(item.QTY_MOLDADA) || 0,
+                    Number(item.QTY_FUSAO) || 0,
+                    Number(item.QTY_ACABAMENTO) || 0,
+                    Number(item.QTY_TT) || 0,
+                    Number(item.QTY_USINAGEM) || 0,
+                    Number(item.QTY_QUALIDADE) || 0,
+                    Number(item.QTY_EXPEDICAO) || 0
+                );
+                if (maxInd < targetTotalQty) {
+                    targetTotalQty = Math.max(cFat, maxInd);
+                }
+            }
+
+            const cExp  = Math.min(targetTotalQty, Math.max(cFat,  Number(item.QTY_EXPEDICAO) || 0));
+            const cQual = Math.min(targetTotalQty, Math.max(cExp,  Number(item.QTY_QUALIDADE) || 0));
+            const cUsi = Math.min(targetTotalQty, Math.max(cQual, Number(item.QTY_USINAGEM) || 0));
+            const cTT = Math.min(targetTotalQty, Math.max(cUsi,  Number(item.QTY_TT) || 0));
+            const cAcab = Math.min(targetTotalQty, Math.max(cTT,   Number(item.QTY_ACABAMENTO) || 0));
+            const cFus = Math.min(targetTotalQty, Math.max(cAcab, Number(item.QTY_FUSAO) || 0));
+            const cMold = Math.min(targetTotalQty, Math.max(cFus,  Number(item.QTY_MOLDADA) || 0));
+
+            const res = {
+                qExpedicao:  Math.max(0, cExp - cFat),
+                qQualidade:  Math.max(0, cQual - cExp),
+                qUsinagem:   Math.max(0, cUsi - cQual),
+                qTT:         Math.max(0, cTT - cUsi),
+                qAcabamento: Math.max(0, cAcab - cTT),
+                qFusao:      Math.max(0, cFus - cAcab),
+                qMoldada:    Math.max(0, cMold - cFus),
+                qAguardando: Math.max(0, targetTotalQty - cMold),
+                targetTotalQty
+            };
+
+            // Threshold filter (suppress noise < 0.01 units)
+            for (let k in res) {
+                if (typeof res[k] === 'number' && res[k] < 0.01) res[k] = 0;
+            }
+
+            return res;
+        }
+
         let carteiraData = []; // Store carteira data for comparison
 
         async function loadDataFromServer() {
@@ -3047,40 +3105,9 @@
                 const hasDate = item.ENTREGA_PETR || item.DATA_ENTREGA_PPR;
                 if (hasDate) releasedWeight += itemTotalWeight;
 
-                // Quantities for Progress Calculation (Limited by Commercial Order)
-                const totalInitialQty = Number(item.QUANTIDADE_PPR) || 0;
-                const targetTotalQty = totalInitialQty; // The Goal is the Order
-                
-                // 1. Get Cumulative Totals (Removed cap to allow industrial reality to show even if over order qty)
-                // Hierarchy: Faturamento → Expedição → Qualidade → Usinagem → TT → Acabamento → Fusão → Moldada → Aguardando
-                const cFat  = Math.min(targetTotalQty, Number(item.QUANTIDADE_FATURADA_PPR) || 0);
-                const cExp  = Math.min(targetTotalQty, Math.max(cFat,  Number(item.QTY_EXPEDICAO) || 0));
-                const cQual = Math.min(targetTotalQty, Math.max(cExp,  Number(item.QTY_QUALIDADE) || 0));
-                const cUsi = Math.min(targetTotalQty, Math.max(cQual, Number(item.QTY_USINAGEM) || 0));
-                const cTT = Math.min(targetTotalQty, Math.max(cUsi,  Number(item.QTY_TT) || 0));
-                const cAcab = Math.min(targetTotalQty, Math.max(cTT,   Number(item.QTY_ACABAMENTO) || 0));
-                const cFus = Math.min(targetTotalQty, Math.max(cAcab, Number(item.QTY_FUSAO) || 0));
-                const cMold = Math.min(targetTotalQty, Math.max(cFus,  Number(item.QTY_MOLDADA) || 0));
-
-                // 2. Differential Logic (Current = Cumulative - Next)
-                let qExpedicao   = Math.max(0, cExp - cFat);
-                let qQualidade   = Math.max(0, cQual - cExp);
-                let qUsinagem    = Math.max(0, cUsi - cQual);
-                let qTT          = Math.max(0, cTT - cUsi);
-                let qAcabamento  = Math.max(0, cAcab - cTT);
-                let qFusao       = Math.max(0, cFus - cAcab);
-                let qMoldada     = Math.max(0, cMold - cFus);
-                let qAguardando  = Math.max(0, targetTotalQty - cMold);
-
-                // Threshold filter (suppress noise < 0.01 units)
-                if (qExpedicao < 0.01) qExpedicao = 0;
-                if (qQualidade < 0.01) qQualidade = 0;
-                if (qUsinagem < 0.01) qUsinagem = 0;
-                if (qTT < 0.01) qTT = 0;
-                if (qAcabamento < 0.01) qAcabamento = 0;
-                if (qFusao < 0.01) qFusao = 0;
-                if (qMoldada < 0.01) qMoldada = 0;
-                if (qAguardando < 0.01) qAguardando = 0;
+                // Use centralized industrial metrics
+                const metrics = getItemSectorMetrics(item);
+                const { qExpedicao, qQualidade, qUsinagem, qTT, qAcabamento, qFusao, qMoldada, qAguardando } = metrics;
 
                 // Unit metrics for direct multiplication
                 let uW = 0;
@@ -3638,61 +3665,8 @@
                 if (activeChartFilters.stage) {
                     const s = activeChartFilters.stage;
                     
-                    // Hierarchical Logic: Limited by Commercial Order
-                    const saldoLib = Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0;
-                    const qtdOrig = Number(item.QUANTIDADE_PPR) || 0;
-                    let targetTotalQty = saldoLib > 0 ? saldoLib : qtdOrig;
-
-                    let cFat = Math.min(targetTotalQty, Number(item.QUANTIDADE_FATURADA_PPR) || 0);
-                    
-                    // Check if it's fully faturado (Force total flow if T)
-                    if (item.FATURADO_PPR === 'T' || cFat >= targetTotalQty) {
-                        cFat = targetTotalQty;
-                    }
-
-                    // [NEW] RESIDUE SUPPRESSION: If partially faturado and no extra release, 
-                    // cap target by the max of faturamento and industrial activity.
-                    if (cFat > 0 && saldoLib <= 0 && targetTotalQty > cFat) {
-                        const maxInd = Math.max(
-                            Number(item.QTY_MOLDADA) || 0,
-                            Number(item.QTY_FUSAO) || 0,
-                            Number(item.QTY_ACABAMENTO) || 0,
-                            Number(item.QTY_TT) || 0,
-                            Number(item.QTY_USINAGEM) || 0,
-                            Number(item.QTY_QUALIDADE) || 0,
-                            Number(item.QTY_EXPEDICAO) || 0
-                        );
-                        if (maxInd < targetTotalQty) {
-                            targetTotalQty = Math.max(cFat, maxInd);
-                        }
-                    }
-
-                    const cExp  = Math.min(targetTotalQty, Math.max(cFat,  Number(item.QTY_EXPEDICAO) || 0));
-                    const cQual = Math.min(targetTotalQty, Math.max(cExp,  Number(item.QTY_QUALIDADE) || 0));
-                    const cUsi = Math.min(targetTotalQty, Math.max(cQual, Number(item.QTY_USINAGEM) || 0));
-                    const cTT = Math.min(targetTotalQty, Math.max(cUsi,  Number(item.QTY_TT) || 0));
-                    const cAcab = Math.min(targetTotalQty, Math.max(cTT,   Number(item.QTY_ACABAMENTO) || 0));
-                    const cFus = Math.min(targetTotalQty, Math.max(cAcab, Number(item.QTY_FUSAO) || 0));
-                    const cMold = Math.min(targetTotalQty, Math.max(cFus,  Number(item.QTY_MOLDADA) || 0));
-
-                    let qExpedicao   = Math.max(0, cExp - cFat);
-                    let qQualidade   = Math.max(0, cQual - cExp);
-                    let qUsinagem    = Math.max(0, cUsi - cQual);
-                    let qTT          = Math.max(0, cTT - cUsi);
-                    let qAcabamento  = Math.max(0, cAcab - cTT);
-                    let qFusao       = Math.max(0, cFus - cAcab);
-                    let qMoldada     = Math.max(0, cMold - cFus);
-                    let qAguardando  = Math.max(0, targetTotalQty - cMold);
-
-                    // Suppress noise
-                    if (qExpedicao < 0.01) qExpedicao = 0;
-                    if (qQualidade < 0.01) qQualidade = 0;
-                    if (qUsinagem < 0.01) qUsinagem = 0;
-                    if (qTT < 0.01) qTT = 0;
-                    if (qAcabamento < 0.01) qAcabamento = 0;
-                    if (qFusao < 0.01) qFusao = 0;
-                    if (qMoldada < 0.01) qMoldada = 0;
-                    if (qAguardando < 0.01) qAguardando = 0;
+                    const metrics = getItemSectorMetrics(item);
+                    const { qExpedicao, qQualidade, qUsinagem, qTT, qAcabamento, qFusao, qMoldada, qAguardando, targetTotalQty } = metrics;
 
                     let sectorQty = 0;
                     if (s === 'aguardando') sectorQty = qAguardando;
