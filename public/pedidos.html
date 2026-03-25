@@ -2944,7 +2944,7 @@
                 const targetTotalQty = totalInitialQty; // The Goal is the Order
                 
                 // 1. Get Cumulative Totals (Removed cap to allow industrial reality to show even if over order qty)
-                // Hierarchy: Expedição â†’ Qualidade â†’ Usinagem â†’ TT â†’ Acabamento â†’ Fusão â†’ Moldada â†’ Aguardando
+                // Hierarchy: Expedição → Qualidade → Usinagem → TT → Acabamento → Fusão → Moldada → Aguardando
                 const cExp  = Number(item.QTY_EXPEDICAO) || 0;
                 const cQual = Math.max(cExp,  Number(item.QTY_QUALIDADE) || 0);
                 const cUsi  = Math.max(cQual, Number(item.QTY_USINAGEM) || 0);
@@ -2973,13 +2973,28 @@
                 if (qMoldada < 0.01) qMoldada = 0;
                 if (qAguardando < 0.01) qAguardando = 0;
 
-                // Helper to add proportional data
+                // Unit metrics for direct multiplication
+                let uW = 0;
+                if (item.PESO_UNIT !== undefined && item.PESO_UNIT !== null && item.PESO_UNIT !== '') {
+                    uW = Number(item.PESO_UNIT);
+                } else if (customWeights[item.PRODUTO_PPR]) {
+                    uW = customWeights[item.PRODUTO_PPR];
+                } else {
+                    const qO = Number(item.QUANTIDADE_PPR) || 0;
+                    uW = qO > 0 ? ((Number(item.PESO_LIQUIDO_NPR) || 0) / qO) : 0;
+                }
+
+                let uP = parseFloat(item.VALOR_PPR || 0);
+                if (item.PRECO_KG && parseFloat(item.PRECO_KG) > 0 && customWeights[item.PRODUTO_PPR]) {
+                    uP = parseFloat(item.PRECO_KG) * uW;
+                }
+
+                // Helper to add data using direct unit multiplication
                 const addKpi = (kpi, q) => {
-                    const factor = targetTotalQty > 0 ? (q / targetTotalQty) : 0;
                     if (q <= 0) return;
                     kpi.qtd += q;
-                    kpi.peso += itemTotalWeight * factor;
-                    kpi.valor += itemTotalValue * factor;
+                    kpi.peso += uW * q;
+                    kpi.valor += uP * q;
                 };
 
                 addKpi(kpiExpedicao, qExpedicao);
