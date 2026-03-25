@@ -2775,10 +2775,11 @@
 
         // Helper global para cálculo de peso corrigido
         function getCorrectedWeight(item) {
-            const saldoLiberado = Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0;
-            const qtdOriginal = Number(item.QUANTIDADE_PPR) || 0;
-            // Regra: se liberado > 0 usa ele, senão usa original (bloqueado)
-            const saldoReal = saldoLiberado > 0 ? saldoLiberado : qtdOriginal;
+            // Usamos o saldo industrial unificado (calculado em getItemSectorMetrics)
+            // para garantir consistência em todo o dashboard
+            const metrics = getItemSectorMetrics(item);
+            const saldoReal = metrics.totalBalance;
+            const qtdOriginal = metrics.originalTarget;
 
             let unitWeight = 0;
             const prodCode = String(item.PRODUTO_PPR || '').trim();
@@ -2797,39 +2798,36 @@
         // Helper para métricas industriais (Saldos por Setor)
         function getItemSectorMetrics(item) {
             const saldoLib = Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0;
-            const qtdOrig = Number(item.QUANTIDADE_PPR) || 0;
-            const opQty = Number(item.OP_PCS) || 0;
+            const qtdOrig  = Number(item.QUANTIDADE_PPR) || 0;
             
-            // Prioridade: Quantiade da OP, se não houver, usa o pedido (saldo ou original)
-            let targetTotalQty = opQty > 0 ? opQty : (saldoLib > 0 ? saldoLib : qtdOrig);
+            // Prioridade: Quantidade da OP, se não houver, usa o pedido original.
+            let targetTotalQty = (Number(item.OP_PCS) || 0) || (Number(item.OP_QUANTIDADE) || 0) || (saldoLib > 0 ? (saldoLib + (Number(item.QUANTIDADE_FATURADA_PPR) || 0)) : qtdOrig);
 
-            let cFat = Number(item.QUANTIDADE_FATURADA_PPR) || 0;
+            // Faturamento: Máximo entre o comercial (ERP) e o físico (apontamento no setor faturamento)
+            let cFat = Math.max(
+                Number(item.QUANTIDADE_FATURADA_PPR) || 0,
+                Number(item.QTY_FATURAMENTO) || 0
+            );
             
-            // Força fluxo total se estiver marcado como faturado
+            // Força fluxo total se estiver marcado como faturado 'T'
             if (item.FATURADO_PPR === 'T') {
                 cFat = targetTotalQty;
             }
 
-            // [NEW] SUPRESSÃO DE RESÍDUOS: Se faturado parcialmente e sem liberação extra,
-            // limita o alvo se nada foi iniciado além do faturado.
-            if (cFat > 0 && targetTotalQty > cFat && saldoLib <= 0) {
-                const maxInd = Math.max(
-                    Number(item.QTY_MOLDADA)    || 0,
-                    Number(item.QTY_FUSAO)      || 0,
-                    Number(item.QTY_ACABAMENTO) || 0,
-                    Number(item.QTY_TT)         || 0,
-                    Number(item.QTY_USINAGEM)   || 0,
-                    Number(item.QTY_QUALIDADE)  || 0,
-                    Number(item.QTY_EXPEDICAO)  || 0
-                );
-                
-                // Se tudo o que foi produzido já foi faturado, removemos o saldo residual (Aguardando)
-                if (cFat >= maxInd) {
-                    targetTotalQty = cFat;
-                } else {
-                    // Se ainda há produção "em andamento" parcial, o alvo passa a ser o limite da atividade
-                    targetTotalQty = Math.max(cFat, maxInd);
-                }
+            const maxInd = Math.max(
+                Number(item.QTY_MOLDADA)    || 0,
+                Number(item.QTY_FUSAO)      || 0,
+                Number(item.QTY_ACABAMENTO) || 0,
+                Number(item.QTY_TT)         || 0,
+                Number(item.QTY_USINAGEM)   || 0,
+                Number(item.QTY_QUALIDADE)  || 0,
+                Number(item.QTY_EXPEDICAO)  || 0
+            );
+
+            // [NEW] SUPRESSÃO DE RESÍDUOS GHOST: Se o faturamento iniciou, limitamos a meta
+            // ao teto da produção física para ignorar sobras do pedido original ('Aguardando').
+            if (cFat > 0 && targetTotalQty > cFat) {
+                targetTotalQty = Math.max(cFat, maxInd);
             }
 
             // Cálculo dos patamares (Cumulative levels)
@@ -2851,8 +2849,11 @@
                 qFusao:      Math.max(0, cFus - cAcab),
                 qMoldada:    Math.max(0, cMold - cFus),
                 qAguardando: Math.max(0, targetTotalQty - cMold),
-                targetTotalQty
+                targetTotalQty,
+                originalTarget: (Number(item.OP_PCS) || 0) || (Number(item.OP_QUANTIDADE) || 0) || qtdOrig
             };
+
+            res.totalBalance = res.qExpedicao + res.qQualidade + res.qUsinagem + res.qTT + res.qAcabamento + res.qFusao + res.qMoldada + res.qAguardando;
 
             // Threshold filter (suppress noise < 0.01 units)
             for (let k in res) {
@@ -2977,9 +2978,9 @@
                 const entrega = item.ENTREGA_PETR ? new Date(item.ENTREGA_PETR).toLocaleDateString() :
                     (item.DATA_ENTREGA_PPR ? new Date(item.DATA_ENTREGA_PPR).toLocaleDateString() : '-');
 
-                const saldoLiberado = Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0;
-                const qtdOriginal = Number(item.QUANTIDADE_PPR) || 0;
-                const saldoReal = item._sectorQty !== undefined ? item._sectorQty : (saldoLiberado > 0 ? saldoLiberado : qtdOriginal);
+                const metrics = getItemSectorMetrics(item);
+                const saldoReal = item._sectorQty !== undefined ? item._sectorQty : metrics.totalBalance;
+                const qtdOriginal = metrics.originalTarget;
 
                 let totalWeightOriginal = Number(item.PESO_LIQUIDO_NPR) || 0;
                 let unitWeight = 0;
@@ -3095,10 +3096,9 @@
 
 
             list.forEach(item => {
-                const itemTotalWeight = getCorrectedWeight(item);
-                const saldo = Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0;
-                const qtdOriginal = Number(item.QUANTIDADE_PPR) || 0;
-                const realQty = saldo > 0 ? saldo : qtdOriginal;
+                const metrics = getItemSectorMetrics(item);
+                const realQty = metrics.totalBalance;
+                const itemTotalWeight = getCorrectedWeight(item); 
 
                 totalWeight += itemTotalWeight;
 
@@ -3115,8 +3115,7 @@
                 const hasDate = item.ENTREGA_PETR || item.DATA_ENTREGA_PPR;
                 if (hasDate) releasedWeight += itemTotalWeight;
 
-                // Use centralized industrial metrics
-                const metrics = getItemSectorMetrics(item);
+                // Use centralized industrial metrics (already calculated)
                 const { qExpedicao, qQualidade, qUsinagem, qTT, qAcabamento, qFusao, qMoldada, qAguardando } = metrics;
 
                 // Unit metrics for direct multiplication
