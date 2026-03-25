@@ -2798,18 +2798,21 @@
         function getItemSectorMetrics(item) {
             const saldoLib = Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0;
             const qtdOrig = Number(item.QUANTIDADE_PPR) || 0;
-            let targetTotalQty = saldoLib > 0 ? saldoLib : qtdOrig;
-
-            let cFat = Math.min(targetTotalQty, Number(item.QUANTIDADE_FATURADA_PPR) || 0);
+            const opQty = Number(item.OP_PCS) || 0;
             
-            // Check if it's fully faturado (Force total flow if T)
-            if (item.FATURADO_PPR === 'T' || (cFat >= targetTotalQty && targetTotalQty > 0)) {
+            // Prioridade: Quantiade da OP, se não houver, usa o pedido (saldo ou original)
+            let targetTotalQty = opQty > 0 ? opQty : (saldoLib > 0 ? saldoLib : qtdOrig);
+
+            let cFat = Number(item.QUANTIDADE_FATURADA_PPR) || 0;
+            
+            // Força fluxo total se estiver marcado como faturado
+            if (item.FATURADO_PPR === 'T') {
                 cFat = targetTotalQty;
             }
 
-            // [NEW] RESIDUE SUPPRESSION: If partially faturado and no extra release, 
-            // cap target by the max of faturamento and industrial activity.
-            if (cFat > 0 && saldoLib <= 0 && targetTotalQty > cFat) {
+            // [NEW] SUPRESSÃO DE RESÍDUOS: Se faturado parcialmente e sem liberação extra,
+            // limita o alvo se nada foi iniciado além do faturado.
+            if (cFat > 0 && targetTotalQty > cFat && saldoLib <= 0) {
                 const maxInd = Math.max(
                     Number(item.QTY_MOLDADA) || 0,
                     Number(item.QTY_FUSAO) || 0,
@@ -2824,13 +2827,14 @@
                 }
             }
 
-            const cExp  = Math.min(targetTotalQty, Math.max(cFat,  Number(item.QTY_EXPEDICAO) || 0));
-            const cQual = Math.min(targetTotalQty, Math.max(cExp,  Number(item.QTY_QUALIDADE) || 0));
-            const cUsi = Math.min(targetTotalQty, Math.max(cQual, Number(item.QTY_USINAGEM) || 0));
-            const cTT = Math.min(targetTotalQty, Math.max(cUsi,  Number(item.QTY_TT) || 0));
-            const cAcab = Math.min(targetTotalQty, Math.max(cTT,   Number(item.QTY_ACABAMENTO) || 0));
-            const cFus = Math.min(targetTotalQty, Math.max(cAcab, Number(item.QTY_FUSAO) || 0));
-            const cMold = Math.min(targetTotalQty, Math.max(cFus,  Number(item.QTY_MOLDADA) || 0));
+            // Removemos Math.min(targetTotalQty, ...) para permitir excedentes de produção
+            const cExp  = Math.max(cFat,  Number(item.QTY_EXPEDICAO) || 0);
+            const cQual = Math.max(cExp,  Number(item.QTY_QUALIDADE) || 0);
+            const cUsi  = Math.max(cQual, Number(item.QTY_USINAGEM) || 0);
+            const cTT   = Math.max(cUsi,  Number(item.QTY_TT) || 0);
+            const cAcab = Math.max(cTT,   Number(item.QTY_ACABAMENTO) || 0);
+            const cFus  = Math.max(cAcab, Number(item.QTY_FUSAO) || 0);
+            const cMold = Math.max(cFus,  Number(item.QTY_MOLDADA) || 0);
 
             const res = {
                 qExpedicao:  Math.max(0, cExp - cFat),
