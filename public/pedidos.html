@@ -3641,13 +3641,30 @@
                     // Hierarchical Logic: Limited by Commercial Order
                     const saldoLib = Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0;
                     const qtdOrig = Number(item.QUANTIDADE_PPR) || 0;
-                    const targetTotalQty = saldoLib > 0 ? saldoLib : qtdOrig;
+                    let targetTotalQty = saldoLib > 0 ? saldoLib : qtdOrig;
 
                     let cFat = Math.min(targetTotalQty, Number(item.QUANTIDADE_FATURADA_PPR) || 0);
                     
                     // Check if it's fully faturado (Force total flow if T)
                     if (item.FATURADO_PPR === 'T' || cFat >= targetTotalQty) {
                         cFat = targetTotalQty;
+                    }
+
+                    // [NEW] RESIDUE SUPPRESSION: If partially faturado and no extra release, 
+                    // cap target by the max of faturamento and industrial activity.
+                    if (cFat > 0 && saldoLib <= 0 && targetTotalQty > cFat) {
+                        const maxInd = Math.max(
+                            Number(item.QTY_MOLDADA) || 0,
+                            Number(item.QTY_FUSAO) || 0,
+                            Number(item.QTY_ACABAMENTO) || 0,
+                            Number(item.QTY_TT) || 0,
+                            Number(item.QTY_USINAGEM) || 0,
+                            Number(item.QTY_QUALIDADE) || 0,
+                            Number(item.QTY_EXPEDICAO) || 0
+                        );
+                        if (maxInd < targetTotalQty) {
+                            targetTotalQty = Math.max(cFat, maxInd);
+                        }
                     }
 
                     const cExp  = Math.min(targetTotalQty, Math.max(cFat,  Number(item.QTY_EXPEDICAO) || 0));
