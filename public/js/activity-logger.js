@@ -43,8 +43,13 @@
                 const lock = result.data.find(l => l.page_id === page);
                 if (lock && lock.is_locked) {
                     if (lock.lock_reason === 'sync') {
-                        // Sync lock afeta TODOS os usuários, inclusive devs
-                        showSyncOverlay(lock);
+                        if (role === 'desenvolvedor' || role === 'admin') {
+                            // Desenvolvedores/Admins: Não bloqueia, apenas mostra indicador flutuante
+                            showFloatingSyncIndicator(lock);
+                        } else {
+                            // Usuários normais: Bloqueia com overlay total
+                            showSyncOverlay(lock);
+                        }
                     } else if (role !== 'desenvolvedor' && role !== 'admin') {
                         // Bloqueio manual — apenas não-devs
                         showMaintenanceOverlay();
@@ -514,6 +519,134 @@
         window.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') e.preventDefault();
         }, true);
+    }
+
+    // --- INDICADOR FLUTUANTE DE SINCRONIZAÇÃO (PARA DEVS) ---
+    function showFloatingSyncIndicator(lockData) {
+        // Evitar duplicado
+        if (document.getElementById('sync-floating-indicator')) return;
+
+        const syncStartedAt = lockData && lockData.sync_started_at ? new Date(lockData.sync_started_at).getTime() : Date.now();
+        const syncEstimatedMs = lockData && lockData.sync_estimated_ms ? lockData.sync_estimated_ms : 120000;
+
+        // 1. Injetar estilos
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes sync-float-slidein {
+                from { transform: translateX(120%); opacity: 0; }
+                to { transform: translateX(0); opacity: 1; }
+            }
+            @keyframes sync-float-pulse {
+                0%, 100% { box-shadow: 0 8px 32px rgba(59, 130, 246, 0.2); }
+                50% { box-shadow: 0 8px 48px rgba(59, 130, 246, 0.4); }
+            }
+            #sync-floating-indicator {
+                animation: sync-float-slidein 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards,
+                           sync-float-pulse 3s ease-in-out infinite;
+            }
+            .sync-float-progress {
+                transition: width 1s linear;
+            }
+        `;
+        document.head.appendChild(style);
+
+        // 2. Criar Elemento
+        const indicator = document.createElement('div');
+        indicator.id = 'sync-floating-indicator';
+        indicator.style.cssText = `
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            width: 280px;
+            background: rgba(15, 15, 20, 0.85);
+            backdrop-filter: blur(20px) saturate(1.8);
+            -webkit-backdrop-filter: blur(20px) saturate(1.8);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            border-radius: 16px;
+            padding: 16px;
+            z-index: 100000;
+            color: #fff;
+            font-family: 'Inter', sans-serif;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            user-select: none;
+        `;
+
+        const elapsedMs = Date.now() - syncStartedAt;
+        const initialProgress = Math.min((elapsedMs / syncEstimatedMs) * 100, 95);
+
+        indicator.innerHTML = `
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <i class="fa-solid fa-arrows-rotate sync-spinner" style="color: #60a5fa; font-size: 14px;"></i>
+                    <span style="font-size: 0.8rem; font-weight: 700; color: #60a5fa; letter-spacing: 0.02em;">SINC-DATA DEV</span>
+                </div>
+                <span id="sync-float-pct" style="font-size: 0.75rem; font-weight: 600; color: #a1a1aa;">${Math.round(initialProgress)}%</span>
+            </div>
+            
+            <div style="width: 100%; height: 4px; background: rgba(59, 130, 246, 0.1); border-radius: 2px; overflow: hidden;">
+                <div id="sync-float-fill" class="sync-float-progress" style="width: ${initialProgress}%; height: 100%; background: #3b82f6; border-radius: 2px;"></div>
+            </div>
+
+            <div id="sync-float-status" style="font-size: 0.7rem; color: #71717a; display: flex; align-items: center; gap: 4px;">
+                <i class="fa-solid fa-cloud-arrow-down" style="font-size: 10px;"></i>
+                <span>Sincronizando com Firebird...</span>
+            </div>
+        `;
+
+        document.body.appendChild(indicator);
+
+        // 3. Loops de Atualização
+        const fill = document.getElementById('sync-float-fill');
+        const pctText = document.getElementById('sync-float-pct');
+        const statusText = document.getElementById('sync-float-status');
+
+        const updateInterval = setInterval(() => {
+            const elapsed = Date.now() - syncStartedAt;
+            const pct = Math.min((elapsed / syncEstimatedMs) * 100, 98);
+            if (fill) fill.style.width = pct + '%';
+            if (pctText) pctText.textContent = Math.round(pct) + '%';
+        }, 1000);
+
+        const page = window.location.pathname.split('/').pop() || 'index.html';
+        const checkInterval = setInterval(async () => {
+            try {
+                const resp = await fetch('/api/page-locks');
+                const result = await resp.json();
+                if (result.success && Array.isArray(result.data)) {
+                    const lock = result.data.find(l => l.page_id === page);
+                    if (!lock || !lock.is_locked || lock.lock_reason !== 'sync') {
+                        // Finalizado!
+                        clearInterval(updateInterval);
+                        clearInterval(checkInterval);
+                        if (fill) {
+                            fill.style.width = '100%';
+                            fill.style.background = '#10b981';
+                        }
+                        if (pctText) {
+                            pctText.textContent = '100%';
+                            pctText.style.color = '#10b981';
+                        }
+                        if (statusText) {
+                            statusText.innerHTML = '<i class="fa-solid fa-circle-check" style="color: #10b981;"></i> <span style="color: #10b981;">Sincronização Finalizada</span>';
+                        }
+                        
+                        // Notificar com um toast (se existir a função global showToast ou similar)
+                        // Como activity-logger é injetado, ele pode não ter acesso direto a funções de pedidos.html
+                        // Mas podemos tentar emitir um evento ou apenas deixar o popup ali por 10s
+                        setTimeout(() => {
+                             if (indicator.parentNode) {
+                                 indicator.style.transition = 'all 0.5s ease-out';
+                                 indicator.style.transform = 'translateX(120%)';
+                                 indicator.style.opacity = '0';
+                                 setTimeout(() => indicator.remove(), 500);
+                             }
+                        }, 8000);
+                    }
+                }
+            } catch (e) {}
+        }, 5000);
     }
 
     // --- SISTEMA DE CONTROLE DE SESSÃO (CENTRALIZADO) ---
