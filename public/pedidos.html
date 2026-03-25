@@ -2803,14 +2803,12 @@
             // Prioridade: Quantidade da OP, se não houver, usa o pedido original.
             let targetTotalQty = (Number(item.OP_QUANTIDADE) || 0) || (saldoLib > 0 ? (saldoLib + (Number(item.QUANTIDADE_FATURADA_PPR) || 0)) : qtdOrig);
 
-            // Faturamento: Máximo entre o comercial (ERP) e o físico (apontamento no setor faturamento)
-            let cFat = Math.max(
-                Number(item.QUANTIDADE_FATURADA_PPR) || 0,
-                Number(item.QTY_FATURAMENTO) || 0
-            );
+            // Faturamento: Priorizamos o faturamento FÍSICO (apontamento) para o fluxo industrial.
+            let cFat = Number(item.QTY_FATURAMENTO) || 0;
+            const erpFat = Number(item.QUANTIDADE_FATURADA_PPR) || 0;
             
-            // Força fluxo total se estiver marcado como faturado 'T'
-            if (item.FATURADO_PPR === 'T') {
+            // Força encerramento se marcado como faturado 'T' ou se faturamento ERP já cobre a meta
+            if (item.FATURADO_PPR === 'T' || (targetTotalQty > 0 && erpFat >= targetTotalQty)) {
                 cFat = targetTotalQty;
             }
 
@@ -2824,10 +2822,10 @@
                 Number(item.QTY_EXPEDICAO)  || 0
             );
 
-            // [NEW] SUPRESSÃO DE RESÍDUOS GHOST: Se o faturamento iniciou, limitamos a meta
-            // ao teto da produção física para ignorar sobras do pedido original ('Aguardando').
-            if (cFat > 0 && targetTotalQty > cFat) {
-                targetTotalQty = Math.max(cFat, maxInd);
+            // [NEW] SUPRESSÃO DE RESÍDUOS GHOST: Se qualquer faturamento iniciou, limitamos a meta
+            // ao teto da produção física para ignorar sobras do pedido comercial ('Aguardando').
+            if ((cFat > 0 || erpFat > 0) && targetTotalQty > Math.max(cFat, erpFat)) {
+                targetTotalQty = Math.max(cFat, erpFat, maxInd);
             }
 
             // Cálculo dos patamares (Cumulative levels)
