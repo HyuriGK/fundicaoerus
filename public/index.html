@@ -2789,10 +2789,64 @@
                     document.getElementById('clock-display').innerText = d.toLocaleDateString('pt-BR') + " " + d.toLocaleTimeString('pt-BR');
                 }, 1000);
 
+                function enforceSidebarRoleFilter() {
+                    const role = (localStorage.getItem('erus_role') || '').toLowerCase();
+                    const restrictedRoles = {
+                        'moldagem': 'fichatecmoldagem.html',
+                        'fusão': 'fichatecfusao.html',
+                        'fusao': 'fichatecfusao.html',
+                        'acabamento': 'fichatecacabamento.html'
+                    };
+
+                    if (restrictedRoles[role]) {
+                        const allowedPage = restrictedRoles[role];
+                        
+                        // Hide all nav-group-separators and their wrappers
+                        document.querySelectorAll('.nav-group-separator, .nav-group-wrapper').forEach(el => {
+                            el.style.display = 'none';
+                        });
+
+                        // Hide Dashboard home link
+                        document.querySelectorAll('.nav-link').forEach(link => {
+                            const href = link.getAttribute('href');
+                            if (href === 'processos.html' || href === 'index.html') {
+                                link.style.display = 'none';
+                            }
+                        });
+
+                        // Find the allowed page link and its parent group, and show them
+                        const allowedLink = document.querySelector(`.nav-link[href="${allowedPage}"]`);
+                        if (allowedLink) {
+                            allowedLink.style.display = 'flex';
+                            const groupWrapper = allowedLink.closest('.nav-group-wrapper');
+                            if (groupWrapper) {
+                                groupWrapper.style.display = 'block';
+                                groupWrapper.classList.remove('collapsed');
+                                groupWrapper.classList.add('expanded');
+                                groupWrapper.style.maxHeight = 'none'; // Force expand
+                                
+                                // Show the corresponding separator
+                                const groupId = groupWrapper.id;
+                                const separator = document.querySelector(`.nav-group-separator[onclick*="${groupId}"]`);
+                                if (separator) {
+                                    separator.style.display = 'flex';
+                                    // Hide other links within the same group if any
+                                    groupWrapper.querySelectorAll('.nav-link').forEach(link => {
+                                        if (link.getAttribute('href') !== allowedPage) {
+                                            link.style.display = 'none';
+                                        }
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+
                 document.addEventListener('DOMContentLoaded', () => {
                     renderCards();
                     updateUserInfo();
                     checkTasks(); // Check tasks on load
+                    enforceSidebarRoleFilter(); // Filter sidebar for restricted roles
 
                     // Periódico (cada 5 min)
                     setInterval(checkTasks, 5 * 60 * 1000);

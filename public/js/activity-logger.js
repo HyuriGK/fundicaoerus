@@ -666,28 +666,11 @@
 
         if (rolePermissions[role]) {
             const allowedPage = rolePermissions[role];
-            if (page !== allowedPage) {
+            // Access to index.html is allowed, but restricted to the specific page otherwise
+            if (page !== 'index.html' && page !== allowedPage) {
                 window.location.replace(allowedPage);
-                return true; // Redirection triggered
+                return true; 
             }
-
-            // If on the allowed page, adjust the UI (replace Back with Logout)
-            // Using a small timeout to ensure DOM is ready or can be handled by observers
-            const adjustUI = () => {
-                const backBtn = document.querySelector('.btn-back');
-                if (backBtn && !backBtn.dataset.adjusted) {
-                    backBtn.innerHTML = '<i class="fa-solid fa-right-from-bracket"></i> SAIR';
-                    backBtn.href = '#';
-                    backBtn.onclick = (e) => {
-                        e.preventDefault();
-                        window.erusLogout();
-                    };
-                    backBtn.dataset.adjusted = 'true';
-                }
-            };
-            adjustUI();
-            setTimeout(adjustUI, 500); 
-            setTimeout(adjustUI, 2000);
         }
         return false;
     }
