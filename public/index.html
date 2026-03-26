@@ -2139,7 +2139,8 @@
                     fusao: new Array(daysInMonth).fill(0),
                     moldagem: new Array(daysInMonth).fill(0),
                     terceiro: new Array(daysInMonth).fill(0),
-                    faturado: new Array(daysInMonth).fill(0)
+                    faturado: new Array(daysInMonth).fill(0),
+                    acabamento: new Array(daysInMonth).fill(0)
                 };
 
                 let currentChartMode = 0; // 0: Fusão, 1: Moldagem, 2: Terceiro, 3: Faturado
@@ -2338,6 +2339,7 @@
 
                                 let totalFusaoKg = 0;
                                 let totalMoldagemKg = 0;
+                                let totalAcabamentoKg = 0;
 
                                 monthRows.forEach(r => {
                                     let day = 0;
@@ -2357,10 +2359,22 @@
                                             chartData.moldagem[day - 1] += (peso / 1000);
                                             totalMoldagemKg += peso;
                                         }
+                                        if (setor.includes("ACAB") || setor.includes("ACABAMENTO")) {
+                                            chartData.acabamento[day - 1] += (peso / 1000);
+                                            totalAcabamentoKg += peso;
+                                        }
                                     }
                                 });
 
-                                numericValue = totalFusaoKg / 1000;
+                                // Ajusta valor inicial dependendo do role
+                                const role = (localStorage.getItem('erus_role') || '').toLowerCase();
+                                if (role === 'moldagem') {
+                                    numericValue = totalMoldagemKg / 1000;
+                                } else if (role === 'acabamento') {
+                                    numericValue = totalAcabamentoKg / 1000;
+                                } else {
+                                    numericValue = totalFusaoKg / 1000;
+                                }
                                 subLabel = `Produção Apontada no Mês`;
 
                                 if (!prodChartInstance) initChart();
@@ -2548,6 +2562,37 @@
                         }
                     });
 
+                    const role = (localStorage.getItem('erus_role') || '').toLowerCase();
+                    const restrictedPages = {
+                        'moldagem': 1,
+                        'fusão': 0,
+                        'fusao': 0,
+                        'acabamento': 4
+                    };
+
+                    if (restrictedPages[role] !== undefined) {
+                        currentChartMode = restrictedPages[role];
+                        // Ajusta o dataset inicial se necessário
+                        const m = restrictedPages[role];
+                        const configs = [
+                            { label: 'Produção Diária (Fusão)', color: '#fbbf24', data: chartData.fusao },
+                            { label: 'Produção Diária (Moldagem)', color: '#a855f7', data: chartData.moldagem },
+                            { label: 'Total Terceirizado', color: '#38bdf8', data: chartData.terceiro },
+                            { label: 'Total Faturado', color: '#10b981', data: chartData.faturado },
+                            { label: 'Produção Diária (Acabamento)', color: '#f472b6', data: chartData.acabamento }
+                        ];
+                        prodChartInstance.data.datasets[0].data = configs[m].data;
+                        prodChartInstance.data.datasets[0].borderColor = configs[m].color;
+                        prodChartInstance.data.datasets[0].backgroundColor = configs[m].color;
+                        
+                        document.getElementById('chart-display-title').firstChild.textContent = configs[m].label + " - ";
+                        const titleSpan = document.getElementById('chart-display-title').querySelector('span');
+                        if (titleSpan) titleSpan.style.color = configs[m].color;
+                        
+                        prodChartInstance.update();
+                        updateDynamicKPI(configs[m].label, configs[m].data, m);
+                    }
+
                     startRotationTimer();
                 }
 
@@ -2558,6 +2603,13 @@
                 }
 
                 function startRotationTimer() {
+                    const role = (localStorage.getItem('erus_role') || '').toLowerCase();
+                    if (['moldagem', 'fusão', 'fusao', 'acabamento'].includes(role)) {
+                        document.getElementById('countdown-timer').parentElement.style.display = 'none';
+                        document.querySelector('.chart-controls').style.display = 'none';
+                        return; // Não inicia timer para cargos restritos
+                    }
+
                     setInterval(() => {
                         // Não subtrai tempo se estiver no meio da animação de troca
                         if (!isTransitioning) {
@@ -2592,6 +2644,19 @@
                 }
 
                 function rotateChart() {
+                    const role = (localStorage.getItem('erus_role') || '').toLowerCase();
+                    const restrictedPages = {
+                        'moldagem': 1,
+                        'fusão': 0,
+                        'fusao': 0,
+                        'acabamento': 4
+                    };
+
+                    // Se for cargo restrito, força o modo e não rotaciona (exceto na primeira chamada de init)
+                    if (restrictedPages[role] !== undefined && isTransitioning === false && prodChartInstance) {
+                        currentChartMode = restrictedPages[role];
+                    }
+
                     if (!prodChartInstance || isTransitioning) return;
 
                     isTransitioning = true;
@@ -2602,7 +2667,7 @@
 
                     // Aguarda o tempo da transição CSS (400ms)
                     setTimeout(() => {
-                        currentChartMode = (currentChartMode + 1) % 4;
+                        currentChartMode = (currentChartMode + 1) % 5;
                         let label = "";
                         let color = "";
                         let data = [];
@@ -2619,10 +2684,14 @@
                             label = "Total Terceirizado Diário (KG)";
                             color = "#38bdf8";
                             data = chartData.terceiro;
-                        } else {
+                        } else if (currentChartMode === 3) {
                             label = "Total Faturado Diário (Ton)";
                             color = "#10b981";
                             data = chartData.faturado;
+                        } else {
+                            label = "Produção Diária (Acabamento)";
+                            color = "#f472b6";
+                            data = chartData.acabamento;
                         }
 
                         // Atualiza textos
