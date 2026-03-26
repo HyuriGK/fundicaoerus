@@ -3642,8 +3642,8 @@
                     if (chartMode === 'emission_pending' || chartMode === 'emission_total') {
                         dateField = item.DATA_EMISSAO_PEDIDO;
                     } else {
-                        // Default to delivery
-                        dateField = item.ENTREGA_PETR;
+                        // Default to delivery - Priority: PETR (PCP defined) then PPR (Pedido original)
+                        dateField = item.ENTREGA_PETR || item.DATA_ENTREGA_PPR;
                     }
 
                     if (!dateField) return false;
@@ -3654,7 +3654,7 @@
                     if (d.getMonth() !== activeChartFilters.month) return false;
 
                     // NEW: Check Year as well (from the specialized filter dropdowns)
-                    let yearId = 'chartYearFilter'; // Fallback
+                    let yearId = 'yearFilterPCP'; // Default to PCP Chart Year
                     if (chartMode === 'delivery') yearId = 'yearFilterPCP';
                     else if (chartMode === 'emission_pending') yearId = 'yearFilterPending';
                     else if (chartMode === 'emission_total') yearId = 'yearFilterHistorical';
@@ -3910,7 +3910,7 @@
             const selectedYear = yearEl ? (parseInt(yearEl.value) || new Date().getFullYear()) : new Date().getFullYear();
 
             list.forEach(item => {
-                const d = item.ENTREGA_PETR ? new Date(item.ENTREGA_PETR) : null;
+                const d = (item.ENTREGA_PETR || item.DATA_ENTREGA_PPR) ? new Date(item.ENTREGA_PETR || item.DATA_ENTREGA_PPR) : null;
                 if (d && d.getFullYear() === selectedYear) {
                     const weight = getCorrectedWeight(item);
                     let vUnit = parseFloat(item.VALOR_PPR || 0);
@@ -3978,21 +3978,26 @@
                         mode: 'index',
                         intersect: false
                     },
-                    onClick: (e, elements) => {
+                    onClick: (e) => {
                         const activeElements = chartPCP.getElementsAtEventForMode(e, 'index', { intersect: false }, true);
                         if (activeElements.length > 0) {
-                            if (chartMode === 'delivery' && activeChartFilters.month !== null) {
-                                // Already zoomed, toggle off
+                            const clickedMonth = activeElements[0].index;
+                            
+                            // If we click the SAME month that is already filtered, toggle it OFF
+                            if (chartMode === 'delivery' && activeChartFilters.month === clickedMonth) {
                                 chartMode = null;
                                 activeChartFilters.month = null;
                             } else {
-                                // Normal view, set filter
-                                activeChartFilters.month = activeElements[0].index;
+                                // Set filter to clicked month
+                                activeChartFilters.month = clickedMonth;
                                 chartMode = 'delivery';
                             }
                         } else {
-                            chartMode = null;
-                            activeChartFilters.month = null;
+                            // Clicked outside bars: Clear PCP month filter
+                            if (chartMode === 'delivery') {
+                                chartMode = null;
+                                activeChartFilters.month = null;
+                            }
                         }
                         applyColumnFilters();
                     }
