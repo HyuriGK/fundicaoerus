@@ -1597,7 +1597,7 @@
                             <button class="btn-modern" onclick="openModal()" style="font-size: 0.65rem; padding: 4px 10px; background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.2); color: var(--color-primary); height: 26px;">
                                 <i class="fa-solid fa-list-check"></i> Registros
                             </button>
-                            <select id="yearFilterPending" onchange="updatePendingChart(currentFilteredData)"
+                            <select id="yearFilterPending" onchange="syncEmissionYear(this.value); updateHistoricalChart().then(() => updatePendingChart(currentFilteredData))"
                                 style="font-size: 0.7rem; padding: 5px 8px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-subtle); color: #a1a1aa; cursor: pointer; outline: none; height: 26px; border-radius: 4px;">
                             </select>
                         </div>
@@ -1623,7 +1623,7 @@
                             </select>
 
                             <!-- Month Filter (Visible when client mode or just always to refine) -->
-                            <select id="monthFilterHistorical" onchange="updateHistoricalChart()"
+                            <select id="monthFilterHistorical" onchange="updateHistoricalChart().then(() => updatePendingChart(currentFilteredData))"
                                 style="font-size: 0.7rem; padding: 5px 8px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-subtle); color: #a1a1aa; cursor: pointer; outline: none; border-radius: 4px;">
                                 <option value="Todos">Meses: Todos</option>
                                 <option value="1">Janeiro</option>
@@ -1641,7 +1641,7 @@
                             </select>
 
                             <!-- Year Filter -->
-                            <select id="yearFilterHistorical" onchange="updateHistoricalChart()"
+                            <select id="yearFilterHistorical" onchange="syncEmissionYear(this.value); updateHistoricalChart().then(() => updatePendingChart(currentFilteredData))"
                                 style="font-size: 0.7rem; padding: 5px 8px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-subtle); color: #a1a1aa; cursor: pointer; outline: none; border-radius: 4px;">
                             </select>
                         </div>
@@ -4000,55 +4000,148 @@
             });
         }
 
+        function syncEmissionYear(val) {
+            document.getElementById('yearFilterHistorical').value = val;
+            document.getElementById('yearFilterPending').value = val;
+        }
+
         function updatePendingChart(list) {
-            const mData = Array(12).fill(0);
-            const mDataValue = Array(12).fill(0);
+            const monthEl = document.getElementById('monthFilterHistorical');
+            const selectedMonth = monthEl ? monthEl.value : 'Todos';
             const yearEl = document.getElementById('yearFilterPending');
             const selectedYear = yearEl ? (parseInt(yearEl.value) || new Date().getFullYear()) : new Date().getFullYear();
-
-            list.forEach(item => {
-                const d = item.DATA_EMISSAO_PEDIDO ? new Date(item.DATA_EMISSAO_PEDIDO) : null;
-                if (d && d.getFullYear() === selectedYear) {
-                    const weight = getCorrectedWeight(item);
-                    let vUnit = parseFloat(item.VALOR_PPR || 0);
-                    const realQ = (Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0) || (Number(item.QUANTIDADE_PPR) || 0);
-                    if (item.PRECO_KG && parseFloat(item.PRECO_KG) > 0 && customWeights[item.PRODUTO_PPR]) {
-                        vUnit = parseFloat(item.PRECO_KG) * (realQ > 0 ? (weight / realQ) : 0);
-                    }
-                    mData[d.getMonth()] += weight;
-                    mDataValue[d.getMonth()] += (vUnit * realQ);
-                }
-            });
-
             const monthLabels = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-            
-            let finalLabels = [...monthLabels];
-            let finalData = [...mData];
-            let finalDataValue = [...mDataValue];
-            let finalBgColors = monthLabels.map((_, idx) => 
-                (chartMode === 'emission_pending' && activeChartFilters.month === idx) ? '#fff' : chartColorAmber
-            );
+            const titleEl = document.getElementById('chartPending').closest('.chart-panel').querySelector('.chart-title-flex');
 
-            // ZOOM LOGIC: If a month is selected, show ONLY that month's bar
-            if (chartMode === 'emission_pending' && activeChartFilters.month !== null) {
-                const idx = activeChartFilters.month;
-                finalLabels = [monthLabels[idx]];
-                finalData = [mData[idx]];
-                finalDataValue = [mDataValue[idx]];
-                finalBgColors = ['#fff'];
+            if (selectedMonth === 'Todos') {
+                if (titleEl) titleEl.innerText = 'Gráfico de Emissão de Pedidos C/ Entrega Pendente';
+                // --- MONTHLY VIEW (12 BARS) ---
+                const mData = Array(12).fill(0);
+                const mDataValue = Array(12).fill(0);
+
+                list.forEach(item => {
+                    const d = item.DATA_EMISSAO_PEDIDO ? toLocalDate(item.DATA_EMISSAO_PEDIDO) : null;
+                    if (d && d.getFullYear() === selectedYear) {
+                        const weight = getCorrectedWeight(item);
+                        let vUnit = parseFloat(item.VALOR_PPR || 0);
+                        const realQ = (Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0) || (Number(item.QUANTIDADE_PPR) || 0);
+                        const prodCode = String(item.PRODUTO_PPR || '').trim();
+                        if (item.PRECO_KG && parseFloat(item.PRECO_KG) > 0 && customWeights[prodCode]) {
+                            vUnit = parseFloat(item.PRECO_KG) * (realQ > 0 ? (weight / realQ) : 0);
+                        }
+                        mData[d.getMonth()] += weight;
+                        mDataValue[d.getMonth()] += (vUnit * realQ);
+                    }
+                });
+
+                let finalLabels = [...monthLabels];
+                let finalData = [...mData];
+                let finalDataValue = [...mDataValue];
+                let finalBgColors = monthLabels.map((_, idx) => 
+                    (chartMode === 'emission_pending' && activeChartFilters.month === idx) ? '#fff' : chartColorAmber
+                );
+
+                if (chartMode === 'emission_pending' && activeChartFilters.month !== null) {
+                    const idx = activeChartFilters.month;
+                    finalLabels = [monthLabels[idx]];
+                    finalData = [mData[idx]];
+                    finalDataValue = [mDataValue[idx]];
+                    finalBgColors = ['#fff'];
+                }
+
+                renderPendingChart(finalLabels, finalData, finalDataValue, finalBgColors);
+
+            } else {
+                // --- DAILY VIEW (30 BARS) ---
+                const mIdx = parseInt(selectedMonth);
+                const monthName = monthLabels[mIdx - 1];
+                const dailyMap = {};
+                
+                let totalMonthWeight = 0;
+                let totalMonthValue = 0;
+
+                list.forEach(item => {
+                    const d = item.DATA_EMISSAO_PEDIDO ? toLocalDate(item.DATA_EMISSAO_PEDIDO) : null;
+                    if (d && d.getFullYear() === selectedYear && (d.getMonth() + 1) === mIdx) {
+                        const dayNum = d.getDate();
+                        if (!dailyMap[dayNum]) dailyMap[dayNum] = { peso: 0, valor: 0 };
+                        
+                        const weight = getCorrectedWeight(item);
+                        let vUnit = parseFloat(item.VALOR_PPR || 0);
+                        const realQ = (Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0) || (Number(item.QUANTIDADE_PPR) || 0);
+                        const prodCode = String(item.PRODUTO_PPR || '').trim();
+                        if (item.PRECO_KG && parseFloat(item.PRECO_KG) > 0 && customWeights[prodCode]) {
+                            vUnit = parseFloat(item.PRECO_KG) * (realQ > 0 ? (weight / realQ) : 0);
+                        }
+                        const itemWeight = weight;
+                        const itemValue = (vUnit * realQ);
+
+                        dailyMap[dayNum].peso += itemWeight;
+                        dailyMap[dayNum].valor += itemValue;
+                        totalMonthWeight += itemWeight;
+                        totalMonthValue += itemValue;
+                    }
+                });
+
+                const lastDay = new Date(selectedYear, mIdx, 0).getDate();
+                const labels = [];
+                const weightData = [];
+                const valueData = [];
+                for (let i = 1; i <= lastDay; i++) {
+                    labels.push(`Dia ${String(i).padStart(2, '0')}`);
+                    weightData.push(dailyMap[i] ? dailyMap[i].peso : 0);
+                    valueData.push(dailyMap[i] ? dailyMap[i].valor : 0);
+                }
+
+                // Update Title with Totals
+                if (titleEl) {
+                    const valStr = valorVisible ? totalMonthValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-----';
+                    titleEl.innerText = `Emissão Pendente ${monthName}/${selectedYear}: ${totalMonthWeight.toLocaleString('pt-BR')} kg | ${valStr}`;
+                }
+
+                // --- LITERAL ZOOM LOGIC ---
+                const fStart = document.getElementById('filterEmissionStart')?.value;
+                const fEnd = document.getElementById('filterEmissionEnd')?.value;
+                
+                let finalLabels = labels;
+                let finalWeight = weightData;
+                let finalValue = valueData;
+                let finalBgColors = Array(labels.length).fill(chartColorAmber);
+
+                if (fStart && fStart === fEnd) {
+                    const d = toLocalDate(fStart);
+                    if (d.getFullYear() === selectedYear && (d.getMonth() + 1) === mIdx) {
+                        const dayNum = d.getDate();
+                        const idx = dayNum - 1;
+                        if (idx >= 0 && idx < labels.length) {
+                            finalLabels = [labels[idx]];
+                            finalWeight = [weightData[idx]];
+                            finalValue = [valueData[idx]];
+                            finalBgColors = ['#fff'];
+
+                            // Further specify title for the day if zoomed
+                            const dayValStr = valorVisible ? weightData[idx].toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-----';
+                            titleEl.innerText = `Emissão Pendente Dia ${dayNum}: ${weightData[idx].toLocaleString('pt-BR')} kg | ${dayValStr}`;
+                        }
+                    }
+                }
+
+                renderPendingChart(finalLabels, finalWeight, finalValue, finalBgColors);
             }
+        }
 
+        function renderPendingChart(labels, data, extraData, bgColors) {
             if (chartPending) chartPending.destroy();
             chartPending = new Chart(document.getElementById('chartPending').getContext('2d'), {
                 type: 'bar',
                 data: {
-                    labels: finalLabels,
+                    labels: labels,
                     datasets: [{
                         label: 'Peso (kg)',
-                        data: finalData,
-                        backgroundColor: finalBgColors,
+                        data: data,
+                        backgroundColor: bgColors,
                         borderRadius: 4,
-                        extraData: finalDataValue
+                        extraData: extraData
                     }]
                 },
                 options: {
@@ -4071,27 +4164,45 @@
                             }
                         }
                     },
-                    interaction: {
-                        mode: 'index',
-                        intersect: false
-                    },
+                    interaction: { mode: 'index', intersect: false },
                     onClick: (e, elements) => {
-                        const activeElements = chartPending.getElementsAtEventForMode(e, 'index', { intersect: false }, true);
-                        if (activeElements.length > 0) {
-                            if (chartMode === 'emission_pending' && activeChartFilters.month !== null) {
-                                // Already zoomed, toggle off
-                                chartMode = null;
-                                activeChartFilters.month = null;
-                            } else {
-                                // Normal view, set filter
-                                activeChartFilters.month = activeElements[0].index;
+                        const monthEl = document.getElementById('monthFilterHistorical');
+                        const selectedMonth = monthEl ? monthEl.value : 'Todos';
+                        const yearEl = document.getElementById('yearFilterPending');
+                        const selectedYear = yearEl ? (parseInt(yearEl.value) || new Date().getFullYear()) : new Date().getFullYear();
+
+                        if (elements.length > 0) {
+                            const index = elements[0].index;
+                            if (selectedMonth === 'Todos') {
+                                // Zoom into specific month
+                                document.getElementById('monthFilterHistorical').value = String(index + 1);
                                 chartMode = 'emission_pending';
+                                activeChartFilters.month = index;
+                            } else {
+                                // Zoom into specific day (Literal Zoom)
+                                const fStart = document.getElementById('filterEmissionStart')?.value;
+                                const fEnd = document.getElementById('filterEmissionEnd')?.value;
+
+                                let dayNum;
+                                if (chartPending.data.labels.length === 1) {
+                                    dayNum = parseInt(chartPending.data.labels[0].replace('Dia ', ''));
+                                } else {
+                                    dayNum = index + 1;
+                                }
+
+                                const targetDate = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+                                if (fStart === targetDate && fEnd === targetDate) {
+                                    document.getElementById('filterEmissionStart').value = '';
+                                    document.getElementById('filterEmissionEnd').value = '';
+                                } else {
+                                    document.getElementById('filterEmissionStart').value = targetDate;
+                                    document.getElementById('filterEmissionEnd').value = targetDate;
+                                }
+                                chartMode = 'emission_pending';
+                                activeChartFilters.month = parseInt(selectedMonth) - 1;
                             }
-                        } else {
-                            chartMode = null;
-                            activeChartFilters.month = null;
+                            applyColumnFilters();
                         }
-                        applyColumnFilters();
                     }
                 }
             });
