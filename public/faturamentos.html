@@ -659,6 +659,29 @@
             transform: translateY(-2px);
         }
 
+        .btn-mini-chart {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-muted);
+            padding: 4px 12px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-weight: 600;
+        }
+
+        .btn-mini-chart:hover {
+            background: rgba(245, 158, 11, 0.1);
+            color: var(--color-primary);
+        }
+
+        .btn-mini-chart.active {
+            background: var(--color-primary);
+            color: #000;
+            border-color: var(--color-primary);
+        }
+
         .modal-card {
             background: #09090b;
             border: 1px solid var(--border-highlight);
@@ -1025,6 +1048,9 @@
         </div>
 
         <div class="side-menu-actions">
+            <button class="side-btn" id="btnToggleCharts" onclick="toggleChartsView()">
+                <i class="fa-solid fa-chart-pie"></i> Alternar Gráficos
+            </button>
             <button class="side-btn" onclick="openRecordsModal()">
                 <i class="fa-solid fa-table-list"></i> Registros
             </button>
@@ -1074,8 +1100,8 @@
             </div>
         </div>
 
-        <!-- CHARTS ROW -->
-        <div class="charts-row">
+        <!-- CHARTS ROW (STANDARD) -->
+        <div class="charts-row" id="standardChartsRow">
             <div class="chart-panel">
                 <div class="chart-header-row">
                     <div class="chart-title">Faturamento Diário (Peso)</div>
@@ -1117,6 +1143,21 @@
                 </div>
             </div>
         </div>
+
+        <!-- CHARTS ROW (ABC) -->
+        <div class="charts-row" id="abcChartsRow" style="display:none;">
+            <div class="chart-panel" style="grid-column: span 2;">
+                <div class="chart-header-row">
+                    <div class="chart-title">Representação Curva ABC: <span id="abcTypeLabel" style="color:var(--color-primary)">Peso (kg)</span></div>
+                    <div class="chart-header-kpi" style="gap: 5px;">
+                        <button class="btn-mini-chart active" id="btnAbcPeso" onclick="setABCType('peso')">Peso (kg)</button>
+                        <button class="btn-mini-chart" id="btnAbcValor" onclick="setABCType('valor')">Valor (R$)</button>
+                        <button class="btn-mini-chart" id="btnAbcPreco" onclick="setABCType('preco')">Preço (R$/kg)</button>
+                    </div>
+                </div>
+                <div style="position: relative; flex: 1; width: 100%; min-height: 0;"><canvas id="abcChart"></canvas></div>
+            </div>
+        </div>
     </main>
 
 
@@ -1127,8 +1168,10 @@
         let clientStats = {};
         let colFilters = {};
         let currentMeta = 0;
-        let dailyChart = null, annualChart = null;
+        let dailyChart = null, annualChart = null, abcChart = null;
         let showServices = false;
+        let showABC = false;
+        let abcType = 'peso';
         const serviceClients = [
             "IMEPEL INDUSTRIA MECANICA LTDA",
             "STEELROOL INDUSTRIA METALURGICA",
@@ -1155,6 +1198,7 @@
         const formatNumber = (val, decimals = 2) => (val || 0).toLocaleString('pt-BR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
         const formatWeight = (val) => (val || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kg';
         const formatDate = (dateStr) => { if (!dateStr) return ''; const [y, m, d] = dateStr.split('-'); return `${d}/${m}/${y}`; };
+        const formatDateShort = (dateStr) => { if (!dateStr) return ''; const [y, m, d] = dateStr.split('-'); return `${d}/${m}`; };
 
         function showToast(title, subtitle, type = 'info') {
             let container = document.getElementById('toast-container');
@@ -1392,8 +1436,13 @@
             const diasComFaturamento = Object.keys(dailyMap).length;
             const totalPesoContext = dailyContextData.reduce((a, b) => a + (b.pesoTotal || 0), 0);
             document.getElementById('avgDailyWeight').textContent = formatWeight(diasComFaturamento > 0 ? totalPesoContext / diasComFaturamento : 0);
-
+ 
             renderDailyChart(dailyChartData, highlightedDay, monthStartStr, monthEndStr);
+            
+            // --- ABC CHART UPDATE ---
+            if (showABC) {
+                renderABCChart(rangeData);
+            }
         }
 
         function updateAnnualEvolutionDynamic(filteredData, highlightIndex) {
@@ -1450,7 +1499,7 @@
             dailyChart = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: data.map(d => formatDate(d.data)),
+                    labels: data.map(d => formatDateShort(d.data)),
                     datasets: [{
                         label: 'Peso (kg)',
                         data: data.map(d => d.pesoTotal),
@@ -1843,6 +1892,105 @@
             
             renderTable();
             updateDashboardfromRecords(allData);
+        }
+
+        // --- ABC SEARCH & CHART LOGIC ---
+        function toggleChartsView() {
+            showABC = !showABC;
+            document.getElementById('standardChartsRow').style.display = showABC ? 'none' : 'grid';
+            document.getElementById('abcChartsRow').style.display = showABC ? 'grid' : 'none';
+            
+            const btn = document.getElementById('btnToggleCharts');
+            if (showABC) {
+                btn.style.backgroundColor = 'var(--color-primary)';
+                btn.style.color = '#000';
+                btn.innerHTML = '<i class="fa-solid fa-chart-line"></i> Evolução Temporal';
+                updateDashboardfromRecords(allData);
+            } else {
+                btn.style.backgroundColor = 'rgba(255,255,255,0.03)';
+                btn.style.color = 'var(--text-muted)';
+                btn.innerHTML = '<i class="fa-solid fa-chart-pie"></i> Alternar Gráficos';
+            }
+        }
+
+        function setABCType(type) {
+            abcType = type;
+            const label = document.getElementById('abcTypeLabel');
+            if (type === 'peso') label.textContent = 'Peso (kg)';
+            else if (type === 'valor') label.textContent = 'Valor (R$)';
+            else if (type === 'preco') label.textContent = 'Preço (R$/kg)';
+
+            document.querySelectorAll('.btn-mini-chart').forEach(b => b.classList.remove('active'));
+            if (type === 'peso') document.getElementById('btnAbcPeso').classList.add('active');
+            else if (type === 'valor') document.getElementById('btnAbcValor').classList.add('active');
+            else if (type === 'preco') document.getElementById('btnAbcPreco').classList.add('active');
+
+            updateDashboardfromRecords(allData);
+        }
+
+        function renderABCChart(data) {
+            const ctx = document.getElementById('abcChart').getContext('2d');
+            if (abcChart) abcChart.destroy();
+
+            // Group by Client
+            const clientGroups = {};
+            data.forEach(item => {
+                const name = (item.clienteNome || 'Desconhecido').trim();
+                if (!clientGroups[name]) clientGroups[name] = { peso: 0, valor: 0 };
+                clientGroups[name].peso += (item.pesoTotal || 0);
+                clientGroups[name].valor += calculateCalculatedTotal(item);
+            });
+
+            const clientList = Object.keys(clientGroups).map(name => {
+                const g = clientGroups[name];
+                return {
+                    name,
+                    peso: g.peso,
+                    valor: g.valor,
+                    preco: g.peso > 0 ? g.valor / g.peso : 0
+                };
+            });
+
+            // Sort by active metric
+            clientList.sort((a, b) => b[abcType] - a[abcType]);
+
+            // Top 15
+            const topClients = clientList.slice(0, 15);
+
+            abcChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: topClients.map(c => c.name),
+                    datasets: [{
+                        label: abcType === 'preco' ? 'R$/kg' : (abcType === 'valor' ? 'R$' : 'kg'),
+                        data: topClients.map(c => c[abcType]),
+                        backgroundColor: '#f59e0b',
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: (context) => {
+                                    const val = context.raw;
+                                    if (abcType === 'valor') return formatCurrency(val);
+                                    if (abcType === 'preco') return 'R$ ' + val.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) + ' / kg';
+                                    return formatNumber(val, 2) + ' kg';
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#a1a1aa' } },
+                        y: { grid: { display: false }, ticks: { color: '#f4f4f5', font: { size: 10 } } }
+                    }
+                }
+            });
         }
 
         document.addEventListener('DOMContentLoaded', () => {
