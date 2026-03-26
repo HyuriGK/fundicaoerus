@@ -958,7 +958,10 @@
             </div>
 
             <div class="toolbar-row">
-                <div class="toolbar-group">
+                <div class="toolbar-group" style="display: flex; gap: 10px;">
+                    <button class="btn-modern" id="btnToggleServices" onclick="toggleServices()" style="background-color: rgba(255,255,255,0.05); color: var(--text-muted); border-color: var(--border-subtle);">
+                        <i class="fa-solid fa-hand-holding-dollar"></i> Serviços Prestados: <span id="statusServices">OFF</span>
+                    </button>
                     <button class="btn-modern" onclick="openClientModal()" style="background-color: var(--color-primary); color: #000;">
                         <i class="fa-solid fa-user-slash"></i> Clientes (Filtrar)
                     </button>
@@ -1125,6 +1128,12 @@
         let colFilters = {};
         let currentMeta = 0;
         let dailyChart = null, annualChart = null;
+        let showServices = false;
+        const serviceClients = [
+            "IMEPEL INDUSTRIA MECANICA LTDA",
+            "STEELROOL INDUSTRIA METALURGICA",
+            "SPILROD FUNDICAO DE FERRO E ACO LTDA"
+        ];
 
         const formatCurrency = (val) => (val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 2 });
         const formatNumber = (val, decimals = 2) => (val || 0).toLocaleString('pt-BR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
@@ -1208,8 +1217,15 @@
             const startInput = document.getElementById('startDate').value;
             const endInput = document.getElementById('endDate').value;
 
-            // 1. Base Data (Filtered for Exclusions)
-            const filteredAll = data.filter(item => !excludedClients.has((item.clienteNome || 'Desconhecido').trim()) && item.excluido_manualmente !== true);
+            // 1. Base Data (Filtered for Exclusions and Service Toggle)
+            const filteredAll = data.filter(item => {
+                const name = (item.clienteNome || 'Desconhecido').trim();
+                // Check if it's a service client and if we should show it
+                const isService = serviceClients.includes(name);
+                if (isService && !showServices) return false;
+                
+                return !excludedClients.has(name) && item.excluido_manualmente !== true;
+            });
 
             // Populate Year Selector with any additional years found in data
             const yearSelector = document.getElementById('yearSelector');
@@ -1605,7 +1621,13 @@
 
             // Filter for display
             let filteredClients = allData.filter(item => {
-                if (excludedClients.has((item.clienteNome || 'Desconhecido').trim())) return false;
+                const name = (item.clienteNome || 'Desconhecido').trim();
+                
+                // Service Toggle logic
+                const isService = serviceClients.includes(name);
+                if (isService && !showServices) return false;
+
+                if (excludedClients.has(name)) return false;
                 if (startInput && item.data < startInput) return false;
                 if (endInput && item.data > endInput) return false;
                 return true;
@@ -1741,6 +1763,29 @@
 
         function filterClientList() { renderClientList(); }
         function toggleClientExclusion(c) { if (excludedClients.has(c)) excludedClients.delete(c); else excludedClients.add(c); renderClientList(); renderTable(); updateDashboardfromRecords(allData); saveClientExclusion(); }
+
+        function toggleServices() {
+            showServices = !showServices;
+            const btn = document.getElementById('btnToggleServices');
+            const status = document.getElementById('statusServices');
+            
+            if (showServices) {
+                btn.style.backgroundColor = 'var(--color-primary)';
+                btn.style.color = '#000';
+                btn.style.borderColor = 'var(--color-primary)';
+                status.textContent = 'ON';
+                showToast("Serviços Habilitados", "Faturamento agora inclui IMEPEL, STEELROOL e SPILROD.", "success");
+            } else {
+                btn.style.backgroundColor = 'rgba(255,255,255,0.05)';
+                btn.style.color = 'var(--text-muted)';
+                btn.style.borderColor = 'var(--border-subtle)';
+                status.textContent = 'OFF';
+                showToast("Serviços Ocultos", "Clientes de prestação de serviços foram removidos dos totais.", "info");
+            }
+            
+            renderTable();
+            updateDashboardfromRecords(allData);
+        }
 
         document.addEventListener('DOMContentLoaded', () => {
             const now = new Date();
