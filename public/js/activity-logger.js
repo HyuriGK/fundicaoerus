@@ -649,7 +649,60 @@
         }, 5000);
     }
 
+    // --- ROLE ENFORCEMENT ---
+    function enforceRoleAccess() {
+        if (window.location.pathname.includes('login.html')) return;
+
+        const page = window.location.pathname.split('/').pop() || 'index.html';
+        const role = (localStorage.getItem('erus_role') || 'Visitante').toLowerCase();
+
+        const rolePermissions = {
+            'moldagem': 'fichatecmoldagem.html',
+            'fusão': 'fichatecfusao.html',
+            'fusao': 'fichatecfusao.html',
+            'acabamento': 'fichatecacabamento.html',
+            'acabamento_externo': 'fichatecacabamento.html'
+        };
+
+        if (rolePermissions[role]) {
+            const allowedPage = rolePermissions[role];
+            if (page !== allowedPage) {
+                window.location.replace(allowedPage);
+                return true; // Redirection triggered
+            }
+
+            // If on the allowed page, adjust the UI (replace Back with Logout)
+            // Using a small timeout to ensure DOM is ready or can be handled by observers
+            const adjustUI = () => {
+                const backBtn = document.querySelector('.btn-back');
+                if (backBtn && !backBtn.dataset.adjusted) {
+                    backBtn.innerHTML = '<i class="fa-solid fa-right-from-bracket"></i> SAIR';
+                    backBtn.href = '#';
+                    backBtn.onclick = (e) => {
+                        e.preventDefault();
+                        window.erusLogout();
+                    };
+                    backBtn.dataset.adjusted = 'true';
+                }
+            };
+            adjustUI();
+            setTimeout(adjustUI, 500); 
+            setTimeout(adjustUI, 2000);
+        }
+        return false;
+    }
+
+    // --- GLOBAL LOGOUT ---
+    window.erusLogout = function () {
+        localStorage.removeItem('erus_auth');
+        localStorage.removeItem('erus_last_activity');
+        localStorage.removeItem('erus_user');
+        localStorage.removeItem('erus_role');
+        window.location.replace('login.html');
+    };
+
     // --- SISTEMA DE CONTROLE DE SESSÃO (CENTRALIZADO) ---
+
     const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutos
 
     function verificarSessao() {
@@ -899,6 +952,7 @@
     // Verificar sessão IMEDIATAMENTE (antes de qualquer renderização)
     if (!window.location.pathname.includes('login.html')) {
         verificarSessao();
+        enforceRoleAccess();
     }
 
     // 1. Log Page Visit on Load + verificar bloqueio
