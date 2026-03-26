@@ -1200,6 +1200,10 @@
 
             const activeStages = [];
             let prevStageQty = totalQty;
+            
+            // Arrival date in the first stage is the emission date
+            let arrivalDate = emissionDate ? toLocalDate(emissionDate) : now; 
+
 
             // --- 4. Run the flow logic through the filtered stages ---
             for (let i = 0; i < thisOpStages.length; i++) {
@@ -1207,9 +1211,11 @@
                 // Use the maximum of this stage's pointing OR any later stage's pointing
                 // to determine how many pieces have at least REACHED and passed this point.
                 const effectivePointed = Math.max(groupStatus[stage].qty, maxForwardPointing[stage] || 0);
-                
                 const qtyMovingToNext = Math.min(prevStageQty, effectivePointed);
                 const qtyStayingInStage = Math.max(0, prevStageQty - qtyMovingToNext);
+
+                // Days stopped in this sector = business days since the previous stage was finished
+                const daysStopped = getBusinessDaysDiff(arrivalDate, now);
 
 
                 if (qtyStayingInStage > 0.001) {
@@ -1239,11 +1245,16 @@
                         statusText: statusText,
                         isDelayed: isDelayed,
                         statusColor: statusColor,
-                        qtyExpedited: qtyExpedited
+                        qtyExpedited: qtyExpedited,
+                        daysStopped: daysStopped
                     });
                 }
 
                 prevStageQty = qtyMovingToNext;
+                // Update arrival date for the NEXT stage: use the last pointing date of THIS stage if it exists
+                if (groupStatus[stage].lastDate) {
+                    arrivalDate = groupStatus[stage].lastDate;
+                }
             }
 
             // Special Case: If everything is pointed in the last stage, keep it in the last stage
@@ -1259,7 +1270,8 @@
                     statusText: statusText,
                     isDelayed: diff > 0,
                     statusColor: diff > 0 ? 'var(--status-danger)' : 'var(--status-success)',
-                    qtyExpedited: qtyExpedited
+                    qtyExpedited: qtyExpedited,
+                    daysStopped: getBusinessDaysDiff(arrivalDate, now)
                 });
             }
 
@@ -1337,6 +1349,9 @@
                                     <span style="font-weight: 500; opacity: 0.8;">qtd expedida:</span> 
                                     <span style="font-weight: 700;">${expeditedQty} PÇS</span>
                                 </div>` : ''}
+                                <div class="stopped-info" style="font-size: 1.1rem; margin-top: 8px; font-weight: 700; color: #fff; background: rgba(255,255,255,0.05); padding: 5px 10px; border-radius: 6px; display: inline-block;">
+                                    <i class="fa-solid fa-clock" style="margin-right: 6px; color: var(--color-primary);"></i>Parado há ${status.daysStopped} ${status.daysStopped === 1 ? 'dia' : 'dias'}
+                                </div>
                             </div>
                         `;
                     } else {
@@ -1359,6 +1374,9 @@
                                 </div>
                                 <div class="status-badge" style="color: ${statusColor};">
                                     <i class="fa-solid ${isDelayed ? 'fa-triangle-exclamation' : 'fa-check-circle'}"></i> ${statusText}
+                                </div>
+                                <div class="stopped-info" style="font-size: 0.72rem; margin-top: 6px; font-weight: 600; color: var(--text-muted); opacity: 0.8;">
+                                    <i class="fa-solid fa-clock" style="margin-right: 4px;"></i>Parado há ${status.daysStopped} ${status.daysStopped === 1 ? 'dia' : 'dias'}
                                 </div>
                             </div>
                         `;
