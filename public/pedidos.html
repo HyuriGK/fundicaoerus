@@ -4190,52 +4190,122 @@
 
                 const ctx = document.getElementById('chartHistorical').getContext('2d');
                 const monthLabels = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+                
                 if (viewMode === 'month') {
-                    if (titleEl) titleEl.innerText = 'Gráfico de Emissão de Pedidos';
-                    // MODO: POR MÊS
-                    if (!emissionDataCache) {
-                        const res = await fetch('/api/emissoes/monthly-summary');
-                        if (!res.ok) throw new Error('Erro ao buscar dados de emissão');
-                        emissionDataCache = await res.json();
-                    }
-
-                    const weightData = Array(12).fill(0);
-                    const valueData = Array(12).fill(0);
-
-                    emissionDataCache.forEach(row => {
-                        if (row.ano === selectedYear) {
-                            weightData[row.mes - 1] = row.totalPeso;
-                            valueData[row.mes - 1] = row.totalValor;
+                    // MODO: POR MÊS ou DIA (DENTRO DO MÊS)
+                    
+                    if (selectedMonth === 'Todos') {
+                        if (titleEl) titleEl.innerText = 'Gráfico de Emissão de Pedidos';
+                        
+                        if (!emissionDataCache) {
+                            const res = await fetch('/api/emissoes/monthly-summary');
+                            if (!res.ok) throw new Error('Erro ao buscar dados de emissão');
+                            emissionDataCache = await res.json();
                         }
-                    });
 
-                    // Filtering Month if not "Todos"
-                    let labels = monthLabels;
-                    let finalWeight = weightData;
-                    let finalValue = valueData;
+                        const weightData = Array(12).fill(0);
+                        const valueData = Array(12).fill(0);
 
-                    if (selectedMonth !== 'Todos') {
-                        const mIdx = parseInt(selectedMonth) - 1;
-                        labels = [monthLabels[mIdx]];
-                        finalWeight = [weightData[mIdx]];
-                        finalValue = [valueData[mIdx]];
+                        emissionDataCache.forEach(row => {
+                            if (row.ano === selectedYear) {
+                                weightData[row.mes - 1] = row.totalPeso;
+                                valueData[row.mes - 1] = row.totalValor;
+                            }
+                        });
+
+                        if (chartHistorical) chartHistorical.destroy();
+                        chartHistorical = new Chart(ctx, {
+                            type: 'bar',
+                            data: {
+                                labels: monthLabels,
+                                datasets: [{
+                                    label: 'Peso (kg)',
+                                    data: weightData,
+                                    backgroundColor: chartColorAmber,
+                                    borderRadius: 4,
+                                    extraData: valueData
+                                }]
+                            },
+                            options: getHistoricalOptions('kg', false)
+                        });
+                    } else {
+                        // SELECTED A SPECIFIC MONTH -> SHOW DAILY VIEW
+                        const mIdx = parseInt(selectedMonth);
+                        const monthName = monthLabels[mIdx - 1];
+                        
+                        // Fetch individual records for this month to aggregate daily
+                        const res = await fetch(`/api/emissoes/list?ano=${selectedYear}&mes=${selectedMonth}`);
+                        if (!res.ok) throw new Error('Erro ao buscar registros históricos');
+                        const records = await res.json();
+
+                        // Aggregate by day
+                        const dailyMap = {};
+                        let totalMonthWeight = 0;
+                        let totalMonthValue = 0;
+
+                        records.forEach(r => {
+                            const d = new Date(r.DATA_EMISSAO_PEDIDO);
+                            const dayNum = d.getDate();
+                            if (!dailyMap[dayNum]) dailyMap[dayNum] = { peso: 0, valor: 0 };
+                            
+                            // Peso Logic (Correction if available)
+                            let wUn = 0;
+                            const qOriginal = parseFloat(r.QUANTIDADE_PPR) || 0;
+                            const prodCode = String(r.PRODUTO_PPR || '').trim();
+                            
+                            if (customWeights[prodCode]) {
+                                wUn = customWeights[prodCode];
+                            } else {
+                                wUn = qOriginal > 0 ? (parseFloat(r.PESO_LIQUIDO_NPR) || 0) / qOriginal : 0;
+                            }
+                            const itemWeight = wUn * qOriginal;
+                            
+                            // Valor Logic
+                            let vUn = parseFloat(r.VALOR_PPR || 0);
+                            if (r.PRECO_KG && parseFloat(r.PRECO_KG) > 0 && customWeights[prodCode]) {
+                                vUn = parseFloat(r.PRECO_KG) * wUn;
+                            }
+                            const itemValue = vUn * qOriginal;
+
+                            dailyMap[dayNum].peso += itemWeight;
+                            dailyMap[dayNum].valor += itemValue;
+                            totalMonthWeight += itemWeight;
+                            totalMonthValue += itemValue;
+                        });
+
+                        // Prepare Labels (1 to Last Day of Month)
+                        const lastDay = new Date(selectedYear, mIdx, 0).getDate();
+                        const labels = [];
+                        const weightData = [];
+                        const valueData = [];
+                        
+                        for (let i = 1; i <= lastDay; i++) {
+                            labels.push(`Dia ${String(i).padStart(2, '0')}`);
+                            weightData.push(dailyMap[i] ? dailyMap[i].peso : 0);
+                            valueData.push(dailyMap[i] ? dailyMap[i].valor : 0);
+                        }
+
+                        if (titleEl) {
+                            const valStr = valorVisible ? totalMonthValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-----';
+                            titleEl.innerHTML = `Emissão ${monthName}/${selectedYear} <span style="font-size: 0.85rem; color: var(--color-primary); margin-left:15px;">Total: ${formatNumber(totalMonthWeight, 0)} kg | ${valStr}</span>`;
+                        }
+
+                        if (chartHistorical) chartHistorical.destroy();
+                        chartHistorical = new Chart(ctx, {
+                            type: 'bar',
+                            data: {
+                                labels: labels,
+                                datasets: [{
+                                    label: 'Peso (kg)',
+                                    data: weightData,
+                                    backgroundColor: chartColorAmber,
+                                    borderRadius: 4,
+                                    extraData: valueData
+                                }]
+                            },
+                            options: getHistoricalOptions('kg', false)
+                        });
                     }
-
-                    if (chartHistorical) chartHistorical.destroy();
-                    chartHistorical = new Chart(ctx, {
-                        type: 'bar',
-                        data: {
-                            labels: labels,
-                            datasets: [{
-                                label: 'Peso (kg)',
-                                data: finalWeight,
-                                backgroundColor: chartColorAmber,
-                                borderRadius: 4,
-                                extraData: finalValue
-                            }]
-                        },
-                        options: getHistoricalOptions('kg', false)
-                    });
 
                 } else {
                     if (titleEl) titleEl.innerText = 'Pareto - Emissão por Cliente';
@@ -4365,18 +4435,26 @@
                         const viewMode = modeEl ? modeEl.value : 'month';
 
                         if (viewMode === 'month') {
-                            // Clicou no mês -> Filtra no dashboard (sem abrir modal automático)
-                            let targetMonthIndex = index;
-                            if (selectedMonth !== 'Todos') targetMonthIndex = parseInt(selectedMonth) - 1;
-
-                            if (chartMode === 'emission_total' && activeChartFilters.month === targetMonthIndex) {
-                                chartMode = null;
-                                activeChartFilters.month = null;
-                            } else {
+                            if (selectedMonth === 'Todos') {
+                                // CLICKED ON A MONTH BAR -> Change dropdown and trigger daily view
+                                const targetMonth = index + 1;
+                                document.getElementById('monthFilterHistorical').value = String(targetMonth);
+                                // Set global filters to match this month for the table too
                                 chartMode = 'emission_total';
-                                activeChartFilters.month = targetMonthIndex;
+                                activeChartFilters.month = index;
+                                applyColumnFilters(); // This triggers updateHistoricalChart() indirectly through updateCharts()
+                            } else {
+                                // CLICKED ON A DAY BAR -> Filter specifically for that day
+                                const dayNum = index + 1;
+                                const targetDate = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+                                
+                                document.getElementById('filterEmissionStart').value = targetDate;
+                                document.getElementById('filterEmissionEnd').value = targetDate;
+                                
+                                chartMode = 'emission_total';
+                                activeChartFilters.month = parseInt(selectedMonth) - 1;
+                                applyColumnFilters();
                             }
-                            applyColumnFilters();
                         } else {
                             // Pareto Click -> Filtrar por esse cliente no dashboard
                             const clientName = labels[index];
