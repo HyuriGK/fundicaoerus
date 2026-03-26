@@ -927,7 +927,7 @@
                     <div class="chart-title">Peso Total Terceirizado (KG)</div>
                 </div>
                 <div class="chart-container-wrapper">
-                    <canvas id="lineChart"></canvas>
+                    <canvas id="barChart"></canvas>
                 </div>
             </div>
         </main>
@@ -1158,7 +1158,7 @@
         let registros = [];
         let recebidos = {};
         let itensConhecidos = new Map();
-        let lineChartInstance = null;
+        let mainChartInstance = null;
 
         const modalStack = [];
 
@@ -1618,12 +1618,12 @@
                 const fA = selectedYear.toString();
                 filtrados.forEach(r => { const d = r.data.split('T')[0]; cD[d] = (cD[d] || 0) + (parseFloat(r.quant || 0) * parseFloat(r.peso || 0)); });
             }
-            renderLineChart(cD, selectedMonthIndex === -1);
+            renderChart(cD, selectedMonthIndex === -1);
         }
 
-        function renderLineChart(data, isM) {
+        function renderChart(data, isM) {
             let l = [], w = [];
-            const ctx = document.getElementById('lineChart').getContext('2d');
+            const ctx = document.getElementById('barChart').getContext('2d');
 
             if (isM) {
                 // Visão Anual (meses)
@@ -1634,41 +1634,32 @@
                 // Visão Mensal (todos os dias do mês)
                 const fM = (selectedMonthIndex + 1).toString().padStart(2, '0');
                 const fA = selectedYear.toString();
-                // Pega o último dia do mês para saber quantos dias renderizar
                 const daysInMonth = new Date(parseInt(fA), parseInt(fM), 0).getDate();
 
                 for (let i = 1; i <= daysInMonth; i++) {
                     const dayStr = i.toString().padStart(2, '0');
                     const dateKey = `${fA}-${fM}-${dayStr}`;
-                    l.push(dayStr); // Rótulo: 01, 02...
-                    w.push(data[dateKey] || 0); // Valor ou 0 se não existir
+                    l.push(dayStr);
+                    w.push(data[dateKey] || 0);
                 }
             }
 
-            // Calcular um máximo sugerido para a régua ficar maior que o valor mais alto
             const maxVal = Math.max(...w, 0);
-            const suggestedMax = maxVal > 0 ? maxVal * 1.2 : 10; // Adiciona 20% de folga
+            const suggestedMax = maxVal > 0 ? maxVal * 1.2 : 10;
 
-            if (lineChartInstance) lineChartInstance.destroy();
-            lineChartInstance = new Chart(ctx, {
-                type: 'line',
+            if (mainChartInstance) mainChartInstance.destroy();
+            mainChartInstance = new Chart(ctx, {
+                type: 'bar',
                 data: {
                     labels: l,
                     datasets: [{
                         label: 'Peso (KG)',
                         data: w,
+                        backgroundColor: '#fbbf24',
                         borderColor: '#fbbf24',
-                        backgroundColor: 'rgba(251, 191, 36, 0.1)',
-                        borderWidth: 3,
-                        fill: true,
-                        tension: 0.4,
-                        pointBackgroundColor: '#fbbf24',
-                        pointBorderColor: '#09090b',
-                        pointBorderWidth: 2,
-                        pointRadius: 5,
-                        pointHoverRadius: 7,
-                        // Aumenta a área de interação
-                        pointHitRadius: 15
+                        borderWidth: 1,
+                        borderRadius: 4,
+                        hoverBackgroundColor: '#fff'
                     }]
                 },
                 options: {
@@ -1680,9 +1671,7 @@
                             position: 'top',
                             labels: {
                                 color: '#a1a1aa',
-                                font: {
-                                    size: 12
-                                }
+                                font: { size: 12 }
                             }
                         },
                         tooltip: {
@@ -1698,12 +1687,7 @@
                             displayColors: false,
                             callbacks: {
                                 label: function (context) {
-                                    let label = context.dataset.label || '';
-                                    if (label) {
-                                        label += ': ';
-                                    }
-                                    label += formatNumber(context.parsed.y) + ' KG';
-                                    return label;
+                                    return `Peso: ${formatNumber(context.parsed.y)} KG`;
                                 }
                             }
                         },
@@ -1733,9 +1717,7 @@
                         y: {
                             beginAtZero: true,
                             suggestedMax: suggestedMax,
-                            grid: {
-                                color: 'rgba(255, 255, 255, 0.05)'
-                            },
+                            grid: { color: 'rgba(255, 255, 255, 0.05)' },
                             ticks: {
                                 color: '#a1a1aa',
                                 callback: function (value) {
@@ -1744,12 +1726,8 @@
                             }
                         },
                         x: {
-                            grid: {
-                                color: 'rgba(255, 255, 255, 0.05)'
-                            },
-                            ticks: {
-                                color: '#a1a1aa'
-                            }
+                            grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                            ticks: { color: '#a1a1aa' }
                         }
                     }
                 }
