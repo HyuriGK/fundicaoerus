@@ -1135,6 +1135,12 @@
             "SPILROD FUNDICAO DE FERRO E ACO LTDA"
         ];
 
+        function isServiceClient(name) {
+            if (!name) return false;
+            const n = name.trim().toUpperCase();
+            return serviceClients.some(sc => sc.toUpperCase() === n);
+        }
+
         const formatCurrency = (val) => (val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 2 });
         const formatNumber = (val, decimals = 2) => (val || 0).toLocaleString('pt-BR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
         const formatWeight = (val) => (val || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kg';
@@ -1220,11 +1226,23 @@
             // 1. Base Data (Filtered for Exclusions and Service Toggle)
             const filteredAll = data.filter(item => {
                 const name = (item.clienteNome || 'Desconhecido').trim();
-                // Check if it's a service client and if we should show it
-                const isService = serviceClients.includes(name);
-                if (isService && !showServices) return false;
+                const isService = isServiceClient(name);
+                
+                if (isService) {
+                    return showServices; // Show only if toggle is ON
+                }
                 
                 return !excludedClients.has(name) && item.excluido_manualmente !== true;
+            });
+
+            // 1.5 Special check for Sums: ensure service clients are NOT ignored if toggle is ON
+            const dataToSum = data.filter(item => {
+                const name = (item.clienteNome || 'Desconhecido').trim();
+                if (isServiceClient(name)) return showServices;
+                
+                if (excludedClients.has(name)) return false;
+                if (item.excluido_manualmente === true) return false;
+                return true;
             });
 
             // Populate Year Selector with any additional years found in data
@@ -1248,7 +1266,7 @@
             const annualFilteredData = filteredAll.filter(item => item.data && item.data.startsWith(selectedYear));
 
             // 2. Filter for Range (Drivers Table & KPIs)
-            const rangeData = filteredAll.filter(item => {
+            const rangeData = dataToSum.filter(item => {
                 if (startInput && item.data < startInput) return false;
                 if (endInput && item.data > endInput) return false;
                 return true;
@@ -1622,10 +1640,11 @@
             // Filter for display
             let filteredClients = allData.filter(item => {
                 const name = (item.clienteNome || 'Desconhecido').trim();
+                const isService = isServiceClient(name);
                 
-                // Service Toggle logic
-                const isService = serviceClients.includes(name);
-                if (isService && !showServices) return false;
+                if (isService) {
+                    return showServices;
+                }
 
                 if (excludedClients.has(name)) return false;
                 if (startInput && item.data < startInput) return false;
@@ -1667,7 +1686,8 @@
                 const valorUnit = isVisible ? formatCurrency(item.valorUnitario || 0) : 'R$ ---';
                 const valorTotal = isVisible ? formatCurrency(calculatedTotal) : 'R$ ---';
 
-                const isIgnored = item.excluido_manualmente === true;
+                const isService = isServiceClient(item.clienteNome);
+                const isIgnored = item.excluido_manualmente === true && (!isService || !showServices);
                 const inclCell = `<td class="checkbox-cell" style="${isDev ? '' : 'display: none;'}" onclick="event.stopPropagation()"><input type="checkbox" ${!isIgnored ? 'checked' : ''} onclick="toggleRowExclusion(${globalIdx})"></td>`;
 
                 return `
@@ -1687,7 +1707,11 @@
                 </tr>
             `}).join('') || '<tr><td colspan="12" style="text-align:center; padding: 20px;">Nenhum registro.</td></tr>';
 
-            const incl = filteredClients.filter(i => !i.excluido_manualmente);
+            const incl = filteredClients.filter(item => {
+                const isService = isServiceClient(item.clienteNome);
+                if (isService) return showServices;
+                return !item.excluido_manualmente;
+            });
             const elRecords = document.getElementById('totalRecords');
             const elWeight = document.getElementById('totalWeight');
             const elValue = document.getElementById('totalValue');
