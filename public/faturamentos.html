@@ -1149,10 +1149,18 @@
             <div class="chart-panel" style="grid-column: span 2;">
                 <div class="chart-header-row">
                     <div class="chart-title">Representação Curva ABC: <span id="abcTypeLabel" style="color:var(--color-primary)">Peso (kg)</span></div>
-                    <div class="chart-header-kpi" style="gap: 5px;">
-                        <button class="btn-mini-chart active" id="btnAbcPeso" onclick="setABCType('peso')">Peso (kg)</button>
-                        <button class="btn-mini-chart" id="btnAbcValor" onclick="setABCType('valor')">Valor (R$)</button>
-                        <button class="btn-mini-chart" id="btnAbcPreco" onclick="setABCType('preco')">Preço (R$/kg)</button>
+                    <div style="display: flex; align-items: center; gap: 15px;">
+                        <div style="display: flex; gap: 8px; font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">
+                            <span style="display:flex; align-items:center; gap:4px;"><span style="width:10px; height:10px; border-radius:3px; background:#f59e0b;"></span> Classe A (70%)</span>
+                            <span style="display:flex; align-items:center; gap:4px;"><span style="width:10px; height:10px; border-radius:3px; background:#a1a1aa;"></span> Classe B (25%)</span>
+                            <span style="display:flex; align-items:center; gap:4px;"><span style="width:10px; height:10px; border-radius:3px; background:#3f3f46;"></span> Classe C (5%)</span>
+                        </div>
+                        <div class="test-spacer" style="width:1px; height:20px; background:var(--border-subtle);"></div>
+                        <div class="chart-header-kpi" style="gap: 5px;">
+                            <button class="btn-mini-chart active" id="btnAbcPeso" onclick="setABCType('peso')">Peso (kg)</button>
+                            <button class="btn-mini-chart" id="btnAbcValor" onclick="setABCType('valor')">Valor (R$)</button>
+                            <button class="btn-mini-chart" id="btnAbcPreco" onclick="setABCType('preco')">Preço (R$/kg)</button>
+                        </div>
                     </div>
                 </div>
                 <div style="position: relative; flex: 1; width: 100%; min-height: 0;"><canvas id="abcChart"></canvas></div>
@@ -1954,17 +1962,32 @@
             // Sort by active metric
             clientList.sort((a, b) => b[abcType] - a[abcType]);
 
-            // Top 15
+            // Calculate ABC Cumulative Pct
+            const totalValue = clientList.reduce((acc, curr) => acc + curr[abcType], 0);
+            let currentSum = 0;
+            clientList.forEach((c, i) => {
+                currentSum += c[abcType];
+                const pct = totalValue > 0 ? (currentSum / totalValue) * 100 : 0;
+                if (pct <= 70) c.abc = 'A';
+                else if (pct <= 95) c.abc = 'B';
+                else c.abc = 'C';
+            });
+
+            // Top 15 for visualization
             const topClients = clientList.slice(0, 15);
 
             abcChart = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: topClients.map(c => c.name),
+                    labels: topClients.map(c => `[${c.abc}] ${c.name}`),
                     datasets: [{
                         label: abcType === 'preco' ? 'R$/kg' : (abcType === 'valor' ? 'R$' : 'kg'),
                         data: topClients.map(c => c[abcType]),
-                        backgroundColor: '#f59e0b',
+                        backgroundColor: topClients.map(c => {
+                            if (c.abc === 'A') return '#f59e0b';
+                            if (c.abc === 'B') return '#a1a1aa';
+                            return '#3f3f46';
+                        }),
                         borderRadius: 4
                     }]
                 },
