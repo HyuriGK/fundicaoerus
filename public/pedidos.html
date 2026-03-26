@@ -3639,7 +3639,7 @@
                 // 1. Chart Filters (PowerBI Style)
                 if (activeChartFilters.month !== null) {
                     let dateField;
-                    if (chartMode === 'emission_pending') {
+                    if (chartMode === 'emission_pending' || chartMode === 'emission_total') {
                         dateField = item.DATA_EMISSAO_PEDIDO;
                     } else {
                         // Default to delivery
@@ -3653,8 +3653,13 @@
                     // Check Month
                     if (d.getMonth() !== activeChartFilters.month) return false;
 
-                    // NEW: Check Year as well (from the filter dropdown)
-                    const yearEl = document.getElementById('chartYearFilter');
+                    // NEW: Check Year as well (from the specialized filter dropdowns)
+                    let yearId = 'chartYearFilter'; // Fallback
+                    if (chartMode === 'delivery') yearId = 'yearFilterPCP';
+                    else if (chartMode === 'emission_pending') yearId = 'yearFilterPending';
+                    else if (chartMode === 'emission_total') yearId = 'yearFilterHistorical';
+
+                    const yearEl = document.getElementById(yearId);
                     const selectedYear = yearEl ? (parseInt(yearEl.value) || new Date().getFullYear()) : new Date().getFullYear();
 
                     if (d.getFullYear() !== selectedYear) return false;
@@ -3817,61 +3822,13 @@
                         unitPrice = parseFloat(item.PRECO_KG) * unitWeight;
                     }
                     item._sectorValue = unitPrice * sectorQty;
-                } else {
-                    // Reset sector metrics if no stage filter
-                    delete item._sectorQty;
-                    delete item._sectorWeight;
-                    delete item._sectorValue;
                 }
-
+                
                 // 5. History Filter (By default, HIDE fully billed orders for the Table)
-                // Unless we are in a specific "History" mode for the table (not implemented yet)
-                // The 'Carteira' concept implies BACKLOG (Open Orders).
-                // FATURADO_PPR = 'T' means it's done. 
-                // However, we want them for CHARTS.
-                // The charts use `filtered` list? Yes `updateCharts(filtered)`.
-                // PROBLEM: If we filter them out here, the charts won't see them either!
-                // FIX: We need TWO lists? or we allow them in `filtered` but hide them in `renderTable`?
-                // `renderTable` iterates `list`. `updateCharts` iterates `list`.
-                // User wants "Total Emission Chart" to show everything.
-                // User wants "Carteira Table" to show only open.
-
-                // Let's change the strategy:
-                // 1. keep `filtered` as the "View Data".
-                // 2. If `chartMode === 'emission_total'`, we probably WANT history in the chart.
-                // 3. But the TABLE should probably only show what's filtered.
-
-                // Let's add a "Show Completed" toggle? Or just handle it visually?
-                // User said: "visto que eu quero ter um histórico mes a mês do quanto é emitido de pedido"
-
-                // If I include them in `filtered`, they appear in the table.
-                // I will add a check:
-                // If the item is fully billed ('T'), we generally exclude it from the default view
-                // UNLESS the user explicitly wants to see history.
-                // Given the user instructions, I'll exclude them from the *default* filter
-                // BUT I need to make sure the "Total Emission" chart attempts to fetch its own data or uses a separate dataset?
-                // The "Total Emission" chart in `pedidos.html` ALREADY fetches `api/pedidos-firebird/emissao-mensal` (Historical) separately!
-                // See line ~2327: `fetch('/api/pedidos-firebird/emissao-mensal?anoInicio='...)`
-                // AND it caches it in `totalEmissionCache`.
-                // AND `updateMonthlyChart` uses `totalEmissionCache` if `chartMode === 'emission_total'`.
-
-                // THEREFORE: The chart DOES NOT rely on the `filtered` table data for the "Total Emission" view!
-                // It relies on `totalEmissionCache`.
-
-                // HOWEVER, the user might want `emission_pending` or `delivery` charts to eventually reflect history?
-                // User said: "na tabela pedido_produto para o gráfico de emissão total... os registros devem trazer faturado_ppr T e P"
-                // The "Total Emission" chart ALREADY fetches from Firebird directly (via `pedidos-firebird.js`).
-                // So... why did the user ask to change `pedidos-sync`?
-                // Maybe they want to STOP using `pedidos-firebird.js` (direct access) and use the Sync table?
-                // Or maybe they want the "Pending" chart to also start showing history?
-
-                // To be safe and compliant with "Carteira" purpose:
-                // I will **Exclude** 'T' (Total Faturado) from the main list here.
-                // This keeps the Table and the "Pending/Delivery" charts focused on the Backlog.
-                // The "Total Emission" chart (which uses a separate API) is unaffected by this filter and works fine.
-                // Wait, if I change the Sync Script, `allData` (loaded from `/api/pedidos-sync`) will now have 'T' records.
-                // If I don't filter them here, they appear in the Table.
-                // So I MUST filter them here to keep the Table clean.
+                // Unless we are in 'emission_total' mode (Historical Chart view)
+                if (chartMode !== 'emission_total' && item.FATURADO_PPR === 'T') {
+                    return false;
+                }
                 return true;
             });
 
@@ -4032,7 +3989,6 @@
                                 // Normal view, set filter
                                 activeChartFilters.month = activeElements[0].index;
                                 chartMode = 'delivery';
-                                openModal(); // Open modal with filtered data
                             }
                         } else {
                             chartMode = null;
@@ -4130,7 +4086,6 @@
                                 // Normal view, set filter
                                 activeChartFilters.month = activeElements[0].index;
                                 chartMode = 'emission_pending';
-                                openModal(); // Open modal with filtered data
                             }
                         } else {
                             chartMode = null;
@@ -4210,7 +4165,6 @@
                         if (activeElements.length > 0) {
                             const clickedId = ids[activeElements[0].index];
                             activeChartFilters.client = (activeChartFilters.client == clickedId) ? null : clickedId;
-                            if (activeChartFilters.client) openModal(); // Open modal if client selected
                         } else {
                             activeChartFilters.client = null;
                         }
@@ -4411,33 +4365,34 @@
                         const viewMode = modeEl ? modeEl.value : 'month';
 
                         if (viewMode === 'month') {
-                            // Clicou no mês -> abre modal com registros desse mês
-                            let targetMonth = index + 1;
-                            if (selectedMonth !== 'Todos') targetMonth = parseInt(selectedMonth);
+                            // Clicou no mês -> Filtra no dashboard (sem abrir modal automático)
+                            let targetMonthIndex = index;
+                            if (selectedMonth !== 'Todos') targetMonthIndex = parseInt(selectedMonth) - 1;
 
-                            try {
-                                const res = await fetch(`/api/emissoes/list?ano=${selectedYear}&mes=${targetMonth}`);
-                                if (!res.ok) throw new Error();
-                                const records = await res.json();
-                                showHistoricalDetails(records, `Emissões - ${targetMonth}/${selectedYear}`);
-                            } catch (err) {
-                                console.error('Erro ao buscar detalhes:', err);
+                            if (chartMode === 'emission_total' && activeChartFilters.month === targetMonthIndex) {
+                                chartMode = null;
+                                activeChartFilters.month = null;
+                            } else {
+                                chartMode = 'emission_total';
+                                activeChartFilters.month = targetMonthIndex;
                             }
+                            applyColumnFilters();
                         } else {
-                            // Pareto Click -> Filtrar por esse cliente no modal
+                            // Pareto Click -> Filtrar por esse cliente no dashboard
                             const clientName = labels[index];
-                            try {
-                                const res = await fetch(`/api/emissoes/list?ano=${selectedYear}&mes=${selectedMonth}`);
-                                if (!res.ok) throw new Error();
-                                const allRecords = await res.json();
+                            // Find client ID in data
+                            const clientRow = data.find(r => r.name === clientName);
+                            const clickedId = clientRow ? clientRow.ID_CLIENTE_CORE : null;
 
-                                // Filter locally by client name
-                                const filtered = allRecords.filter(r => r.NOME_CLIENTE === clientName);
-                                showHistoricalDetails(filtered, `Emissões - ${clientName} (${selectedMonth !== 'Todos' ? selectedMonth + '/' : ''}${selectedYear})`);
-                            } catch (err) {
-                                console.error('Erro ao buscar detalhes por cliente:', err);
-                            }
+                            activeChartFilters.client = (activeChartFilters.client == clickedId) ? null : clickedId;
+                            chartMode = 'emission_total'; // Keep it in historical mode to show 'T' records
+                            applyColumnFilters();
                         }
+                    } else {
+                        chartMode = null;
+                        activeChartFilters.month = null;
+                        activeChartFilters.client = null;
+                        applyColumnFilters();
                     }
                 }
             };
