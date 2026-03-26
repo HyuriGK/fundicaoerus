@@ -580,31 +580,45 @@
         .industrial-progress-container {
             flex-shrink: 0;
             margin-bottom: 12px;
-            display: flex;
+            display: none; /* Inicia oculta */
             flex-direction: column;
             gap: 10px;
+            transition: all 0.3s ease;
         }
 
-        .industrial-progress-label {
+        /* Botão Posição Industrial Estilizado */
+        .toggle-industrial-btn {
+            background: rgba(251, 191, 36, 0.1);
+            border: 1px solid rgba(251, 191, 36, 0.3);
+            color: var(--color-primary);
+            padding: 8px 16px;
+            border-radius: 8px;
             font-size: 0.75rem;
-            font-weight: 600;
-            color: var(--text-muted);
-            text-transform: uppercase;
+            font-weight: 700;
             letter-spacing: 0.05em;
+            cursor: pointer;
             display: flex;
-            justify-content: space-between;
             align-items: center;
+            gap: 8px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            margin-bottom: 10px;
+            width: fit-content;
         }
 
-        .industrial-bar {
-            height: 30px;
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 20px;
-            display: flex;
-            overflow: hidden;
-            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5);
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            position: relative;
+        .toggle-industrial-btn:hover {
+            background: rgba(251, 191, 36, 0.2);
+            border-color: var(--color-primary);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(251, 191, 36, 0.15);
+        }
+
+        .toggle-industrial-btn i {
+            font-size: 0.9rem;
+            transition: transform 0.3s ease;
+        }
+
+        .toggle-industrial-btn.active i {
+            transform: rotate(180deg);
         }
 
         .bar-segment {
@@ -1493,7 +1507,14 @@
                     <div class="kpi-subtext">Sem data (BLOCK)</div>
                 </div>
             </div>
-            <div class="industrial-progress-container">
+            
+            <!-- Botão de Alternância Posição Industrial -->
+            <button class="toggle-industrial-btn" onclick="toggleIndustrialPosition()">
+                <i class="fa-solid fa-industry"></i>
+                POSIÇÃO INDUSTRIAL
+            </button>
+
+            <div class="industrial-progress-container" id="industrialProgressContainer">
                 
                 <div class="industrial-groups-grid">
                     <!-- Group 1: Aguardando -->
@@ -3994,15 +4015,20 @@
                             }
                         }
                     },
+                    interaction: {
+                        mode: 'index',
+                        intersect: false
+                    },
                     onClick: (e, elements) => {
-                        if (elements.length > 0) {
+                        const activeElements = chartPCP.getElementsAtEventForMode(e, 'index', { intersect: false }, true);
+                        if (activeElements.length > 0) {
                             if (chartMode === 'delivery' && activeChartFilters.month !== null) {
                                 // Already zoomed, toggle off
                                 chartMode = null;
                                 activeChartFilters.month = null;
                             } else {
                                 // Normal view, set filter
-                                activeChartFilters.month = elements[0].index;
+                                activeChartFilters.month = activeElements[0].index;
                                 chartMode = 'delivery';
                             }
                         } else {
@@ -4086,15 +4112,20 @@
                             }
                         }
                     },
+                    interaction: {
+                        mode: 'index',
+                        intersect: false
+                    },
                     onClick: (e, elements) => {
-                        if (elements.length > 0) {
+                        const activeElements = chartPending.getElementsAtEventForMode(e, 'index', { intersect: false }, true);
+                        if (activeElements.length > 0) {
                             if (chartMode === 'emission_pending' && activeChartFilters.month !== null) {
                                 // Already zoomed, toggle off
                                 chartMode = null;
                                 activeChartFilters.month = null;
                             } else {
                                 // Normal view, set filter
-                                activeChartFilters.month = elements[0].index;
+                                activeChartFilters.month = activeElements[0].index;
                                 chartMode = 'emission_pending';
                             }
                         } else {
@@ -4166,9 +4197,14 @@
                             }
                         }
                     },
+                    interaction: {
+                        mode: 'index',
+                        intersect: false
+                    },
                     onClick: (e, elements) => {
-                        if (elements.length > 0) {
-                            const clickedId = ids[elements[0].index];
+                        const activeElements = chartPareto.getElementsAtEventForMode(e, 'index', { intersect: false }, true);
+                        if (activeElements.length > 0) {
+                            const clickedId = ids[activeElements[0].index];
                             activeChartFilters.client = (activeChartFilters.client == clickedId) ? null : clickedId;
                         } else {
                             activeChartFilters.client = null;
@@ -4353,9 +4389,14 @@
                         }
                     }
                 },
+                interaction: {
+                    mode: 'index',
+                    intersect: false
+                },
                 onClick: async (e, elements) => {
-                    if (elements.length > 0) {
-                        const index = elements[0].index;
+                    const activeElements = chartHistorical.getElementsAtEventForMode(e, 'index', { intersect: false }, true);
+                    if (activeElements.length > 0) {
+                        const index = activeElements[0].index;
                         const yearEl = document.getElementById('yearFilterHistorical');
                         const monthEl = document.getElementById('monthFilterHistorical');
                         const modeEl = document.getElementById('modeFilterHistorical');
@@ -4510,6 +4551,33 @@
                 row1.style.display = 'none';
                 row2.style.display = 'grid';
             }
+            // Resize all to ensure they fit the new layout
+            if(chartPCP) chartPCP.resize();
+            if(chartPareto) chartPareto.resize();
+            if(chartPending) chartPending.resize();
+            if(chartHistorical) chartHistorical.resize();
+        }
+
+        function toggleIndustrialPosition() {
+            const container = document.getElementById('industrialProgressContainer');
+            const btn = document.querySelector('.toggle-industrial-btn');
+            if (!container) return;
+
+            if (container.style.display === 'none' || !container.style.display) {
+                container.style.display = 'flex';
+                btn.classList.add('active');
+            } else {
+                container.style.display = 'none';
+                btn.classList.remove('active');
+            }
+
+            // Resize charts to adjust to new height
+            setTimeout(() => {
+                if(chartPCP) chartPCP.resize();
+                if(chartPareto) chartPareto.resize();
+                if(chartPending) chartPending.resize();
+                if(chartHistorical) chartHistorical.resize();
+            }, 50);
         }
 
         window.addEventListener('keydown', (e) => {
