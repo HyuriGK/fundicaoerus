@@ -538,7 +538,7 @@
 
         th {
             background: #18181b;
-            color: var(--color-primary);
+            color: #a1a1aa; /* Gray color matching pedidos.html */
             white-space: nowrap;
             text-transform: uppercase;
         }
@@ -582,7 +582,7 @@
         #dataTable thead tr:first-child th {
             position: relative; /* Disabled Sticky (Scrolls with content) */
             background-color: #18181b;
-            color: var(--color-primary);
+            color: #a1a1aa; /* Gray color */
             padding: 12px 8px;
             text-align: center;
             font-weight: 700;
@@ -610,7 +610,7 @@
         #dataTable thead tr:first-child th {
             position: relative; /* Disabled Sticky */
             background-color: #18181b;
-            color: var(--color-primary);
+            color: #a1a1aa; /* Gray color */
             padding: 14px 10px;
             text-align: center;
             font-weight: 700;
@@ -985,9 +985,12 @@
                                     placeholder="..."></th>
                             <th><input type="text" id="filter-lote" class="filter-input-table" onkeyup="filterDetailTable()"
                                     placeholder="..."></th>
-                            <th></th>
-                            <th></th>
-                            <th></th>
+                            <th><input type="text" id="filter-qtd" class="filter-input-table" onkeyup="filterDetailTable()"
+                                    placeholder="..."></th>
+                            <th><input type="text" id="filter-peso-un" class="filter-input-table" onkeyup="filterDetailTable()"
+                                    placeholder="..."></th>
+                            <th><input type="text" id="filter-peso-total" class="filter-input-table" onkeyup="filterDetailTable()"
+                                    placeholder="..."></th>
                         </tr>
                     </thead>
                     <tbody></tbody>
@@ -1051,9 +1054,8 @@
                             <th><input class="filter-input-table" onkeyup="filterTable()" placeholder="..."></th>
                             <th><input class="filter-input-table" onkeyup="filterTable()" placeholder="..."></th>
                             <th><input class="filter-input-table" onkeyup="filterTable()" placeholder="..."></th>
-                            <th></th>
-                            <th></th>
-                            <th></th>
+                            <th><input class="filter-input-table" onkeyup="filterTable()" placeholder="..."></th>
+                            <th><input class="filter-input-table" onkeyup="filterTable()" placeholder="..."></th>
                         </tr>
                     </thead>
                     <tbody></tbody>
@@ -1341,14 +1343,24 @@
                     const input = inputs[j];
                     if (!input) continue;
 
-                    const filterVal = input.value.toUpperCase();
+                    const filterVal = input.value.trim().toUpperCase();
                     if (!filterVal) continue;
 
-                    const txtValue = (tds[j].textContent || tds[j].innerText).toUpperCase();
+                    const txtValue = (tds[j].textContent || tds[j].innerText).trim().toUpperCase();
 
-                    if (txtValue.indexOf(filterVal) === -1) {
-                        show = false;
-                        break;
+                    // --- EXACT MATCH LOGIC for Peso UN (index 9) ---
+                    if (j === 9) {
+                        // For Peso UN, we want to match exactly what is typed
+                        // We replace comma with dot for standardized comparison if it looks like a number
+                        if (txtValue !== filterVal && txtValue.replace(',', '.') !== filterVal.replace(',', '.')) {
+                            show = false;
+                            break;
+                        }
+                    } else {
+                        if (txtValue.indexOf(filterVal) === -1) {
+                            show = false;
+                            break;
+                        }
                     }
                 }
                 tr[i].style.display = show ? '' : 'none';
@@ -2118,7 +2130,10 @@
                 codigo_peca: document.getElementById('filter-codigo_peca').value.toLowerCase(),
                 produto: document.getElementById('filter-produto').value.toLowerCase(),
                 motivo: document.getElementById('filter-motivo').value.toLowerCase(),
-                lote: document.getElementById('filter-lote').value.toLowerCase()
+                lote: document.getElementById('filter-lote').value.toLowerCase(),
+                qtd: document.getElementById('filter-qtd').value.toLowerCase().trim(),
+                pesoUn: document.getElementById('filter-peso-un').value.toLowerCase().trim(),
+                pesoTotal: document.getElementById('filter-peso-total').value.toLowerCase()
             };
 
             const rows = document.querySelectorAll('#detailDataTable tbody tr');
@@ -2132,8 +2147,15 @@
                 const matchProduto = cells[5].textContent.toLowerCase().includes(filters.produto);
                 const matchMotivo = cells[6].textContent.toLowerCase().includes(filters.motivo);
                 const matchLote = cells[7].textContent.toLowerCase().includes(filters.lote);
+                const matchQtd = cells[8].textContent.toLowerCase().includes(filters.qtd);
+                
+                // EXACT MATCH logic for Peso UN (index 9)
+                const txtPesoUn = cells[9].textContent.toLowerCase().trim();
+                const matchPesoUn = filters.pesoUn === "" || (txtPesoUn === filters.pesoUn || txtPesoUn.replace(',', '.') === filters.pesoUn.replace(',', '.'));
+                
+                const matchPesoTotal = cells[10].textContent.toLowerCase().includes(filters.pesoTotal);
 
-                if (matchData && matchSetorResp && matchCliente && matchOp && matchCodigo && matchProduto && matchMotivo && matchLote) {
+                if (matchData && matchSetorResp && matchCliente && matchOp && matchCodigo && matchProduto && matchMotivo && matchLote && matchQtd && matchPesoUn && matchPesoTotal) {
                     row.style.display = '';
                 } else {
                     row.style.display = 'none';
