@@ -2573,42 +2573,115 @@
                     'refugo': { icon: 'fa-trash-can', color: '#f87171' }
                 };
 
-                function renderCards() {
+                // --- TOP CLIENTES CARTEIRA ---
+                async function renderTopClients() {
                     const grid = document.getElementById('quickAccessGrid');
-                    grid.innerHTML = '';
+                    grid.innerHTML = '<div style="color:var(--text-dim); font-size:0.8rem; grid-column: 1/-1;">Carregando Top Clientes... <i class="fa-solid fa-spinner fa-spin"></i></div>';
                     
-                    const role = (localStorage.getItem('erus_role') || '').toLowerCase();
-                    const isRestricted = ['moldagem', 'fusão', 'fusao', 'acabamento'].includes(role);
+                    try {
+                        const role = (localStorage.getItem('erus_role') || '').toLowerCase();
+                        if (['moldagem', 'fusão', 'fusao', 'acabamento'].includes(role)) {
+                            grid.innerHTML = '';
+                            return; 
+                        }
 
-                    ALL_LINKS.forEach(link => {
-                        if (isRestricted && (link.id !== 'producaosetor' && link.id !== 'refugo')) {
+                        grid.style.gridTemplateColumns = 'repeat(5, 1fr)';
+
+                        const pRes = await fetch('/api/pedidos-sync');
+                        if (!pRes.ok) throw new Error('Falha ao buscar carteira');
+                        const pData = await pRes.json();
+                        
+                        let customWeightsMap = {};
+                        try {
+                            const wRes = await fetch('/api/weights/list');
+                            if (wRes.ok) customWeightsMap = await wRes.json();
+                        } catch(e){}
+
+                        function getClientWeight(item) {
+                            const saldoLib = Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0;
+                            let saldoReal = saldoLib;
+                            if (saldoLib <= 0) {
+                                const qO = Number(item.QUANTIDADE_PPR) || 0;
+                                const qF = Number(item.QUANTIDADE_FATURADO_PPR || item.QUANTIDADE_FATURADA_PPR) || 0;
+                                saldoReal = Math.max(0, qO - qF);
+                            }
+
+                            const metrics = getItemSectorMetrics(item);
+                            const qtdOriginal = metrics.originalTarget;
+
+                            let unitWeight = 0;
+                            const prodCode = String(item.PRODUTO_PPR || '').trim();
+
+                            if (item.PESO_UNIT !== undefined && item.PESO_UNIT !== null && item.PESO_UNIT !== '') {
+                                unitWeight = Number(item.PESO_UNIT);
+                            } else if (customWeightsMap[prodCode]) {
+                                unitWeight = customWeightsMap[prodCode];
+                            } else {
+                                unitWeight = qtdOriginal > 0 ? (Number(item.PESO_LIQUIDO_NPR) || 0) / qtdOriginal : 0;
+                            }
+
+                            return unitWeight * saldoReal;
+                        }
+
+                        let totalPortfolioWeight = 0;
+                        const clientTotals = {};
+
+                        pData.forEach(item => {
+                            const pCode = String(item.PRODUTO_PPR || '').trim();
+                            if (pCode.endsWith('1')) return; // ignora modelos
+
+                            const w = getClientWeight(item);
+                            if (w > 0) {
+                                totalPortfolioWeight += w;
+                                const cName = String(item.NOME_CLIENTE || 'Desconhecido').trim().toUpperCase();
+                                if (!clientTotals[cName]) clientTotals[cName] = 0;
+                                clientTotals[cName] += w;
+                            }
+                        });
+
+                        const sortedClients = Object.keys(clientTotals)
+                            .map(name => ({ name, weight: clientTotals[name] }))
+                            .sort((a, b) => b.weight - a.weight)
+                            .slice(0, 5); 
+
+                        grid.innerHTML = '';
+                        
+                        if (sortedClients.length === 0) {
+                            grid.innerHTML = '<div style="color:var(--text-dim); grid-column: 1/-1;">Nenhuma carteira ativa.</div>';
                             return;
                         }
 
-                        let title = link.title;
-                        if (isRestricted && link.id === 'producaosetor') {
-                            if (role === 'moldagem') title = 'Produção (Moldagem)';
-                            if (role === 'acabamento') title = 'Produção (Acabamento)';
-                        }
+                        const colors = ['#f59e0b', '#3b82f6', '#10b981', '#a855f7', '#ec4899'];
 
-                        const theme = CARD_THEMES[link.id] || { icon: 'fa-chart-bar', color: '#fbbf24' };
+                        sortedClients.forEach((client, index) => {
+                            const pct = totalPortfolioWeight > 0 ? ((client.weight / totalPortfolioWeight) * 100).toFixed(1) : 0;
+                            const weightTon = (client.weight / 1000).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+                            const color = colors[index % colors.length];
 
-                        const card = document.createElement('a');
-                        card.className = 'bento-card';
-                        card.href = link.url;
-                        if (link.tooltip) card.setAttribute('data-tooltip', link.tooltip);
-                        card.innerHTML = `
-                    <div class="card-live-data" id="live-${link.id}">
-                        <h4 class="card-title">${title}</h4>
-                        <span class="live-value">---</span>
-                        <span class="live-label" style="color: ${theme.color};">
-                            <i class="fa-solid ${theme.icon}"></i> CONSULTANDO...
-                        </span>
-                    </div>
-                `;
-                        grid.appendChild(card);
-                        if (link.api) fetchLiveData(link);
-                    });
+                            let shortName = client.name.split(' ')[0];
+                            if (client.name.split(' ').length > 1) {
+                                shortName += ' ' + client.name.split(' ')[1];
+                            }
+
+                            const card = document.createElement('div');
+                            card.className = 'bento-card';
+                            card.style.cursor = 'default';
+                            card.innerHTML = `
+                                <div class="card-live-data">
+                                    <h4 class="card-title" title="${client.name}" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size:0.75rem;">${index + 1}º ${shortName}</h4>
+                                    <span class="live-value" style="font-size: 1.5rem;">${weightTon} <span style="font-size:0.7rem; color:var(--text-dim);">Ton</span></span>
+                                    <span class="live-label" style="color: ${color}; opacity:0.9;">
+                                        <i class="fa-solid fa-chart-pie"></i> ${pct}% da Carteira
+                                    </span>
+                                </div>
+                            `;
+                            grid.appendChild(card);
+                        });
+
+                    } catch(e) {
+                         grid.innerHTML = '<div style="color:var(--status-danger); grid-column: 1/-1;">Erro ao carregar top clientes.</div>';
+                         console.error('Erro Top Clientes:', e);
+                    }
                 }
 
                 let customWeightsMap = {};
@@ -3361,7 +3434,7 @@
                 }
 
                 document.addEventListener('DOMContentLoaded', () => {
-                    renderCards();
+                    renderTopClients();
                     updateUserInfo();
                     checkTasks();
                     enforceSidebarRoleFilter();
