@@ -1714,11 +1714,11 @@
                             <th class="sortable-th" id="th-cliente" onclick="toggleSort('cliente')" style="width: 14%; text-align: left;">CLIENTE</th>
                             <th style="width: 7%; text-align: center;">CÓDIGO</th>
                             <th style="width: 18%;">PRODUTO</th>
-                            <th style="width: 4%;">SALDO</th>
+                            <th class="sortable-th" id="th-saldo" onclick="toggleSort('saldo')" style="width: 4%;">SALDO</th>
                             <th class="sortable-th" id="th-peso_un" onclick="toggleSort('peso_un')" style="width: 7%;">PESO UN</th>
                             <th class="sortable-th" id="th-peso_total" onclick="toggleSort('peso_total')" style="width: 7%;">PESO TOTAL</th>
 
-                            <th style="width: 8%;">TOTAL (R$)</th>
+                            <th class="sortable-th" id="th-valor_total" onclick="toggleSort('valor_total')" style="width: 8%;">TOTAL (R$)</th>
                             <th style="width: 5%;">OP</th>
                         </tr>
                         <tr id="filterRow">
@@ -3849,6 +3849,30 @@
                     } else if (sortConfig.column === 'peso_total') {
                         valA = getCorrectedWeight(a);
                         valB = getCorrectedWeight(b);
+                    } else if (sortConfig.column === 'saldo') {
+                        const getS = (item) => {
+                            if (item._sectorQty !== undefined) return item._sectorQty;
+                            return getItemSectorMetrics(item).totalBalance;
+                        };
+                        valA = getS(a);
+                        valB = getS(b);
+                    } else if (sortConfig.column === 'valor_total') {
+                        const getV = (item) => {
+                            if (item._sectorValue !== undefined) return item._sectorValue;
+                            const metrics = getItemSectorMetrics(item);
+                            const sReal = metrics.totalBalance;
+                            const qOrig = metrics.originalTarget;
+                            let uW = 0;
+                            const pCode = String(item.PRODUTO_PPR || '').trim();
+                            if (item.PESO_UNIT !== undefined && item.PESO_UNIT !== null && item.PESO_UNIT !== '') uW = Number(item.PESO_UNIT);
+                            else if (customWeights[pCode]) uW = customWeights[pCode];
+                            else uW = qOrig > 0 ? (Number(item.PESO_LIQUIDO_NPR) || 0) / qOrig : 0;
+                            let uP = parseFloat(item.VALOR_PPR || 0);
+                            if (item.PRECO_KG && parseFloat(item.PRECO_KG) > 0 && customWeights[pCode]) uP = parseFloat(item.PRECO_KG) * uW;
+                            return uP * sReal;
+                        };
+                        valA = getV(a);
+                        valB = getV(b);
                     } else {
                         return 0;
                     }
