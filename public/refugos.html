@@ -1019,6 +1019,7 @@
         // --- CONSTANTS & STATE ---
         const MONTHS_SHORT = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
         let rawData = [];
+        let customWeights = {}; // NOVO: Pesos customizados (sincronizados com pedidos.html)
         let monthlyProduction = {};
         let selectedYear = 2026;
         let selectedMonthIndex = new Date().getMonth(); // 0-based
@@ -1096,6 +1097,9 @@
         async function fetchData() {
             showSpinner();
             try {
+                // Busca pesos customizados primeiro
+                await fetchCustomWeights();
+
                 const res = await fetch('/api/refugos-new'); // New API endpoint
                 const json = await res.json();
                 rawData = json.refugoRawData || [];
@@ -1105,6 +1109,53 @@
                 console.error(e);
             } finally {
                 hideSpinner();
+            }
+        }
+
+        async function fetchCustomWeights() {
+            try {
+                const res = await fetch('/api/weights/list');
+                if (res.ok) {
+                    customWeights = await res.json();
+                }
+            } catch (e) {
+                console.error('Erro ao buscar pesos customizados:', e);
+            }
+        }
+
+        async function saveWeight(event, prodCode) {
+            if (event.key !== 'Enter') return;
+
+            const input = event.target;
+            const newWeight = parseFloat(input.value.replace(',', '.'));
+
+            if (isNaN(newWeight) || newWeight < 0) {
+                showToast("Atenção", "Digite um peso válido.", "warning");
+                return;
+            }
+
+            // Lock input
+            input.disabled = true;
+
+            try {
+                const res = await fetch('/api/weights/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ codigo: prodCode, peso: newWeight })
+                });
+
+                if (!res.ok) throw new Error('Falha ao salvar');
+
+                // Atualiza local e reprocessa
+                customWeights[prodCode] = newWeight;
+                showToast("Sucesso", `Peso de ${newWeight}kg salvo para o produto ${prodCode}`, "success");
+                
+                // Reprocessa os dados para atualizar totais e tabelas
+                processData();
+            } catch (e) {
+                console.error(e);
+                showToast("Erro", "Falha ao salvar peso customizado.", "danger");
+                input.disabled = false;
             }
         }
 
@@ -1334,7 +1385,16 @@
         // --- DATA PROCESSING ---
         function processData() {
             // Filter Data based on Year & Month
-            const filteredData = rawData.filter(r => {
+            const filteredData = rawData.map(r => {
+                // Aplicar peso customizado se existir
+                const pesoUn = customWeights[r.codigo_peca] !== undefined ? customWeights[r.codigo_peca] : parseFloat(r.peso_un || 0);
+                const qtd = parseFloat(r.quantidade || 0);
+                return {
+                    ...r,
+                    peso_un: pesoUn,
+                    peso_total: pesoUn * qtd
+                };
+            }).filter(r => {
                 if (!r.data) return false;
                 const [y, m] = r.data.split('-').map(Number);
 
@@ -1386,7 +1446,9 @@
 
             // Populate Table
             const tbody = document.querySelector('#dataTable tbody');
-            tbody.innerHTML = filteredData.map(r => `
+            tbody.innerHTML = filteredData.map(r => {
+                const isCustom = customWeights[r.codigo_peca] !== undefined;
+                return `
                     <tr>
                         <td style="text-align: center;">${formatDate(r.data)}</td>
                         <td style="text-align: center;">${r.setor_responsavel || '-'}</td>
@@ -1397,10 +1459,17 @@
                         <td class="truncate-text" title="${r.motivo || ''}">${r.motivo || '-'}</td>
                         <td style="text-align: center;">${r.lote || '-'}</td>
                         <td style="text-align: center;">${parseFloat(r.quantidade).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                        <td style="text-align: center;">${parseFloat(r.peso_un || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                        <td style="text-align: center; padding: 5px;">
+                            <input type="text" 
+                                value="${r.peso_un.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}" 
+                                onkeydown="saveWeight(event, '${r.codigo_peca}')"
+                                style="width: 60px; text-align: center; background: ${isCustom ? 'rgba(251, 191, 36, 0.1)' : 'rgba(255,255,255,0.05)'}; border: 1px solid ${isCustom ? 'var(--color-primary)' : 'var(--border-subtle)'}; color: ${isCustom ? 'var(--color-primary)' : '#fff'}; border-radius: 4px; padding: 2px; font-family: var(--font-mono); font-size: 0.75rem;"
+                                title="Pressione Enter para salvar">
+                        </td>
                         <td style="text-align: center;">${parseFloat(r.peso_total).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                     </tr>
-                `).join('');
+                `;
+            }).join('');
 
             // Re-apply filter if text exists
             filterTable();
@@ -1869,21 +1938,30 @@
             if (details.length === 0 && filterValue === 'Outros') {
                 tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding:20px;">Detalhes para "Outros" não disponíveis nesta visualização.</td></tr>';
             } else {
-                tbody.innerHTML = details.map(r => `
-                    <tr>
-                        <td style="text-align: center;">${formatDate(r.data)}</td>
-                        <td style="text-align: center;">${r.setor_responsavel || '-'}</td>
-                        <td class="truncate-client" style="text-align: center;" title="${r.cliente || ''}">${r.cliente || '-'}</td>
-                        <td class="copyable" style="text-align: center;" onclick="copyToClipboard('${r.op || ''}', 'OP')">${r.op || '-'} <i class="fa-regular fa-copy" style="font-size:0.7em; margin-left:5px; opacity:0.5;"></i></td>
-                        <td class="copyable" style="text-align: center;" onclick="copyToClipboard('${r.codigo_peca || ''}', 'Código')">${r.codigo_peca || '-'} <i class="fa-regular fa-copy" style="font-size:0.7em; margin-left:5px; opacity:0.5;"></i></td>
-                        <td class="truncate-text" title="${r.descricao || ''}">${r.descricao || '-'}</td>
-                        <td class="truncate-text" title="${r.motivo || ''}">${r.motivo || '-'}</td>
-                        <td style="text-align: center;">${r.lote || '-'}</td>
-                        <td style="text-align: center;">${parseFloat(r.quantidade).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                        <td style="text-align: center;">${parseFloat(r.peso_un || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                        <td style="text-align: center;">${parseFloat(r.peso_total).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                    </tr>
-                `).join('');
+                tbody.innerHTML = details.map(r => {
+                    const isCustom = customWeights[r.codigo_peca] !== undefined;
+                    return `
+                        <tr>
+                            <td style="text-align: center;">${formatDate(r.data)}</td>
+                            <td style="text-align: center;">${r.setor_responsavel || '-'}</td>
+                            <td class="truncate-client" style="text-align: center;" title="${r.cliente || ''}">${r.cliente || '-'}</td>
+                            <td class="copyable" style="text-align: center;" onclick="copyToClipboard('${r.op || ''}', 'OP')">${r.op || '-'} <i class="fa-regular fa-copy" style="font-size:0.7em; margin-left:5px; opacity:0.5;"></i></td>
+                            <td class="copyable" style="text-align: center;" onclick="copyToClipboard('${r.codigo_peca || ''}', 'Código')">${r.codigo_peca || '-'} <i class="fa-regular fa-copy" style="font-size:0.7em; margin-left:5px; opacity:0.5;"></i></td>
+                            <td class="truncate-text" title="${r.descricao || ''}">${r.descricao || '-'}</td>
+                            <td class="truncate-text" title="${r.motivo || ''}">${r.motivo || '-'}</td>
+                            <td style="text-align: center;">${r.lote || '-'}</td>
+                            <td style="text-align: center;">${parseFloat(r.quantidade).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                            <td style="text-align: center; padding: 5px;">
+                                <input type="text" 
+                                    value="${r.peso_un.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}" 
+                                    onkeydown="saveWeight(event, '${r.codigo_peca}')"
+                                    style="width: 60px; text-align: center; background: ${isCustom ? 'rgba(251, 191, 36, 0.1)' : 'rgba(255,255,255,0.05)'}; border: 1px solid ${isCustom ? 'var(--color-primary)' : 'var(--border-subtle)'}; color: ${isCustom ? 'var(--color-primary)' : '#fff'}; border-radius: 4px; padding: 2px; font-family: var(--font-mono); font-size: 0.75rem;"
+                                    title="Pressione Enter para salvar">
+                            </td>
+                            <td style="text-align: center;">${parseFloat(r.peso_total).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                        </tr>
+                    `;
+                }).join('');
             }
 
             // Drilldown Pareto Logic
