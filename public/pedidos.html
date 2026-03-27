@@ -2887,6 +2887,15 @@
         // ==========================================================================
 
         // Helper global para cálculo de peso corrigido
+        function getCommercialBalance(item) {
+            const saldoLib = Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0;
+            if (saldoLib > 0) return saldoLib;
+            // Fallback: Total - Faturado (se saldoLib não estiver vindo do ERP)
+            const qtdOrig = Number(item.QUANTIDADE_PPR) || 0;
+            const qtdFat = Number(item.QUANTIDADE_FATURADO_PPR || item.QUANTIDADE_FATURADA_PPR) || 0;
+            return Math.max(0, qtdOrig - qtdFat);
+        }
+
         function getCorrectedWeight(item) {
             // Usamos o saldo industrial unificado (calculado em getItemSectorMetrics)
             // para garantir consistência em todo o dashboard
@@ -3095,7 +3104,7 @@
                     (item.DATA_ENTREGA_PPR ? new Date(item.DATA_ENTREGA_PPR).toLocaleDateString() : '-');
 
                 const metrics = getItemSectorMetrics(item);
-                const saldoReal = item._sectorQty !== undefined ? item._sectorQty : metrics.totalBalance;
+                const saldoReal = item._sectorQty !== undefined ? item._sectorQty : getCommercialBalance(item);
                 const qtdOriginal = metrics.originalTarget;
 
                 let totalWeightOriginal = Number(item.PESO_LIQUIDO_NPR) || 0;
@@ -3753,9 +3762,8 @@
                     }
 
                     if (key === 'SALDO_REAL') {
-                        const metrics = getItemSectorMetrics(item);
-                        const sReal = metrics.totalBalance;
-                        return String(sReal).includes(value);
+                        const val = activeChartFilters.stage ? getItemSectorMetrics(item).totalBalance : getCommercialBalance(item);
+                        return String(val).includes(value);
                     }
 
                     if (key === 'PESO_LIQUIDO_NPR') {
@@ -3863,7 +3871,7 @@
                     } else if (sortConfig.column === 'saldo') {
                         const getS = (item) => {
                             if (item._sectorQty !== undefined) return item._sectorQty;
-                            return getItemSectorMetrics(item).totalBalance;
+                            return getCommercialBalance(item);
                         };
                         valA = getS(a);
                         valB = getS(b);
