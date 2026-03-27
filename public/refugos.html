@@ -409,45 +409,115 @@
             font-weight: 700;
         }
 
-        /* TABLE MODAL */
+        /* TABLE & MODAL (PEDIDOS PREMIUM STANDARD) */
         .modal-overlay {
             display: none;
             position: fixed;
             inset: 0;
-            background: rgba(0, 0, 0, 0.8);
-            backdrop-filter: blur(4px);
+            background: rgba(0, 0, 0, 0.95);
             z-index: 2000;
-            justify-content: center;
             align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(5px);
         }
 
         .modal-overlay.active {
             display: flex;
         }
 
-        .modal-content {
-            background-color: #18181b;
-            width: 100%;
-            height: 100%;
+        .modal-card.fullscreen {
+            max-width: none;
+            max-height: none;
+            width: 100vw;
+            height: 100vh;
             border-radius: 0;
             border: none;
+            margin: 0;
+            padding: 30px 40px;
+            background: #09090b;
+            overflow-y: hidden;
             display: flex;
             flex-direction: column;
-            padding: 20px;
         }
 
         .modal-header {
             display: flex;
             justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-subtle);
+            padding-bottom: 15px;
             margin-bottom: 20px;
+            flex-shrink: 0;
         }
 
-        .close-btn {
-            background: none;
-            border: none;
-            color: #fff;
-            font-size: 1.5rem;
+        .modal-title {
+            font-size: 1.8rem;
+            color: var(--color-primary);
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .modal-close {
+            color: var(--status-danger);
             cursor: pointer;
+            font-size: 2rem;
+            transition: transform 0.2s;
+        }
+
+        .modal-close:hover {
+            transform: scale(1.1);
+            color: #ff0000;
+        }
+
+        .toolbar-row {
+            background: transparent;
+            border: none;
+            border-radius: var(--radius-md);
+            padding: 10px 0;
+            margin-bottom: 20px;
+            display: flex;
+            gap: 16px;
+            align-items: center;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            flex-shrink: 0;
+        }
+
+        .toolbar-group {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .table-container {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-md);
+            overflow: auto;
+            width: 100%;
+            flex-grow: 1;
+            position: relative;
+        }
+
+        .btn-modern {
+            padding: 8px 16px;
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            font-weight: 600;
+            font-size: 0.9rem;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s;
+            background-color: #27272a;
+            color: #fff;
+        }
+
+        .btn-modern:hover {
+            background-color: #3f3f46;
+            border-color: rgba(255, 255, 255, 0.3);
         }
 
         table {
@@ -708,7 +778,7 @@
                 <button class="side-btn" id="btnMapping" onclick="openMappingModal()" style="display: none;">
                     <i class="fa-solid fa-map-location-dot"></i> Mapeamento
                 </button>
-                <button class="side-btn" onclick="showTableModal()">
+                <button class="side-btn" onclick="openTableModal()">
                     <i class="fa-solid fa-table"></i> Ver Tabela
                 </button>
                 <a href="index.html" class="side-btn btn-back-side">
@@ -792,52 +862,74 @@
     </div>
 
     <!-- Full Screen Detail Modal -->
-    <div id="detailModalOverlay" class="modal-overlay full-screen">
-        <div class="modal-content full-screen-content">
+    <div id="detailModalOverlay" class="modal-overlay">
+        <div class="modal-card fullscreen">
             <div class="modal-header">
                 <div>
-                    <h2 class="modal-title" id="detailModalTitle">Detalhes</h2>
+                    <h2 class="modal-title" id="detailModalTitle"><i class="fa-solid fa-circle-info" style="margin-right: 15px;"></i>Detalhes</h2>
                 </div>
-                <button class="close-btn" onclick="closeDetailModal()">&times;</button>
+                <span class="modal-close" onclick="closeDetailModal()" title="Fechar (ESC)">&times;</span>
             </div>
+
+            <div class="toolbar-row">
+                <div class="toolbar-group">
+                    <div id="detailSummaryBanner" style="display: flex; align-items: center; gap: 20px; background: rgba(251, 191, 36, 0.1); padding: 8px 20px; border-radius: 6px; border: 1px solid rgba(251, 191, 36, 0.3);">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;">Total Qtd:</span>
+                            <strong id="detailTotalQty" style="color: var(--color-primary); font-family: var(--font-mono); font-size: 1rem;">0</strong>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;">Total Peso:</span>
+                            <strong id="detailTotalWeight" style="color: #fff; font-family: var(--font-mono); font-size: 1rem;">0,00 kg</strong>
+                        </div>
+                    </div>
+                </div>
+                <div class="toolbar-group" style="margin-left: auto;">
+                    <button class="btn-modern" onclick="exportToExcel('detailDataTable', 'Detalhes_Refugo')" style="background-color: #3f3f46;">
+                        <i class="fa-solid fa-file-excel"></i> Exportar
+                    </button>
+                </div>
+            </div>
+
             <!-- Novo Container de Gráfico para Drilldown de Pareto -->
             <div id="drilldownChartContainer"
                 style="height: 280px; padding: 10px 10px 0 10px; display: none; margin-bottom: 25px;">
                 <canvas id="drilldownParetoChart"></canvas>
             </div>
-            <div class="table-scroll">
+
+            <div class="table-container">
                 <table id="detailDataTable">
                     <thead>
                         <tr>
-                            <th style="text-align: center; width: 90px;">Data</th>
-                            <th style="text-align: center; width: 100px;">Setor Resp.</th>
-                            <th style="text-align: center; width: 140px;">CLIENTE</th>
-                            <th style="text-align: center; width: 80px;">OP</th>
-                            <th style="text-align: center; width: 100px;">Cód. Peça</th>
-                            <th style="width: 180px;">Produto</th>
-                            <th style="width: 180px;">Motivo</th>
-                            <th style="text-align: center; width: 90px;">Lote</th>
-                            <th style="text-align: center; width: 70px;">Qtd</th>
-                            <th style="text-align: center; width: 70px;">Peso Un</th>
-                            <th style="text-align: center; width: 90px;">Peso Total</th>
+                            <th style="text-align: center; width: 5%;">Data</th>
+                            <th style="text-align: center; width: 10%;">Setor Resp.</th>
+                            <th style="text-align: center; width: 15%;">CLIENTE</th>
+                            <th style="text-align: center; width: 8%;">OP</th>
+                            <th style="text-align: center; width: 10%;">Cód. Peça</th>
+                            <th style="width: 15%;">Produto</th>
+                            <th style="width: 15%;">Motivo</th>
+                            <th style="text-align: center; width: 7%;">Lote</th>
+                            <th style="text-align: center; width: 5%;">Qtd</th>
+                            <th style="text-align: center; width: 5%;">Peso Un</th>
+                            <th style="text-align: center; width: 5%;">Peso Total</th>
                         </tr>
                         <tr id="filter-row">
-                            <th><input type="date" id="filter-data" class="col-filter" onchange="filterDetailTable()"
+                            <th><input type="date" id="filter-data" class="filter-input-table" onchange="filterDetailTable()"
                                     style="padding:2px;"></th>
-                            <th><input type="text" id="filter-setor-resp" class="col-filter"
-                                    onkeyup="filterDetailTable()" placeholder="Filtro..."></th>
-                            <th><input type="text" id="filter-cliente" class="col-filter" onkeyup="filterDetailTable()"
-                                    placeholder="Filtro..."></th>
-                            <th><input type="text" id="filter-op" class="col-filter" onkeyup="filterDetailTable()"
-                                    placeholder="Filtro..."></th>
-                            <th><input type="text" id="filter-codigo_peca" class="col-filter"
-                                    onkeyup="filterDetailTable()" placeholder="Filtro..."></th>
-                            <th><input type="text" id="filter-produto" class="col-filter" onkeyup="filterDetailTable()"
-                                    placeholder="Filtro..."></th>
-                            <th><input type="text" id="filter-motivo" class="col-filter" onkeyup="filterDetailTable()"
-                                    placeholder="Filtro..."></th>
-                            <th><input type="text" id="filter-lote" class="col-filter" onkeyup="filterDetailTable()"
-                                    placeholder="Filtro..."></th>
+                            <th><input type="text" id="filter-setor-resp" class="filter-input-table"
+                                    onkeyup="filterDetailTable()" placeholder="..."></th>
+                            <th><input type="text" id="filter-cliente" class="filter-input-table" onkeyup="filterDetailTable()"
+                                    placeholder="..."></th>
+                            <th><input type="text" id="filter-op" class="filter-input-table" onkeyup="filterDetailTable()"
+                                    placeholder="..."></th>
+                            <th><input type="text" id="filter-codigo_peca" class="filter-input-table"
+                                    onkeyup="filterDetailTable()" placeholder="..."></th>
+                            <th><input type="text" id="filter-produto" class="filter-input-table" onkeyup="filterDetailTable()"
+                                    placeholder="..."></th>
+                            <th><input type="text" id="filter-motivo" class="filter-input-table" onkeyup="filterDetailTable()"
+                                    placeholder="..."></th>
+                            <th><input type="text" id="filter-lote" class="filter-input-table" onkeyup="filterDetailTable()"
+                                    placeholder="..."></th>
                             <th></th>
                             <th></th>
                             <th></th>
@@ -846,127 +938,67 @@
                     <tbody></tbody>
                 </table>
             </div>
+            <div style="text-align: center; color: var(--text-muted); margin-top: 15px; font-size: 0.8rem;">Pressione ESC para fechar</div>
         </div>
     </div>
 
-    <style>
-        /* Full Screen Modal Styles */
-        .modal-overlay.full-screen {
-            align-items: flex-end !important;
-            /* Align to bottom */
-            justify-content: center;
-            /* Center horizontally */
-            padding: 0;
-            background: rgba(0, 0, 0, 0.8);
-            backdrop-filter: blur(4px);
-            z-index: 2000;
-            /* Ensure it is above everything */
-
-            /* Transition Logic */
-            visibility: hidden;
-            opacity: 0;
-            pointer-events: none;
-            transition: visibility 0s 0.4s, opacity 0.4s ease-in-out;
-        }
-
-        .modal-overlay.full-screen.active {
-            visibility: visible;
-            opacity: 1;
-            pointer-events: auto;
-            transition: visibility 0s, opacity 0.4s ease-in-out;
-        }
-
-        .modal-content.full-screen-content {
-            width: 100%;
-            height: 100%;
-            /* Occupy 100% of height */
-            max-width: none;
-            border-radius: 0;
-            /* Remove rounded corners for full screen */
-            margin: 0;
-
-            /* Slide Up Animation */
-            transform: translateY(100%);
-            transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
-
-            background: #18181b;
-            border: none;
-            display: flex;
-            flex-direction: column;
-        }
-
-        .modal-overlay.full-screen.active .modal-content.full-screen-content {
-            transform: translateY(0);
-            animation: none;
-        }
-
-        @keyframes slideUp {
-            from {
-                transform: translateY(100%);
-                opacity: 0;
-            }
-
-            to {
-                transform: translateY(0);
-                opacity: 1;
-            }
-        }
-
-        .modal-subtitle {
-            font-size: 0.85rem;
-            color: var(--text-muted);
-            margin: 0;
-            font-weight: 400;
-        }
-    </style>
 
     <!-- Table Modal -->
     <div id="tableModalOverlay" class="modal-overlay">
-        <div class="modal-content">
+        <div class="modal-card fullscreen">
             <div class="modal-header">
-                <h2 style="color: var(--color-primary); margin:0;">Registros Detalhados</h2>
-
-                <button class="close-btn" onclick="closeTableModal()">&times;</button>
+                <h2 class="modal-title"><i class="fa-solid fa-list-check" style="margin-right: 15px;"></i>Registros Detalhados</h2>
+                <span class="modal-close" onclick="closeTableModal()" title="Fechar (ESC)">&times;</span>
             </div>
-            <div class="table-scroll">
+
+            <div class="toolbar-row">
+                <div class="toolbar-group">
+                    <div id="tableSummaryBanner" style="display: flex; align-items: center; gap: 20px; background: rgba(251, 191, 36, 0.1); padding: 8px 20px; border-radius: 6px; border: 1px solid rgba(251, 191, 36, 0.3);">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;">Total Qtd:</span>
+                            <strong id="tableTotalQty" style="color: var(--color-primary); font-family: var(--font-mono); font-size: 1rem;">0</strong>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;">Total Peso:</span>
+                            <strong id="tableTotalWeight" style="color: #fff; font-family: var(--font-mono); font-size: 1rem;">0,00 kg</strong>
+                        </div>
+                    </div>
+                </div>
+                <div class="toolbar-group" style="margin-left: auto;">
+                    <button class="btn-modern" onclick="exportToExcel('dataTable', 'Registros_Refugo')" style="background-color: #3f3f46;">
+                        <i class="fa-solid fa-file-excel"></i> Exportar
+                    </button>
+                </div>
+            </div>
+
+            <div class="table-container">
                 <table id="dataTable">
                     <thead>
                         <tr>
-                            <th style="text-align: center;">Data</th>
-                            <th style="text-align: center;">Setor Resp.</th>
-                            <th style="text-align: center;">CLIENTE</th>
-                            <th style="text-align: center;">OP</th>
-                            <th style="text-align: center;">Cód. Peça</th>
-                            <th>Produto</th>
-                            <th>Motivo</th>
-                            <th style="text-align: center;">Lote</th>
-                            <th style="text-align: center;">Qtd</th>
-                            <th style="text-align: center;">Peso Un (kg)</th>
-                            <th style="text-align: center;">Peso Total (kg)</th>
+                            <th style="text-align: center; width: 5%;">Data</th>
+                            <th style="text-align: center; width: 10%;">Setor Resp.</th>
+                            <th style="text-align: center; width: 15%;">CLIENTE</th>
+                            <th style="text-align: center; width: 8%;">OP</th>
+                            <th style="text-align: center; width: 10%;">Cód. Peça</th>
+                            <th style="width: 15%;">Produto</th>
+                            <th style="width: 15%;">Motivo</th>
+                            <th style="text-align: center; width: 7%;">Lote</th>
+                            <th style="text-align: center; width: 5%;">Qtd</th>
+                            <th style="text-align: center; width: 5%;">Peso Un</th>
+                            <th style="text-align: center; width: 5%;">Peso Total</th>
                         </tr>
-                        <tr>
-                            <th><input type="text" class="col-filter" onkeyup="filterTable()" placeholder="Filtro...">
-                            </th>
-                            <th><input type="text" class="col-filter" onkeyup="filterTable()" placeholder="Filtro...">
-                            </th>
-                            <th><input type="text" class="col-filter" onkeyup="filterTable()" placeholder="Filtro...">
-                            </th>
-                            <th><input type="text" class="col-filter" onkeyup="filterTable()" placeholder="Filtro...">
-                            </th>
-                            <th><input type="text" class="col-filter" onkeyup="filterTable()" placeholder="Filtro...">
-                            </th>
-                            <th><input type="text" class="col-filter" onkeyup="filterTable()" placeholder="Filtro...">
-                            </th>
-                            <th><input type="text" class="col-filter" onkeyup="filterTable()" placeholder="Filtro...">
-                            </th>
-                            <th><input type="text" class="col-filter" onkeyup="filterTable()" placeholder="Filtro...">
-                            </th>
-                            <th><input type="text" class="col-filter" onkeyup="filterTable()" placeholder="Filtro...">
-                            </th>
-                            <th><input type="text" class="col-filter" onkeyup="filterTable()" placeholder="Exato...">
-                            </th>
-                            <th><input type="text" class="col-filter" onkeyup="filterTable()" placeholder="Filtro...">
-                            </th>
+                        <tr id="mainFilterRow">
+                            <th><input class="filter-input-table" onkeyup="filterTable()" placeholder="..."></th>
+                            <th><input class="filter-input-table" onkeyup="filterTable()" placeholder="..."></th>
+                            <th><input class="filter-input-table" onkeyup="filterTable()" placeholder="..."></th>
+                            <th><input class="filter-input-table" onkeyup="filterTable()" placeholder="..."></th>
+                            <th><input class="filter-input-table" onkeyup="filterTable()" placeholder="..."></th>
+                            <th><input class="filter-input-table" onkeyup="filterTable()" placeholder="..."></th>
+                            <th><input class="filter-input-table" onkeyup="filterTable()" placeholder="..."></th>
+                            <th><input class="filter-input-table" onkeyup="filterTable()" placeholder="..."></th>
+                            <th></th>
+                            <th></th>
+                            <th></th>
                         </tr>
                     </thead>
                     <tbody></tbody>
@@ -1213,51 +1245,60 @@
         }
 
         // --- TABLE MODAL ---
-        function showTableModal() {
+        function openTableModal() {
             document.getElementById('tableModalOverlay').classList.add('active');
+            updateTableTotals();
         }
+
         function closeTableModal() {
             document.getElementById('tableModalOverlay').classList.remove('active');
-            // Clear filter when closing? Optional.
+        }
+
+        function updateTableTotals() {
+            const rows = document.querySelectorAll('#dataTable tbody tr');
+            let totalQty = 0;
+            let totalWeight = 0;
+            rows.forEach(row => {
+                if (row.style.display !== 'none') {
+                    // Index 8 is Qtd, Index 10 is Peso Total
+                    const qty = parseFloat(row.cells[8].textContent.replace(/\./g, '').replace(',', '.')) || 0;
+                    const weight = parseFloat(row.cells[10].textContent.replace(/\./g, '').replace(',', '.')) || 0;
+                    totalQty += qty;
+                    totalWeight += weight;
+                }
+            });
+            document.getElementById('tableTotalQty').textContent = totalQty.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            document.getElementById('tableTotalWeight').textContent = totalWeight.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kg';
         }
 
 
 
         function filterTable() {
             const table = document.getElementById('dataTable');
-            const inputs = table.querySelectorAll('.col-filter');
+            const inputs = table.querySelectorAll('.filter-input-table');
             const tr = table.getElementsByTagName('tbody')[0].getElementsByTagName('tr');
 
             for (let i = 0; i < tr.length; i++) {
                 let show = true;
                 const tds = tr[i].getElementsByTagName('td');
 
-                for (let j = 0; j < tds.length; j++) {
+                for (let j = 0; j < inputs.length; j++) {
                     const input = inputs[j];
                     if (!input) continue;
 
                     const filterVal = input.value.toUpperCase();
-                    if (!filterVal) continue; // No filter for this column
+                    if (!filterVal) continue;
 
                     const txtValue = (tds[j].textContent || tds[j].innerText).toUpperCase();
 
-                    // Specific Logic for Peso Un (Index 9) -> Exact Match
-                    if (j === 9) {
-                        // Exact match logic (comparing strings)
-                        if (txtValue !== filterVal) {
-                            show = false;
-                            break;
-                        }
-                    } else {
-                        // Contains logic for others
-                        if (txtValue.indexOf(filterVal) === -1) {
-                            show = false;
-                            break;
-                        }
+                    if (txtValue.indexOf(filterVal) === -1) {
+                        show = false;
+                        break;
                     }
                 }
                 tr[i].style.display = show ? '' : 'none';
             }
+            updateTableTotals();
         }
 
         function copyToClipboard(text, type) {
@@ -1997,7 +2038,24 @@
             // requestAnimationFrame to ensure transition plays
             requestAnimationFrame(() => {
                 modal.classList.add('active');
+                updateDetailTotals();
             });
+        }
+
+        function updateDetailTotals() {
+            const rows = document.querySelectorAll('#detailDataTable tbody tr');
+            let totalQty = 0;
+            let totalWeight = 0;
+            rows.forEach(row => {
+                if (row.style.display !== 'none') {
+                    const qty = parseFloat(row.cells[8].textContent.replace(/\./g, '').replace(',', '.')) || 0;
+                    const weight = parseFloat(row.cells[10].textContent.replace(/\./g, '').replace(',', '.')) || 0;
+                    totalQty += qty;
+                    totalWeight += weight;
+                }
+            });
+            document.getElementById('detailTotalQty').textContent = totalQty.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            document.getElementById('detailTotalWeight').textContent = totalWeight.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kg';
         }
 
         function filterDetailTable() {
@@ -2030,6 +2088,7 @@
                     row.style.display = 'none';
                 }
             });
+            updateDetailTotals();
         }
 
         function closeDetailModal() {
