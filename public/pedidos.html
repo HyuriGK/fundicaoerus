@@ -2937,7 +2937,8 @@
 
             // [NEW] SUPRESSÃO DE RESÍDUOS GHOST: Se qualquer faturamento iniciou, limitamos a meta
             // ao teto da produção física para ignorar sobras do pedido comercial ('Aguardando').
-            if ((cFat > 0 || erpFat > 0) && targetTotalQty > Math.max(cFat, erpFat)) {
+            // Entretando, se o saldo comercial (ERP) for positivo, respeitamos esse saldo.
+            if ((cFat > 0 || erpFat > 0) && targetTotalQty > Math.max(cFat, erpFat) && saldoLib <= 0) {
                 targetTotalQty = Math.max(cFat, erpFat, maxInd);
             }
 
@@ -3604,7 +3605,7 @@
                 '2': 'NOME_CLIENTE',
                 '3': 'PRODUTO_PPR',
                 '4': 'NOME_PRODUTO_PPR',
-                '5': 'QUANTIDADE_PPR',
+                '5': 'SALDO_REAL',
                 '6': 'PESO_UNIT',
                 '7': 'PESO_LIQUIDO_NPR',
                 '8': 'VALOR_TOTAL',
@@ -3739,12 +3740,18 @@
                 const filtersPassed = Object.entries(filters).every(([key, value]) => {
                     if (!value) return true;
 
-                    // Lógica de Filtro Exato
+                    // Lógica de Filtro Exato/Calculado
                     if (key === 'CODIGO_PPR') {
                         if (value === 'block') {
                             return !item.ENTREGA_PETR && !item.DATA_ENTREGA_PPR;
                         }
                         return String(item[key]) === value;
+                    }
+
+                    if (key === 'SALDO_REAL') {
+                        const metrics = getItemSectorMetrics(item);
+                        const sReal = metrics.totalBalance;
+                        return String(sReal).includes(value);
                     }
 
                     if (key === 'PESO_LIQUIDO_NPR') {
