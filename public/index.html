@@ -2575,9 +2575,15 @@
                     'refugo': { icon: 'fa-trash-can', color: '#f87171' }
                 };
 
-                function renderCards() {
+                async function renderCards() {
                     const grid = document.getElementById('quickAccessGrid');
                     grid.innerHTML = '';
+
+                    // NOVO: Carregar pesos customizados globalmente antes de processar os cards
+                    try {
+                        const wRes = await fetch('/api/weights/list');
+                        if (wRes.ok) customWeightsMap = await wRes.json();
+                    } catch (e) { console.error('Erro loading weights globally:', e); }
                     
                     const role = (localStorage.getItem('erus_role') || '').toLowerCase();
                     const isRestricted = ['moldagem', 'fusão', 'fusao', 'acabamento'].includes(role);
@@ -2843,11 +2849,7 @@
                             }
                         }
                         else if (link.id === 'carteira') {
-                            // Fetch Custom Weights first
-                            try {
-                                const wRes = await fetch('/api/weights/list');
-                                if (wRes.ok) customWeightsMap = await wRes.json();
-                            } catch (e) { console.error('Erro loading weights', e); }
+                            // Fetch Pedidos Sync
 
                             // Fetch Pedidos Sync
                             const pRes = await fetch('/api/pedidos-sync');
@@ -2870,32 +2872,34 @@
                         }
                         else if (link.id === 'refugo') {
                             // Data already fetched from /api/refugos-new
-                            // Structure: { refugoRawData: [...], refugoMonthlyProduction: {'YYYY-MM': total} }
                             const rData = data;
+                            const currentMonthKey = `${curYear}-${curMonth}`;
 
-                            const currentMonthKey = `${curYear}-${curMonth}`; // YYYY-MM
-
-                            // 1. Calculate Total Refugo for Current Month
+                            // 1. Calcular Refugo Total do Mês (Aplicando pesos customizados como no refugos.html)
                             const monthRefugos = (rData.refugoRawData || []).filter(r => {
                                 return (r.data || '').startsWith(currentMonthKey);
                             });
 
-                            const totalRefugoKg = monthRefugos.reduce((acc, r) => acc + (parseFloat(r.peso_total) || 0), 0);
+                            const totalRefugoKg = monthRefugos.reduce((acc, r) => {
+                                // Se houver peso customizado, usa ele, senão usa o peso_un que veio da API
+                                const pesoUn = customWeightsMap[r.codigo_peca] !== undefined ? customWeightsMap[r.codigo_peca] : (parseFloat(r.peso_un) || 0);
+                                const qtd = parseFloat(r.quantidade || 0);
+                                return acc + (pesoUn * qtd);
+                            }, 0);
 
-                            // 2. Get Total Production for Current Month
-                            // The API returns a map: "2025-02": 150000.50
+                            // 2. Obter Produção Total do Mês
                             const totalProducaoKg = rData.refugoMonthlyProduction ? (rData.refugoMonthlyProduction[currentMonthKey] || 0) : 0;
 
-                            // 3. Calculate Percentage
+                            // 3. Calcular Porcentagem para o subLabel
                             let porcentagem = 0;
                             if (totalProducaoKg > 0) {
                                 porcentagem = (totalRefugoKg / totalProducaoKg) * 100;
                             }
 
-                            // 4. Update UI
-                            numericValue = porcentagem;
-                            valueSuffix = "%";
-                            subLabel = `${monthRefugos.length} Ocorrências no Mês`;
+                            // 4. Update UI: Principal agora é Peso (Ton), % no sublabel
+                            numericValue = totalRefugoKg / 1000;
+                            valueSuffix = "Ton";
+                            subLabel = `${porcentagem.toFixed(2)}% de Refugo no Mês`;
                         }
 
                         // ANIMATION START
