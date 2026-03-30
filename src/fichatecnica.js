@@ -72,6 +72,7 @@ router.get('/:codigo', async (req, res) => {
                 detalhes_machos as "DETALHES_MACHOS",
                 tinta_refrataria_fic as "TINTA_REFRATARIA_FIC",
                 detalhes_luvas as "DETALHES_LUVAS",
+                tipo_ferramental_fic as "TIPO_FERRAMENTAL_FIC",
                 miniatura_link as "MINIATURA_LINK"
             FROM ficha_tecnica
             WHERE pro_codigo_fic = $1
