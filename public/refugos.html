@@ -957,7 +957,7 @@
         <div class="modal-card fullscreen">
             <div class="modal-header">
                 <div>
-                    <h2 class="modal-title"><i class="fa-solid fa-table" style="margin-right: 15px;"></i>Registros Listados</h2>
+                    <h2 class="modal-title" id="detailRecordsModalTitle"><i class="fa-solid fa-table" style="margin-right: 15px;"></i>Registros Listados</h2>
                 </div>
                 <span class="modal-close" onclick="closeDetailRecordsModal()" title="Fechar (ESC)">&times;</span>
             </div>
@@ -1132,6 +1132,11 @@
             // Close modal on ESC
             document.addEventListener('keydown', (e) => {
                 if (e.key === 'Escape') {
+                    const recModal = document.getElementById('detailRecordsModalOverlay');
+                    if (recModal && recModal.style.display === 'flex') {
+                        closeDetailRecordsModal();
+                        return;
+                    }
                     closeTableModal();
                     closeDetailModal();
                     closeMappingModal();
@@ -2025,6 +2030,14 @@
         function openDetailModal(filterValue, filterType) {
             const modal = document.getElementById('detailModalOverlay');
             const title = document.getElementById('detailModalTitle');
+            const recordTitle = document.getElementById('detailRecordsModalTitle');
+
+            if (recordTitle) {
+                recordTitle.textContent = filterValue;
+                if (filterType.toLowerCase() === 'data') {
+                    recordTitle.textContent = `Registros de ${formatDate(filterValue)}`;
+                }
+            }
 
             const tbody = document.querySelector('#detailDataTable tbody');
             const table = document.getElementById('detailDataTable');
@@ -2099,18 +2112,19 @@
 
             // Drilldown Pareto Logic
             const chartContainer = document.getElementById('drilldownChartContainer');
-            if (filterType === 'Cliente') {
-                chartContainer.style.display = 'block';
-                renderDrilldownPareto(details, filterValue);
-            } else {
-                chartContainer.style.display = 'none';
-                if (drilldownChartInstance) drilldownChartInstance.destroy();
-            }
-
-            // requestAnimationFrame to ensure transition plays
+            
             requestAnimationFrame(() => {
-                modal.classList.add('active');
                 updateDetailTotals();
+                if (filterType === 'Cliente' || filterType.toLowerCase() === 'cliente') {
+                    chartContainer.style.display = 'block';
+                    renderDrilldownPareto(details, filterValue);
+                    modal.classList.add('active');
+                } else {
+                    chartContainer.style.display = 'none';
+                    if (drilldownChartInstance) drilldownChartInstance.destroy();
+                    // Pulla direto pra listagem de registros
+                    openDetailRecordsModal();
+                }
             });
         }
 
