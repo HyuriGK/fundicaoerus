@@ -20,7 +20,18 @@ router.get('/', async (req, res) => {
         try {
             const prefRes = await pool.query(`SELECT value FROM app_preferences WHERE key = 'excluded_clients'`);
             if (prefRes.rows.length > 0 && prefRes.rows[0].value) {
-                excludedClients = typeof prefRes.rows[0].value === 'string' ? JSON.parse(prefRes.rows[0].value) : prefRes.rows[0].value;
+                const rawExcluded = typeof prefRes.rows[0].value === 'string' ? JSON.parse(prefRes.rows[0].value) : prefRes.rows[0].value;
+                // FORÇAR INCLUSÃO DE SERVIÇOS: Mesmo que estejam na lista de exclusão do faturamento,
+                // na tela de CUSTOS eles devem aparecer sempre (IMEPEL, STEELROOL, SPILROD).
+                const serviceClients = [
+                    "IMEPEL INDUSTRIA MECANICA LTDA",
+                    "STEELROOL INDUSTRIA METALURGICA",
+                    "SPILROD FUNDICAO DE FERRO E ACO LTDA"
+                ];
+                excludedClients = rawExcluded.filter(name => 
+                    !serviceClients.includes(name.trim().toUpperCase()) && 
+                    name.trim() !== "257"
+                );
             }
         } catch (e) { /* ignore if table doesn't exist */ }
 
