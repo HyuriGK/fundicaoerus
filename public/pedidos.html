@@ -2596,10 +2596,15 @@
                     const prodCode = String(item.PRODUTO_PPR || '').trim();
                     if (prodCode.endsWith('1')) return false;
 
-                    const hasDeliveryDate = item.ENTREGA_PETR || item.DATA_ENTREGA_PPR;
-                    const isBlocked = !hasDeliveryDate;
+                    const isBlockReasonNoOP = (!item.OP_PCS || item.OP_PCS === '-' || String(item.OP_PCS).trim() === '');
+                    const isBlockReasonStatus = (
+                        item.STATUS_PED === 'B' ||
+                        item.STATUS_PPR === 'B' ||
+                        (item.STATUS_DESC_PED && String(item.STATUS_DESC_PED).toUpperCase().includes('BLOQ'))
+                    );
+                    const isBlockReasonNoDate = (!item.ENTREGA_PETR && !item.DATA_ENTREGA_PPR);
 
-                    return isBlocked;
+                    return isBlockReasonStatus || isBlockReasonNoDate || isBlockReasonNoOP;
                 });
 
                 if (!targetList || targetList.length === 0) {
@@ -2779,6 +2784,7 @@
 
                     const hasDeliveryDate = i.ENTREGA_PETR || i.DATA_ENTREGA_PPR;
                     const descOriginal = i.STATUS_DESC_PED || '';
+                    const isBlockReasonNoOP = (!i.OP_PCS || i.OP_PCS === '-' || String(i.OP_PCS).trim() === '');
                     const isManualBlocked = (i.STATUS_PED === 'B' || i.STATUS_PPR === 'B' || descOriginal.toUpperCase().includes('BLOQ'));
 
                     let motivo = '';
@@ -2786,7 +2792,10 @@
                         motivo = 'Aguardando data de entrega (Sem data)';
                     }
                     if (isManualBlocked) {
-                        motivo = descOriginal ? descOriginal : 'Bloqueio manual no sistema';
+                        motivo = descOriginal ? descOriginal.trim() : 'Bloqueio manual no sistema';
+                    }
+                    if (isBlockReasonNoOP && hasDeliveryDate && !isManualBlocked) {
+                        motivo = 'Desbloqueado, mas SEM OP vinculada';
                     }
 
                     const qtd = i._qtd;
@@ -2797,6 +2806,7 @@
                     text += `• Ped: ${cod} | Emissão: ${emissao} | Dias Bloqueado: ${diasBloqueado}\n`;
                     text += `Cód: ${codProd}${obsFicha}\n`;
                     text += `Desc: ${truncDesc}\n`;
+                    text += `Motivo: ${motivo}\n`;
                     text += `Qtd: ${qtd} | Peso Total Bloqueado: ${formatNumber(pesoTotal)} kg\n\n`;
                 });
             });
