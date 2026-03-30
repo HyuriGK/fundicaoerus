@@ -3168,7 +3168,8 @@
                 const isBlocked = (
                     item.STATUS_PED === 'B' ||
                     item.STATUS_PPR === 'B' ||
-                    (item.STATUS_DESC_PED && String(item.STATUS_DESC_PED).toUpperCase().includes('BLOQ'))
+                    (item.STATUS_DESC_PED && String(item.STATUS_DESC_PED).toUpperCase().includes('BLOQ')) ||
+                    (!item.ENTREGA_PETR && !item.DATA_ENTREGA_PPR)
                 );
 
                 const blockedHtml = isBlocked
@@ -3255,8 +3256,15 @@
                 totalValue += itemTotalValue;
                 totalQty += realQty;
 
-                const hasDate = item.ENTREGA_PETR || item.DATA_ENTREGA_PPR;
-                if (hasDate) releasedWeight += itemTotalWeight;
+                const hasDate = !!(item.ENTREGA_PETR || item.DATA_ENTREGA_PPR);
+                const isStatusBlocked = (
+                    item.STATUS_PED === 'B' ||
+                    item.STATUS_PPR === 'B' ||
+                    (item.STATUS_DESC_PED && String(item.STATUS_DESC_PED).toUpperCase().includes('BLOQ'))
+                );
+
+                const isReleased = hasDate && !isStatusBlocked;
+                if (isReleased) releasedWeight += itemTotalWeight;
 
                 // Use centralized industrial metrics (already calculated)
                 const { qExpedicao, qQualidade, qUsinagem, qTT, qAcabamento, qFusao, qMoldada, qAguardando, targetTotalQty } = metrics;
@@ -3776,11 +3784,18 @@
 
                     // Lógica de Filtro Exato/Calculado
                     if (key === 'CODIGO_PPR') {
+                        const hasDate = !!(item.ENTREGA_PETR || item.DATA_ENTREGA_PPR);
+                        const isStatusBlocked = (
+                            item.STATUS_PED === 'B' ||
+                            item.STATUS_PPR === 'B' ||
+                            (item.STATUS_DESC_PED && String(item.STATUS_DESC_PED).toUpperCase().includes('BLOQ'))
+                        );
+
                         if (value === 'block') {
-                            return !item.ENTREGA_PETR && !item.DATA_ENTREGA_PPR;
+                            return !hasDate || isStatusBlocked;
                         }
                         if (value === 'released') {
-                            return (item.ENTREGA_PETR || item.DATA_ENTREGA_PPR);
+                            return hasDate && !isStatusBlocked;
                         }
                         return String(item[key]) === value;
                     }
