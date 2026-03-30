@@ -75,7 +75,14 @@ router.get('/', async (req, res) => {
                 AND p.quantidade = f.quantidade
             WHERE f.data_faturamento >= $1 AND f.data_faturamento < $2
               AND COALESCE(p.excluido, f.excluido_manualmente, false) = false
-              AND f.pedido IS NOT NULL AND TRIM(f.pedido) != ''
+              -- REGRA DE SINCRONISMO: Validar Pedidos vazios, EXCETO para Clientes de Serviço (IMEPEL, STEELROOL, SPILROD)
+              AND (
+                  (f.pedido IS NOT NULL AND TRIM(f.pedido) != '') 
+                  OR TRIM(f.cliente_nome) ILIKE 'IMEPEL INDUSTRIA%'
+                  OR TRIM(f.cliente_nome) ILIKE 'STEELROOL INDUSTRIA%'
+                  OR TRIM(f.cliente_nome) ILIKE 'SPILROD FUNDICAO%'
+                  OR TRIM(f.cliente_codigo) = '257'
+              )
         `;
         const fatParams = [startDate, endDate];
         if (excludedClients.length > 0) {
@@ -167,8 +174,14 @@ router.get('/', async (req, res) => {
                 AND p.quantidade = f.quantidade
             WHERE f.data_faturamento >= $1 AND f.data_faturamento < $2
               AND COALESCE(p.excluido, f.excluido_manualmente, false) = false
-              -- REGRA DE SINCRONISMO: Validar Pedidos vazios (Igual faturamentos.html)
-              AND f.pedido IS NOT NULL AND TRIM(f.pedido) != ''
+              -- REGRA DE SINCRONISMO: Validar Pedidos vazios, EXCETO para Clientes de Serviço (IMEPEL, STEELROOL, SPILROD)
+              AND (
+                  (f.pedido IS NOT NULL AND TRIM(f.pedido) != '') 
+                  OR TRIM(f.cliente_nome) ILIKE 'IMEPEL INDUSTRIA%'
+                  OR TRIM(f.cliente_nome) ILIKE 'STEELROOL INDUSTRIA%'
+                  OR TRIM(f.cliente_nome) ILIKE 'SPILROD FUNDICAO%'
+                  OR TRIM(f.cliente_codigo) = '257'
+              )
         `;
         const prevFatParams = [prevStartDate, prevEndDate];
         if (excludedClients.length > 0) {
@@ -217,8 +230,14 @@ router.get('/', async (req, res) => {
                 AND p.quantidade = f.quantidade
             WHERE EXTRACT(YEAR FROM f.data_faturamento) = $1
               AND COALESCE(p.excluido, f.excluido_manualmente, false) = false
-              -- REGRA DE SINCRONISMO: Validar Pedidos vazios (Igual faturamentos.html)
-              AND f.pedido IS NOT NULL AND TRIM(f.pedido) != ''
+              -- REGRA DE SINCRONISMO: Validar Pedidos vazios, EXCETO para Clientes de Serviço (IMEPEL, STEELROOL, SPILROD)
+              AND (
+                  (f.pedido IS NOT NULL AND TRIM(f.pedido) != '') 
+                  OR TRIM(f.cliente_nome) ILIKE 'IMEPEL INDUSTRIA%'
+                  OR TRIM(f.cliente_nome) ILIKE 'STEELROOL INDUSTRIA%'
+                  OR TRIM(f.cliente_nome) ILIKE 'SPILROD FUNDICAO%'
+                  OR TRIM(f.cliente_codigo) = '257'
+              )
         `;
         const fatEvoParams = [year];
         if (excludedClients.length > 0) {
