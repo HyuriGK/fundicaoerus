@@ -156,6 +156,7 @@ router.get('/', async (req, res) => {
                 AND p.quantidade = f.quantidade
             WHERE f.data_faturamento >= $1 AND f.data_faturamento < $2
               AND COALESCE(p.excluido, f.excluido_manualmente, false) = false
+              -- REGRA DE SINCRONISMO: Validar Pedidos vazios (Igual faturamentos.html)
               AND f.pedido IS NOT NULL AND TRIM(f.pedido) != ''
         `;
         const prevFatParams = [prevStartDate, prevEndDate];
@@ -205,6 +206,7 @@ router.get('/', async (req, res) => {
                 AND p.quantidade = f.quantidade
             WHERE EXTRACT(YEAR FROM f.data_faturamento) = $1
               AND COALESCE(p.excluido, f.excluido_manualmente, false) = false
+              -- REGRA DE SINCRONISMO: Validar Pedidos vazios (Igual faturamentos.html)
               AND f.pedido IS NOT NULL AND TRIM(f.pedido) != ''
         `;
         const fatEvoParams = [year];
