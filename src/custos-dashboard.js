@@ -64,6 +64,10 @@ router.get('/', async (req, res) => {
                 AND p.quantidade = f.quantidade
             WHERE f.data_faturamento >= $1 AND f.data_faturamento < $2
               AND COALESCE(p.excluido, f.excluido_manualmente, false) = false
+              -- REGRA DE SINCRONISMO: Excluir Clientes de Serviço e Pedidos vazios (Igual faturamentos.html)
+              AND TRIM(f.cliente_nome) NOT IN ('IMEPEL INDUSTRIA MECANICA LTDA', 'STEELROOL INDUSTRIA METALURGICA', 'SPILROD FUNDICAO DE FERRO E ACO LTDA')
+              AND TRIM(f.cliente_codigo) NOT IN ('257')
+              AND f.pedido IS NOT NULL AND TRIM(f.pedido) != ''
         `;
         const fatParams = [startDate, endDate];
         if (excludedClients.length > 0) {
@@ -155,6 +159,10 @@ router.get('/', async (req, res) => {
                 AND p.quantidade = f.quantidade
             WHERE f.data_faturamento >= $1 AND f.data_faturamento < $2
               AND COALESCE(p.excluido, f.excluido_manualmente, false) = false
+              -- REGRA DE SINCRONISMO: Excluir Clientes de Serviço e Pedidos vazios (Igual faturamentos.html)
+              AND TRIM(f.cliente_nome) NOT IN ('IMEPEL INDUSTRIA MECANICA LTDA', 'STEELROOL INDUSTRIA METALURGICA', 'SPILROD FUNDICAO DE FERRO E ACO LTDA')
+              AND TRIM(f.cliente_codigo) NOT IN ('257')
+              AND f.pedido IS NOT NULL AND TRIM(f.pedido) != ''
         `;
         const prevFatParams = [prevStartDate, prevEndDate];
         if (excludedClients.length > 0) {
@@ -203,6 +211,10 @@ router.get('/', async (req, res) => {
                 AND p.quantidade = f.quantidade
             WHERE EXTRACT(YEAR FROM f.data_faturamento) = $1
               AND COALESCE(p.excluido, f.excluido_manualmente, false) = false
+              -- REGRA DE SINCRONISMO: Excluir Clientes de Serviço e Pedidos vazios (Igual faturamentos.html)
+              AND TRIM(f.cliente_nome) NOT IN ('IMEPEL INDUSTRIA MECANICA LTDA', 'STEELROOL INDUSTRIA METALURGICA', 'SPILROD FUNDICAO DE FERRO E ACO LTDA')
+              AND TRIM(f.cliente_codigo) NOT IN ('257')
+              AND f.pedido IS NOT NULL AND TRIM(f.pedido) != ''
         `;
         const fatEvoParams = [year];
         if (excludedClients.length > 0) {
