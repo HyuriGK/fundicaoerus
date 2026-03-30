@@ -938,8 +938,11 @@
                         </div>
                     </div>
                 </div>
-                <div class="toolbar-group" style="margin-left: auto;">
-                    <button class="btn-modern" onclick="exportToExcel('detailDataTable', 'Detalhes_Refugo')" style="background-color: #3f3f46;">
+                <div class="toolbar-group" style="margin-left: auto; gap: 10px; display: flex;">
+                    <button id="btnToggleDetailTable" class="btn-modern" onclick="toggleDetailTable()" style="background-color: var(--color-primary); color: #000;">
+                        <i class="fa-solid fa-table"></i> Ver Registros
+                    </button>
+                    <button id="btnExportDetail" class="btn-modern" onclick="exportToExcel('detailDataTable', 'Detalhes_Refugo')" style="background-color: #3f3f46; display: none;">
                         <i class="fa-solid fa-file-excel"></i> Exportar
                     </button>
                 </div>
@@ -951,7 +954,7 @@
                 <canvas id="drilldownParetoChart"></canvas>
             </div>
 
-            <div class="table-container">
+            <div id="detailTableContainer" class="table-container" style="display: none;">
                 <table id="detailDataTable">
                     <thead>
                         <tr>
@@ -2017,6 +2020,22 @@
         function openDetailModal(filterValue, filterType) {
             const modal = document.getElementById('detailModalOverlay');
             const title = document.getElementById('detailModalTitle');
+
+            // Reset visibilidade da tabela
+            isDetailTableVisible = false;
+            if (document.getElementById('detailTableContainer')) {
+                document.getElementById('detailTableContainer').style.display = 'none';
+            }
+            if (document.getElementById('btnExportDetail')) {
+                document.getElementById('btnExportDetail').style.display = 'none';
+            }
+            const btnToggle = document.getElementById('btnToggleDetailTable');
+            if (btnToggle) {
+                btnToggle.innerHTML = '<i class="fa-solid fa-table"></i> Ver Registros';
+                btnToggle.style.backgroundColor = 'var(--color-primary)';
+                btnToggle.style.color = '#000';
+            }
+
             const tbody = document.querySelector('#detailDataTable tbody');
             const table = document.getElementById('detailDataTable');
 
@@ -2109,16 +2128,43 @@
             const rows = document.querySelectorAll('#detailDataTable tbody tr');
             let totalQty = 0;
             let totalWeight = 0;
+
             rows.forEach(row => {
-                if (row.style.display !== 'none') {
-                    const qty = parseFloat(row.cells[8].textContent.replace(/\./g, '').replace(',', '.')) || 0;
-                    const weight = parseFloat(row.cells[10].textContent.replace(/\./g, '').replace(',', '.')) || 0;
-                    totalQty += qty;
-                    totalWeight += weight;
+                if (row.style.display !== 'none' && row.id !== 'filter-row') {
+                    // Extract values, parse float.
+                    // Qtd is 8th cell (index 8), weight is 10th cell (index 10)
+                    const qtdText = row.cells[8].textContent.replace(/\./g, '').replace(',', '.');
+                    const weightText = row.cells[10].textContent.replace('kg', '').replace(/\./g, '').replace(',', '.').trim();
+
+                    totalQty += parseFloat(qtdText) || 0;
+                    totalWeight += parseFloat(weightText) || 0;
                 }
             });
             document.getElementById('detailTotalQty').textContent = totalQty.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             document.getElementById('detailTotalWeight').textContent = totalWeight.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kg';
+        }
+
+        // --- DETAIL TABLE TOGGLE ---
+        let isDetailTableVisible = false;
+        function toggleDetailTable() {
+            isDetailTableVisible = !isDetailTableVisible;
+            const container = document.getElementById('detailTableContainer');
+            const btnToggle = document.getElementById('btnToggleDetailTable');
+            const btnExport = document.getElementById('btnExportDetail');
+            
+            if (isDetailTableVisible) {
+                container.style.display = 'block';
+                btnExport.style.display = 'inline-flex';
+                btnToggle.innerHTML = '<i class="fa-solid fa-eye-slash"></i> Ocultar Registros';
+                btnToggle.style.backgroundColor = '#3f3f46';
+                btnToggle.style.color = '#fff';
+            } else {
+                container.style.display = 'none';
+                btnExport.style.display = 'none';
+                btnToggle.innerHTML = '<i class="fa-solid fa-table"></i> Ver Registros';
+                btnToggle.style.backgroundColor = 'var(--color-primary)';
+                btnToggle.style.color = '#000';
+            }
         }
 
         function filterDetailTable() {
