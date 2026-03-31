@@ -819,9 +819,10 @@
             <table class="print-table">
                 <thead>
                     <tr>
-                        <th style="width: 40%">ETAPA</th>
-                        <th style="width: 25%">QUANTIDADE</th>
-                        <th style="width: 35%">CÓD. BARRAS</th>
+                        <th style="width: 35%">ETAPA</th>
+                        <th style="width: 15%">UNID.</th>
+                        <th style="width: 20%">QUANTIDADE</th>
+                        <th style="width: 30%">CÓD. BARRAS</th>
                     </tr>
                 </thead>
                 <tbody id="printStagesBody">
@@ -848,6 +849,7 @@
         let allOps = [];
         let selectedOp = null;
         let currentRoteiro = [];
+        let currentProductTechInfo = null;
 
 
         const stageIcons = {
@@ -943,6 +945,19 @@
                 let roteiro = await routeRes.json();
 
                 currentRoteiro = roteiro;
+                
+                // Busca dados da Ficha Técnica (Figuras, etc.)
+                try {
+                    const techRes = await fetch(`/api/fichatecnica/${op.PRODUTO_PPR}`);
+                    if (techRes.ok) {
+                        currentProductTechInfo = await techRes.json();
+                        console.log("📄 Dados técnicos carregados:", currentProductTechInfo);
+                    } else {
+                        currentProductTechInfo = null;
+                    }
+                } catch (e) {
+                    currentProductTechInfo = null;
+                }
 
                 // Remover fallback fixo - se não tem roteiro no banco, não mostra nada
                 renderStages(pointings, roteiro, op.OP_QUANTIDADE || op.QUANTIDADE_PPR);
@@ -1091,11 +1106,27 @@
             if (Array.isArray(currentRoteiro) && currentRoteiro.length > 0) {
                 currentRoteiro.forEach((stage, index) => {
                     const tr = document.createElement('tr');
-                    // Usa a sequência real vinda do banco (ex: 10, 20, 50...) ou fallback se não existir
                     const seq = stage.sequencia || (index + 1) * 10;
+                    
+                    const normSetor = normalizeSectorName(stage.setor);
+                    const isMoldagem = normSetor === 'MOLDAGEM';
+                    const unit = isMoldagem ? 'MOLDES' : 'PEÇAS';
+                    
+                    let stageHtml = `<div style="font-weight: 800; font-size: 16px;">${stage.setor}</div>`;
+                    let qtyToPrint = opQty;
+
+                    if (isMoldagem && currentProductTechInfo) {
+                        const figs = parseFloat(currentProductTechInfo.QTDE_FIGURAS || 0);
+                        if (figs > 0) {
+                            stageHtml += `<div style="font-size: 10px; color: #555; margin-top: 2px;">FIGURAS: ${figs}</div>`;
+                            qtyToPrint = Math.ceil(opQty / figs);
+                        }
+                    }
+
                     tr.innerHTML = `
-                        <td class="etapa-nome" style="font-size: 16px;">${stage.setor}</td>
-                        <td style="font-size: 18px; font-weight: bold;">${opQty}</td>
+                        <td class="etapa-nome" style="padding: 10px 15px;">${stageHtml}</td>
+                        <td style="font-size: 14px; font-weight: 700;">${unit}</td>
+                        <td style="font-size: 18px; font-weight: 800;">${qtyToPrint}</td>
                         <td style="padding: 5px;">
                             <svg class="barcode" jsbarcode-value="${seq}" jsbarcode-height="40" jsbarcode-margin="0" jsbarcode-displayvalue="false"></svg>
                         </td>
@@ -1108,9 +1139,26 @@
                 estagiosPadrao.forEach((stage, index) => {
                     const tr = document.createElement('tr');
                     const seq = (index + 1) * 10;
+                    
+                    const normSetor = normalizeSectorName(stage);
+                    const isMoldagem = normSetor === 'MOLDAGEM';
+                    const unit = isMoldagem ? 'MOLDES' : 'PEÇAS';
+
+                    let stageHtml = `<div style="font-weight: 800; font-size: 16px;">${stage}</div>`;
+                    let qtyToPrint = opQty;
+
+                    if (isMoldagem && currentProductTechInfo) {
+                        const figs = parseFloat(currentProductTechInfo.QTDE_FIGURAS || 0);
+                        if (figs > 0) {
+                            stageHtml += `<div style="font-size: 10px; color: #555; margin-top: 2px;">FIGURAS: ${figs}</div>`;
+                            qtyToPrint = Math.ceil(opQty / figs);
+                        }
+                    }
+
                     tr.innerHTML = `
-                        <td class="etapa-nome" style="font-size: 16px;">${stage}</td>
-                        <td style="font-size: 18px; font-weight: bold;">${opQty}</td>
+                        <td class="etapa-nome" style="padding: 10px 15px;">${stageHtml}</td>
+                        <td style="font-size: 14px; font-weight: 700;">${unit}</td>
+                        <td style="font-size: 18px; font-weight: 800;">${qtyToPrint}</td>
                         <td style="padding: 5px;">
                             <svg class="barcode" jsbarcode-value="${seq}" jsbarcode-height="40" jsbarcode-margin="0" jsbarcode-displayvalue="false"></svg>
                         </td>
