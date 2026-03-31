@@ -9,6 +9,7 @@
     <!-- Google Fonts & Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="js/activity-logger.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.0/dist/JsBarcode.all.min.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
@@ -641,7 +642,7 @@
             }
 
             .print-table tbody tr {
-                height: 50px;
+                height: 70px;
             }
 
             .print-table td.etapa-nome {
@@ -808,13 +809,9 @@
             <table class="print-table">
                 <thead>
                     <tr>
-                        <th style="width: 15%">ETAPA</th>
-                        <th style="width: 20%">OPERADOR</th>
-                        <th style="width: 15%">DATA / HORA</th>
-                        <th style="width: 10%">QTD BOAS</th>
-                        <th style="width: 10%">QTD REF.</th>
-                        <th style="width: 15%">VISTO LÍDER</th>
-                        <th style="width: 15%">VISTO QUAL.</th>
+                        <th style="width: 40%">ETAPA</th>
+                        <th style="width: 25%">QUANTIDADE</th>
+                        <th style="width: 35%">CÓD. BARRAS</th>
                     </tr>
                 </thead>
                 <tbody id="printStagesBody">
@@ -1079,17 +1076,19 @@
             tbody.innerHTML = '';
             
             // Popula o Roteiro
+            const opQty = selectedOp.OP_QUANTIDADE || selectedOp.QUANTIDADE_PPR || 0;
+
             if (Array.isArray(currentRoteiro) && currentRoteiro.length > 0) {
                 currentRoteiro.forEach((stage, index) => {
                     const tr = document.createElement('tr');
+                    // Usa a sequência real vinda do banco (ex: 10, 20, 50...) ou fallback se não existir
+                    const seq = stage.sequencia || (index + 1) * 10;
                     tr.innerHTML = `
-                        <td class="etapa-nome">${index + 1}. ${stage.setor}</td>
-                        <td></td>
-                        <td></td>
-                        <td></td>
-                        <td></td>
-                        <td></td>
-                        <td></td>
+                        <td class="etapa-nome" style="font-size: 16px;">${stage.setor}</td>
+                        <td style="font-size: 18px; font-weight: bold;">${opQty}</td>
+                        <td style="padding: 5px;">
+                            <svg class="barcode" jsbarcode-value="${seq}" jsbarcode-height="40" jsbarcode-margin="0" jsbarcode-displayvalue="true"></svg>
+                        </td>
                     `;
                     tbody.appendChild(tr);
                 });
@@ -1098,20 +1097,27 @@
                 const estagiosPadrao = ['MOLDAGEM', 'FUSÃO', 'ACABAMENTO', 'TRATAMENTO TÉRMICO', 'USINAGEM', 'INSPEÇÃO', 'EXPEDIÇÃO'];
                 estagiosPadrao.forEach((stage, index) => {
                     const tr = document.createElement('tr');
+                    const seq = (index + 1) * 10;
                     tr.innerHTML = `
-                        <td class="etapa-nome">${index + 1}. ${stage}</td>
-                        <td></td>
-                        <td></td>
-                        <td></td>
-                        <td></td>
-                        <td></td>
-                        <td></td>
+                        <td class="etapa-nome" style="font-size: 16px;">${stage}</td>
+                        <td style="font-size: 18px; font-weight: bold;">${opQty}</td>
+                        <td style="padding: 5px;">
+                            <svg class="barcode" jsbarcode-value="${seq}" jsbarcode-height="40" jsbarcode-margin="0" jsbarcode-displayvalue="true"></svg>
+                        </td>
                     `;
                     tbody.appendChild(tr);
                 });
             }
 
-            window.print();
+            // Inicializa JsBarcode
+            if (typeof JsBarcode !== 'undefined') {
+                JsBarcode(".barcode").init();
+            }
+
+            // Exige um timeout pequeno para os SVGs do código de barras renderizarem antes de abrir a janela print
+            setTimeout(() => {
+                window.print();
+            }, 300);
         }
 
         window.onload = init;
