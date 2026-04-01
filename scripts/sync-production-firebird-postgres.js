@@ -76,11 +76,14 @@ function chunkArray(myArray, chunk_size) {
         `);
         console.log('✅ Postgres ready.');
 
-        // DETERMINAR DATA DE INÍCIO (Forçar Sincronização e Limpeza)
-        // O usuário solicitou limpar 2026 e garantir que 2025 exista.
+        // OTIMIZAÇÃO: Sincronização Incremental (Janela de 90 dias)
+        // Em vez de buscar dados de 2025 inteiros toda vez, buscamos apenas os últimos 90 dias.
+        // Isso cobre OPs em aberto e correções recentes com muito mais agilidade.
+        let startDateObj = new Date();
+        startDateObj.setDate(startDateObj.getDate() - 90);
+        let startDate = startDateObj.toISOString().split('T')[0];
 
-        let startDate = '2025-01-01';
-        console.log(`📅 Sincronizing PERMANENTLY from ${startDate}...`);
+        console.log(`📅 Janela de Sincronização: ${startDate} até hoje (90 dias).`);
 
         // Add columns if they don't exist (migration for existing table)
         await pool.query(`
@@ -102,10 +105,11 @@ function chunkArray(myArray, chunk_size) {
         // Widen liga column if needed (was VARCHAR(50), now VARCHAR(255))
         await pool.query(`ALTER TABLE producao_apontada_sincronizada ALTER COLUMN liga TYPE VARCHAR(255)`);
 
-        // Clear requested range first (2025 and 2026)
-        console.log('🧹 Clearing data from 2025 onwards (Clean Slate)...');
-        await pool.query("DELETE FROM producao_apontada_sincronizada WHERE data_producao >= $1", [startDate]);
-        console.log('✅ Data cleared.');
+        // OTIMIZAÇÃO: Removemos o DELETE global para evitar o "Nuclear Option" toda vez.
+        // Os dados antigos permanecem e os novos são atualizados via ON CONFLICT.
+        // console.log('🧹 Clearing data from 2025 onwards (Clean Slate)...');
+        // await pool.query("DELETE FROM producao_apontada_sincronizada WHERE data_producao >= $1", [startDate]);
+        // console.log('✅ Data cleared.');
 
         Firebird.attach(fbOptions, function (err, db) {
             if (err) {
