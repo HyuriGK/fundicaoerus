@@ -75,7 +75,7 @@ function drawPinnedDashboard(startTime = null) {
 }
 
 /**
- * Log an error: Appends to file and PRINTS to terminal below the dashboard
+ * Log an event: Appends to file and PRINTS relevant ones to terminal
  */
 function logEvent(script, message, isError = true) {
     const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
@@ -85,16 +85,20 @@ function logEvent(script, message, isError = true) {
 
     if (isError) totalErrorsCount++;
 
-    // Write to persistent log file
+    // Write to persistent log file (ALWAY LOG EVERYTHING IN FILE)
     const logEntry = `[${timestamp}] [${script}] ${isError ? 'ERROR' : 'INFO'}: ${msg}\n`;
     try {
         fs.appendFileSync(LOG_FILE, logEntry);
     } catch (e) {}
 
-    // PRINT TO TERMINAL (scrolling region)
-    // We don't use cursorTo here, we just print so it scrolls normally below the board
-    const icon = isError ? '⚠️' : 'ℹ️';
-    console.log(`${icon} [${timeDisplay}] ${script}: ${msg}`);
+    // PRINT TO TERMINAL (scrolling region) - ONLY RELEVANT STUFF
+    // We filter out common library/node "spam" warnings to keep terminal dashboard clean
+    const isSpam = msg.includes('SECURITY WARNING') || msg.includes('Warning:') || msg.includes('adopt standard libpq');
+    
+    if (!isSpam || isError) {
+        const icon = isError ? '⚠️' : 'ℹ️';
+        console.log(`${icon} [${timeDisplay}] ${script}: ${msg}`);
+    }
 }
 
 /**
