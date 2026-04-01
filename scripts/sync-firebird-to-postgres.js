@@ -110,74 +110,41 @@ async function criarTabelasPostgres() {
 // SINCRONIZAR FATURAMENTO DIÁRIO
 // =========================================================
 
-async function sincronizarFaturamentoDiario(fbDb) {
-    console.log('\n📊 Sincronizando faturamento diário...');
-
-    // Buscar faturamento de 2026 do Firebird
-    const dataInicio = new Date('2026-01-01');
-    console.log(`📅 Buscando faturamento diário a partir de: ${dataInicio.toISOString().split('T')[0]}`);
-
-    const query = `
-        SELECT 
-            CAST(nf.EMISSAO_NOT AS DATE) as DATA_FATURAMENTO,
-            COUNT(DISTINCT nf.CODIGO_NOT) as TOTAL_NOTAS,
-            COUNT(nfp.PRODUTO_NPR) as TOTAL_ITENS,
-            SUM(nfp.QUANTIDADE_NPR) as QUANTIDADE_TOTAL,
-            SUM(nfp.TOTAL_NPR) as VALOR_TOTAL_CENTAVOS,
-            SUM(nfp.QUANTIDADE_NPR * COALESCE(p.PESO_LIQUIDO_PRO, 0)) as PESO_TOTAL
-        FROM NOTA_FISCAL nf
-        INNER JOIN NOTA_FISCAL_PRODUTO nfp 
-            ON nf.EMPRESA_NOT = nfp.EMPRESA_NPR 
-            AND nf.SERIE_NOT = nfp.SERIE_NPR
-            AND nf.CODIGO_NOT = nfp.CODIGO_NPR
-        LEFT JOIN PRODUTO p
-            ON nfp.PRODUTO_NPR = p.CODIGO_PRO
-        WHERE nf.EMISSAO_NOT >= ?
-            AND nf.TIPO_NOT = 'S'
-            AND nf.STATUS_NOT = 'A'
-        GROUP BY CAST(nf.EMISSAO_NOT AS DATE)
-        ORDER BY DATA_FATURAMENTO DESC
-    `;
-
-    return new Promise((resolve, reject) => {
-        fbDb.query(query, [dataInicio], async (err, result) => {
-            if (err) {
-                console.error('❌ Erro ao buscar dados do Firebird:', err);
-                return reject(err);
-            }
-
-            console.log(`📦 ${result.length} dias de faturamento encontrados`);
-
-            // Limpar dados de 2026 do PostgreSQL para evitar duplicidade
-            await pool.query("DELETE FROM faturamento_diario WHERE data >= '2026-01-01'");
-
-            // Inserir novos dados
-            for (const row of result) {
-                await pool.query(`
-                    INSERT INTO faturamento_diario 
-                    (data, total_notas, total_itens, quantidade_total, valor_total, peso_total)
-                    VALUES ($1, $2, $3, $4, $5, $6)
-                    ON CONFLICT (data) DO UPDATE SET
-                        total_notas = EXCLUDED.total_notas,
-                        total_itens = EXCLUDED.total_itens,
-                        quantidade_total = EXCLUDED.quantidade_total,
-                        valor_total = EXCLUDED.valor_total,
-                        peso_total = EXCLUDED.peso_total,
-                        atualizado_em = CURRENT_TIMESTAMP
-                `, [
-                    formatarData(row.DATA_FATURAMENTO),
-                    row.TOTAL_NOTAS || 0,
-                    row.TOTAL_ITENS || 0,
-                    row.QUANTIDADE_TOTAL || 0,
-                    centavosParaReais(row.VALOR_TOTAL_CENTAVOS),
-                    row.PESO_TOTAL || 0
-                ]);
-            }
-
-            console.log('✅ Faturamento diário sincronizado!');
-            resolve();
-        });
-    });
+async function sincronizarFaturamentoDiario() {
+    console.log('\n📊 Reconstruindo faturamento diário (No PostgreSQL)...');
+    
+    // Agora fazemos a agregação diretamente no PostgreSQL baseado na tabela de detalhes já sincronizada
+    // Isso é ordens de magnitude mais rápido que buscar tudo no Firebird toda vez
+    try {
+        await pool.query(`
+            WITH agregados AS (
+                SELECT 
+                    data_faturamento as data,
+                    COUNT(DISTINCT nota_fiscal) as total_notas,
+                    COUNT(*) as total_itens,
+                    SUM(quantidade) as quantidade_total,
+                    SUM(valor_total) as valor_total,
+                    SUM(peso_total) as peso_total
+                FROM faturamento_firebird
+                WHERE data_faturamento >= '2026-01-01' AND (excluido_manualmente = FALSE OR excluido_manualmente IS NULL)
+                GROUP BY data_faturamento
+            )
+            INSERT INTO faturamento_diario 
+            (data, total_notas, total_itens, quantidade_total, valor_total, peso_total)
+            SELECT data, total_notas, total_itens, quantidade_total, valor_total, peso_total FROM agregados
+            ON CONFLICT (data) DO UPDATE SET
+                total_notas = EXCLUDED.total_notas,
+                total_itens = EXCLUDED.total_itens,
+                quantidade_total = EXCLUDED.quantidade_total,
+                valor_total = EXCLUDED.valor_total,
+                peso_total = EXCLUDED.peso_total,
+                atualizado_em = CURRENT_TIMESTAMP
+        `);
+        console.log('✅ Faturamento diário atualizado (Postgres)!');
+    } catch (err) {
+        console.error('❌ Erro ao atualizar faturamento diário no Postgres:', err);
+        throw err;
+    }
 }
 
 // Sincronização de Top Produtos Removida a pedido do usuário
@@ -237,8 +204,12 @@ async function sincronizarDetalhado(fbDb) {
 
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_fat_fb_data ON faturamento_firebird(data_faturamento DESC)`);
 
+    // OTIMIZAÇÃO: Sincronização Incremental (Janela de 15 dias)
+    // Em vez de buscar o ano todo, buscamos apenas os últimos 15 dias.
+    // Isso reduz o processamento drasticamente e acelera a sincronização.
     const dataInicio = new Date();
-    dataInicio.setFullYear(2026, 0, 1); // Faturamento apenas de 2026 conforme solicitado
+    dataInicio.setDate(dataInicio.getDate() - 60);
+    console.log(`📅 Janela de Sincronização: ${dataInicio.toISOString().split('T')[0]} até hoje.`);
 
     const query = `
     SELECT
@@ -281,22 +252,10 @@ async function sincronizarDetalhado(fbDb) {
 
             console.log(`📦 ${result.length} itens de nota encontrados`);
 
-            // Limpar dados anteriores para evitar duplicidade ou registros órfãos
-            // Como sincronizamos a partir de 2026, limpamos esses registros antes de reinserir
-            console.log('  🗑️ Limpando registros de faturamento detalhado...');
-
-            // BUSCAR PREFERÊNCIAS DE EXCLUSÃO (Tabela correta: faturamento_firebird_preferencias)
-            const prefsResult = await pool.query('SELECT nota_fiscal, codigo_item, pedido, data_faturamento, quantidade, excluido FROM faturamento_firebird_preferencias');
-            const prefsMap = new Map();
-            prefsResult.rows.forEach(r => {
-                const dateStr = r.data_faturamento ? r.data_faturamento.toISOString().split('T')[0] : '';
-                // IMPORTANT: Must match loop logic (String(parseFloat(quant)))
-                const qStr = parseFloat(r.quantidade || 0);
-                const key = `${r.nota_fiscal}-${String(r.codigo_item).trim()}-${String(r.pedido || '').trim()}-${dateStr}-${qStr}`;
-                prefsMap.set(key, r.excluido);
-            });
-
-            await pool.query("DELETE FROM faturamento_firebird WHERE data_faturamento >= '2026-01-01' OR data_faturamento IS NULL");
+            // OTIMIZAÇÃO: Removemos o DELETE global para evitar o "Nuclear Option" toda vez.
+            // Os dados antigos permanecem e os novos são atualizados via ON CONFLICT.
+            // console.log('  🗑️ Limpando registros de faturamento detalhado...');
+            // await pool.query("DELETE FROM faturamento_firebird WHERE data_faturamento >= '2026-01-01' OR data_faturamento IS NULL");
 
             let inserted = 0;
             let errors = 0;
@@ -391,76 +350,47 @@ async function sincronizarDetalhado(fbDb) {
 // SINCRONIZAR ESTATÍSTICAS GERAIS
 // =========================================================
 
-async function sincronizarEstatisticas(fbDb) {
-    console.log('\n📈 Sincronizando estatísticas gerais...');
+async function sincronizarEstatisticas() {
+    console.log('\n📈 Atualizando estatísticas gerais (No PostgreSQL)...');
 
-    const dataInicio = new Date('2026-01-01');
-    console.log(`📈 Buscando estatísticas a partir de: ${dataInicio.toISOString().split('T')[0]}`);
-
-    const query = `
-        SELECT 
-            COUNT(DISTINCT nf.CODIGO_NOT) as TOTAL_NOTAS,
-            COUNT(DISTINCT nf.DESTINATARIO_NOT) as TOTAL_CLIENTES,
-            COUNT(nfp.PRODUTO_NPR) as TOTAL_ITENS,
-            SUM(nfp.QUANTIDADE_NPR) as QUANTIDADE_TOTAL,
-            SUM(nfp.TOTAL_NPR) as VALOR_TOTAL_CENTAVOS,
-            MIN(nf.EMISSAO_NOT) as PRIMEIRA_NOTA,
-            MAX(nf.EMISSAO_NOT) as ULTIMA_NOTA
-        FROM NOTA_FISCAL nf
-        INNER JOIN NOTA_FISCAL_PRODUTO nfp 
-            ON nf.EMPRESA_NOT = nfp.EMPRESA_NPR 
-            AND nf.SERIE_NOT = nfp.SERIE_NPR
-            AND nf.CODIGO_NOT = nfp.CODIGO_NPR
-        WHERE nf.EMISSAO_NOT >= ?
-            AND nf.TIPO_NOT = 'S'
-            AND nf.STATUS_NOT = 'A'
-    `;
-
-    return new Promise((resolve, reject) => {
-        fbDb.query(query, [dataInicio], async (err, result) => {
-            if (err) {
-                console.error('❌ Erro ao buscar estatísticas do Firebird:', err);
-                return reject(err);
-            }
-
-            const stats = result[0];
-            const valorTotal = centavosParaReais(stats.VALOR_TOTAL_CENTAVOS);
-            const ticketMedio = stats.TOTAL_ITENS > 0 ? valorTotal / stats.TOTAL_ITENS : 0;
-
-            console.log(`📊 Estatísticas: R$ ${valorTotal.toFixed(2)} em ${stats.TOTAL_NOTAS} notas`);
-
-            // Atualizar estatísticas
-            await pool.query(`
-                INSERT INTO faturamento_estatisticas 
-                (periodo, total_notas, total_clientes, total_itens, quantidade_total, 
-                 valor_total, ticket_medio, primeira_nota, ultima_nota)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-                ON CONFLICT (periodo) DO UPDATE SET
-                    total_notas = EXCLUDED.total_notas,
-                    total_clientes = EXCLUDED.total_clientes,
-                    total_itens = EXCLUDED.total_itens,
-                    quantidade_total = EXCLUDED.quantidade_total,
-                    valor_total = EXCLUDED.valor_total,
-                    ticket_medio = EXCLUDED.ticket_medio,
-                    primeira_nota = EXCLUDED.primeira_nota,
-                    ultima_nota = EXCLUDED.ultima_nota,
-                    atualizado_em = CURRENT_TIMESTAMP
-            `, [
+    try {
+        await pool.query(`
+            WITH stats AS (
+                SELECT 
+                    COUNT(DISTINCT nota_fiscal) as total_notas,
+                    COUNT(DISTINCT cliente_codigo) as total_clientes,
+                    COUNT(*) as total_itens,
+                    SUM(quantidade) as quantidade_total,
+                    SUM(valor_total) as valor_total,
+                    MIN(data_faturamento) as primeira_nota,
+                    MAX(data_faturamento) as ultima_nota
+                FROM faturamento_firebird
+                WHERE data_faturamento >= '2026-01-01' AND (excluido_manualmente = FALSE OR excluido_manualmente IS NULL)
+            )
+            INSERT INTO faturamento_estatisticas 
+            (periodo, total_notas, total_clientes, total_itens, quantidade_total, 
+             valor_total, ticket_medio, primeira_nota, ultima_nota)
+            SELECT 
                 'ultimos_90_dias',
-                stats.TOTAL_NOTAS || 0,
-                stats.TOTAL_CLIENTES || 0,
-                stats.TOTAL_ITENS || 0,
-                stats.QUANTIDADE_TOTAL || 0,
-                valorTotal,
-                ticketMedio,
-                formatarData(stats.PRIMEIRA_NOTA),
-                formatarData(stats.ULTIMA_NOTA)
-            ]);
-
-            console.log('✅ Estatísticas sincronizadas!');
-            resolve();
-        });
-    });
+                total_notas, total_clientes, total_itens, quantidade_total, 
+                valor_total, (CASE WHEN total_itens > 0 THEN valor_total / total_itens ELSE 0 END), 
+                primeira_nota, ultima_nota
+            FROM stats
+            ON CONFLICT (periodo) DO UPDATE SET
+                total_notas = EXCLUDED.total_notas,
+                total_clientes = EXCLUDED.total_clientes,
+                total_itens = EXCLUDED.total_itens,
+                quantidade_total = EXCLUDED.quantidade_total,
+                valor_total = EXCLUDED.valor_total,
+                ticket_medio = EXCLUDED.ticket_medio,
+                primeira_nota = EXCLUDED.primeira_nota,
+                ultima_nota = EXCLUDED.ultima_nota,
+                atualizado_em = CURRENT_TIMESTAMP
+        `);
+        console.log('✅ Estatísticas sincronizadas (Postgres)!');
+    } catch (err) {
+        console.error('❌ Erro ao atualizar estatísticas no Postgres:', err);
+    }
 }
 
 // =========================================================
@@ -489,8 +419,8 @@ async function sincronizar() {
             try {
                 // Sincronizar todos os dados - Prioridade para o Detalhado (faturamentos.html)
                 await sincronizarDetalhado(fbDb);
-                await sincronizarFaturamentoDiario(fbDb);
-                await sincronizarEstatisticas(fbDb);
+                await sincronizarFaturamentoDiario(); // Agora no Postgres
+                await sincronizarEstatisticas();      // Agora no Postgres
 
                 console.log('\n' + '='.repeat(60));
                 console.log('✅ SINCRONIZAÇÃO CONCLUÍDA COM SUCESSO!');
