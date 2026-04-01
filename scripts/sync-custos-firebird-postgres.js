@@ -18,7 +18,7 @@ async function createTableIfNotExists() {
     const client = await pool.connect();
     console.log('✅ Conectado ao Postgres.');
     try {
-        console.log('🛠️ Executando DDL (Create/Alter Table)...');
+        console.log('🛠️ [1/4] Criando Tabela (se necessário)...');
         await client.query(`
             CREATE TABLE IF NOT EXISTS custos_registros (
                 id SERIAL PRIMARY KEY,
@@ -34,46 +34,56 @@ async function createTableIfNotExists() {
                 ano INTEGER,
                 atualizado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
-            
-            -- Garantir que as colunas novas existam
             ALTER TABLE custos_registros ADD COLUMN IF NOT EXISTS produto VARCHAR(255);
             ALTER TABLE custos_registros ADD COLUMN IF NOT EXISTS produto_cod VARCHAR(50);
             ALTER TABLE custos_registros ADD COLUMN IF NOT EXISTS fornecedor VARCHAR(255);
-            
-            -- Limpeza e Padronização para suportar Índice Único (Evitar NULLs em chaves de sincronização)
-            UPDATE custos_registros SET documento = '' WHERE documento IS NULL;
-            UPDATE custos_registros SET produto_cod = '' WHERE produto_cod IS NULL;
-            UPDATE custos_registros SET fornecedor = '' WHERE fornecedor IS NULL;
+        `);
+
+        console.log('🛠️ [2/4] Normalizando dados para Índice Único...');
+        await client.query(`
+            UPDATE custos_registros SET documento = TRIM(COALESCE(documento, '')) WHERE documento IS NULL OR documento != TRIM(documento);
+            UPDATE custos_registros SET produto_cod = TRIM(COALESCE(produto_cod, '')) WHERE produto_cod IS NULL OR produto_cod != TRIM(produto_cod);
+            UPDATE custos_registros SET fornecedor = TRIM(COALESCE(fornecedor, '')) WHERE fornecedor IS NULL OR fornecedor != TRIM(fornecedor);
 
             ALTER TABLE custos_registros ALTER COLUMN documento SET DEFAULT '';
             ALTER TABLE custos_registros ALTER COLUMN produto_cod SET DEFAULT '';
             ALTER TABLE custos_registros ALTER COLUMN fornecedor SET DEFAULT '';
+        `);
 
-            -- Remover duplicatas existentes de forma robusta (Limpeza de resquícios de sincronizações anteriores)
+        console.log('🛠️ [3/4] Removendo duplicatas legadas...');
+        await client.query(`
             DELETE FROM custos_registros
             WHERE id IN (
                 SELECT id
                 FROM (
                     SELECT id,
                            ROW_NUMBER() OVER (
-                               PARTITION BY categoria, documento, produto_cod, fornecedor, data_emissao, valor
+                               PARTITION BY 
+                                 TRIM(categoria), 
+                                 TRIM(COALESCE(documento, '')), 
+                                 TRIM(COALESCE(produto_cod, '')), 
+                                 TRIM(COALESCE(fornecedor, '')), 
+                                 data_emissao, 
+                                 valor
                                ORDER BY id DESC
                            ) as row_num
                     FROM custos_registros
                 ) t
                 WHERE t.row_num > 1
             );
+        `);
 
-            -- Unique index to support UPSERT (incremental sync)
+        console.log('🛠️ [4/4] Gerando Índice de Sincronização Incremental...');
+        await client.query(`
             DROP INDEX IF EXISTS idx_custos_unique_upsert;
             CREATE UNIQUE INDEX idx_custos_unique_upsert 
             ON custos_registros(categoria, documento, produto_cod, fornecedor, data_emissao, valor);
 
-            -- Índices para performance na API (Filtros e Agrupamentos)
             CREATE INDEX IF NOT EXISTS idx_custos_registros_mes_ano ON custos_registros(mes, ano);
             CREATE INDEX IF NOT EXISTS idx_custos_registros_categoria ON custos_registros(categoria);
         `);
-        console.log('✅ Tabela custos_registros verificada/criada no Postgres.');
+        
+        console.log('✅ Tabela custos_registros inicializada com sucesso.');
     } catch (error) {
         console.error('❌ Erro ao criar tabela no Postgres:', error);
         throw error;
