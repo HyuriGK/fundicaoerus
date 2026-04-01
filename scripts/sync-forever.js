@@ -1,7 +1,6 @@
 /**
- * MASTER SYNC FOREVER V3 (Static Dashboard Edition)
- * Orchestrates 6 batch files with a real-time, non-scrolling UI.
- * Features: Concurrent execution, Static board updates, Average Cycle Time.
+ * MASTER SYNC FOREVER V4 (Dashboard + Error Monitoring)
+ * Orchestrates 6 batch files with real-time status and error logging.
  */
 
 const { spawn } = require('child_process');
@@ -21,9 +20,25 @@ const SYNC_BATS = [
 
 // STATE
 let cycleCount = 0;
-let cycleHistory = []; // Durations in seconds
+let cycleHistory = []; 
 let currentStatus = {};
+let lastErrors = []; // Array of { time: string, msg: string, script: string }
 SYNC_BATS.forEach(b => currentStatus[b.name] = '0%');
+
+/**
+ * Adds an error to the log, keeping only the last 5 unique ones.
+ */
+function logError(script, message) {
+    const time = new Date().toLocaleTimeString('pt-BR');
+    const msg = message.trim();
+    if (!msg || msg.includes('@PROG')) return;
+
+    // Evitar duplicatas idênticas seguidas
+    if (lastErrors.length > 0 && lastErrors[0].msg === msg) return;
+
+    lastErrors.unshift({ time, msg, script });
+    if (lastErrors.length > 5) lastErrors.pop();
+}
 
 /**
  * Renders the Static Dashboard
@@ -44,49 +59,87 @@ function renderDashboard(startTime = null) {
     
     SYNC_BATS.forEach(bat => {
         const prog = currentStatus[bat.name] || '0%';
-        const barWidth = 20;
-        const filledWidth = Math.floor((parseInt(prog) / 100) * barWidth);
-        const bar = '█'.repeat(filledWidth) + '░'.repeat(barWidth - filledWidth);
+        const isError = prog === '⚠️ ERRO';
+        
+        let bar = '';
+        if (isError) {
+            bar = '‼ ERROR ‼'.padEnd(20, ' ');
+        } else {
+            const filledWidth = Math.floor((parseInt(prog) / 100) * 20);
+            bar = '█'.repeat(filledWidth) + '░'.repeat(20 - filledWidth);
+        }
         
         const label = bat.name.padEnd(15, ' ');
         console.log(`║  ${label} [${bar}] ${prog.padStart(4, ' ')}  ║`);
     });
 
+    console.log('╠════════════════════════════════════════════════════════════╣');
+    console.log('║               🛑 STATUS / ÚLTIMOS ERROS                    ║');
+    console.log('╠════════════════════════════════════════════════════════════╣');
+
+    if (lastErrors.length === 0) {
+        console.log('║  ✅ Sem erros detectados no momento.                       ║');
+    } else {
+        lastErrors.forEach(err => {
+            const line = `[${err.time}] ${err.script}: ${err.msg}`;
+            console.log(`║  ⚠️ ${line.substring(0, 53).padEnd(53, ' ')} ║`);
+        });
+        // Preencher o resto se tiver menos de 5
+        for (let i = lastErrors.length; i < 3; i++) {
+            console.log('║                                                            ║');
+        }
+    }
+
     console.log('╚════════════════════════════════════════════════════════════╝');
     
     if (startTime) {
         const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-        process.stdout.write(`\n   ⏱️ Tempo atual do ciclo: ${elapsed}s\n`);
+        process.stdout.write(`\n   ⏱️ Tempo atual do ciclo: ${elapsed}s (Pressione Ctrl+C para parar)\n`);
     }
 }
 
 /**
- * Runs a single .bat file and parses @PROG signals
+ * Runs a single .bat file and parses @PROG signals + Errors
  */
 function runBat(batEntry) {
     return new Promise((resolve) => {
         const child = spawn('cmd.exe', ['/c', batEntry.file], {
             cwd: ROOT_DIR,
-            stdio: ['ignore', 'pipe', 'pipe'] // Pipe stdout/stderr to parse signals
+            stdio: ['ignore', 'pipe', 'pipe']
         });
 
+        // Capturar Saída Padrão (Signals)
         child.stdout.on('data', (data) => {
             const lines = data.toString().split('\n');
             lines.forEach(line => {
-                if (line.includes('@PROG:')) {
-                    const parts = line.trim().split(':');
+                const trimmedLine = line.trim();
+                if (trimmedLine.includes('@PROG:')) {
+                    const parts = trimmedLine.split(':');
                     if (parts.length >= 3) {
-                        const name = parts[1];
-                        const val = parts[2];
-                        currentStatus[name] = val;
-                        // Trigger re-render (optional: debounce if too fast)
+                        currentStatus[parts[1]] = parts[2];
                     }
+                } else if (trimmedLine.includes('❌') || trimmedLine.toLowerCase().includes('error:')) {
+                    logError(batEntry.name, trimmedLine);
                 }
             });
         });
 
-        child.on('close', () => {
-            currentStatus[batEntry.name] = '100%';
+        // Capturar Erros Técnicos (stderr)
+        child.stderr.on('data', (data) => {
+            const errLog = data.toString().trim();
+            if (errLog && !errLog.includes('terminada')) {
+                logError(batEntry.name, errLog);
+                currentStatus[batEntry.name] = '⚠️ ERRO';
+            }
+        });
+
+        child.on('close', (code) => {
+            if (code !== 0) {
+                currentStatus[batEntry.name] = '⚠️ ERRO';
+                logError(batEntry.name, `Processo finalizado com erro (${code})`);
+            } else {
+                currentStatus[batEntry.name] = '100%';
+            }
             resolve();
         });
     });
@@ -96,33 +149,29 @@ function runBat(batEntry) {
  * Main Loop
  */
 async function startForever() {
-    // Hide cursor for better appearance
     process.stdout.write('\x1B[?25l');
 
     while (true) {
         cycleCount++;
-        SYNC_BATS.forEach(b => currentStatus[b.name] = '0%');
+        SYNC_BATS.forEach(b => {
+             // Se estava em erro, tentamos novamente
+             currentStatus[b.name] = '0%';
+        });
         
         const cycleStart = Date.now();
-        
-        // Initial render for the cycle
         renderDashboard(cycleStart);
 
-        // Update timer every second
         const timerInterval = setInterval(() => renderDashboard(cycleStart), 1000);
 
-        // RUN ALL CONCURRENTLY
         await Promise.all(SYNC_BATS.map(bat => runBat(bat)));
 
         clearInterval(timerInterval);
         
         const duration = (Date.now() - cycleStart) / 1000;
         cycleHistory.push(duration);
-        if (cycleHistory.length > 50) cycleHistory.shift(); // Keep last 50 cycles for average
+        if (cycleHistory.length > 50) cycleHistory.shift();
 
         renderDashboard(cycleStart); 
-        
-        // Zero delay - starts next cycle immediately
     }
 }
 
