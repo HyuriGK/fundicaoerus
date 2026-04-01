@@ -229,6 +229,7 @@ async function syncData() {
             // Chamada de migração para o mestre
             await createTableIfNotExists();
 
+            const totalGeral = dados.fornecedores.length + dados.tipos.length + dados.setores.length + dados.materiais.length;
             let totalInseridos = 0;
 
             const insertBatch = async (cat, rows) => {
