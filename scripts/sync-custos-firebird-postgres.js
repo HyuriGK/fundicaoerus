@@ -40,8 +40,28 @@ async function createTableIfNotExists() {
             ALTER TABLE custos_registros ADD COLUMN IF NOT EXISTS produto_cod VARCHAR(50);
             ALTER TABLE custos_registros ADD COLUMN IF NOT EXISTS fornecedor VARCHAR(255);
             
+            -- Limpeza e Padronização para suportar Índice Único (Evitar NULLs em chaves de sincronização)
+            UPDATE custos_registros SET documento = '' WHERE documento IS NULL;
+            UPDATE custos_registros SET produto_cod = '' WHERE produto_cod IS NULL;
+            UPDATE custos_registros SET fornecedor = '' WHERE fornecedor IS NULL;
+
+            ALTER TABLE custos_registros ALTER COLUMN documento SET DEFAULT '';
+            ALTER TABLE custos_registros ALTER COLUMN produto_cod SET DEFAULT '';
+            ALTER TABLE custos_registros ALTER COLUMN fornecedor SET DEFAULT '';
+
+            -- Remover duplicatas existentes (Limpeza de resquícios de sincronizações anteriores)
+            DELETE FROM custos_registros a USING custos_registros b
+            WHERE a.id < b.id 
+              AND a.categoria = b.categoria 
+              AND a.documento = b.documento
+              AND a.produto_cod = b.produto_cod
+              AND a.fornecedor = b.fornecedor
+              AND a.data_emissao = b.data_emissao 
+              AND a.valor = b.valor;
+
             -- Unique index to support UPSERT (incremental sync)
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_custos_unique_upsert 
+            DROP INDEX IF EXISTS idx_custos_unique_upsert;
+            CREATE UNIQUE INDEX idx_custos_unique_upsert 
             ON custos_registros(categoria, documento, produto_cod, fornecedor, data_emissao, valor);
 
             -- Índices para performance na API (Filtros e Agrupamentos)
@@ -223,7 +243,7 @@ async function syncData() {
                     const query = `
                         INSERT INTO custos_registros (categoria, nome, produto, produto_cod, fornecedor, valor, documento, data_emissao, mes, ano) 
                         VALUES ${values.join(',')}
-                        ON CONFLICT ON CONSTRAINT custos_registros_categoria_documento_produto_cod_fornecedor_d_key DO UPDATE SET
+                        ON CONFLICT (categoria, documento, produto_cod, fornecedor, data_emissao, valor) DO UPDATE SET
                             nome = EXCLUDED.nome,
                             produto = EXCLUDED.produto,
                             valor = EXCLUDED.valor,
