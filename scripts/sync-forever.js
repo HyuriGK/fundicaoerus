@@ -1,14 +1,17 @@
 /**
- * MASTER SYNC FOREVER V4 (Dashboard + Error Monitoring)
- * Orchestrates 6 batch files with real-time status and error logging.
+ * MASTER SYNC FOREVER V6 (Scrolling Log + Pinned Dashboard)
+ * Orchestrates 6 batch files with a static top status board and 
+ * an infinite scrolling log below it.
  */
 
 const { spawn } = require('child_process');
 const path = require('path');
 const readline = require('readline');
+const fs = require('fs');
 
 // CONFIGURATIONS
 const ROOT_DIR = path.join(__dirname, '..');
+const LOG_FILE = path.join(ROOT_DIR, 'sync-errors.log');
 const SYNC_BATS = [
     { name: 'CUSTOS', file: 'sincronizar_acustos.bat' },
     { name: 'DEVOLUÇÕES', file: 'sincronizar_adevolucoes.bat' },
@@ -22,30 +25,17 @@ const SYNC_BATS = [
 let cycleCount = 0;
 let cycleHistory = []; 
 let currentStatus = {};
-let lastErrors = []; // Array of { time: string, msg: string, script: string }
+let totalErrorsCount = 0;
+let logBuffer = []; // We use this for the persistent log file, but terminal will just scroll.
+
 SYNC_BATS.forEach(b => currentStatus[b.name] = '0%');
 
 /**
- * Adds an error to the log, keeping only the last 5 unique ones.
+ * Pinned Header Drawing (always at the top of the terminal viewport)
  */
-function logError(script, message) {
-    const time = new Date().toLocaleTimeString('pt-BR');
-    const msg = message.trim();
-    if (!msg || msg.includes('@PROG')) return;
-
-    // Evitar duplicatas idênticas seguidas
-    if (lastErrors.length > 0 && lastErrors[0].msg === msg) return;
-
-    lastErrors.unshift({ time, msg, script });
-    if (lastErrors.length > 5) lastErrors.pop();
-}
-
-/**
- * Renders the Static Dashboard
- */
-function renderDashboard(startTime = null) {
+function drawPinnedDashboard(startTime = null) {
+    // Move to top and clear only what we need for the board
     readline.cursorTo(process.stdout, 0, 0);
-    readline.clearScreenDown(process.stdout);
 
     const avgTime = cycleHistory.length > 0 
         ? (cycleHistory.reduce((a, b) => a + b, 0) / cycleHistory.length).toFixed(1) 
@@ -55,6 +45,7 @@ function renderDashboard(startTime = null) {
     console.log(`║          📊 SGP ERUS - MONITOR DE SINCRONIZAÇÃO            ║`);
     console.log('╠════════════════════════════════════════════════════════════╣');
     console.log(`║  🔄 CICLO: #${cycleCount.toString().padStart(3, '0')}          🕒 MÉDIA: ${avgTime}s p/ ciclo   ║`);
+    console.log(`║  🚩 TOTAL ERROS: ${totalErrorsCount.toString().padStart(4, '0')}      📂 LOG: sync-errors.log       ║`);
     console.log('╠════════════════════════════════════════════════════════════╣');
     
     SYNC_BATS.forEach(bat => {
@@ -70,36 +61,44 @@ function renderDashboard(startTime = null) {
         }
         
         const label = bat.name.padEnd(15, ' ');
+        // readline.clearLine(process.stdout, 0); // Ensure line is clean
         console.log(`║  ${label} [${bar}] ${prog.padStart(4, ' ')}  ║`);
     });
-
-    console.log('╠════════════════════════════════════════════════════════════╣');
-    console.log('║               🛑 STATUS / ÚLTIMOS ERROS                    ║');
-    console.log('╠════════════════════════════════════════════════════════════╣');
-
-    if (lastErrors.length === 0) {
-        console.log('║  ✅ Sem erros detectados no momento.                       ║');
-    } else {
-        lastErrors.forEach(err => {
-            const line = `[${err.time}] ${err.script}: ${err.msg}`;
-            console.log(`║  ⚠️ ${line.substring(0, 53).padEnd(53, ' ')} ║`);
-        });
-        // Preencher o resto se tiver menos de 5
-        for (let i = lastErrors.length; i < 3; i++) {
-            console.log('║                                                            ║');
-        }
-    }
 
     console.log('╚════════════════════════════════════════════════════════════╝');
     
     if (startTime) {
         const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-        process.stdout.write(`\n   ⏱️ Tempo atual do ciclo: ${elapsed}s (Pressione Ctrl+C para parar)\n`);
+        process.stdout.write(`   ⏱️  Tempo: ${elapsed}s  |  Histórico completo abaixo: \n`);
+        console.log('─'.repeat(61));
     }
 }
 
 /**
- * Runs a single .bat file and parses @PROG signals + Errors
+ * Log an error: Appends to file and PRINTS to terminal below the dashboard
+ */
+function logEvent(script, message, isError = true) {
+    const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    const timeDisplay = new Date().toLocaleTimeString('pt-BR');
+    const msg = message.trim();
+    if (!msg || msg.includes('@PROG')) return;
+
+    if (isError) totalErrorsCount++;
+
+    // Write to persistent log file
+    const logEntry = `[${timestamp}] [${script}] ${isError ? 'ERROR' : 'INFO'}: ${msg}\n`;
+    try {
+        fs.appendFileSync(LOG_FILE, logEntry);
+    } catch (e) {}
+
+    // PRINT TO TERMINAL (scrolling region)
+    // We don't use cursorTo here, we just print so it scrolls normally below the board
+    const icon = isError ? '⚠️' : 'ℹ️';
+    console.log(`${icon} [${timeDisplay}] ${script}: ${msg}`);
+}
+
+/**
+ * Runs a single .bat file
  */
 function runBat(batEntry) {
     return new Promise((resolve) => {
@@ -108,7 +107,6 @@ function runBat(batEntry) {
             stdio: ['ignore', 'pipe', 'pipe']
         });
 
-        // Capturar Saída Padrão (Signals)
         child.stdout.on('data', (data) => {
             const lines = data.toString().split('\n');
             lines.forEach(line => {
@@ -119,16 +117,15 @@ function runBat(batEntry) {
                         currentStatus[parts[1]] = parts[2];
                     }
                 } else if (trimmedLine.includes('❌') || trimmedLine.toLowerCase().includes('error:')) {
-                    logError(batEntry.name, trimmedLine);
+                    logEvent(batEntry.name, trimmedLine, true);
                 }
             });
         });
 
-        // Capturar Erros Técnicos (stderr)
         child.stderr.on('data', (data) => {
             const errLog = data.toString().trim();
             if (errLog && !errLog.includes('terminada')) {
-                logError(batEntry.name, errLog);
+                logEvent(batEntry.name, errLog, true);
                 currentStatus[batEntry.name] = '⚠️ ERRO';
             }
         });
@@ -136,7 +133,7 @@ function runBat(batEntry) {
         child.on('close', (code) => {
             if (code !== 0) {
                 currentStatus[batEntry.name] = '⚠️ ERRO';
-                logError(batEntry.name, `Processo finalizado com erro (${code})`);
+                logEvent(batEntry.name, `Finalizado com falha (código ${code})`, true);
             } else {
                 currentStatus[batEntry.name] = '100%';
             }
@@ -149,19 +146,22 @@ function runBat(batEntry) {
  * Main Loop
  */
 async function startForever() {
+    // Clear once at beginning
+    console.clear();
     process.stdout.write('\x1B[?25l');
+
+    if (!fs.existsSync(LOG_FILE)) {
+        fs.writeFileSync(LOG_FILE, '--- SYNC FOREVER LOG START ---\n');
+    }
 
     while (true) {
         cycleCount++;
-        SYNC_BATS.forEach(b => {
-             // Se estava em erro, tentamos novamente
-             currentStatus[b.name] = '0%';
-        });
+        SYNC_BATS.forEach(b => currentStatus[b.name] = '0%');
         
         const cycleStart = Date.now();
-        renderDashboard(cycleStart);
+        drawPinnedDashboard(cycleStart);
 
-        const timerInterval = setInterval(() => renderDashboard(cycleStart), 1000);
+        const timerInterval = setInterval(() => drawPinnedDashboard(cycleStart), 1000);
 
         await Promise.all(SYNC_BATS.map(bat => runBat(bat)));
 
@@ -171,11 +171,11 @@ async function startForever() {
         cycleHistory.push(duration);
         if (cycleHistory.length > 50) cycleHistory.shift();
 
-        renderDashboard(cycleStart); 
+        drawPinnedDashboard(cycleStart); 
+        logEvent('SYSTEM', `Ciclo #${cycleCount} finalizado em ${duration}s`, false);
     }
 }
 
-// Ensure cursor is shown on exit
 process.on('SIGINT', () => {
     process.stdout.write('\x1B[?25h');
     process.exit();
