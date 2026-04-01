@@ -343,8 +343,9 @@ async function sincronizarDetalhado(fbDb) {
                 });
 
                 await Promise.all(promises);
-                if (inserted % 500 === 0) {
-                    process.stdout.write(`  ⏳ ${inserted}/${result.length} itens sincronizados...\r`);
+                if (inserted % 100 === 0 || inserted === result.length) {
+                    const pct = ((inserted / result.length) * 100).toFixed(0);
+                    console.log(`[FATURAMENTO] Sincronizando... ${pct}%`);
                 }
             }
 

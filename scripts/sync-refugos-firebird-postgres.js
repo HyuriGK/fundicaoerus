@@ -223,7 +223,10 @@ async function startSync() {
                     cleanString(row.LOTE_PCS)
                 ]);
                 inserted++;
-                if (inserted % 50 === 0) console.log(`  ⏳ Processados: ${inserted}/${rows.length}`);
+                if (inserted % 100 === 0 || inserted === rows.length) {
+                    const pct = ((inserted / rows.length) * 100).toFixed(0);
+                    console.log(`[REFUGOS] Sincronizando... ${pct}%`);
+                }
             } catch (err) {
                 console.error(`  ❌ Erro no Registro ${row.ID_PCS}:`, err.message);
             }

@@ -312,7 +312,10 @@ function chunkArray(myArray, chunk_size) {
                     });
 
                     await Promise.all(promises);
-                    process.stdout.write('.');
+                    if (inserted % 100 === 0 || inserted === productionRows.length) {
+                        const pct = ((inserted / productionRows.length) * 100).toFixed(0);
+                        console.log(`[PRODUÇÃO] Sincronizando... ${pct}%`);
+                    }
                 }
 
                 console.log(`\n✅ Sync Loop Complete.`);
