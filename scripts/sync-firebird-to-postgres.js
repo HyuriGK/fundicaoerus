@@ -255,7 +255,16 @@ async function sincronizarDetalhado(fbDb) {
             // OTIMIZAÇÃO: Removemos o DELETE global para evitar o "Nuclear Option" toda vez.
             // Os dados antigos permanecem e os novos são atualizados via ON CONFLICT.
             // console.log('  🗑️ Limpando registros de faturamento detalhado...');
-            // await pool.query("DELETE FROM faturamento_firebird WHERE data_faturamento >= '2026-01-01' OR data_faturamento IS NULL");
+            
+            // BUSCAR PREFERÊNCIAS DE EXCLUSÃO (Tabela correta: faturamento_firebird_preferencias)
+            const prefsResult = await pool.query('SELECT nota_fiscal, codigo_item, pedido, data_faturamento, quantidade, excluido FROM faturamento_firebird_preferencias');
+            const prefsMap = new Map();
+            prefsResult.rows.forEach(r => {
+                const dateStr = r.data_faturamento ? r.data_faturamento.toISOString().split('T')[0] : '';
+                const qStr = parseFloat(r.quantidade || 0);
+                const key = `${r.nota_fiscal}-${String(r.codigo_item).trim()}-${String(r.pedido || '').trim()}-${dateStr}-${qStr}`;
+                prefsMap.set(key, r.excluido);
+            });
 
             let inserted = 0;
             let errors = 0;
