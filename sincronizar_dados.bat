@@ -16,4 +16,4 @@ echo   SINCRO PARADA: Roteiros carregados para o Postgres.
 echo   Seus dados estao prontos no dashboard!
 echo ======================================================
 echo.
-pause
+exit

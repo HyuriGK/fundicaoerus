@@ -13,7 +13,6 @@ echo [INFO] Horario: %DATE% %TIME%
 
 :: Rodar o script Node.js
 node scripts/sync-devolucoes.js
-
 if %errorlevel% equ 0 (
     echo.
     echo [SUCCESS] Sincronizacao concluida com sucesso!
@@ -22,4 +21,4 @@ if %errorlevel% equ 0 (
     echo [ERROR] Falha na sincronizacao. Verifique os logs acima.
 )
 
-pause
+exit

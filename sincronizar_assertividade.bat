@@ -31,4 +31,4 @@ if %ERRORLEVEL% NEQ 0 (
 echo.
 echo ✅ Sincronização concluída com sucesso!
 echo.
-pause
+exit

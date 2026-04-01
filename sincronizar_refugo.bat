@@ -10,4 +10,4 @@ node scripts/sync-refugos-firebird-postgres.js
 :: Desbloqueia a tela apos a sincronizacao
 node scripts/sync-page-lock.js unlock refugos.html
 
-pause
+exit
