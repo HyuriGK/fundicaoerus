@@ -215,11 +215,22 @@ async function syncData() {
             let totalInseridos = 0;
 
             const insertBatch = async (cat, rows) => {
-                const BATCH_SIZE = 200; // Lotes menores para commit mais frequente e feedback rápido
-                console.log(`📤 Inserindo ${rows.length} registros para a categoria: ${cat}...`);
+                // Deduplicação em tempo de execução para evitar erro de "ON CONFLICT" no mesmo lote
+                const uniqueRows = [];
+                const seenKeys = new Set();
+                rows.forEach(r => {
+                    const key = `${cat}|${String(r.DOCUMENTO || '')}|${String(r.PRODUTO_COD || '')}|${String(r.FORNECEDOR || '')}|${r.DATA_EMISSAO}|${r.VALOR}`.toUpperCase();
+                    if (!seenKeys.has(key)) {
+                        seenKeys.add(key);
+                        uniqueRows.push(r);
+                    }
+                });
 
-                for (let i = 0; i < rows.length; i += BATCH_SIZE) {
-                    const chunk = rows.slice(i, i + BATCH_SIZE);
+                const BATCH_SIZE = 200; // Lotes menores para commit mais frequente e feedback rápido
+                console.log(`📤 Inserindo ${uniqueRows.length} registros únicos para a categoria: ${cat} (de ${rows.length} totais)...`);
+
+                for (let i = 0; i < uniqueRows.length; i += BATCH_SIZE) {
+                    const chunk = uniqueRows.slice(i, i + BATCH_SIZE);
                     const values = [];
                     const params = [];
 
