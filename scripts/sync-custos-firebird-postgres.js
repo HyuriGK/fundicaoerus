@@ -37,6 +37,9 @@ async function createTableIfNotExists() {
             ALTER TABLE custos_registros ADD COLUMN IF NOT EXISTS produto VARCHAR(255);
             ALTER TABLE custos_registros ADD COLUMN IF NOT EXISTS produto_cod VARCHAR(50);
             ALTER TABLE custos_registros ADD COLUMN IF NOT EXISTS fornecedor VARCHAR(255);
+
+            -- REMOVER ÍNDICE PARA PERMITIR LIMPEZA (Se ele existir de uma falha anterior)
+            DROP INDEX IF EXISTS idx_custos_unique_upsert;
         `);
 
         console.log('🛠️ [2/4] Normalizando dados para Índice Único...');
@@ -75,7 +78,6 @@ async function createTableIfNotExists() {
 
         console.log('🛠️ [4/4] Gerando Índice de Sincronização Incremental...');
         await client.query(`
-            DROP INDEX IF EXISTS idx_custos_unique_upsert;
             CREATE UNIQUE INDEX idx_custos_unique_upsert 
             ON custos_registros(categoria, documento, produto_cod, fornecedor, data_emissao, valor);
 
