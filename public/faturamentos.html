@@ -944,6 +944,58 @@
         .clickable-code:active {
             transform: scale(0.98);
         }
+
+        /* --- YEAR/MONTH SELECTOR (Synced from refugos.html) --- */
+        .year-select {
+            background: transparent;
+            border: 1px solid var(--border-subtle);
+            color: var(--color-primary);
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-family: var(--font-mono);
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .year-select:hover {
+            border-color: var(--border-highlight);
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        .months-group {
+            display: flex;
+            gap: 5px;
+        }
+
+        .month-btn {
+            background: transparent;
+            border: 1px solid var(--border-subtle);
+            color: var(--text-muted);
+            padding: 8px 14px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+        }
+
+        .month-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+        }
+
+        .month-btn.active {
+            background: var(--color-primary);
+            color: #000;
+            border-color: var(--color-primary);
+            font-weight: 800;
+        }
+
+        .month-btn.all-btn.active {
+            background: var(--status-success);
+            color: #fff;
+        }
     </style>
 </head>
 
@@ -1121,6 +1173,19 @@
             </div>
         </div>
 
+        <!-- PERIOD SELECTOR (Synced from refugos.html) -->
+        <div class="toolbar-row" style="border-bottom: none; margin-bottom: 25px; padding-bottom: 0; justify-content: center;">
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <select id="dashboardYearSelect" class="year-select" onchange="changeDashboardYear()">
+                    <option value="2026">2026</option>
+                    <option value="2025">2025</option>
+                </select>
+                <div class="months-group" id="dashboardMonthButtons">
+                    <!-- JS Generated -->
+                </div>
+            </div>
+        </div>
+
         <!-- CHARTS ROW (STANDARD) -->
         <div class="charts-row" id="standardChartsRow">
             <div class="chart-panel">
@@ -1136,28 +1201,7 @@
                 <div class="chart-header-row">
                     <div class="chart-title">Evolução Anual (Peso)</div>
                     <div class="chart-header-kpi">
-                        <span>Ano:</span>
-                        <select id="yearSelector" class="filter-input"
-                            style="background:#27272a; border:1px solid var(--border-subtle); padding:2px 8px; border-radius:4px; color:#fff; font-size: 0.8rem; cursor: pointer;"
-                            onchange="onYearChange()">
-                            <option value="2026">2026</option>
-                            <option value="2025">2025</option>
-                        </select>
-                        <select id="monthSelector" style="display:none;" onchange="updatePeriod()">
-                            <option value="all">Todos</option>
-                            <option value="01">01</option>
-                            <option value="02">02</option>
-                            <option value="03">03</option>
-                            <option value="04">04</option>
-                            <option value="05">05</option>
-                            <option value="06">06</option>
-                            <option value="07">07</option>
-                            <option value="08">08</option>
-                            <option value="09">09</option>
-                            <option value="10">10</option>
-                            <option value="11">11</option>
-                            <option value="12">12</option>
-                        </select>
+                        <span>EVOLUÇÃO MENSAL (PESO)</span>
                     </div>
                 </div>
                 <div style="position: relative; flex: 1; width: 100%; min-height: 0;"><canvas id="annualChart"></canvas>
@@ -1204,6 +1248,10 @@
 
 
     <script>
+        const MONTHS_SHORT = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
+        let selectedDashboardYear = 2026;
+        let selectedDashboardMonthIndex = new Date().getMonth(); // 0-based
+
         let allData = [];
         let excludedClients = new Set();
         let clientStats = {};
@@ -1213,6 +1261,85 @@
         let showServices = false;
         let showABC = false;
         let abcType = 'peso';
+
+        // --- DASHBOARD SELECTOR LOGIC ---
+        function renderDashboardMonthButtons() {
+            const container = document.getElementById('dashboardMonthButtons');
+            if (!container) return;
+            container.innerHTML = '';
+
+            // All Button (ANO)
+            const btnAll = document.createElement('button');
+            btnAll.className = 'month-btn all-btn';
+            btnAll.textContent = 'ANO';
+            btnAll.onclick = () => selectDashboardMonth(-1);
+            container.appendChild(btnAll);
+
+            MONTHS_SHORT.forEach((m, i) => {
+                const btn = document.createElement('button');
+                btn.className = 'month-btn';
+                btn.textContent = m;
+                btn.id = `btn-dash-month-${i}`;
+                btn.onclick = () => selectDashboardMonth(i);
+                container.appendChild(btn);
+            });
+            updateDashboardMonthButtonsUI();
+        }
+
+        function selectDashboardMonth(idx) {
+            selectedDashboardMonthIndex = idx;
+            updateDashboardMonthButtonsUI();
+            syncPeriodInputs();
+        }
+
+        function changeDashboardYear() {
+            selectedDashboardYear = parseInt(document.getElementById('dashboardYearSelect').value);
+            syncPeriodInputs();
+        }
+
+        function updateDashboardMonthButtonsUI() {
+            document.querySelectorAll('.months-group .month-btn').forEach(b => b.classList.remove('active'));
+            if (selectedDashboardMonthIndex === -1) {
+                const btnAll = document.querySelector('.months-group .all-btn');
+                if (btnAll) btnAll.classList.add('active');
+            } else {
+                const btn = document.getElementById(`btn-dash-month-${selectedDashboardMonthIndex}`);
+                if (btn) btn.classList.add('active');
+            }
+        }
+
+        function syncPeriodInputs() {
+            const year = selectedDashboardYear;
+            const monthIdx = selectedDashboardMonthIndex;
+
+            let firstDay, lastDay;
+            if (monthIdx === -1) {
+                firstDay = `${year}-01-01`;
+                lastDay = `${year}-12-31`;
+            } else {
+                const monthStr = String(monthIdx + 1).padStart(2, '0');
+                firstDay = `${year}-${monthStr}-01`;
+                const lastDayDate = new Date(year, monthIdx + 1, 0);
+                lastDay = `${year}-${monthStr}-${String(lastDayDate.getDate()).padStart(2, '0')}`;
+            }
+
+            const startInput = document.getElementById('startDate');
+            const endInput = document.getElementById('endDate');
+
+            if (startInput && endInput) {
+                startInput.value = firstDay;
+                endInput.value = lastDay;
+            }
+
+            // Trigger data refresh
+            refreshAll();
+        }
+
+        // Initialize selector on load
+        document.addEventListener('DOMContentLoaded', () => {
+            renderDashboardMonthButtons();
+        });
+
         const serviceClients = [
             "IMEPEL INDUSTRIA MECANICA LTDA",
             "STEELROOL INDUSTRIA METALURGICA",
@@ -1278,48 +1405,6 @@
 
         async function refreshAll() { await loadRecordsData(); }
 
-        function onYearChange() {
-            const y = document.getElementById('yearSelector').value;
-            const currentYearStr = new Date().getFullYear().toString();
-            const mSel = document.getElementById('monthSelector');
-
-            // Logica solicitada: se trocar o ano e não for o atual, vira "Todos"
-            if (y !== currentYearStr) {
-                mSel.value = 'all';
-            } else {
-                // Se voltar pro atual, talvez focar no mês vigente? Sim, faz sentido.
-                mSel.value = String(new Date().getMonth() + 1).padStart(2, '0');
-            }
-            updatePeriod();
-        }
-
-        function updatePeriod() {
-            const year = document.getElementById('yearSelector').value;
-            const month = document.getElementById('monthSelector').value;
-
-            let firstDay, lastDay;
-            if (month === 'all') {
-                firstDay = `${year}-01-01`;
-                lastDay = `${year}-12-31`;
-            } else {
-                firstDay = `${year}-${month}-01`;
-                const lastDayDate = new Date(year, parseInt(month), 0);
-                lastDay = `${year}-${month}-${String(lastDayDate.getDate()).padStart(2, '0')}`;
-            }
-
-            const startInput = document.getElementById('startDate');
-            const endInput = document.getElementById('endDate');
-
-            if (startInput && endInput) {
-                startInput.value = firstDay;
-                endInput.value = lastDay;
-            }
-
-            loadMeta();
-            updateDashboardfromRecords(allData);
-            renderTable();
-        }
-
         async function loadMeta() {
             try {
                 const startDate = document.getElementById('startDate').value;
@@ -1362,24 +1447,7 @@
                 return true;
             });
 
-            // Populate Year Selector with any additional years found in data
-            const yearSelector = document.getElementById('yearSelector');
-            if (yearSelector) {
-                const existingYears = new Set([...yearSelector.options].map(o => o.value));
-                const dataYears = [...new Set(filteredAll.map(item => item.data ? item.data.substring(0, 4) : null).filter(y => y))];
-
-                dataYears.forEach(y => {
-                    if (!existingYears.has(y)) {
-                        const opt = document.createElement('option');
-                        opt.value = y;
-                        opt.textContent = y;
-                        yearSelector.appendChild(opt);
-                        existingYears.add(y);
-                    }
-                });
-            }
-
-            const selectedYear = yearSelector ? yearSelector.value : new Date().getFullYear().toString();
+            const selectedYear = selectedDashboardYear.toString();
             const annualFilteredData = filteredAll.filter(item => item.data && item.data.startsWith(selectedYear));
 
             // 2. Filter for Range (Drivers Table & KPIs)
@@ -2050,27 +2118,19 @@
         }
 
         document.addEventListener('DOMContentLoaded', () => {
-            const now = new Date();
-            const currentYear = now.getFullYear().toString();
-            const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
-
-            const ySel = document.getElementById('yearSelector');
-            const mSel = document.getElementById('monthSelector');
-
-            if (ySel) {
-                ySel.value = currentYear;
-                // Inicialmente, se for o ano atual, abre no mês vigente
-                if (mSel) mSel.value = currentMonth;
-            } else if (mSel) {
-                mSel.value = 'all';
-            }
-
-            updatePeriod();
+            renderDashboardMonthButtons();
+            syncPeriodInputs();
             loadRecordsData();
+
+            // Clock update
             setInterval(() => {
-                const n = new Date();
-                document.getElementById('clock-time').innerText = n.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-                document.getElementById('clock-date').innerText = n.toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric', month: 'short' }).toUpperCase();
+                const clockTime = document.getElementById('clock-time');
+                const clockDate = document.getElementById('clock-date');
+                if (clockTime && clockDate) {
+                    const n = new Date();
+                    clockTime.innerText = n.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                    clockDate.innerText = n.toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric', month: 'short' }).toUpperCase();
+                }
             }, 1000);
 
             // Esc key listener
