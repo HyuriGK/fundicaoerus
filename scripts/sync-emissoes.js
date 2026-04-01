@@ -94,7 +94,8 @@ async function syncEmissoes() {
                     SELECT unnest($1::text[]), unnest($2::jsonb[]), NOW()
                     ON CONFLICT (sync_key) DO UPDATE SET data = EXCLUDED.data, updated_at = EXCLUDED.updated_at;
                 `, [keys, data]);
-                process.stdout.write('.');
+                const pct = ((Math.min(i + BATCH_SIZE, results.length) / results.length) * 100).toFixed(0);
+                console.log(`[EMISSÕES] Sincronizando... ${pct}%`);
             }
         }
 

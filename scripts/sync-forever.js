@@ -1,7 +1,7 @@
 /**
- * MASTER SYNC FOREVER (Parallel & High-Frequency)
- * Orchestrates all industrial dashboard synchronization scripts.
- * Mode: CONCURRENT (All scripts run at once)
+ * MASTER SYNC FOREVER V2 (Parallel Batch Orchestrator)
+ * Orchestrates 6 specific batch files for industrial dashboard sync.
+ * Mode: CONCURRENT (All .bat files run at once)
  * Delay: ZERO (Restarts immediately after the last one finishes)
  */
 
@@ -9,37 +9,36 @@ const { spawn } = require('child_process');
 const path = require('path');
 
 // CONFIGURATIONS
-const SCRIPTS_DIR = __dirname;
-const SYNC_SCRIPTS = [
-    'sync-firebird-to-postgres.js',        // Faturamento
-    'sync-production-firebird-postgres.js', // Monitoramento / Produção
-    'sync-refugos-firebird-postgres.js',     // Refugos
-    'sync-custos-firebird-postgres.js',     // Custos
-    'sync-devolucoes.js'                   // Devoluções
+const ROOT_DIR = path.join(__dirname, '..');
+const SYNC_BATS = [
+    'sincronizar_acustos.bat',
+    'sincronizar_adevolucoes.bat',
+    'sincronizar_afaturamento.bat',
+    'sincronizar_apedidos.bat',
+    'sincronizar_aproducao.bat',
+    'sincronizar_arefugo.bat'
 ];
 
 /**
- * Runs a single script and returns a promise that resolves when it finishes.
+ * Runs a single .bat file and returns a promise.
  */
-function runScript(scriptName) {
+function runBat(batName) {
     return new Promise((resolve) => {
-        console.log(`[MASTER]  iniciando ${scriptName}...`);
-        
-        const child = spawn('node', [path.join(SCRIPTS_DIR, scriptName)], {
-            stdio: 'inherit' // Inherit stdio to see colored output and real-time logs
+        // Use cmd.exe /c to execute batch files on Windows
+        const child = spawn('cmd.exe', ['/c', batName], {
+            cwd: ROOT_DIR,
+            stdio: 'inherit' // Keep inherited to see the stylized output from scripts
         });
 
         child.on('close', (code) => {
-            if (code === 0) {
-                console.log(`[MASTER] ✅ ${scriptName} finalizado.`);
-            } else {
-                console.error(`[MASTER] ❌ ${scriptName} parou com erro (código ${code}).`);
+            if (code !== 0) {
+                console.error(`[MAESTRO] ⚠️ ${batName} finalizou com código ${code}.`);
             }
             resolve();
         });
-        
+
         child.on('error', (err) => {
-            console.error(`[MASTER] ❌ Erro ao disparar ${scriptName}:`, err.message);
+            console.error(`[MAESTRO] ❌ Erro ao disparar ${batName}:`, err.message);
             resolve();
         });
     });
@@ -51,32 +50,35 @@ function runScript(scriptName) {
 async function startForever() {
     let cycleCount = 1;
 
+    // Clear console for the first run
+    console.clear();
+
     while (true) {
-        console.log('\n' + '='.repeat(80));
-        console.log(`🚀 INICIANDO CICLO DE SINCRONIZAÇÃO PARALELA #${cycleCount}`);
-        console.log(`⏰ Inicio: ${new Date().toLocaleString('pt-BR')}`);
-        console.log('='.repeat(80) + '\n');
+        console.log('\n' + '╔' + '═'.repeat(60) + '╗');
+        console.log(`║           🔄 CICLO DE SINCRONIZAÇÃO PARALELA #${cycleCount.toString().padStart(3, '0')}          ║`);
+        console.log(`║           ⏰ Início: ${new Date().toLocaleString('pt-BR')}           ║`);
+        console.log('╚' + '═'.repeat(60) + '╝' + '\n');
 
         const startTime = Date.now();
 
-        // RUN ALL AT ONCE
-        await Promise.all(SYNC_SCRIPTS.map(script => runScript(script)));
+        // RUN ALL SPECIFIED BATCH FILES AT ONCE
+        await Promise.all(SYNC_BATS.map(bat => runBat(bat)));
 
         const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-        console.log('\n' + '='.repeat(80));
-        console.log(`🎉 CICLO #${cycleCount} FINALIZADO EM ${duration}s`);
-        console.log(`🔄 Reiniciando IMEDIATAMENTE conforme solicitado...`);
-        console.log('='.repeat(80) + '\n');
+        console.log('\n' + '─'.repeat(62));
+        console.log(`✨ CICLO #${cycleCount} FINALIZADO EM ${duration}s`);
+        console.log(`🔄 Reiniciando imediatamente conforme solicitado...`);
+        console.log('─'.repeat(62) + '\n');
 
         cycleCount++;
-        // No sleep, just loop back to while(true)
+        // Zero delay loop
     }
 }
 
-// Global process error handling
+// Global error handling
 process.on('uncaughtException', (err) => {
     console.error('[MASTER CRITICAL ERROR]', err);
 });
 
-// Start the engine
+// Launch the engine
 startForever();
