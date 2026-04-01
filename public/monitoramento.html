@@ -306,6 +306,21 @@
             font-family: var(--font-mono);
         }
 
+        .column-weight {
+            color: var(--color-primary);
+            font-size: 0.85rem;
+            font-weight: 700;
+            font-family: var(--font-mono);
+            margin-left: 10px;
+            opacity: 0.9;
+        }
+
+        body.presentation-mode .column-weight {
+            font-size: 1.1rem;
+            margin-left: 15px;
+            text-shadow: 0 0 10px rgba(var(--color-primary-rgb), 0.3);
+        }
+
 
 
         /* --- COLUMN SEARCH --- */
@@ -727,7 +742,10 @@
         <div class="kanban-column" id="col-moldagem">
             <div class="column-header">
                 <h2>Moldagem</h2>
-                <span class="column-count" id="count-moldagem">0</span>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span class="column-count" id="count-moldagem">0</span>
+                    <span class="column-weight" id="weight-moldagem">0.0kg</span>
+                </div>
             </div>
             <div class="column-search">
                 <input type="text" id="search-moldagem" placeholder="Buscar OP, Peça ou Cliente..."
@@ -753,7 +771,10 @@
         <div class="kanban-column" id="col-fusao">
             <div class="column-header">
                 <h2>Fusão</h2>
-                <span class="column-count" id="count-fusao">0</span>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span class="column-count" id="count-fusao">0</span>
+                    <span class="column-weight" id="weight-fusao">0.0kg</span>
+                </div>
             </div>
             <div class="column-search">
                 <input type="text" id="search-fusao" placeholder="Buscar OP, Peça ou Cliente..."
@@ -778,7 +799,10 @@
         <div class="kanban-column" id="col-acabamento">
             <div class="column-header">
                 <h2>Acabamento</h2>
-                <span class="column-count" id="count-acabamento">0</span>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span class="column-count" id="count-acabamento">0</span>
+                    <span class="column-weight" id="weight-acabamento">0.0kg</span>
+                </div>
             </div>
             <div class="column-search">
                 <input type="text" id="search-acabamento" placeholder="Buscar OP, Peça ou Cliente..."
@@ -791,7 +815,10 @@
         <div class="kanban-column" id="col-tratamento">
             <div class="column-header">
                 <h2>Trat. Térmico</h2>
-                <span class="column-count" id="count-tratamento">0</span>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span class="column-count" id="count-tratamento">0</span>
+                    <span class="column-weight" id="weight-tratamento">0.0kg</span>
+                </div>
             </div>
             <div class="column-search">
                 <input type="text" id="search-tratamento" placeholder="Buscar OP, Peça ou Cliente..."
@@ -804,7 +831,10 @@
         <div class="kanban-column" id="col-usinagem">
             <div class="column-header">
                 <h2>Usinagem</h2>
-                <span class="column-count" id="count-usinagem">0</span>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span class="column-count" id="count-usinagem">0</span>
+                    <span class="column-weight" id="weight-usinagem">0.0kg</span>
+                </div>
             </div>
             <div class="column-search">
                 <input type="text" id="search-usinagem" placeholder="Buscar OP, Peça ou Cliente..."
@@ -817,7 +847,10 @@
         <div class="kanban-column" id="col-qualidade">
             <div class="column-header">
                 <h2>Insp. Qualidade</h2>
-                <span class="column-count" id="count-qualidade">0</span>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span class="column-count" id="count-qualidade">0</span>
+                    <span class="column-weight" id="weight-qualidade">0.0kg</span>
+                </div>
             </div>
             <div class="column-search">
                 <input type="text" id="search-qualidade" placeholder="Buscar OP, Peça ou Cliente..."
@@ -830,7 +863,10 @@
         <div class="kanban-column" id="col-expedicao">
             <div class="column-header">
                 <h2>Expedição</h2>
-                <span class="column-count" id="count-expedicao">0</span>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span class="column-count" id="count-expedicao">0</span>
+                    <span class="column-weight" id="weight-expedicao">0.0kg</span>
+                </div>
             </div>
             <div class="column-search">
                 <input type="text" id="search-expedicao" placeholder="Buscar OP, Peça ou Cliente..."
@@ -993,6 +1029,31 @@
             showExpedicaoTV: true
         };
 
+        let customWeights = {}; // Memory for manual weights set in pedidos.html
+        
+        function getUnitWeight(op) {
+            const prodCode = String(op.PRODUTO_PPR || '').trim();
+            
+            // 1. Manual Weight (set in pedidos.html via /api/weights/list)
+            if (customWeights[prodCode]) {
+                return parseFloat(customWeights[prodCode]);
+            }
+            
+            // 2. Technical System Weight (field from Firebird/Sync)
+            if (op.PESO_UNIT && parseFloat(op.PESO_UNIT) > 0) {
+                return parseFloat(op.PESO_UNIT);
+            }
+            
+            // 3. Fallback: Calculated from Total Weight / Total Qty
+            const totalWeight = parseFloat(op.PESO_LIQUIDO_NPR || 0);
+            const totalQty = parseInt(op.OP_QUANTIDADE) || parseInt(op.QUANTIDADE_PPR) || 1;
+            if (totalWeight > 0) {
+                return totalWeight / totalQty;
+            }
+            
+            return 0;
+        }
+
         const sectorGroups = {
             'MOLDAGEM': ['MOLDAGEM', 'MOLDAGEM MANUAL', 'MOLDAGEM PESADA', 'MOLDAGEM LEVE', 'MOLDAGEM MECANIZADA', 'MOLDAGEM AUTOMÁTICA', 'MOLDAGEM EM AREIA'],
             'FUSÃO': ['FUSÃO', 'FUSAO'],
@@ -1113,12 +1174,15 @@
         async function fetchData() {
             try {
                 // Fetch OPs from the sync endpoint (like pedidos.html)
-                const [resOps, resPointing] = await Promise.all([
+                const [resOps, resPointing, resWeights] = await Promise.all([
                     fetch('/api/pedidos-sync'),
-                    fetch('/api/pedidos-firebird/op-apontamentos-resumo')
+                    fetch('/api/pedidos-firebird/op-apontamentos-resumo'),
+                    fetch('/api/weights/list')
                 ]);
-
+ 
                 if (!resOps.ok || !resPointing.ok) throw new Error('Falha ao buscar dados');
+ 
+                if (resWeights.ok) customWeights = await resWeights.json();
 
                 const rawOps = await resOps.json();
                 pointingSummary = await resPointing.json();
@@ -1293,19 +1357,26 @@
 
         function renderBoard() {
             // Clear lists
+            const weightSums = {};
             orderedStages.forEach(stage => {
                 const list = document.getElementById(`list-${configKeyMap[stage]}`);
                 if (list) list.innerHTML = '';
                 const count = document.getElementById(`count-${configKeyMap[stage]}`);
                 if (count) count.innerText = '0';
+                const weightEl = document.getElementById(`weight-${configKeyMap[stage]}`);
+                if (weightEl) weightEl.innerText = '0.0kg';
             });
-
+ 
             const counts = {};
-            orderedStages.forEach(s => counts[s] = 0);
-
+            orderedStages.forEach(s => {
+                counts[s] = 0;
+                weightSums[s] = 0;
+            });
+ 
             allOps.forEach(op => {
                 const totalQtyAll = parseInt(op.OP_QUANTIDADE) || parseInt(op.QUANTIDADE_PPR) || 0;
                 const statusList = getOpStages(op.OP_PCS, totalQtyAll, op.OP_EMISSAO || op.DATA_EMISSAO_PEDIDO, op.ROTEIRO_PRODUCAO);
+                const unitWeight = getUnitWeight(op);
 
                 statusList.forEach(status => {
                     const { stage, qty, statusText, isDelayed, statusColor, qtyExpedited } = status;
@@ -1332,6 +1403,7 @@
                     }
 
                     counts[stage]++;
+                    weightSums[stage] += (unitWeight * qty);
 
                     const prodCode = op.PRODUTO_PPR || '';
                     const prodName = op.NOME_PRODUTO_PPR || '';
@@ -1404,10 +1476,17 @@
             const totalCards = Object.values(counts).reduce((a, b) => a + b, 0);
 
             Object.entries(counts).forEach(([stage, count]) => {
-                const el = document.getElementById(`count-${configKeyMap[stage]}`);
+                const key = configKeyMap[stage];
+                const el = document.getElementById(`count-${key}`);
                 if (el) {
                     const percentage = totalCards > 0 ? Math.round((count / totalCards) * 100) : 0;
                     el.innerText = `${count} (${percentage}%)`;
+                }
+                
+                const wEl = document.getElementById(`weight-${key}`);
+                if (wEl) {
+                    const totalKg = weightSums[stage] || 0;
+                    wEl.innerText = `${totalKg.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}kg`;
                 }
             });
         }
