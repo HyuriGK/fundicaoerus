@@ -134,9 +134,13 @@ async function sincronizar() {
                         row.MOTIVO ? String(row.MOTIVO).trim() : '',
                         row.CODIGO_DEV
                     ]);
-                }
 
-                console.log('✅ Sincronização de devoluções concluída com sucesso!');
+                    inserted++;
+                    if (inserted % 50 === 0 || inserted === result.length) {
+                        const pct = ((inserted / result.length) * 100).toFixed(0);
+                        process.stdout.write(`@PROG:DEVOLUÇÕES:${pct}%\n`);
+                    }
+                }
 
                 // ATUALIZAR STATUS DE SINCRONIZAÇÃO
                 try {

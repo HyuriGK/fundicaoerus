@@ -225,7 +225,7 @@ async function startSync() {
                 inserted++;
                 if (inserted % 100 === 0 || inserted === rows.length) {
                     const pct = ((inserted / rows.length) * 100).toFixed(0);
-                    console.log(`[REFUGOS] Sincronizando... ${pct}%`);
+                    process.stdout.write(`@PROG:REFUGOS:${pct}%\n`);
                 }
             } catch (err) {
                 console.error(`  ❌ Erro no Registro ${row.ID_PCS}:`, err.message);

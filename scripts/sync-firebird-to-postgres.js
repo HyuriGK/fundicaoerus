@@ -345,12 +345,10 @@ async function sincronizarDetalhado(fbDb) {
                 await Promise.all(promises);
                 if (inserted % 100 === 0 || inserted === result.length) {
                     const pct = ((inserted / result.length) * 100).toFixed(0);
-                    console.log(`[FATURAMENTO] Sincronizando... ${pct}%`);
+                    process.stdout.write(`@PROG:FATURAMENTO:${pct}%\n`);
                 }
             }
 
-            console.log(`\n✅ Faturamento detalhado sincronizado! Total: ${inserted} registros processados.`);
-            console.log(`   Erros: ${errors}`);
             resolve();
         });
     });

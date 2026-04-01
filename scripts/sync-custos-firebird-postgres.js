@@ -263,10 +263,11 @@ async function syncData() {
 
                     await client.query(query, params);
                     totalInseridos += chunk.length;
-
-                    process.stdout.write(`\r⏳ Progresso: ${totalInseridos} registros totais... `);
+                    const pct = ((totalInseridos / totalGeral) * 100).toFixed(0);
+                    if (totalInseridos % 200 === 0 || totalInseridos === totalGeral) {
+                        process.stdout.write(`@PROG:CUSTOS:${pct}%\n`);
+                    }
                 }
-                console.log(`\n✅ Categoria ${cat} concluída.`);
             };
 
             await insertBatch('fornecedores', dados.fornecedores);

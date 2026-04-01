@@ -95,7 +95,7 @@ async function syncEmissoes() {
                     ON CONFLICT (sync_key) DO UPDATE SET data = EXCLUDED.data, updated_at = EXCLUDED.updated_at;
                 `, [keys, data]);
                 const pct = ((Math.min(i + BATCH_SIZE, results.length) / results.length) * 100).toFixed(0);
-                console.log(`[EMISSÕES] Sincronizando... ${pct}%`);
+                process.stdout.write(`@PROG:EMISSÕES:${pct}%\n`);
             }
         }
 

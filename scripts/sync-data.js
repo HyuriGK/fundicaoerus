@@ -310,7 +310,7 @@ async function syncData() {
                 ON CONFLICT (sync_key) DO UPDATE SET data = EXCLUDED.data, updated_at = EXCLUDED.updated_at;
             `, [keys, data]);
             const pct = ((Math.min(i + BATCH_SIZE, rowsToUpsert.length) / rowsToUpsert.length) * 100).toFixed(0);
-            console.log(`[CARTEIRA] Sincronizando... ${pct}%`);
+            process.stdout.write(`@PROG:PEDIDOS:${pct}%\n`);
         }
 
         console.log(`\n\n✅ Sincronização CONCLUÍDA em ${((Date.now() - startTime)/1000).toFixed(1)}s!`);

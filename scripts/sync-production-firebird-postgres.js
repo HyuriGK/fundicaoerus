@@ -314,7 +314,7 @@ function chunkArray(myArray, chunk_size) {
                     await Promise.all(promises);
                     if (inserted % 100 === 0 || inserted === productionRows.length) {
                         const pct = ((inserted / productionRows.length) * 100).toFixed(0);
-                        console.log(`[PRODUÇÃO] Sincronizando... ${pct}%`);
+                        process.stdout.write(`@PROG:PRODUÇÃO:${pct}%\n`);
                     }
                 }
 
