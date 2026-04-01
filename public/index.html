@@ -1654,6 +1654,15 @@
                             class="fa-solid fa-rotate-left"></i><span>Devoluções</span></a>
                 </div>
 
+                <!-- EM DESENVOLVIMENTO -->
+                <div id="nav-separator-desenvolvimento" class="nav-group-separator" onclick="toggleGroup('group-desenvolvimento')" style="display: none;">
+                    <i class="fas fa-screwdriver-wrench" style="font-size: 0.8rem; color: #ef4444; margin-right: 8px;"></i>
+                    <span class="nav-group-label" style="color: #ef4444;">Em desenvolvimento</span>
+                    <div class="nav-group-line"></div><i class="fa-solid fa-plus" id="icon-group-desenvolvimento"></i>
+                </div>
+                <div id="group-desenvolvimento" class="nav-group-wrapper collapsed">
+                </div>
+
             </ul>
 
             <!-- RODAPÉ DA SIDEBAR COM BOTÃO SAIR -->
@@ -2386,6 +2395,9 @@
                     const lockMap = {};
                     activeLocks.forEach(l => { lockMap[l.page_id] = l.is_locked; });
 
+                    // Aplicar bloqueios visualmente na barra lateral
+                    applySidebarLocks(lockMap);
+
                     tbody.innerHTML = LOCKABLE_PAGES.map(page => {
                         const isLocked = lockMap[page.id] || false;
                         const statusTag = isLocked
@@ -2427,6 +2439,50 @@
                     } catch (error) {
                         console.error('Erro ao alternar bloqueio:', error);
                         showToast('Erro', 'Erro ao conectar com servidor', 'danger');
+                    }
+                }
+
+                function applySidebarLocks(lockMap) {
+                    const devGroup = document.getElementById('group-desenvolvimento');
+                    const devSeparator = document.getElementById('nav-separator-desenvolvimento');
+                    if (!devGroup || !devSeparator) return;
+
+                    let hasLocked = false;
+
+                    // Mover links bloqueados para "Em desenvolvimento"
+                    document.querySelectorAll('.nav-link').forEach(link => {
+                        const href = link.getAttribute('href');
+                        if (!href || href === '#' || href === 'index.html' || href === 'processos.html') return;
+
+                        const pageId = href;
+                        const isLocked = lockMap[pageId] === true;
+
+                        if (isLocked) {
+                            // Salva pai original se não existir
+                            if (!link.dataset.originalGroup) {
+                                const parent = link.closest('.nav-group-wrapper');
+                                if (parent) link.dataset.originalGroup = parent.id;
+                            }
+                            devGroup.appendChild(link);
+                            hasLocked = true;
+                        } else {
+                            // Devolver ao pai original se estiver em desenvolvimento e for desbloqueado
+                            if (link.dataset.originalGroup && link.closest('#group-desenvolvimento')) {
+                                const originalParent = document.getElementById(link.dataset.originalGroup);
+                                if (originalParent) {
+                                    originalParent.appendChild(link);
+                                }
+                            }
+                        }
+                    });
+
+                    // Mostrar/Ocultar separador de "Em desenvolvimento"
+                    devSeparator.style.display = hasLocked ? 'flex' : 'none';
+                    if (!hasLocked) {
+                        devGroup.classList.remove('expanded');
+                        devGroup.classList.add('collapsed');
+                        const icon = document.getElementById('icon-group-desenvolvimento');
+                        if (icon) { icon.classList.remove('fa-minus'); icon.classList.add('fa-plus'); }
                     }
                 }
 
@@ -3410,6 +3466,7 @@
                     updateUserInfo();
                     checkTasks();
                     enforceSidebarRoleFilter();
+                    loadPageLocks();
                     // renderQuickLinks removido, sendo renderTopClients chamado logo após popular carteira
                     fetchSectorData();
 
