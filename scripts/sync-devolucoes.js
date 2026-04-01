@@ -59,6 +59,11 @@ async function sincronizar() {
             process.exit(1);
         }
 
+        const dataInicio = new Date();
+        dataInicio.setDate(dataInicio.getDate() - 90);
+        const dataInicioStr = dataInicio.toISOString().split('T')[0];
+        console.log(`📅 Janela de Sincronização: ${dataInicioStr} até hoje.`);
+
         const query = `
             SELECT 
                 d.CODIGO_DEV as NOTA_FISCAL,
@@ -85,11 +90,11 @@ async function sincronizar() {
                 ON dp.PRODUTO_DEP = p.CODIGO_PRO
             WHERE d.STATUS_DEV <> 'C'
                 AND dp.STATUS_DEP <> 'C'
-                AND d.DATA_DEV >= '2025-01-01'
+                AND d.DATA_DEV >= ?
             ORDER BY d.DATA_DEV DESC
         `;
 
-        db.query(query, async (err, result) => {
+        db.query(query, [dataInicio], async (err, result) => {
             if (err) {
                 console.error('❌ Erro na consulta Firebird:', err);
                 db.detach();
@@ -99,9 +104,6 @@ async function sincronizar() {
             console.log(`📦 Encontrados ${result.length} registros de devolução.`);
 
             try {
-                // Limpar dados para reinserir
-                await pool.query('DELETE FROM firebird_sync_devolucoes');
-
                 for (const row of result) {
                     await pool.query(`
                         INSERT INTO firebird_sync_devolucoes (
@@ -109,6 +111,12 @@ async function sincronizar() {
                             cliente_nome, codigo_item, descricao, quantidade, valor_unitario, 
                             valor_total, peso_un, peso_total, motivo, codigo_not
                         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+                        ON CONFLICT (nota_fiscal, serie, item_nota, codigo_item) DO UPDATE SET
+                            cliente_nome = EXCLUDED.cliente_nome,
+                            quantidade = EXCLUDED.quantidade,
+                            valor_total = EXCLUDED.valor_total,
+                            peso_total = EXCLUDED.peso_total,
+                            atualizado_em = CURRENT_TIMESTAMP
                     `, [
                         row.NOTA_FISCAL,
                         '', // Série não presente na tabela DEVOLUCAO

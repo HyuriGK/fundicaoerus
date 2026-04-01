@@ -73,17 +73,22 @@ async function startSync() {
         )`);
         console.log('✅ Tabela refugo_apontado_sincronizado recriada.');
 
-        // 2. Buscar Refugos no Firebird
+        // 2. Buscar Refugos no Firebird (Janela Incremental de 90 dias)
+        const dataInicio = new Date();
+        dataInicio.setDate(dataInicio.getDate() - 90);
+        const dataInicioStr = dataInicio.toISOString().split('T')[0];
+        console.log(`📅 Janela de Sincronização: ${dataInicioStr} até hoje.`);
+
         const queryRefugos = `
             SELECT 
                 ID_PCS, EMPRESA_PCS, CODIGO_PCS, SETOR_PCS, REF_CODIGO_PCS, DATA_PCS, 
                 DQUANTIDADE_REFUGO_PCS as QUANTIDADE, LOTE_PCS,
                 NOTA_NFE_PCS, SERIE_NFE_PCS
             FROM PRODUCAO_SETOR 
-            WHERE DATA_PCS >= '2025-01-01' AND REF_CODIGO_PCS IS NOT NULL AND DQUANTIDADE_REFUGO_PCS > 0
+            WHERE DATA_PCS >= ? AND REF_CODIGO_PCS IS NOT NULL AND DQUANTIDADE_REFUGO_PCS > 0
             ORDER BY DATA_PCS DESC
         `;
-        const rows = await firebirdQuery(db, queryRefugos);
+        const rows = await firebirdQuery(db, queryRefugos, [dataInicio]);
         console.log(`📦 Encontrados ${rows.length} registros de refugo no Firebird.`);
 
         if (rows.length === 0) {

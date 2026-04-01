@@ -204,11 +204,11 @@ async function sincronizarDetalhado(fbDb) {
 
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_fat_fb_data ON faturamento_firebird(data_faturamento DESC)`);
 
-    // OTIMIZAÇÃO: Sincronização Incremental (Janela de 15 dias)
-    // Em vez de buscar o ano todo, buscamos apenas os últimos 15 dias.
+    // OTIMIZAÇÃO: Sincronização Incremental (Janela de 90 dias)
+    // Em vez de buscar o ano todo, buscamos apenas os últimos 90 dias.
     // Isso reduz o processamento drasticamente e acelera a sincronização.
     const dataInicio = new Date();
-    dataInicio.setDate(dataInicio.getDate() - 60);
+    dataInicio.setDate(dataInicio.getDate() - 90);
     console.log(`📅 Janela de Sincronização: ${dataInicio.toISOString().split('T')[0]} até hoje.`);
 
     const query = `

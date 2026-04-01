@@ -40,6 +40,10 @@ async function createTableIfNotExists() {
             ALTER TABLE custos_registros ADD COLUMN IF NOT EXISTS produto_cod VARCHAR(50);
             ALTER TABLE custos_registros ADD COLUMN IF NOT EXISTS fornecedor VARCHAR(255);
             
+            -- Unique index to support UPSERT (incremental sync)
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_custos_unique_upsert 
+            ON custos_registros(categoria, documento, produto_cod, fornecedor, data_emissao, valor);
+
             -- Índices para performance na API (Filtros e Agrupamentos)
             CREATE INDEX IF NOT EXISTS idx_custos_registros_mes_ano ON custos_registros(mes, ano);
             CREATE INDEX IF NOT EXISTS idx_custos_registros_categoria ON custos_registros(categoria);
@@ -84,6 +88,11 @@ async function syncData() {
 
     // Removemos o agrupamento (GROUP BY) e o limitador (FIRST 20)
     // Coleta o registro cru: Nome, Valor Específico do item, a Data e NF.
+    const dataInicio = new Date();
+    dataInicio.setDate(dataInicio.getDate() - 90);
+    const dataInicioStr = dataInicio.toISOString().split('T')[0];
+    console.log(`📅 Janela de Sincronização: ${dataInicioStr} até hoje.`);
+
     const queries = {
         fornecedores: `
             SELECT 
@@ -99,7 +108,7 @@ async function syncData() {
             FROM COMPRA_PRODUTO CP
             JOIN COMPRA C ON CP.COM_ID_CPR = C.ID_COM
             LEFT JOIN FORNECEDOR FORN ON CP.FORNECEDOR_CPR = FORN.CODIGO_FRN
-            WHERE EXTRACT(YEAR FROM C.EMISSAO_COM) IN (2025, 2026) AND C.PARA_COM = 'F'
+            WHERE C.EMISSAO_COM >= ? AND C.PARA_COM = 'F'
         `,
         tipos: `
             SELECT 
@@ -116,7 +125,7 @@ async function syncData() {
             JOIN COMPRA C ON CP.COM_ID_CPR = C.ID_COM
             LEFT JOIN DESPESA DES ON C.DESPESA_COM = DES.CODIGO_DES
             LEFT JOIN FORNECEDOR FORN ON CP.FORNECEDOR_CPR = FORN.CODIGO_FRN
-            WHERE EXTRACT(YEAR FROM C.EMISSAO_COM) IN (2025, 2026) AND DES.NOME_DES IS NOT NULL AND C.PARA_COM = 'F'
+            WHERE C.EMISSAO_COM >= ? AND DES.NOME_DES IS NOT NULL AND C.PARA_COM = 'F'
         `,
         setores: `
             SELECT 
@@ -132,7 +141,7 @@ async function syncData() {
             FROM PAGAR PAG
             LEFT JOIN CENTRO_CUSTO CC ON PAG.CTU_CODIGO_PAG = CC.CODIGO_CTU
             LEFT JOIN FORNECEDOR FORN ON PAG.FORNECEDOR_PAG = FORN.CODIGO_FRN
-            WHERE PAG.ANO_PAG IN (2025, 2026)
+            WHERE PAG.DATA_EMISSAO_PAG >= ?
         `,
         materiais: `
             SELECT 
@@ -149,13 +158,13 @@ async function syncData() {
             JOIN COMPRA C ON CP.COM_ID_CPR = C.ID_COM
             LEFT JOIN PRODUTO PRO ON CP.PRODUTO_CPR = PRO.CODIGO_PRO
             LEFT JOIN FORNECEDOR FORN ON CP.FORNECEDOR_CPR = FORN.CODIGO_FRN
-            WHERE EXTRACT(YEAR FROM C.EMISSAO_COM) IN (2025, 2026) AND C.PARA_COM = 'F'
+            WHERE C.EMISSAO_COM >= ? AND C.PARA_COM = 'F'
         `
     };
 
-    const fetchFbData = (q, name) => {
+    const fetchFbData = (q, name, params = []) => {
         return new Promise((resolve) => {
-            dbFb.query(q, (err, res) => {
+            dbFb.query(q, params, (err, res) => {
                 if (err) {
                     console.error(`❌ Erro ao buscar ${name} no Firebird:`, err.message);
                     resolve([]);
@@ -169,10 +178,10 @@ async function syncData() {
     try {
         console.log('📥 Extraindo registros granulares do Firebird (pesado)...');
         const dados = {
-            fornecedores: await fetchFbData(queries.fornecedores, 'Fornecedores'),
-            tipos: await fetchFbData(queries.tipos, 'Tipos'),
-            setores: await fetchFbData(queries.setores, 'Setores'),
-            materiais: await fetchFbData(queries.materiais, 'Materiais')
+            fornecedores: await fetchFbData(queries.fornecedores, 'Fornecedores', [dataInicio]),
+            tipos: await fetchFbData(queries.tipos, 'Tipos', [dataInicio]),
+            setores: await fetchFbData(queries.setores, 'Setores', [dataInicio]),
+            materiais: await fetchFbData(queries.materiais, 'Materiais', [dataInicio])
         };
 
         dbFb.detach();
@@ -180,8 +189,8 @@ async function syncData() {
 
         const client = await pool.connect();
         try {
-            console.log('🧹 Limpando tabela de registros (TRUNCATE)...');
-            await client.query('TRUNCATE TABLE custos_registros');
+            // Chamada de migração para o mestre
+            await createTableIfNotExists();
 
             let totalInseridos = 0;
 
@@ -214,6 +223,11 @@ async function syncData() {
                     const query = `
                         INSERT INTO custos_registros (categoria, nome, produto, produto_cod, fornecedor, valor, documento, data_emissao, mes, ano) 
                         VALUES ${values.join(',')}
+                        ON CONFLICT ON CONSTRAINT custos_registros_categoria_documento_produto_cod_fornecedor_d_key DO UPDATE SET
+                            nome = EXCLUDED.nome,
+                            produto = EXCLUDED.produto,
+                            valor = EXCLUDED.valor,
+                            atualizado_em = CURRENT_TIMESTAMP
                     `;
 
                     await client.query(query, params);
