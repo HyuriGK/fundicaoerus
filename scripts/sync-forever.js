@@ -116,8 +116,11 @@ function runBat(batEntry) {
                     if (parts.length >= 3) {
                         currentStatus[parts[1]] = parts[2];
                     }
-                } else if (trimmedLine.includes('❌') || trimmedLine.toLowerCase().includes('error:')) {
+                } else if (trimmedLine.includes('❌') || (trimmedLine.toLowerCase().includes('error:') && !trimmedLine.toLowerCase().includes('warning'))) {
                     logEvent(batEntry.name, trimmedLine, true);
+                } else if (trimmedLine.includes('Warning:') || trimmedLine.includes('SECURITY WARNING:')) {
+                    // Benign warnings - just log as info for history without setting ERROR status
+                    logEvent(batEntry.name, trimmedLine, false);
                 }
             });
         });
@@ -125,8 +128,13 @@ function runBat(batEntry) {
         child.stderr.on('data', (data) => {
             const errLog = data.toString().trim();
             if (errLog && !errLog.includes('terminada')) {
-                logEvent(batEntry.name, errLog, true);
-                currentStatus[batEntry.name] = '⚠️ ERRO';
+                // Ignore Node/PG specific warnings in stderr
+                if (errLog.includes('Warning:') || errLog.includes('SECURITY WARNING:')) {
+                    logEvent(batEntry.name, errLog, false);
+                } else {
+                    logEvent(batEntry.name, errLog, true);
+                    currentStatus[batEntry.name] = '⚠️ ERRO';
+                }
             }
         });
 

@@ -49,15 +49,20 @@ async function createTableIfNotExists() {
             ALTER TABLE custos_registros ALTER COLUMN produto_cod SET DEFAULT '';
             ALTER TABLE custos_registros ALTER COLUMN fornecedor SET DEFAULT '';
 
-            -- Remover duplicatas existentes (Limpeza de resquícios de sincronizações anteriores)
-            DELETE FROM custos_registros a USING custos_registros b
-            WHERE a.id < b.id 
-              AND a.categoria = b.categoria 
-              AND a.documento = b.documento
-              AND a.produto_cod = b.produto_cod
-              AND a.fornecedor = b.fornecedor
-              AND a.data_emissao = b.data_emissao 
-              AND a.valor = b.valor;
+            -- Remover duplicatas existentes de forma robusta (Limpeza de resquícios de sincronizações anteriores)
+            DELETE FROM custos_registros
+            WHERE id IN (
+                SELECT id
+                FROM (
+                    SELECT id,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY categoria, documento, produto_cod, fornecedor, data_emissao, valor
+                               ORDER BY id DESC
+                           ) as row_num
+                    FROM custos_registros
+                ) t
+                WHERE t.row_num > 1
+            );
 
             -- Unique index to support UPSERT (incremental sync)
             DROP INDEX IF EXISTS idx_custos_unique_upsert;
