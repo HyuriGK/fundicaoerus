@@ -874,6 +874,7 @@
                     <button class="view-btn active" id="btnViewDay" onclick="switchView('day')">Por Dia/Mês</button>
                     <button class="view-btn" id="btnViewReasonSector" onclick="switchView('reasonSector')">Por
                         Motivo/Setor</button>
+                    <button class="view-btn" id="btnViewMaterial" onclick="switchView('material')">Por Material</button>
                     <button class="view-btn" id="btnViewClient" onclick="switchView('client')">Por Cliente</button>
                 </div>
             </div>
@@ -884,6 +885,15 @@
                     <div class="chart-title">Evolução Diária / Mensal</div>
                     <div class="chart-wrapper">
                         <canvas id="barChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="charts-container" id="viewMaterial" style="display: none;">
+                <div class="chart-panel">
+                    <div class="chart-title">Refugo por Material (Top 5)</div>
+                    <div class="chart-wrapper">
+                        <canvas id="materialChart"></canvas>
                     </div>
                 </div>
             </div>
@@ -1300,6 +1310,7 @@
             // Reset Displays
             document.getElementById('viewDay').style.display = 'none';
             document.getElementById('viewReasonSector').style.display = 'none';
+            document.getElementById('viewMaterial').style.display = 'none';
             document.getElementById('viewClient').style.display = 'none';
 
             if (view === 'day') {
@@ -1311,6 +1322,10 @@
                 document.getElementById('viewReasonSector').style.display = 'flex';
                 renderPieChart('sectorChart', getDataForTop5(currentFilteredData, 'setor_responsavel'), 'Setor');
                 renderPieChart('reasonChart', getDataForTop5(currentFilteredData, 'motivo'), 'Motivo');
+            } else if (view === 'material') {
+                document.getElementById('btnViewMaterial').classList.add('active');
+                document.getElementById('viewMaterial').style.display = 'flex';
+                renderPieChart('materialChart', getDataForTop5(currentFilteredData, 'material'), 'Material');
             } else if (view === 'client') {
                 document.getElementById('btnViewClient').classList.add('active');
                 document.getElementById('viewClient').style.display = 'flex';
@@ -1572,6 +1587,9 @@
             else if (currentView === 'reasonSector') {
                 renderPieChart('sectorChart', getDataForTop5(filteredData, 'setor_responsavel'), 'Setor');
                 renderPieChart('reasonChart', getDataForTop5(filteredData, 'motivo'), 'Motivo');
+            }
+            else if (currentView === 'material') {
+                renderPieChart('materialChart', getDataForTop5(filteredData, 'material'), 'Material');
             }
             else if (currentView === 'client') renderParetoChart(filteredData);
 
@@ -2079,7 +2097,10 @@
                     return r.data === filterValue;
                 }
                 const val = r[filterType.toLowerCase()] || 'Não Mapeado';
-                if (filterValue === 'Outros') return true; // Actually we should filter differently for Outros, but let's at least show them
+                if (filterValue === 'Outros') {
+                    const top5Data = getDataForTop5(currentFilteredData, filterType.toLowerCase());
+                    return !Object.keys(top5Data).includes(val);
+                }
                 return val === filterValue;
             });
 
@@ -2279,7 +2300,9 @@
                         if (elements.length > 0) {
                             const index = elements[0].index;
                             const label = labels[index];
-                            const filterType = labelPrefix === 'Setor' ? 'setor_responsavel' : 'motivo';
+                            let filterType = 'motivo';
+                            if (labelPrefix === 'Setor') filterType = 'setor_responsavel';
+                            else if (labelPrefix === 'Material') filterType = 'material';
                             openDetailModal(label, filterType);
                         }
                     },
