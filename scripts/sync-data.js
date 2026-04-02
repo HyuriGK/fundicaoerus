@@ -213,7 +213,7 @@ async function syncData() {
                 SUM(CASE WHEN setor LIKE '%TRATAMENTO%' OR setor LIKE '%NORMALIZA%' OR setor LIKE '%TEMPERA%' OR setor LIKE '%REVENIMENTO%' THEN quantidade ELSE 0 END) as qty_tt,
                 SUM(CASE WHEN setor LIKE '%USINAGEM%' THEN quantidade ELSE 0 END) as qty_usinagem,
                 SUM(CASE WHEN setor LIKE '%INSPECAO%' OR setor LIKE '%QUALIDADE%' THEN quantidade ELSE 0 END) as qty_qualidade,
-                SUM(CASE WHEN setor LIKE '%EXPEDICAO%' THEN quantidade ELSE 0 END) as qty_expedicao,
+                SUM(CASE WHEN setor LIKE '%EXPEDICAO%' AND setor NOT LIKE '%USINAGEM%' THEN quantidade ELSE 0 END) as qty_expedicao,
                 SUM(CASE WHEN setor LIKE '%FATURAMENTO%' THEN quantidade ELSE 0 END) as qty_faturamento
             FROM producao_apontada_sincronizada
             WHERE op IS NOT NULL AND op != ''
