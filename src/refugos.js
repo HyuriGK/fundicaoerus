@@ -43,7 +43,7 @@ router.get('/', async (req, res) => {
                 r.motivo,
                 r.cliente,
                 m.setor_responsavel,
-                f.nome_material as material
+                f.material_fic as material
             FROM refugo_apontado_sincronizado r
             LEFT JOIN refugo_mapeamento_setores m ON r.motivo = m.motivo
             LEFT JOIN ficha_tecnica f ON r.codigo_peca = f.pro_codigo_fic
