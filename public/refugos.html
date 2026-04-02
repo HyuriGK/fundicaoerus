@@ -14,8 +14,8 @@
         rel="stylesheet">
     <script src="js/activity-logger.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script
-        src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <style>
         /* Copied Styles from refugo.html with adjustments */
         :root {
@@ -980,6 +980,7 @@
                             <th style="text-align: center;">OP</th>
                             <th style="text-align: center;">Cód. Peça</th>
                             <th style="text-align: left;">Produto</th>
+                            <th style="text-align: left;">Material</th>
                             <th style="text-align: left;">Motivo</th>
                             <th style="text-align: center;">Lote</th>
                             <th style="text-align: center;">Qtd</th>
@@ -993,6 +994,7 @@
                             <th><input type="text" id="filter-op" class="filter-input-table" onkeyup="filterDetailTable()" placeholder="..."></th>
                             <th><input type="text" id="filter-codigo_peca" class="filter-input-table" onkeyup="filterDetailTable()" placeholder="..."></th>
                             <th><input type="text" id="filter-produto" class="filter-input-table" onkeyup="filterDetailTable()" placeholder="..."></th>
+                            <th><input type="text" id="filter-material" class="filter-input-table" onkeyup="filterDetailTable()" placeholder="..."></th>
                             <th><input type="text" id="filter-motivo" class="filter-input-table" onkeyup="filterDetailTable()" placeholder="..."></th>
                             <th><input type="text" id="filter-lote" class="filter-input-table" onkeyup="filterDetailTable()" placeholder="..."></th>
                             <th><input type="text" id="filter-qtd" class="filter-input-table" onkeyup="filterDetailTable()" placeholder="..."></th>
@@ -1046,6 +1048,7 @@
                             <th style="text-align: center;">OP</th>
                             <th style="text-align: center;">Cód. Peça</th>
                             <th style="text-align: left;">Produto</th>
+                            <th style="text-align: left;">Material</th>
                             <th style="text-align: left;">Motivo</th>
                             <th style="text-align: center;">Lote</th>
                             <th style="text-align: center;">Qtd</th>
@@ -1053,6 +1056,7 @@
                             <th style="text-align: center;">Peso Total</th>
                         </tr>
                         <tr id="mainFilterRow">
+                            <th><input class="filter-input-table" onkeyup="filterTable()" placeholder="..."></th>
                             <th><input class="filter-input-table" onkeyup="filterTable()" placeholder="..."></th>
                             <th><input class="filter-input-table" onkeyup="filterTable()" placeholder="..."></th>
                             <th><input class="filter-input-table" onkeyup="filterTable()" placeholder="..."></th>
@@ -1330,9 +1334,9 @@
             let totalWeight = 0;
             rows.forEach(row => {
                 if (row.style.display !== 'none') {
-                    // Index 8 is Qtd, Index 10 is Peso Total
-                    const qty = parseFloat(row.cells[8].textContent.replace(/\./g, '').replace(',', '.')) || 0;
-                    const weight = parseFloat(row.cells[10].textContent.replace(/\./g, '').replace(',', '.')) || 0;
+                    // Index 9 is Qtd, Index 11 is Peso Total (shifted by Material column)
+                    const qty = parseFloat(row.cells[9].textContent.replace(/\./g, '').replace(',', '.')) || 0;
+                    const weight = parseFloat(row.cells[11].textContent.replace(/\./g, '').replace(',', '.')) || 0;
                     totalQty += qty;
                     totalWeight += weight;
                 }
@@ -1361,8 +1365,8 @@
 
                     const txtValue = (tds[j].textContent || tds[j].innerText).trim().toUpperCase();
 
-                    // --- EXACT MATCH LOGIC for Peso UN (index 9) ---
-                    if (j === 9) {
+                    // --- EXACT MATCH LOGIC for Peso UN (index 10) ---
+                    if (j === 10) {
                         // For Peso UN, we want to match exactly what is typed
                         // We replace comma with dot for standardized comparison if it looks like a number
                         if (txtValue !== filterVal && txtValue.replace(',', '.') !== filterVal.replace(',', '.')) {
@@ -1594,6 +1598,7 @@
                         <td class="copyable" style="text-align: center;" onclick="copyToClipboard('${r.op || ''}', 'OP')">${r.op || '-'} <i class="fa-regular fa-copy" style="font-size:0.7em; margin-left:5px; opacity:0.5;"></i></td>
                         <td class="copyable" style="text-align: center;" onclick="copyToClipboard('${r.codigo_peca || ''}', 'Código')">${r.codigo_peca || '-'} <i class="fa-regular fa-copy" style="font-size:0.7em; margin-left:5px; opacity:0.5;"></i></td>
                         <td class="truncate-text" title="${r.descricao || ''}">${r.descricao || '-'}</td>
+                        <td class="truncate-text" title="${r.material || ''}">${r.material || '-'}</td>
                         <td class="truncate-text" title="${r.motivo || ''}">${r.motivo || '-'}</td>
                         <td style="text-align: center;">${r.lote || '-'}</td>
                         <td style="text-align: center;">${parseFloat(r.quantidade).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
@@ -2110,6 +2115,7 @@
                             <td class="copyable" style="text-align: center;" onclick="copyToClipboard('${r.op || ''}', 'OP')">${r.op || '-'} <i class="fa-regular fa-copy" style="font-size:0.7em; margin-left:5px; opacity:0.5;"></i></td>
                             <td class="copyable" style="text-align: center;" onclick="copyToClipboard('${r.codigo_peca || ''}', 'Código')">${r.codigo_peca || '-'} <i class="fa-regular fa-copy" style="font-size:0.7em; margin-left:5px; opacity:0.5;"></i></td>
                             <td class="truncate-text" title="${r.descricao || ''}">${r.descricao || '-'}</td>
+                            <td class="truncate-text" title="${r.material || ''}">${r.material || '-'}</td>
                             <td class="truncate-text" title="${r.motivo || ''}">${r.motivo || '-'}</td>
                             <td style="text-align: center;">${r.lote || '-'}</td>
                             <td style="text-align: center;">${parseFloat(r.quantidade).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
@@ -2147,9 +2153,9 @@
             rows.forEach(row => {
                 if (row.style.display !== 'none' && row.id !== 'filter-row') {
                     // Extract values, parse float.
-                    // Qtd is 8th cell (index 8), weight is 10th cell (index 10)
-                    const qtdText = row.cells[8].textContent.replace(/\./g, '').replace(',', '.');
-                    const weightText = row.cells[10].textContent.replace('kg', '').replace(/\./g, '').replace(',', '.').trim();
+                    // Qtd is 9th cell (index 9), weight is 11th cell (index 11)
+                    const qtdText = row.cells[9].textContent.replace(/\./g, '').replace(',', '.');
+                    const weightText = row.cells[11].textContent.replace('kg', '').replace(/\./g, '').replace(',', '.').trim();
 
                     totalQty += parseFloat(qtdText) || 0;
                     totalWeight += parseFloat(weightText) || 0;
@@ -2176,6 +2182,7 @@
                 op: document.getElementById('filter-op').value.toLowerCase(),
                 codigo_peca: document.getElementById('filter-codigo_peca').value.toLowerCase(),
                 produto: document.getElementById('filter-produto').value.toLowerCase(),
+                material: document.getElementById('filter-material').value.toLowerCase(),
                 motivo: document.getElementById('filter-motivo').value.toLowerCase(),
                 lote: document.getElementById('filter-lote').value.toLowerCase(),
                 qtd: document.getElementById('filter-qtd').value.toLowerCase().trim(),
@@ -2192,17 +2199,18 @@
                 const matchOp = cells[3].textContent.toLowerCase().includes(filters.op);
                 const matchCodigo = cells[4].textContent.toLowerCase().includes(filters.codigo_peca);
                 const matchProduto = cells[5].textContent.toLowerCase().includes(filters.produto);
-                const matchMotivo = cells[6].textContent.toLowerCase().includes(filters.motivo);
-                const matchLote = cells[7].textContent.toLowerCase().includes(filters.lote);
-                const matchQtd = cells[8].textContent.toLowerCase().includes(filters.qtd);
+                const matchMaterial = cells[6].textContent.toLowerCase().includes(filters.material);
+                const matchMotivo = cells[7].textContent.toLowerCase().includes(filters.motivo);
+                const matchLote = cells[8].textContent.toLowerCase().includes(filters.lote);
+                const matchQtd = cells[9].textContent.toLowerCase().includes(filters.qtd);
                 
-                // EXACT MATCH logic for Peso UN (index 9)
-                const txtPesoUn = cells[9].textContent.toLowerCase().trim();
+                // EXACT MATCH logic for Peso UN (index 10)
+                const txtPesoUn = cells[10].textContent.toLowerCase().trim();
                 const matchPesoUn = filters.pesoUn === "" || (txtPesoUn === filters.pesoUn || txtPesoUn.replace(',', '.') === filters.pesoUn.replace(',', '.'));
                 
-                const matchPesoTotal = cells[10].textContent.toLowerCase().includes(filters.pesoTotal);
+                const matchPesoTotal = cells[11].textContent.toLowerCase().includes(filters.pesoTotal);
 
-                if (matchData && matchSetorResp && matchCliente && matchOp && matchCodigo && matchProduto && matchMotivo && matchLote && matchQtd && matchPesoUn && matchPesoTotal) {
+                if (matchData && matchSetorResp && matchCliente && matchOp && matchCodigo && matchProduto && matchMaterial && matchMotivo && matchLote && matchQtd && matchPesoUn && matchPesoTotal) {
                     row.style.display = '';
                 } else {
                     row.style.display = 'none';
@@ -2322,6 +2330,33 @@
             if (!str) return '-';
             const [y, m, d] = str.split('-');
             return `${d}/${m}/${y}`;
+        }
+
+        function exportToExcel(tableId, filename) {
+            const table = document.getElementById(tableId);
+            if (!table) return;
+            
+            const rows = Array.from(table.querySelectorAll('tbody tr')).filter(r => r.style.display !== 'none');
+            const headers = Array.from(table.querySelectorAll('thead tr:first-child th')).map(th => th.textContent.trim());
+            
+            const data = [headers];
+            rows.forEach(r => {
+                // Skip filter-row if it exists in tbody (shouldn't be the case here, but safe)
+                if (r.id === 'filter-row') return;
+                
+                const rowData = Array.from(r.cells).map(td => {
+                    // For weight inputs, get the value
+                    const input = td.querySelector('input');
+                    if (input) return input.value;
+                    return td.textContent.trim();
+                });
+                data.push(rowData);
+            });
+            
+            const ws = XLSX.utils.aoa_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Dados");
+            XLSX.writeFile(wb, `${filename}_${new Date().toISOString().slice(0, 10)}.xlsx`);
         }
 
     </script>
