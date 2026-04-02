@@ -48,24 +48,37 @@ router.post('/', getUserId, async (req, res) => {
     if (req.userRole !== 'desenvolvedor' && req.userRole !== 'admin') {
         return res.status(403).json({ success: false, message: 'Acesso negado.' });
     }
-    const { recipient_id, message } = req.body; // recipient_id null = todos
+    const { recipient_ids, message } = req.body; // recipient_ids can be an array, or null for ALL
 
     if (!message) {
         return res.status(400).json({ success: false, message: 'Mensagem vazia.' });
     }
 
     try {
-        const result = await pool.query(
-            'INSERT INTO communications (sender_id, recipient_id, message) VALUES ($1, $2, $3) RETURNING *',
-            [req.userId, recipient_id || null, message]
-        );
+        // Se for para todos (recipient_ids vazio ou nulo)
+        if (!recipient_ids || recipient_ids.length === 0) {
+            const result = await pool.query(
+                'INSERT INTO communications (sender_id, recipient_id, message) VALUES ($1, $2, $3) RETURNING *',
+                [req.userId, null, message]
+            );
+            res.json({ success: true, communication: result.rows[0] });
+        } else {
+            // Se for para múltiplos usuários específicos
+            const queries = recipient_ids.map(rid => {
+                return pool.query(
+                    'INSERT INTO communications (sender_id, recipient_id, message) VALUES ($1, $2, $3)',
+                    [req.userId, rid, message]
+                );
+            });
+            await Promise.all(queries);
+            res.json({ success: true, message: 'Mensagens enviadas com sucesso.' });
+        }
         
         logActivity(req.headers['x-user'], 'SEND_MESSAGE', 'communications', { 
-            recipient_id: recipient_id || 'ALL',
+            recipients: recipient_ids ? recipient_ids.length : 'ALL',
             msg_length: message.length 
         });
 
-        res.json({ success: true, communication: result.rows[0] });
     } catch (error) {
         console.error('Erro ao enviar comunicação:', error);
         res.status(500).json({ success: false, message: 'Erro ao enviar mensagem.' });
