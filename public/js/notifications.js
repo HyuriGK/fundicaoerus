@@ -9,13 +9,6 @@
     // Elementos da UI
     const bell = document.getElementById('notification-bell');
     const countBadge = document.getElementById('notification-count');
-    const commMenuItem = document.getElementById('comm-menu-item');
-    const commNotifDot = document.getElementById('comm-notif-dot');
-
-    // Mostrar menu de comunicação apenas para admin/dev
-    if (commMenuItem && (role === 'admin' || role === 'desenvolvedor')) {
-        commMenuItem.style.display = 'flex';
-    }
 
     async function checkNotifications() {
         try {
@@ -49,12 +42,10 @@
         if (count > 0) {
             countBadge.innerText = count;
             countBadge.style.display = 'block';
-            if (commNotifDot) commNotifDot.style.display = 'block';
             // Animação de pulso no sino
             if (bell) bell.style.animation = 'pulseGlow 2s infinite';
         } else {
             countBadge.style.display = 'none';
-            if (commNotifDot) commNotifDot.style.display = 'none';
             if (bell) bell.style.animation = 'none';
         }
     }
