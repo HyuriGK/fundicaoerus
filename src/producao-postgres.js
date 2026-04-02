@@ -138,15 +138,7 @@ router.get('/', async (req, res) => {
             });
         }
 
-        const { sector, search, limit = 100000 } = req.query;
-        let { startDate, endDate } = req.query;
-
-        // Default to last 90 days if no date filter is provided
-        if (!startDate && !endDate) {
-            const ninetyDaysAgo = new Date();
-            ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-            startDate = ninetyDaysAgo.toISOString().split('T')[0];
-        }
+        const { startDate, endDate, sector, search, limit = 100000 } = req.query;
 
         let query = `
             SELECT 
