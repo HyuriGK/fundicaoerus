@@ -229,8 +229,11 @@ async function syncData() {
             // Chamada de migração para o mestre
             await createTableIfNotExists();
 
-            const totalGeral = dados.fornecedores.length + dados.tipos.length + dados.setores.length + dados.materiais.length;
             let totalInseridos = 0;
+            const totalGeral = (dados.fornecedores?.length || 0) + 
+                               (dados.tipos?.length || 0) + 
+                               (dados.setores?.length || 0) + 
+                               (dados.materiais?.length || 0);
 
             const insertBatch = async (cat, rows) => {
                 // Deduplicação em tempo de execução para evitar erro de "ON CONFLICT" no mesmo lote

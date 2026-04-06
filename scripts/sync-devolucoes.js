@@ -103,8 +103,8 @@ async function sincronizar() {
 
             console.log(`📦 Encontrados ${result.length} registros de devolução.`);
 
+            let inserted = 0;
             try {
-                let inserted = 0;
                 for (const row of result) {
                     await pool.query(`
                         INSERT INTO firebird_sync_devolucoes (

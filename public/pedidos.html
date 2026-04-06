@@ -1695,6 +1695,10 @@
                         style="background-color: #27272a; border: 1px solid var(--border-highlight); margin-right: 10px;">
                         <i class="fa-solid fa-envelope"></i> Gerar Email
                     </button>
+                    <button id="btnExtrairExcel" class="btn-modern" onclick="exportToExcel()"
+                        style="background-color: #10b981; color: #fff; border: 1px solid rgba(16, 185, 129, 0.2); margin-right: 10px;">
+                        <i class="fa-solid fa-file-excel"></i> Extrair Excel
+                    </button>
                     <button id="toggleModelosBtn" class="btn-modern btn-toggle" onclick="toggleModelosFilter()"
                         style="background-color: #3f3f46;">
                         <span id="toggleModelosText"><i class="fa-solid fa-eye"></i> Mostrar Modelos</span>
@@ -4910,7 +4914,9 @@
             const role = localStorage.getItem('erus_role');
             if (role === 'visitante') {
                 const btnEmail = document.getElementById('btnGerarEmail');
+                const btnExcel = document.getElementById('btnExtrairExcel');
                 if (btnEmail) btnEmail.style.display = 'none';
+                if (btnExcel) btnExcel.style.display = 'none';
             }
 
             // Observer to handle chart resizing when layout changes (e.g. Industrial Position Toggle)
@@ -5125,6 +5131,83 @@
             else if (dModal && dModal.style.display === 'flex') closeOPDetails();
             else if (typeof originalCloseModal === 'function') originalCloseModal();
         };
+
+        // --- EXPORT TO EXCEL ---
+        function exportToExcel() {
+            if (!typeof XLSX !== 'undefined') {
+                showToast("Erro", "Biblioteca Excel não carregada.", "danger");
+                return;
+            }
+
+            if (!currentFilteredData || currentFilteredData.length === 0) {
+                showToast("Aviso", "Nenhum dado filtrado para exportar.", "info");
+                return;
+            }
+
+            const exportData = currentFilteredData.map(item => {
+                const metrics = getItemSectorMetrics(item);
+                const saldoReal = item._sectorQty !== undefined ? item._sectorQty : getCommercialBalance(item);
+                
+                // Precise weight calc following table logic
+                let unitWeight = 0;
+                const prodCode = String(item.PRODUTO_PPR || '').trim();
+                const qtdOriginal = metrics.originalTarget;
+                if (item.PESO_UNIT !== undefined && item.PESO_UNIT !== null && item.PESO_UNIT !== '') {
+                    unitWeight = Number(item.PESO_UNIT);
+                } else if (customWeights[prodCode]) {
+                    unitWeight = customWeights[prodCode];
+                } else {
+                    unitWeight = qtdOriginal > 0 ? (Number(item.PESO_LIQUIDO_NPR) || 0) / qtdOriginal : 0;
+                }
+                const totalWeightReal = item._sectorWeight !== undefined ? item._sectorWeight : (unitWeight * saldoReal);
+
+                // Precise price calc following table logic
+                let unitPrice = parseFloat(item.VALOR_PPR || 0);
+                if (item.PRECO_KG && parseFloat(item.PRECO_KG) > 0 && customWeights[prodCode]) {
+                    unitPrice = parseFloat(item.PRECO_KG) * unitWeight;
+                }
+                const valorTotal = item._sectorValue !== undefined ? item._sectorValue : (unitPrice * saldoReal);
+
+                const entrega = item.ENTREGA_PETR ? new Date(item.ENTREGA_PETR).toLocaleDateString('pt-BR') :
+                    (item.DATA_ENTREGA_PPR ? new Date(item.DATA_ENTREGA_PPR).toLocaleDateString('pt-BR') : '-');
+
+                const row = {
+                    "Pedido": item.CODIGO_PPR || '-',
+                    "Ordem Compra (OC)": item.ORDEM_COMPRA_PPR || '-',
+                    "Entrega": entrega,
+                    "Cliente": item.NOME_CLIENTE || '-',
+                    "Código": item.PRODUTO_PPR || '-',
+                    "Produto": item.NOME_PRODUTO_PPR || '-',
+                    "Saldo": saldoReal,
+                    "Peso Un. (kg)": parseFloat(unitWeight.toFixed(3)),
+                    "Peso Total (kg)": parseFloat(totalWeightReal.toFixed(2)),
+                    "OP": item.OP_PCS || '-'
+                };
+
+                if (valorVisible) {
+                    row["Total (R$)"] = parseFloat(valorTotal.toFixed(2));
+                }
+
+                return row;
+            });
+
+            try {
+                const ws = XLSX.utils.json_to_sheet(exportData);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, "Pedidos_Filtrados");
+
+                // Auto-adjust column widths
+                const wscols = Object.keys(exportData[0]).map(key => ({ wch: Math.max(key.length, 12) }));
+                ws['!cols'] = wscols;
+
+                const fileName = `Pedidos_Erus_${new Date().toISOString().split('T')[0]}.xlsx`;
+                XLSX.writeFile(wb, fileName);
+                showToast("Sucesso", "Arquivo Excel gerado com sucesso!", "success");
+            } catch (err) {
+                console.error("Erro exportando excel:", err);
+                showToast("Erro", "Falha ao gerar o arquivo Excel.", "danger");
+            }
+        }
     </script>
     <script src="js/notifications.js"></script>
 </body>

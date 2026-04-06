@@ -8,6 +8,9 @@ const { spawn } = require('child_process');
 const path = require('path');
 const readline = require('readline');
 const fs = require('fs');
+const dns = require('dns');
+const { promisify } = require('util');
+const dnsLookup = promisify(dns.lookup);
 
 // CONFIGURATIONS
 const ROOT_DIR = path.join(__dirname, '..');
@@ -29,6 +32,37 @@ let totalErrorsCount = 0;
 let logBuffer = []; // We use this for the persistent log file, but terminal will just scroll.
 
 SYNC_BATS.forEach(b => currentStatus[b.name] = '0%');
+let IS_STANDBY = false;
+let IS_NETWORK_DOWN = false;
+
+/**
+ * Check if the machine has network access
+ */
+async function checkNetwork() {
+    try {
+        await dnsLookup('8.8.8.8');
+        IS_NETWORK_DOWN = false;
+        return true;
+    } catch (e) {
+        IS_NETWORK_DOWN = true;
+        return false;
+    }
+}
+
+/**
+ * Check if current time is within Mon-Fri, 06:00 - 18:00
+ */
+function checkSchedule() {
+    const now = new Date();
+    const day = now.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+    const hour = now.getHours();
+
+    const isWeekday = day >= 1 && day <= 5;
+    const isWorkingHours = hour >= 6 && hour < 18;
+
+    IS_STANDBY = !(isWeekday && isWorkingHours);
+    return !IS_STANDBY;
+}
 
 /**
  * Pinned Header Drawing (always at the top of the terminal viewport)
@@ -42,7 +76,13 @@ function drawPinnedDashboard(startTime = null) {
         : '--';
 
     console.log('╔════════════════════════════════════════════════════════════╗');
-    console.log(`║          📊 SGP ERUS - MONITOR DE SINCRONIZAÇÃO            ║`);
+    if (IS_NETWORK_DOWN) {
+        console.log(`║      📡 AGUARDANDO REDE - CONEXÃO NÃO IDENTIFICADA         ║`);
+    } else if (IS_STANDBY) {
+        console.log(`║      💤 MODO STANDBY - FORA DO HORÁRIO COMERCIAL           ║`);
+    } else {
+        console.log(`║          📊 SGP ERUS - MONITOR DE SINCRONIZAÇÃO            ║`);
+    }
     console.log('╠════════════════════════════════════════════════════════════╣');
     console.log(`║  🔄 CICLO: #${cycleCount.toString().padStart(3, '0')}          🕒 MÉDIA: ${avgTime}s p/ ciclo   ║`);
     console.log(`║  🚩 TOTAL ERROS: ${totalErrorsCount.toString().padStart(4, '0')}      📂 LOG: sync-errors.log       ║`);
@@ -167,6 +207,20 @@ async function startForever() {
     }
 
     while (true) {
+        if (!checkSchedule()) {
+            drawPinnedDashboard();
+            // In standby, we just wait 5 minutes before checking again
+            await new Promise(resolve => setTimeout(resolve, 5 * 60 * 1000));
+            continue;
+        }
+
+        if (!(await checkNetwork())) {
+            drawPinnedDashboard();
+            // If network is down, wait 30 seconds before re-checking
+            await new Promise(resolve => setTimeout(resolve, 30 * 1000));
+            continue;
+        }
+
         cycleCount++;
         SYNC_BATS.forEach(b => currentStatus[b.name] = '0%');
         
