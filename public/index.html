@@ -1097,6 +1097,64 @@
         .btn-task-action:hover {
             opacity: 0.9;
         }
+
+        /* User Logs Modal Styles */
+        .logs-table-container {
+            flex: 1;
+            overflow-y: auto;
+            margin-top: 15px;
+            padding-right: 5px;
+        }
+
+        .logs-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0 8px;
+            color: #fff;
+        }
+
+        .logs-table th {
+            text-align: left;
+            padding: 12px;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--text-dim);
+            border-bottom: 1px solid var(--border-subtle);
+            position: sticky;
+            top: 0;
+            background: #09090b;
+            z-index: 5;
+        }
+
+        .logs-table td {
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.02);
+            border-top: 1px solid rgba(255, 255, 255, 0.04);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            font-size: 0.85rem;
+        }
+
+        .logs-table tr td:first-child { border-left: 1px solid rgba(255, 255, 255, 0.04); border-radius: 8px 0 0 8px; }
+        .logs-table tr td:last-child { border-right: 1px solid rgba(255, 255, 255, 0.04); border-radius: 0 8px 8px 0; }
+
+        .log-badge-action {
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: 800;
+            text-transform: uppercase;
+        }
+
+        .log-details-json {
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            color: var(--color-primary);
+            max-width: 300px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
     </style>
     <style>
         /* --- COLLAPSIBLE SIDEBAR CSS --- */
@@ -2217,6 +2275,9 @@
                         <td class="activity-cell" style="font-size: 0.8rem; color: #a1a1aa; cursor: default;" ${tooltipAttr}>${lastActivity}</td>
                         <td class="table-actions">
                             ${actionBtn}
+                            <button class="btn-action edit" onclick="openUserLogs('${u.username}', '${u.name}')" title="Ver Logs de Atividade" style="color: #6366f1; border-color: rgba(99, 102, 241, 0.3); background: rgba(99, 102, 241, 0.1);">
+                                <i class="fa-solid fa-list-ul"></i>
+                            </button>
                             <button class="btn-action edit" onclick="editUserRole('${u.username}', '${u.role}')" title="Editar Permissão">
                                 <i class="fa-solid fa-user-pen"></i>
                             </button>
@@ -3504,6 +3565,69 @@
                     }
                 }
 
+                // --- FUNÇÕES DE LOGS POR USUÁRIO ---
+                async function openUserLogs(username, displayName) {
+                    const modal = document.getElementById('userLogsModal');
+                    const userNameSpan = document.getElementById('logUserDisplayName');
+                    const tbody = document.querySelector('#userLogsTable tbody');
+                    const noLogsMsg = document.getElementById('noUserLogsMessage');
+                    const table = document.getElementById('userLogsTable');
+
+                    userNameSpan.textContent = displayName;
+                    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:30px;">Carregando logs...</td></tr>';
+                    noLogsMsg.style.display = 'none';
+                    table.style.display = 'table';
+                    modal.style.display = 'flex';
+
+                    try {
+                        const response = await fetch(`/api/admin/users/${username}/logs`, {
+                            headers: { 'x-role': localStorage.getItem('erus_role') }
+                        });
+                        const data = await response.json();
+
+                        if (data.success) {
+                            renderUserLogs(data.logs);
+                        } else {
+                            showToast("Erro", "Falha ao buscar logs", "danger");
+                        }
+                    } catch (error) {
+                        console.error(error);
+                        showToast("Erro", "Erro de conexão", "danger");
+                    }
+                }
+
+                function renderUserLogs(logs) {
+                    const tbody = document.querySelector('#userLogsTable tbody');
+                    const noLogsMsg = document.getElementById('noUserLogsMessage');
+                    const table = document.getElementById('userLogsTable');
+                    
+                    tbody.innerHTML = '';
+                    
+                    if (logs.length === 0) {
+                        table.style.display = 'none';
+                        noLogsMsg.style.display = 'block';
+                        return;
+                    }
+
+                    logs.forEach(log => {
+                        const tr = document.createElement('tr');
+                        const date = new Date(log.created_at).toLocaleString();
+                        const details = typeof log.details === 'object' ? JSON.stringify(log.details) : (log.details || '—');
+                        
+                        tr.innerHTML = `
+                            <td style="white-space: nowrap;">${date}</td>
+                            <td><span class="log-badge-action" style="background: rgba(251, 191, 36, 0.1); color: var(--color-primary);">${log.action}</span></td>
+                            <td style="color: var(--text-muted)">${log.table_name || '—'}</td>
+                            <td class="log-details-json" title='${details}'>${details}</td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                }
+
+                function closeUserLogsModal() {
+                    document.getElementById('userLogsModal').style.display = 'none';
+                }
+
                 // --- SECTOR BREAKDOWN GRID ---
                 async function fetchSectorData() {
                     const overlay = document.querySelector('#card-producao .loading-overlay');
@@ -3688,6 +3812,43 @@
             </script>
 
     <!-- Modal de Tarefas removido (Agora integrado no Admin Modal) -->
+    <!-- USER LOGS MODAL -->
+    <div id="userLogsModal" class="modal-overlay" style="z-index: 10001;">
+        <div class="modal-card fullscreen" style="background: #09090b; max-width: 900px; height: 85vh;">
+            <div class="modal-header">
+                <div class="modal-title-group">
+                    <div class="modal-title-icon" style="background: rgba(99, 102, 241, 0.1); color: #6366f1;">
+                        <i class="fa-solid fa-clock-rotate-left"></i>
+                    </div>
+                    <div class="modal-title">Logs de Atividade: <span id="logUserDisplayName" style="color:var(--color-primary)">—</span></div>
+                </div>
+                <button class="modal-close-btn" onclick="closeUserLogsModal()">
+                    <i class="fa-solid fa-times"></i> Fechar
+                </button>
+            </div>
+            <div class="modal-content" style="padding: 24px; display: flex; flex-direction: column;">
+                <div class="logs-table-container">
+                    <table class="logs-table" id="userLogsTable">
+                        <thead>
+                            <tr>
+                                <th>Data/Hora</th>
+                                <th>Ação</th>
+                                <th>Página/Entidade</th>
+                                <th>Detalhes</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- JS Generated -->
+                        </tbody>
+                    </table>
+                    <div id="noUserLogsMessage" style="display: none; text-align: center; padding: 40px; color: var(--text-dim);">
+                        Nenhum log de atividade encontrado para este usuário.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="js/notifications.js"></script>
 </body>
 
