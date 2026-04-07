@@ -1,21 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const Firebird = require('node-firebird');
+const { Firebird, options: firebirdOptions } = require('../lib/firebird-helper');
 const pool = require('../lib/db'); // Adicionado para consulta no Postgres
-
-// Configuração do Firebird
-const firebirdOptions = {
-    host: process.env.FIREBIRD_HOST || 'Desktop-dqarv0d',
-    port: parseInt(process.env.FIREBIRD_PORT) || 3050,
-    database: process.env.FIREBIRD_DATABASE || '\\01\\LM-Sistemas\\SIGE2.0\\Dados\\ERUS.fdb',
-    user: process.env.FIREBIRD_USER || 'SYSDBA',
-    password: process.env.FIREBIRD_PASSWORD || 'masterkey',
-    lowercase_keys: false,
-    role: null,
-    pageSize: 4096,
-    wireCrypt: true,
-    retry: 3
-};
 
 /**
  * Função utilitária para executar queries no Firebird com tratamento de erros

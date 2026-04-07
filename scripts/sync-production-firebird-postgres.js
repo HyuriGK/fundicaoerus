@@ -7,20 +7,8 @@ if (process.pkg) {
     envPath = path.join(path.dirname(process.execPath), '.env.local');
 }
 
-require('dotenv').config({ path: envPath });
-const Firebird = require('node-firebird');
+const { Firebird, options: fbOptions } = require('../lib/firebird-helper');
 const pool = require('../lib/db');
-
-// --- Firebird Configuration ---
-const fbOptions = {
-    host: 'Desktop-dqarv0d',
-    port: 3050,
-    database: '\\01\\LM-Sistemas\\SIGE2.0\\Dados\\ERUS.fdb',
-    user: 'SYSDBA',
-    password: 'masterkey',
-    lowercase_keys: false,
-    pageSize: 4096, wireCrypt: true
-};
 
 // --- Helper Functions ---
 function cleanString(str) {

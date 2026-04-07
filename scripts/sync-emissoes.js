@@ -1,17 +1,6 @@
 require('dotenv').config({ path: '.env.local' });
-const Firebird = require('node-firebird');
+const { Firebird, options: FIREBIRD_OPTIONS } = require('../lib/firebird-helper');
 const { Pool } = require('pg');
-
-// --- CONFIGURAÇÃO ---
-const FIREBIRD_OPTIONS = {
-    host: 'Desktop-dqarv0d',
-    port: 3050,
-    database: '\\01\\LM-Sistemas\\SIGE2.0\\Dados\\ERUS.fdb',
-    user: 'SYSDBA',
-    password: 'masterkey',
-    lowercase_keys: false,
-    pageSize: 4096, wireCrypt: true
-};
 
 function cleanConnectionString(str) {
     if (!str) return '';
@@ -29,10 +18,12 @@ async function syncEmissoes() {
     console.log('🚀 Iniciando sincronização de EMISSÕES (Histórico 2025/2026)...');
     const startTime = Date.now();
 
-    const pgClient = await pgPool.connect();
+    let pgClient;
     let db;
 
     try {
+        pgClient = await pgPool.connect();
+        
         await pgClient.query(`
             CREATE TABLE IF NOT EXISTS firebird_sync_emissoes (
                 sync_key TEXT PRIMARY KEY,
@@ -110,10 +101,10 @@ async function syncEmissoes() {
         `);
 
     } catch (err) {
-        console.error('❌ ERRO NA SINCRONIZAÇÃO DE EMISSÕES:', err);
+        console.error('❌ ERRO NA SINCRONIZAÇÃO DE EMISSÕES:', err.message);
     } finally {
         if (db) db.detach();
-        pgClient.release();
+        if (pgClient) pgClient.release();
         process.exit(0);
     }
 }

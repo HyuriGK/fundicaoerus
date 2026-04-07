@@ -1,5 +1,5 @@
-const Firebird = require('node-firebird');
 const pool = require('../lib/db');
+const { Firebird, options: firebirdOptions } = require('../lib/firebird-helper');
 require('dotenv').config({ path: '.env.local' });
 
 /**
@@ -7,11 +7,6 @@ require('dotenv').config({ path: '.env.local' });
  * Foco: Sincronizar TODAS as OPs Ativas (A, N, P) da Empresa 10 diretamente do Firebird.
  * Melhoria: Joins robustos via PRODUCAO_PEDIDO para recuperar Clientes e Datas de Entrega.
  */
-
-const firebirdOptions = {
-    host: 'Desktop-dqarv0d', port: 3050, database: '\\01\\LM-Sistemas\\SIGE2.0\\Dados\\ERUS.fdb',
-    user: 'SYSDBA', password: 'masterkey', lowercase_keys: false, pageSize: 4096, wireCrypt: true
-};
 
 async function syncMaster() {
     const startTime = Date.now();

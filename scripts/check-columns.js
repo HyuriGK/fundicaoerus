@@ -1,15 +1,6 @@
-const Firebird = require('node-firebird');
 
-const FIREBIRD_OPTIONS = {
-    host: 'Desktop-dqarv0d',
-    port: 3050,
-    database: '\\01\\LM-Sistemas\\SIGE2.0\\Dados\\ERUS.fdb',
-    user: 'SYSDBA',
-    password: 'masterkey',
-    lowercase_keys: false,
-    role: null,
-    pageSize: 4096, wireCrypt: true
-};
+
+const { Firebird, options: FIREBIRD_OPTIONS } = require('../lib/firebird-helper');
 
 Firebird.attach(FIREBIRD_OPTIONS, (err, db) => {
     if (err) throw err;

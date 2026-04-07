@@ -1,17 +1,9 @@
 // Script para CONSULTAR e ANALISAR dados de faturamento diário do Firebird
 // SOMENTE LEITURA - NÃO ALTERA NADA NO BANCO
 
-const Firebird = require('node-firebird');
 
-const options = {
-    host: 'Desktop-dqarv0d',
-    port: 3050,
-    database: '\\01\\LM-Sistemas\\SIGE2.0\\Dados\\ERUS.fdb',
-    user: 'SYSDBA',
-    password: 'masterkey',
-    lowercase_keys: false,
-    pageSize: 4096, wireCrypt: true
-};
+
+const { Firebird, options: options } = require('../lib/firebird-helper');
 
 console.log('📊 ANÁLISE DE FATURAMENTO DIÁRIO - SOMENTE LEITURA\n');
 console.log('='.repeat(100));

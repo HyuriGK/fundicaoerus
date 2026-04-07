@@ -2,7 +2,7 @@
 // Lê dados de faturamento do Firebird e sincroniza com PostgreSQL (Neon)
 // IMPORTANTE: Somente leitura no Firebird, escrita apenas no PostgreSQL
 
-const Firebird = require('node-firebird');
+
 const path = require('path');
 const fs = require('fs');
 
@@ -20,15 +20,7 @@ const pool = require('../lib/db'); // Usar pool existente
 // =========================================================
 
 // Firebird (Somente Leitura)
-const firebirdOptions = {
-    host: 'Desktop-dqarv0d',
-    port: 3050,
-    database: '\\01\\LM-Sistemas\\SIGE2.0\\Dados\\ERUS.fdb',
-    user: 'SYSDBA',
-    password: 'masterkey',
-    lowercase_keys: false,
-    pageSize: 4096, wireCrypt: true
-};
+const { Firebird, options: firebirdOptions } = require('../lib/firebird-helper');
 
 
 // =========================================================

@@ -2,20 +2,12 @@
 // Script de Sincronização de Devoluções: Firebird → PostgreSQL
 // Filtra por FINALIDADE_NOT = 4 e anos 2025/2026
 
-const Firebird = require('node-firebird');
+
 const path = require('path');
 require('dotenv').config({ path: '.env.local' });
 const pool = require('../lib/db');
 
-const firebirdOptions = {
-    host: 'Desktop-dqarv0d',
-    port: 3050,
-    database: '\\01\\LM-Sistemas\\SIGE2.0\\Dados\\ERUS.fdb',
-    user: 'SYSDBA',
-    password: 'masterkey',
-    lowercase_keys: false,
-    pageSize: 4096, wireCrypt: true
-};
+const { Firebird, options: firebirdOptions } = require('../lib/firebird-helper');
 
 function formatarData(data) {
     if (!data) return null;

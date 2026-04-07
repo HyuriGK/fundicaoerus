@@ -4,15 +4,10 @@
 // Hierarquia de Cliente: NOTA_FISCAL -> PEDIDO -> PRODUTO
 
 require('dotenv').config({ path: '.env.local' });
-const Firebird = require('node-firebird');
+
 const pool = require('../lib/db');
 
-const fbOptions = {
-    host: 'Desktop-dqarv0d', port: 3050,
-    database: '\\01\\LM-Sistemas\\SIGE2.0\\Dados\\ERUS.fdb',
-    user: 'SYSDBA', password: 'masterkey',
-    lowercase_keys: false, pageSize: 4096, wireCrypt: true
-};
+const { Firebird, options: fbOptions } = require('../lib/firebird-helper');
 
 // Funções Utilitárias
 const firebirdQuery = (db, query, params = []) => {

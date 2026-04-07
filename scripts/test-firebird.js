@@ -1,18 +1,9 @@
 require('dotenv').config({ path: '.env.local' });
-const Firebird = require('node-firebird');
+
 
 // --- CONFIGURAÇÃO DO FIREBIRD ---
 // PREENCHA AQUI COM SEUS DADOS:
-const options = {
-    host: 'Desktop-dqarv0d',
-    port: 3050,
-    database: '\\01\\LM-Sistemas\\SIGE2.0\\Dados\\ERUS.fdb',
-    user: 'SYSDBA',
-    password: 'masterkey',
-    lowercase_keys: false,
-    role: null,
-    pageSize: 4096, wireCrypt: true
-};
+const { Firebird, options: options } = require('../lib/firebird-helper');
 
 console.log('Tentando conectar ao Firebird...');
 console.log(`Host: ${options.host}:${options.port}`);

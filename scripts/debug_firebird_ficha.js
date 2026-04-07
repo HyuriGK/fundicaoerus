@@ -1,4 +1,4 @@
-const Firebird = require('node-firebird');
+
 const fb = { host: 'Desktop-dqarv0d', port: 3050, database: '\\01\\LM-Sistemas\\SIGE2.0\\Dados\\ERUS.fdb', user: 'SYSDBA', password: 'masterkey' };
 
 Firebird.attach(fb, (err, db) => {

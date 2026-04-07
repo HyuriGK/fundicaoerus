@@ -1,17 +1,9 @@
 require('dotenv').config({ path: '.env.local' });
-const Firebird = require('node-firebird');
+
 const { Pool } = require('pg');
 
 // Configuração do Firebird
-const firebirdOptions = {
-    host: 'Desktop-dqarv0d',
-    port: 3050,
-    database: '\\01\\LM-Sistemas\\SIGE2.0\\Dados\\ERUS.fdb',
-    user: 'SYSDBA',
-    password: 'masterkey',
-    lowercase_keys: false,
-    pageSize: 4096, wireCrypt: true
-};
+const { Firebird, options: firebirdOptions } = require('../lib/firebird-helper');
 
 // Configuração do PostgreSQL (Neon)
 const pgPool = new Pool({
