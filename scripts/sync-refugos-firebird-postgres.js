@@ -33,20 +33,22 @@ async function syncRefugos() {
 
         const query = `
             SELECT 
-                R.CODIGO_REF,
-                R.DATA_REF,
+                PCS.CODIGO_PCS AS CODIGO_REF,
+                PCS.DATA_PCS AS DATA_REF,
                 S.NOME_SET AS SETOR,
                 P.NOME_PRO AS PRODUTO,
-                M.MOTIVO_RFS AS MOTIVO,
-                R.QUANTIDADE_REF AS QUANTIDADE,
-                R.QUANTIDADE_REF * COALESCE(P.PESO_LIQUIDO_PRO, 0) AS PESO_TOTAL,
-                R.ORDEM_PCP_REF AS OP
-            FROM REFUGO R
-            LEFT JOIN SETOR S ON R.SETOR_REF = S.CODIGO_SET
-            LEFT JOIN PRODUTO P ON R.PRODUTO_REF = P.CODIGO_PRO
-            LEFT JOIN REFUGO_STATUS M ON R.STATUS_REF = M.CODIGO_RFS
-            WHERE R.DATA_REF >= '${dataInicioStr}'
-            ORDER BY R.DATA_REF DESC
+                R.NOME_REF AS MOTIVO,
+                PCS.QUANTIDADE_REFUGO_PCS AS QUANTIDADE,
+                PCS.QUANTIDADE_REFUGO_PCS * COALESCE(P.PESO_LIQUIDO_PRO, 0) AS PESO_TOTAL,
+                PCS.DOCUMENTO_PCS AS OP
+            FROM PRODUCAO_SETOR PCS
+            LEFT JOIN SETOR S ON PCS.SETOR_PCS = S.CODIGO_SET
+            LEFT JOIN PRODUCAO_SETOR_PECA PCSP ON PCS.CODIGO_PCS = PCSP.PCS_ID_CODIGO_PCSP
+            LEFT JOIN PRODUTO P ON PCSP.PRO_CODIGO_PCSP = P.CODIGO_PRO
+            LEFT JOIN REFUGO R ON PCS.REF_CODIGO_PCS = R.CODIGO_REF
+            WHERE PCS.QUANTIDADE_REFUGO_PCS > 0
+              AND PCS.DATA_PCS >= '${dataInicioStr}'
+            ORDER BY PCS.DATA_PCS DESC
         `;
 
         const result = await new Promise((resolve, reject) => {
