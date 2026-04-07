@@ -129,8 +129,9 @@ async function syncFaturamento() {
                 ]);
                 insertedCount++;
 
-                if (insertedCount % 100 === 0) {
-                    console.log(`  ⏳ ${insertedCount} registros inseridos...`);
+                if (insertedCount % 100 === 0 || insertedCount === firebirdData.length) {
+                    const pct = ((insertedCount / firebirdData.length) * 100).toFixed(0);
+                    process.stdout.write(`@PROG:FATURAMENTO:${pct}%\n`);
                 }
             } catch (err) {
                 console.error(`  ⚠️  Erro ao inserir registro:`, err.message);
