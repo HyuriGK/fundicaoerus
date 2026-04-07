@@ -17,7 +17,7 @@
                 <div class="loader-logo">
                     <i class="fa-solid fa-layer-group"></i>
                 </div>
-                <div class="loader-text">Iniciando Sistema</div>
+                <div class="loader-text">Carregando Informações</div>
                 <div class="loader-progress-bg">
                     <div id="loader-progress-fill"></div>
                 </div>
