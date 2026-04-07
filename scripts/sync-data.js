@@ -1,94 +1,92 @@
-const { Firebird, attachWithRetry } = require('../lib/firebird-helper');
-const pool = require('../lib/db');
+require('dotenv').config({ path: '.env.local' });
+const { Firebird, options: FIREBIRD_OPTIONS } = require('../lib/firebird-helper');
+const { Pool } = require('pg');
 
-async function syncPedidos() {
-    console.log('🚀 Iniciando sincronização de PEDIDOS (Histórico 2025/2026)...');
+function cleanConnectionString(str) {
+    if (!str) return '';
+    let cleaned = str.trim();
+    if (cleaned.startsWith('psql')) cleaned = cleaned.substring(4).trim();
+    return cleaned.replace(/^['"]|['"]$/g, '');
+}
+
+const pgPool = new Pool({
+    connectionString: cleanConnectionString(process.env.DATABASE_URL),
+    ssl: { rejectUnauthorized: false }
+});
+
+async function syncData() {
+    console.log('🚀 Iniciando sincronização simplificada de DADOS (PEDIDOS/FATURAMENTO)...');
+    const startTime = Date.now();
+
+    let pgClient;
+    let db;
 
     try {
-        // 1. Criar Tabelas no Postgres
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS firebird_sync_pedidos (
-                sync_key TEXT PRIMARY KEY,
-                data JSONB,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE TABLE IF NOT EXISTS firebird_sync_emissoes (
+        pgClient = await pgPool.connect();
+        
+        await pgClient.query(`
+            CREATE TABLE IF NOT EXISTS firebird_sync_dados (
                 sync_key TEXT PRIMARY KEY,
                 data JSONB,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
 
-        // 2. Conectar ao Firebird com Retry
-        const db = await attachWithRetry();
-        console.log('✅ Conectado ao Firebird com sucesso.');
+        db = await new Promise((resolve, reject) => {
+            Firebird.attach(FIREBIRD_OPTIONS, (err, d) => {
+                if (err) reject(err);
+                else resolve(d);
+            });
+        });
+        console.log('✅ Conectado ao Firebird');
 
         // Buscar Pedidos/Faturamentos Ativos (2025/2026)
         const query = `
             SELECT 
-                P.CODIGO_PED, P.CODIGO_CLI_PED, P.DATA_PED, P.DATA_ENTREGA_PED,
-                P.VALOR_TOTAL_PED, P.STATUS_PED, P.STATUS_PRODUCAO_PED,
-                P.ORDEM_COMPRA_PED, P.CLIENTE_PED, P.VENDEDOR_PED,
-                C.RAZAO_SOCIAL_CLI AS NOME_CLIENTE,
-                CASE 
-                    WHEN P.STATUS_PED = 'C' THEN 'Cancelado'
-                    WHEN P.STATUS_PED = 'F' THEN 'Faturado'
-                    WHEN P.STATUS_PED = 'P' THEN 'Pendente'
-                    ELSE 'Outro'
-                END AS STATUS_DESCRITIVO
+                P.CODIGO_PED, P.ANO_PED, P.EMPRESA_PED, P.EMISSAO_PED, P.STATUS_PED,
+                C.RAZAO_SOCIAL_CLI as NOME_CLIENTE,
+                (SELECT SUM(PP.VALOR_PPR * PP.QUANTIDADE_PPR) FROM PEDIDO_PRODUTO PP WHERE PP.CODIGO_PPR = P.CODIGO_PED AND PP.ANO_PPR = P.ANO_PED AND PP.EMPRESA_PPR = P.EMPRESA_PED) as TOTAL_PEDIDO
             FROM PEDIDO P
-            LEFT JOIN CLIENTE C ON P.CLIENTE_PED = C.CODIGO_CLI
-            WHERE EXTRACT(YEAR FROM P.DATA_PED) IN (2025, 2026)
+            JOIN CLIENTE C ON P.CLIENTE_PED = C.CODIGO_CLI AND P.CLI_EMPRESA_PED = C.EMPRESA_CLI
+            WHERE EXTRACT(YEAR FROM P.EMISSAO_PED) IN (2025, 2026)
+            AND P.STATUS_PED <> 'C'
         `;
 
-        const result = await new Promise((resolve, reject) => {
-            db.query(query, [], (err, res) => {
+        const results = await new Promise((resolve, reject) => {
+            db.query(query, (err, res) => {
                 if (err) reject(err);
-                else resolve(res || []);
+                else resolve(res);
             });
         });
 
-        console.log(`📦 Encontrados ${result.length} pedidos no Firebird.`);
+        console.log(`📊 ${results.length} pedidos encontrados.`);
 
-        let inserted = 0;
-        for (const row of result) {
-            const syncKey = `PED-${row.CODIGO_PED}`;
-            await pool.query(`
-                INSERT INTO firebird_sync_pedidos (sync_key, data, updated_at)
-                VALUES ($1, $2, CURRENT_TIMESTAMP)
-                ON CONFLICT (sync_key) DO UPDATE SET
-                    data = EXCLUDED.data,
-                    updated_at = CURRENT_TIMESTAMP
-            `, [syncKey, row]);
+        if (results.length > 0) {
+            console.log('📤 Enviando para o Postgres...');
+            for (let i = 0; i < results.length; i += 500) {
+                const batch = results.slice(i, i + 500);
+                const keys = batch.map(r => `PED-${r.EMPRESA_PED}-${r.ANO_PED}-${r.CODIGO_PED}`);
+                const data = batch.map(r => JSON.stringify(r));
 
-            inserted++;
-            if (inserted % 100 === 0 || inserted === result.length) {
-                const pct = ((inserted / result.length) * 100).toFixed(0);
-                process.stdout.write(`@PROG:PEDIDOS:${pct}%\n`);
+                await pgClient.query(`
+                    INSERT INTO firebird_sync_dados (sync_key, data, updated_at)
+                    SELECT unnest($1::text[]), unnest($2::jsonb[]), NOW()
+                    ON CONFLICT (sync_key) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW();
+                `, [keys, data]);
+                const pct = ((Math.min(i + 500, results.length) / results.length) * 100).toFixed(0);
+                process.stdout.write(`@PROG:DADOS:${pct}%\n`);
             }
         }
 
-        // ATUALIZAR STATUS DE SINCRONIZAÇÃO
-        try {
-            await pool.query("SET TIME ZONE 'America/Sao_Paulo'");
-            await pool.query(`
-                INSERT INTO sync_status (screen_name, last_sync_at)
-                VALUES ('Pedidos', NOW())
-                ON CONFLICT (screen_name) DO UPDATE SET last_sync_at = NOW();
-            `);
-            console.log('📊 Status de sincronização atualizado para: Pedidos');
-        } catch (statusErr) {
-            console.error('⚠️ Erro ao atualizar status de sincronização:', statusErr.message);
-        }
+        console.log(`\n\n✅ Sincronização de DADOS concluída em ${((Date.now() - startTime)/1000).toFixed(1)}s!`);
 
-        db.detach();
-        console.log('✅ Sincronização de pedidos finalizada com sucesso.');
+    } catch (err) {
+        console.error('❌ ERRO NA SINCRONIZAÇÃO DE DADOS:', err.message);
+    } finally {
+        if (db) db.detach();
+        if (pgClient) pgClient.release();
         process.exit(0);
-
-    } catch (error) {
-        console.error('❌ Erro crítico na sincronização de pedidos:', error);
-        process.exit(1);
     }
 }
 
-syncPedidos();
+syncData();

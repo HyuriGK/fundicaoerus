@@ -1,6 +1,12 @@
 const path = require('path');
 const fs = require('fs');
 
+// Determine path to .env.local
+let envPath = '.env.local';
+if (process.pkg) {
+    envPath = path.join(path.dirname(process.execPath), '.env.local');
+}
+
 const { Firebird, options: fbOptions } = require('../lib/firebird-helper');
 const pool = require('../lib/db');
 
@@ -31,7 +37,6 @@ function chunkArray(myArray, chunk_size) {
 // --- Main Execution ---
 (async () => {
     try {
-        console.log('🚀 Iniciando sincronização de PRODUÇÃO (Histórico 2025/2026)...');
         const syncStartTime = new Date(); // Capture start time for Mark & Sweep
         console.log(`🕒 Sync Start Time: ${syncStartTime.toISOString()}`);
 
@@ -94,9 +99,12 @@ function chunkArray(myArray, chunk_size) {
         // await pool.query("DELETE FROM producao_apontada_sincronizada WHERE data_producao >= $1", [startDate]);
         // console.log('✅ Data cleared.');
 
-        const { attachWithRetry } = require('../lib/firebird-helper');
-        const db = await attachWithRetry();
-        console.log(`✅ Firebird attached. Fetching Movements starting from ${startDate}...`);
+        Firebird.attach(fbOptions, function (err, db) {
+            if (err) {
+                console.error('❌ Firebird Connection Error:', err);
+                process.exit(1);
+            }
+            console.log(`✅ Firebird attached. Fetching Movements starting from ${startDate}...`);
 
             // 1. Fetch PRODUCAO_SETOR (Base Table as per user request)
             // User restriction: "se baseie em PRODUCAO_SETOR SOMENTE COM AS COLUNAS QUE EU TE MANDEI"
@@ -319,6 +327,8 @@ function chunkArray(myArray, chunk_size) {
                 await pool.end();
                 process.exit(0);
             });
+        });
+
     } catch (err) {
         console.error('❌ Critical Error:', err);
         process.exit(1);

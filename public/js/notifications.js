@@ -137,30 +137,14 @@ ${msg.message}
     }
 
     if (bell) {
-        bell.addEventListener('click', async () => {
-            // Apenas Admin (Role puro) abre o painel de envio. 
-            // Desenvolvedores agora apenas visualizam notificações conforme solicitado.
-            if (role === 'admin') {
-                if (typeof openAdminModal === 'function') {
-                    openAdminModal();
-                    setTimeout(() => switchAdminView('communication'), 100);
-                }
+        bell.addEventListener('click', () => {
+            if (role === 'admin' || role === 'desenvolvedor') {
+                openAdminModal();
+                setTimeout(() => switchAdminView('communication'), 100);
             } else {
-                try {
-                    // Forçar re-check ao clicar no sino
-                    const res = await fetch('/api/communications/unread', {
-                        headers: { 'x-user': user }
-                    });
-                    const data = await res.json();
-                    
-                    if (data.success && data.unread.length > 0) {
-                        showMessagePopup(data.unread[0]);
-                    } else {
-                        showNoNotificationsMessage();
-                    }
-                } catch (err) {
-                    console.error('Erro ao abrir notificações:', err);
-                }
+                // Para usuários comuns, forçar re-exibição se clicar no sino
+                sessionStorage.removeItem('last_comm_popup_id');
+                checkNotifications();
             }
         });
     }
