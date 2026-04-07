@@ -14,7 +14,7 @@ const firebirdOptions = {
     user: 'SYSDBA',
     password: 'masterkey',
     lowercase_keys: false,
-    pageSize: 4096
+    pageSize: 4096, wireCrypt: true
 };
 
 function formatarData(data) {

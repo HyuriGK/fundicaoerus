@@ -8,7 +8,7 @@ const options = {
     user: 'SYSDBA',
     password: 'masterkey',
     lowercase_keys: false,
-    pageSize: 4096
+    pageSize: 4096, wireCrypt: true
 };
 
 console.log('📊 Consultando faturamento de 2026...\n');

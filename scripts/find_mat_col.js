@@ -6,7 +6,7 @@ const options = {
     user: 'SYSDBA',
     password: 'masterkey',
     lowercase_keys: false,
-    pageSize: 4096
+    pageSize: 4096, wireCrypt: true
 };
 
 Firebird.attach(options, function (err, db) {

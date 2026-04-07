@@ -3,7 +3,7 @@ const options = {
     host: 'Desktop-dqarv0d', port: 3050,
     database: '\\01\\LM-Sistemas\\SIGE2.0\\Dados\\ERUS.fdb',
     user: 'SYSDBA', password: 'masterkey',
-    lowercase_keys: false, role: null, pageSize: 4096
+    lowercase_keys: false, role: null, pageSize: 4096, wireCrypt: true
 };
 firebird.attach(options, function (err, db) {
     if (err) throw err;

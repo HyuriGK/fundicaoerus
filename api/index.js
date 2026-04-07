@@ -104,9 +104,12 @@ app.get('/api/test-firebird', (req, res) => {
     const options = {
         host: process.env.FIREBIRD_HOST || 'Desktop-dqarv0d',
         port: parseInt(process.env.FIREBIRD_PORT) || 3050,
-        database: process.env.FIREBIRD_DATABASE || '\\\\01\\\\LM-Sistemas\\\\SIGE2.0\\\\Dados\\\\ERUS.fdb',
+        database: process.env.FIREBIRD_DATABASE || '\\01\\LM-Sistemas\\SIGE2.0\\Dados\\ERUS.fdb',
         user: process.env.FIREBIRD_USER || 'SYSDBA',
-        password: process.env.FIREBIRD_PASSWORD || 'masterkey'
+        password: process.env.FIREBIRD_PASSWORD || 'masterkey',
+        lowercase_keys: false,
+        pageSize: 4096,
+        wireCrypt: true
     };
     Firebird.attach(options, (err, db) => {
         if (err) return res.status(500).json({ error: 'Connection failed', details: err.message });

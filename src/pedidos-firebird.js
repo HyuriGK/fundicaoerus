@@ -7,12 +7,13 @@ const pool = require('../lib/db'); // Adicionado para consulta no Postgres
 const firebirdOptions = {
     host: process.env.FIREBIRD_HOST || 'Desktop-dqarv0d',
     port: parseInt(process.env.FIREBIRD_PORT) || 3050,
-    database: process.env.FIREBIRD_DATABASE || '\\\\01\\\\LM-Sistemas\\\\SIGE2.0\\\\Dados\\\\ERUS.fdb',
+    database: process.env.FIREBIRD_DATABASE || '\\01\\LM-Sistemas\\SIGE2.0\\Dados\\ERUS.fdb',
     user: process.env.FIREBIRD_USER || 'SYSDBA',
     password: process.env.FIREBIRD_PASSWORD || 'masterkey',
     lowercase_keys: false,
     role: null,
     pageSize: 4096,
+    wireCrypt: true,
     retry: 3
 };
 

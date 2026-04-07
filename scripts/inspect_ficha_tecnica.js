@@ -8,7 +8,7 @@ const fbOptions = {
     user: 'SYSDBA',
     password: 'masterkey',
     lowercase_keys: false,
-    pageSize: 4096
+    pageSize: 4096, wireCrypt: true
 };
 
 Firebird.attach(fbOptions, function (err, db) {

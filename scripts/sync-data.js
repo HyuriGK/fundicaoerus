@@ -10,7 +10,7 @@ const FIREBIRD_OPTIONS = {
     user: 'SYSDBA',
     password: 'masterkey',
     lowercase_keys: false,
-    pageSize: 4096
+    pageSize: 4096, wireCrypt: true
 };
 
 function cleanConnectionString(str) {

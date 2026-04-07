@@ -7,7 +7,7 @@ const options = {
     user: 'SYSDBA',
     password: 'masterkey',
     lowercase_keys: false,
-    pageSize: 4096
+    pageSize: 4096, wireCrypt: true
 };
 
 const tables = ['FICHA_TECNICA', 'PRODUTO', 'PRODUTOS'];

@@ -11,7 +11,7 @@ const options = {
     password: 'masterkey',
     lowercase_keys: false,
     role: null,
-    pageSize: 4096
+    pageSize: 4096, wireCrypt: true
 };
 
 console.log('Tentando conectar ao Firebird...');

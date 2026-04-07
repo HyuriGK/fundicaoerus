@@ -8,7 +8,7 @@ const options = {
     password: 'masterkey',
     lowercase_keys: false,
     role: null,
-    pageSize: 4096
+    pageSize: 4096, wireCrypt: true
 };
 
 // Query exata do endpoint (adaptada para console)
