@@ -1,4 +1,3 @@
-require('dotenv').config({ path: '.env.local' });
 const { Firebird, options: FIREBIRD_OPTIONS } = require('../lib/firebird-helper');
 const { Pool } = require('pg');
 
