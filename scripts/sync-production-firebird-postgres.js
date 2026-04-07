@@ -1,12 +1,6 @@
 const path = require('path');
 const fs = require('fs');
 
-// Determine path to .env.local
-let envPath = '.env.local';
-if (process.pkg) {
-    envPath = path.join(path.dirname(process.execPath), '.env.local');
-}
-
 const { Firebird, options: fbOptions } = require('../lib/firebird-helper');
 const pool = require('../lib/db');
 

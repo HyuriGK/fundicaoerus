@@ -1,10 +1,4 @@
-// scripts/sync-devolucoes.js
-// Script de Sincronização de Devoluções: Firebird → PostgreSQL
-// Filtra por FINALIDADE_NOT = 4 e anos 2025/2026
-
-
 const path = require('path');
-require('dotenv').config({ path: '.env.local' });
 const pool = require('../lib/db');
 
 const { Firebird, options: firebirdOptions } = require('../lib/firebird-helper');

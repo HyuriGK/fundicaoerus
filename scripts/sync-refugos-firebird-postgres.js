@@ -1,12 +1,8 @@
-
 // Script: sync-refugos-firebird-postgres.js
 // Sincroniza dados de REFUGO (PRODUCAO_SETOR) para PostgreSQL
 // Hierarquia de Cliente: NOTA_FISCAL -> PEDIDO -> PRODUTO
 
-require('dotenv').config({ path: '.env.local' });
-
 const pool = require('../lib/db');
-
 const { Firebird, options: fbOptions } = require('../lib/firebird-helper');
 
 // Funções Utilitárias

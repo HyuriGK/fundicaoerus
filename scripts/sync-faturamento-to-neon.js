@@ -1,13 +1,17 @@
-require('dotenv').config({ path: '.env.local' });
-
-const { Pool } = require('pg');
-
 // Configuração do Firebird
 const { Firebird, options: firebirdOptions } = require('../lib/firebird-helper');
+const { Pool } = require('pg');
+
+function cleanConnectionString(str) {
+    if (!str) return '';
+    let cleaned = str.trim();
+    if (cleaned.startsWith('psql')) cleaned = cleaned.substring(4).trim();
+    return cleaned.replace(/^['"]|['"]$/g, '');
+}
 
 // Configuração do PostgreSQL (Neon)
 const pgPool = new Pool({
-    connectionString: process.env.DATABASE_URL.replace(/^psql\s+'|'$/g, ''),
+    connectionString: cleanConnectionString(process.env.DATABASE_URL),
     ssl: { rejectUnauthorized: false }
 });
 
