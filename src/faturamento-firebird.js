@@ -1,8 +1,6 @@
 // src/faturamento-firebird.js
 const express = require('express');
 const router = express.Router();
-const Firebird = require('node-firebird');
-
 // Configuração do Firebird
 const { Firebird, options: firebirdOptions } = require('../lib/firebird-helper');
 
