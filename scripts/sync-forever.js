@@ -160,11 +160,12 @@ function runBat(batEntry) {
                     if (parts.length >= 3) {
                         currentStatus[parts[1]] = parts[2];
                     }
-                } else if (trimmedLine.includes('❌') || (trimmedLine.toLowerCase().includes('error:') && !trimmedLine.toLowerCase().includes('warning'))) {
-                    logEvent(batEntry.name, trimmedLine, true);
-                } else if (trimmedLine.includes('Warning:') || trimmedLine.includes('SECURITY WARNING:')) {
-                    // Benign warnings - just log as info for history without setting ERROR status
-                    logEvent(batEntry.name, trimmedLine, false);
+                } else if (trimmedLine) {
+                    // Log EVERY line that isn't @PROG to help with debugging
+                    // Identify errors based on prefix or keyword
+                    const isErr = trimmedLine.includes('❌') || 
+                                 (trimmedLine.toLowerCase().includes('error:') && !trimmedLine.toLowerCase().includes('warning'));
+                    logEvent(batEntry.name, trimmedLine, isErr);
                 }
             });
         });
