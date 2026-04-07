@@ -6,14 +6,8 @@
 const path = require('path');
 const fs = require('fs');
 
-// Determine path to .env.local
-let envPath = '.env.local';
-if (process.pkg) {
-    envPath = path.join(path.dirname(process.execPath), '.env.local');
-}
-
-require('dotenv').config({ path: envPath });
-const pool = require('../lib/db'); // Usar pool existente
+// Usar helper centralizado e pool existente
+const pool = require('../lib/db');
 
 // =========================================================
 // CONFIGURAÇÕES
