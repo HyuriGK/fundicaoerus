@@ -8,8 +8,8 @@ const Firebird = require('node-firebird');
 const pool = require('../lib/db');
 
 const fbOptions = {
-    host: '10.1.1.100', port: 3050,
-    database: '/home/lm/LM-Sistemas/SIGE2.0/Dados/sige.fdb',
+    host: 'Desktop-dqarv0d', port: 3050,
+    database: '\\01\\LM-Sistemas\\SIGE2.0\\Dados\\ERUS.fdb',
     user: 'SYSDBA', password: 'masterkey',
     lowercase_keys: false, pageSize: 4096
 };

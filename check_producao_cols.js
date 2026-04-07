@@ -1,5 +1,5 @@
 const Firebird = require('node-firebird');
-const options = { host: '10.1.1.100', port: 3050, database: '/home/lm/LM-Sistemas/SIGE2.0/Dados/sige.fdb', user: 'SYSDBA', password: 'masterkey', lowercase_keys: false, pageSize: 4096 };
+const options = { host: 'Desktop-dqarv0d', port: 3050, database: '\\01\\LM-Sistemas\\SIGE2.0\\Dados\\ERUS.fdb', user: 'SYSDBA', password: 'masterkey', lowercase_keys: false, pageSize: 4096 };
 Firebird.attach(options, function (err, db) {
     if (err) { console.error('Connection failed:', err.message); process.exit(1); }
     const query = `

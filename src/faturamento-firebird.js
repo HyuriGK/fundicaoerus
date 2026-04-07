@@ -5,11 +5,11 @@ const Firebird = require('node-firebird');
 
 // Configuração do Firebird
 const firebirdOptions = {
-    host: '10.1.1.100',
-    port: 3050,
-    database: '/home/lm/LM-Sistemas/SIGE2.0/Dados/sige.fdb',
-    user: 'SYSDBA',
-    password: 'masterkey',
+    host: process.env.FIREBIRD_HOST || 'Desktop-dqarv0d',
+    port: parseInt(process.env.FIREBIRD_PORT) || 3050,
+    database: process.env.FIREBIRD_DATABASE || '\\\\01\\\\LM-Sistemas\\\\SIGE2.0\\\\Dados\\\\ERUS.fdb',
+    user: process.env.FIREBIRD_USER || 'SYSDBA',
+    password: process.env.FIREBIRD_PASSWORD || 'masterkey',
     lowercase_keys: false,
     pageSize: 4096
 };
