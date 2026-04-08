@@ -78,6 +78,19 @@ async function syncData() {
         }
 
         console.log(`\n\n✅ Sincronização de DADOS concluída em ${((Date.now() - startTime)/1000).toFixed(1)}s!`);
+        
+        // ATUALIZAR STATUS
+        try {
+            await pgClient.query("SET TIME ZONE 'America/Sao_Paulo'");
+            await pgClient.query(`
+                INSERT INTO sync_status (screen_name, last_sync_at)
+                VALUES ('Pedidos', NOW())
+                ON CONFLICT (screen_name) DO UPDATE SET last_sync_at = NOW();
+            `);
+            console.log('📊 Status de sincronização atualizado para: Pedidos');
+        } catch (statusErr) {
+            console.error('⚠️ Erro ao atualizar status de sincronização:', statusErr.message);
+        }
 
     } catch (err) {
         console.error('❌ ERRO NA SINCRONIZAÇÃO DE DADOS:', err.message);
