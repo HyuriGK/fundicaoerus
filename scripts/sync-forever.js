@@ -185,8 +185,8 @@ function runBat(batEntry) {
         child.stderr.on('data', (data) => {
             const errLog = data.toString().trim();
             if (errLog && !errLog.includes('terminada')) {
-                // Ignore Node/PG specific warnings in stderr
-                if (errLog.includes('Warning:') || errLog.includes('SECURITY WARNING:')) {
+                // Ignore Node/PG specific warnings in stderr or transient login retries (⏳)
+                if (errLog.includes('Warning:') || errLog.includes('SECURITY WARNING:') || errLog.includes('⏳')) {
                     logEvent(batEntry.name, errLog, false);
                 } else {
                     logEvent(batEntry.name, errLog, true);
