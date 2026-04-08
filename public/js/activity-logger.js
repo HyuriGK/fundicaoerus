@@ -978,9 +978,4 @@
     // 4. Verificar sessão periodicamente (a cada 60s)
     setInterval(verificarSessao, 60000);
 
-    // EXPORTAÇÃO GLOBAL
-    window.ActivityLogger = {
-        log: logActivity
-    };
-
 })();
