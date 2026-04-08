@@ -703,15 +703,12 @@
                     <span class="kpi-value warning" id="kpi-emitted-pending-weight" style="color: var(--status-warning)">0 kg</span>
                 </div>
                 <!-- FINANCEIRO BRUTO -->
-                <div class="kpi-card" id="card-finance-total">
+                <div class="kpi-card" id="card-finance-total" onclick="toggleFinance(event)" title="Clique para mostrar/ocultar valores">
                     <span class="kpi-title">Financeiro Emitido (Bruto)</span>
                     <span class="kpi-value accent" id="kpi-total-value">R$ 0,00</span>
-                    <button id="btn-toggle-finance" class="toggle-finance-btn" title="Alternar Visibilidade Financeira" onclick="toggleFinance(event)">
-                        <i class="fa-solid fa-eye-slash"></i>
-                    </button>
                 </div>
                 <!-- FINANCEIRO PENDENTE -->
-                <div class="kpi-card" id="card-finance-pending" onclick="showRecords('pending_emitted')">
+                <div class="kpi-card" id="card-finance-pending" onclick="toggleFinance(event)" title="Clique para mostrar/ocultar valores">
                     <span class="kpi-title">Financeiro Emitido (Pendente)</span>
                     <span class="kpi-value warning" id="kpi-emitted-pending-value-money" style="color: var(--status-warning)">R$ 0,00</span>
                 </div>
@@ -914,14 +911,11 @@
                 
                 console.log('User Role:', userRole);
                 
-                // Only Commercial, Developer and Administrator can toggle
-                const canToggle = ['desenvolvedor', 'comercial', 'administrador'].includes(userRoleLower);
-                const btnToggle = document.getElementById('btn-toggle-finance');
-                if (btnToggle) btnToggle.style.display = canToggle ? 'flex' : 'none';
+                // Only Commercial, Developer and Administrator can see finance values (via click)
+                const isAuthorized = ['administrador', 'desenvolvedor', 'comercial'].includes(userRoleLower);
 
                 // Initial visibility: Always hidden by default for security
                 valorVisible = false;
-                updateFinanceToggleIcon();
 
                 // 3. Dados em paralelo
                 const year = document.getElementById('filter-year').value;
@@ -1014,27 +1008,30 @@
             document.getElementById('kpi-emitted-pending-weight').innerText = `${pendEmittedW.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} kg`;
             
             document.getElementById('kpi-total-value').innerText = valorVisible ? 
-                totalV.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'R$ ***';
+                totalV.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '----';
 
             document.getElementById('kpi-emitted-pending-value-money').innerText = valorVisible ? 
-                pendEmittedV.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'R$ ***';
+                pendEmittedV.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '----';
             
             document.getElementById('pending-info').innerText = `Pendente (Seleção): ${pendEmittedW.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} kg`;
         }
 
         function toggleFinance(event) {
             if (event) event.stopPropagation();
+            
+            // Check authorization before toggling
+            const userRoleRaw = localStorage.getItem('erus_role') || '';
+            const userRoleLower = userRoleRaw.trim().toLowerCase();
+            const isAuthorized = ['administrador', 'desenvolvedor', 'comercial'].includes(userRoleLower);
+
+            if (!isAuthorized) {
+                alert('Acesso negado. Você não tem permissão para visualizar dados financeiros.');
+                return;
+            }
+
             valorVisible = !valorVisible;
             console.log('Toggle Finance:', valorVisible);
-            updateFinanceToggleIcon();
             processAndRender();
-        }
-
-        function updateFinanceToggleIcon() {
-            const icon = document.querySelector('#btn-toggle-finance i');
-            if (icon) {
-                icon.className = valorVisible ? 'fa-solid fa-eye' : 'fa-solid fa-eye-slash';
-            }
         }
 
         // --- CHARTS LOGIC ---
