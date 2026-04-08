@@ -13,6 +13,9 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     
     <script src="js/activity-logger.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
     <style>
         /* --- BLOQUEIO DE SELEÇÃO GLOBAL --- */
@@ -480,8 +483,8 @@
                 <div class="filter-group">
                     <select id="filter-year" onchange="processAndRender()">
                         <option value="2024">2024</option>
-                        <option value="2025" selected>2025</option>
-                        <option value="2026">2026</option>
+                        <option value="2025">2025</option>
+                        <option value="2026" selected>2026</option>
                     </select>
                     <select id="filter-month" onchange="processAndRender()">
                         <option value="all">Ano Completo</option>
@@ -666,15 +669,10 @@
                     if (wRes.ok) customWeights = await wRes.json();
                 } catch (err) { console.warn('Erro ao carregar pesos', err); }
 
-                // 2. Permissões de Usuário
-                try {
-                    const sessionRes = await fetch('/api/session');
-                    if (sessionRes.ok) {
-                        const session = await sessionRes.json();
-                        const role = session.user?.role;
-                        valorVisible = ['Administrador', 'Desenvolvedor', 'Comercial'].includes(role);
-                    }
-                } catch (err) { console.warn('Erro ao verificar sessão', err); }
+                // 2. Permissões de Usuário (via localStorage como no pedidos.html)
+                const userRole = localStorage.getItem('erus_role');
+                const userName = localStorage.getItem('erus_name');
+                valorVisible = ['Administrador', 'Desenvolvedor', 'Comercial'].includes(userRole);
 
                 // 3. Dados em paralelo
                 const year = document.getElementById('filter-year').value;
@@ -683,18 +681,24 @@
                     fetch('/api/pedidos-sync')
                 ]);
 
-                if (totalRes.ok) rawTotalEmissions = await totalRes.json();
-                if (pendingRes.ok) rawPendingEmissions = await pendingRes.json();
+                if (!totalRes.ok || !pendingRes.ok) {
+                    throw new Error('Falha na resposta do servidor.');
+                }
 
+                rawTotalEmissions = await totalRes.json();
+                rawPendingEmissions = await pendingRes.json();
+
+                console.log('✅ Conexão confirmada. Dados de 2026 recebidos.');
                 processAndRender();
                 
                 if (window.hideLoader) window.hideLoader();
-                ActivityLogger.log('Acessou Painel de Emissões', 'Visualização analítica de pedidos');
+                ActivityLogger.log('Acessou Painel de Emissões', `Usuário: ${userName || 'N/A'}`);
                 
                 document.getElementById('connection-status').style.display = 'inline-flex';
             } catch (err) {
                 console.error('Erro ao carregar:', err);
                 if (window.hideLoader) window.hideLoader();
+                alert('Erro na conexão com o servidor. Tente recarregar a página (F5).');
             }
         }
 
