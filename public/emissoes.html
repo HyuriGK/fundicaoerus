@@ -501,7 +501,7 @@
             position: relative;
         }
 
-        /* --- TABLE & MODAL --- */
+        /* --- TABLE & MODAL (PEDIDOS CLONE) --- */
         .modal {
             display: none;
             position: fixed;
@@ -515,69 +515,122 @@
 
         .modal-content {
             background: #09090b;
-            width: 100%;
-            height: 100%;
+            width: 100vw;
+            height: 100vh;
             border-radius: 0;
             border: none;
             display: flex;
             flex-direction: column;
             overflow: hidden;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            padding: 30px 40px;
         }
 
         .modal-header {
-            padding: 20px 32px;
-            border-bottom: 1px solid var(--border-subtle);
             display: flex;
             justify-content: space-between;
             align-items: center;
-            background: rgba(24, 24, 27, 0.5);
+            border-bottom: 1px solid var(--border-subtle);
+            padding-bottom: 15px;
+            margin-bottom: 20px;
+            flex-shrink: 0;
         }
 
-        .modal-title { font-size: 1.25rem; font-weight: 800; color: #fff; }
+        .modal-title {
+            font-size: 1.8rem;
+            color: var(--color-primary);
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
 
-        .table-area {
-            flex: 1;
+        .modal-close {
+            color: var(--status-danger);
+            cursor: pointer;
+            font-size: 2rem;
+            transition: transform 0.2s;
+        }
+
+        .modal-close:hover {
+            transform: scale(1.1);
+            color: #ff0000;
+        }
+
+        .table-container {
+            background: rgba(24, 24, 27, 0.7);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
             overflow: auto;
-            padding: 20px;
+            width: 100%;
+            flex-grow: 1;
+            position: relative;
         }
 
         table {
             width: 100%;
             border-collapse: collapse;
             font-family: var(--font-mono);
-            font-size: 0.8rem;
+            font-size: 0.75rem;
+            table-layout: fixed;
         }
 
         th {
             background: #18181b;
-            padding: 12px;
-            text-align: left;
             color: var(--text-muted);
+            font-weight: 600;
+            text-transform: uppercase;
+            border-bottom: 1px solid var(--border-subtle);
+            border-right: 1px solid var(--border-separator);
+            padding: 10px 4px;
+            text-align: left;
             position: sticky;
             top: 0;
-            z-index: 10;
-            border-bottom: 2px solid var(--border-subtle);
+            z-index: 20;
         }
 
         td {
-            padding: 10px 12px;
-            border-bottom: 1px solid var(--border-separator);
-            color: #e4e4e7;
+            padding: 8px 4px;
+            border-bottom: 1px solid var(--border-subtle);
+            border-right: 1px solid var(--border-separator);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            color: var(--text-main);
         }
 
         tr:hover td {
-            background: rgba(255, 255, 255, 0.03);
+            background: rgba(255, 255, 255, 0.02);
             color: var(--color-primary);
         }
 
-        #table-search {
-            background: #18181b;
-            border: 1px solid var(--border-subtle);
-            color: #fff;
-            padding: 8px 14px;
-            border-radius: 8px;
-            width: 300px;
+        .filter-input-table {
+            width: 100%;
+            background: transparent;
+            border: none;
+            border-bottom: 1px solid var(--border-subtle);
+            color: var(--color-primary);
+            padding: 9px;
+            font-family: var(--font-mono);
+            font-size: 0.7rem;
+            text-align: inherit;
+            outline: none;
+        }
+
+        /* Colunas Emissões */
+        .col-date { width: 80px; text-align: center; }
+        .col-ped  { width: 90px; text-align: center; }
+        .col-cli  { width: 220px; text-align: left; }
+        .col-prod { width: 220px; text-align: left; }
+        .col-val  { width: 80px; text-align: center; }
+        .col-kg   { width: 80px; text-align: center; }
+        .col-mon  { width: 100px; text-align: center; }
+        .col-op   { width: 100px; text-align: center; }
+
+        .toolbar-row {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+            margin-bottom: 15px;
+            flex-shrink: 0;
         }
 
         .months-group {
@@ -741,25 +794,41 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h2 class="modal-title" id="modal-records-title"><i class="fa-solid fa-list"></i> Registros de Emissão</h2>
-                <div class="filter-group">
-                    <input type="text" id="table-search" placeholder="Filtrar tabela..." onkeyup="filterTable()">
-                    <button class="btn btn-glass" onclick="closeModal()"><i class="fa-solid fa-xmark"></i> Fechar</button>
+                <span class="modal-close" onclick="closeModal('modal-records')">&times;</span>
+            </div>
+            
+            <div class="toolbar-row">
+                <div style="color: var(--text-muted); font-size: 0.85rem;">
+                    Exibindo <span id="count-visible" style="color: var(--color-primary); font-weight: bold;">0</span> registros filtrados
                 </div>
             </div>
-            <div class="table-area">
+
+            <div class="table-container">
                 <table id="records-table">
                     <thead>
                         <tr>
-                            <th>Data Emissão</th>
-                            <th>Pedido</th>
-                            <th>Cliente</th>
-                            <th>Produto</th>
-                            <th>Qtd Original</th>
-                            <th>Saldo Pend.</th>
-                            <th>Peso Unit.</th>
-                            <th>Peso Total</th>
-                            <th>Valor Total</th>
-                            <th>OP</th>
+                            <th class="col-date">Data</th>
+                            <th class="col-ped">Pedido</th>
+                            <th class="col-cli">Cliente</th>
+                            <th class="col-prod">Produto</th>
+                            <th class="col-val">Qtd Orig.</th>
+                            <th class="col-val">Saldo Pend.</th>
+                            <th class="col-kg">Peso Unit.</th>
+                            <th class="col-kg">Peso Total</th>
+                            <th class="col-mon">Valor (R$)</th>
+                            <th class="col-op">OP / Status</th>
+                        </tr>
+                        <tr id="filterRow">
+                            <th><input type="text" class="filter-input-table" placeholder="Filtrar..." onkeyup="filterTable()"></th>
+                            <th><input type="text" class="filter-input-table" placeholder="Filtrar..." onkeyup="filterTable()"></th>
+                            <th><input type="text" class="filter-input-table" placeholder="Filtrar..." onkeyup="filterTable()"></th>
+                            <th><input type="text" class="filter-input-table" placeholder="Filtrar..." onkeyup="filterTable()"></th>
+                            <th><input type="text" class="filter-input-table" placeholder="Filtrar..." onkeyup="filterTable()"></th>
+                            <th><input type="text" class="filter-input-table" placeholder="Filtrar..." onkeyup="filterTable()"></th>
+                            <th><input type="text" class="filter-input-table" placeholder="Filtrar..." onkeyup="filterTable()"></th>
+                            <th><input type="text" class="filter-input-table" placeholder="Filtrar..." onkeyup="filterTable()"></th>
+                            <th><input type="text" class="filter-input-table" placeholder="Filtrar..." onkeyup="filterTable()"></th>
+                            <th><input type="text" class="filter-input-table" placeholder="Filtrar..." onkeyup="filterTable()"></th>
                         </tr>
                     </thead>
                     <tbody id="records-body"></tbody>
@@ -1183,13 +1252,15 @@
             processAndRender();
         }
 
-        // --- RECORDS MODAL ---
-
         function showRecords(mode) {
             activeMode = mode;
             const year = parseInt(document.getElementById('filter-year').value);
             const isAllMonths = currentSelectedMonth === 'all';
             const monthIdx = isAllMonths ? null : parseInt(currentSelectedMonth);
+
+            // Limpeza de filtros prévios
+            const filterInputs = document.querySelectorAll('.filter-input-table');
+            filterInputs.forEach(input => input.value = '');
 
             // Mapa para cruzamento de saldos atuais
             const pendingMap = new Map();
@@ -1239,39 +1310,54 @@
                 const valor = (Number(r.VALOR_PPR || 0) * (mode === 'total' ? qty : saldo));
 
                 tr.innerHTML = `
-                    <td>${toLocalDate(r.DATA_EMISSAO_PEDIDO).toLocaleDateString('pt-BR')}</td>
-                    <td style="font-weight:700">${r.CODIGO_PPR}/${r.ANO_PPR}</td>
-                    <td title="${r.NOME_CLIENTE || ''}">${(r.NOME_CLIENTE || '').substring(0, 20)}</td>
-                    <td title="${r.NOME_PRODUTO_PPR || ''}">${(r.NOME_PRODUTO_PPR || '').substring(0, 20)}</td>
-                    <td style="text-align:center">${qty}</td>
-                    <td style="text-align:center; color:${saldo > 0 ? colorAmber : 'inherit'}">${saldo}</td>
-                    <td style="text-align:right">${unitW.toFixed(3)}</td>
-                    <td style="text-align:right; font-weight:bold">${mode === 'total' ? weightBruto.toLocaleString('pt-BR', {maximumFractionDigits:1}) : weightPendente.toLocaleString('pt-BR', {maximumFractionDigits:1})} kg</td>
-                    <td style="text-align:right">${valorVisible ? valor.toLocaleString('pt-BR', {style:'currency', currency:'BRL'}) : '***'}</td>
-                    <td style="text-align:center; color:var(--text-muted)">${r.NUMERO_OP || '-'}</td>
+                    <td class="col-date">${toLocalDate(r.DATA_EMISSAO_PEDIDO).toLocaleDateString('pt-BR')}</td>
+                    <td class="col-ped" style="font-weight:700">${r.CODIGO_PPR}/${r.ANO_PPR}</td>
+                    <td class="col-cli" title="${r.NOME_CLIENTE || ''}">${(r.NOME_CLIENTE || '')}</td>
+                    <td class="col-prod" title="${r.NOME_PRODUTO_PPR || ''}">${(r.NOME_PRODUTO_PPR || '')}</td>
+                    <td class="col-val" style="text-align:center">${qty}</td>
+                    <td class="col-val" style="text-align:center; color:${saldo > 0 ? colorAmber : 'inherit'}">${saldo}</td>
+                    <td class="col-kg" style="text-align:right">${unitW.toFixed(3)}</td>
+                    <td class="col-kg" style="text-align:right; font-weight:bold">${mode === 'total' ? weightBruto.toLocaleString('pt-BR', {maximumFractionDigits:1}) : weightPendente.toLocaleString('pt-BR', {maximumFractionDigits:1})} kg</td>
+                    <td class="col-mon" style="text-align:right">${valorVisible ? valor.toLocaleString('pt-BR', {style:'currency', currency:'BRL'}) : '***'}</td>
+                    <td class="col-op" style="text-align:center; color:var(--text-muted)">${r.NUMERO_OP || '-'}</td>
                 `;
                 tbody.appendChild(tr);
             });
 
             document.getElementById('modal-records').style.display = 'flex';
+            document.getElementById('count-visible').innerText = filtered.length;
         }
 
         function filterTable() {
-            const input = document.getElementById('table-search');
-            const filter = input.value.toLowerCase();
             const table = document.getElementById('records-table');
-            const tr = table.getElementsByTagName('tr');
+            const tbody = document.getElementById('records-body');
+            const trs = tbody.getElementsByTagName('tr');
+            
+            const filterRow = document.getElementById('filterRow');
+            const inputs = filterRow.getElementsByTagName('input');
+            
+            let visibleCount = 0;
 
-            for (let i = 1; i < tr.length; i++) {
-                let show = false;
-                const tds = tr[i].getElementsByTagName('td');
-                for (let j = 0; j < tds.length; j++) {
-                    if (tds[j].textContent.toLowerCase().includes(filter)) {
-                        show = true; break;
+            for (let i = 0; i < trs.length; i++) {
+                let showRow = true;
+                const tds = trs[i].getElementsByTagName('td');
+                
+                for (let j = 0; j < inputs.length; j++) {
+                    const filterValue = inputs[j].value.toLowerCase();
+                    if (filterValue && tds[j]) {
+                        const cellText = tds[j].textContent.toLowerCase();
+                        if (cellText.indexOf(filterValue) === -1) {
+                            showRow = false;
+                            break;
+                        }
                     }
                 }
-                tr[i].style.display = show ? "" : "none";
+                
+                trs[i].style.display = showRow ? '' : 'none';
+                if (showRow) visibleCount++;
             }
+            
+            document.getElementById('count-visible').innerText = visibleCount;
         }
 
         function closeModal() {
