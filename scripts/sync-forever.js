@@ -12,6 +12,10 @@ const dns = require('dns');
 const { promisify } = require('util');
 const dnsLookup = promisify(dns.lookup);
 
+// Carregar .env.local no processo pai para evitar mltiplas leituras concorrentes
+const envPath = path.join(__dirname, '../.env.local');
+require('dotenv').config({ path: envPath });
+
 // CONFIGURATIONS
 const ROOT_DIR = path.join(__dirname, '..');
 const LOG_FILE = path.join(ROOT_DIR, 'sync-errors.log');
@@ -133,10 +137,18 @@ function logEvent(script, message, isError = true) {
 
     // PRINT TO TERMINAL (scrolling region) - ONLY RELEVANT STUFF
     // We filter out common library/node "spam" warnings to keep terminal dashboard clean
-    const isSpam = msg.includes('SECURITY WARNING') || msg.includes('Warning:') || msg.includes('adopt standard libpq');
+    const isSpam = msg.includes('SECURITY WARNING') || 
+                   msg.includes('Warning:') || 
+                   msg.includes('adopt standard libpq') ||
+                   msg.includes('SSL modes') ||
+                   msg.includes('libpq compatibility');
     
-    if (!isSpam || isError) {
-        const icon = isError ? '⚠️' : 'ℹ️';
+    // No logar como erro se for apenas spam de segurana do driver PG
+    let effectiveError = isError;
+    if (isSpam) effectiveError = false;
+
+    if (!isSpam || effectiveError) {
+        const icon = effectiveError ? '⚠' : 'ℹ️';
         console.log(`${icon} [${timeDisplay}] ${script}: ${msg}`);
     }
 }
@@ -148,7 +160,8 @@ function runBat(batEntry) {
     return new Promise((resolve) => {
         const child = spawn('cmd.exe', ['/c', batEntry.file], {
             cwd: ROOT_DIR,
-            stdio: ['ignore', 'pipe', 'pipe']
+            stdio: ['ignore', 'pipe', 'pipe'],
+            env: { ...process.env, DEBUG_SYNC: 'true' } // Passar variáveis e ativar debug
         });
 
         child.stdout.on('data', (data) => {
@@ -229,7 +242,12 @@ async function startForever() {
 
         const timerInterval = setInterval(() => drawPinnedDashboard(cycleStart), 1000);
 
-        await Promise.all(SYNC_BATS.map(bat => runBat(bat)));
+        // Sincronizaço Sequencial para evitar conflitos de arquivo e sobrecarga de banco
+        for (const bat of SYNC_BATS) {
+            await runBat(bat);
+            // Pequeno intervalo entre scripts para estabilização
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        }
 
         clearInterval(timerInterval);
         
