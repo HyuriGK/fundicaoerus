@@ -495,10 +495,10 @@
 
         .modal-content {
             background: #09090b;
-            width: 95%;
-            height: 90%;
-            border-radius: 20px;
-            border: 1px solid var(--border-subtle);
+            width: 100%;
+            height: 100%;
+            border-radius: 0;
+            border: none;
             display: flex;
             flex-direction: column;
             overflow: hidden;
@@ -558,6 +558,41 @@
             padding: 8px 14px;
             border-radius: 8px;
             width: 300px;
+        }
+
+        .months-group {
+            display: flex;
+            gap: 5px;
+        }
+
+        .month-btn {
+            background: transparent;
+            border: 1px solid var(--border-subtle);
+            color: var(--text-muted);
+            padding: 8px 14px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+        }
+
+        .month-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+        }
+
+        .month-btn.active {
+            background: var(--color-primary);
+            color: #000;
+            border-color: var(--color-primary);
+            font-weight: 800;
+        }
+
+        .month-btn.all-btn.active {
+            background: #3b82f6;
+            color: #fff;
+            border-color: #3b82f6;
         }
     </style>
 </head>
@@ -639,21 +674,9 @@
                         <option value="2025">2025</option>
                         <option value="2026" selected>2026</option>
                     </select>
-                    <select id="filter-month" class="year-select" onchange="processAndRender()">
-                        <option value="all">Ano Completo</option>
-                        <option value="0">Janeiro</option>
-                        <option value="1">Fevereiro</option>
-                        <option value="2">Março</option>
-                        <option value="3">Abril</option>
-                        <option value="4">Maio</option>
-                        <option value="5">Junho</option>
-                        <option value="6">Julho</option>
-                        <option value="7">Agosto</option>
-                        <option value="8">Setembro</option>
-                        <option value="9">Outubro</option>
-                        <option value="10">Novembro</option>
-                        <option value="11">Dezembro</option>
-                    </select>
+                    <div class="months-group" id="month-buttons">
+                        <!-- Gerado via JS -->
+                    </div>
                 </div>
                 <div class="filter-group">
                     <button class="btn-primary" onclick="showRecords('total')">
@@ -661,9 +684,6 @@
                     </button>
                     <button class="btn-glass" onclick="showRecords('pending')">
                         <i class="fa-solid fa-hourglass-half"></i> Backlog Pendente
-                    </button>
-                    <button class="btn-glass" onclick="exportToExcel()">
-                        <i class="fa-solid fa-file-excel"></i> Exportar
                     </button>
                 </div>
             </div>
@@ -747,6 +767,10 @@
         let chartTotal = null;
         let chartPending = null;
         let activeMode = 'total'; 
+
+        // Filtros Atuais
+        let currentSelectedMonth = 'all'; // Default: Ano Completo
+        const MONTHS_LABELS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
         
         // Cores padrão (Zinc/Amber)
         const colorAmber = '#fbbf24';
@@ -839,7 +863,9 @@
                 rawTotalEmissions = await totalRes.json();
                 rawPendingEmissions = await pendingRes.json();
 
-                console.log('✅ Conexão confirmada. Dados de 2026 recebidos.');
+                console.log('✅ Conexão confirmada. Dados recebidos.');
+                
+                createMonthButtons();
                 processAndRender();
                 
                 if (window.hideLoader) window.hideLoader();
@@ -855,9 +881,8 @@
 
         function processAndRender() {
             const year = parseInt(document.getElementById('filter-year').value);
-            const month = document.getElementById('filter-month').value;
-            const isAllMonths = month === 'all';
-            const monthIdx = isAllMonths ? null : parseInt(month);
+            const isAllMonths = currentSelectedMonth === 'all';
+            const monthIdx = isAllMonths ? null : parseInt(currentSelectedMonth);
 
             // Filtro para KPIs
             let filteredTotal = rawTotalEmissions.filter(r => {
@@ -978,8 +1003,7 @@
                     onClick: (e, activeEls) => {
                         if (activeEls.length > 0 && !isDaily) {
                             const idx = activeEls[0].index;
-                            document.getElementById('filter-month').value = idx;
-                            processAndRender();
+                            selectMonth(idx);
                         }
                     }
                 }
@@ -1061,8 +1085,7 @@
                     onClick: (e, activeEls) => {
                         if (activeEls.length > 0 && !isDaily) {
                             const idx = activeEls[0].index;
-                            document.getElementById('filter-month').value = idx;
-                            processAndRender();
+                            selectMonth(idx);
                         }
                     }
                 }
@@ -1070,7 +1093,43 @@
         }
 
         function resetChartZoom() {
-            document.getElementById('filter-month').value = 'all';
+            selectMonth('all');
+        }
+
+        // --- UI HELPERS ---
+
+        function createMonthButtons() {
+            const container = document.getElementById('month-buttons');
+            container.innerHTML = '';
+
+            // Botão TODOS
+            const btnAll = document.createElement('button');
+            btnAll.className = `month-btn all-btn ${currentSelectedMonth === 'all' ? 'active' : ''}`;
+            btnAll.innerText = 'TODOS';
+            btnAll.onclick = () => selectMonth('all');
+            container.appendChild(btnAll);
+
+            // Botões Jan-Dez
+            MONTHS_LABELS.forEach((month, idx) => {
+                const btn = document.createElement('button');
+                btn.className = `month-btn ${currentSelectedMonth == idx ? 'active' : ''}`;
+                btn.innerText = month;
+                btn.onclick = () => selectMonth(idx);
+                container.appendChild(btn);
+            });
+        }
+
+        function selectMonth(month) {
+            currentSelectedMonth = month;
+            
+            // Atualizar classes active nos botões
+            const buttons = document.querySelectorAll('.month-btn');
+            buttons.forEach(btn => {
+                btn.classList.remove('active');
+                if (month === 'all' && btn.classList.contains('all-btn')) btn.classList.add('active');
+                if (month !== 'all' && btn.innerText === MONTHS_LABELS[month]) btn.classList.add('active');
+            });
+
             processAndRender();
         }
 
@@ -1079,9 +1138,8 @@
         function showRecords(mode) {
             activeMode = mode;
             const year = parseInt(document.getElementById('filter-year').value);
-            const month = document.getElementById('filter-month').value;
-            const isAllMonths = month === 'all';
-            const monthIdx = isAllMonths ? null : parseInt(month);
+            const isAllMonths = currentSelectedMonth === 'all';
+            const monthIdx = isAllMonths ? null : parseInt(currentSelectedMonth);
 
             const source = mode === 'total' ? rawTotalEmissions : rawPendingEmissions;
             
