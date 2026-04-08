@@ -245,8 +245,8 @@ async function startForever() {
         // Sincronizaço Sequencial para evitar conflitos de arquivo e sobrecarga de banco
         for (const bat of SYNC_BATS) {
             await runBat(bat);
-            // Pequeno intervalo entre scripts para estabilização
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            // Pequeno intervalo entre scripts para estabilização (aumentado para 3s)
+            await new Promise(resolve => setTimeout(resolve, 3000));
         }
 
         clearInterval(timerInterval);
