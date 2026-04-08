@@ -22,7 +22,6 @@ const LOG_FILE = path.join(ROOT_DIR, 'sync-errors.log');
 const SYNC_BATS = [
     { name: 'CUSTOS', file: 'sincronizar_acustos.bat' },
     { name: 'DEVOLUÇÕES', file: 'sincronizar_adevolucoes.bat' },
-    { name: 'EMISSÕES', file: 'sincronizar_emissoes.bat' },
     { name: 'FATURAMENTO', file: 'sincronizar_afaturamento.bat' },
     { name: 'PEDIDOS', file: 'sincronizar_apedidos.bat' },
     { name: 'PRODUÇÃO', file: 'sincronizar_aproducao.bat' },

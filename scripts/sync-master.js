@@ -59,10 +59,8 @@ async function syncMaster() {
                 
                 // 2. Upsert OPs na tabela do dashboard
                 console.log('📤 [2/4] Atualizando Dashboard (firebird_sync_pedidos)...');
-                for (let i = 0; i < opsResults.length; i++) {
-                    const op = opsResults[i];
+                for (const op of opsResults) {
                     const syncKey = `OP-${op.OP_PCS}`;
-                    
                     // Garantir que campos nulos não quebrem o dashboard
                     op.OP_QUANTIDADE = op.OP_QUANTIDADE || 0;
                     op.QUANTIDADE_PPR = op.OP_QUANTIDADE; 
@@ -72,23 +70,16 @@ async function syncMaster() {
                         VALUES ($1, $2, NOW())
                         ON CONFLICT (sync_key) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()
                     `, [syncKey, JSON.stringify(op)]);
-
-                    if (i % 20 === 0) {
-                        const pct = Math.floor((i / opsResults.length) * 50);
-                        process.stdout.write(`@PROG:PEDIDOS:${pct}%\n`);
-                    }
                 }
-                process.stdout.write(`@PROG:PEDIDOS:50%\n`);
 
                 // 3. Sincronizar Roteiros para esses produtos
                 const uniqueProducts = [...new Set(opsResults.map(op => String(op.PRODUTO_PPR).trim()))];
                 console.log(`📥 [3/4] Sincronizando roteiros para ${uniqueProducts.length} produtos...`);
 
                 const productChunks = [];
-                for (let i = 0; i < uniqueProducts.length; i += 30) productChunks.push(uniqueProducts.slice(i, i + 30));
+                for (let i = 0; i < uniqueProducts.length; i += 100) productChunks.push(uniqueProducts.slice(i, i + 100));
 
-                for (let i = 0; i < productChunks.length; i++) {
-                    const chunk = productChunks[i];
+                for (const chunk of productChunks) {
                     const placeholders = chunk.map(c => `'${c}'`).join(',');
 
                     // Vínculo Produto -> Ficha
@@ -120,20 +111,10 @@ async function syncMaster() {
                     for (const rt of rts) {
                         await pgClient.query(`INSERT INTO roteiros_tecnicos (ficha_id, sequencia, setor_nome) VALUES ($1, $2, $3) ON CONFLICT (ficha_id, sequencia) DO UPDATE SET setor_nome = EXCLUDED.setor_nome`, [rt.CODIGO_FIC, rt.SEQUENCIA, String(rt.SETOR).trim().toUpperCase()]);
                     }
-                    const pct = 50 + Math.floor(((i + 1) / productChunks.length) * 50);
-                    process.stdout.write(`@PROG:PEDIDOS:${pct}%\n`);
-                    if (i % 5 === 0) console.log(`   🔸 Roteiros: Processando lote ${i+1}/${productChunks.length} (${pct}%)`);
+                    process.stdout.write('.');
                 }
 
                 await pgClient.query('COMMIT');
-
-                // ATUALIZAÇÃO DE STATUS FINAL
-                await pgClient.query("SET TIME ZONE 'America/Sao_Paulo'");
-                await pgClient.query(`
-                    INSERT INTO sync_status (screen_name, last_sync_at)
-                    VALUES ('Pedidos', NOW())
-                    ON CONFLICT (screen_name) DO UPDATE SET last_sync_at = NOW()
-                `);
             } catch (e) {
                 await pgClient.query('ROLLBACK');
                 console.error('\n❌ [Erro Postgres]:', e.message);
@@ -143,7 +124,7 @@ async function syncMaster() {
 
             const duration = ((Date.now() - startTime) / 1000).toFixed(1);
             console.log('\n\n======================================================');
-            console.log(`🎉 SINCRONIZAÇÃO MASTER CONCLUÍDA EM ${duration}S!`);
+            console.log(`🎉 SINCRONIZAÇÃO V5 CONCLUÍDA EM ${duration}S!`);
             console.log('======================================================\n');
             db.detach();
             process.exit(0);
