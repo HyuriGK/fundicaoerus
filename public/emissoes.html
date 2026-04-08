@@ -345,33 +345,53 @@
         .kpi-row {
             display: flex;
             gap: 20px;
-            margin-bottom: 4px;
-            flex-wrap: nowrap;
-            height: 80px;
-            min-height: 80px;
+            margin-bottom: 20px;
+            height: 90px;
             flex-shrink: 0;
         }
 
         .kpi-card {
             flex: 1;
-            background: transparent;
-            border: none;
-            border-radius: 0;
-            padding: 10px;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 12px;
+            padding: 12px;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             position: relative;
-            overflow: hidden;
-            box-shadow: none;
-            transition: transform 0.3s;
-            user-select: none;
+            transition: all 0.3s;
             cursor: pointer;
+            border: 1px solid transparent;
         }
 
         .kpi-card:hover {
-            transform: translateY(-5px) scale(1.05);
+            background: rgba(255, 255, 255, 0.05);
+            border-color: rgba(251, 191, 36, 0.2);
+            transform: translateY(-4px);
+        }
+
+        .toggle-finance-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            width: 28px;
+            height: 28px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            transition: all 0.2s;
+        }
+
+        .toggle-finance-btn:hover {
+            background: rgba(251, 191, 36, 0.1);
+            color: var(--color-primary);
         }
 
         .kpi-title {
@@ -634,35 +654,25 @@
                     <p class="page-subtitle">Performance de Emissão de Pedidos e Backlog Comercial</p>
                 </div>
             </div>
-
-            <div class="header-actions">
-                <div id="connection-status" class="status-badge" style="display:none; color: var(--status-success); font-size: 0.8rem; font-weight: 600;">
-                    <i class="fa-solid fa-circle-check"></i> Conectado
-                </div>
-                <button class="btn-glass" onclick="loadData()">
-                    <i class="fa-solid fa-rotate"></i> Atualizar
-                </button>
-            </div>
         </header>
 
         <main class="dashboard-content">
             <!-- KPI ROW -->
             <div class="kpi-row">
                 <div class="kpi-card" onclick="showRecords('total')">
-                    <span class="kpi-title">Volume Emitido (Mês)</span>
+                    <span class="kpi-title">Volume Emitido (Bruto)</span>
                     <span class="kpi-value accent" id="kpi-total-weight">0 kg</span>
                 </div>
-                <div class="kpi-card">
+                <div class="kpi-card" onclick="showRecords('pending_emitted')">
+                    <span class="kpi-title">Volume Emitido Pendente</span>
+                    <span class="kpi-value warning" id="kpi-emitted-pending-weight" style="color: var(--status-warning)">0 kg</span>
+                </div>
+                <div class="kpi-card" id="card-finance-total">
                     <span class="kpi-title">Financeiro Emitido (Mês)</span>
                     <span class="kpi-value accent" id="kpi-total-value">R$ 0,00</span>
-                </div>
-                <div class="kpi-card" onclick="showRecords('pending')">
-                    <span class="kpi-title">Itens Pendentes</span>
-                    <span class="kpi-value" id="kpi-pending-count">0</span>
-                </div>
-                <div class="kpi-card" onclick="showRecords('pending')">
-                    <span class="kpi-title">Backlog (Pendente)</span>
-                    <span class="kpi-value" id="kpi-pending-weight">0 kg</span>
+                    <button id="btn-toggle-finance" class="toggle-finance-btn" onclick="toggleFinance(event)">
+                        <i class="fa-solid fa-eye-slash"></i>
+                    </button>
                 </div>
             </div>
             
@@ -682,8 +692,8 @@
                     <button class="btn-primary" onclick="showRecords('total')">
                         <i class="fa-solid fa-list-ul"></i> Registros Mês
                     </button>
-                    <button class="btn-glass" onclick="showRecords('pending')">
-                        <i class="fa-solid fa-hourglass-half"></i> Backlog Pendente
+                    <button class="btn-glass" onclick="showRecords('pending_emitted')">
+                        <i class="fa-solid fa-hourglass-half"></i> Pendentes Mês
                     </button>
                 </div>
             </div>
@@ -844,10 +854,24 @@
                     if (wRes.ok) customWeights = await wRes.json();
                 } catch (err) { console.warn('Erro ao carregar pesos', err); }
 
-                // 2. Permissões de Usuário (via localStorage como no pedidos.html)
+                // 2. Permissões de Usuário
                 const userRole = localStorage.getItem('erus_role');
                 const userName = localStorage.getItem('erus_name');
-                valorVisible = ['Administrador', 'Desenvolvedor', 'Comercial'].includes(userRole);
+                
+                // Only Commercial and Developer can toggle
+                const canToggle = ['Desenvolvedor', 'Comercial'].includes(userRole);
+                const btnToggle = document.getElementById('btn-toggle-finance');
+                if (btnToggle) btnToggle.style.display = canToggle ? 'flex' : 'none';
+
+                // Initial visibility
+                const savedVisibility = localStorage.getItem('emissoes_finance_visible');
+                if (savedVisibility !== null) {
+                    valorVisible = savedVisibility === 'true';
+                } else {
+                    // Default: Visible for authorized roles
+                    valorVisible = ['Administrador', 'Desenvolvedor', 'Comercial'].includes(userRole);
+                }
+                updateFinanceToggleIcon();
 
                 // 3. Dados em paralelo
                 const year = document.getElementById('filter-year').value;
@@ -870,8 +894,6 @@
                 
                 if (window.hideLoader) window.hideLoader();
                 ActivityLogger.log('Acessou Painel de Emissões', `Usuário: ${userName || 'N/A'}`);
-                
-                document.getElementById('connection-status').style.display = 'inline-flex';
             } catch (err) {
                 console.error('Erro ao carregar:', err);
                 if (window.hideLoader) window.hideLoader();
@@ -903,29 +925,39 @@
         }
 
         function updateKPIs(total, pending) {
-            let totalW = 0, totalV = 0;
+            let totalW = 0, totalV = 0, pendEmittedW = 0;
+            
             total.forEach(r => {
-                totalW += getOriginalWeight(r);
+                const weightBruto = getOriginalWeight(r);
+                totalW += weightBruto;
                 totalV += (Number(r.VALOR_PPR || 0) * Number(r.QUANTIDADE_PPR || 0));
-            });
-
-            let pendW = 0, pendC = 0;
-            pending.forEach(r => {
-                const bal = getCommercialBalance(r);
-                if (bal > 0) {
-                    pendC++;
-                    pendW += getCorrectedWeight(r);
-                }
+                
+                // Pendente especificamente do que foi emitido no período
+                pendEmittedW += getCorrectedWeight(r);
             });
 
             document.getElementById('kpi-total-weight').innerText = `${totalW.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} kg`;
+            document.getElementById('kpi-emitted-pending-weight').innerText = `${pendEmittedW.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} kg`;
+            
             document.getElementById('kpi-total-value').innerText = valorVisible ? 
                 totalV.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'R$ ***';
             
-            document.getElementById('kpi-pending-count').innerText = pendC.toLocaleString('pt-BR');
-            document.getElementById('kpi-pending-weight').innerText = `${pendW.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} kg`;
-            
-            document.getElementById('pending-info').innerText = `Backlog Total: ${pendW.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} kg`;
+            document.getElementById('pending-info').innerText = `Pendente (Seleção): ${pendEmittedW.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} kg`;
+        }
+
+        function toggleFinance(event) {
+            if (event) event.stopPropagation();
+            valorVisible = !valorVisible;
+            localStorage.setItem('emissoes_finance_visible', valorVisible);
+            updateFinanceToggleIcon();
+            processAndRender();
+        }
+
+        function updateFinanceToggleIcon() {
+            const icon = document.querySelector('#btn-toggle-finance i');
+            if (icon) {
+                icon.className = valorVisible ? 'fa-solid fa-eye' : 'fa-solid fa-eye-slash';
+            }
         }
 
         // --- CHARTS LOGIC ---
@@ -1145,21 +1177,18 @@
             
             const filtered = source.filter(r => {
                 const d = toLocalDate(r.DATA_EMISSAO_PEDIDO);
-                if (mode === 'total') {
-                    if (!d || d.getFullYear() !== year) return false;
-                    if (!isAllMonths && d.getMonth() !== monthIdx) return false;
-                } else {
+                if (!d || d.getFullYear() !== year) return false;
+                if (!isAllMonths && d.getMonth() !== monthIdx) return false;
+
+                if (mode === 'pending_emitted') {
                     if (getCommercialBalance(r) <= 0) return false;
-                    // O backlog é global, mas se quiser filtrar pelo mês de emissão como a pedidos.html faz:
-                    if (!d || d.getFullYear() !== year) return false;
-                    if (!isAllMonths && d.getMonth() !== monthIdx) return false;
                 }
                 return true;
             });
 
             document.getElementById('modal-records-title').innerHTML = mode === 'total' ? 
-                '<i class="fa-solid fa-file-lines"></i> Registros Emitidos no Período' : 
-                '<i class="fa-solid fa-hourglass-start"></i> Detalhamento do Backlog no Período';
+                '<i class="fa-solid fa-file-lines"></i> Registros Emitidos Brutos' : 
+                '<i class="fa-solid fa-hourglass-start"></i> Detalhamento Pendente (Seleção)';
 
             const tbody = document.getElementById('records-body');
             tbody.innerHTML = '';
