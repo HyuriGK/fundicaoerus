@@ -720,10 +720,10 @@
                     <span class="kpi-title">Volume Emitido Pendente</span>
                     <span class="kpi-value warning" id="kpi-emitted-pending-weight" style="color: var(--status-warning)">0 kg</span>
                 </div>
-                <div class="kpi-card" id="card-finance-total">
+                <div class="kpi-card" id="card-finance-total" onclick="showRecords('total')">
                     <span class="kpi-title">Financeiro Emitido (Mês)</span>
                     <span class="kpi-value accent" id="kpi-total-value">R$ 0,00</span>
-                    <button id="btn-toggle-finance" class="toggle-finance-btn" onclick="toggleFinance(event)">
+                    <button id="btn-toggle-finance" class="toggle-finance-btn" title="Alternar Visibilidade Financeira" onclick="toggleFinance(event)">
                         <i class="fa-solid fa-eye-slash"></i>
                     </button>
                 </div>
@@ -927,18 +927,20 @@
                 const userRole = localStorage.getItem('erus_role');
                 const userName = localStorage.getItem('erus_name');
                 
-                // Only Commercial and Developer can toggle
-                const canToggle = ['Desenvolvedor', 'Comercial'].includes(userRole);
+                // Only Commercial, Developer and Administrator can toggle
+                const canToggle = ['Desenvolvedor', 'Comercial', 'Administrador'].includes(userRole);
                 const btnToggle = document.getElementById('btn-toggle-finance');
                 if (btnToggle) btnToggle.style.display = canToggle ? 'flex' : 'none';
 
                 // Initial visibility
                 const savedVisibility = localStorage.getItem('emissoes_finance_visible');
+                const isAuthorized = ['Administrador', 'Desenvolvedor', 'Comercial'].includes(userRole);
+
                 if (savedVisibility !== null) {
                     valorVisible = savedVisibility === 'true';
                 } else {
                     // Default: Visible for authorized roles
-                    valorVisible = ['Administrador', 'Desenvolvedor', 'Comercial'].includes(userRole);
+                    valorVisible = isAuthorized;
                 }
                 updateFinanceToggleIcon();
 
@@ -1007,7 +1009,12 @@
             total.forEach(r => {
                 const weightBruto = getOriginalWeight(r);
                 totalW += weightBruto;
-                totalV += (Number(r.VALOR_PPR || 0) * Number(r.QUANTIDADE_PPR || 0));
+
+                const v = parseFloat(r.VALOR_PPR || 0);
+                const q = parseFloat(r.QUANTIDADE_PPR || 0);
+                if (!isNaN(v) && !isNaN(q)) {
+                    totalV += (v * q);
+                }
                 
                 // Cálculo da Pendência Real: 
                 // Cruzamos com a carteira atual (pendingMap)
