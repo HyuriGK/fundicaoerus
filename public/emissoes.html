@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <script src="js/loader.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestão de Emissões - Fundição Erus</title>
+
+    <!-- Style & Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    
+    <!-- Functional Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+    <script src="js/activity-logger.js"></script>
+
+    <style>
+        :root {
+            --font-main: 'Inter', sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+            --color-primary: #fbbf24;
+            --color-primary-dim: #d97706;
+            --bg-body: #09090b;
+            --bg-card: rgba(24, 24, 27, 0.7);
+            --text-main: #f4f4f5;
+            --text-muted: #a1a1aa;
+            --border-subtle: rgba(255, 255, 255, 0.08);
+            --border-highlight: rgba(255, 255, 255, 0.15);
+            --radius-md: 12px;
+            --shadow-glow: 0 0 15px rgba(251, 191, 36, 0.15);
+        }
+
+        * { user-select: none; box-sizing: border-box; outline: none; }
+        body {
+            margin: 0; font-family: var(--font-main); background-color: var(--bg-body); color: var(--text-main);
+            background-image: radial-gradient(circle at 15% 50%, rgba(251, 191, 36, 0.03), transparent 25%);
+            height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+        }
+
+        /* --- UI COMPONENTS --- */
+        .app-layout { display: flex; flex-direction: column; height: 100vh; }
+        
+        /* Header */
+        .header {
+            padding: 20px 32px; display: flex; justify-content: space-between; align-items: center;
+            border-bottom: 1px solid var(--border-subtle); background: rgba(9, 9, 11, 0.5); backdrop-filter: blur(10px);
+        }
+        .header-left { display: flex; align-items: center; gap: 15px; }
+        .brand-icon {
+            width: 42px; height: 42px; background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dim));
+            border-radius: 10px; display: flex; align-items: center; justify-content: center; color: #000; font-size: 1.2rem;
+            box-shadow: var(--shadow-glow);
+        }
+        .header-title { margin: 0; font-size: 1.4rem; font-weight: 700; }
+        .header-subtitle { font-size: 0.8rem; color: var(--text-muted); margin-top: 2px; }
+
+        /* KPI Cards */
+        .kpi-row { display: flex; gap: 20px; padding: 24px 32px 0 32px; }
+        .kpi-card {
+            flex: 1; background: var(--bg-card); border: 1px solid var(--border-subtle); padding: 20px; border-radius: 16px;
+            display: flex; flex-direction: column; gap: 8px; transition: transform 0.3s;
+        }
+        .kpi-card:hover { transform: translateY(-4px); border-color: var(--border-highlight); }
+        .kpi-label { font-size: 0.7rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+        .kpi-value { font-size: 1.6rem; font-weight: 800; color: #fff; font-family: var(--font-mono); }
+        .kpi-value.accent { color: var(--color-primary); }
+
+        /* Main Content */
+        .content { flex: 1; padding: 24px 32px; overflow: hidden; display: flex; flex-direction: column; gap: 20px; }
+        
+        /* Toolbar */
+        .toolbar { display: flex; justify-content: space-between; align-items: center; }
+        .filter-group { display: flex; gap: 12px; align-items: center; }
+        
+        select, input {
+            background: #18181b; border: 1px solid var(--border-subtle); color: #fff; padding: 8px 12px; border-radius: 8px;
+            font-family: var(--font-main); font-size: 0.85rem; cursor: pointer;
+        }
+        select:hover { border-color: var(--color-primary); }
+
+        .btn {
+            padding: 10px 20px; border-radius: 8px; font-weight: 600; font-size: 0.85rem; cursor: pointer;
+            display: inline-flex; align-items: center; gap: 8px; transition: all 0.2s; border: 1px solid rgba(255,255,255,0.1);
+        }
+        .btn-primary { background: var(--color-primary); color: #000; border: none; }
+        .btn-primary:hover { background: #fff; transform: translateY(-2px); }
+        .btn-glass { background: rgba(255,255,255,0.05); color: #fff; }
+        .btn-glass:hover { background: rgba(255,255,255,0.1); transform: translateY(-2px); }
+
+        /* Charts Row */
+        .charts-row { display: flex; gap: 20px; flex: 1; min-height: 0; }
+        .chart-container {
+            flex: 1; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 16px; padding: 24px;
+            display: flex; flex-direction: column; gap: 15px; position: relative;
+        }
+        .chart-header { display: flex; justify-content: space-between; align-items: center; }
+        .chart-title { font-size: 0.95rem; font-weight: 600; color: #fff; }
+        .chart-canvas-wrapper { flex: 1; min-height: 0; position: relative; }
+
+        /* Modal */
+        .modal {
+            display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 2000;
+            align-items: center; justify-content: center; backdrop-filter: blur(5px);
+        }
+        .modal-content {
+            background: #121214; width: 95%; height: 90%; border-radius: 20px; border: 1px solid var(--border-subtle);
+            display: flex; flex-direction: column; overflow: hidden; animation: zoomIn 0.3s ease-out;
+        }
+        @keyframes zoomIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+        
+        .modal-header { padding: 24px 32px; border-bottom: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: center; }
+        .modal-title { font-size: 1.2rem; font-weight: 700; display: flex; align-items: center; gap: 12px; }
+        .table-area { flex: 1; overflow: auto; padding: 0 32px 32px 32px; }
+
+        table { width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: 0.75rem; }
+        th { position: sticky; top: 0; background: #18181b; padding: 12px; text-align: left; color: var(--text-muted); border-bottom: 2px solid var(--border-subtle); z-index: 10; }
+        td { padding: 10px 12px; border-bottom: 1px solid var(--border-separator); color: #e4e4e7; white-space: nowrap; }
+        tr:hover td { background: rgba(255,255,255,0.03); color: var(--color-primary); }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 10px; }
+
+        /* Side Menu */
+        .side-menu-trigger { position: fixed; left: 0; top: 0; bottom: 0; width: 10px; z-index: 2000; }
+        .side-menu {
+            position: fixed; left: -300px; top: 0; bottom: 0; width: 280px; background: #09090b; z-index: 2001;
+            transition: 0.4s; padding: 40px 20px; border-right: 1px solid var(--border-subtle);
+        }
+        .side-menu-trigger:hover + .side-menu, .side-menu:hover { left: 0; }
+        .side-link {
+            display: flex; align-items: center; gap: 12px; padding: 12px 15px; border-radius: 8px; color: var(--text-muted);
+            text-decoration: none; margin-bottom: 8px; transition: 0.2s; font-weight: 500;
+        }
+        .side-link:hover { background: rgba(251, 191, 36, 0.1); color: var(--color-primary); }
+        .side-link.active { background: var(--color-primary); color: #000; }
+
+        .logo-text { font-weight: 800; font-size: 1.1rem; color: #fff; margin-bottom: 30px; display: block; }
+    </style>
+</head>
+<body>
+    <div class="side-menu-trigger"></div>
+    <div class="side-menu">
+        <span class="logo-text">SGP ERUS</span>
+        <a href="index.html" class="side-link"><i class="fa-solid fa-house"></i> Início</a>
+        <a href="pedidos.html" class="side-link"><i class="fa-solid fa-cart-shopping"></i> Pedidos & Backlog</a>
+        <a href="emissoes.html" class="side-link active"><i class="fa-solid fa-chart-line"></i> Painel de Emissões</a>
+        <a href="faturamentos.html" class="side-link"><i class="fa-solid fa-file-invoice-dollar"></i> Faturamentos</a>
+        <a href="apontamentos_produtivos.html" class="side-link"><i class="fa-solid fa-industry"></i> Produção</a>
+        <div style="margin-top: auto;">
+            <a href="admin.html" class="side-link"><i class="fa-solid fa-user-shield"></i> Admin</a>
+        </div>
+    </div>
+
+    <div class="app-layout">
+        <header class="header">
+            <div class="header-left">
+                <div class="brand-icon"><i class="fa-solid fa-chart-area"></i></div>
+                <div>
+                    <h1 class="header-title">Gestão de Emissões</h1>
+                    <p class="header-subtitle">Analítico de Pedidos Emitidos (Histórico vs Pendências)</p>
+                </div>
+            </div>
+            <div class="header-right">
+                <button class="btn btn-glass" onclick="loadData()"><i class="fa-solid fa-rotate"></i> Atualizar</button>
+            </div>
+        </header>
+
+        <div class="kpi-row">
+            <div class="kpi-card">
+                <span class="kpi-label">Volume Total Emitido (Mês)</span>
+                <span class="kpi-value accent" id="kpi-total-weight">0 kg</span>
+            </div>
+            <div class="kpi-card">
+                <span class="kpi-label">Financeiro Emitido (Mês)</span>
+                <span class="kpi-value accent" id="kpi-total-value">R$ 0,00</span>
+            </div>
+            <div class="kpi-card">
+                <span class="kpi-label">Itens Pendentes de Entrega</span>
+                <span class="kpi-value" id="kpi-pending-count">0</span>
+            </div>
+            <div class="kpi-card">
+                <span class="kpi-label">Peso Pendente (Backlog)</span>
+                <span class="kpi-value" id="kpi-pending-weight">0 kg</span>
+            </div>
+        </div>
+
+        <main class="content">
+            <div class="toolbar">
+                <div class="filter-group">
+                    <select id="filter-year" onchange="processAndRender()">
+                        <option value="2024">2024</option>
+                        <option value="2025" selected>2025</option>
+                        <option value="2026">2026</option>
+                    </select>
+                    <select id="filter-month" onchange="processAndRender()">
+                        <option value="all">Ano Completo</option>
+                        <option value="0">Janeiro</option>
+                        <option value="1">Fevereiro</option>
+                        <option value="2">Março</option>
+                        <option value="3">Abril</option>
+                        <option value="4">Maio</option>
+                        <option value="5">Junho</option>
+                        <option value="6">Julho</option>
+                        <option value="7">Agosto</option>
+                        <option value="8">Setembro</option>
+                        <option value="9">Outubro</option>
+                        <option value="10">Novembro</option>
+                        <option value="11">Dezembro</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <button class="btn btn-primary" onclick="showRecords('total')"><i class="fa-solid fa-list-check"></i> Registros Totais</button>
+                    <button class="btn btn-glass" onclick="showRecords('pending')"><i class="fa-solid fa-clock-rotate-left"></i> Registros Pendentes</button>
+                    <button class="btn btn-glass" onclick="exportToExcel()"><i class="fa-solid fa-file-excel"></i> Exportar</button>
+                </div>
+            </div>
+
+            <div class="charts-row">
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <span class="chart-title">Emissão Total (Histórico por Mês)</span>
+                        <div class="filter-group">
+                            <span style="font-size: 0.7rem; color: var(--text-muted);"><i class="fa-solid fa-circle-info"></i> Clique p/ detalhar</span>
+                        </div>
+                    </div>
+                    <div class="chart-canvas-wrapper">
+                        <canvas id="chart-total"></canvas>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <span class="chart-title">Emissão Pendente (Backlog Atual)</span>
+                        <div class="filter-group">
+                             <span id="pending-info" style="font-size: 0.75rem; color: var(--color-primary); font-weight: 600;"></span>
+                        </div>
+                    </div>
+                    <div class="chart-canvas-wrapper">
+                        <canvas id="chart-pending"></canvas>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal Registros -->
+    <div id="modal-records" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" id="modal-records-title"><i class="fa-solid fa-list"></i> Registros de Emissão</h2>
+                <div class="filter-group">
+                    <input type="text" id="table-search" placeholder="Filtrar tabela..." onkeyup="filterTable()">
+                    <button class="btn btn-glass" onclick="closeModal()"><i class="fa-solid fa-xmark"></i> Fechar</button>
+                </div>
+            </div>
+            <div class="table-area">
+                <table id="records-table">
+                    <thead>
+                        <tr>
+                            <th>Data Emissão</th>
+                            <th>Pedido</th>
+                            <th>Cliente</th>
+                            <th>Produto</th>
+                            <th>Qtd Original</th>
+                            <th>Saldo Pend.</th>
+                            <th>Peso Unit.</th>
+                            <th>Peso Total</th>
+                            <th>Valor Total</th>
+                            <th>OP</th>
+                        </tr>
+                    </thead>
+                    <tbody id="records-body"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let rawTotalEmissions = [];
+        let rawPendingEmissions = [];
+        let customWeights = {};
+        
+        let chartTotal = null;
+        let chartPending = null;
+        let activeMode = 'total'; // 'total' or 'pending' for record view context
+        
+        const chartColorAmber = '#fbbf24';
+        const chartColorZinc = 'rgba(161, 161, 170, 0.2)';
+
+        // --- CORE FUNCTIONS ---
+
+        function toLocalDate(d) {
+            if (!d) return null;
+            const date = new Date(d);
+            return new Date(date.getTime() + date.getTimezoneOffset() * 60000);
+        }
+
+        async function loadData() {
+            try {
+                // Show loader (via loader.js)
+                if (window.showLoader) window.showLoader();
+
+                // 1. Fetch Custom Weights
+                const weightRes = await fetch('/api/weights');
+                if (weightRes.ok) {
+                    const weightData = await weightRes.json();
+                    customWeights = {};
+                    weightData.forEach(w => customWeights[String(w.codigo_peca).trim()] = w.peso);
+                }
+
+                // 2. Fetch Total Emissions (List for full processing)
+                const year = document.getElementById('filter-year').value;
+                const totalRes = await fetch(`/api/emissoes/list?ano=${year}`);
+                if (totalRes.ok) rawTotalEmissions = await totalRes.json();
+
+                // 3. Fetch Pending Emissions (Backlog)
+                const pendingRes = await fetch('/api/pedidos-sync');
+                if (pendingRes.ok) rawPendingEmissions = await pendingRes.json();
+
+                processAndRender();
+                
+                if (window.hideLoader) window.hideLoader();
+                ActivityLogger.log('Acessou Painel de Emissões', 'Visualização de dados analíticos');
+            } catch (err) {
+                console.error('Erro ao carregar dados:', err);
+                alert('Erro ao carregar dados. Verifique a conexão.');
+            }
+        }
+
+        function getItemWeight(item) {
+            const prodCode = String(item.PRODUTO_PPR || '').trim();
+            const qty = parseFloat(item.QUANTIDADE_PPR || 0);
+            if (customWeights[prodCode]) return customWeights[prodCode] * qty;
+            return parseFloat(item.PESO_LIQUIDO_NPR || 0);
+        }
+
+        function getUnitWeight(item) {
+            const prodCode = String(item.PRODUTO_PPR || '').trim();
+            if (customWeights[prodCode]) return customWeights[prodCode];
+            const qty = parseFloat(item.QUANTIDADE_PPR || 0);
+            if (qty > 0) return (parseFloat(item.PESO_LIQUIDO_NPR || 0) / qty);
+            return 0;
+        }
+
+        function processAndRender() {
+            const year = parseInt(document.getElementById('filter-year').value);
+            const month = document.getElementById('filter-month').value;
+            const isAllMonths = month === 'all';
+            const monthIdx = isAllMonths ? null : parseInt(month);
+
+            // 1. Filter Total Data
+            const totalFiltered = rawTotalEmissions.filter(r => {
+                const d = toLocalDate(r.DATA_EMISSAO_PEDIDO);
+                if (!d || d.getFullYear() !== year) return false;
+                if (!isAllMonths && d.getMonth() !== monthIdx) return false;
+                return true;
+            });
+
+            // 2. Filter Pending Data
+            const pendingFiltered = rawPendingEmissions.filter(r => {
+                const d = toLocalDate(r.DATA_EMISSAO_PEDIDO);
+                if (!d || d.getFullYear() !== year) return false;
+                if (!isAllMonths && d.getMonth() !== monthIdx) return false;
+                return true;
+            });
+
+            updateKPIs(totalFiltered, pendingFiltered);
+            renderChartTotal(rawTotalEmissions, year, monthIdx);
+            renderChartPending(rawPendingEmissions, year, monthIdx);
+        }
+
+        function updateKPIs(total, pending) {
+            let totalW = 0, totalV = 0;
+            total.forEach(r => {
+                totalW += getItemWeight(r);
+                totalV += (parseFloat(r.VALOR_PPR || 0) * (parseFloat(r.QUANTIDADE_PPR || 0)));
+            });
+
+            let pendW = 0, pendC = pending.length;
+            pending.forEach(r => {
+                const unitW = getUnitWeight(r);
+                const saldo = parseFloat(r.SALDO_LIBERADO_FATURAR_PPR || r.QUANTIDADE_PPR || 0);
+                pendW += (unitW * saldo);
+            });
+
+            document.getElementById('kpi-total-weight').innerText = `${totalW.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} kg`;
+            document.getElementById('kpi-total-value').innerText = totalV.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+            document.getElementById('kpi-pending-count').innerText = pendC.toLocaleString('pt-BR');
+            document.getElementById('kpi-pending-weight').innerText = `${pendW.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} kg`;
+            
+            document.getElementById('pending-info').innerText = isNaN(pendW) ? '' : `Total Pendente: ${pendW.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} kg`;
+        }
+
+        function renderChartTotal(data, year, monthIdx) {
+            const ctx = document.getElementById('chart-total').getContext('2d');
+            const monthLabels = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+            
+            let labels = [], values = [];
+
+            if (monthIdx === null) {
+                // Annual View
+                labels = monthLabels;
+                values = Array(12).fill(0);
+                data.forEach(r => {
+                    const d = toLocalDate(r.DATA_EMISSAO_PEDIDO);
+                    if (d && d.getFullYear() === year) values[d.getMonth()] += getItemWeight(r);
+                });
+            } else {
+                // Monthly View (Daily)
+                const lastDay = new Date(year, monthIdx + 1, 0).getDate();
+                labels = Array.from({length: lastDay}, (_, i) => `Dia ${i+1}`);
+                values = Array(lastDay).fill(0);
+                data.forEach(r => {
+                    const d = toLocalDate(r.DATA_EMISSAO_PEDIDO);
+                    if (d && d.getFullYear() === year && d.getMonth() === monthIdx) values[d.getDate() - 1] += getItemWeight(r);
+                });
+            }
+
+            if (chartTotal) chartTotal.destroy();
+            chartTotal = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Peso Emitido (kg)',
+                        data: values,
+                        backgroundColor: chartColorAmber,
+                        borderRadius: 5
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' } }, x: { grid: { display: false } } },
+                    plugins: { legend: { display: false } },
+                    onClick: (e, el) => {
+                        if (el.length > 0 && monthIdx === null) {
+                            document.getElementById('filter-month').value = el[0].index;
+                            processAndRender();
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderChartPending(data, year, monthIdx) {
+            const ctx = document.getElementById('chart-pending').getContext('2d');
+            const monthLabels = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+            
+            let labels = [], values = [];
+
+            if (monthIdx === null) {
+                labels = monthLabels;
+                values = Array(12).fill(0);
+                data.forEach(r => {
+                    const d = toLocalDate(r.DATA_EMISSAO_PEDIDO);
+                    if (d && d.getFullYear() === year) {
+                        const unitW = getUnitWeight(r);
+                        const saldo = parseFloat(r.SALDO_LIBERADO_FATURAR_PPR || r.QUANTIDADE_PPR || 0);
+                        values[d.getMonth()] += (unitW * saldo);
+                    }
+                });
+            } else {
+                const lastDay = new Date(year, monthIdx + 1, 0).getDate();
+                labels = Array.from({length: lastDay}, (_, i) => `Dia ${i+1}`);
+                values = Array(lastDay).fill(0);
+                data.forEach(r => {
+                    const d = toLocalDate(r.DATA_EMISSAO_PEDIDO);
+                    if (d && d.getFullYear() === year && d.getMonth() === monthIdx) {
+                        const unitW = getUnitWeight(r);
+                        const saldo = parseFloat(r.SALDO_LIBERADO_FATURAR_PPR || r.QUANTIDADE_PPR || 0);
+                        values[d.getDate() - 1] += (unitW * saldo);
+                    }
+                });
+            }
+
+            if (chartPending) chartPending.destroy();
+            chartPending = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Peso Pendente (kg)',
+                        data: values,
+                        backgroundColor: '#10b981', // Emerald for Pending
+                        borderRadius: 5
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' } }, x: { grid: { display: false } } },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        // --- MODAL & TABLE ---
+
+        function showRecords(mode) {
+            activeMode = mode;
+            const year = parseInt(document.getElementById('filter-year').value);
+            const month = document.getElementById('filter-month').value;
+            const isAllMonths = month === 'all';
+            const monthIdx = isAllMonths ? null : parseInt(month);
+
+            const source = mode === 'total' ? rawTotalEmissions : rawPendingEmissions;
+            const filtered = source.filter(r => {
+                const d = toLocalDate(r.DATA_EMISSAO_PEDIDO);
+                if (!d || d.getFullYear() !== year) return false;
+                if (!isAllMonths && d.getMonth() !== monthIdx) return false;
+                return true;
+            });
+
+            document.getElementById('modal-records-title').innerHTML = mode === 'total' ? 
+                '<i class="fa-solid fa-list"></i> Registros de Emissão (Histórico Completo)' : 
+                '<i class="fa-solid fa-clock-rotate-left"></i> Registros Pendentes de Entrega';
+
+            const tbody = document.getElementById('records-body');
+            tbody.innerHTML = '';
+
+            filtered.forEach(r => {
+                const tr = document.createElement('tr');
+                const unitW = getUnitWeight(r);
+                const qty = parseFloat(r.QUANTIDADE_PPR || 0);
+                const saldo = parseFloat(r.SALDO_LIBERADO_FATURAR_PPR || r.QUANTIDADE_PPR || 0);
+                const weight = mode === 'total' ? getItemWeight(r) : (unitW * saldo);
+                const valor = parseFloat(r.VALOR_PPR || 0) * (mode === 'total' ? qty : saldo);
+
+                tr.innerHTML = `
+                    <td>${toLocalDate(r.DATA_EMISSAO_PEDIDO).toLocaleDateString('pt-BR')}</td>
+                    <td style="font-weight:700">${r.CODIGO_PPR}/${r.ANO_PPR}</td>
+                    <td>${r.NOME_CLIENTE || '-'}</td>
+                    <td>${r.NOME_PRODUTO_PPR || '-'}</td>
+                    <td style="text-align:center">${qty}</td>
+                    <td style="text-align:center; color:${saldo > 0 ? 'var(--color-primary)' : 'inherit'}">${saldo}</td>
+                    <td style="text-align:center">${unitW.toFixed(3)}</td>
+                    <td style="text-align:center; font-weight:700">${weight.toLocaleString('pt-BR', {minimumFractionDigits: 0, maximumFractionDigits: 0})} kg</td>
+                    <td style="text-align:right">${valor.toLocaleString('pt-BR', {style:'currency', currency:'BRL'})}</td>
+                    <td style="text-align:center; font-size:0.7rem">${r.ORDEM_COMPRA_PPR || '-'}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            document.getElementById('modal-records').style.display = 'flex';
+        }
+
+        function filterTable() {
+            const input = document.getElementById('table-search');
+            const filter = input.value.toLowerCase();
+            const table = document.getElementById('records-table');
+            const tr = table.getElementsByTagName('tr');
+
+            for (let i = 1; i < tr.length; i++) {
+                let show = false;
+                const tds = tr[i].getElementsByTagName('td');
+                for (let j = 0; j < tds.length; j++) {
+                    if (tds[j].textContent.toLowerCase().includes(filter)) {
+                        show = true; break;
+                    }
+                }
+                tr[i].style.display = show ? "" : "none";
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('modal-records').style.display = 'none';
+        }
+
+        function exportToExcel() {
+            const table = document.getElementById('records-table');
+            const wb = XLSX.utils.table_to_book(table, { sheet: "Registros" });
+            XLSX.writeFile(wb, `Emissoes_${activeMode}_${new Date().getTime()}.xlsx`);
+            ActivityLogger.log('Exportou Excel (Emissões)', `Modo: ${activeMode}`);
+        }
+
+        // Initialize
+        window.addEventListener('load', loadData);
+    </script>
+</body>
+</html>
