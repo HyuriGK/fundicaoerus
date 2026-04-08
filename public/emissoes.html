@@ -1000,19 +1000,26 @@
                 return true;
             });
 
-            const filteredPending = rawPendingEmissions; 
+            // Filtro para Backlog (Pendentes) - Deve bater com o gráfico
+            let filteredBacklog = rawPendingEmissions.filter(p => {
+                const d = toLocalDate(p.DATA_EMISSAO_PEDIDO);
+                if (!d || d.getFullYear() !== year) return false;
+                if (!isAllMonths && d.getMonth() !== monthIdx) return false;
+                return true;
+            });
 
             // Update KPIs
-            updateKPIs(filteredTotal, pendingMap);
+            updateKPIs(filteredTotal, filteredBacklog);
             
             // Render Charts
             updateHistoricalChart(rawTotalEmissions, year, monthIdx);
             updatePendingChart(rawPendingEmissions, year, monthIdx);
         }
 
-        function updateKPIs(total, pendingMap) {
+        function updateKPIs(total, filteredBacklog) {
             let totalW = 0, totalV = 0, pendEmittedW = 0, pendEmittedV = 0;
             
+            // 1. Cálculo do Bruto (Histórico de Emissão)
             total.forEach(r => {
                 const weightBruto = getOriginalWeight(r);
                 totalW += weightBruto;
@@ -1022,19 +1029,17 @@
                 if (!isNaN(v) && !isNaN(q)) {
                     totalV += (v * q);
                 }
-                
-                // Cálculo da Pendência Real: 
-                // Cruzamos com a carteira atual (pendingMap)
-                const key = `${r.CODIGO_PPR}_${r.ANO_PPR}_${r.PRODUTO_PPR}`.trim();
-                const currentStatus = pendingMap.get(key);
-                
-                if (currentStatus) {
-                    const saldo = getCommercialBalance(currentStatus);
-                    pendEmittedW += getCorrectedWeight(currentStatus);
-                    
-                    if (!isNaN(v)) {
-                        pendEmittedV += (v * saldo);
-                    }
+            });
+
+            // 2. Cálculo do Pendente (Backlog Atual) - Fonte: rawPendingEmissions filtrado
+            filteredBacklog.forEach(p => {
+                const w = getCorrectedWeight(p);
+                const saldo = getCommercialBalance(p);
+                const v = parseFloat(p.VALOR_PPR || 0);
+
+                pendEmittedW += w;
+                if (!isNaN(v)) {
+                    pendEmittedV += (v * saldo);
                 }
             });
 
