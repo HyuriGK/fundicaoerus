@@ -906,6 +906,14 @@
             const isAllMonths = currentSelectedMonth === 'all';
             const monthIdx = isAllMonths ? null : parseInt(currentSelectedMonth);
 
+            // Criar um mapa de pedidos pendentes atuais para cruzamento rápido
+            // Chave: CODIGO_PPR + ANO_PPR + PRODUTO_PPR
+            const pendingMap = new Map();
+            rawPendingEmissions.forEach(p => {
+                const key = `${p.CODIGO_PPR}_${p.ANO_PPR}_${p.PRODUTO_PPR}`.trim();
+                pendingMap.set(key, p);
+            });
+
             // Filtro para KPIs
             let filteredTotal = rawTotalEmissions.filter(r => {
                 const d = toLocalDate(r.DATA_EMISSAO_PEDIDO);
@@ -917,14 +925,14 @@
             const filteredPending = rawPendingEmissions; 
 
             // Update KPIs
-            updateKPIs(filteredTotal, filteredPending);
+            updateKPIs(filteredTotal, pendingMap);
             
             // Render Charts
             updateHistoricalChart(rawTotalEmissions, year, monthIdx);
             updatePendingChart(rawPendingEmissions, year, monthIdx);
         }
 
-        function updateKPIs(total, pending) {
+        function updateKPIs(total, pendingMap) {
             let totalW = 0, totalV = 0, pendEmittedW = 0;
             
             total.forEach(r => {
@@ -932,8 +940,18 @@
                 totalW += weightBruto;
                 totalV += (Number(r.VALOR_PPR || 0) * Number(r.QUANTIDADE_PPR || 0));
                 
-                // Pendente especificamente do que foi emitido no período
-                pendEmittedW += getCorrectedWeight(r);
+                // Cálculo da Pendência Real: 
+                // Cruzamos com a carteira atual (pendingMap)
+                const key = `${r.CODIGO_PPR}_${r.ANO_PPR}_${r.PRODUTO_PPR}`.trim();
+                const currentStatus = pendingMap.get(key);
+                
+                if (currentStatus) {
+                    // Se o item ainda está na carteira, calculamos o saldo atual dele
+                    pendEmittedW += getCorrectedWeight(currentStatus);
+                } else {
+                    // Se não está na carteira, pendência é 0 (faturado ou cancelado)
+                    pendEmittedW += 0;
+                }
             });
 
             document.getElementById('kpi-total-weight').innerText = `${totalW.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} kg`;
@@ -1173,7 +1191,14 @@
             const isAllMonths = currentSelectedMonth === 'all';
             const monthIdx = isAllMonths ? null : parseInt(currentSelectedMonth);
 
-            const source = mode === 'total' ? rawTotalEmissions : rawPendingEmissions;
+            // Mapa para cruzamento de saldos atuais
+            const pendingMap = new Map();
+            rawPendingEmissions.forEach(p => {
+                const key = `${p.CODIGO_PPR}_${p.ANO_PPR}_${p.PRODUTO_PPR}`.trim();
+                pendingMap.set(key, p);
+            });
+
+            const source = rawTotalEmissions; 
             
             const filtered = source.filter(r => {
                 const d = toLocalDate(r.DATA_EMISSAO_PEDIDO);
@@ -1181,7 +1206,10 @@
                 if (!isAllMonths && d.getMonth() !== monthIdx) return false;
 
                 if (mode === 'pending_emitted') {
-                    if (getCommercialBalance(r) <= 0) return false;
+                    const key = `${r.CODIGO_PPR}_${r.ANO_PPR}_${r.PRODUTO_PPR}`.trim();
+                    const currentStatus = pendingMap.get(key);
+                    const saldo = currentStatus ? getCommercialBalance(currentStatus) : 0;
+                    if (saldo <= 0) return false;
                 }
                 return true;
             });
@@ -1198,9 +1226,16 @@
             filtered.forEach(r => {
                 const tr = document.createElement('tr');
                 const qty = Number(r.QUANTIDADE_PPR || 0);
-                const saldo = getCommercialBalance(r);
-                const weight = mode === 'total' ? getOriginalWeight(r) : getCorrectedWeight(r);
-                const unitW = qty > 0 ? (getOriginalWeight(r) / qty) : 0;
+
+                // Cruzamento de saldo
+                const key = `${r.CODIGO_PPR}_${r.ANO_PPR}_${r.PRODUTO_PPR}`.trim();
+                const currentStatus = pendingMap.get(key);
+                const saldo = currentStatus ? getCommercialBalance(currentStatus) : 0;
+                
+                const weightBruto = getOriginalWeight(r);
+                const weightPendente = currentStatus ? getCorrectedWeight(currentStatus) : 0;
+                
+                const unitW = qty > 0 ? (weightBruto / qty) : 0;
                 const valor = (Number(r.VALOR_PPR || 0) * (mode === 'total' ? qty : saldo));
 
                 tr.innerHTML = `
@@ -1211,7 +1246,7 @@
                     <td style="text-align:center">${qty}</td>
                     <td style="text-align:center; color:${saldo > 0 ? colorAmber : 'inherit'}">${saldo}</td>
                     <td style="text-align:right">${unitW.toFixed(3)}</td>
-                    <td style="text-align:right; font-weight:bold">${weight.toLocaleString('pt-BR', {maximumFractionDigits:1})} kg</td>
+                    <td style="text-align:right; font-weight:bold">${mode === 'total' ? weightBruto.toLocaleString('pt-BR', {maximumFractionDigits:1}) : weightPendente.toLocaleString('pt-BR', {maximumFractionDigits:1})} kg</td>
                     <td style="text-align:right">${valorVisible ? valor.toLocaleString('pt-BR', {style:'currency', currency:'BRL'}) : '***'}</td>
                     <td style="text-align:center; color:var(--text-muted)">${r.NUMERO_OP || '-'}</td>
                 `;
