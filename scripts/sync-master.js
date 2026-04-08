@@ -85,7 +85,7 @@ async function syncMaster() {
                 console.log(`📥 [3/4] Sincronizando roteiros para ${uniqueProducts.length} produtos...`);
 
                 const productChunks = [];
-                for (let i = 0; i < uniqueProducts.length; i += 100) productChunks.push(uniqueProducts.slice(i, i + 100));
+                for (let i = 0; i < uniqueProducts.length; i += 30) productChunks.push(uniqueProducts.slice(i, i + 30));
 
                 for (let i = 0; i < productChunks.length; i++) {
                     const chunk = productChunks[i];
@@ -122,6 +122,7 @@ async function syncMaster() {
                     }
                     const pct = 50 + Math.floor(((i + 1) / productChunks.length) * 50);
                     process.stdout.write(`@PROG:PEDIDOS:${pct}%\n`);
+                    if (i % 5 === 0) console.log(`   🔸 Roteiros: Processando lote ${i+1}/${productChunks.length} (${pct}%)`);
                 }
 
                 await pgClient.query('COMMIT');
