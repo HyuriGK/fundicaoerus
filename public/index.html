@@ -17,6 +17,7 @@
 
     <!-- Chart.js para o Gráfico -->
     <script src="js/activity-logger.js"></script>
+    <script src="js/shared-utils.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <style>
@@ -2886,96 +2887,6 @@
                 let customWeightsMap = {};
                 let excludedClientsSet = new Set();
 
-                // Helper para métricas industriais (Saldos por Setor) - Sincronizado com pedidos.html
-                function getItemSectorMetrics(item) {
-                    const saldoLib = Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0;
-                    const qtdOrig  = Number(item.QUANTIDADE_PPR) || 0;
-                    const erpFat   = Number(item.QUANTIDADE_FATURADA_PPR) || 0;
-                    
-                    // Prioridade: Quantidade da OP, se não houver, usa o pedido original.
-                    let targetTotalQty = (Number(item.OP_QUANTIDADE) || 0) || (saldoLib > 0 ? (saldoLib + erpFat) : qtdOrig);
-                    
-                    // Faturamento: Priorizamos o faturamento FÍSICO (apontamento) para o fluxo industrial.
-                    let cFat = Number(item.QTY_FATURAMENTO) || 0;
-                    
-                    // Força encerramento se marcado como faturado 'T' ou se faturamento ERP já cobre a meta
-                    if (item.FATURADO_PPR === 'T' || (targetTotalQty > 0 && erpFat >= targetTotalQty)) {
-                        cFat = targetTotalQty;
-                    }
-
-                    const maxInd = Math.max(
-                        Number(item.QTY_MOLDADA)    || 0,
-                        Number(item.QTY_FUSAO)      || 0,
-                        Number(item.QTY_ACABAMENTO) || 0,
-                        Number(item.QTY_TT)         || 0,
-                        Number(item.QTY_USINAGEM)   || 0,
-                        Number(item.QTY_QUALIDADE)  || 0,
-                        Number(item.QTY_EXPEDICAO)  || 0
-                    );
-
-                    // Suprimir resíduos ghost: se qualquer faturamento iniciou, limitamos a meta ao teto real.
-                    if ((cFat > 0 || erpFat > 0) && targetTotalQty > Math.max(cFat, erpFat)) {
-                        targetTotalQty = Math.max(cFat, erpFat, maxInd);
-                    }
-
-                    const cExp  = Math.max(cFat,  Number(item.QTY_EXPEDICAO) || 0);
-                    const cQual = Math.max(cExp,  Number(item.QTY_QUALIDADE) || 0);
-                    const cUsi  = Math.max(cQual, Number(item.QTY_USINAGEM) || 0);
-                    const cTT   = Math.max(cUsi,  Number(item.QTY_TT) || 0);
-                    const cAcab = Math.max(cTT,   Number(item.QTY_ACABAMENTO) || 0);
-                    const cFus  = Math.max(cAcab, Number(item.QTY_FUSAO) || 0);
-                    const cMold = Math.max(cFus,  Number(item.QTY_MOLDADA) || 0);
-
-                    const res = {
-                        qExpedicao:  Math.max(0, cExp - cFat),
-                        qQualidade:  Math.max(0, cQual - cExp),
-                        qUsinagem:   Math.max(0, cUsi - cQual),
-                        qTT:         Math.max(0, cTT - cUsi),
-                        qAcabamento: Math.max(0, cAcab - cTT),
-                        qFusao:      Math.max(0, cFus - cAcab),
-                        qMoldada:    Math.max(0, cMold - cFus),
-                        qAguardando: Math.max(0, targetTotalQty - cMold),
-                        targetTotalQty,
-                        originalTarget: (Number(item.OP_QUANTIDADE) || 0) || qtdOrig
-                    };
-
-                    res.totalBalance = res.qExpedicao + res.qQualidade + res.qUsinagem + res.qTT + res.qAcabamento + res.qFusao + res.qMoldada + res.qAguardando;
-                    
-                    // Threshold filter (suppress noise < 0.01 units)
-                    for (let k in res) {
-                        if (typeof res[k] === 'number' && res[k] < 0.01) res[k] = 0;
-                    }
-                    return res;
-                }
-
-                // Helper para cálculo de peso corrigido (Igual ao pedidos.html)
-                function getCorrectedWeight(item) {
-                    // Usamos o Saldo Comercial (Pedidos) e NÃO o saldo físico (Industrial)
-                    const saldoLib = Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0;
-                    let saldoReal = saldoLib;
-                    if (saldoLib <= 0) {
-                        const qO = Number(item.QUANTIDADE_PPR) || 0;
-                        const qF = Number(item.QUANTIDADE_FATURADO_PPR || item.QUANTIDADE_FATURADA_PPR) || 0;
-                        saldoReal = Math.max(0, qO - qF);
-                    }
-
-                    const metrics = getItemSectorMetrics(item);
-                    const qtdOriginal = metrics.originalTarget;
-
-                    let unitWeight = 0;
-                    const prodCode = String(item.PRODUTO_PPR || '').trim();
-
-                    if (item.PESO_UNIT !== undefined && item.PESO_UNIT !== null && item.PESO_UNIT !== '') {
-                        unitWeight = Number(item.PESO_UNIT);
-                    } else if (customWeightsMap[prodCode]) {
-                        unitWeight = customWeightsMap[prodCode];
-                    } else {
-                        unitWeight = qtdOriginal > 0 ? (Number(item.PESO_LIQUIDO_NPR) || 0) / qtdOriginal : 0;
-                    }
-
-                    return unitWeight * saldoReal;
-                }
-
                 async function fetchLiveData(link) {
                     try {
                         const response = await fetch(link.api);
@@ -3125,7 +3036,7 @@
                                 return !isModelo && !isFaturado;
                             });
 
-                            const totalKg = filtered.reduce((acc, item) => acc + getCorrectedWeight(item), 0);
+                            const totalKg = filtered.reduce((acc, item) => acc + getCorrectedWeight(item, customWeightsMap), 0);
                             numericValue = totalKg / 1000;
                             subLabel = "Total em Carteira";
 
@@ -3697,7 +3608,7 @@
                     list.forEach(item => {
                         const cName = (item.NOME_CLIENTE || 'Desconhecido').trim().toUpperCase();
                         if (!clients[cName]) clients[cName] = 0;
-                        clients[cName] += getCorrectedWeight(item);
+                        clients[cName] += getCorrectedWeight(item, customWeightsMap);
                     });
 
                     // Sort descending and take Top 5
