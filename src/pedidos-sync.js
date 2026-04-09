@@ -15,7 +15,7 @@ router.get('/', async (req, res) => {
                     p.updated_at,
                     f.data_fic,
                     f.pro_codigo_fic AS has_ficha
-                FROM firebird_sync_pedidos p
+                FROM firebird_sync_emissoes p
                 INNER JOIN (
                     -- Join by both Pedido and Produto to match exactly the items in the backlog
                     SELECT DISTINCT pedido, codigo FROM carteira
@@ -36,7 +36,7 @@ router.get('/', async (req, res) => {
                     p.updated_at,
                     f.data_fic,
                     f.pro_codigo_fic AS has_ficha
-                FROM firebird_sync_pedidos p
+                FROM firebird_sync_emissoes p
                 LEFT JOIN ficha_tecnica f ON f.pro_codigo_fic = (p.data->>'PRODUTO_PPR')
                 ORDER BY 
                     (f.pro_codigo_fic IS NOT NULL) DESC,
