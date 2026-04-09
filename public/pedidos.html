@@ -4124,12 +4124,20 @@
                 list.forEach(item => {
                     const d = item.DATA_EMISSAO_PEDIDO ? toLocalDate(item.DATA_EMISSAO_PEDIDO) : null;
                     if (d && d.getFullYear() === selectedYear) {
-                        const weight = getCorrectedWeight(item, customWeights);
-                        let vUnit = parseFloat(item.VALOR_PPR || 0);
-                        const realQ = (Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0) || (Number(item.QUANTIDADE_PPR) || 0);
+                        // Usar mesma fórmula de peso do gráfico Emissão Geral
+                        const qOriginal = parseFloat(item.QUANTIDADE_PPR) || 0;
                         const prodCode = String(item.PRODUTO_PPR || '').trim();
+                        let wUn = 0;
+                        if (customWeights[prodCode]) {
+                            wUn = customWeights[prodCode];
+                        } else {
+                            wUn = qOriginal > 0 ? (parseFloat(item.PESO_LIQUIDO_NPR) || 0) / qOriginal : 0;
+                        }
+                        const realQ = getCommercialBalance(item);
+                        const weight = wUn * realQ;
+                        let vUnit = parseFloat(item.VALOR_PPR || 0);
                         if (item.PRECO_KG && parseFloat(item.PRECO_KG) > 0 && customWeights[prodCode]) {
-                            vUnit = parseFloat(item.PRECO_KG) * (realQ > 0 ? (weight / realQ) : 0);
+                            vUnit = parseFloat(item.PRECO_KG) * wUn;
                         }
                         mData[d.getMonth()] += weight;
                         mDataValue[d.getMonth()] += (vUnit * realQ);
@@ -4168,15 +4176,22 @@
                         const dayNum = d.getDate();
                         if (!dailyMap[dayNum]) dailyMap[dayNum] = { peso: 0, valor: 0 };
                         
-                        const weight = getCorrectedWeight(item, customWeights);
-                        let vUnit = parseFloat(item.VALOR_PPR || 0);
-                        const realQ = (Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0) || (Number(item.QUANTIDADE_PPR) || 0);
+                        // Usar mesma fórmula de peso do gráfico Emissão Geral
+                        const qOriginal = parseFloat(item.QUANTIDADE_PPR) || 0;
                         const prodCode = String(item.PRODUTO_PPR || '').trim();
-                        if (item.PRECO_KG && parseFloat(item.PRECO_KG) > 0 && customWeights[prodCode]) {
-                            vUnit = parseFloat(item.PRECO_KG) * (realQ > 0 ? (weight / realQ) : 0);
+                        let wUn = 0;
+                        if (customWeights[prodCode]) {
+                            wUn = customWeights[prodCode];
+                        } else {
+                            wUn = qOriginal > 0 ? (parseFloat(item.PESO_LIQUIDO_NPR) || 0) / qOriginal : 0;
                         }
-                        const itemWeight = weight;
-                        const itemValue = (vUnit * realQ);
+                        const realQ = getCommercialBalance(item);
+                        const itemWeight = wUn * realQ;
+                        let vUnit = parseFloat(item.VALOR_PPR || 0);
+                        if (item.PRECO_KG && parseFloat(item.PRECO_KG) > 0 && customWeights[prodCode]) {
+                            vUnit = parseFloat(item.PRECO_KG) * wUn;
+                        }
+                        const itemValue = vUnit * realQ;
 
                         dailyMap[dayNum].peso += itemWeight;
                         dailyMap[dayNum].valor += itemValue;
