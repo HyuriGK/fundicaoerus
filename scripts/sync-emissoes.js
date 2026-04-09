@@ -192,7 +192,7 @@ async function syncEmissoes() {
         await pgClient.query("SET TIME ZONE 'America/Sao_Paulo'");
         await pgClient.query(`
             INSERT INTO sync_status (screen_name, last_sync_at)
-            VALUES ('Pedidos', NOW())
+            VALUES ('Pedidos', NOW()), ('Emissões', NOW())
             ON CONFLICT (screen_name) DO UPDATE SET last_sync_at = NOW();
         `);
 
