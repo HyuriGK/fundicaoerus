@@ -58,24 +58,14 @@ async function syncEmissoes() {
                 C.RAZAO_SOCIAL_CLI AS NOME_CLIENTE, C.CODIGO_CLI AS ID_CLIENTE_CORE,
                 M.MATERIAL_MAT AS NOME_MATERIAL,
 
-                -- CAMPOS DE PRODUÇÃO (OP)
+                -- CAMPOS DE PRODUÇÃO (OP) - Puxando metadados básicos
                 (SELECT FIRST 1 PP.PCP_CODIGO_PCPR FROM PRODUCAO_PEDIDO PP WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR AND PP.PPR_ANO_PCPR = P.ANO_PPR AND PP.PPR_ITEM_PCPR = P.ITEM_PPR AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR) as OP_PCS,
                 (SELECT FIRST 1 PR.DATA_PCP FROM PRODUCAO_PEDIDO PP JOIN PRODUCAO PR ON PR.CODIGO_PCP = PP.PCP_CODIGO_PCPR AND PR.EMPRESA_PCP = PP.PCP_EMPRESA_PCPR WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR AND PP.PPR_ANO_PCPR = P.ANO_PPR AND PP.PPR_ITEM_PCPR = P.ITEM_PPR AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR) as OP_EMISSAO,
                 (SELECT FIRST 1 PR.ENTREGA_PCP FROM PRODUCAO_PEDIDO PP JOIN PRODUCAO PR ON PR.CODIGO_PCP = PP.PCP_CODIGO_PCPR AND PR.EMPRESA_PCP = PP.PCP_EMPRESA_PCPR WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR AND PP.PPR_ANO_PCPR = P.ANO_PPR AND PP.PPR_ITEM_PCPR = P.ITEM_PPR AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR) as OP_ENTREGA,
                 (SELECT FIRST 1 PR.QUANTIDADE_PCP FROM PRODUCAO_PEDIDO PP JOIN PRODUCAO PR ON PR.CODIGO_PCP = PP.PCP_CODIGO_PCPR AND PR.EMPRESA_PCP = PP.PCP_EMPRESA_PCPR WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR AND PP.PPR_ANO_PCPR = P.ANO_PPR AND PP.PPR_ITEM_PCPR = P.ITEM_PPR AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR) as OP_QUANTIDADE,
                 (SELECT FIRST 1 PR.STATUS_PCP FROM PRODUCAO_PEDIDO PP JOIN PRODUCAO PR ON PR.CODIGO_PCP = PP.PCP_CODIGO_PCPR AND PR.EMPRESA_PCP = PP.PCP_EMPRESA_PCPR WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR AND PP.PPR_ANO_PCPR = P.ANO_PPR AND PP.PPR_ITEM_PCPR = P.ITEM_PPR AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR) as STATUS_PCP,
                 (SELECT FIRST 1 PS.LOTE_PCS FROM PRODUCAO_PEDIDO PP JOIN PRODUCAO_SETOR PS ON PS.CODIGO_PCS = PP.PCP_CODIGO_PCPR AND PS.EMPRESA_PCS = PP.PCP_EMPRESA_PCPR WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR AND PP.PPR_ANO_PCPR = P.ANO_PPR AND PP.PPR_ITEM_PCPR = P.ITEM_PPR AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR ORDER BY PS.ID_PCS DESC) as LOTE_PCS,
-                (SELECT FIRST 1 E.ENTREGA_PETR FROM PEDIDO_PRODUTO_ENTREGA E WHERE E.PPR_CODIGO_PETR = P.CODIGO_PPR AND E.PPR_ANO_PETR = P.ANO_PPR AND E.PPR_ITEM_PETR = P.ITEM_PPR AND E.PPR_EMPRESA_PETR = P.EMPRESA_PPR) as ENTREGA_PETR,
-
-                -- MÉTRICAS INDUSTRIAIS (PRODUÇÃO APONTADA)
-                (SELECT SUM(PS.QUANTIDADE_PCS) FROM PRODUCAO_PEDIDO PP JOIN PRODUCAO_SETOR PS ON PS.CODIGO_PCS = PP.PCP_CODIGO_PCPR AND PS.EMPRESA_PCS = PP.PCP_EMPRESA_PCPR WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR AND PP.PPR_ANO_PCPR = P.ANO_PPR AND PP.PPR_ITEM_PCPR = P.ITEM_PPR AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR AND PS.SETOR_PCS IN (10, 11, 12)) as QTY_MOLDADA,
-                (SELECT SUM(PS.QUANTIDADE_PCS) FROM PRODUCAO_PEDIDO PP JOIN PRODUCAO_SETOR PS ON PS.CODIGO_PCS = PP.PCP_CODIGO_PCPR AND PS.EMPRESA_PCS = PP.PCP_EMPRESA_PCPR WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR AND PP.PPR_ANO_PCPR = P.ANO_PPR AND PP.PPR_ITEM_PCPR = P.ITEM_PPR AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR AND PS.SETOR_PCS = 20) as QTY_FUSAO,
-                (SELECT SUM(PS.QUANTIDADE_PCS) FROM PRODUCAO_PEDIDO PP JOIN PRODUCAO_SETOR PS ON PS.CODIGO_PCS = PP.PCP_CODIGO_PCPR AND PS.EMPRESA_PCS = PP.PCP_EMPRESA_PCPR WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR AND PP.PPR_ANO_PCPR = P.ANO_PPR AND PP.PPR_ITEM_PCPR = P.ITEM_PPR AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR AND PS.SETOR_PCS = 30) as QTY_ACABAMENTO,
-                (SELECT SUM(PS.QUANTIDADE_PCS) FROM PRODUCAO_PEDIDO PP JOIN PRODUCAO_SETOR PS ON PS.CODIGO_PCS = PP.PCP_CODIGO_PCPR AND PS.EMPRESA_PCS = PP.PCP_EMPRESA_PCPR WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR AND PP.PPR_ANO_PCPR = P.ANO_PPR AND PP.PPR_ITEM_PCPR = P.ITEM_PPR AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR AND PS.SETOR_PCS = 40) as QTY_TT,
-                (SELECT SUM(PS.QUANTIDADE_PCS) FROM PRODUCAO_PEDIDO PP JOIN PRODUCAO_SETOR PS ON PS.CODIGO_PCS = PP.PCP_CODIGO_PCPR AND PS.EMPRESA_PCS = PP.PCP_EMPRESA_PCPR WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR AND PP.PPR_ANO_PCPR = P.ANO_PPR AND PP.PPR_ITEM_PCPR = P.ITEM_PPR AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR AND PS.SETOR_PCS IN (50, 105)) as QTY_USINAGEM,
-                (SELECT SUM(PS.QUANTIDADE_PCS) FROM PRODUCAO_PEDIDO PP JOIN PRODUCAO_SETOR PS ON PS.CODIGO_PCS = PP.PCP_CODIGO_PCPR AND PS.EMPRESA_PCS = PP.PCP_EMPRESA_PCPR WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR AND PP.PPR_ANO_PCPR = P.ANO_PPR AND PP.PPR_ITEM_PCPR = P.ITEM_PPR AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR AND PS.SETOR_PCS = 60) as QTY_QUALIDADE,
-                (SELECT SUM(PS.QUANTIDADE_PCS) FROM PRODUCAO_PEDIDO PP JOIN PRODUCAO_SETOR PS ON PS.CODIGO_PCS = PP.PCP_CODIGO_PCPR AND PS.EMPRESA_PCS = PP.PCP_EMPRESA_PCPR WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR AND PP.PPR_ANO_PCPR = P.ANO_PPR AND PP.PPR_ITEM_PCPR = P.ITEM_PPR AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR AND PS.SETOR_PCS = 100) as QTY_EXPEDICAO,
-                (SELECT SUM(PS.QUANTIDADE_PCS) FROM PRODUCAO_PEDIDO PP JOIN PRODUCAO_SETOR PS ON PS.CODIGO_PCS = PP.PCP_CODIGO_PCPR AND PS.EMPRESA_PCS = PP.PCP_EMPRESA_PCPR WHERE PP.PPR_CODIGO_PCPR = P.CODIGO_PPR AND PP.PPR_ANO_PCPR = P.ANO_PPR AND PP.PPR_ITEM_PCPR = P.ITEM_PPR AND PP.PPR_EMPRESA_PCPR = P.EMPRESA_PPR AND PS.SETOR_PCS = 101) as QTY_FATURAMENTO
+                (SELECT FIRST 1 E.ENTREGA_PETR FROM PEDIDO_PRODUTO_ENTREGA E WHERE E.PPR_CODIGO_PETR = P.CODIGO_PPR AND E.PPR_ANO_PETR = P.ANO_PPR AND E.PPR_ITEM_PETR = P.ITEM_PPR AND E.PPR_EMPRESA_PETR = P.EMPRESA_PPR) as ENTREGA_PETR
 
             FROM PEDIDO_PRODUTO P
             INNER JOIN PEDIDO D ON P.CODIGO_PPR = D.CODIGO_PED AND P.ANO_PPR = D.ANO_PED AND P.EMPRESA_PPR = D.EMPRESA_PED
@@ -97,12 +87,59 @@ async function syncEmissoes() {
         console.log(`📊 ${results.length} registros de emissão encontrados.`);
 
         if (results.length > 0) {
+            // BUSCAR APONTAMENTOS EM LOTE (TURBO)
+            const opIds = [...new Set(results.map(r => r.OP_PCS).filter(op => op && op !== '-'))];
+            const pointingsMap = {};
+
+            if (opIds.length > 0) {
+                console.log(`🔍 Buscando apontamentos para ${opIds.length} OPs...`);
+                // Dividir opIds em lotes para a query SQL (Firebird tem limites de IN)
+                const OP_BATCH_LIMIT = 500;
+                for (let j = 0; j < opIds.length; j += OP_BATCH_LIMIT) {
+                    const batchIds = opIds.slice(j, j + OP_BATCH_LIMIT);
+                    const pointingQuery = `
+                        SELECT CODIGO_PCS, SETOR_PCS, SUM(QUANTIDADE_PCS) as TOTAL
+                        FROM PRODUCAO_SETOR
+                        WHERE CODIGO_PCS IN (${batchIds.join(',')})
+                        GROUP BY 1, 2
+                    `;
+                    const pointingRows = await new Promise((resolve, reject) => {
+                        db.query(pointingQuery, (err, res) => {
+                            if (err) reject(err);
+                            else resolve(res);
+                        });
+                    });
+
+                    pointingRows.forEach(row => {
+                        if (!pointingsMap[row.CODIGO_PCS]) pointingsMap[row.CODIGO_PCS] = {};
+                        pointingsMap[row.CODIGO_PCS][row.SETOR_PCS] = row.TOTAL;
+                    });
+                }
+            }
+
             console.log('📤 Enviando para o Postgres em lotes...');
             const BATCH_SIZE = 500;
             for (let i = 0; i < results.length; i += BATCH_SIZE) {
                 const batch = results.slice(i, i + BATCH_SIZE);
-                const keys = batch.map(r => `${r.EMPRESA_PPR}-${r.ANO_PPR}-${r.CODIGO_PPR}-${r.ITEM_PPR}`);
-                const data = batch.map(r => JSON.stringify(r));
+                
+                // Mesclar apontamentos antes de salvar
+                const batchWithMetrics = batch.map(r => {
+                    const ops = pointingsMap[r.OP_PCS] || {};
+                    return {
+                        ...r,
+                        QTY_MOLDADA: (ops[10] || 0) + (ops[11] || 0) + (ops[12] || 0),
+                        QTY_FUSAO: ops[20] || 0,
+                        QTY_ACABAMENTO: ops[30] || 0,
+                        QTY_TT: ops[40] || 0,
+                        QTY_USINAGEM: (ops[50] || 0) + (ops[105] || 0),
+                        QTY_QUALIDADE: ops[60] || 0,
+                        QTY_EXPEDICAO: ops[100] || 0,
+                        QTY_FATURAMENTO: ops[101] || 0
+                    };
+                });
+
+                const keys = batchWithMetrics.map(r => `${r.EMPRESA_PPR}-${r.ANO_PPR}-${r.CODIGO_PPR}-${r.ITEM_PPR}`);
+                const data = batchWithMetrics.map(r => JSON.stringify(r));
 
                 await pgClient.query(`
                     INSERT INTO firebird_sync_pedidos (sync_key, data, updated_at)

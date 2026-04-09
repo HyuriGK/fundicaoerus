@@ -2224,7 +2224,16 @@
 
                 if (banner) {
                     banner.style.display = 'flex';
-                    document.getElementById('sectorTotalQty').innerText = formatNumber(sQty, 0);
+                    // Banner shows RAW Total Pointed (as per user request: "puxar exatamente o apontado")
+                    let sRaw = 0, sQty = 0, sWeight = 0, sValue = 0;
+                    currentFilteredData.forEach(item => {
+                        sRaw += (item._sectorRaw || 0);
+                        sQty += (item._sectorQty || 0);
+                        sWeight += (item._sectorWeight || 0);
+                        sValue += (item._sectorValue || 0);
+                    });
+
+                    document.getElementById('sectorTotalQty').innerHTML = `<span title="Total Apontado no ERP" style="color:var(--color-primary);">${formatNumber(sRaw, 0)}</span> <small style="font-size: 0.7rem; color: var(--text-muted); margin-left: 5px;">(${formatNumber(sQty, 0)} em estoque)</small>`;
                     document.getElementById('sectorTotalWeight').innerText = formatNumber(sWeight) + ' kg';
                     document.getElementById('sectorTotalValue').innerText = valorVisible ? formatCurrency(sValue) : '-----';
                 }
@@ -3228,21 +3237,22 @@
                 }
 
                 // Helper to add data using direct unit multiplication
-                const addKpi = (kpi, q) => {
-                    if (q <= 0) return;
+                const addKpi = (kpi, q, raw) => {
+                    if (q <= 0 && raw <= 0) return;
                     kpi.qtd += q;
+                    kpi.raw = (kpi.raw || 0) + raw;
                     kpi.peso += uW * q;
                     kpi.valor += uP * q;
                 };
 
-                addKpi(kpiExpedicao, qExpedicao);
-                addKpi(kpiQualidade, qQualidade);
-                addKpi(kpiUsinagem, qUsinagem);
-                addKpi(kpiTT, qTT);
-                addKpi(kpiAcabamento, qAcabamento);
-                addKpi(kpiFusao, qFusao);
-                addKpi(kpiMoldagem, qMoldada);
-                addKpi(kpiAguardando, qAguardando);
+                addKpi(kpiExpedicao, qExpedicao, metrics.rawExpedicao);
+                addKpi(kpiQualidade, qQualidade, metrics.rawQualidade);
+                addKpi(kpiUsinagem, qUsinagem, metrics.rawUsinagem);
+                addKpi(kpiTT, qTT, metrics.rawTT);
+                addKpi(kpiAcabamento, qAcabamento, metrics.rawAcabamento);
+                addKpi(kpiFusao, qFusao, metrics.rawFusao);
+                addKpi(kpiMoldagem, qMoldada, metrics.rawMoldada);
+                addKpi(kpiAguardando, qAguardando, metrics.targetTotalQty);
             });
 
             // "Blocked" Weight = Total - Released (Items without delivery date)
@@ -3393,19 +3403,23 @@
                         <span class="tooltip-label">Representatividade (Total)</span>
                         <span class="tooltip-value">${totalPct.toFixed(1)}%</span>
                     </div>
-                    <div class="tooltip-row">
-                        <span class="tooltip-label">Peso total</span>
-                        <span class="tooltip-value">${formatNumber(data.peso, 0)} kg</span>
+                    <div class="tooltip-row" style="background: rgba(251, 191, 36, 0.1); border-radius: 4px; padding: 4px 0;">
+                        <span class="tooltip-label">Total Apontado (ERP)</span>
+                        <span class="tooltip-value" style="font-weight: bold;">${formatNumber(data.raw, 0)} pçs</span>
                     </div>
                     <div class="tooltip-row">
-                        <span class="tooltip-label">Quantidade</span>
+                        <span class="tooltip-label">Saldo Atual no Setor</span>
                         <span class="tooltip-value">${formatNumber(data.qtd, 0)} pçs</span>
                     </div>
-                    <div class="tooltip-row">
-                        <span class="tooltip-label">Valor total</span>
+                     <div class="tooltip-row">
+                        <span class="tooltip-label">Peso total (do Saldo)</span>
+                        <span class="tooltip-value">${formatNumber(data.peso, 0)} kg</span>
+                    </div>
+                    <div class="tooltip-row" style="margin-top: 5px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 5px;">
+                        <span class="tooltip-label">Valor total (do Saldo)</span>
                         <span class="tooltip-value" style="color:var(--status-purple)">${valContent}</span>
                     </div>
-                    <div class="tooltip-footer">
+                    <div class="tooltip-footer" style="margin-top: 5px;">
                         <i class="fa-solid fa-mouse-pointer"></i>
                         Clique sobre esta barra para ver os registros
                     </div>
@@ -3795,19 +3809,21 @@
                     const { qExpedicao, qQualidade, qUsinagem, qTT, qAcabamento, qFusao, qMoldada, qAguardando, targetTotalQty } = metrics;
 
                     let sectorQty = 0;
-                    if (s === 'aguardando') sectorQty = qAguardando;
-                    else if (s === 'moldagem') sectorQty = qMoldada;
-                    else if (s === 'fusao') sectorQty = qFusao;
-                    else if (s === 'acabamento') sectorQty = qAcabamento;
-                    else if (s === 'tt') sectorQty = qTT;
-                    else if (s === 'usinagem') sectorQty = qUsinagem;
-                    else if (s === 'qualidade') sectorQty = qQualidade;
-                    else if (s === 'expedicao') sectorQty = qExpedicao;
+                    let rawQty = 0;
+                    if (s === 'aguardando') { sectorQty = qAguardando; rawQty = targetTotalQty; }
+                    else if (s === 'moldagem') { sectorQty = qMoldada; rawQty = metrics.rawMoldada; }
+                    else if (s === 'fusao') { sectorQty = qFusao; rawQty = metrics.rawFusao; }
+                    else if (s === 'acabamento') { sectorQty = qAcabamento; rawQty = metrics.rawAcabamento; }
+                    else if (s === 'tt') { sectorQty = qTT; rawQty = metrics.rawTT; }
+                    else if (s === 'usinagem') { sectorQty = qUsinagem; rawQty = metrics.rawUsinagem; }
+                    else if (s === 'qualidade') { sectorQty = qQualidade; rawQty = metrics.rawQualidade; }
+                    else if (s === 'expedicao') { sectorQty = qExpedicao; rawQty = metrics.rawExpedicao; }
 
-                    if (sectorQty <= 0.01) return false;
+                    if (rawQty <= 0) return false;
 
                     // Attach metrics for renderTable and summary banner
                     item._sectorQty = sectorQty;
+                    item._sectorRaw = rawQty;
 
                     // Consistent Unit Weight Calculation
                     let unitWeight = 0;

@@ -78,6 +78,7 @@ function getItemSectorMetrics(item) {
     const cMold = Math.max(cFus,  Number(item.QTY_MOLDADA) || 0);
 
     const res = {
+        // SALDOS (Localized balance)
         qExpedicao:  Math.max(0, cExp - cFat),
         qQualidade:  Math.max(0, cQual - cExp),
         qUsinagem:   Math.max(0, cUsi - cQual),
@@ -86,6 +87,17 @@ function getItemSectorMetrics(item) {
         qFusao:      Math.max(0, cFus - cAcab),
         qMoldada:    Math.max(0, cMold - cFus),
         qAguardando: Math.max(0, targetTotalQty - cMold),
+        
+        // APONTADOS BRUTOS (As per ERP pointings)
+        rawFaturamento: Math.max(0, Number(item.QTY_FATURAMENTO) || 0),
+        rawExpedicao:   Math.max(0, Number(item.QTY_EXPEDICAO)   || 0),
+        rawQualidade:   Math.max(0, Number(item.QTY_QUALIDADE)   || 0),
+        rawUsinagem:    Math.max(0, Number(item.QTY_USINAGEM)    || 0),
+        rawTT:          Math.max(0, Number(item.QTY_TT)          || 0),
+        rawAcabamento:  Math.max(0, Number(item.QTY_ACABAMENTO)  || 0),
+        rawFusao:       Math.max(0, Number(item.QTY_FUSAO)       || 0),
+        rawMoldada:     Math.max(0, Number(item.QTY_MOLDADA)     || 0),
+
         targetTotalQty,
         originalTarget: Math.max((Number(item.OP_QUANTIDADE) || 0), qtdOrig)
     };
