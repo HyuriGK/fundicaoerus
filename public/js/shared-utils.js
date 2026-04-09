@@ -8,6 +8,11 @@
  * Prioritizes the ERP's 'SALDO_LIBERADO_FATURAR_PPR'.
  */
 function getCommercialBalance(item) {
+    // 0. Safety filter: If marked as totally billed ('T'), commercial balance is 0.
+    if (String(item.FATURADO_PPR || '').trim().toUpperCase() === 'T') {
+        return 0;
+    }
+
     const saldoLib = Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0;
     if (saldoLib > 0) return saldoLib;
     
