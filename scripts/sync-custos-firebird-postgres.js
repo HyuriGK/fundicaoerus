@@ -1,17 +1,6 @@
 require('dotenv').config({ path: require('path').resolve(__dirname, '../.env.local') });
-const Firebird = require('node-firebird');
+const { Firebird, options: FIREBIRD_OPTIONS } = require('../lib/firebird-helper');
 const pool = require('../lib/db');
-
-const FIREBIRD_OPTIONS = {
-    host: '10.1.1.100',
-    port: 3050,
-    database: '/home/lm/LM-Sistemas/SIGE2.0/Dados/sige.fdb',
-    user: 'SYSDBA',
-    password: 'masterkey',
-    lowercase_keys: false,
-    role: null,
-    pageSize: 4096
-};
 
 async function createTableIfNotExists() {
     console.log('📡 Tentando conectar ao Postgres para verificar tabela...');
