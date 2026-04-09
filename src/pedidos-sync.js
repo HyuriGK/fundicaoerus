@@ -16,17 +16,16 @@ router.get('/', async (req, res) => {
                     f.data_fic,
                     f.pro_codigo_fic AS has_ficha
                 FROM firebird_sync_pedidos p
-                INNER JOIN (
-                    -- Join by both Pedido and Produto to match exactly the items in the backlog
-                    SELECT DISTINCT pedido, codigo FROM carteira
-                ) c ON (p.data->>'CODIGO_PPR') = c.pedido AND (p.data->>'PRODUTO_PPR') = c.codigo
                 LEFT JOIN ficha_tecnica f ON f.pro_codigo_fic = (p.data->>'PRODUTO_PPR')
-                WHERE (p.data->>'OP_PCS') IS NOT NULL AND (p.data->>'OP_PCS') <> '' -- Ensure it's a production order
+                WHERE 
+                    (p.data->>'SALDO_LIBERADO_FATURAR_PPR')::numeric > 0 
+                    AND (p.data->>'STATUS_PPR') <> 'C'
+                    AND (p.data->>'OP_PCS') IS NOT NULL AND (p.data->>'OP_PCS') <> ''
                 ORDER BY 
                     (f.pro_codigo_fic IS NOT NULL) DESC,
                     f.data_fic DESC NULLS LAST,
                     p.updated_at DESC
-                LIMIT 1000
+                LIMIT 1500
             `;
         } else {
             query = `
@@ -42,7 +41,7 @@ router.get('/', async (req, res) => {
                     (f.pro_codigo_fic IS NOT NULL) DESC,
                     f.data_fic DESC NULLS LAST,
                     p.updated_at DESC
-                LIMIT 1000
+                LIMIT 1500
             `;
         }
 
