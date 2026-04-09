@@ -31,14 +31,14 @@ function getItemSectorMetrics(item) {
     const qtdOrig = Number(item.QUANTIDADE_PPR) || 0;
     const erpFat = Number(item.QUANTIDADE_FATURADO_PPR || item.QUANTIDADE_FATURADA_PPR) || 0;
     
-    // Target Total Quantity: Max between OP, Commercial Balance + Billed, or Original.
+    // Target Total Quantity
     let targetTotalQty = Math.max(
         (Number(item.OP_QUANTIDADE) || 0),
         (saldoLib + erpFat),
         qtdOrig
     );
 
-    // Current Billed (Consolidated: Industrial Pointing OR ERP Billing)
+    // Faturamento consolidado
     let cFat = Math.max(
         Number(item.QTY_FATURAMENTO) || 0,
         erpFat
@@ -48,7 +48,7 @@ function getItemSectorMetrics(item) {
         cFat = targetTotalQty;
     }
 
-    // Raw ERP pointings per sector (EXACT factory floor values - "Produzido no Setor")
+    // APONTADOS BRUTOS (Produzido no Setor - valores exatos do ERP)
     const rawFaturamento = Math.max(0, Number(item.QTY_FATURAMENTO) || 0);
     const rawExpedicao   = Math.max(0, Number(item.QTY_EXPEDICAO)   || 0);
     const rawQualidade   = Math.max(0, Number(item.QTY_QUALIDADE)   || 0);
@@ -65,21 +65,29 @@ function getItemSectorMetrics(item) {
         targetTotalQty = Math.max(cFat, erpFat, maxInd);
     }
 
-    // Aguardando = peças que ainda não entraram na produção
-    const qAguardando = Math.max(0, targetTotalQty - Math.max(rawMoldada, cFat));
+    // SALDO POR SETOR (o que está fisicamente parado em cada etapa aguardando a próxima)
+    // Lógica acumulativa: garante que peças que "pularam" etapas sejam corretamente contabilizadas
+    // Ex: se TT=30, Usinagem=0, Expedição=30 → saldo TT = 0 (peças já foram para expedição)
+    const cExp  = Math.max(cFat,  rawExpedicao);
+    const cQual = Math.max(cExp,  rawQualidade);
+    const cUsi  = Math.max(cQual, rawUsinagem);
+    const cTT   = Math.max(cUsi,  rawTT);
+    const cAcab = Math.max(cTT,   rawAcabamento);
+    const cFus  = Math.max(cAcab, rawFusao);
+    const cMold = Math.max(cFus,  rawMoldada);
 
     const res = {
-        // PRODUZIDO NO SETOR (Espelho real do ERP - sem subtração entre etapas)
-        qExpedicao:  rawExpedicao,
-        qQualidade:  rawQualidade,
-        qUsinagem:   rawUsinagem,
-        qTT:         rawTT,
-        qAcabamento: rawAcabamento,
-        qFusao:      rawFusao,
-        qMoldada:    rawMoldada,
-        qAguardando: qAguardando,
+        // SALDO POR SETOR (q* = o que está parado em cada setor)
+        qExpedicao:  Math.max(0, cExp - cFat),
+        qQualidade:  Math.max(0, cQual - cExp),
+        qUsinagem:   Math.max(0, cUsi - cQual),
+        qTT:         Math.max(0, cTT - cUsi),
+        qAcabamento: Math.max(0, cAcab - cTT),
+        qFusao:      Math.max(0, cFus - cAcab),
+        qMoldada:    Math.max(0, cMold - cFus),
+        qAguardando: Math.max(0, targetTotalQty - cMold),
         
-        // APONTADOS BRUTOS (compatibilidade - mesmos valores que q*)
+        // APONTADOS BRUTOS (raw* = produzido no setor, valores exatos do ERP)
         rawFaturamento,
         rawExpedicao,
         rawQualidade,
@@ -93,10 +101,10 @@ function getItemSectorMetrics(item) {
         originalTarget: Math.max((Number(item.OP_QUANTIDADE) || 0), qtdOrig)
     };
 
-    // Total balance = saldo comercial (para cálculos de peso e valor da carteira)
+    // Total balance = saldo comercial
     res.totalBalance = getCommercialBalance(item);
 
-    // Threshold filter (suppress noise < 0.01 units)
+    // Threshold filter
     for (let k in res) {
         if (typeof res[k] === 'number' && res[k] < 0.01) res[k] = 0;
     }
