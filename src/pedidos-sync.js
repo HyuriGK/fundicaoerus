@@ -18,9 +18,8 @@ router.get('/', async (req, res) => {
                 FROM firebird_sync_pedidos p
                 LEFT JOIN ficha_tecnica f ON f.pro_codigo_fic = (p.data->>'PRODUTO_PPR')
                 WHERE 
-                    (p.data->>'SALDO_LIBERADO_FATURAR_PPR')::numeric > 0 
+                    ((p.data->>'QUANTIDADE_PPR')::numeric - COALESCE((p.data->>'QUANTIDADE_FATURADA_PPR')::numeric, 0)) > 0 
                     AND (p.data->>'STATUS_PPR') <> 'C'
-                    AND (p.data->>'OP_PCS') IS NOT NULL AND (p.data->>'OP_PCS') <> ''
                 ORDER BY 
                     (f.pro_codigo_fic IS NOT NULL) DESC,
                     f.data_fic DESC NULLS LAST,
