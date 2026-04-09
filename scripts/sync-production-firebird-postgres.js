@@ -159,8 +159,51 @@ function chunkArray(myArray, chunk_size) {
                 };
 
                 try {
-                    // 3.1 Fetch SETOR names
-                    await fetchMap(setIds, 'SETOR', 'CODIGO_SET', 'NOME_SET', lookupSET);
+                    // 3.1 Fetch SETOR names (com deduplicação inteligente por nome prioritário)
+                    if (setIds.length > 0) {
+                        const chunks = chunkArray(setIds, 200);
+                        console.log(`       fetching SETOR in ${chunks.length} chunks (deduplicated)...`);
+                        
+                        // Nomes prioritários (os nomes "corretos" dos setores de produção)
+                        const priorityNames = ['MOLDAGEM', 'FUSAO', 'FUSÃO', 'ACABAMENTO', 'USINAGEM', 'INSPECAO', 'INSPEÇÃO', 'QUALIDADE'];
+                        
+                        for (const chunk of chunks) {
+                            const idList = chunk.join(',');
+                            const q = `SELECT CODIGO_SET, NOME_SET FROM SETOR WHERE CODIGO_SET IN (${idList})`;
+                            await new Promise((resolve, reject) => {
+                                db.query(q, (err, rows) => {
+                                    if (err) return reject(err);
+                                    rows.forEach(r => {
+                                        const name = (r.NOME_SET || '').trim().toUpperCase();
+                                        const existing = lookupSET[r.CODIGO_SET];
+                                        
+                                        if (!existing) {
+                                            // Primeiro nome encontrado
+                                            lookupSET[r.CODIGO_SET] = r;
+                                        } else {
+                                            // Já tem um nome — verificar se o novo é melhor
+                                            const existingName = (existing.NOME_SET || '').trim().toUpperCase();
+                                            const existingBad = existingName.startsWith('NAO USAR') || existingName.startsWith('NÃO USAR');
+                                            const newBad = name.startsWith('NAO USAR') || name.startsWith('NÃO USAR');
+                                            
+                                            if (existingBad && !newBad) {
+                                                // Substituir nome ruim pelo bom
+                                                lookupSET[r.CODIGO_SET] = r;
+                                            } else if (!existingBad && !newBad) {
+                                                // Ambos são válidos — priorizar nomes conhecidos
+                                                const existingPriority = priorityNames.some(p => existingName.includes(p));
+                                                const newPriority = priorityNames.some(p => name.includes(p));
+                                                if (!existingPriority && newPriority) {
+                                                    lookupSET[r.CODIGO_SET] = r;
+                                                }
+                                            }
+                                        }
+                                    });
+                                    resolve();
+                                });
+                            });
+                        }
+                    }
 
                     // 3.2 Fetch PRODUCAO (OP Details) to get Product ID
                     // CODIGO_PCS in PRODUCAO_SETOR maps to CODIGO_PCP in PRODUCAO
