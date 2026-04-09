@@ -1,8 +1,17 @@
 require('dotenv').config({ path: require('path').resolve(__dirname, '../.env.local') });
-
+const Firebird = require('node-firebird');
 const pool = require('../lib/db');
 
-const { Firebird, options: FIREBIRD_OPTIONS } = require('../lib/firebird-helper');
+const FIREBIRD_OPTIONS = {
+    host: '10.1.1.100',
+    port: 3050,
+    database: '/home/lm/LM-Sistemas/SIGE2.0/Dados/sige.fdb',
+    user: 'SYSDBA',
+    password: 'masterkey',
+    lowercase_keys: false,
+    role: null,
+    pageSize: 4096
+};
 
 async function createTableIfNotExists() {
     console.log('📡 Tentando conectar ao Postgres para verificar tabela...');
@@ -220,11 +229,8 @@ async function syncData() {
             // Chamada de migração para o mestre
             await createTableIfNotExists();
 
+            const totalGeral = dados.fornecedores.length + dados.tipos.length + dados.setores.length + dados.materiais.length;
             let totalInseridos = 0;
-            const totalGeral = (dados.fornecedores?.length || 0) + 
-                               (dados.tipos?.length || 0) + 
-                               (dados.setores?.length || 0) + 
-                               (dados.materiais?.length || 0);
 
             const insertBatch = async (cat, rows) => {
                 // Deduplicação em tempo de execução para evitar erro de "ON CONFLICT" no mesmo lote

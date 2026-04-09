@@ -65,7 +65,7 @@
         }
 
         modal.innerHTML = `
-            <div style="background: #09090b; border: 1px solid rgba(251, 191, 36, 0.2); border-radius: 24px; width: 95%; max-width: 650px; overflow: hidden; box-shadow: 0 30px 60px -12px rgba(0, 0, 0, 0.8), 0 0 20px rgba(251, 191, 36, 0.05); animation: commSlideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1);">
+            <div style="background: #09090b; border: 1px solid rgba(251, 191, 36, 0.2); border-radius: 24px; width: 95%; max-width: 500px; overflow: hidden; box-shadow: 0 30px 60px -12px rgba(0, 0, 0, 0.8), 0 0 20px rgba(251, 191, 36, 0.05); animation: commSlideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1);">
                 <!-- Header Premium -->
                 <div style="background: linear-gradient(to right, rgba(251, 191, 36, 0.1), transparent); padding: 25px 30px; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; align-items: center; gap: 20px;">
                     <div style="width: 56px; height: 56px; background: #fbbf24; border-radius: 16px; display: flex; align-items: center; justify-content: center; color: #000; font-size: 1.6rem; box-shadow: 0 8px 16px rgba(251, 191, 36, 0.3);">
@@ -79,7 +79,7 @@
 
                 <!-- Conteúdo -->
                 <div style="padding: 30px; background: radial-gradient(circle at top right, rgba(251, 191, 36, 0.03), transparent);">
-                    <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 25px; color: #e4e4e7; line-height: 1.7; font-size: 1rem; max-height: 400px; overflow-y: auto; white-space: pre-wrap; margin-bottom: 30px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);">
+                    <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 25px; color: #e4e4e7; line-height: 1.7; font-size: 1rem; max-height: 300px; overflow-y: auto; white-space: pre-wrap; margin-bottom: 30px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);">
 ${msg.message}
                     </div>
 

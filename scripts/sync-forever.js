@@ -8,13 +8,6 @@ const { spawn } = require('child_process');
 const path = require('path');
 const readline = require('readline');
 const fs = require('fs');
-const dns = require('dns');
-const { promisify } = require('util');
-const dnsLookup = promisify(dns.lookup);
-
-// Carregar .env.local no processo pai para evitar mltiplas leituras concorrentes
-const envPath = path.join(__dirname, '../.env.local');
-require('dotenv').config({ path: envPath });
 
 // CONFIGURATIONS
 const ROOT_DIR = path.join(__dirname, '..');
@@ -36,37 +29,6 @@ let totalErrorsCount = 0;
 let logBuffer = []; // We use this for the persistent log file, but terminal will just scroll.
 
 SYNC_BATS.forEach(b => currentStatus[b.name] = '0%');
-let IS_STANDBY = false;
-let IS_NETWORK_DOWN = false;
-
-/**
- * Check if the machine has network access
- */
-async function checkNetwork() {
-    try {
-        await dnsLookup('8.8.8.8');
-        IS_NETWORK_DOWN = false;
-        return true;
-    } catch (e) {
-        IS_NETWORK_DOWN = true;
-        return false;
-    }
-}
-
-/**
- * Check if current time is within Mon-Fri, 06:00 - 18:00
- */
-function checkSchedule() {
-    const now = new Date();
-    const day = now.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
-    const hour = now.getHours();
-
-    const isWeekday = day >= 1 && day <= 5;
-    const isWorkingHours = hour >= 6 && hour < 18;
-
-    IS_STANDBY = !(isWeekday && isWorkingHours);
-    return !IS_STANDBY;
-}
 
 /**
  * Pinned Header Drawing (always at the top of the terminal viewport)
@@ -80,13 +42,7 @@ function drawPinnedDashboard(startTime = null) {
         : '--';
 
     console.log('╔════════════════════════════════════════════════════════════╗');
-    if (IS_NETWORK_DOWN) {
-        console.log(`║      📡 AGUARDANDO REDE - CONEXÃO NÃO IDENTIFICADA         ║`);
-    } else if (IS_STANDBY) {
-        console.log(`║      💤 MODO STANDBY - FORA DO HORÁRIO COMERCIAL           ║`);
-    } else {
-        console.log(`║          📊 SGP ERUS - MONITOR DE SINCRONIZAÇÃO            ║`);
-    }
+    console.log(`║          📊 SGP ERUS - MONITOR DE SINCRONIZAÇÃO            ║`);
     console.log('╠════════════════════════════════════════════════════════════╣');
     console.log(`║  🔄 CICLO: #${cycleCount.toString().padStart(3, '0')}          🕒 MÉDIA: ${avgTime}s p/ ciclo   ║`);
     console.log(`║  🚩 TOTAL ERROS: ${totalErrorsCount.toString().padStart(4, '0')}      📂 LOG: sync-errors.log       ║`);
@@ -137,18 +93,10 @@ function logEvent(script, message, isError = true) {
 
     // PRINT TO TERMINAL (scrolling region) - ONLY RELEVANT STUFF
     // We filter out common library/node "spam" warnings to keep terminal dashboard clean
-    const isSpam = msg.includes('SECURITY WARNING') || 
-                   msg.includes('Warning:') || 
-                   msg.includes('adopt standard libpq') ||
-                   msg.includes('SSL modes') ||
-                   msg.includes('libpq compatibility');
+    const isSpam = msg.includes('SECURITY WARNING') || msg.includes('Warning:') || msg.includes('adopt standard libpq');
     
-    // No logar como erro se for apenas spam de segurana do driver PG
-    let effectiveError = isError;
-    if (isSpam) effectiveError = false;
-
-    if (!isSpam || effectiveError) {
-        const icon = effectiveError ? '⚠' : 'ℹ️';
+    if (!isSpam || isError) {
+        const icon = isError ? '⚠️' : 'ℹ️';
         console.log(`${icon} [${timeDisplay}] ${script}: ${msg}`);
     }
 }
@@ -160,8 +108,7 @@ function runBat(batEntry) {
     return new Promise((resolve) => {
         const child = spawn('cmd.exe', ['/c', batEntry.file], {
             cwd: ROOT_DIR,
-            stdio: ['ignore', 'pipe', 'pipe'],
-            env: { ...process.env, DEBUG_SYNC: 'true' } // Passar variáveis e ativar debug
+            stdio: ['ignore', 'pipe', 'pipe']
         });
 
         child.stdout.on('data', (data) => {
@@ -185,8 +132,8 @@ function runBat(batEntry) {
         child.stderr.on('data', (data) => {
             const errLog = data.toString().trim();
             if (errLog && !errLog.includes('terminada')) {
-                // Ignore Node/PG specific warnings in stderr or transient login retries (⏳)
-                if (errLog.includes('Warning:') || errLog.includes('SECURITY WARNING:') || errLog.includes('⏳')) {
+                // Ignore Node/PG specific warnings in stderr
+                if (errLog.includes('Warning:') || errLog.includes('SECURITY WARNING:')) {
                     logEvent(batEntry.name, errLog, false);
                 } else {
                     logEvent(batEntry.name, errLog, true);
@@ -220,20 +167,6 @@ async function startForever() {
     }
 
     while (true) {
-        if (!checkSchedule()) {
-            drawPinnedDashboard();
-            // In standby, we just wait 5 minutes before checking again
-            await new Promise(resolve => setTimeout(resolve, 5 * 60 * 1000));
-            continue;
-        }
-
-        if (!(await checkNetwork())) {
-            drawPinnedDashboard();
-            // If network is down, wait 30 seconds before re-checking
-            await new Promise(resolve => setTimeout(resolve, 30 * 1000));
-            continue;
-        }
-
         cycleCount++;
         SYNC_BATS.forEach(b => currentStatus[b.name] = '0%');
         
@@ -242,12 +175,7 @@ async function startForever() {
 
         const timerInterval = setInterval(() => drawPinnedDashboard(cycleStart), 1000);
 
-        // Sincronizaço Sequencial para evitar conflitos de arquivo e sobrecarga de banco
-        for (const bat of SYNC_BATS) {
-            await runBat(bat);
-            // Pequeno intervalo entre scripts para estabilização (aumentado para 3s)
-            await new Promise(resolve => setTimeout(resolve, 3000));
-        }
+        await Promise.all(SYNC_BATS.map(bat => runBat(bat)));
 
         clearInterval(timerInterval);
         

@@ -2,12 +2,20 @@
 // Script de Sincronização de Devoluções: Firebird → PostgreSQL
 // Filtra por FINALIDADE_NOT = 4 e anos 2025/2026
 
-
+const Firebird = require('node-firebird');
 const path = require('path');
 require('dotenv').config({ path: '.env.local' });
 const pool = require('../lib/db');
 
-const { Firebird, options: firebirdOptions } = require('../lib/firebird-helper');
+const firebirdOptions = {
+    host: '10.1.1.100',
+    port: 3050,
+    database: '/home/lm/LM-Sistemas/SIGE2.0/Dados/sige.fdb',
+    user: 'SYSDBA',
+    password: 'masterkey',
+    lowercase_keys: false,
+    pageSize: 4096
+};
 
 function formatarData(data) {
     if (!data) return null;
@@ -95,8 +103,8 @@ async function sincronizar() {
 
             console.log(`📦 Encontrados ${result.length} registros de devolução.`);
 
-            let inserted = 0;
             try {
+                let inserted = 0;
                 for (const row of result) {
                     await pool.query(`
                         INSERT INTO firebird_sync_devolucoes (
