@@ -2224,14 +2224,13 @@
 
                 if (banner) {
                     banner.style.display = 'flex';
-                    // Banner shows RAW Total Pointed (as per user request: "puxar exatamente o apontado")
-                    let sRaw = 0, sQty = 0, sWeight = 0, sValue = 0;
+                    // Banner shows Produzido no Setor (exact ERP values, deduplicated by OP)
+                    let sQty = 0, sWeight = 0, sValue = 0;
                     const uniqueOPs = new Set();
                     currentFilteredData.forEach(item => {
                         const opKey = String(item.OP_PCS || '').trim();
-                        // If it's a valid OP, only add its raw pointing once to the total
-                        if (opKey && opKey !== '-' && !uniqueOPs.has(opKey)) {
-                            sRaw += (item._sectorRaw || 0);
+                        if (opKey && opKey !== '-') {
+                            if (uniqueOPs.has(opKey)) return;
                             uniqueOPs.add(opKey);
                         }
                         sQty += (item._sectorQty || 0);
@@ -2239,7 +2238,7 @@
                         sValue += (item._sectorValue || 0);
                     });
 
-                    document.getElementById('sectorTotalQty').innerHTML = `<span title="Total Apontado no ERP" style="color:var(--color-primary);">${formatNumber(sRaw, 0)}</span> <small style="font-size: 0.7rem; color: var(--text-muted); margin-left: 5px;">(${formatNumber(sQty, 0)} em estoque)</small>`;
+                    document.getElementById('sectorTotalQty').innerHTML = `<span title="Produzido no Setor (ERP)" style="color:var(--color-primary);">${formatNumber(sQty, 0)} pçs</span>`;
                     document.getElementById('sectorTotalWeight').innerText = formatNumber(sWeight) + ' kg';
                     document.getElementById('sectorTotalValue').innerText = valorVisible ? formatCurrency(sValue) : '-----';
                 }
@@ -2397,6 +2396,39 @@
 
             const isVisitor = localStorage.getItem('erus_role') === 'visitante';
 
+            // Production metrics for the detail grid
+            const metrics = getItemSectorMetrics(item);
+            const prodStages = [
+                { name: 'Moldagem', qty: metrics.rawMoldada, icon: 'fa-layer-group', color: '#3b82f6' },
+                { name: 'Fusão', qty: metrics.rawFusao, icon: 'fa-fire-burner', color: '#ef4444' },
+                { name: 'Acabamento', qty: metrics.rawAcabamento, icon: 'fa-broom', color: '#8b5cf6' },
+                { name: 'Trat. Térmico', qty: metrics.rawTT, icon: 'fa-temperature-arrow-up', color: '#f59e0b' },
+                { name: 'Usinagem', qty: metrics.rawUsinagem, icon: 'fa-gears', color: '#6366f1' },
+                { name: 'Qualidade', qty: metrics.rawQualidade, icon: 'fa-check-double', color: '#14b8a6' },
+                { name: 'Expedição', qty: metrics.rawExpedicao, icon: 'fa-truck-loading', color: '#22c55e' },
+                { name: 'Faturamento', qty: metrics.rawFaturamento, icon: 'fa-file-invoice-dollar', color: '#a855f7' }
+            ];
+            const hasProduction = prodStages.some(s => s.qty > 0);
+            const prodGridHtml = hasProduction ? `
+                    <div style="border-top: 1px solid rgba(255,255,255,0.05); padding-top: 20px;">
+                        <div class="detail-label" style="margin-bottom: 12px; font-size: 0.9rem;">
+                            <i class="fa-solid fa-industry" style="margin-right: 8px; color: var(--color-primary);"></i>Produzido no Setor (ERP)
+                        </div>
+                        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">
+                            ${prodStages.map(s => `
+                                <div style="background: rgba(255,255,255,0.03); padding: 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.06); text-align: center;">
+                                    <div style="font-size: 0.65rem; color: var(--text-muted); margin-bottom: 4px;">
+                                        <i class="fa-solid ${s.icon}" style="color: ${s.color}; margin-right: 3px;"></i>${s.name}
+                                    </div>
+                                    <div style="font-size: 1.15rem; font-weight: bold; color: ${s.qty > 0 ? s.color : 'var(--text-muted)'};">
+                                        ${s.qty > 0 ? s.qty : '-'}
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+            ` : '';
+
             const html = `
                 <div style="background: rgba(255,255,255,0.03); padding: 30px; border-radius: 12px; border: 1px solid var(--border-subtle); display: flex; flex-direction: column; gap: 30px; width: 100%;">
                     
@@ -2479,6 +2511,9 @@
                             <div class="detail-value" style="color: var(--status-purple); font-weight: bold; font-size: 1.3rem;">${valorVisible ? formatCurrency(vTotal) : '-----'}</div>
                         </div>
                     </div>
+
+                    <!-- ANDAMENTO DE PRODUÇÃO -->
+                    ${prodGridHtml}
 
                     <!-- Status Extra if Blocked -->
                     ${(item.STATUS_PED === 'B' || item.STATUS_PPR === 'B' || (item.STATUS_DESC_PED && String(item.STATUS_DESC_PED).toUpperCase().includes('BLOQ'))) ? `
@@ -3242,33 +3277,32 @@
                     uP = parseFloat(item.PRECO_KG) * uW;
                 }
 
-                const addKpi = (kpi, q, raw, opKey, stageId) => {
-                    if (q <= 0 && raw <= 0) return;
-                    kpi.qtd += q;
-                    kpi.peso += uW * q;
-                    kpi.valor += uP * q;
+                // addKpi: Deduplica por OP para evitar inflar totais quando
+                // múltiplos itens de pedido compartilham a mesma OP
+                const addKpi = (kpi, qty, opKey) => {
+                    if (qty <= 0) return;
 
                     const cleanedOP = String(opKey || '').trim();
                     if (cleanedOP && cleanedOP !== '-') {
                         if (!kpi._processedOPs) kpi._processedOPs = new Set();
-                        if (!kpi._processedOPs.has(cleanedOP)) {
-                            kpi.raw = (kpi.raw || 0) + raw;
-                            kpi._processedOPs.add(cleanedOP);
-                        }
-                    } else if (raw > 0) {
-                        // Se não tem OP mas tem apontamento (caso raro), soma para não perder o dado
-                        kpi.raw = (kpi.raw || 0) + raw;
+                        if (kpi._processedOPs.has(cleanedOP)) return; // Skip duplicate OP
+                        kpi._processedOPs.add(cleanedOP);
                     }
+
+                    kpi.qtd += qty;
+                    kpi.raw = (kpi.raw || 0) + qty;
+                    kpi.peso += uW * qty;
+                    kpi.valor += uP * qty;
                 };
 
-                addKpi(kpiExpedicao, qExpedicao, metrics.rawExpedicao, item.OP_PCS, 'exp');
-                addKpi(kpiQualidade, qQualidade, metrics.rawQualidade, item.OP_PCS, 'qual');
-                addKpi(kpiUsinagem, qUsinagem, metrics.rawUsinagem, item.OP_PCS, 'usi');
-                addKpi(kpiTT, qTT, metrics.rawTT, item.OP_PCS, 'tt');
-                addKpi(kpiAcabamento, qAcabamento, metrics.rawAcabamento, item.OP_PCS, 'acab');
-                addKpi(kpiFusao, qFusao, metrics.rawFusao, item.OP_PCS, 'fus');
-                addKpi(kpiMoldagem, qMoldada, metrics.rawMoldada, item.OP_PCS, 'mold');
-                addKpi(kpiAguardando, qAguardando, metrics.targetTotalQty, item.OP_PCS, 'wait');
+                addKpi(kpiExpedicao, qExpedicao, item.OP_PCS);
+                addKpi(kpiQualidade, qQualidade, item.OP_PCS);
+                addKpi(kpiUsinagem, qUsinagem, item.OP_PCS);
+                addKpi(kpiTT, qTT, item.OP_PCS);
+                addKpi(kpiAcabamento, qAcabamento, item.OP_PCS);
+                addKpi(kpiFusao, qFusao, item.OP_PCS);
+                addKpi(kpiMoldagem, qMoldada, item.OP_PCS);
+                addKpi(kpiAguardando, qAguardando, item.OP_PCS);
             });
 
             // "Blocked" Weight = Total - Released (Items without delivery date)
@@ -3420,15 +3454,11 @@
                         <span class="tooltip-value">${totalPct.toFixed(1)}%</span>
                     </div>
                     <div class="tooltip-row" style="background: rgba(251, 191, 36, 0.1); border-radius: 4px; padding: 4px 0;">
-                        <span class="tooltip-label">Total Apontado (ERP)</span>
-                        <span class="tooltip-value" style="font-weight: bold;">${formatNumber(data.raw, 0)} pçs</span>
-                    </div>
-                    <div class="tooltip-row">
-                        <span class="tooltip-label">Saldo Atual no Setor</span>
-                        <span class="tooltip-value">${formatNumber(data.qtd, 0)} pçs</span>
+                        <span class="tooltip-label">Produzido no Setor (ERP)</span>
+                        <span class="tooltip-value" style="font-weight: bold;">${formatNumber(data.qtd, 0)} pçs</span>
                     </div>
                      <div class="tooltip-row">
-                        <span class="tooltip-label">Peso total (do Saldo)</span>
+                        <span class="tooltip-label">Peso Total</span>
                         <span class="tooltip-value">${formatNumber(data.peso, 0)} kg</span>
                     </div>
                     <div class="tooltip-row" style="margin-top: 5px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 5px;">
