@@ -122,6 +122,7 @@ async function syncEmissoes() {
                         SELECT CODIGO_PCS, SETOR_PCS, SUM(QUANTIDADE_PCS) as TOTAL
                         FROM PRODUCAO_SETOR
                         WHERE CODIGO_PCS IN (${batchIds.join(',')})
+                          AND DATA_PCS >= '2025-01-01' AND DATA_PCS <= '2026-12-31'
                         GROUP BY 1, 2
                     `;
                     const pointingRows = await new Promise((resolve, reject) => {

@@ -347,6 +347,25 @@ function chunkArray(myArray, chunk_size) {
                 console.log(`   Processed: ${inserted}`);
                 console.log(`   Errors: ${errors}`);
 
+                // MARK & SWEEP: Limpar registros "fantasma" (estornados/excluídos do ERP)
+                // Deleta registros dentro da janela de sync que NÃO foram atualizados nesta rodada
+                try {
+                    const sweepResult = await pool.query(
+                        `DELETE FROM producao_apontada_sincronizada 
+                         WHERE data_producao >= $1 
+                           AND atualizado_em < $2`,
+                        [startDate, syncStartTime]
+                    );
+                    const swept = sweepResult.rowCount || 0;
+                    if (swept > 0) {
+                        console.log(`🧹 Mark & Sweep: ${swept} registros fantasma removidos (estornados do ERP).`);
+                    } else {
+                        console.log(`🧹 Mark & Sweep: Nenhum registro fantasma encontrado.`);
+                    }
+                } catch (sweepErr) {
+                    console.error('⚠️ Erro no Mark & Sweep:', sweepErr.message);
+                }
+
                 // ATUALIZAR STATUS DE SINCRONIZAÇÃO
                 try {
                     await pool.query("SET TIME ZONE 'America/Sao_Paulo'");
