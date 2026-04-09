@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+    <script src="js/shared-utils.js"></script>
     <style>
         :root {
             --color-primary: #fbbf24;
@@ -804,25 +805,7 @@
             } catch (e) { console.error('Error loading preferences/weights:', e); }
         }
 
-        function getCorrectedWeight(item) {
-            const saldoLiberado = Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0;
-            const qtdOriginal = Number(item.QUANTIDADE_PPR) || 0;
-            const saldoReal = saldoLiberado > 0 ? saldoLiberado : qtdOriginal;
-
-            let unitWeight = 0;
-            const prodCode = String(item.PRODUTO_PPR || item.CODIGO_PECA || '').trim();
-
-            if (item.PESO_UNIT !== undefined && item.PESO_UNIT !== null && item.PESO_UNIT !== '') {
-                unitWeight = Number(item.PESO_UNIT);
-            } else if (customWeights[prodCode]) {
-                unitWeight = customWeights[prodCode];
-            } else {
-                const pesoNpr = Number(item.PESO_LIQUIDO_NPR) || 0;
-                unitWeight = qtdOriginal > 0 ? (pesoNpr / qtdOriginal) : 0;
-            }
-
-            return unitWeight * saldoReal;
-        }
+        // Centralized getCorrectedWeight now imported from shared-utils.js
 
         function showLoading(cardId, active) {
             const el = document.querySelector(`#${cardId} .loading-overlay`);
@@ -1127,27 +1110,27 @@
                 let totalWeight = 0;
                 
                 raw.forEach(item => {
-                    // 1. Filter Modelos (Ends with '1') - Consistent with pedidos.html
+                    // 1. Sync Filters: Modelos (Ends with '1') and Billed Items
                     const prodCode = String(item.PRODUTO_PPR || '').trim();
-                    if (prodCode.endsWith('1')) return;
+                    const isModelo = prodCode.endsWith('1');
+                    const isFaturado = item.FATURADO_PPR === 'T';
+
+                    if (isModelo || isFaturado) return;
 
                     const client = item.NOME_CLIENTE || 'N/A';
                     
-                    // 2. Corrected Weight Logic
-                    const weight = getCorrectedWeight(item);
+                    // 2. Corrected Weight Logic (Centralized)
+                    const weight = getCorrectedWeight(item, customWeights);
                     
                     // 3. Value Logic
-                    const saldo = Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0;
-                    const qtdOriginal = Number(item.QUANTIDADE_PPR) || 0;
-                    const realQty = saldo > 0 ? saldo : qtdOriginal;
+                    const commercialBalance = getCommercialBalance(item); // From shared-utils
                     
                     let unitPrice = parseFloat(item.VALOR_PPR || 0);
                     // Price per KG logic if applicable
                     if (item.PRECO_KG && parseFloat(item.PRECO_KG) > 0 && customWeights[prodCode]) {
-                        let unitW = realQty > 0 ? (weight / realQty) : 0;
-                        unitPrice = parseFloat(item.PRECO_KG) * unitW;
+                        unitPrice = parseFloat(item.PRECO_KG) * (weight / commercialBalance || 0);
                     }
-                    const value = unitPrice * realQty;
+                    const value = unitPrice * commercialBalance;
                     
                     if (!clients[client]) clients[client] = { weight: 0, value: 0 };
                     clients[client].weight += weight;
