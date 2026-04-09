@@ -2226,8 +2226,14 @@
                     banner.style.display = 'flex';
                     // Banner shows RAW Total Pointed (as per user request: "puxar exatamente o apontado")
                     let sRaw = 0, sQty = 0, sWeight = 0, sValue = 0;
+                    const uniqueOPs = new Set();
                     currentFilteredData.forEach(item => {
-                        sRaw += (item._sectorRaw || 0);
+                        const opKey = String(item.OP_PCS || '').trim();
+                        // If it's a valid OP, only add its raw pointing once to the total
+                        if (opKey && opKey !== '-' && !uniqueOPs.has(opKey)) {
+                            sRaw += (item._sectorRaw || 0);
+                            uniqueOPs.add(opKey);
+                        }
                         sQty += (item._sectorQty || 0);
                         sWeight += (item._sectorWeight || 0);
                         sValue += (item._sectorValue || 0);
@@ -3236,23 +3242,33 @@
                     uP = parseFloat(item.PRECO_KG) * uW;
                 }
 
-                // Helper to add data using direct unit multiplication
-                const addKpi = (kpi, q, raw) => {
+                const addKpi = (kpi, q, raw, opKey, stageId) => {
                     if (q <= 0 && raw <= 0) return;
                     kpi.qtd += q;
-                    kpi.raw = (kpi.raw || 0) + raw;
                     kpi.peso += uW * q;
                     kpi.valor += uP * q;
+
+                    const cleanedOP = String(opKey || '').trim();
+                    if (cleanedOP && cleanedOP !== '-') {
+                        if (!kpi._processedOPs) kpi._processedOPs = new Set();
+                        if (!kpi._processedOPs.has(cleanedOP)) {
+                            kpi.raw = (kpi.raw || 0) + raw;
+                            kpi._processedOPs.add(cleanedOP);
+                        }
+                    } else if (raw > 0) {
+                        // Se não tem OP mas tem apontamento (caso raro), soma para não perder o dado
+                        kpi.raw = (kpi.raw || 0) + raw;
+                    }
                 };
 
-                addKpi(kpiExpedicao, qExpedicao, metrics.rawExpedicao);
-                addKpi(kpiQualidade, qQualidade, metrics.rawQualidade);
-                addKpi(kpiUsinagem, qUsinagem, metrics.rawUsinagem);
-                addKpi(kpiTT, qTT, metrics.rawTT);
-                addKpi(kpiAcabamento, qAcabamento, metrics.rawAcabamento);
-                addKpi(kpiFusao, qFusao, metrics.rawFusao);
-                addKpi(kpiMoldagem, qMoldada, metrics.rawMoldada);
-                addKpi(kpiAguardando, qAguardando, metrics.targetTotalQty);
+                addKpi(kpiExpedicao, qExpedicao, metrics.rawExpedicao, item.OP_PCS, 'exp');
+                addKpi(kpiQualidade, qQualidade, metrics.rawQualidade, item.OP_PCS, 'qual');
+                addKpi(kpiUsinagem, qUsinagem, metrics.rawUsinagem, item.OP_PCS, 'usi');
+                addKpi(kpiTT, qTT, metrics.rawTT, item.OP_PCS, 'tt');
+                addKpi(kpiAcabamento, qAcabamento, metrics.rawAcabamento, item.OP_PCS, 'acab');
+                addKpi(kpiFusao, qFusao, metrics.rawFusao, item.OP_PCS, 'fus');
+                addKpi(kpiMoldagem, qMoldada, metrics.rawMoldada, item.OP_PCS, 'mold');
+                addKpi(kpiAguardando, qAguardando, metrics.targetTotalQty, item.OP_PCS, 'wait');
             });
 
             // "Blocked" Weight = Total - Released (Items without delivery date)

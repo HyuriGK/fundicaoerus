@@ -87,16 +87,37 @@ async function syncEmissoes() {
         console.log(`📊 ${results.length} registros de emissão encontrados.`);
 
         if (results.length > 0) {
-            // BUSCAR APONTAMENTOS EM LOTE (TURBO)
-            const opIds = [...new Set(results.map(r => r.OP_PCS).filter(op => op && op !== '-'))];
+            // 1. BUSCAR MAPA DE TODOS OS VÍNCULOS PEDIDO -> OP
+            console.log('🔗 Mapeando todos os vínculos Pedido -> OP...');
+            const linksQuery = `
+                SELECT PPR_EMPRESA_PCPR, PPR_ANO_PCPR, PPR_CODIGO_PCPR, PPR_ITEM_PCPR, PCP_CODIGO_PCPR
+                FROM PRODUCAO_PEDIDO
+                WHERE PPR_ANO_PCPR IN (2025, 2026)
+            `;
+            const links = await new Promise((resolve, reject) => {
+                db.query(linksQuery, (err, res) => {
+                    if (err) reject(err);
+                    else resolve(res);
+                });
+            });
+
+            const linksMap = {};
+            links.forEach(l => {
+                const key = `${l.PPR_EMPRESA_PCPR}-${l.PPR_ANO_PCPR}-${l.PPR_CODIGO_PCPR}-${l.PPR_ITEM_PCPR}`;
+                if (!linksMap[key]) linksMap[key] = [];
+                linksMap[key].push(l.PCP_CODIGO_PCPR);
+            });
+
+            // 2. BUSCAR APONTAMENTOS EM LOTE (TURBO)
+            const allOpIds = [...new Set(links.map(l => l.PCP_CODIGO_PCPR))];
             const pointingsMap = {};
 
-            if (opIds.length > 0) {
-                console.log(`🔍 Buscando apontamentos para ${opIds.length} OPs...`);
-                // Dividir opIds em lotes para a query SQL (Firebird tem limites de IN)
+            if (allOpIds.length > 0) {
+                console.log(`🔍 Buscando apontamentos para ${allOpIds.length} OPs únicas...`);
+                // Dividir em lotes grandes para o Firebird
                 const OP_BATCH_LIMIT = 500;
-                for (let j = 0; j < opIds.length; j += OP_BATCH_LIMIT) {
-                    const batchIds = opIds.slice(j, j + OP_BATCH_LIMIT);
+                for (let j = 0; j < allOpIds.length; j += OP_BATCH_LIMIT) {
+                    const batchIds = allOpIds.slice(j, j + OP_BATCH_LIMIT);
                     const pointingQuery = `
                         SELECT CODIGO_PCS, SETOR_PCS, SUM(QUANTIDADE_PCS) as TOTAL
                         FROM PRODUCAO_SETOR
@@ -122,19 +143,32 @@ async function syncEmissoes() {
             for (let i = 0; i < results.length; i += BATCH_SIZE) {
                 const batch = results.slice(i, i + BATCH_SIZE);
                 
-                // Mesclar apontamentos antes de salvar
+                // Mesclar apontamentos de TODAS as OPs vinculadas ao item
                 const batchWithMetrics = batch.map(r => {
-                    const ops = pointingsMap[r.OP_PCS] || {};
+                    const key = `${r.EMPRESA_PPR}-${r.ANO_PPR}-${r.CODIGO_PPR}-${r.ITEM_PPR}`;
+                    const linkedOps = linksMap[key] || [];
+                    
+                    const totals = { 10: 0, 11: 0, 12: 0, 20: 0, 30: 0, 40: 0, 50: 0, 60: 0, 100: 0, 101: 0, 105: 0 };
+                    
+                    linkedOps.forEach(opId => {
+                        const opsData = pointingsMap[opId] || {};
+                        Object.keys(opsData).forEach(sector => {
+                            if (totals[sector] !== undefined) {
+                                totals[sector] += opsData[sector];
+                            }
+                        });
+                    });
+
                     return {
                         ...r,
-                        QTY_MOLDADA: (ops[10] || 0) + (ops[11] || 0) + (ops[12] || 0),
-                        QTY_FUSAO: ops[20] || 0,
-                        QTY_ACABAMENTO: ops[30] || 0,
-                        QTY_TT: ops[40] || 0,
-                        QTY_USINAGEM: (ops[50] || 0) + (ops[105] || 0),
-                        QTY_QUALIDADE: ops[60] || 0,
-                        QTY_EXPEDICAO: ops[100] || 0,
-                        QTY_FATURAMENTO: ops[101] || 0
+                        QTY_MOLDADA: totals[10] + totals[11] + totals[12],
+                        QTY_FUSAO: totals[20],
+                        QTY_ACABAMENTO: totals[30],
+                        QTY_TT: totals[40],
+                        QTY_USINAGEM: totals[50] + totals[105],
+                        QTY_QUALIDADE: totals[60],
+                        QTY_EXPEDICAO: totals[100],
+                        QTY_FATURAMENTO: totals[101]
                     };
                 });
 
