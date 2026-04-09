@@ -3962,7 +3962,7 @@
         async function updateCharts(list) {
             updatePCPChart(list);
             updateParetoChart(list);
-            updatePendingChart();
+            updatePendingChart(list);
             await updateHistoricalChart();
         }
 
@@ -4100,9 +4100,7 @@
             document.getElementById('yearFilterPending').value = val;
         }
 
-        function updatePendingChart() {
-            // Usar allData para consistência com o gráfico Geral
-            const pendingList = allData;
+        function updatePendingChart(list) {
             const monthEl = document.getElementById('monthFilterHistorical');
             let selectedMonth = monthEl ? monthEl.value : 'Todos';
             if (selectedMonth === 'Todos') {
@@ -4123,7 +4121,7 @@
                 const mData = Array(12).fill(0);
                 const mDataValue = Array(12).fill(0);
 
-                pendingList.forEach(item => {
+                list.forEach(item => {
                     const d = item.DATA_EMISSAO_PEDIDO ? toLocalDate(item.DATA_EMISSAO_PEDIDO) : null;
                     if (d && d.getFullYear() === selectedYear) {
                         // Usar mesma fórmula de peso do gráfico Emissão Geral
@@ -4172,7 +4170,7 @@
                 let totalMonthWeight = 0;
                 let totalMonthValue = 0;
 
-                pendingList.forEach(item => {
+                list.forEach(item => {
                     const d = item.DATA_EMISSAO_PEDIDO ? toLocalDate(item.DATA_EMISSAO_PEDIDO) : null;
                     if (d && d.getFullYear() === selectedYear && (d.getMonth() + 1) === mIdx) {
                         const dayNum = d.getDate();
@@ -4427,27 +4425,19 @@
                     if (selectedMonth === 'Todos') {
                         if (titleEl) titleEl.innerText = 'Gráfico de Emissão de Pedidos';
                         
-                        // Usar allData (mesma fonte do gráfico Pendente)
+                        if (!emissionDataCache) {
+                            const res = await fetch('/api/emissoes/monthly-summary');
+                            if (!res.ok) throw new Error('Erro ao buscar dados de emissão');
+                            emissionDataCache = await res.json();
+                        }
+
                         const weightData = Array(12).fill(0);
                         const valueData = Array(12).fill(0);
 
-                        allData.forEach(item => {
-                            const d = item.DATA_EMISSAO_PEDIDO ? toLocalDate(item.DATA_EMISSAO_PEDIDO) : null;
-                            if (d && d.getFullYear() === selectedYear) {
-                                const qOriginal = parseFloat(item.QUANTIDADE_PPR) || 0;
-                                const prodCode = String(item.PRODUTO_PPR || '').trim();
-                                let wUn = 0;
-                                if (customWeights[prodCode]) {
-                                    wUn = customWeights[prodCode];
-                                } else {
-                                    wUn = qOriginal > 0 ? (parseFloat(item.PESO_LIQUIDO_NPR) || 0) / qOriginal : 0;
-                                }
-                                let vUn = parseFloat(item.VALOR_PPR || 0);
-                                if (item.PRECO_KG && parseFloat(item.PRECO_KG) > 0 && customWeights[prodCode]) {
-                                    vUn = parseFloat(item.PRECO_KG) * wUn;
-                                }
-                                weightData[d.getMonth()] += wUn * qOriginal;
-                                valueData[d.getMonth()] += vUn * qOriginal;
+                        emissionDataCache.forEach(row => {
+                            if (row.ano === selectedYear) {
+                                weightData[row.mes - 1] = row.totalPeso;
+                                valueData[row.mes - 1] = row.totalValor;
                             }
                         });
 
@@ -4470,39 +4460,45 @@
                         // SELECTED A SPECIFIC MONTH -> SHOW DAILY VIEW
                         const mIdx = parseInt(selectedMonth);
                         const monthName = monthLabels[mIdx - 1];
+                        
+                        // Fetch individual records for this month to aggregate daily
+                        const res = await fetch(`/api/emissoes/list?ano=${selectedYear}&mes=${selectedMonth}`);
+                        if (!res.ok) throw new Error('Erro ao buscar registros históricos');
+                        const records = await res.json();
 
-                        // Usar allData (mesma fonte do gráfico Pendente)
+                        // Aggregate by day
                         const dailyMap = {};
                         let totalMonthWeight = 0;
                         let totalMonthValue = 0;
 
-                        allData.forEach(item => {
-                            const d = item.DATA_EMISSAO_PEDIDO ? toLocalDate(item.DATA_EMISSAO_PEDIDO) : null;
-                            if (d && d.getFullYear() === selectedYear && (d.getMonth() + 1) === mIdx) {
-                                const dayNum = d.getDate();
-                                if (!dailyMap[dayNum]) dailyMap[dayNum] = { peso: 0, valor: 0 };
-                                
-                                const qOriginal = parseFloat(item.QUANTIDADE_PPR) || 0;
-                                const prodCode = String(item.PRODUTO_PPR || '').trim();
-                                let wUn = 0;
-                                if (customWeights[prodCode]) {
-                                    wUn = customWeights[prodCode];
-                                } else {
-                                    wUn = qOriginal > 0 ? (parseFloat(item.PESO_LIQUIDO_NPR) || 0) / qOriginal : 0;
-                                }
-                                const itemWeight = wUn * qOriginal;
-                                
-                                let vUn = parseFloat(item.VALOR_PPR || 0);
-                                if (item.PRECO_KG && parseFloat(item.PRECO_KG) > 0 && customWeights[prodCode]) {
-                                    vUn = parseFloat(item.PRECO_KG) * wUn;
-                                }
-                                const itemValue = vUn * qOriginal;
-
-                                dailyMap[dayNum].peso += itemWeight;
-                                dailyMap[dayNum].valor += itemValue;
-                                totalMonthWeight += itemWeight;
-                                totalMonthValue += itemValue;
+                        records.forEach(r => {
+                            const d = toLocalDate(r.DATA_EMISSAO_PEDIDO);
+                            const dayNum = d.getDate();
+                            if (!dailyMap[dayNum]) dailyMap[dayNum] = { peso: 0, valor: 0 };
+                            
+                            // Peso Logic (Correction if available)
+                            let wUn = 0;
+                            const qOriginal = parseFloat(r.QUANTIDADE_PPR) || 0;
+                            const prodCode = String(r.PRODUTO_PPR || '').trim();
+                            
+                            if (customWeights[prodCode]) {
+                                wUn = customWeights[prodCode];
+                            } else {
+                                wUn = qOriginal > 0 ? (parseFloat(r.PESO_LIQUIDO_NPR) || 0) / qOriginal : 0;
                             }
+                            const itemWeight = wUn * qOriginal;
+                            
+                            // Valor Logic
+                            let vUn = parseFloat(r.VALOR_PPR || 0);
+                            if (r.PRECO_KG && parseFloat(r.PRECO_KG) > 0 && customWeights[prodCode]) {
+                                vUn = parseFloat(r.PRECO_KG) * wUn;
+                            }
+                            const itemValue = vUn * qOriginal;
+
+                            dailyMap[dayNum].peso += itemWeight;
+                            dailyMap[dayNum].valor += itemValue;
+                            totalMonthWeight += itemWeight;
+                            totalMonthValue += itemValue;
                         });
 
                         // Prepare Labels (1 to Last Day of Month)
