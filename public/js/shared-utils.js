@@ -39,11 +39,15 @@ function getItemSectorMetrics(item) {
         qtdOrig
     );
 
-    // Current Billed (Physical/Industrial vs ERP)
-    let cFat = Number(item.QTY_FATURAMENTO) || 0;
+    // Current Billed (Consolidated: Industrial Pointing OR ERP Billing)
+    // This ensures that if the ERP billed it, the industrial sectors are cleared.
+    let cFat = Math.max(
+        Number(item.QTY_FATURAMENTO) || 0,
+        erpFat
+    );
     
-    // Force enclosure if marked as fully billed 'T' or if ERP faturamento covers the target
-    if (item.FATURADO_PPR === 'T' || (targetTotalQty > 0 && erpFat >= targetTotalQty)) {
+    // Force enclosure if marked as fully billed 'T' or if consolidated billing covers the target
+    if (String(item.FATURADO_PPR || '').trim().toUpperCase() === 'T' || (targetTotalQty > 0 && cFat >= targetTotalQty)) {
         cFat = targetTotalQty;
     }
 
