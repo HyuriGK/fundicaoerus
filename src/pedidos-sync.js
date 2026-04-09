@@ -21,7 +21,7 @@ router.get('/', async (req, res) => {
                     SELECT DISTINCT pedido, codigo FROM carteira
                 ) c ON (p.data->>'CODIGO_PPR') = c.pedido AND (p.data->>'PRODUTO_PPR') = c.codigo
                 LEFT JOIN ficha_tecnica f ON f.pro_codigo_fic = (p.data->>'PRODUTO_PPR')
-                WHERE (p.data->>'OP_PCS') IS NOT NULL AND (p.data->>'OP_PCS') <> '' -- Ensure it's a production order
+                -- Removed the OP_PCS filter to include orders not yet in production but in the backlog
                 ORDER BY 
                     (f.pro_codigo_fic IS NOT NULL) DESC,
                     f.data_fic DESC NULLS LAST,
