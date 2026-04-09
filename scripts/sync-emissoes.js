@@ -24,7 +24,7 @@ async function syncEmissoes() {
         pgClient = await pgPool.connect();
         
         await pgClient.query(`
-            CREATE TABLE IF NOT EXISTS firebird_sync_emissoes (
+            CREATE TABLE IF NOT EXISTS firebird_sync_pedidos (
                 sync_key TEXT PRIMARY KEY,
                 data JSONB,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -98,7 +98,7 @@ async function syncEmissoes() {
                 const data = batch.map(r => JSON.stringify(r));
 
                 await pgClient.query(`
-                    INSERT INTO firebird_sync_emissoes (sync_key, data, updated_at)
+                    INSERT INTO firebird_sync_pedidos (sync_key, data, updated_at)
                     SELECT unnest($1::text[]), unnest($2::jsonb[]), NOW()
                     ON CONFLICT (sync_key) DO UPDATE SET data = EXCLUDED.data, updated_at = EXCLUDED.updated_at;
                 `, [keys, data]);
