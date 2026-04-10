@@ -124,5 +124,94 @@ router.get('/list', async (req, res) => {
     }
 });
 
+// GET /api/emissoes/pending-summary  
+// Mesma fonte (firebird_sync_emissoes), mas filtra apenas itens com entrega pendente (não faturados)
+router.get('/pending-summary', async (req, res) => {
+    try {
+        const query = `
+            SELECT 
+                EXTRACT(YEAR FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) as ano,
+                EXTRACT(MONTH FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) as mes,
+                SUM(
+                    COALESCE(pc.peso, 
+                        CASE WHEN CAST(COALESCE(p.data->>'QUANTIDADE_PPR','0') AS NUMERIC) > 0 
+                             THEN CAST(COALESCE(p.data->>'PESO_LIQUIDO_NPR','0') AS NUMERIC) / CAST(p.data->>'QUANTIDADE_PPR' AS NUMERIC)
+                             ELSE 0 END
+                    ) * (
+                        CAST(COALESCE(p.data->>'QUANTIDADE_PPR','0') AS NUMERIC) 
+                        - COALESCE(CAST(COALESCE(p.data->>'QUANTIDADE_FATURADA_PPR','0') AS NUMERIC), 0)
+                    )
+                ) as total_peso,
+                SUM(
+                    CAST(COALESCE(p.data->>'VALOR_PPR', '0') AS NUMERIC) 
+                    * (
+                        CAST(COALESCE(p.data->>'QUANTIDADE_PPR','0') AS NUMERIC) 
+                        - COALESCE(CAST(COALESCE(p.data->>'QUANTIDADE_FATURADA_PPR','0') AS NUMERIC), 0)
+                    )
+                ) as total_valor
+            FROM firebird_sync_emissoes p
+            LEFT JOIN pesos_customizados pc ON TRIM(p.data->>'PRODUTO_PPR') = pc.codigo
+            WHERE p.data->>'DATA_EMISSAO_PEDIDO' IS NOT NULL
+              AND TRIM(COALESCE(p.data->>'FATURADO_PPR','')) <> 'T'
+              AND (CAST(COALESCE(p.data->>'QUANTIDADE_PPR','0') AS NUMERIC) - COALESCE(CAST(COALESCE(p.data->>'QUANTIDADE_FATURADA_PPR','0') AS NUMERIC), 0)) > 0
+            GROUP BY 1, 2
+            ORDER BY 1 DESC, 2 DESC
+        `;
+
+        const result = await pool.query(query);
+
+        const formatted = result.rows.map(row => ({
+            ano: parseInt(row.ano),
+            mes: parseInt(row.mes),
+            totalPeso: parseFloat(row.total_peso),
+            totalValor: parseFloat(row.total_valor)
+        }));
+
+        res.json(formatted);
+    } catch (error) {
+        console.error('Erro ao buscar resumo de emissões pendentes:', error);
+        res.status(500).json({ error: 'Erro interno ao processar dados de emissões pendentes.' });
+    }
+});
+
+// GET /api/emissoes/pending-list
+// Retorna registros individuais para a visão diária do gráfico pendente
+router.get('/pending-list', async (req, res) => {
+    try {
+        const { ano, mes } = req.query;
+        if (!ano || !mes) {
+            return res.status(400).json({ error: 'Ano e mês são obrigatórios.' });
+        }
+
+        const query = `
+            SELECT 
+                p.data,
+                pc.peso as peso_customizado
+            FROM firebird_sync_emissoes p
+            LEFT JOIN pesos_customizados pc ON TRIM(p.data->>'PRODUTO_PPR') = pc.codigo
+            WHERE EXTRACT(YEAR FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) = $1
+              AND EXTRACT(MONTH FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) = $2
+              AND TRIM(COALESCE(p.data->>'FATURADO_PPR','')) <> 'T'
+              AND (CAST(COALESCE(p.data->>'QUANTIDADE_PPR','0') AS NUMERIC) - COALESCE(CAST(COALESCE(p.data->>'QUANTIDADE_FATURADA_PPR','0') AS NUMERIC), 0)) > 0
+            ORDER BY (p.data->>'DATA_EMISSAO_PEDIDO')::date DESC
+        `;
+
+        const result = await pool.query(query, [ano, mes]);
+        const records = result.rows.map(row => {
+            const data = row.data;
+            if (row.peso_customizado !== null) {
+                data.PESO_LIQUIDO_NPR = row.peso_customizado * (parseFloat(data.QUANTIDADE_PPR) || 0);
+                data.PESO_UNIT = row.peso_customizado;
+            }
+            return data;
+        });
+
+        res.json(records);
+    } catch (error) {
+        console.error('Erro ao listar registros de emissões pendentes:', error);
+        res.status(500).json({ error: 'Erro interno ao listar registros pendentes.' });
+    }
+});
+
 module.exports = router;
 
