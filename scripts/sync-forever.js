@@ -4,6 +4,9 @@
  * an infinite scrolling log below it.
  */
 
+const { spawn } = require('child_process');
+const path = require('path');
+const readline = require('readline');
 const fs = require('fs');
 
 // --- ANSI TRUECOLOR UTILS ---
