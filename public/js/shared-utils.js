@@ -8,6 +8,13 @@
  * Prioritizes the ERP's 'SALDO_LIBERADO_FATURAR_PPR'.
  */
 function getCommercialBalance(item) {
+    // Se estivermos visualizando o histórico completo (Gráfico de Emissão Geral)
+    // O Saldo Comercial da peça não diz respeito a quanto "falta entregar" (0 se faturado)
+    // Mas sim ao total bruto emitido no pedido originalmente!
+    if (typeof window !== 'undefined' && window.chartMode === 'emission_total') {
+        return Number(item.QUANTIDADE_PPR) || 0;
+    }
+
     // 0. Safety filter: If marked as totally billed ('T'), commercial balance is 0.
     if (String(item.FATURADO_PPR || '').trim().toUpperCase() === 'T') {
         return 0;
