@@ -3940,12 +3940,10 @@
 
         function toggleProductionStage() {
             // Function no longer needed, bar is fixed.
-        }
-
         async function updateCharts(list) {
             updatePCPChart(list);
             updateParetoChart(list);
-            await updatePendingChart(list);
+            updatePendingChart(list);
             await updateHistoricalChart();
         }
 
@@ -4084,9 +4082,7 @@
             pendingDataCache = null; // Limpa cache ao trocar ano
         }
 
-        let pendingDataCache = null;
-
-        async function updatePendingChart(list) {
+        function updatePendingChart(list) {
             const monthEl = document.getElementById('monthFilterHistorical');
             let selectedMonth = monthEl ? monthEl.value : 'Todos';
             if (selectedMonth === 'Todos') {
@@ -4104,19 +4100,30 @@
                 if (selectedMonth === 'Todos') {
                     if (titleEl) titleEl.innerText = 'Gráfico de Emissão de Pedidos C/ Entrega Pendente';
                     
-                    if (!pendingDataCache) {
-                        const res = await fetch('/api/emissoes/pending-summary');
-                        if (!res.ok) throw new Error('Erro ao buscar pendentes');
-                        pendingDataCache = await res.json();
-                    }
-
                     const mData = Array(12).fill(0);
                     const mDataValue = Array(12).fill(0);
 
-                    pendingDataCache.forEach(row => {
-                        if (row.ano === selectedYear) {
-                            mData[row.mes - 1] = row.totalPeso;
-                            mDataValue[row.mes - 1] = row.totalValor;
+                    list.forEach(item => {
+                        const rawDate = item.DATA_EMISSAO_PEDIDO || item.OP_EMISSAO;
+                        const d = rawDate ? toLocalDate(rawDate) : null;
+                        if (d && d.getFullYear() === selectedYear) {
+                            const qOriginal = parseFloat(item.QUANTIDADE_PPR) || 0;
+                            const prodCode = String(item.PRODUTO_PPR || '').trim();
+                            let wUn = 0;
+                            if (customWeights[prodCode]) {
+                                wUn = customWeights[prodCode];
+                            } else {
+                                const pLiq = parseFloat(item.PESO_LIQUIDO_NPR) || parseFloat(item.PESO_PRODUTO) || 0;
+                                wUn = qOriginal > 0 ? pLiq / qOriginal : 0;
+                            }
+                            const realQ = getCommercialBalance(item);
+                            const weight = wUn * realQ;
+                            let vUnit = parseFloat(item.VALOR_PPR || 0);
+                            if (item.PRECO_KG && parseFloat(item.PRECO_KG) > 0 && customWeights[prodCode]) {
+                                vUnit = parseFloat(item.PRECO_KG) * wUn;
+                            }
+                            mData[d.getMonth()] += weight;
+                            mDataValue[d.getMonth()] += (vUnit * realQ);
                         }
                     });
 
@@ -4141,40 +4148,40 @@
                     const mIdx = parseInt(selectedMonth);
                     const monthName = monthLabels[mIdx - 1];
 
-                    const res = await fetch(`/api/emissoes/pending-list?ano=${selectedYear}&mes=${selectedMonth}`);
-                    if (!res.ok) throw new Error('Erro ao buscar pendentes diários');
-                    const records = await res.json();
-
                     const dailyMap = {};
                     let totalMonthWeight = 0;
                     let totalMonthValue = 0;
 
-                    records.forEach(r => {
-                        const d = toLocalDate(r.DATA_EMISSAO_PEDIDO);
-                        const dayNum = d.getDate();
-                        if (!dailyMap[dayNum]) dailyMap[dayNum] = { peso: 0, valor: 0 };
+                    list.forEach(item => {
+                        const rawDate = item.DATA_EMISSAO_PEDIDO || item.OP_EMISSAO;
+                        const d = rawDate ? toLocalDate(rawDate) : null;
+                        if (d && d.getFullYear() === selectedYear && (d.getMonth() + 1) === mIdx) {
+                            const dayNum = d.getDate();
+                            if (!dailyMap[dayNum]) dailyMap[dayNum] = { peso: 0, valor: 0 };
 
-                        const qOriginal = parseFloat(r.QUANTIDADE_PPR) || 0;
-                        const prodCode = String(r.PRODUTO_PPR || '').trim();
-                        let wUn = 0;
-                        if (customWeights[prodCode]) {
-                            wUn = customWeights[prodCode];
-                        } else {
-                            wUn = qOriginal > 0 ? (parseFloat(r.PESO_LIQUIDO_NPR) || 0) / qOriginal : 0;
+                            const qOriginal = parseFloat(item.QUANTIDADE_PPR) || 0;
+                            const prodCode = String(item.PRODUTO_PPR || '').trim();
+                            let wUn = 0;
+                            if (customWeights[prodCode]) {
+                                wUn = customWeights[prodCode];
+                            } else {
+                                const pLiq = parseFloat(item.PESO_LIQUIDO_NPR) || parseFloat(item.PESO_PRODUTO) || 0;
+                                wUn = qOriginal > 0 ? pLiq / qOriginal : 0;
+                            }
+                            const realQ = getCommercialBalance(item);
+                            const itemWeight = wUn * realQ;
+
+                            let vUn = parseFloat(item.VALOR_PPR || 0);
+                            if (item.PRECO_KG && parseFloat(item.PRECO_KG) > 0 && customWeights[prodCode]) {
+                                vUn = parseFloat(item.PRECO_KG) * wUn;
+                            }
+                            const itemValue = vUn * realQ;
+
+                            dailyMap[dayNum].peso += itemWeight;
+                            dailyMap[dayNum].valor += itemValue;
+                            totalMonthWeight += itemWeight;
+                            totalMonthValue += itemValue;
                         }
-                        const saldo = qOriginal - (parseFloat(r.QUANTIDADE_FATURADA_PPR) || 0);
-                        const itemWeight = wUn * saldo;
-
-                        let vUn = parseFloat(r.VALOR_PPR || 0);
-                        if (r.PRECO_KG && parseFloat(r.PRECO_KG) > 0 && customWeights[prodCode]) {
-                            vUn = parseFloat(r.PRECO_KG) * wUn;
-                        }
-                        const itemValue = vUn * saldo;
-
-                        dailyMap[dayNum].peso += itemWeight;
-                        dailyMap[dayNum].valor += itemValue;
-                        totalMonthWeight += itemWeight;
-                        totalMonthValue += itemValue;
                     });
 
                     const lastDay = new Date(selectedYear, mIdx, 0).getDate();
@@ -4222,6 +4229,7 @@
                 console.error('Erro ao atualizar gráfico pendente:', err);
             }
         }
+
 
         function renderPendingChart(labels, data, extraData, bgColors) {
             if (chartPending) chartPending.destroy();
