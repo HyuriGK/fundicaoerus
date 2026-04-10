@@ -26,6 +26,7 @@ async function syncMaster() {
                         P.CODIGO_PCP as OP_PCS,
                         P.PRODUTO_PCP as PRODUTO_PPR,
                         PR.NOME_PRO as NOME_PRODUTO_PPR,
+                        PR.PESO_LIQUIDO_PRO as PESO_PRODUTO,
                         P.QUANTIDADE_PCP as OP_QUANTIDADE,
                         P.DATA_PCP as OP_EMISSAO,
                         P.ENTREGA_PCP as OP_ENTREGA,
