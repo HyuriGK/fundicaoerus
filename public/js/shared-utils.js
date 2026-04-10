@@ -13,6 +13,12 @@ function getCommercialBalance(item) {
         return 0;
     }
 
+    // New: Support for OP-based data from sync-master.js
+    // If we have OP_QUANTIDADE but no billing saldo fields, assume the OP quantity is the pending balance
+    if (item.OP_QUANTIDADE !== undefined && item.SALDO_LIBERADO_FATURAR_PPR === undefined && item.QUANTIDADE_FATURADO_PPR === undefined) {
+        return Number(item.OP_QUANTIDADE) || 0;
+    }
+
     const saldoLib = Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0;
     if (saldoLib > 0) return saldoLib;
     

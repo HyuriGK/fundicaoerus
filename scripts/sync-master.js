@@ -43,7 +43,31 @@ async function syncMaster() {
                             FROM PRODUCAO_PEDIDO PP
                             JOIN PEDIDO D ON D.CODIGO_PED = PP.PPR_CODIGO_PCPR AND D.ANO_PED = PP.PPR_ANO_PCPR AND D.EMPRESA_PED = PP.PPR_EMPRESA_PCPR
                             WHERE PP.PCP_CODIGO_PCPR = P.CODIGO_PCP AND PP.PCP_EMPRESA_PCPR = P.EMPRESA_PCP
-                        ) as PEDIDO_NUM
+                        ) as PEDIDO_NUM,
+                        (
+                            SELECT FIRST 1 D.EMISSAO_PED
+                            FROM PRODUCAO_PEDIDO PP
+                            JOIN PEDIDO D ON D.CODIGO_PED = PP.PPR_CODIGO_PCPR AND D.ANO_PED = PP.PPR_ANO_PCPR AND D.EMPRESA_PED = PP.PPR_EMPRESA_PCPR
+                            WHERE PP.PCP_CODIGO_PCPR = P.CODIGO_PCP AND PP.PCP_EMPRESA_PCPR = P.EMPRESA_PCP
+                        ) as DATA_EMISSAO_PEDIDO,
+                        (
+                            SELECT FIRST 1 PPR.FATURADO_PPR
+                            FROM PRODUCAO_PEDIDO PP
+                            JOIN PEDIDO_PRODUTO PPR ON PPR.CODIGO_PPR = PP.PPR_CODIGO_PCPR AND PPR.ANO_PPR = PP.PPR_ANO_PCPR AND PPR.ITEM_PPR = PP.PPR_ITEM_PCPR AND PPR.EMPRESA_PPR = PP.PPR_EMPRESA_PCPR
+                            WHERE PP.PCP_CODIGO_PCPR = P.CODIGO_PCP AND PP.PCP_EMPRESA_PCPR = P.EMPRESA_PCP
+                        ) as FATURADO_PPR,
+                        (
+                            SELECT FIRST 1 PPR.SALDO_LIBERADO_FATURAR_PPR
+                            FROM PRODUCAO_PEDIDO PP
+                            JOIN PEDIDO_PRODUTO PPR ON PPR.CODIGO_PPR = PP.PPR_CODIGO_PCPR AND PPR.ANO_PPR = PP.PPR_ANO_PCPR AND PPR.ITEM_PPR = PP.PPR_ITEM_PCPR AND PPR.EMPRESA_PPR = PP.PPR_EMPRESA_PCPR
+                            WHERE PP.PCP_CODIGO_PCPR = P.CODIGO_PCP AND PP.PCP_EMPRESA_PCPR = P.EMPRESA_PCP
+                        ) as SALDO_LIBERADO_FATURAR_PPR,
+                        (
+                            SELECT FIRST 1 PPR.PESO_LIQUIDO_NPR
+                            FROM PRODUCAO_PEDIDO PP
+                            JOIN PEDIDO_PRODUTO PPR ON PPR.CODIGO_PPR = PP.PPR_CODIGO_PCPR AND PPR.ANO_PPR = PP.PPR_ANO_PCPR AND PPR.ITEM_PPR = PP.PPR_ITEM_PCPR AND PPR.EMPRESA_PPR = PP.PPR_EMPRESA_PCPR
+                            WHERE PP.PCP_CODIGO_PCPR = P.CODIGO_PCP AND PP.PCP_EMPRESA_PCPR = P.EMPRESA_PCP
+                        ) as PESO_LIQUIDO_NPR
                     FROM PRODUCAO P
                     LEFT JOIN PRODUTO PR ON PR.CODIGO_PRO = P.PRODUTO_PCP
                     WHERE P.EMPRESA_PCP = 10 
