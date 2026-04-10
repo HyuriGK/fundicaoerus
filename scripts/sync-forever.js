@@ -20,6 +20,7 @@ const SYNC_BATS = [
     { name: 'PRODUÇÃO', file: 'sincronizar_aproducao.bat' },
     { name: 'REFUGOS', file: 'sincronizar_arefugo.bat' }
 ];
+const DELAY_BETWEEN_SCRIPTS = 10000; // 10 segundos
 
 // STATE
 let cycleCount = 0;
@@ -175,7 +176,16 @@ async function startForever() {
 
         const timerInterval = setInterval(() => drawPinnedDashboard(cycleStart), 1000);
 
-        await Promise.all(SYNC_BATS.map(bat => runBat(bat)));
+        // EXECUÇÃO SEQUENCIAL COM INTERVALO DE 10s
+        for (let i = 0; i < SYNC_BATS.length; i++) {
+            const bat = SYNC_BATS[i];
+            await runBat(bat);
+            
+            // Aguarda 10 segundos se não for o último script do ciclo
+            if (i < SYNC_BATS.length - 1) {
+                await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_SCRIPTS));
+            }
+        }
 
         clearInterval(timerInterval);
         
