@@ -70,6 +70,7 @@ router.get('/', async (req, res) => {
                     SELECT 
                         count(*) as count
                     FROM firebird_sync_pedidos p
+                    INNER JOIN items_backlog ib ON TRIM(p.data->>'CODIGO_PPR') = ib.pedido AND TRIM(p.data->>'PRODUTO_PPR') = ib.codigo
                     LEFT JOIN pesos_customizados pc ON TRIM(p.data->>'PRODUTO_PPR') = pc.codigo
                     LEFT JOIN produto_pesos_producao weight_ref ON TRIM(p.data->>'PRODUTO_PPR') = weight_ref.codigo_peca
                     WHERE 
@@ -91,7 +92,7 @@ router.get('/', async (req, res) => {
                         sector: 'Comercial',
                         title: 'Pesos Zerados (Carteira)',
                         description: `Existem <strong>${countP}</strong> itens na Carteira de Pedidos com peso unitário "0,00".<br>Isso afeta o cálculo do faturamento previsto.`,
-                        actionUrl: 'pedidos.html',
+                        actionUrl: 'pedidos.html?filter=zero-weight',
                         priority: 'high',
                         count: countP
                     });
