@@ -17,7 +17,7 @@
                 <div class="loader-logo">
                     <i class="fa-solid fa-layer-group"></i>
                 </div>
-                <div class="loader-text">Carregando Informações</div>
+                <div class="loader-text">CARREGANDO INFORMAÇÕES</div>
                 <div class="loader-progress-bg">
                     <div id="loader-progress-fill"></div>
                 </div>
@@ -45,7 +45,7 @@
     const startLoading = (loaderEl) => {
         const fill = document.getElementById('loader-progress-fill');
         const percText = document.getElementById('loader-perc');
-        const duration = 2000; // 2 segundos
+        const duration = 1500; // 1.5 segundos
         const startTime = Date.now();
 
         const update = () => {
