@@ -65,12 +65,14 @@ router.get('/', async (req, res) => {
                 // Localiza itens na carteira (backlog) que estão no firebird_sync_pedidos e pesam zero
                 const queryPedidosZero = `
                     WITH items_backlog AS (
-                        SELECT DISTINCT pedido, codigo FROM carteira
+                        SELECT DISTINCT pedido::text, codigo::text FROM carteira
                     )
                     SELECT 
                         count(*) as count
                     FROM firebird_sync_pedidos p
-                    INNER JOIN items_backlog ib ON TRIM(p.data->>'CODIGO_PPR') = ib.pedido AND TRIM(p.data->>'PRODUTO_PPR') = ib.codigo
+                    INNER JOIN items_backlog ib 
+                        ON TRIM(p.data->>'CODIGO_PPR') = TRIM(ib.pedido) 
+                        AND TRIM(p.data->>'PRODUTO_PPR') = TRIM(ib.codigo)
                     LEFT JOIN pesos_customizados pc ON TRIM(p.data->>'PRODUTO_PPR') = pc.codigo
                     LEFT JOIN produto_pesos_producao weight_ref ON TRIM(p.data->>'PRODUTO_PPR') = weight_ref.codigo_peca
                     WHERE 
