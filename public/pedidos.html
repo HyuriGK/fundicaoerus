@@ -1623,7 +1623,7 @@
                     <div class="chart-header-row" style="position: relative;">
                         <div class="chart-title-flex">Gráfico de Emissão de Pedidos C/ Entrega Pendente</div>
                         <div style="position: absolute; right: 10px; display: flex; align-items: center; gap: 8px;">
-                            <button class="btn-modern" onclick="openModal()" style="font-size: 0.65rem; padding: 4px 10px; height: 26px;">
+                            <button class="btn-modern" onclick="openPendingEmissionRecords()" style="font-size: 0.65rem; padding: 4px 10px; height: 26px; background-color: var(--color-primary); color: #000;">
                                 <i class="fa-solid fa-list-check"></i> Registros
                             </button>
                              <select id="yearFilterPending" onchange="syncEmissionYear(this.value); updateHistoricalChart().then(() => updatePendingChart(currentFilteredData))" class="year-select">
@@ -1644,6 +1644,9 @@
                         <!-- Filters Column Right -->
                         <div style="position: absolute; right: 10px; display: flex; align-items: center; gap: 6px;">
                             <!-- View Mode -->
+                            <button class="btn-modern" onclick="openHistoricalEmissionRecords()" style="font-size: 0.65rem; padding: 4px 10px; height: 26px; background-color: var(--color-primary); color: #000; margin-right: 5px;">
+                                <i class="fa-solid fa-list-check"></i> Registros
+                            </button>
                             <select id="modeFilterHistorical" onchange="updateHistoricalChart()"
                                 style="font-size: 0.7rem; padding: 5px 8px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-subtle); color: #a1a1aa; cursor: pointer; outline: none; border-radius: 4px;">
                                 <option value="month">Por Mês</option>
@@ -2183,6 +2186,29 @@
             applyColumnFilters();
             openModal();
         }
+
+        function openPendingEmissionRecords() {
+            chartMode = 'emission_pending';
+            applyColumnFilters();
+            openModal();
+        }
+
+        function openHistoricalEmissionRecords() {
+            const yearEl = document.getElementById('yearFilterHistorical');
+            const monthEl = document.getElementById('monthFilterHistorical');
+            const selectedYear = yearEl ? (parseInt(yearEl.value) || new Date().getFullYear()) : new Date().getFullYear();
+            const selectedMonth = monthEl ? monthEl.value : 'Todos';
+
+            if (selectedMonth !== 'Todos') {
+                // Se um mês específico estiver selecionado, busca dados históricos do servidor
+                showHistoricalRecords(selectedYear, parseInt(selectedMonth));
+            } else {
+                // Caso contrário, mostra o que está carregado (incluindo faturados pois chartMode está definido)
+                chartMode = 'emission_total';
+                applyColumnFilters();
+                openModal();
+            }
+        }
         let isModelosHidden = true; // Inicia OCULTO por padrão
 
         let backlogDataState = null; // Backup for commercial backlog when viewing history
@@ -2242,6 +2268,12 @@
                     document.getElementById('sectorTotalWeight').innerText = formatNumber(sWeight) + ' kg';
                     document.getElementById('sectorTotalValue').innerText = valorVisible ? formatCurrency(sValue) : '-----';
                 }
+            } else if (chartMode === 'emission_pending') {
+                if (titleEl) titleEl.innerHTML = `<i class="fa-solid fa-list-check" style="margin-right: 15px;"></i>Registros: Emissão C/ Entrega Pendente`;
+                if (banner) banner.style.display = 'none';
+            } else if (chartMode === 'emission_total') {
+                if (titleEl) titleEl.innerHTML = `<i class="fa-solid fa-history" style="margin-right: 15px;"></i>Registros: Emissão de Pedidos (Histórico)`;
+                if (banner) banner.style.display = 'none';
             } else {
                 if (titleEl) titleEl.innerHTML = `<i class="fa-solid fa-list-check" style="margin-right: 15px;"></i>Registros de Pedidos`;
                 if (banner) banner.style.display = 'none';
