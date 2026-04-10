@@ -28,7 +28,13 @@
 
     // 3. Injetar o HTML no início do body
     const injectLoader = () => {
-        if (document.getElementById('global-loader')) return;
+        const path = window.location.pathname;
+        const isExcluded = path.endsWith('login.html') || path.endsWith('index.html') || path === '/';
+        
+        if (isExcluded || document.getElementById('global-loader')) {
+             if (isExcluded) document.body.style.overflow = '';
+             return;
+        }
         
         const wrapper = document.createElement('div');
         wrapper.innerHTML = loaderHTML;
@@ -41,11 +47,11 @@
         startLoading(loaderEl);
     };
 
-    // 4. Lógica de Simulação (2 segundos)
+    // 4. Lógica de Simulação (1 segundo)
     const startLoading = (loaderEl) => {
         const fill = document.getElementById('loader-progress-fill');
         const percText = document.getElementById('loader-perc');
-        const duration = 1500; // 1.5 segundos
+        const duration = 1000; // Alterado para 1.0 segundo
         const startTime = Date.now();
 
         const update = () => {
@@ -67,8 +73,8 @@
                     // Remover do DOM após a transição de fade-out
                     setTimeout(() => {
                         loaderEl.remove();
-                    }, 600);
-                }, 200);
+                    }, 400); // Mais rápido
+                }, 100); // Mais rápido
             }
         };
 
