@@ -11,7 +11,7 @@ function getCommercialBalance(item) {
     // Se estivermos visualizando o histórico completo (Gráfico de Emissão Geral)
     // O Saldo Comercial da peça não diz respeito a quanto "falta entregar" (0 se faturado)
     // Mas sim ao total bruto emitido no pedido originalmente!
-    if (typeof window !== 'undefined' && window.chartMode === 'emission_total') {
+    if (typeof window !== 'undefined' && typeof chartMode !== 'undefined' && chartMode === 'emission_total') {
         return Number(item.QUANTIDADE_PPR) || 0;
     }
 
