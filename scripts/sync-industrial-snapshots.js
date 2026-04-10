@@ -22,6 +22,8 @@ async function takeSnapshot() {
             WHERE 
                 ((p.data->>'QUANTIDADE_PPR')::numeric - COALESCE((p.data->>'QUANTIDADE_FATURADA_PPR')::numeric, 0)) > 0 
                 AND (p.data->>'STATUS_PPR') <> 'C'
+                AND (p.data->>'STATUS_PED') IS DISTINCT FROM 'C'
+                AND (p.data->>'FATURADO_PPR') IS DISTINCT FROM 'T'
         `;
         const resultPedidos = await client.query(queryPedidos);
         const allItems = resultPedidos.rows.map(r => r.data);
@@ -30,23 +32,27 @@ async function takeSnapshot() {
         
         // 3. Calcular Totais por Setor
         let stats = {
-            aguardando: { qty: 0, weight: 0 },
-            moldagem:   { qty: 0, weight: 0 },
-            fusao:      { qty: 0, weight: 0 },
-            acabamento: { qty: 0, weight: 0 },
-            tt:         { qty: 0, weight: 0 },
-            usinagem:   { qty: 0, weight: 0 },
-            qualidade:  { qty: 0, weight: 0 },
-            expedicao:  { qty: 0, weight: 0 }
+            aguardando: { qty: 0, weight: 0, _processedOPs: new Set() },
+            moldagem:   { qty: 0, weight: 0, _processedOPs: new Set() },
+            fusao:      { qty: 0, weight: 0, _processedOPs: new Set() },
+            acabamento: { qty: 0, weight: 0, _processedOPs: new Set() },
+            tt:         { qty: 0, weight: 0, _processedOPs: new Set() },
+            usinagem:   { qty: 0, weight: 0, _processedOPs: new Set() },
+            qualidade:  { qty: 0, weight: 0, _processedOPs: new Set() },
+            expedicao:  { qty: 0, weight: 0, _processedOPs: new Set() }
         };
 
         for (const item of allItems) {
+            // Regra do Dashboard: Ignorar Modelos (Terminados em '1')
+            const prodCode = String(item.PRODUTO_PPR || '').trim();
+            const isModelo = prodCode.endsWith('1');
+            if (isModelo) continue;
+
             const metrics = getItemSectorMetrics(item);
             
             // Peso Unitário Corrigido
             const originalTarget = metrics.originalTarget;
             let unitWeight = 0;
-            const prodCode = String(item.PRODUTO_PPR || '').trim();
             
             if (item.PESO_UNIT !== undefined && item.PESO_UNIT !== null && item.PESO_UNIT !== '' && Number(item.PESO_UNIT) > 0) {
                 unitWeight = Number(item.PESO_UNIT);
@@ -56,30 +62,29 @@ async function takeSnapshot() {
                 unitWeight = originalTarget > 0 ? (Number(item.PESO_LIQUIDO_NPR) || 0) / originalTarget : 0;
             }
 
-            // Mapeamento dos saldos individuais
-            stats.aguardando.qty += metrics.qAguardando;
-            stats.aguardando.weight += metrics.qAguardando * unitWeight;
+            // Função auxiliar para somar KPI com deduplicação por OP (idêntico ao frontend)
+            const addKpi = (sectorKey, qty) => {
+                if (qty <= 0) return;
+                
+                const opKey = String(item.OP_PCS || '').trim();
+                if (opKey && opKey !== '-') {
+                    if (stats[sectorKey]._processedOPs.has(opKey)) return;
+                    stats[sectorKey]._processedOPs.add(opKey);
+                }
+                
+                stats[sectorKey].qty += qty;
+                stats[sectorKey].weight += qty * unitWeight;
+            };
 
-            stats.moldagem.qty += metrics.qMoldada;
-            stats.moldagem.weight += metrics.qMoldada * unitWeight;
-
-            stats.fusao.qty += metrics.qFusao;
-            stats.fusao.weight += metrics.qFusao * unitWeight;
-
-            stats.acabamento.qty += metrics.qAcabamento;
-            stats.acabamento.weight += metrics.qAcabamento * unitWeight;
-
-            stats.tt.qty += metrics.qTT;
-            stats.tt.weight += metrics.qTT * unitWeight;
-
-            stats.usinagem.qty += metrics.qUsinagem;
-            stats.usinagem.weight += metrics.qUsinagem * unitWeight;
-
-            stats.qualidade.qty += metrics.qQualidade;
-            stats.qualidade.weight += metrics.qQualidade * unitWeight;
-
-            stats.expedicao.qty += metrics.qExpedicao;
-            stats.expedicao.weight += metrics.qExpedicao * unitWeight;
+            // Mapeamento dos saldos individuais com deduplicação
+            addKpi('aguardando', metrics.qAguardando);
+            addKpi('moldagem',   metrics.qMoldada);
+            addKpi('fusao',      metrics.qFusao);
+            addKpi('acabamento', metrics.qAcabamento);
+            addKpi('tt',         metrics.qTT);
+            addKpi('usinagem',   metrics.qUsinagem);
+            addKpi('qualidade',  metrics.qQualidade);
+            addKpi('expedicao',  metrics.qExpedicao);
         }
         
         // 4. Salvar no Banco
