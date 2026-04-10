@@ -23,7 +23,7 @@ async function takeSnapshot() {
                 ((p.data->>'QUANTIDADE_PPR')::numeric - COALESCE((p.data->>'QUANTIDADE_FATURADA_PPR')::numeric, 0)) > 0 
                 AND (p.data->>'STATUS_PPR') <> 'C'
                 AND (p.data->>'STATUS_PED') IS DISTINCT FROM 'C'
-                AND (p.data->>'FATURADO_PPR') IS DISTINCT FROM 'T'
+                AND TRIM(UPPER(p.data->>'FATURADO_PPR')) <> 'T'
         `;
         const resultPedidos = await client.query(queryPedidos);
         const allItems = resultPedidos.rows.map(r => r.data);
