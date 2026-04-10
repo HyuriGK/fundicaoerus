@@ -1514,6 +1514,11 @@
                     <i class="fa-solid fa-table-list"></i>
                     REGISTROS
                 </button>
+
+                <button class="btn-action-standard" onclick="openIndustrialHistory(); this.blur()" id="btn-open-history">
+                    <i class="fa-solid fa-clock-rotate-left"></i>
+                    HISTÓRICO 10 DIAS
+                </button>
             </div>
 
             <div class="industrial-progress-container" id="industrialProgressContainer">
@@ -5190,6 +5195,211 @@
             }
         }
     </script>
+    <!-- Modal de Histórico Industrial -->
+    <div id="industrialHistoryModal" class="modal" style="display: none;">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <div>
+                    <h2 id="historyModalTitle">Histórico: Usinagem Expedição</h2>
+                    <p style="font-size: 0.85em; color: var(--text-muted); margin-top: 4px;">Últimos 10 dias registrados (Barras: Peças vs Peso)</p>
+                </div>
+                <span class="close" onclick="closeIndustrialHistoryModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div id="historyLoading" style="display: none; text-align: center; padding: 40px;">
+                    <i class="fa-solid fa-spinner fa-spin fa-2x" style="color: var(--color-primary);"></i>
+                    <p style="margin-top: 10px;">Carregando dados históricos...</p>
+                </div>
+                <div id="historyChartContainer" style="height: 400px; position: relative;">
+                    <canvas id="industrialHistoryChart"></canvas>
+                </div>
+                <div id="historyEmpty" style="display: none; text-align: center; padding: 40px; color: var(--text-muted);">
+                    <i class="fa-solid fa-database fa-2x" style="margin-bottom: 10px;"></i>
+                    <p>Sem dados históricos para este setor ainda.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- LÓGICA DE HISTÓRICO INDUSTRIAL (CLIQUE DIREITO) ---
+        let historyChart = null;
+
+        function closeIndustrialHistoryModal() {
+            document.getElementById('industrialHistoryModal').style.display = 'none';
+        }
+
+        async function openIndustrialHistory(stage) {
+            const modal = document.getElementById('industrialHistoryModal');
+            const title = document.getElementById('historyModalTitle');
+            const loading = document.getElementById('historyLoading');
+            const chartDiv = document.getElementById('historyChartContainer');
+            const emptyDiv = document.getElementById('historyEmpty');
+
+            // Mapeamento amigável de títulos
+            const stageNames = {
+                'aguardando': 'Aguardando Produção',
+                'moldagem':   'Setor de Moldagem',
+                'fusao':      'Setor de Fusão',
+                'acabamento': 'Setor de Acabamento',
+                'tt':         'Tratamento Térmico',
+                'usinagem':   'Usinagem Expedição',
+                'qualidade':  'Controle de Qualidade',
+                'expedicao':  'Expedição Final'
+            };
+
+            title.innerText = `Histórico Industrial: ${stageNames[stage] || stage.toUpperCase()}`;
+            modal.style.display = 'block';
+            
+            loading.style.display = 'block';
+            chartDiv.style.display = 'none';
+            emptyDiv.style.display = 'none';
+
+            try {
+                const response = await fetch('/api/pedidos-sync/industrial-history');
+                const data = await response.json();
+                
+                loading.style.display = 'none';
+
+                if (!data || data.length === 0) {
+                    emptyDiv.style.display = 'block';
+                    return;
+                }
+
+                chartDiv.style.display = 'block';
+                renderIndustrialHistoryChart(data, stage);
+
+            } catch (err) {
+                console.error("Erro ao carregar histórico:", err);
+                loading.style.display = 'none';
+                showToast("Erro", "Não foi possível carregar o histórico industrial.", "danger");
+            }
+        }
+
+        function renderIndustrialHistoryChart(historyLogs, stage) {
+            const canvas = document.getElementById('industrialHistoryChart');
+            if (historyChart) {
+                historyChart.destroy();
+            }
+
+            // Inverter para mostrar em ordem cronológica (esquerda -> direita)
+            const sortedData = [...historyLogs].reverse();
+            
+            const labels = sortedData.map(d => {
+                const parts = d.date.split('-');
+                return `${parts[2]}/${parts[1]}`; // DD/MM
+            });
+
+            const qtyData = sortedData.map(d => parseFloat(d[`${stage}_qty`] || 0));
+            const weightData = sortedData.map(d => parseFloat(d[`${stage}_weight`] || 0));
+
+            const ctx = canvas.getContext('2d');
+            historyChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Quantidade (Pçs)',
+                            data: qtyData,
+                            backgroundColor: 'rgba(251, 191, 36, 0.7)', // Amber 400
+                            borderColor: '#fbbf24',
+                            borderWidth: 1,
+                            borderRadius: 4,
+                            yAxisID: 'y-pcs'
+                        },
+                        {
+                            label: 'Peso Total (kg)',
+                            data: weightData,
+                            backgroundColor: 'rgba(6, 182, 212, 0.7)', // Cyan 500
+                            borderColor: '#06b6d4',
+                            borderWidth: 1,
+                            borderRadius: 4,
+                            yAxisID: 'y-kg'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    plugins: {
+                        legend: {
+                            labels: { color: '#f4f4f5', font: { family: 'Inter' } }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(24, 24, 27, 0.95)',
+                            titleColor: '#fbbf24',
+                            bodyColor: '#f4f4f5',
+                            borderColor: 'rgba(255,255,255,0.1)',
+                            borderWidth: 1,
+                            padding: 12,
+                            boxPadding: 6
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            ticks: { color: '#a1a1aa' }
+                        },
+                        'y-pcs': {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            title: { display: true, text: 'Peças', color: '#fbbf24' },
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            ticks: { color: '#fbbf24' }
+                        },
+                        'y-kg': {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            title: { display: true, text: 'Peso (kg)', color: '#06b6d4' },
+                            grid: { drawOnChartArea: false }, // Only left axis shows grid lines
+                            ticks: { color: '#06b6d4' }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Inicializar os manipuladores de clique direito
+        function initIndustrialHistoryHandlers() {
+            const containers = [
+                { id: 'groupAguardandoContainer', stage: 'aguardando' },
+                { id: 'groupMoldadoContainer',    stage: 'moldagem' },
+                { id: 'groupFundidoContent',     stage: 'fusao' }, // General sector click falls to fusao or we can handle specific bars
+                { id: 'barFusao',                stage: 'fusao' },
+                { id: 'barAcabamento',           stage: 'acabamento' },
+                { id: 'barTT',                   stage: 'tt' },
+                { id: 'barUsinagem',             stage: 'usinagem' },
+                { id: 'barQualidade',            stage: 'qualidade' },
+                { id: 'barExpedicao',            stage: 'expedicao' }
+            ];
+
+            containers.forEach(item => {
+                const el = document.getElementById(item.id);
+                if (el) {
+                    el.oncontextmenu = function(e) {
+                        e.preventDefault();
+                        openIndustrialHistory(item.stage);
+                    };
+                    // Adicionar tooltip informativo
+                    const currentTitle = el.getAttribute('title') || el.getAttribute('data-tooltip') || '';
+                    const newTooltip = currentTitle ? `${currentTitle}\n(Clique direito para histórico)` : '(Clique direito para histórico)';
+                    el.setAttribute('title', newTooltip);
+                }
+            });
+        }
+
+        // Chamar a inicialização após o carregamento dos dados (após populateIndustrialBars)
+        // Como o dashboard é dinâmico, chamaremos no final do script
+        setTimeout(initIndustrialHistoryHandlers, 2000);
+    </script>
+
     <script src="js/notifications.js"></script>
 </body>
 

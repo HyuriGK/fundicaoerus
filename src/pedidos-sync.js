@@ -61,4 +61,30 @@ router.get('/', async (req, res) => {
     }
 });
 
+// Rota para buscar o histórico de snapshots industriais (últimos 15 dias)
+router.get('/industrial-history', async (req, res) => {
+    try {
+        const query = `
+            SELECT 
+                TO_CHAR(snapshot_date, 'YYYY-MM-DD') as date,
+                aguardando_qty, aguardando_weight,
+                moldagem_qty, moldagem_weight,
+                fusao_qty, fusao_weight,
+                acabamento_qty, acabamento_weight,
+                tt_qty, tt_weight,
+                usinagem_qty, usinagem_weight,
+                qualidade_qty, qualidade_weight,
+                expedicao_qty, expedicao_weight
+            FROM industrial_snapshots
+            ORDER BY snapshot_date DESC
+            LIMIT 15
+        `;
+        const result = await pool.query(query);
+        res.json(result.rows);
+    } catch (error) {
+        console.error('Erro ao buscar histórico industrial:', error);
+        res.status(500).json({ error: 'Erro interno ao buscar histórico.' });
+    }
+});
+
 module.exports = router;

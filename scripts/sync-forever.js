@@ -51,7 +51,8 @@ const SYNC_BATS = [
     { name: 'FATURAMENTO', file: 'sincronizar_afaturamento.bat' },
     { name: 'PEDIDOS', file: 'sincronizar_apedidos.bat' },
     { name: 'PRODUÇÃO', file: 'sincronizar_aproducao.bat' },
-    { name: 'REFUGOS', file: 'sincronizar_arefugo.bat' }
+    { name: 'REFUGOS', file: 'sincronizar_arefugo.bat' },
+    { name: 'SNAPSHOTS', file: 'sincronizar_asnapshots.bat' }
 ];
 const DELAY_BETWEEN_SCRIPTS = 10000; // 10 segundos
 
