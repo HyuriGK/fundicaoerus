@@ -3,23 +3,28 @@ const { Firebird, options: firebirdOptions } = require('../lib/firebird-helper')
 require('dotenv').config({ path: '.env.local' });
 
 /**
- * MASTER SYNC (v5)
- * Foco: Sincronizar TODAS as OPs Ativas (A, N, P) da Empresa 10 diretamente do Firebird.
- * Melhoria: Joins robustos via PRODUCAO_PEDIDO para recuperar Clientes e Datas de Entrega.
+ * MASTER SYNC (v5.1) - OTIMIZADO
+ * Foco: Sincronizar TODAS as OPs Ativas (A, N, P) diretamente do Firebird.
+ * Correção: Reporte de progresso para o monitor (@PROG) e atualização de status do dashboard.
  */
 
 async function syncMaster() {
     const startTime = Date.now();
     console.log('\n======================================================');
-    console.log('🚀 INICIANDO SINCRONIZAÇÃO MASTER (V5)');
+    console.log('🚀 INICIANDO SINCRONIZAÇÃO MASTER OTIMIZADA (V5.1)');
     console.log('======================================================\n');
 
     try {
         Firebird.attach(firebirdOptions, async function (err, db) {
-            if (err) { console.error('❌ [Erro] Falha ao conectar no Firebird:', err.message); process.exit(1); }
+            if (err) { 
+                console.error('❌ [Erro] Falha ao conectar no Firebird:', err.message); 
+                process.exit(1); 
+            }
 
-            // 1. Buscar TODAS as OPs Ativas (A, N, P) da Empresa 10 com joins robustos
-            console.log('📥 [1/4] Coletando OPs Ativas (A, N, P) da Empresa 10...');
+            // 1. Buscar TODAS as OPs Ativas (A, N, P) da Empresa 10
+            process.stdout.write('@PROG:PEDIDOS:5%\n');
+            console.log('📥 [1/4] Coletando OPs Ativas (A, N, P)...');
+            
             const opsResults = await new Promise((res, rej) => {
                 db.query(`
                     SELECT 
@@ -76,17 +81,20 @@ async function syncMaster() {
                 `, (e, r) => e ? rej(e) : res(r));
             });
 
-            console.log(`📦 [Status] ${opsResults.length} OPs ativas encontradas no Firebird.`);
+            console.log(`📦 [Status] ${opsResults.length} OPs ativas encontradas.`);
+            process.stdout.write('@PROG:PEDIDOS:20%\n');
 
             const pgClient = await pool.connect();
             try {
                 await pgClient.query('BEGIN');
                 
                 // 2. Upsert OPs na tabela do dashboard
-                console.log('📤 [2/4] Atualizando Dashboard (firebird_sync_pedidos)...');
+                console.log('📤 [2/4] Atualizando registros no Postgres...');
+                const totalOPs = opsResults.length;
+                let processed = 0;
+                
                 for (const op of opsResults) {
                     const syncKey = `OP-${op.OP_PCS}`;
-                    // Garantir que campos nulos não quebrem o dashboard
                     op.OP_QUANTIDADE = op.OP_QUANTIDADE || 0;
                     op.QUANTIDADE_PPR = op.OP_QUANTIDADE; 
                     
@@ -95,15 +103,22 @@ async function syncMaster() {
                         VALUES ($1, $2, NOW())
                         ON CONFLICT (sync_key) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()
                     `, [syncKey, JSON.stringify(op)]);
+                    
+                    processed++;
+                    if (processed % 50 === 0) {
+                        const pct = 20 + Math.floor((processed / totalOPs) * 40);
+                        process.stdout.write(`@PROG:PEDIDOS:${pct}%\n`);
+                    }
                 }
 
-                // 3. Sincronizar Roteiros para esses produtos
+                // 3. Sincronizar Roteiros
                 const uniqueProducts = [...new Set(opsResults.map(op => String(op.PRODUTO_PPR).trim()))];
                 console.log(`📥 [3/4] Sincronizando roteiros para ${uniqueProducts.length} produtos...`);
 
                 const productChunks = [];
                 for (let i = 0; i < uniqueProducts.length; i += 100) productChunks.push(uniqueProducts.slice(i, i + 100));
 
+                let chunkIdx = 0;
                 for (const chunk of productChunks) {
                     const placeholders = chunk.map(c => `'${c}'`).join(',');
 
@@ -136,10 +151,24 @@ async function syncMaster() {
                     for (const rt of rts) {
                         await pgClient.query(`INSERT INTO roteiros_tecnicos (ficha_id, sequencia, setor_nome) VALUES ($1, $2, $3) ON CONFLICT (ficha_id, sequencia) DO UPDATE SET setor_nome = EXCLUDED.setor_nome`, [rt.CODIGO_FIC, rt.SEQUENCIA, String(rt.SETOR).trim().toUpperCase()]);
                     }
-                    process.stdout.write('.');
+                    
+                    chunkIdx++;
+                    const pct = 60 + Math.floor((chunkIdx / productChunks.length) * 35);
+                    process.stdout.write(`@PROG:PEDIDOS:${pct}%\n`);
                 }
 
                 await pgClient.query('COMMIT');
+
+                // 4. ATUALIZAR STATUS NO DASHBOARD
+                process.stdout.write('@PROG:PEDIDOS:98%\n');
+                console.log('✅ Atualizando status de sincronização...');
+                await pgClient.query("SET TIME ZONE 'America/Sao_Paulo'");
+                await pgClient.query(`
+                    INSERT INTO sync_status (screen_name, last_sync_at)
+                    VALUES ('Pedidos', NOW()), ('Industrial', NOW())
+                    ON CONFLICT (screen_name) DO UPDATE SET last_sync_at = NOW();
+                `);
+
             } catch (e) {
                 await pgClient.query('ROLLBACK');
                 console.error('\n❌ [Erro Postgres]:', e.message);
@@ -148,8 +177,9 @@ async function syncMaster() {
             }
 
             const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+            process.stdout.write('@PROG:PEDIDOS:100%\n');
             console.log('\n\n======================================================');
-            console.log(`🎉 SINCRONIZAÇÃO V5 CONCLUÍDA EM ${duration}S!`);
+            console.log(`🎉 SINCRONIZAÇÃO V5.1 CONCLUÍDA EM ${duration}S!`);
             console.log('======================================================\n');
             db.detach();
             process.exit(0);
