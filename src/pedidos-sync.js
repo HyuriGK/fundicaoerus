@@ -15,7 +15,7 @@ router.get('/', async (req, res) => {
                     p.updated_at,
                     f.data_fic,
                     f.pro_codigo_fic AS has_ficha
-                FROM firebird_sync_pedidos p
+                FROM firebird_sync_emissoes p
                 LEFT JOIN ficha_tecnica f ON f.pro_codigo_fic = (p.data->>'PRODUTO_PPR')
                 WHERE 
                     ((p.data->>'QUANTIDADE_PPR')::numeric - COALESCE((p.data->>'QUANTIDADE_FATURADA_PPR')::numeric, 0)) > 0 
@@ -34,7 +34,7 @@ router.get('/', async (req, res) => {
                     p.updated_at,
                     f.data_fic,
                     f.pro_codigo_fic AS has_ficha
-                FROM firebird_sync_pedidos p
+                FROM firebird_sync_emissoes p
                 LEFT JOIN ficha_tecnica f ON f.pro_codigo_fic = (p.data->>'PRODUTO_PPR')
                 ORDER BY 
                     (f.pro_codigo_fic IS NOT NULL) DESC,
