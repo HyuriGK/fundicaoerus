@@ -3023,9 +3023,9 @@
                         TARGET_SECTORS.forEach(s => totals[s] = 0);
 
                         result.data.forEach(item => {
-                            // Robust Date check: handle string or Date object
+                            // Definitive Safe Date Parse (Identical to apontamentos_produtivos.html)
                             if (!item.data) return;
-                            const itemDate = new Date(item.data);
+                            const itemDate = new Date(item.data + 'T12:00:00'); 
                             if (isNaN(itemDate.getTime())) return;
                             
                             const itemYear = itemDate.getFullYear();
@@ -3033,15 +3033,19 @@
                             
                             if (itemYear !== curYear || itemMonth !== parseInt(curMonth)) return;
 
-                            // Robust Sector check: handle numbers or nulls
+                            // Robust Sector Normalization & Mapping
                             const sRaw = String(item.setor || '').trim().toUpperCase();
                             
                             if (MOLDAGEM_GERAL_SUBTYPES.includes(sRaw)) {
-                                totals['MOLDAGEM GERAL'] += (item.pesoTotal || 0);
-                            } else if (TARGET_SECTORS.includes(sRaw) || sRaw === '50') {
-                                // Map sector 50 to USINAGEM EXPEDICAO
-                                const targetKey = sRaw === '50' ? 'USINAGEM EXPEDICAO' : sRaw;
-                                totals[targetKey] += (item.pesoTotal || 0);
+                                totals['MOLDAGEM GERAL'] += (Number(item.pesoTotal) || 0);
+                            } else if (TARGET_SECTORS.includes(sRaw) || sRaw === '50' || sRaw === 'USINAGEM') {
+                                // Map sector 50 or "USINAGEM" to "USINAGEM EXPEDICAO"
+                                let targetKey = sRaw;
+                                if (sRaw === '50' || sRaw === 'USINAGEM') targetKey = 'USINAGEM EXPEDICAO';
+                                
+                                if (totals.hasOwnProperty(targetKey)) {
+                                    totals[targetKey] += (Number(item.pesoTotal) || 0);
+                                }
                             }
                         });
 
