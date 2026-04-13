@@ -1578,7 +1578,7 @@
                         </div>
                         <div class="kpi-value live-value">---</div>
                         <div class="kpi-subtitle">
-                            <span class="live-label">Kilogramas em Aberto</span>
+                            <span class="live-label">Peso em aberto na carteira</span>
                         </div>
                     </div>
 
@@ -2727,10 +2727,18 @@
                     const fatValueEl = document.querySelector('#live-faturamento .live-value');
                     animateValue(fatValueEl, fatTotalWeight / 1000, 1500, "", "Ton");
                     
-                    // Simple monthly comparison for trend (could be simplified or kept from before)
+                    // monthly comparison for trend
                     const evolRes = await fetch(`/api/faturamento-postgres/evolucao-mensal`);
                     const evolData = await evolRes.json();
-                    const fatPrev = evolData.success ? (evolData.anterior?.pesoTotal || 0) : 0;
+                    
+                    // Find previous month in historical data array
+                    const prevDate = new Date(curYear, curMonth - 1, 1);
+                    const prevEntry = evolData.success ? evolData.data.find(d => {
+                        const dDate = new Date(d.mes);
+                        return dDate.getMonth() === prevDate.getMonth() && dDate.getFullYear() === prevDate.getFullYear();
+                    }) : null;
+
+                    const fatPrev = prevEntry ? prevEntry.pesoTotal : 0;
                     const fatDiff = fatPrev > 0 ? (((fatTotalWeight) - fatPrev) / fatPrev * 100) : 0;
                     
                     const fatTrendEl = document.querySelector('#live-faturamento .kpi-trend');
