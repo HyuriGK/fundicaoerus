@@ -42,13 +42,85 @@
         if (count > 0) {
             countBadge.innerText = count;
             countBadge.style.display = 'block';
-            // Animação de pulso no sino
             if (bell) bell.style.animation = 'pulseGlow 2s infinite';
         } else {
             countBadge.style.display = 'none';
             if (bell) bell.style.animation = 'none';
         }
     }
+
+    // Modal Global Functions (attached to window for HTML access)
+    window.openNotificationsModal = async function() {
+        const modal = document.getElementById('notificationsHistoryModal');
+        const container = document.getElementById('notifHistoryContainer');
+        if (!modal || !container) return;
+
+        modal.style.display = 'flex';
+        container.innerHTML = `<div style="text-align: center; padding: 60px 20px; color: var(--text-dim);"><i class="fa-solid fa-circle-notch fa-spin" style="font-size: 2rem; margin-bottom: 15px;"></i><p>Carregando histórico...</p></div>`;
+
+        try {
+            const res = await fetch('/api/communications/history', {
+                headers: { 'x-user': user }
+            });
+            const data = await res.json();
+
+            if (!data.success || !data.history || data.history.length === 0) {
+                container.innerHTML = `<div style="text-align: center; padding: 60px 20px; color: var(--text-dim);"><i class="fa-solid fa-bell-slash" style="font-size: 2rem; margin-bottom: 15px; opacity: 0.5;"></i><p>Nenhuma notificação encontrada.</p></div>`;
+                return;
+            }
+
+            container.innerHTML = data.history.map(msg => `
+                <div class="notif-item ${msg.is_read ? '' : 'unread'}" id="notif-item-${msg.id}">
+                    <div class="notif-date">
+                        <i class="fa-solid fa-calendar-day"></i> 
+                        ${new Date(msg.created_at).toLocaleString('pt-BR')} 
+                        • De: ${msg.sender_name || 'Admin'}
+                        ${msg.is_read ? '' : '<span class="notif-badge-new">Novo</span>'}
+                    </div>
+                    <div class="notif-message">${msg.message}</div>
+                    ${msg.is_read ? '' : `
+                        <button onclick="markNotificationRead(${msg.id}, this)" style="margin-top: 15px; background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.2); color: var(--color-primary); padding: 6px 12px; border-radius: 8px; font-size: 0.75rem; font-weight: 700; cursor: pointer; transition: 0.3s;">
+                            Entendido!
+                        </button>
+                    `}
+                </div>
+            `).join('');
+
+        } catch (e) {
+            console.error('Erro ao buscar histórico:', e);
+            container.innerHTML = `<div style="color: var(--status-danger); text-align: center; padding: 40px;">Falha ao carregar histórico.</div>`;
+        }
+    };
+
+    window.closeNotificationsModal = function() {
+        document.getElementById('notificationsHistoryModal').style.display = 'none';
+    };
+
+    window.markNotificationRead = async function(id, btn) {
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+        }
+        try {
+            await fetch('/api/communications/mark-read', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-user': user },
+                body: JSON.stringify({ message_id: id })
+            });
+            
+            const item = document.getElementById(`notif-item-${id}`);
+            if (item) {
+                item.classList.remove('unread');
+                const badge = item.querySelector('.notif-badge-new');
+                if (badge) badge.remove();
+                if (btn) btn.remove();
+            }
+            
+            checkNotifications(); // Refresh badge count
+        } catch (e) {
+            console.error('Erro ao marcar como lida:', e);
+        }
+    };
 
     function showMessagePopup(msg) {
         let modal = document.getElementById('comm-popup-modal');
@@ -58,7 +130,7 @@
             modal.style = `
                 position: fixed; inset: 0; background: rgba(0,0,0,0.8); 
                 display: flex; align-items: center; justify-content: center; 
-                z-index: 10000; backdrop-filter: blur(12px);
+                z-index: 10005; backdrop-filter: blur(12px);
                 animation: commFadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1);
             `;
             document.body.appendChild(modal);
@@ -97,58 +169,31 @@ ${msg.message}
             <style>
                 @keyframes commFadeIn { from { opacity: 0; } to { opacity: 1; } }
                 @keyframes commSlideUp { from { opacity: 0; transform: translateY(40px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
-                #commUsersList::-webkit-scrollbar { width: 4px; }
-                #commUsersList::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
             </style>
         `;
 
         modal.style.display = 'flex';
 
-        // Lógica de "Ler Mais Tarde"
         document.getElementById('read-later-comm').addEventListener('click', () => {
             modal.style.display = 'none';
-            // Salva na sessão que este popup já foi ignorado nesta aba para não aparecer de novo no refresh
             sessionStorage.setItem('last_comm_popup_id', String(msg.id));
         });
 
-        // Lógica de "Marcar como Lida" (Entendido)
         document.getElementById('mark-read-comm').addEventListener('click', async () => {
             const btn = document.getElementById('mark-read-comm');
             btn.disabled = true;
             btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
-            
-            try {
-                await fetch('/api/communications/mark-read', {
-                    method: 'POST',
-                    headers: { 
-                        'Content-Type': 'application/json',
-                        'x-user': user
-                    },
-                    body: JSON.stringify({ message_id: msg.id })
-                });
-                modal.style.display = 'none';
-                sessionStorage.removeItem('last_comm_popup_id');
-                checkNotifications(); // Re-checar se há mais mensagens
-            } catch (e) {
-                console.error('Erro ao marcar como lida:', e);
-                modal.style.display = 'none';
-            }
+            await markNotificationRead(msg.id);
+            modal.style.display = 'none';
         });
     }
 
     if (bell) {
         bell.addEventListener('click', () => {
-            if (role === 'admin' || role === 'desenvolvedor') {
-                openAdminModal();
-                setTimeout(() => switchAdminView('communication'), 100);
-            } else {
-                // Para usuários comuns, forçar re-exibição se clicar no sino
-                sessionStorage.removeItem('last_comm_popup_id');
-                checkNotifications();
-            }
+            openNotificationsModal();
         });
     }
 
     checkNotifications();
-    setInterval(checkNotifications, 3 * 60 * 1000); // Checa a cada 3 min
+    setInterval(checkNotifications, 3 * 60 * 1000); // 3 min
 })();

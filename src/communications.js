@@ -48,26 +48,32 @@ router.post('/', getUserId, async (req, res) => {
     if (req.userRole !== 'desenvolvedor' && req.userRole !== 'admin') {
         return res.status(403).json({ success: false, message: 'Acesso negado.' });
     }
-    const { recipient_ids, message } = req.body; // recipient_ids can be an array, or null for ALL
+    const { recipient_ids, message, expiry_days } = req.body; 
 
     if (!message) {
         return res.status(400).json({ success: false, message: 'Mensagem vazia.' });
     }
 
     try {
+        let valid_until = null;
+        if (expiry_days && parseInt(expiry_days) > 0) {
+            valid_until = new Date();
+            valid_until.setDate(valid_until.getDate() + parseInt(expiry_days));
+        }
+
         // Se for para todos (recipient_ids vazio ou nulo)
         if (!recipient_ids || recipient_ids.length === 0) {
             const result = await pool.query(
-                'INSERT INTO communications (sender_id, recipient_id, message) VALUES ($1, $2, $3) RETURNING *',
-                [req.userId, null, message]
+                'INSERT INTO communications (sender_id, recipient_id, message, valid_until) VALUES ($1, $2, $3, $4) RETURNING *',
+                [req.userId, null, message, valid_until]
             );
             res.json({ success: true, communication: result.rows[0] });
         } else {
             // Se for para múltiplos usuários específicos
             const queries = recipient_ids.map(rid => {
                 return pool.query(
-                    'INSERT INTO communications (sender_id, recipient_id, message) VALUES ($1, $2, $3)',
-                    [req.userId, rid, message]
+                    'INSERT INTO communications (sender_id, recipient_id, message, valid_until) VALUES ($1, $2, $3, $4)',
+                    [req.userId, rid, message, valid_until]
                 );
             });
             await Promise.all(queries);
@@ -76,7 +82,8 @@ router.post('/', getUserId, async (req, res) => {
         
         logActivity(req.headers['x-user'], 'SEND_MESSAGE', 'communications', { 
             recipients: recipient_ids ? recipient_ids.length : 'ALL',
-            msg_length: message.length 
+            msg_length: message.length,
+            expiry_days: expiry_days || 'NONE'
         });
 
     } catch (error) {
@@ -88,13 +95,12 @@ router.post('/', getUserId, async (req, res) => {
 // BUSCAR MENSAGENS NÃO LIDAS PARA O USUÁRIO ATUAL
 router.get('/unread', getUserId, async (req, res) => {
     try {
-        // Mensagens destinadas ao usuário OU a todos (recipient_id IS NULL)
-        // QUE ainda não estão na tabela communication_reads para este usuário
         const result = await pool.query(`
             SELECT c.*, u.name as sender_name
             FROM communications c
             LEFT JOIN users u ON c.sender_id = u.id
             WHERE (c.recipient_id = $1 OR c.recipient_id IS NULL)
+              AND (c.valid_until IS NULL OR c.valid_until >= NOW())
               AND NOT EXISTS (
                   SELECT 1 FROM communication_reads cr 
                   WHERE cr.communication_id = c.id AND cr.user_id = $1
@@ -106,6 +112,32 @@ router.get('/unread', getUserId, async (req, res) => {
     } catch (error) {
         console.error('Erro ao buscar mensagens não lidas:', error);
         res.status(500).json({ success: false, message: 'Erro ao buscar notificações.' });
+    }
+});
+
+// BUSCAR HISTÓRICO DE MENSAGENS (Lidas e não lidas, mas NÃO expiradas)
+router.get('/history', getUserId, async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT 
+                c.*, 
+                u.name as sender_name,
+                EXISTS (
+                    SELECT 1 FROM communication_reads cr 
+                    WHERE cr.communication_id = c.id AND cr.user_id = $1
+                ) as is_read
+            FROM communications c
+            LEFT JOIN users u ON c.sender_id = u.id
+            WHERE (c.recipient_id = $1 OR c.recipient_id IS NULL)
+              AND (c.valid_until IS NULL OR c.valid_until >= NOW())
+            ORDER BY c.created_at DESC
+            LIMIT 30
+        `, [req.userId]);
+        
+        res.json({ success: true, history: result.rows });
+    } catch (error) {
+        console.error('Erro ao buscar histórico:', error);
+        res.status(500).json({ success: false, message: 'Erro ao buscar histórico.' });
     }
 });
 
