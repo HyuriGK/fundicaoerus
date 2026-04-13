@@ -2637,8 +2637,10 @@
                 async function refreshDashboard() {
                     try {
                         console.log('Refreshing dashboard data...');
+                        // Run updates sequentially to ensure data dependencies are met
+                        // (updateCharts depends on data fetched in updateKpis)
+                        await updateKpis();
                         await Promise.all([
-                            updateKpis(),
                             updateCharts(),
                             updateTopOrdersTable()
                         ]);
@@ -2742,10 +2744,15 @@
                             const clientName = (item.clienteNome || '').trim();
                             if (excludedClientsSet.has(clientName)) return;
 
-                            const dayStr = (item.data || '').split('T')[0].split('-')[2];
+                            const dRaw = item.data || item.DATA || '';
+                            if (!dRaw) return;
+                            
+                            // Handle ISO string or YYYY-MM-DD
+                            const dayStr = dRaw.split('T')[0].split('-')[2];
                             const dayNum = parseInt(dayStr);
+                            
                             if (dayNum > 0 && dayNum <= daysInMonth) {
-                                values[dayNum - 1] += (parseFloat(item.pesoTotal || 0) / 1000); // Display in Ton
+                                values[dayNum - 1] += (parseFloat(item.pesoTotal || item.weightTotal || 0) / 1000); // Display in Ton
                             }
                         });
                     }
