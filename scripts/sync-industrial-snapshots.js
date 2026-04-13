@@ -14,17 +14,23 @@ async function takeSnapshot() {
     const pgClient = await pool.connect();
     
     try {
+        // 0. Carregar pesos customizados
+        console.log('⚖️ Carregando pesos customizados...');
+        const resWeights = await pgClient.query('SELECT codigo, peso FROM pesos_customizados');
+        const customWeights = {};
+        resWeights.rows.forEach(row => {
+            customWeights[String(row.codigo).trim()] = Number(row.peso);
+        });
+
         // 1. Buscar todos os itens que compõem a "Posição Industrial" (Backlog)
-        // Usamos a mesma lógica do dashboard de Pedidos
+        // SQL filtra itens faturados ou cancelados
         const queryPedidos = `
             SELECT 
                 p.data
-            FROM firebird_sync_pedidos p
+            FROM firebird_sync_emissoes p
             WHERE 
                 ((p.data->>'QUANTIDADE_PPR')::numeric - COALESCE((p.data->>'QUANTIDADE_FATURADA_PPR')::numeric, 0)) > 0 
                 AND (p.data->>'STATUS_PPR') <> 'C'
-                AND (p.data->>'STATUS_PED') IS DISTINCT FROM 'C'
-                AND TRIM(UPPER(p.data->>'FATURADO_PPR')) <> 'T'
         `;
 
         const result = await pgClient.query(queryPedidos);
@@ -34,53 +40,71 @@ async function takeSnapshot() {
 
         // 2. Acumuladores para os 8 setores
         const stats = {
-            aguardando: { qty: 0, weight: 0 },
-            moldagem:   { qty: 0, weight: 0 },
-            fusao:      { qty: 0, weight: 0 },
-            acabamento: { qty: 0, weight: 0 },
-            tt:         { qty: 0, weight: 0 },
-            usinagem:   { qty: 0, weight: 0 },
-            qualidade:  { qty: 0, weight: 0 },
-            expedicao:  { qty: 0, weight: 0 },
-            _processedOPs: new Set()
+            aguardando: { qty: 0, weight: 0, ops: new Set() },
+            moldagem:   { qty: 0, weight: 0, ops: new Set() },
+            fusao:      { qty: 0, weight: 0, ops: new Set() },
+            acabamento: { qty: 0, weight: 0, ops: new Set() },
+            tt:         { qty: 0, weight: 0, ops: new Set() },
+            usinagem:   { qty: 0, weight: 0, ops: new Set() },
+            qualidade:  { qty: 0, weight: 0, ops: new Set() },
+            expedicao:  { qty: 0, weight: 0, ops: new Set() }
         };
 
-        const addKpi = (sectorKey, qty, unitWeight) => {
+        const addKpi = (sectorKey, qty, unitWeight, opKey) => {
             if (qty <= 0) return;
+
+            // Deduplicação por OP (idêntico ao dashboard)
+            const cleanedOP = String(opKey || '').trim();
+            if (cleanedOP && cleanedOP !== '-') {
+                if (stats[sectorKey].ops.has(cleanedOP)) return; // Já contou esta OP neste setor
+                stats[sectorKey].ops.add(cleanedOP);
+            }
+
             stats[sectorKey].qty += qty;
             stats[sectorKey].weight += (qty * unitWeight);
         };
 
         // 3. Calcular métricas usando o shared-utils (garante consistência)
         for (const item of allItems) {
+            // 1. Filtrar Modelos (terminam com 1) - Requisito do Dashboard
+            const prodCode = String(item.PRODUTO_PPR || '').trim();
+            if (prodCode.endsWith('1')) continue;
+
+            // 2. Filtrar Itens Faturados (mesmo se ainda houver saldo residual)
+            if (String(item.FATURADO_PPR || '').trim().toUpperCase() === 'T') continue;
+
             const metrics = getItemSectorMetrics(item);
-            
-            // Cálculo de Peso Unitário (Idêntico ao shared-utils ou pedidos.html)
+            const targetTotalQty = metrics.targetTotalQty;
+
+            // Cálculo de Peso Unitário (Prioriza pesos customizados)
             let unitWeight = 0;
-            const originalTarget = metrics.originalTarget;
             if (item.PESO_UNIT && Number(item.PESO_UNIT) > 0) {
                 unitWeight = Number(item.PESO_UNIT);
+            } else if (customWeights[prodCode]) {
+                unitWeight = customWeights[prodCode];
             } else {
-                unitWeight = originalTarget > 0 ? (Number(item.PESO_LIQUIDO_NPR) || 0) / originalTarget : 0;
+                unitWeight = targetTotalQty > 0 ? (Number(item.PESO_LIQUIDO_NPR) || 0) / targetTotalQty : 0;
             }
 
+            const op = item.OP_PCS;
+
             // Somar pesos/quantidades do backlog de cada setor
-            addKpi('aguardando', metrics.qAguardando, unitWeight);
-            addKpi('moldagem',   metrics.qMoldada,    unitWeight);
-            addKpi('fusao',      metrics.qFusao,      unitWeight);
-            addKpi('acabamento', metrics.qAcabamento, unitWeight);
-            addKpi('tt',         metrics.qTT,         unitWeight);
-            addKpi('usinagem',   metrics.qUsinagem,   unitWeight);
-            addKpi('qualidade',  metrics.qQualidade,  unitWeight);
-            addKpi('expedicao',  metrics.qExpedicao,  unitWeight);
+            addKpi('aguardando', metrics.qAguardando, unitWeight, op);
+            addKpi('moldagem',   metrics.qMoldada,    unitWeight, op);
+            addKpi('fusao',      metrics.qFusao,      unitWeight, op);
+            addKpi('acabamento', metrics.qAcabamento, unitWeight, op);
+            addKpi('tt',         metrics.qTT,         unitWeight, op);
+            addKpi('usinagem',   metrics.qUsinagem,   unitWeight, op);
+            addKpi('qualidade',  metrics.qQualidade,  unitWeight, op);
+            addKpi('expedicao',  metrics.qExpedicao,  unitWeight, op);
         }
         
         // 4. Salvar no Banco
         const snapshotDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
         
         console.log(`✅ Snapshot de ${snapshotDate} calculado com sucesso:`);
-        Object.keys(stats).filter(k => k !== '_processedOPs').forEach(k => {
-            console.log(`   - ${k}: ${stats[k].qty.toFixed(0)} pçs / ${stats[k].weight.toFixed(2)} kg`);
+        Object.keys(stats).forEach(k => {
+            console.log(`   - ${k.padEnd(12)}: ${String(stats[k].qty.toFixed(0)).padStart(5)} pçs / ${String(stats[k].weight.toFixed(2)).padStart(9)} kg (OPs: ${stats[k].ops.size})`);
         });
 
         const queryInsert = `
