@@ -2718,15 +2718,23 @@
                     if (metaPctEl) metaPctEl.innerText = `${metaPct.toFixed(1)}%`;
 
                     // 2. Carteira & Refugo Parallel Fetch
-                    const [cartRes, refRes, prodRes] = await Promise.all([
+                    const [cartRes, refRes] = await Promise.all([
                         fetch('/api/pedidos-sync?carteiraOnly=true'),
-                        fetch(`/api/refugos?year=${curYear}&month=${curMonth + 1}`),
-                        fetch('/api/metas/month-production')
+                        fetch('/api/refugos-new') // Unified endpoint for scrap and production
                     ]);
                     
                     const cartData = await cartRes.json();
-                    const refRaw = await refRes.json();
-                    const monthlyProdData = await prodRes.json();
+                    const refJson = await refRes.json();
+                    
+                    const refRawAll = refJson.refugoRawData || [];
+                    const monthlyProdData = refJson.refugoMonthlyProduction || {};
+
+                    // Filter scrap for current month
+                    const refRaw = refRawAll.filter(r => {
+                        if (!r.data) return false;
+                        const [y, m] = r.data.split('-').map(Number);
+                        return y === curYear && m === (curMonth + 1);
+                    });
                     
                     // Filter logic from pedidos.html: Omit models (prod ends in 1) and billed items ('T')
                     const validC = cartData.filter(item => {
