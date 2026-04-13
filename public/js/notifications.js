@@ -74,6 +74,21 @@
                 transition: transform 0.3s; color: #a1a1aa;
             }
             .notif-item.expanded .notif-toggle-icon { transform: rotate(180deg); }
+
+            /* Minimalist Scrollbar */
+            #notifHistoryContainer::-webkit-scrollbar {
+                width: 4px;
+            }
+            #notifHistoryContainer::-webkit-scrollbar-track {
+                background: transparent;
+            }
+            #notifHistoryContainer::-webkit-scrollbar-thumb {
+                background: rgba(255, 255, 255, 0.05);
+                border-radius: 10px;
+            }
+            #notifHistoryContainer::-webkit-scrollbar-thumb:hover {
+                background: rgba(255, 255, 255, 0.1);
+            }
         `;
         document.head.appendChild(style);
 
