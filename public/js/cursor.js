@@ -6,99 +6,120 @@
     if (isTouchDevice) return;
 
     function initCursor() {
-        if (!document.body || document.getElementById('cursor-arrow')) return;
+        if (!document.body || document.getElementById('cursor-parent')) return;
 
         // --- INITIALIZE CURSOR ELEMENTS ---
+        const parent = document.createElement('div');
+        parent.id = 'cursor-parent';
+        
         const arrow = document.createElement('div');
         const dot = document.createElement('div');
         
-        arrow.id = 'cursor-arrow';
-        arrow.className = 'cursor-arrow';
-        dot.id = 'cursor-apex';
+        arrow.className = 'cursor-main-visual';
         dot.className = 'cursor-apex';
         
-        document.body.appendChild(arrow);
-        document.body.appendChild(dot);
+        parent.appendChild(arrow);
+        parent.appendChild(dot);
+        document.body.appendChild(parent);
 
         // --- STYLES ---
         const style = document.createElement('style');
         style.textContent = `
-            body, a, button, [onclick], .kpi-card, .notif-header, .clickable {
+            body, a, button, [onclick], .kpi-card, .notif-header, .clickable, input, textarea, .editable {
                 cursor: none !important;
             }
 
-            .cursor-arrow {
+            #cursor-parent {
                 position: fixed;
                 top: 0; left: 0;
-                width: 24px; height: 24px;
-                background-image: url("data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M4.5 3L18 12L4.5 21V3Z' fill='black' stroke='%23fbbf24' stroke-width='1.5' stroke-linejoin='round'/%3E%3C/svg%3E");
+                pointer-events: none;
+                z-index: 1000001;
+                will-change: transform;
+                transition: opacity 0.3s ease;
+                opacity: 0;
+            }
+
+            .cursor-main-visual {
+                width: 26px; height: 26px;
                 background-size: contain;
                 background-repeat: no-repeat;
-                pointer-events: none;
-                z-index: 1000001; /* Above everything */
-                /* Rotated to point up-left slightly for classic feel */
-                transform-origin: 0 0;
+                /* Standard Arrow SVG (Refined) */
+                background-image: url("data:image/svg+xml,%3Csvg width='26' height='26' viewBox='0 0 26 26' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M5 3L21 13L5 23V3Z' fill='black' stroke='%23fbbf24' stroke-width='1.5' stroke-linejoin='round'/%3E%3C/svg%3E");
                 transform: rotate(-15deg);
-                opacity: 0;
-                transition: opacity 0.3s ease, width 0.2s, height 0.2s;
-                will-change: transform;
-                filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+                transform-origin: 0 0;
+                transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-image 0.2s, width 0.2s, height 0.2s, opacity 0.2s;
+                filter: drop-shadow(0 2px 5px rgba(0,0,0,0.8));
             }
 
             .cursor-apex {
-                position: fixed;
+                position: absolute;
                 top: 0; left: 0;
                 width: 4px; height: 4px;
                 background: #fbbf24;
                 border-radius: 50%;
-                pointer-events: none;
-                z-index: 1000002;
                 transform: translate(-50%, -50%);
-                opacity: 0;
-                transition: opacity 0.3s ease;
-                box-shadow: 0 0 5px rgba(251, 191, 36, 0.8);
+                transition: width 0.2s, height 0.2s, background 0.2s, opacity 0.2s;
+                box-shadow: 0 0 8px rgba(251, 191, 36, 0.6);
             }
 
-            /* Professional Interaction State */
-            .cursor-active .cursor-arrow {
-                width: 20px; height: 20px;
-                filter: drop-shadow(0 4px 8px rgba(251, 191, 36, 0.3));
+            /* --- STATES --- */
+
+            /* POINTER (Buttons/Links) */
+            .cursor-pointer .cursor-main-visual {
+                transform: rotate(-15deg) scale(0.8);
+                filter: drop-shadow(0 0 10px rgba(251, 191, 36, 0.4));
             }
-            .cursor-active .cursor-apex {
+            .cursor-pointer .cursor-apex {
+                width: 8px; height: 8px;
                 background: #fff;
-                width: 6px; height: 6px;
+            }
+
+            /* TEXT (Inputs/Textareas) */
+            .cursor-text .cursor-main-visual {
+                width: 12px; height: 24px;
+                /* I-Beam SVG */
+                background-image: url("data:image/svg+xml,%3Csvg width='12' height='24' viewBox='0 0 12 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M3 4H9M6 4V20M3 20H9' stroke='%23fbbf24' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+                transform: rotate(0deg) translate(-50%, -50%);
+                opacity: 0.9;
+            }
+            .cursor-text .cursor-apex {
+                opacity: 0; /* Hide apex dot in text mode for cleaner I-Beam */
             }
         `;
         document.head.appendChild(style);
 
-        // --- EVENTS ---
+        // --- COORDINATES ---
         window.addEventListener('mousemove', (e) => {
             const x = e.clientX;
             const y = e.clientY;
             
-            // Positioning (Arrow tip is the reference)
-            arrow.style.left = x + 'px';
-            arrow.style.top = y + 'px';
+            parent.style.transform = `translate(${x}px, ${y}px)`;
             
-            dot.style.left = x + 'px';
-            dot.style.top = y + 'px';
-
-            if (arrow.style.opacity === '0') {
-                arrow.style.opacity = '1';
-                dot.style.opacity = '1';
+            if (parent.style.opacity === '0') {
+                parent.style.opacity = '1';
             }
         });
 
-        const handleInteractEnter = () => document.body.classList.add('cursor-active');
-        const handleInteractLeave = () => document.body.classList.remove('cursor-active');
+        // --- STATE DETECTION ---
+        const setState = (state) => {
+            parent.className = state ? `cursor-${state}` : '';
+        };
 
         function refreshListeners() {
-            const interactive = document.querySelectorAll('a, button, [onclick], .kpi-card, .notif-header, .clickable');
-            interactive.forEach(el => {
-                if (el.dataset.arrowBound) return;
-                el.dataset.arrowBound = "true";
-                el.addEventListener('mouseenter', handleInteractEnter);
-                el.addEventListener('mouseleave', handleInteractLeave);
+            // Pointer Elements
+            document.querySelectorAll('a, button, [onclick], .kpi-card, .notif-header, .clickable').forEach(el => {
+                if (el.dataset.cursorBound) return;
+                el.dataset.cursorBound = "true";
+                el.addEventListener('mouseenter', () => setState('pointer'));
+                el.addEventListener('mouseleave', () => setState(null));
+            });
+
+            // Text Elements
+            document.querySelectorAll('input, textarea, [contenteditable="true"], .editable-text').forEach(el => {
+                if (el.dataset.cursorBoundText) return;
+                el.dataset.cursorBoundText = "true";
+                el.addEventListener('mouseenter', () => setState('text'));
+                el.addEventListener('mouseleave', () => setState(null));
             });
         }
 
@@ -106,14 +127,8 @@
         refreshListeners();
 
         // --- VISIBILITY ---
-        document.addEventListener('mouseleave', () => {
-            arrow.style.opacity = '0';
-            dot.style.opacity = '0';
-        });
-        document.addEventListener('mouseenter', () => {
-            arrow.style.opacity = '1';
-            dot.style.opacity = '1';
-        });
+        document.addEventListener('mouseleave', () => parent.style.opacity = '0');
+        document.addEventListener('mouseenter', () => parent.style.opacity = '1');
     }
 
     if (document.body) {
