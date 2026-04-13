@@ -6,95 +6,75 @@
     if (isTouchDevice) return;
 
     function initCursor() {
-        if (!document.body || document.getElementById('cursor-dot')) return;
+        if (!document.body || document.getElementById('cursor-aura')) return;
 
-        // --- INITIALIZE CURSOR ELEMENTS ---
-        const dot = document.createElement('div');
-        const halo = document.createElement('div');
-        
-        dot.id = 'cursor-dot';
-        dot.className = 'cursor-dot';
-        halo.id = 'cursor-halo';
-        halo.className = 'cursor-halo';
-        
-        document.body.appendChild(dot);
-        document.body.appendChild(halo);
+        // --- INITIALIZE AURA ELEMENT ---
+        const aura = document.createElement('div');
+        aura.id = 'cursor-aura';
+        aura.className = 'cursor-aura';
+        document.body.appendChild(aura);
 
         // --- STYLES ---
         const style = document.createElement('style');
         style.textContent = `
-            body, a, button, [onclick], .kpi-card, .notif-header, .clickable {
-                cursor: none !important;
+            /* RESTORE STANDARD CURSOR */
+            html, body, a, button, [onclick], .kpi-card, .notif-header, .clickable {
+                cursor: auto !important;
+            }
+            a, button, [onclick], .clickable {
+                cursor: pointer !important;
             }
 
-            .cursor-dot {
+            .cursor-aura {
                 position: fixed;
                 top: 0; left: 0;
-                width: 6px; height: 6px;
-                background: #fbbf24;
+                width: 400px; height: 400px;
+                background: radial-gradient(circle, rgba(251, 191, 36, 0.07) 0%, transparent 70%);
                 border-radius: 50%;
                 pointer-events: none;
-                z-index: 1000001;
+                z-index: 999998; /* Just below loader (999999) and interactive elements */
                 transform: translate(-50%, -50%);
-                transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1), background 0.2s;
-            }
-
-            .cursor-halo {
-                position: fixed;
-                top: 0; left: 0;
-                width: 30px; height: 30px;
-                border: 1px solid rgba(251, 191, 36, 0.5);
-                border-radius: 50%;
-                pointer-events: none;
-                z-index: 1000000;
-                transform: translate(-50%, -50%) scale(0);
+                mix-blend-mode: screen;
                 opacity: 0;
-                transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s;
+                transition: opacity 0.5s ease;
+                will-change: transform;
             }
 
-            /* Professional Interaction State */
-            .cursor-active .cursor-halo {
-                transform: translate(-50%, -50%) scale(1);
-                opacity: 1;
-                background: rgba(251, 191, 36, 0.05);
+            /* Premium Interaction State */
+            .aura-active .cursor-aura {
+                background: radial-gradient(circle, rgba(251, 191, 36, 0.12) 0%, transparent 70%);
+                width: 300px; height: 300px;
             }
             
-            .cursor-active .cursor-dot {
-                background: #fff;
-                transform: translate(-50%, -50%) scale(0.8);
-                box-shadow: 0 0 10px rgba(251, 191, 36, 0.5);
+            /* Magnetic subtle reaction on elements */
+            a:hover, button:hover, .kpi-card:hover, .notif-header:hover {
+                transform: scale(1.02);
+                transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
             }
         `;
         document.head.appendChild(style);
 
+        // --- COORDINATES ---
+        let mouse = { x: -500, y: -500 };
+        
         // --- EVENTS ---
         window.addEventListener('mousemove', (e) => {
-            const x = e.clientX;
-            const y = e.clientY;
+            mouse.x = e.clientX;
+            mouse.y = e.clientY;
             
-            // Instant positioning for both elements (Professional feel: Zero delay)
-            dot.style.transform = `translate(${x}px, ${y}px)`;
-            halo.style.transform = `translate(${x}px, ${y}px) scale(${document.body.classList.contains('cursor-active') ? 1 : 0})`;
-            
-            // Fallback for older browsers if needed
-            dot.style.left = '0';
-            dot.style.top = '0';
-            halo.style.left = '0';
-            halo.style.top = '0';
+            // Move the aura
+            aura.style.transform = `translate(${mouse.x}px, ${mouse.y}px)`;
+            if (aura.style.opacity === '0') aura.style.opacity = '1';
         });
 
-        const handleInteractEnter = () => {
-            document.body.classList.add('cursor-active');
-        };
-        const handleInteractLeave = () => {
-            document.body.classList.remove('cursor-active');
-        };
+        const handleInteractEnter = () => document.body.classList.add('aura-active');
+        const handleInteractLeave = () => document.body.classList.remove('aura-active');
 
         function refreshListeners() {
             const interactive = document.querySelectorAll('a, button, [onclick], .kpi-card, .notif-header, .clickable');
             interactive.forEach(el => {
-                if (el.dataset.cursorBound) return;
-                el.dataset.cursorBound = "true";
+                if (el.dataset.auraBound) return;
+                el.dataset.auraBound = "true";
                 el.addEventListener('mouseenter', handleInteractEnter);
                 el.addEventListener('mouseleave', handleInteractLeave);
             });
@@ -104,15 +84,11 @@
         refreshListeners();
 
         // --- VISIBILITY HANDLING ---
-        window.addEventListener('mouseout', (e) => {
-            if (!e.relatedTarget && !e.toElement) {
-                dot.style.opacity = '0';
-                halo.style.opacity = '0';
-            }
+        document.addEventListener('mouseleave', () => {
+            aura.style.opacity = '0';
         });
-        window.addEventListener('mouseover', () => {
-            dot.style.opacity = '1';
-            // Halo opacity is handled by the scale/activity class
+        document.addEventListener('mouseenter', () => {
+            aura.style.opacity = '1';
         });
     }
 
