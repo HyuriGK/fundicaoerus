@@ -2667,16 +2667,21 @@
                     ]);
                     
                     const metaData = await metaRes.json();
-                    const metaVal = parseFloat(metaData.success ? (metaData.data.valor || 0) : 0);
+                    const metaVal = parseFloat(metaData.success ? (metaData.data.meta_peso || metaData.data.valor || 0) : (metaData.meta_peso || 0));
                     
                     const fatData = await fatRes.json();
                     let fatTotalWeight = 0;
                     if (fatData.success) {
-                        // Sum only non-excluded items (aligned with faturamentos.html logic)
+                        // All records for the month, filtered exactly like faturamentos.html
                         fatTotalWeight = fatData.data.reduce((acc, item) => {
+                            // 1. Check manual exclusion
                             if (item.excluido_manualmente === true) return acc;
-                            // Also optionally check for service clients if that standard applies globally
-                            // For now, matching the "PESO TOTAL" which usually includes everything not manually hidden
+                            
+                            // 2. Check excluded clients (synchronized set)
+                            const clientName = (item.clienteNome || '').trim();
+                            if (excludedClientsSet.has(clientName)) return acc;
+
+                            // 3. Sum physical weight
                             return acc + (parseFloat(item.pesoTotal || 0));
                         }, 0);
                     }
