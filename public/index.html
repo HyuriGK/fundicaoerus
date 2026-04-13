@@ -1661,7 +1661,7 @@
                         <div class="mb-card-header">
                             <div>
                                 <span class="mb-card-title">Produção por Setor</span>
-                                <p class="section-subtitle">Total acumulado no mês (kg)</p>
+                                <p class="section-subtitle">Total Produzido no mês</p>
                             </div>
                         </div>
                         <div id="sector-production-list" style="display: flex; flex-direction: column; gap: 10px; padding: 5px 0;">
@@ -3006,10 +3006,11 @@
                             'INSPECAO DE QUALIDADE',
                             'EXPEDICAO'
                         ];
-                        const MOLDAGEM_GERAL_SUBTYPES = ['MOLDAGEM MANUAL', 'MOLDAGEM LEVE', 'MOLDAGEM PESADA'];
+                        const MOLDAGEM_SUBTYPES = ['MOLDAGEM LEVE', 'MOLDAGEM MANUAL', 'MOLDAGEM PESADA'];
 
                         const totals = {};
                         TARGET_SECTORS.forEach(s => totals[s] = 0);
+                        MOLDAGEM_SUBTYPES.forEach(s => totals[s] = 0);
 
                         result.data.forEach(item => {
                             // Definitive Safe Date Parse (Identical to apontamentos_produtivos.html)
@@ -3025,10 +3026,13 @@
                             // Robust Sector Normalization & Mapping
                             const sRaw = String(item.setor || '').trim().toUpperCase();
                             
-                            if (MOLDAGEM_GERAL_SUBTYPES.includes(sRaw)) {
+                            // 1. Accumulate Subtypes
+                            if (MOLDAGEM_SUBTYPES.includes(sRaw)) {
+                                totals[sRaw] += (Number(item.pesoTotal) || 0);
                                 totals['MOLDAGEM GERAL'] += (Number(item.pesoTotal) || 0);
-                            } else if (TARGET_SECTORS.includes(sRaw) || sRaw === '50' || sRaw === 'USINAGEM') {
-                                // Map sector 50 or "USINAGEM" to "USINAGEM EXPEDICAO"
+                            } 
+                            // 2. Accumulate other target sectors
+                            else if (TARGET_SECTORS.includes(sRaw) || sRaw === '50' || sRaw === 'USINAGEM') {
                                 let targetKey = sRaw;
                                 if (sRaw === '50' || sRaw === 'USINAGEM') targetKey = 'USINAGEM EXPEDICAO';
                                 
@@ -3038,9 +3042,13 @@
                             }
                         });
 
-                        container.innerHTML = TARGET_SECTORS.map((sector, idx) => {
+                        // Dynamic rendering with sub-sector indicators
+                        let finalHtml = '';
+                        TARGET_SECTORS.forEach(sector => {
                             const weight = totals[sector];
-                            return `
+                            
+                            // Render main sector
+                            finalHtml += `
                                 <div style="display: grid; grid-template-columns: 1fr 120px 40px; align-items: center; gap: 15px; font-size: 0.85rem; padding: 7px 12px; border-radius: 6px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.03);">
                                     <div style="display: flex; align-items: center; gap: 10px;">
                                         <i class="fa-solid fa-industry" style="color: var(--color-primary); font-size: 0.8rem; opacity: 0.7;"></i>
@@ -3054,7 +3062,28 @@
                                     </div>
                                 </div>
                             `;
-                        }).join('');
+
+                            // If MOLDAGEM GERAL, list subtypes underneath
+                            if (sector === 'MOLDAGEM GERAL') {
+                                MOLDAGEM_SUBTYPES.forEach(sub => {
+                                    const subW = totals[sub];
+                                    finalHtml += `
+                                        <div style="display: grid; grid-template-columns: 1fr 120px 40px; align-items: center; gap: 15px; font-size: 0.75rem; padding: 4px 12px 4px 35px; opacity: 0.8;">
+                                            <div style="display: flex; align-items: center; gap: 8px;">
+                                                <div style="width: 4px; height: 4px; border-radius: 50%; background: var(--color-primary); opacity: 0.4;"></div>
+                                                <span style="color: var(--text-muted); text-transform: uppercase;">${sub}</span>
+                                            </div>
+                                            <div style="text-align: right; color: var(--text-main); font-family: var(--font-mono); font-weight: 600;">
+                                                ${subW.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} <span style="font-size: 0.6rem; color: var(--text-dim);">kg</span>
+                                            </div>
+                                            <div></div>
+                                        </div>
+                                    `;
+                                });
+                            }
+                        });
+
+                        container.innerHTML = finalHtml;
 
                     } catch (error) {
                         console.error('Error updating production sectors:', error);
