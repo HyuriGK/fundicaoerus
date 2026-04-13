@@ -108,10 +108,22 @@ async function syncMaster() {
                     });
 
                     pointingRows.forEach(row => {
+                        const sId = Number(row.SETOR_PCS);
                         if (!pointingsMap[row.CODIGO_PCS]) pointingsMap[row.CODIGO_PCS] = {};
-                        pointingsMap[row.CODIGO_PCS][row.SETOR_PCS] = row.TOTAL;
+                        
+                        // Map older IDs (1, 2, 3...) to standard IDs (10, 20, 30...) if applicable
+                        let targetId = sId;
+                        if (sId === 1) targetId = 10;
+                        else if (sId === 2) targetId = 20;
+                        else if (sId === 3) targetId = 30;
+                        else if (sId === 4) targetId = 40;
+                        else if (sId === 5) targetId = 50;
+                        
+                        if (!pointingsMap[row.CODIGO_PCS][targetId]) pointingsMap[row.CODIGO_PCS][targetId] = 0;
+                        pointingsMap[row.CODIGO_PCS][targetId] += row.TOTAL;
                     });
                 }
+                console.log(`✅ [1.6/4] Pointings extraídos com sucesso para ${Object.keys(pointingsMap).length} OPs.`);
             }
 
             const pgClient = await pool.connect();
@@ -132,7 +144,8 @@ async function syncMaster() {
                     const opsData = pointingsMap[op.OP_PCS] || {};
                     const totals = { 10: 0, 11: 0, 12: 0, 20: 0, 30: 0, 40: 0, 50: 0, 60: 0, 100: 0, 101: 0, 105: 0 };
                     Object.keys(opsData).forEach(sector => {
-                        if (totals[sector] !== undefined) totals[sector] += opsData[sector];
+                        const sId = Number(sector);
+                        if (totals[sId] !== undefined) totals[sId] += opsData[sector];
                     });
 
                     op.QTY_MOLDADA = totals[10] + totals[11] + totals[12];
