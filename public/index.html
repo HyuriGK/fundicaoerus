@@ -1654,16 +1654,20 @@
                     </div>
 
                     <!-- Top Clientes Chart / Concentration -->
-                    <div class="mb-card wide">
+                    <div class="mb-card wide accent-indigo" id="card-clientes-concentracao">
                         <div class="mb-card-header">
                             <div>
-                                <span class="mb-card-title">Concentração de Carteira</span>
-                                <p class="section-subtitle">Distribuição por Cliente</p>
+                                <span class="mb-card-title">Concentração da Carteira</span>
+                                <p class="section-subtitle">Top 6 Clientes por Peso</p>
                             </div>
-                            <div class="mb-card-icon"><i class="fa-solid fa-chart-pie"></i></div>
+                            <div class="mb-card-icon"><i class="fa-solid fa-users-viewfinder"></i></div>
                         </div>
-                        <div class="chart-container" style="max-height: 220px;">
-                            <canvas id="clientConcentrationChart"></canvas>
+                        <div class="chart-container" id="clientConcentrationChart-container" style="max-height: 280px; overflow-y: auto;">
+                            <!-- Populated by JavaScript rendered numbered list -->
+                            <div style="text-align: center; color: var(--text-dim); padding: 40px; font-size: 0.8rem;">
+                                <i class="fa-solid fa-circle-notch fa-spin" style="margin-bottom: 10px; font-size: 1.5rem;"></i>
+                                <p>Processando carteira...</p>
+                            </div>
                         </div>
                     </div>
 
@@ -2652,51 +2656,73 @@
                 }
 
                 async function updateKpis() {
-                    // 1. Faturamento & Meta
-                    const metaRes = await fetch(`/api/metas?mes_ano=${curYear}-${curMonth}`);
-                    const metaData = await metaRes.json();
-                    const metaObj = metaData.success ? metaData.data : { valor: 0 };
+                    // 1. Faturamento & Meta (Aligned with faturamentos.html)
+                    const now = new Date();
+                    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+                    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
                     
-                    const evolRes = await fetch(`/api/faturamento-postgres/evolucao-mensal`);
-                    const evolData = await evolRes.json();
+                    const [metaRes, fatRes] = await Promise.all([
+                        fetch(`/api/metas?mes_ano=${curYear}-${curMonth}`),
+                        fetch(`/api/faturamento-postgres/detalhado?startDate=${startOfMonth}&endDate=${endOfMonth}&limit=50000`)
+                    ]);
+                    
+                    const metaData = await metaRes.json();
+                    const metaVal = parseFloat(metaData.success ? (metaData.data.valor || 0) : 0);
+                    
+                    const fatData = await fatRes.json();
+                    let fatTotalWeight = 0;
+                    if (fatData.success) {
+                        // Sum only non-excluded items (aligned with faturamentos.html logic)
+                        fatTotalWeight = fatData.data.reduce((acc, item) => {
+                            if (item.excluido_manualmente === true) return acc;
+                            // Also optionally check for service clients if that standard applies globally
+                            // For now, matching the "PESO TOTAL" which usually includes everything not manually hidden
+                            return acc + (parseFloat(item.pesoTotal || 0));
+                        }, 0);
+                    }
                     
                     // Faturamento Card
-                    const fatActual = evolData.success ? (evolData.atual?.pesoTotal || 0) : 0;
-                    const fatPrev = evolData.success ? (evolData.anterior?.pesoTotal || 0) : 0;
-                    const fatDiff = fatPrev > 0 ? ((fatActual - fatPrev) / fatPrev * 100) : 0;
-                    
                     const fatValueEl = document.querySelector('#live-faturamento .live-value');
-                    animateValue(fatValueEl, fatActual / 1000, 1500, "", "Ton");
+                    animateValue(fatValueEl, fatTotalWeight / 1000, 1500, "", "Ton");
+                    
+                    // Simple monthly comparison for trend (could be simplified or kept from before)
+                    const evolRes = await fetch(`/api/faturamento-postgres/evolucao-mensal`);
+                    const evolData = await evolRes.json();
+                    const fatPrev = evolData.success ? (evolData.anterior?.pesoTotal || 0) : 0;
+                    const fatDiff = fatPrev > 0 ? (((fatTotalWeight) - fatPrev) / fatPrev * 100) : 0;
                     
                     const fatTrendEl = document.querySelector('#live-faturamento .kpi-trend');
-                    fatTrendEl.className = `kpi-trend ${fatDiff >= 0 ? 'trend-up' : 'trend-down'}`;
-                    fatTrendEl.innerHTML = `<i class="fa-solid fa-caret-${fatDiff >= 0 ? 'up' : 'down'}"></i> ${Math.abs(fatDiff).toFixed(1)}%`;
+                    if (fatTrendEl) {
+                        fatTrendEl.className = `kpi-trend ${fatDiff >= 0 ? 'trend-up' : 'trend-down'}`;
+                        fatTrendEl.innerHTML = `<i class="fa-solid fa-caret-${fatDiff >= 0 ? 'up' : 'down'}"></i> ${Math.abs(fatDiff).toFixed(1)}%`;
+                    }
 
                     // Meta Card
-                    const metaVal = parseFloat(metaObj.valor || 0);
                     const metaEl = document.querySelector('#live-meta .live-value');
                     animateValue(metaEl, metaVal, 1500, "", "Ton");
                     
-                    const metaPct = metaVal > 0 ? (fatActual / (metaVal * 1000) * 100) : 0;
-                    document.getElementById('meta-progress-pct').innerText = `${metaPct.toFixed(1)}%`;
+                    const metaPct = metaVal > 0 ? (fatTotalWeight / (metaVal * 1000) * 100) : 0;
+                    const metaPctEl = document.getElementById('meta-progress-pct');
+                    if (metaPctEl) metaPctEl.innerText = `${metaPct.toFixed(1)}%`;
 
-                    // 2. Carteira (Kg & R$)
+                    // 2. Carteira (Aligned with pedidos.html)
                     const cartRes = await fetch('/api/pedidos-sync?carteiraOnly=true');
                     const cartData = await cartRes.json();
                     
-                    // Filter models/billed
+                    // Filter models/billed as per standard operational view
                     const validC = cartData.filter(item => {
                         const pCode = String(item.PRODUTO_PPR || '').trim();
+                        // Filter out models (end in 1) and full-billed items
                         return !pCode.endsWith('1') && String(item.FATURADO_PPR || '').trim().toUpperCase() !== 'T';
                     });
                     
                     const cartKg = validC.reduce((acc, i) => acc + getCorrectedWeight(i, customWeightsMap), 0);
-                    const cartVal = validC.reduce((acc, i) => acc + (parseFloat(i.VALOR_UNITARIO_PPR || 0) * parseFloat(i.QTDE_PPR || 0)), 0);
+                    const cartVal = validC.reduce((acc, i) => acc + (parseFloat(i.VALOR_UNITARIO_PPR || 0) * (parseFloat(i.SALDO_PPR) || parseFloat(i.QTDE_PPR) || 0)), 0);
                     
                     animateValue(document.querySelector('#live-carteira-peso .live-value'), cartKg / 1000, 1500, "", "Ton");
                     animateValue(document.querySelector('#live-carteira-valor .live-value'), cartVal, 1500, "R$ ");
                     
-                    dashboardData.carteira = validC; // Store for other components
+                    dashboardData.carteira = validC; 
                     dashboardData.totalKg = cartKg;
                 }
 
@@ -2804,31 +2830,32 @@
                 }
 
                 function renderClientChart(labels, data) {
-                    const ctx = document.getElementById('clientConcentrationChart').getContext('2d');
-                    if (clientChart) clientChart.destroy();
+                    const container = document.getElementById('clientConcentrationChart-container');
+                    if (!container) return;
                     
-                    clientChart = new Chart(ctx, {
-                        type: 'doughnut',
-                        data: {
-                            labels: labels,
-                            datasets: [{
-                                data: data,
-                                backgroundColor: ['#6366f1', '#818cf8', '#a5b4fc', '#c7d2fe', '#e0e7ff', '#f5f3ff'],
-                                borderWidth: 0
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            cutout: '70%',
-                            plugins: { 
-                                legend: { 
-                                    position: 'right',
-                                    labels: { color: '#a1a1aa', usePointStyle: true, font: { size: 10 } }
-                                }
-                            }
-                        }
-                    });
+                    // Total weighting for percentage
+                    const totalWeight = data.reduce((a, b) => a + b, 0);
+                    
+                    container.innerHTML = `
+                        <div style="display: flex; flex-direction: column; gap: 10px; padding: 5px 0;">
+                            ${labels.map((label, idx) => {
+                                const weight = data[idx];
+                                const pct = totalWeight > 0 ? (weight / totalWeight * 100).toFixed(1) : 0;
+                                return `
+                                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 0.85rem; padding: 4px 8px; border-radius: 6px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.03);">
+                                        <div style="display: flex; align-items: center; gap: 10px; overflow: hidden;">
+                                            <span style="font-weight: 800; color: var(--color-primary); width: 18px; flex-shrink: 0;">${idx + 1}.</span>
+                                            <span style="color: #fff; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${label}">${label}</span>
+                                        </div>
+                                        <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0; font-family: var(--font-mono);">
+                                            <span style="color: var(--text-muted); font-size: 0.75rem;">${(weight/1000).toLocaleString('pt-BR', {minimumFractionDigits: 1})} Ton</span>
+                                            <span style="color: var(--color-indigo); font-weight: 700;">${pct}%</span>
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    `;
                 }
 
                 async function updateTopOrdersTable() {
