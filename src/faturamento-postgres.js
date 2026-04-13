@@ -294,15 +294,18 @@ router.get('/detalhado', async (req, res) => {
     }
 });
 
-// GET /api/faturamento-postgres/evolucao-mensal - Evolução anual em peso
+// GET /api/faturamento-postgres/evolucao-mensal - Evolução anual em peso (Com filtros)
 router.get('/evolucao-mensal', async (req, res) => {
     try {
-        console.log('📅 Consultando evolução mensal (Peso) do PostgreSQL...');
+        console.log('📅 Consultando evolução mensal filtrada (Peso) do PostgreSQL...');
 
-        const currentYear = new Date().getFullYear();
+        // 1. Buscar Preferências de Clientes Excluídos
+        const prefRes = await pool.query("SELECT value FROM app_preferences WHERE key = 'excluded_clients'");
+        const excludedClients = prefRes.rows[0]?.value ? prefRes.rows[0].value.map(c => c.trim().toUpperCase()) : [];
 
-        // Query que gera todos os 12 meses do ano e faz o join com as somas
-        // UPDATE: Agora usa faturamento_diario para garantir consistência
+        // 2. Query que gera os meses e soma os dados filtrados
+        // Priorizamos a tabela detalhada (faturamento_firebird) em vez da faturamento_diario 
+        // para podermos aplicar os mesmos filtros de cliente e pedido do dashboard.
         const query = `
             WITH meses AS (
                 SELECT generate_series(
@@ -313,16 +316,19 @@ router.get('/evolucao-mensal', async (req, res) => {
             )
             SELECT 
                 m.mes,
-                COALESCE(SUM(d.peso_total), 0) as peso_total,
-                COALESCE(SUM(d.valor_total), 0) as valor_total
+                COALESCE(SUM(f.peso_total), 0) as peso_total,
+                COALESCE(SUM(f.valor_total), 0) as valor_total
             FROM meses m
-            LEFT JOIN faturamento_diario d
-                ON DATE_TRUNC('month', d.data) = m.mes
+            LEFT JOIN faturamento_firebird f 
+                ON DATE_TRUNC('month', f.data_faturamento) = m.mes
+                AND (f.excluido_manualmente = FALSE OR f.excluido_manualmente IS NULL)
+                AND (f.pedido IS NOT NULL AND TRIM(f.pedido) != '')
+                AND NOT (UPPER(TRIM(f.cliente_nome)) = ANY($1))
             GROUP BY m.mes
             ORDER BY m.mes
         `;
 
-        const result = await pool.query(query);
+        const result = await pool.query(query, [excludedClients]);
 
         res.json({
             success: true,
@@ -335,7 +341,7 @@ router.get('/evolucao-mensal', async (req, res) => {
         });
 
     } catch (error) {
-        console.error('❌ Erro:', error);
+        console.error('❌ Erro ao buscar evolução mensal filtrada:', error);
         res.status(500).json({
             success: false,
             message: 'Erro ao buscar evolução mensal',
