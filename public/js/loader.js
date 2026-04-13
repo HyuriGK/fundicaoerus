@@ -81,10 +81,14 @@
         requestAnimationFrame(update);
     };
 
-    // Executar a injeção o mais rápido possível
     if (document.body) {
         injectLoader();
     } else {
         document.addEventListener('DOMContentLoaded', injectLoader);
     }
+
+    // 5. Injetar o Cursor Customizado (Global)
+    const cursorScript = document.createElement('script');
+    cursorScript.src = 'js/cursor.js';
+    document.head.appendChild(cursorScript);
 })();
