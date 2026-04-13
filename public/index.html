@@ -2585,7 +2585,8 @@
                     industrialStatus: {},
                     carteira: [],
                     topOrders: [],
-                    meta: 0
+                    meta: 0,
+                    detailedBilling: []
                 };
 
                 // Note: getCorrectedWeight is now provided by js/shared-utils.js
@@ -2664,6 +2665,7 @@
                     const fatData = await fatRes.json();
                     let fatTotalWeight = 0;
                     if (fatData.success) {
+                        dashboardData.detailedBilling = fatData.data;
                         // All records for the month, filtered exactly like faturamentos.html
                         fatTotalWeight = fatData.data.reduce((acc, item) => {
                             // 1. Check manual exclusion
@@ -2727,22 +2729,27 @@
                 }
 
                 async function updateCharts() {
-                    // A. Billing Evolution Chart
-                    const diagRes = await fetch(`/api/faturamento-postgres/diario`);
-                    const diagData = await diagRes.json();
-                    
-                    if (diagData.success) {
-                        const days = new Date(curYear, now.getMonth() + 1, 0).getDate();
-                        const labels = Array.from({ length: days }, (_, i) => i + 1);
-                        const values = new Array(days).fill(0);
-                        
-                        diagData.data.forEach(d => {
-                             const day = parseInt(d.data.split('-')[2]);
-                             if (day > 0 && day <= days) values[day-1] = d.pesoTotal / 1000;
+                    // A. Billing Evolution Chart (Daily)
+                    // Uses the same logic and detailed data as the fatTotalWeight calculation
+                    const daysInMonth = new Date(curYear, now.getMonth() + 1, 0).getDate();
+                    const labels = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+                    const values = new Array(daysInMonth).fill(0);
+
+                    if (dashboardData.detailedBilling && dashboardData.detailedBilling.length > 0) {
+                        dashboardData.detailedBilling.forEach(item => {
+                            // Apply same exclusions as the KPI for parity
+                            if (item.excluido_manualmente === true) return;
+                            const clientName = (item.clienteNome || '').trim();
+                            if (excludedClientsSet.has(clientName)) return;
+
+                            const dayStr = (item.data || '').split('T')[0].split('-')[2];
+                            const dayNum = parseInt(dayStr);
+                            if (dayNum > 0 && dayNum <= daysInMonth) {
+                                values[dayNum - 1] += (parseFloat(item.pesoTotal || 0) / 1000); // Display in Ton
+                            }
                         });
-                        
-                        renderBillingChart(labels, values);
                     }
+                    renderBillingChart(labels, values);
 
                     // B. Industrial Status (From valid carteira items)
                     const sectors = {};
