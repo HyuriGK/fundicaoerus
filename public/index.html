@@ -1639,14 +1639,14 @@
                     <div class="mb-card wide">
                         <div class="mb-card-header">
                             <div>
-                                <span class="mb-card-title">Maiores Pedidos em Aberto</span>
-                                <p class="section-subtitle">Top 6 pedidos por peso total</p>
+                                <span class="mb-card-title">Produção por Setor</span>
+                                <p class="section-subtitle">Total acumulado no mês (kg)</p>
                             </div>
                         </div>
-                        <div id="top-orders-list" style="display: flex; flex-direction: column; gap: 10px; padding: 5px 0;">
+                        <div id="sector-production-list" style="display: flex; flex-direction: column; gap: 10px; padding: 5px 0;">
                             <div style="text-align: center; color: var(--text-dim); padding: 40px; font-size: 0.8rem;">
                                 <i class="fa-solid fa-circle-notch fa-spin" style="margin-bottom: 10px; font-size: 1.5rem;"></i>
-                                <p>Carregando pedidos...</p>
+                                <p>Carregando produção...</p>
                             </div>
                         </div>
                     </div>
@@ -2644,7 +2644,7 @@
                         await updateKpis();
                         await Promise.all([
                             updateCharts(),
-                            updateTopOrdersTable()
+                            updateSectorProductionTable()
                         ]);
                         console.log('Dashboard updated successfully.');
                     } catch (e) {
@@ -2974,36 +2974,69 @@
                     `;
                 }
 
-                async function updateTopOrdersTable() {
-                    const container = document.getElementById('top-orders-list');
+                async function updateSectorProductionTable() {
+                    const container = document.getElementById('sector-production-list');
                     if (!container) return;
-                    
-                    const topOrders = [...dashboardData.carteira]
-                        .sort((a, b) => getCorrectedWeight(b, customWeightsMap) - getCorrectedWeight(a, customWeightsMap))
-                        .slice(0, 8); // Showing 8 for better vertical usage
-                        
-                    container.innerHTML = topOrders.map((order, idx) => {
-                        const weight = getCorrectedWeight(order, customWeightsMap);
-                        const status = (order.STATUS_PPR || 'Pendente').trim();
-                        const clientName = (order.NOME_CLIENTE || 'NÃO INFORMADO').trim();
-                        const displayClient = clientName.length > 25 ? clientName.substring(0, 25) + '...' : clientName;
 
-                        return `
-                            <div style="display: grid; grid-template-columns: 1fr 100px 90px; align-items: center; gap: 15px; font-size: 0.85rem; padding: 6px 10px; border-radius: 6px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.03);">
-                                <div style="display: flex; align-items: center; gap: 8px; overflow: hidden; min-width: 0;">
-                                    <span style="font-weight: 800; color: var(--color-primary); width: 22px; flex-shrink: 0;">#${order.ID_PEDIDO_PPR}</span>
-                                    <span style="color: #fff; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${clientName}">${displayClient}</span>
+                    try {
+                        const response = await fetch('/api/producao-postgres');
+                        const result = await response.json();
+                        if (!result.success) throw new Error(result.error);
+
+                        const now = new Date();
+                        const curYear = now.getFullYear();
+                        const curMonth = (now.getMonth() + 1).toString().padStart(2, '0');
+                        
+                        // User-requested sectors to show in this list
+                        const TARGET_SECTORS = [
+                            'MOLDAGEM GERAL',
+                            'FUSAO',
+                            'ACABAMENTO',
+                            'USINAGEM EXPEDICAO',
+                            'INSPECAO DE QUALIDADE',
+                            'EXPEDICAO'
+                        ];
+                        const MOLDAGEM_GERAL_SUBTYPES = ['MOLDAGEM MANUAL', 'MOLDAGEM LEVE', 'MOLDAGEM PESADA'];
+
+                        const totals = {};
+                        TARGET_SECTORS.forEach(s => totals[s] = 0);
+
+                        result.data.forEach(item => {
+                            // Date check: YYYY-MM-DD
+                            if (!item.data.startsWith(`${curYear}-${curMonth}`)) return;
+
+                            const sRaw = (item.setor || '').toUpperCase();
+                            if (MOLDAGEM_GERAL_SUBTYPES.includes(sRaw)) {
+                                totals['MOLDAGEM GERAL'] += (item.pesoTotal || 0);
+                            } else if (TARGET_SECTORS.includes(sRaw)) {
+                                totals[sRaw] += (item.pesoTotal || 0);
+                            }
+                        });
+
+                        container.innerHTML = TARGET_SECTORS.map((sector, idx) => {
+                            const weight = totals[sector];
+                            return `
+                                <div style="display: grid; grid-template-columns: 1fr 120px 40px; align-items: center; gap: 15px; font-size: 0.85rem; padding: 7px 12px; border-radius: 6px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.03);">
+                                    <div style="display: flex; align-items: center; gap: 10px;">
+                                        <i class="fa-solid fa-industry" style="color: var(--color-primary); font-size: 0.8rem; opacity: 0.7;"></i>
+                                        <span style="color: #fff; font-weight: 600; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.02em;">${sector}</span>
+                                    </div>
+                                    <div style="text-align: right; color: #fff; font-family: var(--font-mono); font-weight: 700;">
+                                        ${weight.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} <span style="font-size: 0.6rem; color: var(--text-dim); font-weight: 400;">kg</span>
+                                    </div>
+                                    <div style="text-align: right;">
+                                        <i class="fa-solid fa-circle-check" style="color: var(--status-success); font-size: 0.75rem; opacity: 0.8;"></i>
+                                    </div>
                                 </div>
-                                <div style="text-align: right; color: var(--text-muted); font-family: var(--font-mono); font-size: 0.75rem;">
-                                    ${weight.toLocaleString('pt-BR')} kg
-                                </div>
-                                <div style="text-align: right;">
-                                    <span class="mb-badge" style="background: rgba(251, 191, 36, 0.1); color: #fbbf24; font-size: 0.65rem; padding: 2px 6px; border-radius: 4px; display: inline-block;">${status}</span>
-                                </div>
-                            </div>
-                        `;
-                    }).join('');
+                            `;
+                        }).join('');
+
+                    } catch (error) {
+                        console.error('Error updating production sectors:', error);
+                        container.innerHTML = `<div style="padding:20px; color:var(--status-danger); font-size:0.8rem;">Erro ao carregar produção setorial.</div>`;
+                    }
                 }
+ Riverside: Implemented sector-based production aggregation from Postgres.
                 // Standardized grid list for top orders with name truncation and aligned status badges.
 
                 function updateUserInfo() {
