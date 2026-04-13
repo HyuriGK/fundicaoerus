@@ -1575,20 +1575,21 @@
                         </div>
                     </div>
 
-                    <!-- Valor em Carteira -->
-                    <div class="mb-card kpi-card accent-indigo" id="live-carteira-valor">
+                    <!-- Total Refugado -->
+                    <div class="mb-card kpi-card accent-rose" id="live-refugo">
                         <div class="mb-card-header">
-                            <span class="mb-card-title">Valor em Carteira</span>
-                            <div class="mb-card-icon"><i class="fa-solid fa-wallet"></i></div>
+                            <span class="mb-card-title">Total Refugado (Mês)</span>
+                            <div class="mb-card-icon"><i class="fa-solid fa-trash-can"></i></div>
                         </div>
                         <div class="kpi-value live-value">---</div>
                         <div class="kpi-subtitle">
-                            <span class="live-label">Total R$ Pendente</span>
+                            <span class="kpi-trend" id="refugo-pct">--%</span>
+                            <span class="live-label">do faturamento</span>
                         </div>
                     </div>
 
                     <!-- Peso em Carteira -->
-                    <div class="mb-card kpi-card accent-rose" id="live-carteira-peso">
+                    <div class="mb-card kpi-card accent-indigo" id="live-carteira-peso">
                         <div class="mb-card-header">
                             <span class="mb-card-title">Peso em Carteira</span>
                             <div class="mb-card-icon"><i class="fa-solid fa-weight-hanging"></i></div>
@@ -1619,17 +1620,17 @@
                         </div>
                     </div>
 
-                    <!-- Posição Industrial -->
-                    <div class="mb-card chart-card accent-emerald">
+                    <!-- Motivos de Refugo -->
+                    <div class="mb-card chart-card accent-rose">
                         <div class="mb-card-header">
                             <div>
-                                <span class="mb-card-title">Posição Industrial</span>
-                                <h3 style="margin: 4px 0 0 0; font-size: 1rem; color: #fff;">Distribuição por Setor (kg)</h3>
+                                <span class="mb-card-title">Motivos de Refugo</span>
+                                <h3 style="margin: 4px 0 0 0; font-size: 1rem; color: #fff;">Distribuição por Motivo (%)</h3>
                             </div>
-                            <div class="mb-card-icon"><i class="fa-solid fa-industry"></i></div>
+                            <div class="mb-card-icon"><i class="fa-solid fa-chart-pie"></i></div>
                         </div>
                         <div class="chart-container">
-                            <canvas id="industrialChart"></canvas>
+                            <canvas id="scrapChart"></canvas>
                         </div>
                     </div>
 
@@ -2592,7 +2593,11 @@
                     carteira: [],
                     topOrders: [],
                     meta: 0,
-                    detailedBilling: []
+                    detailedBilling: [],
+                    scrapData: [],
+                    scrapByMotive: {},
+                    totalScrapKg: 0,
+                    scrapPct: 0
                 };
 
                 // Note: getCorrectedWeight is now provided by js/shared-utils.js
@@ -2712,9 +2717,16 @@
                     const metaPctEl = document.getElementById('meta-progress-pct');
                     if (metaPctEl) metaPctEl.innerText = `${metaPct.toFixed(1)}%`;
 
-                    // 2. Carteira (Aligned with pedidos.html Dashboard)
-                    const cartRes = await fetch('/api/pedidos-sync?carteiraOnly=true');
+                    // 2. Carteira & Refugo Parallel Fetch
+                    const [cartRes, refRes, prodRes] = await Promise.all([
+                        fetch('/api/pedidos-sync?carteiraOnly=true'),
+                        fetch(`/api/refugos?year=${curYear}&month=${curMonth + 1}`),
+                        fetch('/api/metas/month-production')
+                    ]);
+                    
                     const cartData = await cartRes.json();
+                    const refRaw = await refRes.json();
+                    const monthlyProdData = await prodRes.json();
                     
                     // Filter logic from pedidos.html: Omit models (prod ends in 1) and billed items ('T')
                     const validC = cartData.filter(item => {
@@ -2726,14 +2738,47 @@
                     
                     // Weight calculation parity: uses shared-utils.js logic
                     const cartKg = validC.reduce((acc, i) => acc + getCorrectedWeight(i, customWeightsMap), 0);
-                    const cartVal = validC.reduce((acc, i) => acc + (parseFloat(i.VALOR_TOTAL_PPR || (parseFloat(i.VALOR_UNITARIO_PPR || 0) * (parseFloat(i.SALDO_PPR) || parseFloat(i.QTDE_PPR) || 0)))), 0);
                     
                     // Show in kg as requested for exact parity with pedidos.html
                     animateValue(document.querySelector('#live-carteira-peso .live-value'), cartKg, 1500, "", "kg");
-                    animateValue(document.querySelector('#live-carteira-valor .live-value'), cartVal, 1500, "R$ ");
                     
                     dashboardData.carteira = validC; 
                     dashboardData.totalKg = cartKg;
+
+                    // 3. Scrap Calculation (Refugo)
+                    let totalRefWeight = 0;
+                    const motives = {};
+                    
+                    refRaw.forEach(r => {
+                        // Priority: Custom weight if available in shared state or from raw item
+                        // Note: In index.html we fetch weights/list into customWeightsMap
+                        const pCode = String(r.codigo_peca || '').trim();
+                        const wUn = customWeightsMap[pCode] !== undefined ? customWeightsMap[pCode] : parseFloat(r.peso_un || 0);
+                        const qty = parseFloat(r.quantidade || 0);
+                        const weight = wUn * qty;
+                        
+                        totalRefWeight += weight;
+                        
+                        const motive = String(r.motivo || 'NÃO INFORMADO').trim().toUpperCase();
+                        motives[motive] = (motives[motive] || 0) + weight;
+                    });
+
+                    // Percentage vs Production (matching refugos.html logic)
+                    const prodKey = `${curYear}-${String(curMonth + 1).padStart(2, '0')}`;
+                    const monthProd = monthlyProdData[prodKey] || 0;
+                    const scrapPct = monthProd > 0 ? (totalRefWeight / monthProd * 100) : 0;
+
+                    dashboardData.totalScrapKg = totalRefWeight;
+                    dashboardData.scrapPct = scrapPct;
+                    dashboardData.scrapByMotive = motives;
+
+                    // Update Refugo Card
+                    animateValue(document.querySelector('#live-refugo .live-value'), totalRefWeight, 1500, "", "kg");
+                    const refPctEl = document.getElementById('refugo-pct');
+                    if (refPctEl) {
+                        refPctEl.innerText = `${scrapPct.toFixed(2)}%`;
+                        refPctEl.className = `kpi-trend ${scrapPct > 5 ? 'trend-down' : 'trend-up'}`; // Red if > 5%
+                    }
                 }
 
                 async function updateCharts() {
@@ -2764,20 +2809,11 @@
                     }
                     renderBillingChart(labels, values);
 
-                    // B. Industrial Status (From valid carteira items)
-                    const sectors = {};
-                    dashboardData.carteira.forEach(item => {
-                        const route = String(item.ROTEIRO_PPR || '').trim().toUpperCase();
-                        let sector = 'OUTROS';
-                        if (route.includes('FUS')) sector = 'FUSÃO';
-                        else if (route.includes('MOL')) sector = 'MOLDAGEM';
-                        else if (route.includes('ACAB')) sector = 'ACABAMENTO';
-                        else if (route.includes('USIN')) sector = 'USINAGEM';
-                        
-                        sectors[sector] = (sectors[sector] || 0) + getCorrectedWeight(item, customWeightsMap);
-                    });
+                    // B. Scrap Motives (Pie/Doughnut)
+                    const scrapLabels = Object.keys(dashboardData.scrapByMotive).slice(0, 6); // Top 6 motivos
+                    const scrapValues = scrapLabels.map(l => dashboardData.scrapByMotive[l]);
                     
-                    renderIndustrialChart(Object.keys(sectors), Object.values(sectors));
+                    renderScrapChart(scrapLabels, scrapValues);
 
                     // C. Client Concentration
                     const clients = {};
@@ -2848,33 +2884,56 @@
                     });
                 }
 
-                function renderIndustrialChart(labels, data) {
-                    const ctx = document.getElementById('industrialChart').getContext('2d');
-                    if (industrialChart) industrialChart.destroy();
+                let scrapChartObj = null;
+                function renderScrapChart(labels, data) {
+                    const ctx = document.getElementById('scrapChart')?.getContext('2d');
+                    if (!ctx) return;
+                    if (scrapChartObj) scrapChartObj.destroy();
                     
-                    industrialChart = new Chart(ctx, {
-                        type: 'bar',
+                    scrapChartObj = new Chart(ctx, {
+                        type: 'doughnut',
                         data: {
                             labels: labels,
                             datasets: [{
-                                label: 'Peso (Kg)',
                                 data: data,
-                                backgroundColor: ['#10b981', '#6366f1', '#fbbf24', '#f472b6', '#38bdf8'],
-                                borderRadius: 6
+                                backgroundColor: [
+                                    '#ef4444', '#f97316', '#fbbf24', '#a855f7', '#6366f1', '#3b82f6', '#10b981'
+                                ],
+                                borderColor: '#09090b',
+                                borderWidth: 2,
+                                hoverOffset: 10
                             }]
                         },
                         options: {
-                            indexAxis: 'y',
                             responsive: true,
                             maintainAspectRatio: false,
-                            plugins: { legend: { display: false } },
-                            scales: {
-                                x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#71717a' } },
-                                y: { grid: { display: false }, ticks: { color: '#fff' } }
+                            cutout: '65%',
+                            plugins: {
+                                legend: {
+                                    position: 'right',
+                                    labels: {
+                                        color: '#a1a1aa',
+                                        font: { family: 'Inter', size: 10 },
+                                        padding: 15,
+                                        usePointStyle: true
+                                    }
+                                },
+                                tooltip: {
+                                    backgroundColor: '#18181b',
+                                    titleFont: { family: 'Outfit', weight: 'bold' },
+                                    bodyFont: { family: 'JetBrains Mono' },
+                                    padding: 12,
+                                    borderColor: 'rgba(239, 68, 68, 0.3)',
+                                    borderWidth: 1,
+                                    callbacks: {
+                                        label: (ctx) => ` Peso: ${ctx.parsed.toLocaleString('pt-BR')} kg`
+                                    }
+                                }
                             }
                         }
                     });
                 }
+ Riverside: Replaced renderIndustrialChart with renderScrapChart
 
                 function renderClientChart(labels, data) {
                     const container = document.getElementById('clientConcentrationChart-container');
