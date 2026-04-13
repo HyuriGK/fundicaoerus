@@ -2588,15 +2588,7 @@
                     meta: 0
                 };
 
-                // Helper: Weight Correction (Unified)
-                function getCorrectedWeight(item, weightsMap) {
-                    const code = String(item.PRODUTO_PPR || item.codigo_peca || '').trim();
-                    const qty = parseFloat(item.QTDE_PPR || item.quantidade || 0);
-                    if (weightsMap && weightsMap[code] !== undefined) {
-                        return qty * parseFloat(weightsMap[code]);
-                    }
-                    return qty * (parseFloat(item.PESO_PPR || item.peso_un || 0));
-                }
+                // Note: getCorrectedWeight is now provided by js/shared-utils.js
 
                 // Helper: Value Animation
                 function animateValue(obj, end, duration, prefix = "", suffix = "") {
@@ -2710,20 +2702,23 @@
                     const metaPctEl = document.getElementById('meta-progress-pct');
                     if (metaPctEl) metaPctEl.innerText = `${metaPct.toFixed(1)}%`;
 
-                    // 2. Carteira (Aligned with pedidos.html)
+                    // 2. Carteira (Aligned with pedidos.html Dashboard)
                     const cartRes = await fetch('/api/pedidos-sync?carteiraOnly=true');
                     const cartData = await cartRes.json();
                     
-                    // Filter models/billed as per standard operational view
+                    // Filter logic from pedidos.html: Omit models (prod ends in 1) and billed items ('T')
                     const validC = cartData.filter(item => {
-                        const pCode = String(item.PRODUTO_PPR || '').trim();
-                        // Filter out models (end in 1) and full-billed items
-                        return !pCode.endsWith('1') && String(item.FATURADO_PPR || '').trim().toUpperCase() !== 'T';
+                        const prodCode = String(item.PRODUTO_PPR || '').trim();
+                        const isModelo = prodCode.endsWith('1');
+                        const isFaturado = String(item.FATURADO_PPR || '').trim().toUpperCase() === 'T';
+                        return !isModelo && !isFaturado;
                     });
                     
+                    // Weight calculation parity: uses shared-utils.js logic
                     const cartKg = validC.reduce((acc, i) => acc + getCorrectedWeight(i, customWeightsMap), 0);
                     const cartVal = validC.reduce((acc, i) => acc + (parseFloat(i.VALOR_TOTAL_PPR || (parseFloat(i.VALOR_UNITARIO_PPR || 0) * (parseFloat(i.SALDO_PPR) || parseFloat(i.QTDE_PPR) || 0)))), 0);
                     
+                    // Show in kg as requested for exact parity with pedidos.html
                     animateValue(document.querySelector('#live-carteira-peso .live-value'), cartKg, 1500, "", "kg");
                     animateValue(document.querySelector('#live-carteira-valor .live-value'), cartVal, 1500, "R$ ");
                     
