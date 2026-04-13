@@ -6,75 +6,97 @@
     if (isTouchDevice) return;
 
     function initCursor() {
-        if (!document.body || document.getElementById('cursor-aura')) return;
+        if (!document.body || document.getElementById('cursor-arrow')) return;
 
-        // --- INITIALIZE AURA ELEMENT ---
-        const aura = document.createElement('div');
-        aura.id = 'cursor-aura';
-        aura.className = 'cursor-aura';
-        document.body.appendChild(aura);
+        // --- INITIALIZE CURSOR ELEMENTS ---
+        const arrow = document.createElement('div');
+        const dot = document.createElement('div');
+        
+        arrow.id = 'cursor-arrow';
+        arrow.className = 'cursor-arrow';
+        dot.id = 'cursor-apex';
+        dot.className = 'cursor-apex';
+        
+        document.body.appendChild(arrow);
+        document.body.appendChild(dot);
 
         // --- STYLES ---
         const style = document.createElement('style');
         style.textContent = `
-            /* RESTORE STANDARD CURSOR */
-            html, body, a, button, [onclick], .kpi-card, .notif-header, .clickable {
-                cursor: auto !important;
-            }
-            a, button, [onclick], .clickable {
-                cursor: pointer !important;
+            body, a, button, [onclick], .kpi-card, .notif-header, .clickable {
+                cursor: none !important;
             }
 
-            .cursor-aura {
+            .cursor-arrow {
                 position: fixed;
                 top: 0; left: 0;
-                width: 400px; height: 400px;
-                background: radial-gradient(circle, rgba(251, 191, 36, 0.07) 0%, transparent 70%);
-                border-radius: 50%;
+                width: 24px; height: 24px;
+                background-image: url("data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M4.5 3L18 12L4.5 21V3Z' fill='black' stroke='%23fbbf24' stroke-width='1.5' stroke-linejoin='round'/%3E%3C/svg%3E");
+                background-size: contain;
+                background-repeat: no-repeat;
                 pointer-events: none;
-                z-index: 999998; /* Just below loader (999999) and interactive elements */
-                transform: translate(-50%, -50%);
-                mix-blend-mode: screen;
+                z-index: 1000001; /* Above everything */
+                /* Rotated to point up-left slightly for classic feel */
+                transform-origin: 0 0;
+                transform: rotate(-15deg);
                 opacity: 0;
-                transition: opacity 0.5s ease;
+                transition: opacity 0.3s ease, width 0.2s, height 0.2s;
                 will-change: transform;
+                filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
             }
 
-            /* Premium Interaction State */
-            .aura-active .cursor-aura {
-                background: radial-gradient(circle, rgba(251, 191, 36, 0.12) 0%, transparent 70%);
-                width: 300px; height: 300px;
+            .cursor-apex {
+                position: fixed;
+                top: 0; left: 0;
+                width: 4px; height: 4px;
+                background: #fbbf24;
+                border-radius: 50%;
+                pointer-events: none;
+                z-index: 1000002;
+                transform: translate(-50%, -50%);
+                opacity: 0;
+                transition: opacity 0.3s ease;
+                box-shadow: 0 0 5px rgba(251, 191, 36, 0.8);
             }
-            
-            /* Magnetic subtle reaction on elements */
-            a:hover, button:hover, .kpi-card:hover, .notif-header:hover {
-                transform: scale(1.02);
-                transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+
+            /* Professional Interaction State */
+            .cursor-active .cursor-arrow {
+                width: 20px; height: 20px;
+                filter: drop-shadow(0 4px 8px rgba(251, 191, 36, 0.3));
+            }
+            .cursor-active .cursor-apex {
+                background: #fff;
+                width: 6px; height: 6px;
             }
         `;
         document.head.appendChild(style);
 
-        // --- COORDINATES ---
-        let mouse = { x: -500, y: -500 };
-        
         // --- EVENTS ---
         window.addEventListener('mousemove', (e) => {
-            mouse.x = e.clientX;
-            mouse.y = e.clientY;
+            const x = e.clientX;
+            const y = e.clientY;
             
-            // Move the aura
-            aura.style.transform = `translate(${mouse.x}px, ${mouse.y}px)`;
-            if (aura.style.opacity === '0') aura.style.opacity = '1';
+            // Positioning (Arrow tip is the reference)
+            arrow.style.left = x + 'px';
+            arrow.style.top = y + 'px';
+            
+            dot.style.left = x + 'px';
+            dot.style.top = y + 'px';
+
+            if (arrow.style.opacity === '0') {
+                arrow.style.opacity = '1';
+                dot.style.opacity = '1';
+            }
         });
 
-        const handleInteractEnter = () => document.body.classList.add('aura-active');
-        const handleInteractLeave = () => document.body.classList.remove('aura-active');
+        const handleInteractEnter = () => document.body.classList.add('cursor-active');
+        const handleInteractLeave = () => document.body.classList.remove('cursor-active');
 
         function refreshListeners() {
             const interactive = document.querySelectorAll('a, button, [onclick], .kpi-card, .notif-header, .clickable');
             interactive.forEach(el => {
-                if (el.dataset.auraBound) return;
-                el.dataset.auraBound = "true";
+                if (el.dataset.arrowBound) return;
+                el.dataset.arrowBound = "true";
                 el.addEventListener('mouseenter', handleInteractEnter);
                 el.addEventListener('mouseleave', handleInteractLeave);
             });
@@ -83,12 +105,14 @@
         setInterval(refreshListeners, 2000);
         refreshListeners();
 
-        // --- VISIBILITY HANDLING ---
+        // --- VISIBILITY ---
         document.addEventListener('mouseleave', () => {
-            aura.style.opacity = '0';
+            arrow.style.opacity = '0';
+            dot.style.opacity = '0';
         });
         document.addEventListener('mouseenter', () => {
-            aura.style.opacity = '1';
+            arrow.style.opacity = '1';
+            dot.style.opacity = '1';
         });
     }
 
