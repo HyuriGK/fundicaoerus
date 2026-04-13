@@ -84,6 +84,36 @@ async function syncMaster() {
             console.log(`📦 [Status] ${opsResults.length} OPs ativas encontradas.`);
             process.stdout.write('@PROG:PEDIDOS:20%\n');
 
+            // --- NOVO: Buscar Apontamentos em Lote (Igual sync-emissoes.js) ---
+            const allOpIds = [...new Set(opsResults.map(l => l.OP_PCS))];
+            const pointingsMap = {};
+
+            if (allOpIds.length > 0) {
+                console.log(`🔍 [1.5/4] Buscando apontamentos para ${allOpIds.length} OPs únicas...`);
+                // Dividir em lotes para o Firebird
+                const OP_BATCH_LIMIT = 500;
+                for (let j = 0; j < allOpIds.length; j += OP_BATCH_LIMIT) {
+                    const batchIds = allOpIds.slice(j, j + OP_BATCH_LIMIT);
+                    const pointingQuery = `
+                        SELECT CODIGO_PCS, SETOR_PCS, SUM(QUANTIDADE_PCS) as TOTAL
+                        FROM PRODUCAO_SETOR
+                        WHERE CODIGO_PCS IN (${batchIds.join(',')})
+                        GROUP BY 1, 2
+                    `;
+                    const pointingRows = await new Promise((resolve, reject) => {
+                        db.query(pointingQuery, (err, res) => {
+                            if (err) reject(err);
+                            else resolve(res || []);
+                        });
+                    });
+
+                    pointingRows.forEach(row => {
+                        if (!pointingsMap[row.CODIGO_PCS]) pointingsMap[row.CODIGO_PCS] = {};
+                        pointingsMap[row.CODIGO_PCS][row.SETOR_PCS] = row.TOTAL;
+                    });
+                }
+            }
+
             const pgClient = await pool.connect();
             try {
                 await pgClient.query('BEGIN');
@@ -97,6 +127,22 @@ async function syncMaster() {
                     const syncKey = `OP-${op.OP_PCS}`;
                     op.OP_QUANTIDADE = op.OP_QUANTIDADE || 0;
                     op.QUANTIDADE_PPR = op.OP_QUANTIDADE; 
+
+                    // Mesclar apontamentos (Mapeamento de setores)
+                    const opsData = pointingsMap[op.OP_PCS] || {};
+                    const totals = { 10: 0, 11: 0, 12: 0, 20: 0, 30: 0, 40: 0, 50: 0, 60: 0, 100: 0, 101: 0, 105: 0 };
+                    Object.keys(opsData).forEach(sector => {
+                        if (totals[sector] !== undefined) totals[sector] += opsData[sector];
+                    });
+
+                    op.QTY_MOLDADA = totals[10] + totals[11] + totals[12];
+                    op.QTY_FUSAO = totals[20];
+                    op.QTY_ACABAMENTO = totals[30];
+                    op.QTY_TT = totals[40];
+                    op.QTY_USINAGEM = totals[50] + totals[105];
+                    op.QTY_QUALIDADE = totals[60];
+                    op.QTY_EXPEDICAO = totals[100];
+                    op.QTY_FATURAMENTO = totals[101];
                     
                     await pgClient.query(`
                         INSERT INTO firebird_sync_pedidos (sync_key, data, updated_at)
