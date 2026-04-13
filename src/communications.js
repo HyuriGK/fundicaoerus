@@ -48,7 +48,7 @@ router.post('/', getUserId, async (req, res) => {
     if (req.userRole !== 'desenvolvedor' && req.userRole !== 'admin') {
         return res.status(403).json({ success: false, message: 'Acesso negado.' });
     }
-    const { recipient_ids, message, expiry_days } = req.body; 
+    const { recipient_ids, message, subject, expiry_days } = req.body; 
 
     if (!message) {
         return res.status(400).json({ success: false, message: 'Mensagem vazia.' });
@@ -64,16 +64,16 @@ router.post('/', getUserId, async (req, res) => {
         // Se for para todos (recipient_ids vazio ou nulo)
         if (!recipient_ids || recipient_ids.length === 0) {
             const result = await pool.query(
-                'INSERT INTO communications (sender_id, recipient_id, message, valid_until) VALUES ($1, $2, $3, $4) RETURNING *',
-                [req.userId, null, message, valid_until]
+                'INSERT INTO communications (sender_id, recipient_id, message, subject, valid_until) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+                [req.userId, null, message, subject || null, valid_until]
             );
             res.json({ success: true, communication: result.rows[0] });
         } else {
             // Se for para múltiplos usuários específicos
             const queries = recipient_ids.map(rid => {
                 return pool.query(
-                    'INSERT INTO communications (sender_id, recipient_id, message, valid_until) VALUES ($1, $2, $3, $4)',
-                    [req.userId, rid, message, valid_until]
+                    'INSERT INTO communications (sender_id, recipient_id, message, subject, valid_until) VALUES ($1, $2, $3, $4, $5)',
+                    [req.userId, rid, message, subject || null, valid_until]
                 );
             });
             await Promise.all(queries);

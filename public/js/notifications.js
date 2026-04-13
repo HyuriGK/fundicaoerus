@@ -24,7 +24,7 @@
             }
             .notif-history-modal .modal-card {
                 background: #09090b; border: 1px solid rgba(255,255,255,0.1);
-                border-radius: 24px; width: 95%; max-width: 600px; max-height: 85vh;
+                border-radius: 24px; width: 95%; max-width: 800px; max-height: 85vh;
                 display: flex; flex-direction: column; overflow: hidden;
                 box-shadow: 0 30px 60px -12px rgba(0, 0, 0, 0.8);
                 transform: translateY(20px); transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
@@ -33,27 +33,47 @@
                 transform: translateY(0);
             }
             .notif-item {
-                padding: 20px; border-radius: 16px; margin-bottom: 10px;
+                padding: 0; border-radius: 16px; margin-bottom: 12px;
                 background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06);
-                transition: 0.3s; position: relative;
+                transition: 0.3s; position: relative; overflow: hidden;
             }
             .notif-item.unread {
                 background: rgba(251, 191, 36, 0.03); border-color: rgba(251, 191, 36, 0.15);
             }
-            .notif-item:hover {
-                background: rgba(255,255,255,0.04); transform: translateX(5px);
+            .notif-header {
+                padding: 18px 25px; cursor: pointer; display: flex; align-items: center; justify-content: space-between;
+                transition: background 0.2s;
             }
+            .notif-header:hover { background: rgba(255,255,255,0.03); }
+            
+            .notif-subject {
+                font-size: 1rem; font-weight: 700; color: #fff; flex: 1;
+                display: flex; align-items: center; gap: 10px;
+            }
+            .notif-item.unread .notif-subject { color: #fbbf24; }
+            
             .notif-badge-new {
                 background: #fbbf24; color: #000; font-size: 0.65rem; font-weight: 800;
-                padding: 2px 8px; border-radius: 6px; text-transform: uppercase; margin-left: 10px;
+                padding: 2px 8px; border-radius: 6px; text-transform: uppercase;
             }
             .notif-date {
-                font-size: 0.7rem; color: #a1a1aa; margin-bottom: 8px;
-                display: flex; align-items: center; gap: 5px;
+                font-size: 0.75rem; color: #a1a1aa; font-family: 'JetBrains Mono', monospace;
+            }
+            .notif-body {
+                padding: 0 25px 20px 25px; max-height: 0; opacity: 0; overflow: hidden;
+                transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            }
+            .notif-item.expanded .notif-body {
+                max-height: 1000px; opacity: 1; padding-top: 10px;
             }
             .notif-message {
-                font-size: 0.9rem; color: #e4e4e7; line-height: 1.6; white-space: pre-wrap;
+                font-size: 0.95rem; color: #e4e4e7; line-height: 1.7; white-space: pre-wrap;
+                background: rgba(255,255,255,0.02); padding: 20px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05);
             }
+            .notif-toggle-icon {
+                transition: transform 0.3s; color: #a1a1aa;
+            }
+            .notif-item.expanded .notif-toggle-icon { transform: rotate(180deg); }
         `;
         document.head.appendChild(style);
 
@@ -70,7 +90,7 @@
                         </div>
                         <div>
                             <h3 style="margin: 0; font-size: 1.1rem; color: #fff; font-weight: 800;">Notificações</h3>
-                            <p style="margin: 0; font-size: 0.75rem; color: #a1a1aa;">Histórico de comunicados recentes</p>
+                            <p style="margin: 0; font-size: 0.75rem; color: #a1a1aa;">Toque no assunto para ler a mensagem completa</p>
                         </div>
                     </div>
                     <button onclick="closeNotificationsModal()" style="background: rgba(255,255,255,0.05); border: none; color: #a1a1aa; width: 32px; height: 32px; border-radius: 8px; cursor: pointer; transition: 0.3s;">
@@ -78,7 +98,7 @@
                     </button>
                 </div>
                 
-                <div id="notifHistoryContainer" style="padding: 20px; overflow-y: auto; flex: 1; scrollbar-width: thin;">
+                <div id="notifHistoryContainer" style="padding: 20px 30px; overflow-y: auto; flex: 1; scrollbar-width: thin;">
                     <!-- JS Generated -->
                 </div>
 
@@ -90,6 +110,13 @@
             </div>
         `;
         document.body.appendChild(modal);
+
+        // ESC Key listener
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && modal.classList.contains('visible')) {
+                closeNotificationsModal();
+            }
+        });
     }
 
     async function checkNotifications() {
@@ -151,18 +178,27 @@
 
             container.innerHTML = data.history.map(msg => `
                 <div class="notif-item ${msg.is_read ? '' : 'unread'}" id="notif-item-${msg.id}">
-                    <div class="notif-date">
-                        <i class="fa-solid fa-calendar-day"></i> 
-                        ${new Date(msg.created_at).toLocaleString('pt-BR')} 
-                        • De: ${msg.sender_name || 'Admin'}
-                        ${msg.is_read ? '' : '<span class="notif-badge-new">Novo</span>'}
+                    <div class="notif-header" onclick="this.parentElement.classList.toggle('expanded')">
+                        <div class="notif-subject">
+                            ${msg.subject || 'Sem Assunto'}
+                            ${msg.is_read ? '' : '<span class="notif-badge-new">Novo</span>'}
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 15px;">
+                            <span class="notif-date">${new Date(msg.created_at).toLocaleDateString('pt-BR')}</span>
+                            <i class="fa-solid fa-chevron-down notif-toggle-icon"></i>
+                        </div>
                     </div>
-                    <div class="notif-message">${msg.message}</div>
-                    ${msg.is_read ? '' : `
-                        <button onclick="markNotificationRead(${msg.id}, this)" style="margin-top: 15px; background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.2); color: #fbbf24; padding: 6px 12px; border-radius: 8px; font-size: 0.75rem; font-weight: 700; cursor: pointer; transition: 0.3s;">
-                            Entendido!
-                        </button>
-                    `}
+                    <div class="notif-body">
+                        <div style="font-size: 0.75rem; color: #a1a1aa; margin-bottom: 10px;">
+                            De: <strong>${msg.sender_name || 'Admin'}</strong> • ${new Date(msg.created_at).toLocaleTimeString('pt-BR')}
+                        </div>
+                        <div class="notif-message">${msg.message}</div>
+                        ${msg.is_read ? '' : `
+                            <button onclick="markNotificationRead(${msg.id}, this)" style="margin-top: 15px; background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.2); color: #fbbf24; padding: 10px 18px; border-radius: 10px; font-size: 0.8rem; font-weight: 700; cursor: pointer; transition: 0.3s; width: 100%;">
+                                Marcar como Lida
+                            </button>
+                        `}
+                    </div>
                 </div>
             `).join('');
 
@@ -180,7 +216,7 @@
     window.markNotificationRead = async function(id, btn) {
         if (btn) {
             btn.disabled = true;
-            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Processando...';
         }
         try {
             await fetch('/api/communications/mark-read', {
@@ -221,7 +257,7 @@
                         <i class="fa-solid fa-bell"></i>
                     </div>
                     <div>
-                        <h3 style="margin: 0; color: #fff; font-size: 1.25rem; font-weight: 800;">Novo Comunicado</h3>
+                        <h3 style="margin: 0; color: #fff; font-size: 1.25rem; font-weight: 800;">${msg.subject || 'Novo Comunicado'}</h3>
                         <p style="margin: 4px 0 0 0; font-size: 0.8rem; color: #a1a1aa;">De: <span style="color: #fbbf24; font-weight: 700;">${msg.sender_name || 'Admin'}</span></p>
                     </div>
                 </div>
