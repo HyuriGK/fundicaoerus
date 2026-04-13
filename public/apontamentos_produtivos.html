@@ -265,9 +265,6 @@
                     <select id="material-select" style="min-width: 250px;">
                         <option value="TODOS">Todos os Materiais</option>
                     </select>
-                    <select id="material-group-select" style="min-width: 200px;">
-                        <option value="TODOS">Todos os Grupos</option>
-                    </select>
                     <select id="sector-chart-select"></select>
                 </div>
             </div>
@@ -419,7 +416,6 @@
         let currentYearFilter = new Date().getFullYear().toString();
         let currentMonthFilter = new Date().getMonth() + 1; // 1-12
         let currentSectorFilter = 'MOLDAGEM GERAL';
-        let currentMaterialGroupFilter = 'TODOS';
         let currentMaterialFilter = 'TODOS';
         let chartInstance = null;
 
@@ -431,7 +427,6 @@
         const recordsTableBody = document.getElementById('recordsTableBody');
         const sectorChartSelect = document.getElementById('sector-chart-select');
         const yearFilterSelect = document.getElementById('year-filter-select');
-        const materialGroupSelect = document.getElementById('material-group-select');
         const materialSelect = document.getElementById('material-select');
 
         // INIT
@@ -475,13 +470,6 @@
             sectorChartSelect.innerHTML = orderedSectors.map(s => `<option value="${s}">${s}</option>`).join('');
             sectorChartSelect.value = currentSectorFilter;
 
-            // Material Groups
-            const groups = Object.keys(GROUP_DISPLAY_NAMES).sort();
-            materialGroupSelect.innerHTML = '<option value="TODOS">Todos os Grupos</option>';
-            groups.forEach(g => {
-                materialGroupSelect.innerHTML += `<option value="${g}">${GROUP_DISPLAY_NAMES[g]}</option>`;
-            });
-
             populateMaterialSelect();
         }
 
@@ -490,11 +478,6 @@
             let mappedMaterials = Object.keys(MATERIAL_MAPPING);
             let databaseMaterials = allData.map(d => (d.liga || '').trim().toUpperCase()).filter(m => m !== '');
             let materials = [...new Set([...mappedMaterials, ...databaseMaterials])].sort();
-            
-            // Filter by current group if selected
-            if (currentMaterialGroupFilter !== 'TODOS') {
-                materials = materials.filter(m => resolveGroup(m) === currentMaterialGroupFilter);
-            }
             
             materialSelect.innerHTML = '<option value="TODOS">Todos os Materiais</option>';
             materials.forEach(m => {
@@ -518,23 +501,8 @@
             yearFilterSelect.addEventListener('change', e => { currentYearFilter = e.target.value; applyFilters(); fetchGoal(); });
             sectorChartSelect.addEventListener('change', e => { currentSectorFilter = e.target.value; applyFilters(); fetchGoal(); });
             
-            materialGroupSelect.addEventListener('change', e => { 
-                currentMaterialGroupFilter = e.target.value; 
-                currentMaterialFilter = 'TODOS';
-                populateMaterialSelect();
-                applyFilters();
-            });
-
             materialSelect.addEventListener('change', e => { 
                 currentMaterialFilter = e.target.value;
-                if (currentMaterialFilter !== 'TODOS') {
-                    // Automatically set group based on selection
-                    const resolved = resolveGroup(currentMaterialFilter);
-                    if (resolved !== 'OUTROS') {
-                        currentMaterialGroupFilter = resolved;
-                        materialGroupSelect.value = resolved;
-                    }
-                }
                 applyFilters(); 
             });
             
@@ -577,7 +545,6 @@
 
                 const matchYear = currentYearFilter === 'TODOS' || y === currentYearFilter;
                 const matchMonth = currentMonthFilter === 0 || m === currentMonthFilter;
-                const matchGroup = currentMaterialGroupFilter === 'TODOS' || group === currentMaterialGroupFilter;
                 const matchMaterial = currentMaterialFilter === 'TODOS' || liga === currentMaterialFilter;
                 
                 let matchSector = currentSectorFilter === 'TODOS';
@@ -586,7 +553,7 @@
                     else matchSector = item.setor === currentSectorFilter;
                 }
 
-                return matchYear && matchMonth && matchSector && matchGroup && matchMaterial;
+                return matchYear && matchMonth && matchSector && matchMaterial;
             });
 
             updateKPIs();
