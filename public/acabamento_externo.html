@@ -1,1789 +1,1789 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <script src="js/loader.js"></script>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Acabamento Externo - Fundição Erus</title>
-    <!-- Bibliotecas de Estilo e Ícones -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap"
-        rel="stylesheet">
-    <!-- Bibliotecas Funcionais (Charts, Excel, PDF) -->
-    <script src="js/activity-logger.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script
-        src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
-    <style>
-        /* --- BLOQUEIO DE SELEÇÃO GLOBAL --- */
-        * {
-            user-select: none;
-            -webkit-user-select: none;
-            -moz-user-select: none;
-            -ms-user-select: none;
-            outline: none;
-        }
-        /* Permitir seleção apenas em inputs e textareas */
-        input,
-        textarea,
-        .selectable-text,
-        [contenteditable="true"] {
-            user-select: text !important;
-            -webkit-user-select: text !important;
-            -moz-user-select: text !important;
-            -ms-user-select: text !important;
-            cursor: text;
-        }
-        /* --- ROOT VARIABLES --- */
-        :root {
-            --font-main: 'Inter', sans-serif;
-            --font-mono: 'JetBrains Mono', monospace;
-            --color-primary: #fbbf24;
-            --color-primary-dim: #d97706;
-            --bg-body: #09090b;
-            --bg-card: rgba(24, 24, 27, 0.7);
-            --text-main: #f4f4f5;
-            --text-muted: #a1a1aa;
-            --border-subtle: rgba(255, 255, 255, 0.08);
-            --border-highlight: rgba(255, 255, 255, 0.15);
-            --border-separator: rgba(255, 255, 255, 0.06);
-            --status-success: #10b981;
-            --status-danger: #ef4444;
-            --status-info: #06b6d4;
-            --status-purple: #a855f7;
-            --status-pending: #f59e0b;
-            --header-height: 0px;
-            --footer-height: 55px;
-            --radius-sm: 6px;
-            --radius-md: 12px;
-            --shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
-            --shadow-glow: 0 0 15px rgba(251, 191, 36, 0.2);
-        }
-        *,
-        *::before,
-        *::after {
-            box-sizing: border-box;
-        }
-        body {
-            margin: 0;
-            font-family: var(--font-main);
-            background-color: var(--bg-body);
-            color: var(--text-main);
-            background-image: radial-gradient(circle at 15% 50%, rgba(251, 191, 36, 0.03), transparent 25%), radial-gradient(circle at 85% 30%, rgba(63, 63, 70, 0.05), transparent 25%);
-            height: 100vh;
-            overflow: hidden;
-            padding-bottom: 0;
-        }
-        ::-webkit-scrollbar {
-            width: 8px;
-            height: 8px;
-        }
-        ::-webkit-scrollbar-track {
-            background: transparent;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #3f3f46;
-            border-radius: 10px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: #52525b;
-        }
-        body.modal-open {
-            overflow: hidden;
-        }
-        #loading-screen {
-            position: fixed;
-            inset: 0;
-            background: #09090b;
-            z-index: 9999;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            transition: opacity 0.5s;
-        }
-        .spinner {
-            width: 40px;
-            height: 40px;
-            border: 3px solid rgba(251, 191, 36, 0.3);
-            border-top-color: var(--color-primary);
-            border-radius: 50%;
-            animation: spin 1s infinite linear;
-            margin-bottom: 15px;
-        }
-        @keyframes spin {
-            to {
-                transform: rotate(360deg);
-            }
-        }
-        body.no-scroll {
-            overflow: hidden !important;
-        }
-        .app-layout {
-            display: flex;
-            flex-direction: column;
-            height: 100vh;
-            min-height: 100vh;
-        }
-        /* --- SIDE NAVIGATION (PEDIDOS STANDARD) --- */
-        .side-menu-trigger {
-            position: fixed;
-            left: 0;
-            top: 0;
-            bottom: 0;
-            width: 15px;
-            z-index: 2000;
-            background: transparent;
-        }
-        .side-menu {
-            position: fixed;
-            left: -320px;
-            top: 20px;
-            bottom: 20px;
-            width: 300px;
-            background: rgba(9, 9, 11, 0.95);
-            backdrop-filter: blur(20px) saturate(2);
-            -webkit-backdrop-filter: blur(20px) saturate(2);
-            border: 1px solid var(--border-subtle);
-            border-left: none;
-            border-radius: 0 20px 20px 0;
-            z-index: 2001;
-            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-            display: flex;
-            flex-direction: column;
-            padding: 40px 30px;
-            box-shadow: 10px 0 40px rgba(0, 0, 0, 0.6);
-        }
-        .side-menu-trigger:hover + .side-menu, .side-menu:hover {
-            left: 0;
-        }
-        .side-menu-header {
-            margin-bottom: 40px;
-        }
-        .side-menu-title {
-            font-size: 1.2rem;
-            font-weight: 800;
-            color: #fff;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            margin-bottom: 5px;
-        }
-        .side-menu-subtitle {
-            font-size: 0.7rem;
-            color: var(--color-primary);
-            font-weight: 700;
-            letter-spacing: 0.1em;
-        }
-        .side-menu-actions {
-            display: flex; flex-direction: column; gap: 15px; flex: 1;
-        }
-        .side-btn {
-            width: 100%;
-            padding: 14px 20px;
-            border-radius: 12px;
-            background: rgba(255, 255, 255, 0.03);
-            border: 1px solid var(--border-subtle);
-            color: var(--text-muted);
-            font-weight: 600;
-            font-size: 0.95rem;
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            cursor: pointer;
-            transition: all 0.3s;
-            text-decoration: none;
-        }
-        .side-btn:hover {
-            background: rgba(251, 191, 36, 0.1);
-            border-color: var(--color-primary);
-            color: var(--color-primary);
-            transform: translateX(5px);
-        }
-        .side-btn.btn-back-side {
-            margin-top: auto;
-            background: rgba(239, 68, 68, 0.1);
-            border-color: rgba(239, 68, 68, 0.2);
-            color: #ef4444;
-        }
-        .side-btn.btn-back-side:hover {
-            background: rgba(239, 68, 68, 0.2);
-            border-color: #ef4444;
-            color: #fff;
-        }
-        .dashboard-content {
-            flex: 1;
-            padding: 30px 32px 10px 32px;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
-        .kpi-row {
-            display: flex;
-            gap: 20px;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
-            flex-shrink: 0;
-        }
-        .kpi-card {
-            flex: 1;
-            min-width: 200px;
-            background: transparent;
-            border: none;
-            border-radius: 0;
-            padding: 10px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            position: relative;
-            overflow: hidden;
-            box-shadow: none;
-            cursor: pointer;
-            transition: transform 0.3s var(--ease-out);
-            min-height: 90px;
-            user-select: none;
-            -webkit-user-select: none;
-            -moz-user-select: none;
-            -ms-user-select: none;
-        }
-        .kpi-card:hover {
-            transform: translateY(-5px) scale(1.05);
-        }
-        .kpi-title {
-            font-size: 0.75rem;
-            font-weight: 600;
-            color: var(--text-muted);
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            margin-bottom: 6px;
-            text-align: center;
-            line-height: 1.2;
-        }
-        .kpi-value {
-            font-size: 1.5rem;
-            font-weight: 700;
-            color: #fff;
-            font-family: var(--font-mono);
-            line-height: 1.2;
-        }
-        .kpi-sub {
-            font-size: 0.75rem;
-            color: #71717a;
-            /* Zinc-500 equivalent */
-            margin-top: 4px;
-            font-weight: 500;
-        }
-        .chart-panel {
-            background: rgba(255, 255, 255, 0.02);
-            /* Fundo sutilíssimo para dar corpo */
-            border: none;
-            border-radius: var(--radius-md);
-            padding: 20px;
-            margin-bottom: 10px;
-            display: flex;
-            flex-direction: column;
-            flex: 1;
-            min-height: 0;
-            box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 1);
-            /* Sombra preta sólida embaixo */
-            border-bottom: 2px solid rgba(255, 255, 255, 0.15);
-            /* Linha divisória bem visível */
-        }
-        .chart-header {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            margin-bottom: 15px;
-            flex-wrap: wrap;
-            gap: 10px;
-            flex-shrink: 0;
-        }
-        .chart-title {
-            font-size: 1rem;
-            font-weight: 600;
-            color: var(--text-main);
-            text-align: center;
-        }
-        .toolbar-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
-            gap: 15px;
-        }
-        .year-select {
-            background: rgba(0, 0, 0, 0.3);
-            border: 1px solid var(--border-subtle);
-            color: #fff;
-            padding: 8px 16px;
-            border-radius: 6px;
-            font-family: var(--font-main);
-            font-size: 0.85rem;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        .year-select:hover {
-            border-color: var(--border-highlight);
-            background: rgba(255, 255, 255, 0.03);
-        }
-        .months-group {
-            display: flex;
-            gap: 5px;
-        }
-        .month-btn {
-            background: transparent;
-            border: 1px solid var(--border-subtle);
-            color: var(--text-muted);
-            padding: 8px 14px;
-            border-radius: 6px;
-            font-size: 0.8rem;
-            cursor: pointer;
-            transition: all 0.2s;
-            text-transform: uppercase;
-        }
-        .month-btn:hover {
-            background: rgba(255, 255, 255, 0.1);
-            color: #fff;
-        }
-        .month-btn.active {
-            background: var(--color-primary);
-            color: #000;
-            border-color: var(--color-primary);
-            font-weight: 800;
-        }
-        .month-btn.all-btn.active {
-            background: var(--status-info);
-            color: #000;
-        }
-        .chart-filters {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-        }
-        .chart-container-wrapper {
-            flex: 1;
-            position: relative;
-            min-height: 0;
-            width: 100%;
-        }
-        select {
-            background: transparent;
-            border: 1px solid var(--border-subtle);
-            color: #fff;
-            padding: 6px 12px;
-            border-radius: 6px;
-            font-family: var(--font-main);
-            font-size: 0.85rem;
-            transition: all 0.2s;
-        }
-        select:hover {
-            border-color: var(--border-highlight);
-            background: rgba(255, 255, 255, 0.03);
-        }
-        .form-row {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 16px;
-            margin-bottom: 16px;
-            align-items: flex-end;
-        }
-        .form-group {
-            flex: 1;
-            min-width: 140px;
-        }
-        .form-group label {
-            display: block;
-            font-size: 0.75rem;
-            margin-bottom: 6px;
-            color: var(--text-muted);
-            font-weight: 600;
-            text-transform: uppercase;
-        }
-        .form-group input,
-        .form-group select {
-            width: 100%;
-            background: transparent;
-            border: 1px solid var(--border-subtle);
-            color: #fff;
-            padding: 10px 12px;
-            border-radius: 6px;
-            font-family: var(--font-main);
-            font-size: 0.9rem;
-            transition: all 0.2s;
-        }
-        .form-group input:hover,
-        .form-group select:hover {
-            border-color: var(--border-highlight);
-            background: rgba(255, 255, 255, 0.03);
-        }
-        .btn-modern {
-            padding: 10px 18px;
-            border-radius: 6px;
-            border: none;
-            font-weight: 600;
-            font-size: 0.9rem;
-            cursor: pointer;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            justify-content: center;
-            transition: all 0.2s;
-        }
-        .btn-add {
-            background: var(--color-primary);
-            color: #000;
-        }
-        .btn-outline {
-            background: transparent;
-            border: 1px solid var(--border-subtle);
-            color: var(--text-muted);
-        }
-        .btn-danger {
-            background: rgba(239, 68, 68, 0.1);
-            border: 1px solid rgba(239, 68, 68, 0.3);
-            color: #ef4444;
-        }
-        .btn-success {
-            background: rgba(16, 185, 129, 0.1);
-            border: 1px solid rgba(16, 185, 129, 0.3);
-            color: #10b981;
-        }
-        .controls-panel {
-            margin-top: 20px;
-            padding-top: 20px;
-            border-top: 1px solid var(--border-subtle);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 10px;
-        }
-        .controls-group {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-        }
-        .table-container {
-            background: var(--bg-card);
-            border: 1px solid var(--border-subtle);
-            border-radius: var(--radius-md);
-            overflow-x: auto;
-            margin-bottom: 20px;
-            min-height: 300px;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            font-family: var(--font-mono);
-            font-size: 0.85rem;
-            min-width: 1000px;
-        }
-        th,
-        td {
-            padding: 12px;
-            text-align: center;
-            white-space: nowrap;
-            border-bottom: 1px solid var(--border-subtle);
-            border-right: 1px solid var(--border-separator);
-        }
-        thead th {
-            background: rgba(0, 0, 0, 0.4);
-            color: var(--text-muted);
-            font-weight: 600;
-            text-transform: uppercase;
-            font-size: 0.75rem;
-        }
-        .group-row {
-            background: rgba(255, 255, 255, 0.02);
-            font-weight: 600;
-            color: var(--color-primary);
-            cursor: pointer;
-        }
-        .row-received {
-            background-color: rgba(16, 185, 129, 0.15) !important;
-        }
-        .row-received td {
-            color: #6ee7b7;
-        }
-        .filter-input-table {
-            width: 100%;
-            background: transparent;
-            border: none;
-            border-bottom: 1px solid var(--border-subtle);
-            color: var(--color-primary);
-            padding: 4px;
-            font-family: var(--font-mono);
-            font-size: 0.8rem;
-            text-align: center;
-        }
-        .badge {
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 0.75rem;
-            font-weight: 700;
-            text-transform: uppercase;
-        }
-        .badge-success {
-            background: rgba(16, 185, 129, 0.2);
-            color: #34d399;
-            border: 1px solid rgba(16, 185, 129, 0.3);
-        }
-        .badge-pending {
-            background: rgba(245, 158, 11, 0.2);
-            color: #fbbf24;
-            border: 1px solid rgba(245, 158, 11, 0.3);
-        }
-        .modal-overlay {
-            position: fixed;
-            inset: 0;
-            background: rgba(0, 0, 0, 0.85);
-            display: none;
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-            padding: 10px;
-            backdrop-filter: blur(5px);
-            opacity: 0;
-            transition: opacity 0.3s;
-        }
-        .modal-overlay.visible {
-            opacity: 1;
-        }
-        .modal-content {
-            background: #18181b;
-            border: 1px solid var(--border-highlight);
-            border-radius: var(--radius-md);
-            width: 98vw;
-            max-width: 98vw;
-            max-height: 95vh;
-            display: flex;
-            flex-direction: column;
-            transform: scale(0.95);
-            transition: transform 0.3s;
-        }
-        .modal-overlay.visible .modal-content {
-            transform: scale(1);
-        }
-        #cargaModal .modal-content {
-            height: 96vh;
-        }
-        #novoEnvioModal .modal-content,
-        #registrosModal .modal-content,
-        #buscaModal .modal-content {
-            width: 100vw;
-            height: 100vh;
-            border-radius: 0;
-            border: none;
-        }
-        .modal-header {
-            padding: 20px;
-            border-bottom: 1px solid var(--border-subtle);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .modal-title {
-            font-size: 1.2rem;
-            font-weight: 700;
-            color: #fff;
-        }
-        .modal-close {
-            cursor: pointer;
-            font-size: 1.5rem;
-            color: var(--text-muted);
-        }
-        .modal-body {
-            flex: 1;
-            overflow-y: auto;
-            padding: 0;
-        }
-        .modal-footer {
-            padding: 15px 20px;
-            border-top: 1px solid var(--border-subtle);
-            background: rgba(0, 0, 0, 0.2);
-            display: flex;
-            justify-content: flex-end;
-            gap: 20px;
-            font-family: var(--font-mono);
-            font-size: 0.9rem;
-            color: var(--text-main);
-        }
-        .modal-stat strong {
-            color: var(--color-primary);
-        }
-        .action-icon {
-            cursor: pointer;
-            padding: 4px;
-            transition: transform 0.2s;
-        }
-        .action-icon:hover {
-            transform: scale(1.2);
-        }
-        .icon-delete {
-            color: var(--status-danger);
-        }
-        /* --- TOAST NOTIFICATION --- */
-        .toast-container {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            z-index: 5000;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-        .toast {
-            background: #18181b;
-            border: 1px solid var(--border-subtle);
-            border-left: 4px solid var(--color-primary);
-            color: #fff;
-            padding: 16px 20px;
-            border-radius: 6px;
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
-            font-family: var(--font-main);
-            font-size: 0.9rem;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            animation: slideIn 0.3s ease-out forwards;
-            min-width: 350px;
-        }
-        .toast.danger {
-            border-left-color: var(--status-danger);
-        }
-        .toast-icon {
-            font-size: 1.2rem;
-        }
-        .toast.danger .toast-icon {
-            color: var(--status-danger);
-        }
-        .toast-content {
-            display: flex;
-            flex-direction: column;
-        }
-        .toast-title {
-            font-weight: 600;
-            font-size: 0.95rem;
-        }
-        .toast-subtitle {
-            font-size: 0.75rem;
-            color: #a1a1aa;
-            margin-top: 4px;
-        }
-        @keyframes slideIn {
-            from {
-                transform: translateX(100%);
-                opacity: 0;
-            }
-            to {
-                transform: translateX(0);
-                opacity: 1;
-            }
-        }
-        @keyframes fadeOut {
-            to {
-                opacity: 0;
-                transform: translateY(10px);
-            }
-        }
-        /* Ajuste para os formulários de busca */
-        #buscaModal .form-row {
-            align-items: flex-start;
-        }
-        #buscaModal .form-group {
-            min-width: 160px;
-        }
-        /* Estilo para gráfico de linha */
-        .line-chart-point {
-            background-color: var(--color-primary);
-            border-radius: 50%;
-            border: 2px solid var(--bg-card);
-        }
-        /* Colunas ocultas para não desenvolvedores */
-        .value-hidden {
-            color: var(--text-muted) !important;
-            background: rgba(0, 0, 0, 0.2) !important;
-        }
-        .value-hidden::before {
-            content: "â¢â¢â¢â¢";
-            letter-spacing: 2px;
-        }
-        /* Estilo para o filtro de código no modal */
-        .code-filter-input {
-            width: 220px;
-            padding: 8px 12px;
-            background: rgba(0, 0, 0, 0.3);
-            border: 1px solid var(--border-subtle);
-            color: #fff;
-            border-radius: 6px;
-            font-family: var(--font-main);
-            font-size: 0.85rem;
-        }
-        .code-filter-input::placeholder {
-            color: var(--text-muted);
-        }
-        .code-filter-input:focus {
-            outline: none;
-            border-color: var(--color-primary);
-        }
-        /* --- GLOBAL NOTIFICATION BELL STYLE --- */
-        #notification-bell {
-            position: fixed;
-            top: 20px;
-            right: 32px;
-            z-index: 10001;
-            width: 45px;
-            height: 45px;
-            background: rgba(24, 24, 27, 0.8);
-            border: 1px solid var(--border-subtle);
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-        }
-        #notification-bell:hover {
-            border-color: var(--color-primary);
-            background: rgba(251, 191, 36, 0.1);
-            transform: translateY(-2px);
-            box-shadow: 0 10px 20px -5px rgba(0, 0, 0, 0.5);
-        }
-        #notification-bell i {
-            color: var(--text-muted);
-            font-size: 1.1rem;
-            transition: 0.3s;
-        }
-        #notification-bell:hover i {
-            color: var(--color-primary);
-        }
-        #notification-count {
-            position: absolute;
-            top: -5px;
-            right: -5px;
-            background: var(--status-danger);
-            color: #fff;
-            font-size: 0.65rem;
-            font-weight: 800;
-            padding: 2px 6px;
-            border-radius: 10px;
-            border: 2px solid var(--bg-body);
-            display: none;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
-        }
-        @keyframes pulseGlow {
-            0% { box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.4); }
-            70% { box-shadow: 0 0 0 10px rgba(251, 191, 36, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(251, 191, 36, 0); }
-        }
-    </style>
-</head>
-<body class="no-scroll">
-    <!-- Sessão gerenciada centralmente por js/activity-logger.js -->
-    <script>
-        // --- RELÃGIO DO RODAPÃ ---
-        setInterval(() => {
-            const now = new Date();
-            const timeEl = document.getElementById('clock-time');
-            const dateEl = document.getElementById('clock-date');
-            if (timeEl) timeEl.innerText = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-            if (dateEl) dateEl.innerText = now.toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric', month: 'short' }).toUpperCase();
-        }, 1000);
-    </script>
-    <!-- TOAST CONTAINER -->
-    <div id="toast-container" class="toast-container"></div>
-    <div id="notification-bell" title="Notificações">
-        <i class="fa-solid fa-bell"></i>
-        <span id="notification-count">0</span>
-    </div>
-    <div id="loading-screen">
-        <div class="spinner"></div>
-        <div style="color: var(--text-muted); font-family: var(--font-main);">Processando dados...</div>
-    </div>
-    <div class="app-layout">
-    <!-- Side Menu Trigger Area -->
-    <div class="side-menu-trigger"></div>
-    <nav class="side-menu">
-        <div class="side-menu-header">
-            <span class="side-menu-subtitle">MENU DASHBOARD</span>
-            <div class="side-menu-title">Opções</div>
-        </div>
-        <div class="side-menu-actions">
-            <button class="side-btn" onclick="abrirModalBusca()">
-                <i class="fa-solid fa-magnifying-glass"></i> Abrir Busca
-            </button>
-            <button class="side-btn" id="novoEnvioButton" onclick="abrirModalPorId('novoEnvioModal')">
-                <i class="fa-solid fa-plus-circle"></i> Novo Envio
-            </button>
-            <button class="side-btn" onclick="abrirModalPorId('registrosModal')">
-                <i class="fa-solid fa-table"></i> Registros
-            </button>
-            <a href="index.html" class="side-btn btn-back-side">
-                <i class="fa-solid fa-arrow-right-from-bracket"></i> Voltar
-            </a>
-        </div>
-    </nav>
-        <main class="dashboard-content">
-            <div class="kpi-row" id="statsPanel"></div>
-            <!-- Toolbar Row (Filters) -->
-            <div class="toolbar-row">
-                <div class="chart-filters">
-                    <select id="yearSelect" class="year-select" onchange="changeYear()"></select>
-                    <div class="months-group" id="monthButtons"></div>
-                </div>
-            </div>
-            <div class="chart-panel">
-                <div class="chart-header">
-                    <div class="chart-title">Peso Total Terceirizado (KG)</div>
-                </div>
-                <div class="chart-container-wrapper">
-                    <canvas id="barChart"></canvas>
-                </div>
-            </div>
-        </main>
-    </div>
-    <!-- MODAIS -->
-    <div id="novoEnvioModal" class="modal-overlay">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2 class="modal-title">Novo Registro de Envio</h2>
-                <span class="modal-close" onclick="fecharModalTopo()"><i class="fa-solid fa-xmark"></i></span>
-            </div>
-            <div class="modal-body" style="padding: 30px;">
-                <div class="form-row">
-                    <div class="form-group" style="flex: 0.5;"><label>Carga</label><input type="text" id="inputCarga"
-                            placeholder="Ex: 123" class="mono" autocomplete="off"></div>
-                    <div class="form-group" style="flex: 0.6;"><label>Data</label><input type="date" id="inputData">
-                    </div>
-                    <div class="form-group" style="flex: 0.6;"><label>Código</label><input type="text" id="inputCodigo"
-                            placeholder="CÃDIGO" class="mono" style="text-transform: uppercase;"
-                            onblur="verificarCodigoParaAutopreenchimento()" autocomplete="off"></div>
-                    <div class="form-group" style="flex: 2;"><label>Descrição</label><input type="text"
-                            id="inputDescricao" placeholder="DESCRIÃÃO DA PEÃA" style="text-transform: uppercase;"
-                            autocomplete="off"></div>
-                    <div class="form-group" style="flex: 1;"><label>Cliente</label><input type="text" id="inputCliente"
-                            placeholder="CLIENTE" style="text-transform: uppercase;" autocomplete="off"></div>
-                    <div class="form-group" style="flex: 1;">
-                        <label>Terceiro</label>
-                        <select id="inputTerceiro">
-                            <option value="BSP REBARBAÃÃO">BSP REBARBAÃÃO</option>
-                            <option value="JM REBARBAÃÃO">JM REBARBAÃÃO</option>
-                            <option value="VG REBARBAÃÃO">VG REBARBAÃÃO</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="form-row">
-                    <div class="form-group"><label>Peso Un. (kg)</label><input type="number" id="inputPesoUn"
-                            placeholder="0.00" min="0" step="0.01" class="mono"></div>
-                    <div class="form-group"><label>Valor Unit.</label><input type="number" id="inputValorUnit"
-                            placeholder="0.00" min="0" step="0.01" class="mono"></div>
-                    <div class="form-group"><label>Qtd. Total</label><input type="number" id="inputQuantidade"
-                            placeholder="0" min="1" class="mono" oninput="atualizarQuantidades('total')"></div>
-                    <div class="form-group"><label>Qtd. Escariar</label><input type="number" id="inputQtdEscariar"
-                            placeholder="0" min="0" class="mono" oninput="atualizarQuantidades('escariar')"></div>
-                    <div class="form-group"><label>Qtd. Só Rebarbar</label><input type="number" id="inputQtdRebarba"
-                            placeholder="0" min="0" class="mono" oninput="atualizarQuantidades('rebarba')"></div>
-                    <div class="form-group" style="flex: 2;"><label>Observações</label><input type="text"
-                            id="inputObservacoes" placeholder="OBSERVAÃÃES..." style="text-transform: uppercase;"
-                            autocomplete="off"></div>
-                    <div class="form-group" style="flex: 0.5;"><label>&nbsp;</label><button class="btn-modern btn-add"
-                            onclick="adicionarRegistro()" style="width:100%;"><i class="fa-solid fa-plus"></i>
-                            Adicionar</button></div>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div id="registrosModal" class="modal-overlay">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2 class="modal-title">Registros de Envio</h2>
-                <div style="display: flex; align-items: center; gap: 10px;">
-                    <input type="text" id="filterByCode" class="code-filter-input" placeholder="Filtrar por código..."
-                        oninput="filtrarPorCodigo(this.value)" autocomplete="off">
-                    <span class="modal-close" onclick="fecharModalTopo()"><i class="fa-solid fa-xmark"></i></span>
-                </div>
-            </div>
-            <div class="modal-body table-container" style="border:none; margin:0; border-radius:0;">
-                <table id="terceiroTable">
-                    <thead>
-                        <tr>
-                            <th>CARGA</th>
-                            <th>DATA</th>
-                            <th>TERCEIRO</th>
-                            <th>PESO TOTAL (KG)</th>
-                            <th>QTD TOTAL</th>
-                            <th>TOTAL VENDA (R$)</th>
-                            <th>CUSTO SERVIÃO</th>
-                            <th>STATUS</th>
-                        </tr>
-                        <tr class="filter-row">
-                            <th><input class="filter-input-table" placeholder="Filtro..." /></th>
-                            <th><input class="filter-input-table" placeholder="Filtro..." /></th>
-                            <th><input class="filter-input-table" placeholder="Filtro..." /></th>
-                            <th><input class="filter-input-table" placeholder="Filtro..." /></th>
-                            <th><input class="filter-input-table" placeholder="Filtro..." /></th>
-                            <th><input class="filter-input-table" placeholder="Filtro..." /></th>
-                            <th><input class="filter-input-table" placeholder="Filtro..." /></th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody></tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-    <div id="cargaModal" class="modal-overlay">
-        <div class="modal-content">
-            <div class="modal-header">
-                <div style="display:flex; align-items:center; gap:15px; flex-wrap:wrap;">
-                    <h2 class="modal-title" id="modalTitle">Detalhes da Carga</h2>
-                    <button class="btn-modern btn-success" id="recebidoBtn" onclick="marcarCargaRecebida()"><i
-                            class="fa-solid fa-check-double"></i> Receber Tudo</button>
-                    <button class="btn-modern btn-add" id="generatePdfBtn"
-                        onclick="generateCargaPDF(document.getElementById('modalTitle').textContent.split(': ')[1].split('<')[0])"><i
-                            class="fa-solid fa-file-pdf"></i> PDF</button>
-                </div>
-                <span class="modal-close" onclick="fecharModalTopo()"><i class="fa-solid fa-xmark"></i></span>
-            </div>
-            <div id="modalTableContainer" class="modal-body table-container"
-                style="border:none; margin:0; border-radius:0;"></div>
-            <div id="modalFooter" class="modal-footer"></div>
-        </div>
-    </div>
-    <!-- Novo Modal de Detalhes do Item -->
-    <div id="itemDetailsModal" class="modal-overlay" style="z-index: 10001;"> <!-- Z-index maior que cargaModal -->
-        <div class="modal-content" style="max-width: 500px;">
-            <div class="modal-header">
-                <h2 class="modal-title" id="itemDetailsTitle">Detalhes do Item</h2>
-                <span class="modal-close" onclick="fecharModalTopo()"><i class="fa-solid fa-xmark"></i></span>
-            </div>
-            <div class="modal-body" id="itemDetailsBody" style="padding: 20px; color: #fff;">
-                <!-- Conteúdo preenchido via JS -->
-            </div>
-        </div>
-    </div>
-    <div id="itensModal" class="modal-overlay">
-        <div class="modal-content" style="max-width: 800px;">
-            <div class="modal-header">
-                <h2 class="modal-title">Itens Cadastrados</h2><span class="modal-close" onclick="fecharModalTopo()"><i
-                        class="fa-solid fa-xmark"></i></span>
-            </div>
-            <div id="itensModalTableContainer" class="modal-body table-container"
-                style="border:none; margin:0; border-radius:0;"></div>
-        </div>
-    </div>
-    <div id="buscaModal" class="modal-overlay">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2 class="modal-title">Busca Avançada</h2><span class="modal-close" onclick="fecharModalTopo()"><i
-                        class="fa-solid fa-xmark"></i></span>
-            </div>
-            <div style="padding: 20px; background: rgba(0,0,0,0.2);">
-                <div class="form-row" style="align-items: flex-start;">
-                    <div class="form-group" style="min-width: 180px;">
-                        <label>Código</label>
-                        <input type="text" id="buscaCodigo" class="mono" autocomplete="off" style="width: 100%;">
-                    </div>
-                    <div class="form-group" style="min-width: 200px;">
-                        <label>Descrição</label>
-                        <input type="text" id="buscaDescricao" autocomplete="off" style="width: 100%;">
-                    </div>
-                    <div class="form-group" style="min-width: 180px;">
-                        <label>Cliente</label>
-                        <input type="text" id="buscaCliente" autocomplete="off" style="width: 100%;">
-                    </div>
-                    <div class="form-group" style="min-width: auto; align-self: flex-end;">
-                        <button class="btn-modern btn-add" onclick="realizarBuscaAvancada()" style="height: 42px;"><i
-                                class="fa-solid fa-search"></i> Pesquisar</button>
-                    </div>
-                </div>
-            </div>
-            <div id="buscaTableContainer" class="modal-body table-container"
-                style="border:none; margin:0; border-radius:0;"></div>
-        </div>
-    </div>
-    <input type="file" id="importFile" accept=".json" style="display: none;">
-    <script>
-        // Toast Notification Function
-        function showToast(title, subtitle, type = 'info') {
-            let container = document.getElementById('toast-container');
-            if (!container) {
-                container = document.createElement('div');
-                container.id = 'toast-container';
-                container.className = 'toast-container';
-                document.body.appendChild(container);
-            }
-            const toast = document.createElement('div');
-            toast.className = `toast ${type}`;
-            const icon = type === 'danger' ? '<i class="fa-solid fa-ban toast-icon"></i>' : '<i class="fa-solid fa-circle-info toast-icon"></i>';
-            toast.innerHTML = `
-                ${icon} 
-                <div class="toast-content">
-                    <span class="toast-title">${title}</span>
-                    <span class="toast-subtitle">${subtitle}</span>
-                </div>
-            `;
-            container.appendChild(toast);
-            // Remove após 4 segundos
-            setTimeout(() => {
-                toast.style.animation = 'fadeOut 0.5s ease-out forwards';
-                setTimeout(() => {
-                    if (toast.parentNode) toast.parentNode.removeChild(toast);
-                }, 500);
-            }, 4000);
-        }
-        // Check user role
-        function checkUserRole() {
-            return localStorage.getItem('erus_role');
-        }
-        function showSpinner() { const s = document.getElementById('loading-screen'); if (s) { s.style.display = 'flex'; s.style.opacity = '1'; document.body.classList.add('no-scroll'); } }
-        function hideSpinner() { const s = document.getElementById('loading-screen'); if (s) { s.style.opacity = '0'; document.body.classList.remove('no-scroll'); setTimeout(() => s.style.display = 'none', 500); } }
-        Chart.defaults.font.family = "'Inter', sans-serif";
-        Chart.register(ChartDataLabels);
-        const MONTHS_SHORT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
-        let selectedMonthIndex = new Date().getMonth(); // 0-11
-        let selectedYear = new Date().getFullYear();
-        let registros = [];
-        let recebidos = {};
-        let itensConhecidos = new Map();
-        let mainChartInstance = null;
-        const modalStack = [];
-        // Variável para contolar visibilidade do valor total
-        let isValorTotalVisible = false;
-        // Variável para filtro de código
-        let currentCodeFilter = '';
-        function abrirModalPorId(id) {
-            const m = document.getElementById(id);
-            if (!m) return;
-            m.style.display = 'flex';
-            setTimeout(() => m.classList.add('visible'), 10);
-            document.body.classList.add('modal-open');
-            modalStack.push(id);
-        }
-        function fecharModalTopo() {
-            if (modalStack.length === 0) return;
-            const id = modalStack.pop();
-            const m = document.getElementById(id);
-            if (m) {
-                m.classList.remove('visible');
-                setTimeout(() => m.style.display = 'none', 300);
-            }
-            if (modalStack.length === 0) {
-                document.body.classList.remove('modal-open');
-            }
-        }
-        document.addEventListener('keydown', e => {
-            if (e.key === 'Escape') {
-                fecharModalTopo();
-            }
-        });
-        async function apiRequest(actionOrEndpoint, method = 'GET', data = null) {
-            let url = '/api/acabamento-externo';
-            if (method === 'POST') {
-                const actionMap = {
-                    'registros': 'add-registro',
-                    'recebidos': 'toggle-recebido',
-                    'itens': 'save-item',
-                    'itens-delete': 'delete-item',
-                    'delete': 'delete-registro',
-                    'delete-all-terceiro': 'clear-all',
-                    'import': 'import'
-                };
-                const action = actionMap[actionOrEndpoint] || actionOrEndpoint;
-                url += `?action=${action}`;
-            }
-            const options = {
-                method,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-role': localStorage.getItem('erus_role'),
-                    'x-user': localStorage.getItem('erus_user')
-                }
-            };
-            if (data) options.body = JSON.stringify(data);
-            try {
-                const response = await fetch(url, options);
-                if (!response.ok) throw new Error(`Erro: ${response.status}`);
-                return await response.json();
-            } catch (error) { console.error(error); throw error; }
-        }
-        const formatNumber = v => Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-        const formatCurrency = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-        const formatDate = iso => { if (!iso || !iso.includes('-')) return ''; const [y, m, d] = iso.split('T')[0].split('-'); return `${d}/${m}/${y}`; };
-        const parseNumberSafe = t => { const s = String(t || '').trim().replace(/,/g, '.'); const n = parseFloat(s); return isNaN(n) ? 0 : n; };
-        const formatMonthYear = d => { if (!d) return ''; const p = d.split('T')[0].split('-'); return p.length < 3 ? '' : `${p[1]}/${p[0]}`; };
-        // --- FUNÃÃO PARA ATUALIZAR O FOOTER ---
-        function updateFooterTotals(weight, qty) {
-            const wEl = document.getElementById('footer-total-weight');
-            const qEl = document.getElementById('footer-total-qty');
-            if (wEl) wEl.textContent = formatNumber(weight) + ' KG';
-            if (qEl) qEl.textContent = qty.toLocaleString('pt-BR');
-        }
-        function calcularValorItem(reg) {
-            const terc = String(reg.terceiro || '').toUpperCase();
-            const peso = parseFloat(reg.peso || 0);
-            const qEsc = parseInt(reg.quant_escariar || 0);
-            const qReb = parseInt(reg.quant_rebarba || 0);
-            if (terc === 'BSP REBARBAÃÃO') return (qEsc * peso * 1.30) + (qReb * peso * 1.10);
-            if (terc === 'VG REBARBAÃÃO') return (qEsc + qReb) * peso * 1.00;
-            if (terc === 'JM REBARBAÃÃO') return (qEsc * peso * 1.10) + (qReb * peso * 1.00);
-            return 0;
-        }
-        function atualizarQuantidades(origem) {
-            const tIn = document.getElementById('inputQuantidade'), eIn = document.getElementById('inputQtdEscariar'), rIn = document.getElementById('inputQtdRebarba');
-            let t = parseInt(tIn.value) || 0, e = parseInt(eIn.value) || 0, r = parseInt(rIn.value) || 0;
-            if (origem === 'total') { r = (e > 0) ? t - e : t; if (r < 0) { r = 0; e = t; } }
-            else if (origem === 'escariar') { if (e > t) e = t; r = t - e; }
-            else if (origem === 'rebarba') { if (r > t) r = t; e = t - r; }
-            tIn.value = t; eIn.value = e; rIn.value = r;
-        }
-        async function carregarItensConhecidos() { return Promise.resolve(); }
-        function verificarCodigoParaAutopreenchimento() {
-            const cod = document.getElementById('inputCodigo').value.trim().toUpperCase();
-            if (cod && itensConhecidos.has(cod)) {
-                setTimeout(() => {
-                    if (confirm('Código encontrado. Preencher dados automaticamente?')) {
-                        const item = itensConhecidos.get(cod);
-                        document.getElementById('inputDescricao').value = item.descricao;
-                        document.getElementById('inputPesoUn').value = item.peso;
-                        document.getElementById('inputCliente').value = item.cliente;
-                    }
-                }, 100);
-            }
-        }
-        async function salvarOuAtualizarItem(data) {
-            try { const res = await apiRequest('itens', 'POST', data); if (res.success) itensConhecidos.set(data.codigo, data); } catch (e) { }
-        }
-        function abrirModalBusca() {
-            abrirModalPorId('buscaModal');
-        }
-        function realizarBuscaAvancada() {
-            const cod = document.getElementById('buscaCodigo').value.trim().toUpperCase();
-            const desc = document.getElementById('buscaDescricao').value.trim().toUpperCase();
-            const cli = document.getElementById('buscaCliente').value.trim().toUpperCase();
-            const res = registros.filter(r => {
-                let mCo = true, mDe = true, mCl = true;
-                if (cod) {
-                    mCo = r.codigo && r.codigo.toUpperCase().includes(cod);
-                }
-                if (desc) {
-                    mDe = r.descricao && r.descricao.toUpperCase().includes(desc);
-                }
-                if (cli) {
-                    mCl = r.cliente && r.cliente.toUpperCase().includes(cli);
-                }
-                return mCo && mDe && mCl;
-            });
-            const cont = document.getElementById('buscaTableContainer');
-            if (res.length === 0) { cont.innerHTML = `<div style="padding:20px;text-align:center;">Nenhum registro.</div>`; return; }
-            let h = `<table><thead><tr><th>DATA</th><th>CARGA</th><th>TERCEIRO</th><th>CÃDIGO</th><th>DESCRIÃÃO</th><th>CLIENTE</th><th>QTD</th><th>PESO (KG)</th></tr></thead><tbody>`;
-            res.sort((a, b) => new Date(b.data) - new Date(a.data)).forEach(r => {
-                const isRec = recebidos[r.carga]?.some(i => i.id === r.id);
-                h += `<tr class="${isRec ? 'row-received' : ''}"><td>${formatDate(r.data)}</td><td style="font-weight:bold;color:var(--color-primary);cursor:pointer;" onclick="fecharModalTopo(); fecharModalTopo(); showCargaDetails('${r.carga}')">${r.carga}</td><td>${r.terceiro || '-'}</td><td>${r.codigo || '-'}</td><td>${r.descricao || '-'}</td><td>${r.cliente || '-'}</td><td>${r.quant}</td><td>${formatNumber(r.quant * (r.peso || 0))}</td></tr>`;
-            });
-            cont.innerHTML = h + `</tbody></table>`;
-        }
-        // Função para filtrar por código
-        function filtrarPorCodigo(codigo) {
-            currentCodeFilter = codigo.trim().toUpperCase();
-            renderTable();
-        }
-        // Função para alternar visibilidade do valor total
-        function toggleValorTotalVisibility() {
-            const role = checkUserRole();
-            if (role === 'desenvolvedor' || role === 'comercial' || role === 'administrador') {
-                isValorTotalVisible = !isValorTotalVisible;
-                updateDashboardAndCharts();
-                showToast(
-                    isValorTotalVisible ? "Valor total visível" : "Valor total oculto",
-                    isValorTotalVisible ? "O valor total está sendo exibido" : "O valor total está oculto",
-                    "info"
-                );
-            } else {
-                showToast(
-                    "Você não tem permissão comercial",
-                    "Se necessário, entre em contato com o administrador do sistema",
-                    "danger"
-                );
-            }
-        }
-        async function adicionarRegistro() {
-            // Removed isDev check for adding records
-            // Removed isDev check for adding records
-            /*
-            const role = checkUserRole();
-            if (role !== 'desenvolvedor') {
-                showToast("Você não tem permissão para adicionar", "Apenas desenvolvedores podem adicionar registros", "danger");
-                return;
-            }
-            */
-            const t = parseInt(document.getElementById('inputQuantidade').value) || 0, e = parseInt(document.getElementById('inputQtdEscariar').value) || 0, r = parseInt(document.getElementById('inputQtdRebarba').value) || 0;
-            const cod = document.getElementById('inputCodigo').value.trim().toUpperCase(), c = document.getElementById('inputCarga').value.trim().toUpperCase();
-            if (t !== (e + r)) return alert('Soma incorreta.');
-            if (!c || !cod || t <= 0) return alert('Campos obrigatórios vazios.');
-            const item = { codigo: cod, descricao: document.getElementById('inputDescricao').value.toUpperCase(), peso: parseNumberSafe(document.getElementById('inputPesoUn').value), cliente: document.getElementById('inputCliente').value.toUpperCase() };
-            await salvarOuAtualizarItem(item);
-            // Ler valor unitário antes de compor o registro
-            const valorUnit = parseNumberSafe(document.getElementById('inputValorUnit')?.value);
-            const reg = { carga: c, ...item, quant: t, quant_escariar: e, quant_rebarba: r, terceiro: document.getElementById('inputTerceiro').value.toUpperCase(), observacoes: document.getElementById('inputObservacoes').value.toUpperCase(), data: document.getElementById('inputData').value || new Date().toISOString().split('T')[0], tipo: "terceiro", valor_unit: valorUnit > 0 ? valorUnit : null };
-            // Custo do Serviço (Calculado automaticamente sempre)
-            reg.valor = calcularValorItem(reg);
-            try { const res = await apiRequest('registros', 'POST', reg); if (res.success) { reg.id = res.id; registros.unshift(reg); renderTable(); updateDashboardAndCharts(); limparFormularioParcialmente(); showToast("Registro adicionado", "O item foi adicionado com sucesso", "info"); } } catch (err) { }
-        }
-        async function carregarDados() {
-            showSpinner();
-            try {
-                await carregarRegistrosERecebidos();
-                populateDateFilters();
-                renderTable();
-                updateDashboardAndCharts();
-                // Verificar permissões para mostrar/ocultar botões e separador
-                const role = checkUserRole();
-                const novoEnvioBtn = document.getElementById('novoEnvioButton');
-                const separatorNovoEnvio = document.getElementById('separatorNovoEnvio');
-                if (role !== 'desenvolvedor') {
-                    if (novoEnvioBtn) novoEnvioBtn.style.display = 'none';
-                    if (separatorNovoEnvio) separatorNovoEnvio.style.display = 'none';
-                } else {
-                    if (novoEnvioBtn) novoEnvioBtn.style.display = 'inline-flex';
-                    if (separatorNovoEnvio) separatorNovoEnvio.style.display = 'block';
-                }
-            } catch (e) { console.error(e); } finally { hideSpinner(); }
-        }
-        async function carregarRegistrosERecebidos() {
-            try {
-                const data = await apiRequest('acabamento-externo', 'GET');
-                registros = data.registros.sort((a, b) => new Date(b.data) - new Date(a.data));
-                itensConhecidos.clear();
-                data.itens.forEach(item => { item.peso = parseFloat(item.peso); itensConhecidos.set(item.codigo, item); });
-                recebidos = {};
-                data.recebidos.forEach(i => { if (!recebidos[i.carga]) recebidos[i.carga] = []; recebidos[i.carga].push(i); });
-            } catch (e) { throw e; }
-        }
-        function renderTable(dadosParaExibir = registros) {
-            const tbody = document.querySelector('#terceiroTable tbody');
-            tbody.innerHTML = '';
-            // Aplicar filtro de código se existir
-            let dadosFiltrados = dadosParaExibir;
-            if (currentCodeFilter) {
-                // Primeiro, encontrar as cargas que contêm o código
-                const cargasComCodigo = new Set();
-                dadosParaExibir.forEach(r => {
-                    if (r.codigo && r.codigo.toUpperCase().includes(currentCodeFilter)) {
-                        cargasComCodigo.add(r.carga);
-                    }
-                });
-                // Filtrar todos os itens dessas cargas
-                dadosFiltrados = dadosParaExibir.filter(r => cargasComCodigo.has(r.carga));
-            }
-            const grouped = dadosFiltrados.reduce((acc, r) => { if (!acc[r.carga]) acc[r.carga] = []; acc[r.carga].push(r); return acc; }, {});
-            let totalWeight = 0;
-            let totalQty = 0;
-            const isDev = (checkUserRole() === 'desenvolvedor' || checkUserRole() === 'comercial' || checkUserRole() === 'administrador');
-            const showValue = isDev && isValorTotalVisible;
-            Object.keys(grouped).sort((a, b) => (parseInt(b) || 0) - (parseInt(a) || 0)).forEach(c => {
-                const its = grouped[c];
-                const p = its[0];
-                const tP = its.reduce((s, i) => s + (parseFloat(i.quant || 0) * parseFloat(i.peso || 0)), 0);
-                const tV = its.reduce((s, i) => s + parseFloat(i.valor || 0), 0);
-                const tQ = its.reduce((s, i) => s + parseInt(i.quant || 0), 0);
-                // Sumarizar para o footer
-                totalWeight += tP;
-                totalQty += tQ;
-                const recC = (recebidos[c] || []).length;
-                const totC = its.length;
-                const tr = document.createElement('tr');
-                tr.className = 'group-row';
-                tr.onclick = () => showCargaDetails(c);
-                let rowHTML = `<td>${c}</td><td>${formatDate(p.data)}</td><td>${p.terceiro}</td><td>${formatNumber(tP)}</td><td>${tQ}</td>`;
-                // Removed isDev check - allow everyone to see values
-                // Only sum Sales Value for pending items (not received)
-                const vSales = its.reduce((s, i) => {
-                    const isItemRec = recebidos[c]?.some(rec => rec.id === i.id);
-                    return s + (!isItemRec && i.valor_unit ? parseFloat(i.valor_unit) * parseFloat(i.quant || 0) : 0);
-                }, 0);
-                const vCost = its.reduce((s, i) => s + parseFloat(i.valor || 0), 0);
-                rowHTML += `<td>${showValue ? (vSales > 0 ? formatCurrency(vSales) : '-') : '-'}</td>`;
-                rowHTML += `<td style="color:#ef4444;">${showValue ? formatCurrency(vCost) : '-'}</td>`;
-                rowHTML += `<td>${(totC > 0 && recC >= totC) ? '<span class="badge badge-success">Recebido</span>' : `<span class="badge badge-pending">${recC}/${totC} Pendente</span>`}</td>`;
-                tr.innerHTML = rowHTML;
-                tbody.appendChild(tr);
-            });
-            // Atualizar footer
-            updateFooterTotals(totalWeight, totalQty);
-            applyColumnFilters();
-        }
-        function renderMonthButtons() {
-            const container = document.getElementById('monthButtons');
-            if (!container) return;
-            container.innerHTML = '';
-            const btnAll = document.createElement('button');
-            btnAll.className = 'month-btn all-btn';
-            btnAll.textContent = 'ANO';
-            btnAll.onclick = () => selectMonth(-1);
-            container.appendChild(btnAll);
-            MONTHS_SHORT.forEach((m, i) => {
-                const btn = document.createElement('button');
-                btn.className = 'month-btn';
-                btn.textContent = m;
-                btn.id = `btn-month-${i}`;
-                btn.onclick = () => selectMonth(i);
-                container.appendChild(btn);
-            });
-            updateMonthButtonsUI();
-        }
-        function selectMonth(idx) {
-            selectedMonthIndex = idx;
-            updateMonthButtonsUI();
-            updateDashboardAndCharts();
-        }
-        function changeYear() {
-            selectedYear = parseInt(document.getElementById('yearSelect').value);
-            updateDashboardAndCharts();
-        }
-        function updateMonthButtonsUI() {
-            document.querySelectorAll('.month-btn').forEach(b => b.classList.remove('active'));
-            if (selectedMonthIndex === -1) {
-                const allBtn = document.querySelector('.all-btn');
-                if (allBtn) allBtn.classList.add('active');
-            } else {
-                const btn = document.getElementById(`btn-month-${selectedMonthIndex}`);
-                if (btn) btn.classList.add('active');
-            }
-        }
-        function populateDateFilters() {
-            const sA = document.getElementById('yearSelect');
-            if (!sA) return;
-            sA.innerHTML = '';
-            const aSet = new Set();
-            const now = new Date();
-            const curYear = now.getFullYear();
-            aSet.add(curYear);
-            aSet.add(curYear - 1);
-            registros.forEach(r => {
-                if (r.data) {
-                    const p = r.data.split('T')[0].split('-');
-                    aSet.add(parseInt(p[0]));
-                }
-            });
-            Array.from(aSet).sort((a, b) => b - a).forEach(a => {
-                const o = document.createElement('option');
-                o.value = a;
-                o.textContent = a;
-                sA.appendChild(o);
-            });
-            sA.value = selectedYear;
-            renderMonthButtons();
-        }
-        function updateDashboardAndCharts() {
-            const fM = selectedMonthIndex === -1 ? "" : (selectedMonthIndex + 1).toString().padStart(2, '0');
-            const fA = selectedYear.toString();
-            const filtrados = registros.filter(r => {
-                if (!r.data) return false;
-                const p = r.data.split('T')[0].split('-');
-                return (!fM || p[1] === fM) && (!fA || p[0] === fA);
-            });
-            // Calculate Sales Value and Weight only for pending items
-            const tVenda = filtrados.reduce((acc, r) => {
-                const isItemRec = recebidos[r.carga]?.some(rec => rec.id === r.id);
-                return acc + (!isItemRec && r.valor_unit ? parseFloat(r.quant || 0) * parseFloat(r.valor_unit) : 0);
-            }, 0);
-            const tPesoProcesso = filtrados.reduce((acc, r) => {
-                const isItemRec = recebidos[r.carga]?.some(rec => rec.id === r.id);
-                return acc + (!isItemRec ? parseFloat(r.quant || 0) * parseFloat(r.peso || 0) : 0);
-            }, 0);
-            let tP = 0;
-            let tCusto = 0;
-            filtrados.forEach(r => {
-                tP += (parseFloat(r.quant || 0) * parseFloat(r.peso || 0));
-                tCusto += parseFloat(r.valor || 0);
-            });
-            const isDev = (checkUserRole() === 'desenvolvedor' || checkUserRole() === 'comercial' || checkUserRole() === 'administrador');
-            // Allow everyone to see values ONLY if dev AND toggle is on
-            const showValue = isDev && isValorTotalVisible;
-            let kpiHtml = '';
-            // 1. Peso Total em Processo (KG)
-            kpiHtml += `
-            <div class="kpi-card kpi-blue">
-                <div class="kpi-title">Peso Total em Processo (KG)</div>
-                <div class="kpi-value">${formatNumber(tPesoProcesso)}</div>
-                <div class="kpi-sub">Peso em processo</div>
-            </div>`;
-            // 2. Valor Total em Processo (Venda) - CLICKABLE FOR TOGGLE
-            kpiHtml += `
-            <div class="kpi-card kpi-purple" onclick="toggleValorTotalVisibility()" style="cursor: pointer;">
-                <div class="kpi-title">Valor Total em Processo (Venda) <i class="fa-solid ${showValue ? 'fa-eye' : 'fa-eye-slash'}" style="margin-left:5px; opacity:0.7;"></i></div>
-                <div class="kpi-value">${showValue ? formatCurrency(tVenda) : 'â¢â¢â¢â¢â¢â¢'}</div>
-                <div class="kpi-sub">Valor agregado em processo</div>
-            </div>`;
-            // 3. Peso Total Terceirizado
-            kpiHtml += `
-            <div class="kpi-card kpi-blue">
-                <div class="kpi-title">Peso Total Terceirizado (KG)</div>
-                <div class="kpi-value">${formatNumber(tP)}</div>
-                <div class="kpi-sub">Total movimentado no período</div>
-            </div>`;
-            // 4. Custo Total Serviços
-            kpiHtml += `
-            <div class="kpi-card kpi-red">
-                <div class="kpi-title">Custo Total Serviços</div>
-                <div class="kpi-value">${showValue ? formatCurrency(tCusto) : 'â¢â¢â¢â¢â¢â¢'}</div>
-                <div class="kpi-sub">Custo total no período</div>
-            </div>`;
-            document.getElementById('statsPanel').innerHTML = kpiHtml;
-            renderTable(filtrados);
-            let cD = {};
-            if (fM === "") { for (let i = 1; i <= 12; i++) cD[i.toString().padStart(2, '0')] = 0; filtrados.forEach(r => { const m = r.data.split('T')[0].split('-')[1]; cD[m] += (parseFloat(r.quant || 0) * parseFloat(r.peso || 0)); }); }
-            else {
-                const fM = (selectedMonthIndex + 1).toString().padStart(2, '0');
-                const fA = selectedYear.toString();
-                filtrados.forEach(r => { const d = r.data.split('T')[0]; cD[d] = (cD[d] || 0) + (parseFloat(r.quant || 0) * parseFloat(r.peso || 0)); });
-            }
-            renderChart(cD, selectedMonthIndex === -1);
-        }
-        function renderChart(data, isM) {
-            let l = [], w = [];
-            const ctx = document.getElementById('barChart').getContext('2d');
-            if (isM) {
-                // Visão Anual (meses)
-                const names = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
-                l = Object.keys(data).sort().map(k => names[parseInt(k) - 1]);
-                w = Object.keys(data).sort().map(k => data[k]);
-            } else {
-                // Visão Mensal (todos os dias do mês)
-                const fM = (selectedMonthIndex + 1).toString().padStart(2, '0');
-                const fA = selectedYear.toString();
-                const daysInMonth = new Date(parseInt(fA), parseInt(fM), 0).getDate();
-                for (let i = 1; i <= daysInMonth; i++) {
-                    const dayStr = i.toString().padStart(2, '0');
-                    const dateKey = `${fA}-${fM}-${dayStr}`;
-                    l.push(dayStr);
-                    w.push(data[dateKey] || 0);
-                }
-            }
-            const maxVal = Math.max(...w, 0);
-            const suggestedMax = maxVal > 0 ? maxVal * 1.2 : 10;
-            if (mainChartInstance) mainChartInstance.destroy();
-            mainChartInstance = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: l,
-                    datasets: [{
-                        label: 'Peso (KG)',
-                        data: w,
-                        backgroundColor: '#fbbf24',
-                        borderColor: '#fbbf24',
-                        borderWidth: 1,
-                        borderRadius: 4,
-                        hoverBackgroundColor: '#fff'
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            display: true,
-                            position: 'top',
-                            labels: {
-                                color: '#a1a1aa',
-                                font: { size: 12 }
-                            }
-                        },
-                        tooltip: {
-                            mode: 'index',
-                            intersect: false,
-                            backgroundColor: 'rgba(24, 24, 27, 0.95)',
-                            titleColor: '#fbbf24',
-                            bodyColor: '#f4f4f5',
-                            borderColor: 'rgba(251, 191, 36, 0.3)',
-                            borderWidth: 1,
-                            cornerRadius: 6,
-                            padding: 12,
-                            displayColors: false,
-                            callbacks: {
-                                label: function (context) {
-                                    return `Peso: ${formatNumber(context.parsed.y)} KG`;
-                                }
-                            }
-                        },
-                        datalabels: {
-                            display: function (context) {
-                                return context.dataset.data[context.dataIndex] > 0;
-                            },
-                            align: 'top',
-                            anchor: 'end',
-                            offset: 4,
-                            color: '#ffffff',
-                            font: {
-                                family: "'JetBrains Mono', monospace",
-                                weight: 'bold',
-                                size: 10
-                            },
-                            formatter: function (value) {
-                                return formatNumber(value, 0);
-                            }
-                        }
-                    },
-                    interaction: {
-                        mode: 'index',
-                        intersect: false
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            suggestedMax: suggestedMax,
-                            grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                            ticks: {
-                                color: '#a1a1aa',
-                                callback: function (value) {
-                                    return formatNumber(value) + ' KG';
-                                }
-                            }
-                        },
-                        x: {
-                            grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                            ticks: { color: '#a1a1aa' }
-                        }
-                    }
-                }
-            });
-        }
-        function showCargaDetails(carga) {
-            const isDev = (checkUserRole() === 'desenvolvedor' || checkUserRole() === 'comercial');
-            const showValue = isDev && isValorTotalVisible;
-            document.getElementById('modalTitle').innerHTML = `Detalhes: <span style="color:var(--color-primary);">${carga}</span>`;
-            document.getElementById('cargaModal').setAttribute('data-current-carga', carga);
-            // Mostrar/ocultar botões baseado na role
-            if (isDev) {
-                document.getElementById('recebidoBtn').style.display = 'inline-flex';
-                document.getElementById('generatePdfBtn').style.display = 'inline-flex';
-            } else {
-                document.getElementById('recebidoBtn').style.display = 'none';
-                document.getElementById('generatePdfBtn').style.display = 'none';
-            }
-            const its = registros.filter(r => r.carga === carga);
-            // Updated header: Removed DATA and PREÃO VENDA (UNIT), added OBS.
-            let h = `<table><thead><tr><th>CÃDIGO</th><th>DESCRIÃÃO</th><th>CLIENTE</th><th>PESO UN.</th><th>QTD</th>`;
-            // Show columns for everyone
-            h += `<th>TOTAL VENDA (R$)</th><th>CUSTO SERV.</th><th>OBS.</th>`;
-            h += `<th>OK</th>`;
-            if (isDev) {
-                h += `<th>AÃÃO</th>`;
-            }
-            h += `</tr></thead><tbody>`;
-            its.forEach(r => {
-                const isRec = recebidos[r.carga]?.some(i => i.id === r.id);
-                // Updated row: clickable code, removed data/unit price, added observation
-                h += `<tr>`;
-                h += `<td><a href="#" onclick="showItemDetails(${r.id}); return false;" style="color:var(--color-primary); text-decoration:none; font-weight:bold;">${r.codigo}</a></td>`;
-                h += `<td>${r.descricao}</td><td>${r.cliente || '-'}</td><td>${formatNumber(r.peso)}</td><td>${r.quant}</td>`;
-                // Show values for everyone
-                const vCost = parseFloat(r.valor || 0);
-                const qtd = parseInt(r.quant || 0);
-                const vTotalSales = r.valor_unit ? formatCurrency(parseFloat(r.valor_unit) * qtd) : '-';
-                h += `<td>${showValue ? vTotalSales : '-'}</td>`;
-                h += `<td style="color:#ef4444;">${showValue ? formatCurrency(vCost) : '-'}</td>`;
-                h += `<td>${r.observacoes || '-'}</td>`;
-                // Verificar permissão para mostrar checkbox
-                if (isDev) {
-                    h += `<td><input type="checkbox" onchange="toggleRecebido(${r.id},'${r.carga}',this.checked)" ${isRec ? 'checked' : ''}></td>`;
-                } else {
-                    h += `<td><span class="badge ${isRec ? 'badge-success' : 'badge-pending'}">${isRec ? 'â' : 'â'}</span></td>`;
-                }
-                if (isDev) {
-                    h += `<td><i class="fa-solid fa-trash action-icon icon-delete" onclick="excluirRegistro(${r.id})"></i></td>`;
-                }
-                h += `</tr>`;
-            });
-            document.getElementById('modalTableContainer').innerHTML = h + `</tbody></table>`;
-            const tP = its.reduce((s, i) => s + (parseFloat(i.quant || 0) * parseFloat(i.peso || 0)), 0);
-            const tV = its.reduce((s, i) => s + parseFloat(i.valor || 0), 0);
-            let footerHTML = `<div class="modal-stat">ITENS: <strong>${its.length}</strong></div><div class="modal-stat">PESO: <strong>${formatNumber(tP)} KG</strong></div>`;
-            // Show value for everne
-            footerHTML += `<div class="modal-stat">VALOR: <strong>${showValue ? formatCurrency(tV) : '-'}</strong></div>`;
-            document.getElementById('modalFooter').innerHTML = footerHTML;
-            abrirModalPorId('cargaModal');
-        }
-        async function excluirRegistro(id) {
-            const role = checkUserRole();
-            if (role !== 'desenvolvedor' && role !== 'diretor' && role !== 'administrador' && role !== 'gerente comercial') {
-                showToast("Você não tem permissão para excluir", "Apenas administradores podem excluir registros", "danger");
-                return;
-            }
-            if (!id || !confirm('Excluir este registro permanentemente?')) return;
-            showSpinner();
-            try {
-                const response = await apiRequest('delete', 'POST', { id: id });
-                if (response.success) {
-                    await carregarRegistrosERecebidos();
-                    const m = document.getElementById('cargaModal');
-                    if (m.classList.contains('visible')) {
-                        const cargaAtual = m.getAttribute('data-current-carga');
-                        const aindaTem = registros.some(r => r.carga === cargaAtual);
-                        if (aindaTem) showCargaDetails(cargaAtual); else fecharModalTopo();
-                    }
-                    renderTable();
-                    updateDashboardAndCharts();
-                } else alert('Erro: Registro não encontrado.');
-            } catch (err) { alert('Erro: ' + err.message); } finally { hideSpinner(); }
-        }
-        async function toggleRecebido(id, carga, checked) {
-            const role = checkUserRole();
-            if (role !== 'desenvolvedor' && role !== 'comercial' && role !== 'diretor' && role !== 'administrador' && role !== 'gerente comercial') {
-                showToast("Você não tem permissão", "Apenas administradores, comercial, gerente comercial e diretor podem marcar como recebido", "danger");
-                return;
-            }
-            try { await apiRequest('recebidos', 'POST', { id, carga, checked }); await carregarRegistrosERecebidos(); renderTable(); } catch (e) { }
-        }
-        async function marcarCargaRecebida() {
-            const role = checkUserRole();
-            if (role !== 'desenvolvedor' && role !== 'comercial' && role !== 'diretor' && role !== 'administrador' && role !== 'gerente comercial') {
-                showToast("Você não tem permissão", "Apenas administradores, comercial, gerente comercial e diretor podem receber cargas", "danger");
-                return;
-            }
-            const c = document.getElementById('cargaModal').getAttribute('data-current-carga');
-            const ids = registros.filter(r => r.carga === c && !recebidos[c]?.some(re => re.id === r.id)).map(r => r.id);
-            if (ids.length === 0) return;
-            try { await Promise.all(ids.map(id => apiRequest('recebidos', 'POST', { id, carga: c, checked: true }))); await carregarRegistrosERecebidos(); renderTable(); showCargaDetails(c); } catch (e) { }
-        }
-        function showItemDetails(id) {
-            const item = registros.find(r => r.id === id);
-            if (!item) return;
-            const role = checkUserRole();
-            const allowed = (role === 'desenvolvedor' || role === 'comercial' || role === 'diretor' || role === 'administrador' || role === 'gerente comercial');
-            const vUnit = allowed && item.valor_unit ? formatCurrency(parseFloat(item.valor_unit)) : '****';
-            const vTotalSales = allowed && item.valor_unit ? formatCurrency(parseFloat(item.valor_unit) * (item.quant || 0)) : '****';
-            const vCost = allowed ? formatCurrency(parseFloat(item.valor || 0)) : '****';
-            const html = `
-                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px; margin-bottom:15px;">
-                    <div><small style="color:#a1a1aa; display:block;">CÃDIGO</small><strong style="font-size:1.1rem;">${item.codigo}</strong></div>
-                     <div><small style="color:#a1a1aa; display:block;">DATA</small><strong>${formatDate(item.data)}</strong></div>
-                </div>
-                <div style="margin-bottom:15px;"><small style="color:#a1a1aa; display:block;">DESCRIÃÃO</small><strong>${item.descricao}</strong></div>
-                <div style="margin-bottom:15px;"><small style="color:#a1a1aa; display:block;">CLIENTE</small><strong>${item.cliente || '-'}</strong></div>
-                <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px; margin-bottom:15px; background:rgba(255,255,255,0.05); padding:10px; border-radius:6px;">
-                    <div><small style="color:#a1a1aa; display:block;">QTD TOTAL</small><strong>${item.quant}</strong></div>
-                    <div><small style="color:#a1a1aa; display:block;">ESCARIAÃÃO</small><strong>${item.quant_escariar || 0}</strong></div>
-                    <div><small style="color:#a1a1aa; display:block;">REBARBA</small><strong>${item.quant_rebarba || 0}</strong></div>
-                </div>
-                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:15px; background:rgba(255,255,255,0.05); padding:10px; border-radius:6px;">
-                    <div><small style="color:#a1a1aa; display:block;">PREÃO VENDA (UN)</small><strong>${vUnit}</strong></div>
-                    <div><small style="color:#a1a1aa; display:block;">TOTAL VENDA</small><strong style="color:var(--status-purple);">${vTotalSales}</strong></div>
-                </div>
-                 <div style="margin-bottom:15px; background:#ef444420; padding:10px; border-radius:6px; border:1px solid #ef444450;">
-                    <small style="color:#ef4444; display:block;">CUSTO SERVIÃO (TOTAL)</small><strong style="color:#ef4444; font-size:1.1rem;">${vCost}</strong>
-                </div>
-                <div style="margin-top:10px;">
-                    <small style="color:#a1a1aa; display:block;">OBSERVAÃÃES</small>
-                    <div style="background:rgba(0,0,0,0.2); padding:8px; border-radius:4px; min-height:40px;">${item.observacoes || 'Nenhuma observação.'}</div>
-                </div>
-            `;
-            document.getElementById('itemDetailsBody').innerHTML = html;
-            document.getElementById('itemDetailsTitle').innerText = `Detalhes do Item`;
-            abrirModalPorId('itemDetailsModal');
-        }
-        function generateCargaPDF(carga) {
-            const role = checkUserRole();
-            if (role === 'visitante') {
-                showToast("Acesso Negado", "Visitantes não podem gerar relatórios financeiros.", "danger");
-                return;
-            }
-            const { jsPDF } = window.jspdf;
-            const cStr = carga.replace(/<[^>]*>?/gm, '').trim();
-            const items = registros.filter(r => r.carga === cStr);
-            if (!items.length) return;
-            const doc = new jsPDF('l', 'mm', 'a4');
-            const pW = doc.internal.pageSize.getWidth(); const pH = doc.internal.pageSize.getHeight();
-            doc.setFillColor(24, 24, 27); doc.rect(0, 0, pW, 35, 'F');
-            doc.setFontSize(24); doc.setTextColor(251, 191, 36); doc.setFont("helvetica", "bold"); doc.text("FUNDIÃÃO ERUS", 14, 18);
-            doc.setFontSize(10); doc.setTextColor(161, 161, 170); doc.text("SISTEMA DE GESTÃO DE ACABAMENTO EXTERNO", 14, 25);
-            doc.setFontSize(12); doc.setTextColor(255, 255, 255); doc.text(`CARGA: ${cStr}`, pW - 14, 18, { align: 'right' }); doc.text(`TERCEIRO: ${items[0].terceiro}`, pW - 14, 25, { align: 'right' });
-            doc.setDrawColor(251, 191, 36); doc.setLineWidth(1); doc.line(14, 30, pW - 14, 30);
-            doc.autoTable({
-                startY: 45,
-                head: [['DATA', 'CÃDIGO', 'DESCRIÃÃO', 'CLIENTE', 'PESO UN.', 'QTD', 'VALOR UNIT', 'TOTAL']],
-                body: items.map(r => [formatDate(r.data), r.codigo, r.descricao, r.cliente || '-', formatNumber(r.peso) + " kg", r.quant, formatCurrency(r.quant > 0 ? r.valor / r.quant : 0), formatCurrency(r.valor)]),
-                styles: { fontSize: 9, cellPadding: 3, valign: 'middle', halign: 'center' },
-                headStyles: { fillColor: [39, 39, 42], textColor: [251, 191, 36], fontStyle: 'bold' },
-                alternateRowStyles: { fillColor: [250, 250, 250] },
-                columnStyles: {
-                    2: { halign: 'left', cellWidth: 50 },
-                    3: { halign: 'left', cellWidth: 40 },
-                    7: { fontStyle: 'bold' }
-                },
-                margin: { bottom: 70 }
-            });
-            const tP = items.reduce((s, i) => s + (parseFloat(i.quant || 0) * parseFloat(i.peso || 0)), 0);
-            const tV = items.reduce((s, i) => s + parseFloat(i.valor || 0), 0);
-            const tQ = items.reduce((s, i) => s + parseInt(i.quant || 0), 0);
-            const summaryY = pH - 65;
-            doc.setFillColor(248, 250, 252); doc.rect(14, summaryY, pW - 28, 20, 'F'); doc.setDrawColor(226, 232, 240); doc.rect(14, summaryY, pW - 28, 20, 'S');
-            doc.setFontSize(10); doc.setTextColor(51, 65, 85); doc.setFont("helvetica", "bold");
-            doc.text(`QUANTIDADE TOTAL: ${tQ}`, 20, summaryY + 12); doc.text(`PESO TOTAL: ${formatNumber(tP)} KG`, (pW / 2) - 30, summaryY + 12); doc.text(`VALOR TOTAL: ${formatCurrency(tV)}`, pW - 20, summaryY + 12, { align: 'right' });
-            const sigY = pH - 30; doc.setDrawColor(200); doc.line(20, sigY, 90, sigY); doc.line(pW - 90, sigY, pW - 20, sigY);
-            doc.setFontSize(8); doc.text("RESPONSÃVEL EXPEDIÃÃO", 55, sigY + 5, { align: 'center' }); doc.text("RESPONSÃVEL RECEBIMENTO (TERCEIRO)", pW - 55, sigY + 5, { align: 'center' });
-            doc.setFontSize(7); doc.setTextColor(150); doc.text(`Documento gerado em: ${new Date().toLocaleString('pt-BR')} | Fundição Erus Software`, 14, pH - 10);
-            doc.save(`Carga_${cStr}_Erus.pdf`);
-        }
-        function fazerBackup() {
-            const data = { registros: registros.filter(r => r.tipo === 'terceiro'), recebidos, itens: Array.from(itensConhecidos.entries()) };
-            const b = new Blob([JSON.stringify(data)], { type: 'application/json' });
-            const u = URL.createObjectURL(b); const a = document.createElement('a'); a.href = u; a.download = `Backup_Erus_${new Date().toISOString().slice(0, 10)}.json`; a.click();
-        }
-        function iniciarImportacao() { document.getElementById('importFile').click(); }
-        document.getElementById('importFile').onchange = e => {
-            const f = e.target.files[0]; if (!f) return;
-            const r = new FileReader(); r.onload = async ev => { try { await apiRequest('import', 'POST', JSON.parse(ev.target.result)); location.reload(); } catch (e) { } }; r.readAsText(f);
-        };
-        function iniciarRelatorioMensal() {
-            const mA = prompt("Mês/Ano (MM/AAAA):", new Date().toLocaleDateString('pt-BR', { month: '2-digit', year: 'numeric' }));
-            if (!mA) return;
-            const filtrados = registros.filter(r => formatMonthYear(r.data) === mA);
-            if (!filtrados.length) return alert('Sem dados.');
-            const wsData = [["DATA", "CARGA", "TERCEIRO", "CÃDIGO", "CLIENTE", "QTD", "VALOR"]];
-            filtrados.forEach(r => wsData.push([formatDate(r.data), r.carga, r.terceiro, r.codigo, r.cliente || '-', r.quant, r.valor]));
-            const wb = XLSX.utils.book_new(); const ws = XLSX.utils.aoa_to_sheet(wsData);
-            XLSX.utils.book_append_sheet(wb, ws, "Relatorio"); XLSX.writeFile(wb, `Relatorio_${mA.replace('/', '-')}.xlsx`);
-        }
-        function applyColumnFilters() {
-            const filters = Array.from(document.querySelectorAll('#terceiroTable .filter-input-table')).map(i => i.value.toUpperCase());
-            let visibleWeight = 0;
-            let visibleQty = 0;
-            document.querySelectorAll('#terceiroTable tbody tr').forEach(row => {
-                const cells = row.querySelectorAll('td');
-                let vis = true;
-                for (let i = 0; i < 6; i++) if (filters[i] && !cells[i].textContent.toUpperCase().includes(filters[i])) vis = false;
-                row.style.display = vis ? '' : 'none';
-                if (vis) {
-                    // Cell 3 is Weight, Cell 4 is Qty based on Table Head order
-                    const wStr = cells[3].textContent;
-                    const qStr = cells[4].textContent;
-                    visibleWeight += parseNumberSafe(wStr);
-                    visibleQty += parseNumberSafe(qStr);
-                }
-            });
-            updateFooterTotals(visibleWeight, visibleQty);
-        }
-        function limparFormularioParcialmente() { ['inputCodigo', 'inputDescricao', 'inputPesoUn', 'inputValorUnit', 'inputQuantidade', 'inputQtdEscariar', 'inputQtdRebarba', 'inputCliente', 'inputObservacoes'].forEach(id => document.getElementById(id).value = ''); document.getElementById('inputCodigo').focus(); }
-        function confirmAndClear() { if (prompt("Digite 'CONFIRMAR':") === 'CONFIRMAR') apiRequest('delete-all-terceiro', 'POST', { type: 'terceiro' }).then(() => carregarDados()); }
-        function redirectToLink() { window.location.href = 'index.html'; }
-        document.addEventListener('DOMContentLoaded', () => {
-            carregarDados();
-            document.querySelectorAll('.filter-input-table').forEach(i => i.oninput = applyColumnFilters);
-            document.getElementById('inputData').valueAsDate = new Date();
-        });
-    </script>
-    <script src="js/activity-logger.js"></script>
-    <script src="js/notifications.js"></script>
-</body>
-</html>
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <script src="js/loader.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Acabamento Externo - Fundição Erus</title>
+    <!-- Bibliotecas de Estilo e Ícones -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap"
+        rel="stylesheet">
+    <!-- Bibliotecas Funcionais (Charts, Excel, PDF) -->
+    <script src="js/activity-logger.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script
+        src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+    <style>
+        /* --- BLOQUEIO DE SELEÇÃO GLOBAL --- */
+        * {
+            user-select: none;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            outline: none;
+        }
+        /* Permitir seleção apenas em inputs e textareas */
+        input,
+        textarea,
+        .selectable-text,
+        [contenteditable="true"] {
+            user-select: text !important;
+            -webkit-user-select: text !important;
+            -moz-user-select: text !important;
+            -ms-user-select: text !important;
+            cursor: text;
+        }
+        /* --- ROOT VARIABLES --- */
+        :root {
+            --font-main: 'Inter', sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+            --color-primary: #fbbf24;
+            --color-primary-dim: #d97706;
+            --bg-body: #09090b;
+            --bg-card: rgba(24, 24, 27, 0.7);
+            --text-main: #f4f4f5;
+            --text-muted: #a1a1aa;
+            --border-subtle: rgba(255, 255, 255, 0.08);
+            --border-highlight: rgba(255, 255, 255, 0.15);
+            --border-separator: rgba(255, 255, 255, 0.06);
+            --status-success: #10b981;
+            --status-danger: #ef4444;
+            --status-info: #06b6d4;
+            --status-purple: #a855f7;
+            --status-pending: #f59e0b;
+            --header-height: 0px;
+            --footer-height: 55px;
+            --radius-sm: 6px;
+            --radius-md: 12px;
+            --shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+            --shadow-glow: 0 0 15px rgba(251, 191, 36, 0.2);
+        }
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+        }
+        body {
+            margin: 0;
+            font-family: var(--font-main);
+            background-color: var(--bg-body);
+            color: var(--text-main);
+            background-image: radial-gradient(circle at 15% 50%, rgba(251, 191, 36, 0.03), transparent 25%), radial-gradient(circle at 85% 30%, rgba(63, 63, 70, 0.05), transparent 25%);
+            height: 100vh;
+            overflow: hidden;
+            padding-bottom: 0;
+        }
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #3f3f46;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #52525b;
+        }
+        body.modal-open {
+            overflow: hidden;
+        }
+        #loading-screen {
+            position: fixed;
+            inset: 0;
+            background: #09090b;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.5s;
+        }
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(251, 191, 36, 0.3);
+            border-top-color: var(--color-primary);
+            border-radius: 50%;
+            animation: spin 1s infinite linear;
+            margin-bottom: 15px;
+        }
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+        body.no-scroll {
+            overflow: hidden !important;
+        }
+        .app-layout {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            min-height: 100vh;
+        }
+        /* --- SIDE NAVIGATION (PEDIDOS STANDARD) --- */
+        .side-menu-trigger {
+            position: fixed;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 15px;
+            z-index: 2000;
+            background: transparent;
+        }
+        .side-menu {
+            position: fixed;
+            left: -320px;
+            top: 20px;
+            bottom: 20px;
+            width: 300px;
+            background: rgba(9, 9, 11, 0.95);
+            backdrop-filter: blur(20px) saturate(2);
+            -webkit-backdrop-filter: blur(20px) saturate(2);
+            border: 1px solid var(--border-subtle);
+            border-left: none;
+            border-radius: 0 20px 20px 0;
+            z-index: 2001;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            flex-direction: column;
+            padding: 40px 30px;
+            box-shadow: 10px 0 40px rgba(0, 0, 0, 0.6);
+        }
+        .side-menu-trigger:hover + .side-menu, .side-menu:hover {
+            left: 0;
+        }
+        .side-menu-header {
+            margin-bottom: 40px;
+        }
+        .side-menu-title {
+            font-size: 1.2rem;
+            font-weight: 800;
+            color: #fff;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 5px;
+        }
+        .side-menu-subtitle {
+            font-size: 0.7rem;
+            color: var(--color-primary);
+            font-weight: 700;
+            letter-spacing: 0.1em;
+        }
+        .side-menu-actions {
+            display: flex; flex-direction: column; gap: 15px; flex: 1;
+        }
+        .side-btn {
+            width: 100%;
+            padding: 14px 20px;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-muted);
+            font-weight: 600;
+            font-size: 0.95rem;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-decoration: none;
+        }
+        .side-btn:hover {
+            background: rgba(251, 191, 36, 0.1);
+            border-color: var(--color-primary);
+            color: var(--color-primary);
+            transform: translateX(5px);
+        }
+        .side-btn.btn-back-side {
+            margin-top: auto;
+            background: rgba(239, 68, 68, 0.1);
+            border-color: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+        }
+        .side-btn.btn-back-side:hover {
+            background: rgba(239, 68, 68, 0.2);
+            border-color: #ef4444;
+            color: #fff;
+        }
+        .dashboard-content {
+            flex: 1;
+            padding: 30px 32px 10px 32px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .kpi-row {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            flex-shrink: 0;
+        }
+        .kpi-card {
+            flex: 1;
+            min-width: 200px;
+            background: transparent;
+            border: none;
+            border-radius: 0;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+            box-shadow: none;
+            cursor: pointer;
+            transition: transform 0.3s var(--ease-out);
+            min-height: 90px;
+            user-select: none;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+        }
+        .kpi-card:hover {
+            transform: translateY(-5px) scale(1.05);
+        }
+        .kpi-title {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 6px;
+            text-align: center;
+            line-height: 1.2;
+        }
+        .kpi-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #fff;
+            font-family: var(--font-mono);
+            line-height: 1.2;
+        }
+        .kpi-sub {
+            font-size: 0.75rem;
+            color: #71717a;
+            /* Zinc-500 equivalent */
+            margin-top: 4px;
+            font-weight: 500;
+        }
+        .chart-panel {
+            background: rgba(255, 255, 255, 0.02);
+            /* Fundo sutilíssimo para dar corpo */
+            border: none;
+            border-radius: var(--radius-md);
+            padding: 20px;
+            margin-bottom: 10px;
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-height: 0;
+            box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 1);
+            /* Sombra preta sólida embaixo */
+            border-bottom: 2px solid rgba(255, 255, 255, 0.15);
+            /* Linha divisória bem visível */
+        }
+        .chart-header {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+            gap: 10px;
+            flex-shrink: 0;
+        }
+        .chart-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-main);
+            text-align: center;
+        }
+        .toolbar-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        .year-select {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border-subtle);
+            color: #fff;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-family: var(--font-main);
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .year-select:hover {
+            border-color: var(--border-highlight);
+            background: rgba(255, 255, 255, 0.03);
+        }
+        .months-group {
+            display: flex;
+            gap: 5px;
+        }
+        .month-btn {
+            background: transparent;
+            border: 1px solid var(--border-subtle);
+            color: var(--text-muted);
+            padding: 8px 14px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+        }
+        .month-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+        }
+        .month-btn.active {
+            background: var(--color-primary);
+            color: #000;
+            border-color: var(--color-primary);
+            font-weight: 800;
+        }
+        .month-btn.all-btn.active {
+            background: var(--status-info);
+            color: #000;
+        }
+        .chart-filters {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .chart-container-wrapper {
+            flex: 1;
+            position: relative;
+            min-height: 0;
+            width: 100%;
+        }
+        select {
+            background: transparent;
+            border: 1px solid var(--border-subtle);
+            color: #fff;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-family: var(--font-main);
+            font-size: 0.85rem;
+            transition: all 0.2s;
+        }
+        select:hover {
+            border-color: var(--border-highlight);
+            background: rgba(255, 255, 255, 0.03);
+        }
+        .form-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            margin-bottom: 16px;
+            align-items: flex-end;
+        }
+        .form-group {
+            flex: 1;
+            min-width: 140px;
+        }
+        .form-group label {
+            display: block;
+            font-size: 0.75rem;
+            margin-bottom: 6px;
+            color: var(--text-muted);
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            background: transparent;
+            border: 1px solid var(--border-subtle);
+            color: #fff;
+            padding: 10px 12px;
+            border-radius: 6px;
+            font-family: var(--font-main);
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+        .form-group input:hover,
+        .form-group select:hover {
+            border-color: var(--border-highlight);
+            background: rgba(255, 255, 255, 0.03);
+        }
+        .btn-modern {
+            padding: 10px 18px;
+            border-radius: 6px;
+            border: none;
+            font-weight: 600;
+            font-size: 0.9rem;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+        .btn-add {
+            background: var(--color-primary);
+            color: #000;
+        }
+        .btn-outline {
+            background: transparent;
+            border: 1px solid var(--border-subtle);
+            color: var(--text-muted);
+        }
+        .btn-danger {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #ef4444;
+        }
+        .btn-success {
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            color: #10b981;
+        }
+        .controls-panel {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid var(--border-subtle);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .controls-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .table-container {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-md);
+            overflow-x: auto;
+            margin-bottom: 20px;
+            min-height: 300px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            min-width: 1000px;
+        }
+        th,
+        td {
+            padding: 12px;
+            text-align: center;
+            white-space: nowrap;
+            border-bottom: 1px solid var(--border-subtle);
+            border-right: 1px solid var(--border-separator);
+        }
+        thead th {
+            background: rgba(0, 0, 0, 0.4);
+            color: var(--text-muted);
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.75rem;
+        }
+        .group-row {
+            background: rgba(255, 255, 255, 0.02);
+            font-weight: 600;
+            color: var(--color-primary);
+            cursor: pointer;
+        }
+        .row-received {
+            background-color: rgba(16, 185, 129, 0.15) !important;
+        }
+        .row-received td {
+            color: #6ee7b7;
+        }
+        .filter-input-table {
+            width: 100%;
+            background: transparent;
+            border: none;
+            border-bottom: 1px solid var(--border-subtle);
+            color: var(--color-primary);
+            padding: 4px;
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+            text-align: center;
+        }
+        .badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+        .badge-success {
+            background: rgba(16, 185, 129, 0.2);
+            color: #34d399;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+        .badge-pending {
+            background: rgba(245, 158, 11, 0.2);
+            color: #fbbf24;
+            border: 1px solid rgba(245, 158, 11, 0.3);
+        }
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.85);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            padding: 10px;
+            backdrop-filter: blur(5px);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .modal-overlay.visible {
+            opacity: 1;
+        }
+        .modal-content {
+            background: #18181b;
+            border: 1px solid var(--border-highlight);
+            border-radius: var(--radius-md);
+            width: 98vw;
+            max-width: 98vw;
+            max-height: 95vh;
+            display: flex;
+            flex-direction: column;
+            transform: scale(0.95);
+            transition: transform 0.3s;
+        }
+        .modal-overlay.visible .modal-content {
+            transform: scale(1);
+        }
+        #cargaModal .modal-content {
+            height: 96vh;
+        }
+        #novoEnvioModal .modal-content,
+        #registrosModal .modal-content,
+        #buscaModal .modal-content {
+            width: 100vw;
+            height: 100vh;
+            border-radius: 0;
+            border: none;
+        }
+        .modal-header {
+            padding: 20px;
+            border-bottom: 1px solid var(--border-subtle);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .modal-title {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: #fff;
+        }
+        .modal-close {
+            cursor: pointer;
+            font-size: 1.5rem;
+            color: var(--text-muted);
+        }
+        .modal-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0;
+        }
+        .modal-footer {
+            padding: 15px 20px;
+            border-top: 1px solid var(--border-subtle);
+            background: rgba(0, 0, 0, 0.2);
+            display: flex;
+            justify-content: flex-end;
+            gap: 20px;
+            font-family: var(--font-mono);
+            font-size: 0.9rem;
+            color: var(--text-main);
+        }
+        .modal-stat strong {
+            color: var(--color-primary);
+        }
+        .action-icon {
+            cursor: pointer;
+            padding: 4px;
+            transition: transform 0.2s;
+        }
+        .action-icon:hover {
+            transform: scale(1.2);
+        }
+        .icon-delete {
+            color: var(--status-danger);
+        }
+        /* --- TOAST NOTIFICATION --- */
+        .toast-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 5000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .toast {
+            background: #18181b;
+            border: 1px solid var(--border-subtle);
+            border-left: 4px solid var(--color-primary);
+            color: #fff;
+            padding: 16px 20px;
+            border-radius: 6px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+            font-family: var(--font-main);
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            animation: slideIn 0.3s ease-out forwards;
+            min-width: 350px;
+        }
+        .toast.danger {
+            border-left-color: var(--status-danger);
+        }
+        .toast-icon {
+            font-size: 1.2rem;
+        }
+        .toast.danger .toast-icon {
+            color: var(--status-danger);
+        }
+        .toast-content {
+            display: flex;
+            flex-direction: column;
+        }
+        .toast-title {
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+        .toast-subtitle {
+            font-size: 0.75rem;
+            color: #a1a1aa;
+            margin-top: 4px;
+        }
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        @keyframes fadeOut {
+            to {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+        }
+        /* Ajuste para os formulários de busca */
+        #buscaModal .form-row {
+            align-items: flex-start;
+        }
+        #buscaModal .form-group {
+            min-width: 160px;
+        }
+        /* Estilo para gráfico de linha */
+        .line-chart-point {
+            background-color: var(--color-primary);
+            border-radius: 50%;
+            border: 2px solid var(--bg-card);
+        }
+        /* Colunas ocultas para não desenvolvedores */
+        .value-hidden {
+            color: var(--text-muted) !important;
+            background: rgba(0, 0, 0, 0.2) !important;
+        }
+        .value-hidden::before {
+            content: "••••";
+            letter-spacing: 2px;
+        }
+        /* Estilo para o filtro de código no modal */
+        .code-filter-input {
+            width: 220px;
+            padding: 8px 12px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border-subtle);
+            color: #fff;
+            border-radius: 6px;
+            font-family: var(--font-main);
+            font-size: 0.85rem;
+        }
+        .code-filter-input::placeholder {
+            color: var(--text-muted);
+        }
+        .code-filter-input:focus {
+            outline: none;
+            border-color: var(--color-primary);
+        }
+        /* --- GLOBAL NOTIFICATION BELL STYLE --- */
+        #notification-bell {
+            position: fixed;
+            top: 20px;
+            right: 32px;
+            z-index: 10001;
+            width: 45px;
+            height: 45px;
+            background: rgba(24, 24, 27, 0.8);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+        #notification-bell:hover {
+            border-color: var(--color-primary);
+            background: rgba(251, 191, 36, 0.1);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px -5px rgba(0, 0, 0, 0.5);
+        }
+        #notification-bell i {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+            transition: 0.3s;
+        }
+        #notification-bell:hover i {
+            color: var(--color-primary);
+        }
+        #notification-count {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            background: var(--status-danger);
+            color: #fff;
+            font-size: 0.65rem;
+            font-weight: 800;
+            padding: 2px 6px;
+            border-radius: 10px;
+            border: 2px solid var(--bg-body);
+            display: none;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        }
+        @keyframes pulseGlow {
+            0% { box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(251, 191, 36, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(251, 191, 36, 0); }
+        }
+    </style>
+</head>
+<body class="no-scroll">
+    <!-- Sessão gerenciada centralmente por js/activity-logger.js -->
+    <script>
+        // --- RELÃGIO DO RODAPÃ ---
+        setInterval(() => {
+            const now = new Date();
+            const timeEl = document.getElementById('clock-time');
+            const dateEl = document.getElementById('clock-date');
+            if (timeEl) timeEl.innerText = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+            if (dateEl) dateEl.innerText = now.toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric', month: 'short' }).toUpperCase();
+        }, 1000);
+    </script>
+    <!-- TOAST CONTAINER -->
+    <div id="toast-container" class="toast-container"></div>
+    <div id="notification-bell" title="Notificações">
+        <i class="fa-solid fa-bell"></i>
+        <span id="notification-count">0</span>
+    </div>
+    <div id="loading-screen">
+        <div class="spinner"></div>
+        <div style="color: var(--text-muted); font-family: var(--font-main);">Processando dados...</div>
+    </div>
+    <div class="app-layout">
+    <!-- Side Menu Trigger Area -->
+    <div class="side-menu-trigger"></div>
+    <nav class="side-menu">
+        <div class="side-menu-header">
+            <span class="side-menu-subtitle">MENU DASHBOARD</span>
+            <div class="side-menu-title">Opções</div>
+        </div>
+        <div class="side-menu-actions">
+            <button class="side-btn" onclick="abrirModalBusca()">
+                <i class="fa-solid fa-magnifying-glass"></i> Abrir Busca
+            </button>
+            <button class="side-btn" id="novoEnvioButton" onclick="abrirModalPorId('novoEnvioModal')">
+                <i class="fa-solid fa-plus-circle"></i> Novo Envio
+            </button>
+            <button class="side-btn" onclick="abrirModalPorId('registrosModal')">
+                <i class="fa-solid fa-table"></i> Registros
+            </button>
+            <a href="index.html" class="side-btn btn-back-side">
+                <i class="fa-solid fa-arrow-right-from-bracket"></i> Voltar
+            </a>
+        </div>
+    </nav>
+        <main class="dashboard-content">
+            <div class="kpi-row" id="statsPanel"></div>
+            <!-- Toolbar Row (Filters) -->
+            <div class="toolbar-row">
+                <div class="chart-filters">
+                    <select id="yearSelect" class="year-select" onchange="changeYear()"></select>
+                    <div class="months-group" id="monthButtons"></div>
+                </div>
+            </div>
+            <div class="chart-panel">
+                <div class="chart-header">
+                    <div class="chart-title">Peso Total Terceirizado (KG)</div>
+                </div>
+                <div class="chart-container-wrapper">
+                    <canvas id="barChart"></canvas>
+                </div>
+            </div>
+        </main>
+    </div>
+    <!-- MODAIS -->
+    <div id="novoEnvioModal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Novo Registro de Envio</h2>
+                <span class="modal-close" onclick="fecharModalTopo()"><i class="fa-solid fa-xmark"></i></span>
+            </div>
+            <div class="modal-body" style="padding: 30px;">
+                <div class="form-row">
+                    <div class="form-group" style="flex: 0.5;"><label>Carga</label><input type="text" id="inputCarga"
+                            placeholder="Ex: 123" class="mono" autocomplete="off"></div>
+                    <div class="form-group" style="flex: 0.6;"><label>Data</label><input type="date" id="inputData">
+                    </div>
+                    <div class="form-group" style="flex: 0.6;"><label>Código</label><input type="text" id="inputCodigo"
+                            placeholder="CÃDIGO" class="mono" style="text-transform: uppercase;"
+                            onblur="verificarCodigoParaAutopreenchimento()" autocomplete="off"></div>
+                    <div class="form-group" style="flex: 2;"><label>Descrição</label><input type="text"
+                            id="inputDescricao" placeholder="DESCRIÃÃO DA PEÃA" style="text-transform: uppercase;"
+                            autocomplete="off"></div>
+                    <div class="form-group" style="flex: 1;"><label>Cliente</label><input type="text" id="inputCliente"
+                            placeholder="CLIENTE" style="text-transform: uppercase;" autocomplete="off"></div>
+                    <div class="form-group" style="flex: 1;">
+                        <label>Terceiro</label>
+                        <select id="inputTerceiro">
+                            <option value="BSP REBARBAÃÃO">BSP REBARBAÃÃO</option>
+                            <option value="JM REBARBAÃÃO">JM REBARBAÃÃO</option>
+                            <option value="VG REBARBAÃÃO">VG REBARBAÃÃO</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label>Peso Un. (kg)</label><input type="number" id="inputPesoUn"
+                            placeholder="0.00" min="0" step="0.01" class="mono"></div>
+                    <div class="form-group"><label>Valor Unit.</label><input type="number" id="inputValorUnit"
+                            placeholder="0.00" min="0" step="0.01" class="mono"></div>
+                    <div class="form-group"><label>Qtd. Total</label><input type="number" id="inputQuantidade"
+                            placeholder="0" min="1" class="mono" oninput="atualizarQuantidades('total')"></div>
+                    <div class="form-group"><label>Qtd. Escariar</label><input type="number" id="inputQtdEscariar"
+                            placeholder="0" min="0" class="mono" oninput="atualizarQuantidades('escariar')"></div>
+                    <div class="form-group"><label>Qtd. Só Rebarbar</label><input type="number" id="inputQtdRebarba"
+                            placeholder="0" min="0" class="mono" oninput="atualizarQuantidades('rebarba')"></div>
+                    <div class="form-group" style="flex: 2;"><label>Observações</label><input type="text"
+                            id="inputObservacoes" placeholder="OBSERVAÃÃES..." style="text-transform: uppercase;"
+                            autocomplete="off"></div>
+                    <div class="form-group" style="flex: 0.5;"><label>&nbsp;</label><button class="btn-modern btn-add"
+                            onclick="adicionarRegistro()" style="width:100%;"><i class="fa-solid fa-plus"></i>
+                            Adicionar</button></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="registrosModal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Registros de Envio</h2>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <input type="text" id="filterByCode" class="code-filter-input" placeholder="Filtrar por código..."
+                        oninput="filtrarPorCodigo(this.value)" autocomplete="off">
+                    <span class="modal-close" onclick="fecharModalTopo()"><i class="fa-solid fa-xmark"></i></span>
+                </div>
+            </div>
+            <div class="modal-body table-container" style="border:none; margin:0; border-radius:0;">
+                <table id="terceiroTable">
+                    <thead>
+                        <tr>
+                            <th>CARGA</th>
+                            <th>DATA</th>
+                            <th>TERCEIRO</th>
+                            <th>PESO TOTAL (KG)</th>
+                            <th>QTD TOTAL</th>
+                            <th>TOTAL VENDA (R$)</th>
+                            <th>CUSTO SERVIÃO</th>
+                            <th>STATUS</th>
+                        </tr>
+                        <tr class="filter-row">
+                            <th><input class="filter-input-table" placeholder="Filtro..." /></th>
+                            <th><input class="filter-input-table" placeholder="Filtro..." /></th>
+                            <th><input class="filter-input-table" placeholder="Filtro..." /></th>
+                            <th><input class="filter-input-table" placeholder="Filtro..." /></th>
+                            <th><input class="filter-input-table" placeholder="Filtro..." /></th>
+                            <th><input class="filter-input-table" placeholder="Filtro..." /></th>
+                            <th><input class="filter-input-table" placeholder="Filtro..." /></th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div id="cargaModal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div style="display:flex; align-items:center; gap:15px; flex-wrap:wrap;">
+                    <h2 class="modal-title" id="modalTitle">Detalhes da Carga</h2>
+                    <button class="btn-modern btn-success" id="recebidoBtn" onclick="marcarCargaRecebida()"><i
+                            class="fa-solid fa-check-double"></i> Receber Tudo</button>
+                    <button class="btn-modern btn-add" id="generatePdfBtn"
+                        onclick="generateCargaPDF(document.getElementById('modalTitle').textContent.split(': ')[1].split('<')[0])"><i
+                            class="fa-solid fa-file-pdf"></i> PDF</button>
+                </div>
+                <span class="modal-close" onclick="fecharModalTopo()"><i class="fa-solid fa-xmark"></i></span>
+            </div>
+            <div id="modalTableContainer" class="modal-body table-container"
+                style="border:none; margin:0; border-radius:0;"></div>
+            <div id="modalFooter" class="modal-footer"></div>
+        </div>
+    </div>
+    <!-- Novo Modal de Detalhes do Item -->
+    <div id="itemDetailsModal" class="modal-overlay" style="z-index: 10001;"> <!-- Z-index maior que cargaModal -->
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2 class="modal-title" id="itemDetailsTitle">Detalhes do Item</h2>
+                <span class="modal-close" onclick="fecharModalTopo()"><i class="fa-solid fa-xmark"></i></span>
+            </div>
+            <div class="modal-body" id="itemDetailsBody" style="padding: 20px; color: #fff;">
+                <!-- Conteúdo preenchido via JS -->
+            </div>
+        </div>
+    </div>
+    <div id="itensModal" class="modal-overlay">
+        <div class="modal-content" style="max-width: 800px;">
+            <div class="modal-header">
+                <h2 class="modal-title">Itens Cadastrados</h2><span class="modal-close" onclick="fecharModalTopo()"><i
+                        class="fa-solid fa-xmark"></i></span>
+            </div>
+            <div id="itensModalTableContainer" class="modal-body table-container"
+                style="border:none; margin:0; border-radius:0;"></div>
+        </div>
+    </div>
+    <div id="buscaModal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Busca Avançada</h2><span class="modal-close" onclick="fecharModalTopo()"><i
+                        class="fa-solid fa-xmark"></i></span>
+            </div>
+            <div style="padding: 20px; background: rgba(0,0,0,0.2);">
+                <div class="form-row" style="align-items: flex-start;">
+                    <div class="form-group" style="min-width: 180px;">
+                        <label>Código</label>
+                        <input type="text" id="buscaCodigo" class="mono" autocomplete="off" style="width: 100%;">
+                    </div>
+                    <div class="form-group" style="min-width: 200px;">
+                        <label>Descrição</label>
+                        <input type="text" id="buscaDescricao" autocomplete="off" style="width: 100%;">
+                    </div>
+                    <div class="form-group" style="min-width: 180px;">
+                        <label>Cliente</label>
+                        <input type="text" id="buscaCliente" autocomplete="off" style="width: 100%;">
+                    </div>
+                    <div class="form-group" style="min-width: auto; align-self: flex-end;">
+                        <button class="btn-modern btn-add" onclick="realizarBuscaAvancada()" style="height: 42px;"><i
+                                class="fa-solid fa-search"></i> Pesquisar</button>
+                    </div>
+                </div>
+            </div>
+            <div id="buscaTableContainer" class="modal-body table-container"
+                style="border:none; margin:0; border-radius:0;"></div>
+        </div>
+    </div>
+    <input type="file" id="importFile" accept=".json" style="display: none;">
+    <script>
+        // Toast Notification Function
+        function showToast(title, subtitle, type = 'info') {
+            let container = document.getElementById('toast-container');
+            if (!container) {
+                container = document.createElement('div');
+                container.id = 'toast-container';
+                container.className = 'toast-container';
+                document.body.appendChild(container);
+            }
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            const icon = type === 'danger' ? '<i class="fa-solid fa-ban toast-icon"></i>' : '<i class="fa-solid fa-circle-info toast-icon"></i>';
+            toast.innerHTML = `
+                ${icon} 
+                <div class="toast-content">
+                    <span class="toast-title">${title}</span>
+                    <span class="toast-subtitle">${subtitle}</span>
+                </div>
+            `;
+            container.appendChild(toast);
+            // Remove após 4 segundos
+            setTimeout(() => {
+                toast.style.animation = 'fadeOut 0.5s ease-out forwards';
+                setTimeout(() => {
+                    if (toast.parentNode) toast.parentNode.removeChild(toast);
+                }, 500);
+            }, 4000);
+        }
+        // Check user role
+        function checkUserRole() {
+            return localStorage.getItem('erus_role');
+        }
+        function showSpinner() { const s = document.getElementById('loading-screen'); if (s) { s.style.display = 'flex'; s.style.opacity = '1'; document.body.classList.add('no-scroll'); } }
+        function hideSpinner() { const s = document.getElementById('loading-screen'); if (s) { s.style.opacity = '0'; document.body.classList.remove('no-scroll'); setTimeout(() => s.style.display = 'none', 500); } }
+        Chart.defaults.font.family = "'Inter', sans-serif";
+        Chart.register(ChartDataLabels);
+        const MONTHS_SHORT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+        let selectedMonthIndex = new Date().getMonth(); // 0-11
+        let selectedYear = new Date().getFullYear();
+        let registros = [];
+        let recebidos = {};
+        let itensConhecidos = new Map();
+        let mainChartInstance = null;
+        const modalStack = [];
+        // Variável para contolar visibilidade do valor total
+        let isValorTotalVisible = false;
+        // Variável para filtro de código
+        let currentCodeFilter = '';
+        function abrirModalPorId(id) {
+            const m = document.getElementById(id);
+            if (!m) return;
+            m.style.display = 'flex';
+            setTimeout(() => m.classList.add('visible'), 10);
+            document.body.classList.add('modal-open');
+            modalStack.push(id);
+        }
+        function fecharModalTopo() {
+            if (modalStack.length === 0) return;
+            const id = modalStack.pop();
+            const m = document.getElementById(id);
+            if (m) {
+                m.classList.remove('visible');
+                setTimeout(() => m.style.display = 'none', 300);
+            }
+            if (modalStack.length === 0) {
+                document.body.classList.remove('modal-open');
+            }
+        }
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') {
+                fecharModalTopo();
+            }
+        });
+        async function apiRequest(actionOrEndpoint, method = 'GET', data = null) {
+            let url = '/api/acabamento-externo';
+            if (method === 'POST') {
+                const actionMap = {
+                    'registros': 'add-registro',
+                    'recebidos': 'toggle-recebido',
+                    'itens': 'save-item',
+                    'itens-delete': 'delete-item',
+                    'delete': 'delete-registro',
+                    'delete-all-terceiro': 'clear-all',
+                    'import': 'import'
+                };
+                const action = actionMap[actionOrEndpoint] || actionOrEndpoint;
+                url += `?action=${action}`;
+            }
+            const options = {
+                method,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-role': localStorage.getItem('erus_role'),
+                    'x-user': localStorage.getItem('erus_user')
+                }
+            };
+            if (data) options.body = JSON.stringify(data);
+            try {
+                const response = await fetch(url, options);
+                if (!response.ok) throw new Error(`Erro: ${response.status}`);
+                return await response.json();
+            } catch (error) { console.error(error); throw error; }
+        }
+        const formatNumber = v => Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const formatCurrency = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        const formatDate = iso => { if (!iso || !iso.includes('-')) return ''; const [y, m, d] = iso.split('T')[0].split('-'); return `${d}/${m}/${y}`; };
+        const parseNumberSafe = t => { const s = String(t || '').trim().replace(/,/g, '.'); const n = parseFloat(s); return isNaN(n) ? 0 : n; };
+        const formatMonthYear = d => { if (!d) return ''; const p = d.split('T')[0].split('-'); return p.length < 3 ? '' : `${p[1]}/${p[0]}`; };
+        // --- FUNÃÃO PARA ATUALIZAR O FOOTER ---
+        function updateFooterTotals(weight, qty) {
+            const wEl = document.getElementById('footer-total-weight');
+            const qEl = document.getElementById('footer-total-qty');
+            if (wEl) wEl.textContent = formatNumber(weight) + ' KG';
+            if (qEl) qEl.textContent = qty.toLocaleString('pt-BR');
+        }
+        function calcularValorItem(reg) {
+            const terc = String(reg.terceiro || '').toUpperCase();
+            const peso = parseFloat(reg.peso || 0);
+            const qEsc = parseInt(reg.quant_escariar || 0);
+            const qReb = parseInt(reg.quant_rebarba || 0);
+            if (terc === 'BSP REBARBAÃÃO') return (qEsc * peso * 1.30) + (qReb * peso * 1.10);
+            if (terc === 'VG REBARBAÃÃO') return (qEsc + qReb) * peso * 1.00;
+            if (terc === 'JM REBARBAÃÃO') return (qEsc * peso * 1.10) + (qReb * peso * 1.00);
+            return 0;
+        }
+        function atualizarQuantidades(origem) {
+            const tIn = document.getElementById('inputQuantidade'), eIn = document.getElementById('inputQtdEscariar'), rIn = document.getElementById('inputQtdRebarba');
+            let t = parseInt(tIn.value) || 0, e = parseInt(eIn.value) || 0, r = parseInt(rIn.value) || 0;
+            if (origem === 'total') { r = (e > 0) ? t - e : t; if (r < 0) { r = 0; e = t; } }
+            else if (origem === 'escariar') { if (e > t) e = t; r = t - e; }
+            else if (origem === 'rebarba') { if (r > t) r = t; e = t - r; }
+            tIn.value = t; eIn.value = e; rIn.value = r;
+        }
+        async function carregarItensConhecidos() { return Promise.resolve(); }
+        function verificarCodigoParaAutopreenchimento() {
+            const cod = document.getElementById('inputCodigo').value.trim().toUpperCase();
+            if (cod && itensConhecidos.has(cod)) {
+                setTimeout(() => {
+                    if (confirm('Código encontrado. Preencher dados automaticamente?')) {
+                        const item = itensConhecidos.get(cod);
+                        document.getElementById('inputDescricao').value = item.descricao;
+                        document.getElementById('inputPesoUn').value = item.peso;
+                        document.getElementById('inputCliente').value = item.cliente;
+                    }
+                }, 100);
+            }
+        }
+        async function salvarOuAtualizarItem(data) {
+            try { const res = await apiRequest('itens', 'POST', data); if (res.success) itensConhecidos.set(data.codigo, data); } catch (e) { }
+        }
+        function abrirModalBusca() {
+            abrirModalPorId('buscaModal');
+        }
+        function realizarBuscaAvancada() {
+            const cod = document.getElementById('buscaCodigo').value.trim().toUpperCase();
+            const desc = document.getElementById('buscaDescricao').value.trim().toUpperCase();
+            const cli = document.getElementById('buscaCliente').value.trim().toUpperCase();
+            const res = registros.filter(r => {
+                let mCo = true, mDe = true, mCl = true;
+                if (cod) {
+                    mCo = r.codigo && r.codigo.toUpperCase().includes(cod);
+                }
+                if (desc) {
+                    mDe = r.descricao && r.descricao.toUpperCase().includes(desc);
+                }
+                if (cli) {
+                    mCl = r.cliente && r.cliente.toUpperCase().includes(cli);
+                }
+                return mCo && mDe && mCl;
+            });
+            const cont = document.getElementById('buscaTableContainer');
+            if (res.length === 0) { cont.innerHTML = `<div style="padding:20px;text-align:center;">Nenhum registro.</div>`; return; }
+            let h = `<table><thead><tr><th>DATA</th><th>CARGA</th><th>TERCEIRO</th><th>CÃDIGO</th><th>DESCRIÃÃO</th><th>CLIENTE</th><th>QTD</th><th>PESO (KG)</th></tr></thead><tbody>`;
+            res.sort((a, b) => new Date(b.data) - new Date(a.data)).forEach(r => {
+                const isRec = recebidos[r.carga]?.some(i => i.id === r.id);
+                h += `<tr class="${isRec ? 'row-received' : ''}"><td>${formatDate(r.data)}</td><td style="font-weight:bold;color:var(--color-primary);cursor:pointer;" onclick="fecharModalTopo(); fecharModalTopo(); showCargaDetails('${r.carga}')">${r.carga}</td><td>${r.terceiro || '-'}</td><td>${r.codigo || '-'}</td><td>${r.descricao || '-'}</td><td>${r.cliente || '-'}</td><td>${r.quant}</td><td>${formatNumber(r.quant * (r.peso || 0))}</td></tr>`;
+            });
+            cont.innerHTML = h + `</tbody></table>`;
+        }
+        // Função para filtrar por código
+        function filtrarPorCodigo(codigo) {
+            currentCodeFilter = codigo.trim().toUpperCase();
+            renderTable();
+        }
+        // Função para alternar visibilidade do valor total
+        function toggleValorTotalVisibility() {
+            const role = checkUserRole();
+            if (role === 'desenvolvedor' || role === 'comercial' || role === 'administrador') {
+                isValorTotalVisible = !isValorTotalVisible;
+                updateDashboardAndCharts();
+                showToast(
+                    isValorTotalVisible ? "Valor total visível" : "Valor total oculto",
+                    isValorTotalVisible ? "O valor total está sendo exibido" : "O valor total está oculto",
+                    "info"
+                );
+            } else {
+                showToast(
+                    "Você não tem permissão comercial",
+                    "Se necessário, entre em contato com o administrador do sistema",
+                    "danger"
+                );
+            }
+        }
+        async function adicionarRegistro() {
+            // Removed isDev check for adding records
+            // Removed isDev check for adding records
+            /*
+            const role = checkUserRole();
+            if (role !== 'desenvolvedor') {
+                showToast("Você não tem permissão para adicionar", "Apenas desenvolvedores podem adicionar registros", "danger");
+                return;
+            }
+            */
+            const t = parseInt(document.getElementById('inputQuantidade').value) || 0, e = parseInt(document.getElementById('inputQtdEscariar').value) || 0, r = parseInt(document.getElementById('inputQtdRebarba').value) || 0;
+            const cod = document.getElementById('inputCodigo').value.trim().toUpperCase(), c = document.getElementById('inputCarga').value.trim().toUpperCase();
+            if (t !== (e + r)) return alert('Soma incorreta.');
+            if (!c || !cod || t <= 0) return alert('Campos obrigatórios vazios.');
+            const item = { codigo: cod, descricao: document.getElementById('inputDescricao').value.toUpperCase(), peso: parseNumberSafe(document.getElementById('inputPesoUn').value), cliente: document.getElementById('inputCliente').value.toUpperCase() };
+            await salvarOuAtualizarItem(item);
+            // Ler valor unitário antes de compor o registro
+            const valorUnit = parseNumberSafe(document.getElementById('inputValorUnit')?.value);
+            const reg = { carga: c, ...item, quant: t, quant_escariar: e, quant_rebarba: r, terceiro: document.getElementById('inputTerceiro').value.toUpperCase(), observacoes: document.getElementById('inputObservacoes').value.toUpperCase(), data: document.getElementById('inputData').value || new Date().toISOString().split('T')[0], tipo: "terceiro", valor_unit: valorUnit > 0 ? valorUnit : null };
+            // Custo do Serviço (Calculado automaticamente sempre)
+            reg.valor = calcularValorItem(reg);
+            try { const res = await apiRequest('registros', 'POST', reg); if (res.success) { reg.id = res.id; registros.unshift(reg); renderTable(); updateDashboardAndCharts(); limparFormularioParcialmente(); showToast("Registro adicionado", "O item foi adicionado com sucesso", "info"); } } catch (err) { }
+        }
+        async function carregarDados() {
+            showSpinner();
+            try {
+                await carregarRegistrosERecebidos();
+                populateDateFilters();
+                renderTable();
+                updateDashboardAndCharts();
+                // Verificar permissões para mostrar/ocultar botões e separador
+                const role = checkUserRole();
+                const novoEnvioBtn = document.getElementById('novoEnvioButton');
+                const separatorNovoEnvio = document.getElementById('separatorNovoEnvio');
+                if (role !== 'desenvolvedor') {
+                    if (novoEnvioBtn) novoEnvioBtn.style.display = 'none';
+                    if (separatorNovoEnvio) separatorNovoEnvio.style.display = 'none';
+                } else {
+                    if (novoEnvioBtn) novoEnvioBtn.style.display = 'inline-flex';
+                    if (separatorNovoEnvio) separatorNovoEnvio.style.display = 'block';
+                }
+            } catch (e) { console.error(e); } finally { hideSpinner(); }
+        }
+        async function carregarRegistrosERecebidos() {
+            try {
+                const data = await apiRequest('acabamento-externo', 'GET');
+                registros = data.registros.sort((a, b) => new Date(b.data) - new Date(a.data));
+                itensConhecidos.clear();
+                data.itens.forEach(item => { item.peso = parseFloat(item.peso); itensConhecidos.set(item.codigo, item); });
+                recebidos = {};
+                data.recebidos.forEach(i => { if (!recebidos[i.carga]) recebidos[i.carga] = []; recebidos[i.carga].push(i); });
+            } catch (e) { throw e; }
+        }
+        function renderTable(dadosParaExibir = registros) {
+            const tbody = document.querySelector('#terceiroTable tbody');
+            tbody.innerHTML = '';
+            // Aplicar filtro de código se existir
+            let dadosFiltrados = dadosParaExibir;
+            if (currentCodeFilter) {
+                // Primeiro, encontrar as cargas que contêm o código
+                const cargasComCodigo = new Set();
+                dadosParaExibir.forEach(r => {
+                    if (r.codigo && r.codigo.toUpperCase().includes(currentCodeFilter)) {
+                        cargasComCodigo.add(r.carga);
+                    }
+                });
+                // Filtrar todos os itens dessas cargas
+                dadosFiltrados = dadosParaExibir.filter(r => cargasComCodigo.has(r.carga));
+            }
+            const grouped = dadosFiltrados.reduce((acc, r) => { if (!acc[r.carga]) acc[r.carga] = []; acc[r.carga].push(r); return acc; }, {});
+            let totalWeight = 0;
+            let totalQty = 0;
+            const isDev = (checkUserRole() === 'desenvolvedor' || checkUserRole() === 'comercial' || checkUserRole() === 'administrador');
+            const showValue = isDev && isValorTotalVisible;
+            Object.keys(grouped).sort((a, b) => (parseInt(b) || 0) - (parseInt(a) || 0)).forEach(c => {
+                const its = grouped[c];
+                const p = its[0];
+                const tP = its.reduce((s, i) => s + (parseFloat(i.quant || 0) * parseFloat(i.peso || 0)), 0);
+                const tV = its.reduce((s, i) => s + parseFloat(i.valor || 0), 0);
+                const tQ = its.reduce((s, i) => s + parseInt(i.quant || 0), 0);
+                // Sumarizar para o footer
+                totalWeight += tP;
+                totalQty += tQ;
+                const recC = (recebidos[c] || []).length;
+                const totC = its.length;
+                const tr = document.createElement('tr');
+                tr.className = 'group-row';
+                tr.onclick = () => showCargaDetails(c);
+                let rowHTML = `<td>${c}</td><td>${formatDate(p.data)}</td><td>${p.terceiro}</td><td>${formatNumber(tP)}</td><td>${tQ}</td>`;
+                // Removed isDev check - allow everyone to see values
+                // Only sum Sales Value for pending items (not received)
+                const vSales = its.reduce((s, i) => {
+                    const isItemRec = recebidos[c]?.some(rec => rec.id === i.id);
+                    return s + (!isItemRec && i.valor_unit ? parseFloat(i.valor_unit) * parseFloat(i.quant || 0) : 0);
+                }, 0);
+                const vCost = its.reduce((s, i) => s + parseFloat(i.valor || 0), 0);
+                rowHTML += `<td>${showValue ? (vSales > 0 ? formatCurrency(vSales) : '-') : '-'}</td>`;
+                rowHTML += `<td style="color:#ef4444;">${showValue ? formatCurrency(vCost) : '-'}</td>`;
+                rowHTML += `<td>${(totC > 0 && recC >= totC) ? '<span class="badge badge-success">Recebido</span>' : `<span class="badge badge-pending">${recC}/${totC} Pendente</span>`}</td>`;
+                tr.innerHTML = rowHTML;
+                tbody.appendChild(tr);
+            });
+            // Atualizar footer
+            updateFooterTotals(totalWeight, totalQty);
+            applyColumnFilters();
+        }
+        function renderMonthButtons() {
+            const container = document.getElementById('monthButtons');
+            if (!container) return;
+            container.innerHTML = '';
+            const btnAll = document.createElement('button');
+            btnAll.className = 'month-btn all-btn';
+            btnAll.textContent = 'ANO';
+            btnAll.onclick = () => selectMonth(-1);
+            container.appendChild(btnAll);
+            MONTHS_SHORT.forEach((m, i) => {
+                const btn = document.createElement('button');
+                btn.className = 'month-btn';
+                btn.textContent = m;
+                btn.id = `btn-month-${i}`;
+                btn.onclick = () => selectMonth(i);
+                container.appendChild(btn);
+            });
+            updateMonthButtonsUI();
+        }
+        function selectMonth(idx) {
+            selectedMonthIndex = idx;
+            updateMonthButtonsUI();
+            updateDashboardAndCharts();
+        }
+        function changeYear() {
+            selectedYear = parseInt(document.getElementById('yearSelect').value);
+            updateDashboardAndCharts();
+        }
+        function updateMonthButtonsUI() {
+            document.querySelectorAll('.month-btn').forEach(b => b.classList.remove('active'));
+            if (selectedMonthIndex === -1) {
+                const allBtn = document.querySelector('.all-btn');
+                if (allBtn) allBtn.classList.add('active');
+            } else {
+                const btn = document.getElementById(`btn-month-${selectedMonthIndex}`);
+                if (btn) btn.classList.add('active');
+            }
+        }
+        function populateDateFilters() {
+            const sA = document.getElementById('yearSelect');
+            if (!sA) return;
+            sA.innerHTML = '';
+            const aSet = new Set();
+            const now = new Date();
+            const curYear = now.getFullYear();
+            aSet.add(curYear);
+            aSet.add(curYear - 1);
+            registros.forEach(r => {
+                if (r.data) {
+                    const p = r.data.split('T')[0].split('-');
+                    aSet.add(parseInt(p[0]));
+                }
+            });
+            Array.from(aSet).sort((a, b) => b - a).forEach(a => {
+                const o = document.createElement('option');
+                o.value = a;
+                o.textContent = a;
+                sA.appendChild(o);
+            });
+            sA.value = selectedYear;
+            renderMonthButtons();
+        }
+        function updateDashboardAndCharts() {
+            const fM = selectedMonthIndex === -1 ? "" : (selectedMonthIndex + 1).toString().padStart(2, '0');
+            const fA = selectedYear.toString();
+            const filtrados = registros.filter(r => {
+                if (!r.data) return false;
+                const p = r.data.split('T')[0].split('-');
+                return (!fM || p[1] === fM) && (!fA || p[0] === fA);
+            });
+            // Calculate Sales Value and Weight only for pending items
+            const tVenda = filtrados.reduce((acc, r) => {
+                const isItemRec = recebidos[r.carga]?.some(rec => rec.id === r.id);
+                return acc + (!isItemRec && r.valor_unit ? parseFloat(r.quant || 0) * parseFloat(r.valor_unit) : 0);
+            }, 0);
+            const tPesoProcesso = filtrados.reduce((acc, r) => {
+                const isItemRec = recebidos[r.carga]?.some(rec => rec.id === r.id);
+                return acc + (!isItemRec ? parseFloat(r.quant || 0) * parseFloat(r.peso || 0) : 0);
+            }, 0);
+            let tP = 0;
+            let tCusto = 0;
+            filtrados.forEach(r => {
+                tP += (parseFloat(r.quant || 0) * parseFloat(r.peso || 0));
+                tCusto += parseFloat(r.valor || 0);
+            });
+            const isDev = (checkUserRole() === 'desenvolvedor' || checkUserRole() === 'comercial' || checkUserRole() === 'administrador');
+            // Allow everyone to see values ONLY if dev AND toggle is on
+            const showValue = isDev && isValorTotalVisible;
+            let kpiHtml = '';
+            // 1. Peso Total em Processo (KG)
+            kpiHtml += `
+            <div class="kpi-card kpi-blue">
+                <div class="kpi-title">Peso Total em Processo (KG)</div>
+                <div class="kpi-value">${formatNumber(tPesoProcesso)}</div>
+                <div class="kpi-sub">Peso em processo</div>
+            </div>`;
+            // 2. Valor Total em Processo (Venda) - CLICKABLE FOR TOGGLE
+            kpiHtml += `
+            <div class="kpi-card kpi-purple" onclick="toggleValorTotalVisibility()" style="cursor: pointer;">
+                <div class="kpi-title">Valor Total em Processo (Venda) <i class="fa-solid ${showValue ? 'fa-eye' : 'fa-eye-slash'}" style="margin-left:5px; opacity:0.7;"></i></div>
+                <div class="kpi-value">${showValue ? formatCurrency(tVenda) : '••••••'}</div>
+                <div class="kpi-sub">Valor agregado em processo</div>
+            </div>`;
+            // 3. Peso Total Terceirizado
+            kpiHtml += `
+            <div class="kpi-card kpi-blue">
+                <div class="kpi-title">Peso Total Terceirizado (KG)</div>
+                <div class="kpi-value">${formatNumber(tP)}</div>
+                <div class="kpi-sub">Total movimentado no período</div>
+            </div>`;
+            // 4. Custo Total Serviços
+            kpiHtml += `
+            <div class="kpi-card kpi-red">
+                <div class="kpi-title">Custo Total Serviços</div>
+                <div class="kpi-value">${showValue ? formatCurrency(tCusto) : '••••••'}</div>
+                <div class="kpi-sub">Custo total no período</div>
+            </div>`;
+            document.getElementById('statsPanel').innerHTML = kpiHtml;
+            renderTable(filtrados);
+            let cD = {};
+            if (fM === "") { for (let i = 1; i <= 12; i++) cD[i.toString().padStart(2, '0')] = 0; filtrados.forEach(r => { const m = r.data.split('T')[0].split('-')[1]; cD[m] += (parseFloat(r.quant || 0) * parseFloat(r.peso || 0)); }); }
+            else {
+                const fM = (selectedMonthIndex + 1).toString().padStart(2, '0');
+                const fA = selectedYear.toString();
+                filtrados.forEach(r => { const d = r.data.split('T')[0]; cD[d] = (cD[d] || 0) + (parseFloat(r.quant || 0) * parseFloat(r.peso || 0)); });
+            }
+            renderChart(cD, selectedMonthIndex === -1);
+        }
+        function renderChart(data, isM) {
+            let l = [], w = [];
+            const ctx = document.getElementById('barChart').getContext('2d');
+            if (isM) {
+                // Visão Anual (meses)
+                const names = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+                l = Object.keys(data).sort().map(k => names[parseInt(k) - 1]);
+                w = Object.keys(data).sort().map(k => data[k]);
+            } else {
+                // Visão Mensal (todos os dias do mês)
+                const fM = (selectedMonthIndex + 1).toString().padStart(2, '0');
+                const fA = selectedYear.toString();
+                const daysInMonth = new Date(parseInt(fA), parseInt(fM), 0).getDate();
+                for (let i = 1; i <= daysInMonth; i++) {
+                    const dayStr = i.toString().padStart(2, '0');
+                    const dateKey = `${fA}-${fM}-${dayStr}`;
+                    l.push(dayStr);
+                    w.push(data[dateKey] || 0);
+                }
+            }
+            const maxVal = Math.max(...w, 0);
+            const suggestedMax = maxVal > 0 ? maxVal * 1.2 : 10;
+            if (mainChartInstance) mainChartInstance.destroy();
+            mainChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: l,
+                    datasets: [{
+                        label: 'Peso (KG)',
+                        data: w,
+                        backgroundColor: '#fbbf24',
+                        borderColor: '#fbbf24',
+                        borderWidth: 1,
+                        borderRadius: 4,
+                        hoverBackgroundColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top',
+                            labels: {
+                                color: '#a1a1aa',
+                                font: { size: 12 }
+                            }
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            backgroundColor: 'rgba(24, 24, 27, 0.95)',
+                            titleColor: '#fbbf24',
+                            bodyColor: '#f4f4f5',
+                            borderColor: 'rgba(251, 191, 36, 0.3)',
+                            borderWidth: 1,
+                            cornerRadius: 6,
+                            padding: 12,
+                            displayColors: false,
+                            callbacks: {
+                                label: function (context) {
+                                    return `Peso: ${formatNumber(context.parsed.y)} KG`;
+                                }
+                            }
+                        },
+                        datalabels: {
+                            display: function (context) {
+                                return context.dataset.data[context.dataIndex] > 0;
+                            },
+                            align: 'top',
+                            anchor: 'end',
+                            offset: 4,
+                            color: '#ffffff',
+                            font: {
+                                family: "'JetBrains Mono', monospace",
+                                weight: 'bold',
+                                size: 10
+                            },
+                            formatter: function (value) {
+                                return formatNumber(value, 0);
+                            }
+                        }
+                    },
+                    interaction: {
+                        mode: 'index',
+                        intersect: false
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            suggestedMax: suggestedMax,
+                            grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                            ticks: {
+                                color: '#a1a1aa',
+                                callback: function (value) {
+                                    return formatNumber(value) + ' KG';
+                                }
+                            }
+                        },
+                        x: {
+                            grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                            ticks: { color: '#a1a1aa' }
+                        }
+                    }
+                }
+            });
+        }
+        function showCargaDetails(carga) {
+            const isDev = (checkUserRole() === 'desenvolvedor' || checkUserRole() === 'comercial');
+            const showValue = isDev && isValorTotalVisible;
+            document.getElementById('modalTitle').innerHTML = `Detalhes: <span style="color:var(--color-primary);">${carga}</span>`;
+            document.getElementById('cargaModal').setAttribute('data-current-carga', carga);
+            // Mostrar/ocultar botões baseado na role
+            if (isDev) {
+                document.getElementById('recebidoBtn').style.display = 'inline-flex';
+                document.getElementById('generatePdfBtn').style.display = 'inline-flex';
+            } else {
+                document.getElementById('recebidoBtn').style.display = 'none';
+                document.getElementById('generatePdfBtn').style.display = 'none';
+            }
+            const its = registros.filter(r => r.carga === carga);
+            // Updated header: Removed DATA and PREÃO VENDA (UNIT), added OBS.
+            let h = `<table><thead><tr><th>CÃDIGO</th><th>DESCRIÃÃO</th><th>CLIENTE</th><th>PESO UN.</th><th>QTD</th>`;
+            // Show columns for everyone
+            h += `<th>TOTAL VENDA (R$)</th><th>CUSTO SERV.</th><th>OBS.</th>`;
+            h += `<th>OK</th>`;
+            if (isDev) {
+                h += `<th>AÃÃO</th>`;
+            }
+            h += `</tr></thead><tbody>`;
+            its.forEach(r => {
+                const isRec = recebidos[r.carga]?.some(i => i.id === r.id);
+                // Updated row: clickable code, removed data/unit price, added observation
+                h += `<tr>`;
+                h += `<td><a href="#" onclick="showItemDetails(${r.id}); return false;" style="color:var(--color-primary); text-decoration:none; font-weight:bold;">${r.codigo}</a></td>`;
+                h += `<td>${r.descricao}</td><td>${r.cliente || '-'}</td><td>${formatNumber(r.peso)}</td><td>${r.quant}</td>`;
+                // Show values for everyone
+                const vCost = parseFloat(r.valor || 0);
+                const qtd = parseInt(r.quant || 0);
+                const vTotalSales = r.valor_unit ? formatCurrency(parseFloat(r.valor_unit) * qtd) : '-';
+                h += `<td>${showValue ? vTotalSales : '-'}</td>`;
+                h += `<td style="color:#ef4444;">${showValue ? formatCurrency(vCost) : '-'}</td>`;
+                h += `<td>${r.observacoes || '-'}</td>`;
+                // Verificar permissão para mostrar checkbox
+                if (isDev) {
+                    h += `<td><input type="checkbox" onchange="toggleRecebido(${r.id},'${r.carga}',this.checked)" ${isRec ? 'checked' : ''}></td>`;
+                } else {
+                    h += `<td><span class="badge ${isRec ? 'badge-success' : 'badge-pending'}">${isRec ? 'â' : 'â'}</span></td>`;
+                }
+                if (isDev) {
+                    h += `<td><i class="fa-solid fa-trash action-icon icon-delete" onclick="excluirRegistro(${r.id})"></i></td>`;
+                }
+                h += `</tr>`;
+            });
+            document.getElementById('modalTableContainer').innerHTML = h + `</tbody></table>`;
+            const tP = its.reduce((s, i) => s + (parseFloat(i.quant || 0) * parseFloat(i.peso || 0)), 0);
+            const tV = its.reduce((s, i) => s + parseFloat(i.valor || 0), 0);
+            let footerHTML = `<div class="modal-stat">ITENS: <strong>${its.length}</strong></div><div class="modal-stat">PESO: <strong>${formatNumber(tP)} KG</strong></div>`;
+            // Show value for everne
+            footerHTML += `<div class="modal-stat">VALOR: <strong>${showValue ? formatCurrency(tV) : '-'}</strong></div>`;
+            document.getElementById('modalFooter').innerHTML = footerHTML;
+            abrirModalPorId('cargaModal');
+        }
+        async function excluirRegistro(id) {
+            const role = checkUserRole();
+            if (role !== 'desenvolvedor' && role !== 'diretor' && role !== 'administrador' && role !== 'gerente comercial') {
+                showToast("Você não tem permissão para excluir", "Apenas administradores podem excluir registros", "danger");
+                return;
+            }
+            if (!id || !confirm('Excluir este registro permanentemente?')) return;
+            showSpinner();
+            try {
+                const response = await apiRequest('delete', 'POST', { id: id });
+                if (response.success) {
+                    await carregarRegistrosERecebidos();
+                    const m = document.getElementById('cargaModal');
+                    if (m.classList.contains('visible')) {
+                        const cargaAtual = m.getAttribute('data-current-carga');
+                        const aindaTem = registros.some(r => r.carga === cargaAtual);
+                        if (aindaTem) showCargaDetails(cargaAtual); else fecharModalTopo();
+                    }
+                    renderTable();
+                    updateDashboardAndCharts();
+                } else alert('Erro: Registro não encontrado.');
+            } catch (err) { alert('Erro: ' + err.message); } finally { hideSpinner(); }
+        }
+        async function toggleRecebido(id, carga, checked) {
+            const role = checkUserRole();
+            if (role !== 'desenvolvedor' && role !== 'comercial' && role !== 'diretor' && role !== 'administrador' && role !== 'gerente comercial') {
+                showToast("Você não tem permissão", "Apenas administradores, comercial, gerente comercial e diretor podem marcar como recebido", "danger");
+                return;
+            }
+            try { await apiRequest('recebidos', 'POST', { id, carga, checked }); await carregarRegistrosERecebidos(); renderTable(); } catch (e) { }
+        }
+        async function marcarCargaRecebida() {
+            const role = checkUserRole();
+            if (role !== 'desenvolvedor' && role !== 'comercial' && role !== 'diretor' && role !== 'administrador' && role !== 'gerente comercial') {
+                showToast("Você não tem permissão", "Apenas administradores, comercial, gerente comercial e diretor podem receber cargas", "danger");
+                return;
+            }
+            const c = document.getElementById('cargaModal').getAttribute('data-current-carga');
+            const ids = registros.filter(r => r.carga === c && !recebidos[c]?.some(re => re.id === r.id)).map(r => r.id);
+            if (ids.length === 0) return;
+            try { await Promise.all(ids.map(id => apiRequest('recebidos', 'POST', { id, carga: c, checked: true }))); await carregarRegistrosERecebidos(); renderTable(); showCargaDetails(c); } catch (e) { }
+        }
+        function showItemDetails(id) {
+            const item = registros.find(r => r.id === id);
+            if (!item) return;
+            const role = checkUserRole();
+            const allowed = (role === 'desenvolvedor' || role === 'comercial' || role === 'diretor' || role === 'administrador' || role === 'gerente comercial');
+            const vUnit = allowed && item.valor_unit ? formatCurrency(parseFloat(item.valor_unit)) : '****';
+            const vTotalSales = allowed && item.valor_unit ? formatCurrency(parseFloat(item.valor_unit) * (item.quant || 0)) : '****';
+            const vCost = allowed ? formatCurrency(parseFloat(item.valor || 0)) : '****';
+            const html = `
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px; margin-bottom:15px;">
+                    <div><small style="color:#a1a1aa; display:block;">CÃDIGO</small><strong style="font-size:1.1rem;">${item.codigo}</strong></div>
+                     <div><small style="color:#a1a1aa; display:block;">DATA</small><strong>${formatDate(item.data)}</strong></div>
+                </div>
+                <div style="margin-bottom:15px;"><small style="color:#a1a1aa; display:block;">DESCRIÃÃO</small><strong>${item.descricao}</strong></div>
+                <div style="margin-bottom:15px;"><small style="color:#a1a1aa; display:block;">CLIENTE</small><strong>${item.cliente || '-'}</strong></div>
+                <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px; margin-bottom:15px; background:rgba(255,255,255,0.05); padding:10px; border-radius:6px;">
+                    <div><small style="color:#a1a1aa; display:block;">QTD TOTAL</small><strong>${item.quant}</strong></div>
+                    <div><small style="color:#a1a1aa; display:block;">ESCARIAÃÃO</small><strong>${item.quant_escariar || 0}</strong></div>
+                    <div><small style="color:#a1a1aa; display:block;">REBARBA</small><strong>${item.quant_rebarba || 0}</strong></div>
+                </div>
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:15px; background:rgba(255,255,255,0.05); padding:10px; border-radius:6px;">
+                    <div><small style="color:#a1a1aa; display:block;">PREÃO VENDA (UN)</small><strong>${vUnit}</strong></div>
+                    <div><small style="color:#a1a1aa; display:block;">TOTAL VENDA</small><strong style="color:var(--status-purple);">${vTotalSales}</strong></div>
+                </div>
+                 <div style="margin-bottom:15px; background:#ef444420; padding:10px; border-radius:6px; border:1px solid #ef444450;">
+                    <small style="color:#ef4444; display:block;">CUSTO SERVIÃO (TOTAL)</small><strong style="color:#ef4444; font-size:1.1rem;">${vCost}</strong>
+                </div>
+                <div style="margin-top:10px;">
+                    <small style="color:#a1a1aa; display:block;">OBSERVAÃÃES</small>
+                    <div style="background:rgba(0,0,0,0.2); padding:8px; border-radius:4px; min-height:40px;">${item.observacoes || 'Nenhuma observação.'}</div>
+                </div>
+            `;
+            document.getElementById('itemDetailsBody').innerHTML = html;
+            document.getElementById('itemDetailsTitle').innerText = `Detalhes do Item`;
+            abrirModalPorId('itemDetailsModal');
+        }
+        function generateCargaPDF(carga) {
+            const role = checkUserRole();
+            if (role === 'visitante') {
+                showToast("Acesso Negado", "Visitantes não podem gerar relatórios financeiros.", "danger");
+                return;
+            }
+            const { jsPDF } = window.jspdf;
+            const cStr = carga.replace(/<[^>]*>?/gm, '').trim();
+            const items = registros.filter(r => r.carga === cStr);
+            if (!items.length) return;
+            const doc = new jsPDF('l', 'mm', 'a4');
+            const pW = doc.internal.pageSize.getWidth(); const pH = doc.internal.pageSize.getHeight();
+            doc.setFillColor(24, 24, 27); doc.rect(0, 0, pW, 35, 'F');
+            doc.setFontSize(24); doc.setTextColor(251, 191, 36); doc.setFont("helvetica", "bold"); doc.text("FUNDIÃÃO ERUS", 14, 18);
+            doc.setFontSize(10); doc.setTextColor(161, 161, 170); doc.text("SISTEMA DE GESTÃO DE ACABAMENTO EXTERNO", 14, 25);
+            doc.setFontSize(12); doc.setTextColor(255, 255, 255); doc.text(`CARGA: ${cStr}`, pW - 14, 18, { align: 'right' }); doc.text(`TERCEIRO: ${items[0].terceiro}`, pW - 14, 25, { align: 'right' });
+            doc.setDrawColor(251, 191, 36); doc.setLineWidth(1); doc.line(14, 30, pW - 14, 30);
+            doc.autoTable({
+                startY: 45,
+                head: [['DATA', 'CÃDIGO', 'DESCRIÃÃO', 'CLIENTE', 'PESO UN.', 'QTD', 'VALOR UNIT', 'TOTAL']],
+                body: items.map(r => [formatDate(r.data), r.codigo, r.descricao, r.cliente || '-', formatNumber(r.peso) + " kg", r.quant, formatCurrency(r.quant > 0 ? r.valor / r.quant : 0), formatCurrency(r.valor)]),
+                styles: { fontSize: 9, cellPadding: 3, valign: 'middle', halign: 'center' },
+                headStyles: { fillColor: [39, 39, 42], textColor: [251, 191, 36], fontStyle: 'bold' },
+                alternateRowStyles: { fillColor: [250, 250, 250] },
+                columnStyles: {
+                    2: { halign: 'left', cellWidth: 50 },
+                    3: { halign: 'left', cellWidth: 40 },
+                    7: { fontStyle: 'bold' }
+                },
+                margin: { bottom: 70 }
+            });
+            const tP = items.reduce((s, i) => s + (parseFloat(i.quant || 0) * parseFloat(i.peso || 0)), 0);
+            const tV = items.reduce((s, i) => s + parseFloat(i.valor || 0), 0);
+            const tQ = items.reduce((s, i) => s + parseInt(i.quant || 0), 0);
+            const summaryY = pH - 65;
+            doc.setFillColor(248, 250, 252); doc.rect(14, summaryY, pW - 28, 20, 'F'); doc.setDrawColor(226, 232, 240); doc.rect(14, summaryY, pW - 28, 20, 'S');
+            doc.setFontSize(10); doc.setTextColor(51, 65, 85); doc.setFont("helvetica", "bold");
+            doc.text(`QUANTIDADE TOTAL: ${tQ}`, 20, summaryY + 12); doc.text(`PESO TOTAL: ${formatNumber(tP)} KG`, (pW / 2) - 30, summaryY + 12); doc.text(`VALOR TOTAL: ${formatCurrency(tV)}`, pW - 20, summaryY + 12, { align: 'right' });
+            const sigY = pH - 30; doc.setDrawColor(200); doc.line(20, sigY, 90, sigY); doc.line(pW - 90, sigY, pW - 20, sigY);
+            doc.setFontSize(8); doc.text("RESPONSÃVEL EXPEDIÃÃO", 55, sigY + 5, { align: 'center' }); doc.text("RESPONSÃVEL RECEBIMENTO (TERCEIRO)", pW - 55, sigY + 5, { align: 'center' });
+            doc.setFontSize(7); doc.setTextColor(150); doc.text(`Documento gerado em: ${new Date().toLocaleString('pt-BR')} | Fundição Erus Software`, 14, pH - 10);
+            doc.save(`Carga_${cStr}_Erus.pdf`);
+        }
+        function fazerBackup() {
+            const data = { registros: registros.filter(r => r.tipo === 'terceiro'), recebidos, itens: Array.from(itensConhecidos.entries()) };
+            const b = new Blob([JSON.stringify(data)], { type: 'application/json' });
+            const u = URL.createObjectURL(b); const a = document.createElement('a'); a.href = u; a.download = `Backup_Erus_${new Date().toISOString().slice(0, 10)}.json`; a.click();
+        }
+        function iniciarImportacao() { document.getElementById('importFile').click(); }
+        document.getElementById('importFile').onchange = e => {
+            const f = e.target.files[0]; if (!f) return;
+            const r = new FileReader(); r.onload = async ev => { try { await apiRequest('import', 'POST', JSON.parse(ev.target.result)); location.reload(); } catch (e) { } }; r.readAsText(f);
+        };
+        function iniciarRelatorioMensal() {
+            const mA = prompt("Mês/Ano (MM/AAAA):", new Date().toLocaleDateString('pt-BR', { month: '2-digit', year: 'numeric' }));
+            if (!mA) return;
+            const filtrados = registros.filter(r => formatMonthYear(r.data) === mA);
+            if (!filtrados.length) return alert('Sem dados.');
+            const wsData = [["DATA", "CARGA", "TERCEIRO", "CÃDIGO", "CLIENTE", "QTD", "VALOR"]];
+            filtrados.forEach(r => wsData.push([formatDate(r.data), r.carga, r.terceiro, r.codigo, r.cliente || '-', r.quant, r.valor]));
+            const wb = XLSX.utils.book_new(); const ws = XLSX.utils.aoa_to_sheet(wsData);
+            XLSX.utils.book_append_sheet(wb, ws, "Relatorio"); XLSX.writeFile(wb, `Relatorio_${mA.replace('/', '-')}.xlsx`);
+        }
+        function applyColumnFilters() {
+            const filters = Array.from(document.querySelectorAll('#terceiroTable .filter-input-table')).map(i => i.value.toUpperCase());
+            let visibleWeight = 0;
+            let visibleQty = 0;
+            document.querySelectorAll('#terceiroTable tbody tr').forEach(row => {
+                const cells = row.querySelectorAll('td');
+                let vis = true;
+                for (let i = 0; i < 6; i++) if (filters[i] && !cells[i].textContent.toUpperCase().includes(filters[i])) vis = false;
+                row.style.display = vis ? '' : 'none';
+                if (vis) {
+                    // Cell 3 is Weight, Cell 4 is Qty based on Table Head order
+                    const wStr = cells[3].textContent;
+                    const qStr = cells[4].textContent;
+                    visibleWeight += parseNumberSafe(wStr);
+                    visibleQty += parseNumberSafe(qStr);
+                }
+            });
+            updateFooterTotals(visibleWeight, visibleQty);
+        }
+        function limparFormularioParcialmente() { ['inputCodigo', 'inputDescricao', 'inputPesoUn', 'inputValorUnit', 'inputQuantidade', 'inputQtdEscariar', 'inputQtdRebarba', 'inputCliente', 'inputObservacoes'].forEach(id => document.getElementById(id).value = ''); document.getElementById('inputCodigo').focus(); }
+        function confirmAndClear() { if (prompt("Digite 'CONFIRMAR':") === 'CONFIRMAR') apiRequest('delete-all-terceiro', 'POST', { type: 'terceiro' }).then(() => carregarDados()); }
+        function redirectToLink() { window.location.href = 'index.html'; }
+        document.addEventListener('DOMContentLoaded', () => {
+            carregarDados();
+            document.querySelectorAll('.filter-input-table').forEach(i => i.oninput = applyColumnFilters);
+            document.getElementById('inputData').valueAsDate = new Date();
+        });
+    </script>
+    <script src="js/activity-logger.js"></script>
+    <script src="js/notifications.js"></script>
+</body>
+</html>
