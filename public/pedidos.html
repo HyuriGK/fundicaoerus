@@ -450,6 +450,7 @@
         canvas {
             height: 100% !important;
             min-height: 0 !important;
+            width: 100% !important; /* Force width stability as well */
         }
         .chart-title-flex {
             font-size: 0.95rem;
@@ -2592,8 +2593,17 @@
                 if (resCarteira.ok) {
                     carteiraData = await resCarteira.json();
                 }
-                // Apply filters immediately to respect "isModelosHidden" default
-                applyColumnFilters();
+                // Apply filters after a short delay to ensure Grid layout is stable
+                setTimeout(() => {
+                    applyColumnFilters();
+                    // Extra verification to ensure charts are properly sized after first paint
+                    requestAnimationFrame(() => {
+                        if (chartPCP) chartPCP.resize();
+                        if (chartPareto) chartPareto.resize();
+                        if (chartPending) chartPending.resize();
+                        if (chartHistorical) chartHistorical.resize();
+                    });
+                }, 150);
                 // Populate material suggestions for autocomplete
                 populateMaterialSuggestions();
                 // REDIRECTION LOGIC: Check for specific filters from Task Center
@@ -4256,8 +4266,19 @@
             }
         });
         document.addEventListener('DOMContentLoaded', async () => {
+            // 1. Observer FIRST: handle chart resizing when layout changes
+            const ro = new ResizeObserver(() => {
+                if (chartPCP) chartPCP.resize();
+                if (chartPareto) chartPareto.resize();
+                if (chartPending) chartPending.resize();
+                if (chartHistorical) chartHistorical.resize();
+            });
+            document.querySelectorAll('.chart-panel').forEach(p => ro.observe(p));
+
+            // 2. Setup filters and load data
             if (typeof setupFilters === 'function') setupFilters();
             await loadDataFromServer();
+            
             const role = localStorage.getItem('erus_role');
             const btnEmail = document.getElementById('btnGerarEmail');
             
@@ -4270,14 +4291,6 @@
                 const btnExcel = document.getElementById('btnExtrairExcel');
                 if (btnExcel) btnExcel.style.display = 'none';
             }
-            // Observer to handle chart resizing when layout changes (e.g. Industrial Position Toggle)
-            const ro = new ResizeObserver(() => {
-                if (chartPCP) chartPCP.resize();
-                if (chartPareto) chartPareto.resize();
-                if (chartPending) chartPending.resize();
-                if (chartHistorical) chartHistorical.resize();
-            });
-            document.querySelectorAll('.chart-panel').forEach(p => ro.observe(p));
         });
         // --- CONSTANTES E HELPERS DE ROTEIRO DINÃÂ‚MICO ---
         let leadTimes = JSON.parse(localStorage.getItem('monitoramento_leadtimes')) || {
