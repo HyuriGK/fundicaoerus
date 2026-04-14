@@ -5209,21 +5209,21 @@
         }
     </script>
     <!-- Modal de Histórico Industrial -->
-    <div id="industrialHistoryModal" class="modal-overlay" style="display: none;">
-        <div class="modal-card" style="width: 650px; max-width: 95%; max-height: 85vh; border-radius: 12px; background: #09090b; border: 1px solid var(--border-highlight); overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);">
+    <div id="industrialHistoryModal" class="modal-overlay" style="display: none; background: #000;">
+        <div class="modal-card" style="width: 100vw; height: 100vh; max-width: 100vw; max-height: 100vh; border-radius: 0; background: #09090b; border: none; overflow: hidden; display: flex; flex-direction: column;">
             <div class="modal-header" style="padding: 20px 30px; border-bottom: 1px solid var(--border-subtle);">
                 <div style="flex: 1;">
                     <h2 id="historyModalTitle" style="font-size: 1.25rem; font-weight: 700; color: #fff;">Histórico: Usinagem Expedição</h2>
-                    <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">Últimos 10 dias registrados (Peças vs Peso)</p>
+                    <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">Exibição completa do mês atual (1 ao último dia)</p>
                 </div>
                 <span class="modal-close" onclick="closeIndustrialHistoryModal()" style="font-size: 2rem; cursor: pointer;">&times;</span>
             </div>
-            <div class="modal-body" style="padding: 30px;">
+            <div class="modal-body" style="padding: 20px 40px; flex: 1; display: flex; flex-direction: column; overflow: hidden;">
                 <div id="historyLoading" style="display: none; text-align: center; padding: 40px;">
                     <i class="fa-solid fa-spinner fa-spin fa-2x" style="color: var(--color-primary);"></i>
                     <p style="margin-top: 10px; color: var(--text-muted);">Carregando dados...</p>
                 </div>
-                <div id="historyChartContainer" style="height: 350px; position: relative;">
+                <div id="historyChartContainer" style="flex: 1; position: relative; min-height: 0;">
                     <canvas id="industrialHistoryChart"></canvas>
                 </div>
                 <div id="historyEmpty" style="display: none; text-align: center; padding: 40px; color: var(--text-muted);">
@@ -5300,20 +5300,32 @@
                 historyChart.destroy();
             }
 
-            // Inverter para mostrar em ordem cronológica (esquerda -> direita)
-            const sortedData = [...historyLogs].reverse();
+            // Gerar todos os dias do mês atual
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = now.getMonth();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
             
-            const labels = sortedData.map(d => {
-                const dateStr = String(d.date || '');
-                if (dateStr.includes('-')) {
-                    const parts = dateStr.split('T')[0].split('-');
-                    if (parts.length === 3) return `${parts[2]}/${parts[1]}`; // DD/MM
-                }
-                return dateStr;
-            });
+            const labels = [];
+            const qtyData = [];
+            const weightData = [];
 
-            const qtyData = sortedData.map(d => parseFloat(d[`${stage}_qty`] || 0));
-            const weightData = sortedData.map(d => parseFloat(d[`${stage}_weight`] || 0));
+            for (let d = 1; d <= daysInMonth; d++) {
+                const dayStr = String(d).padStart(2, '0');
+                const monthStr = String(month + 1).padStart(2, '0');
+                const dateKey = `${year}-${monthStr}-${dayStr}`;
+                
+                labels.push(`${dayStr}/${monthStr}`);
+                
+                const entry = historyLogs.find(h => h.date === dateKey);
+                if (entry) {
+                    qtyData.push(parseFloat(entry[`${stage}_qty`] || 0));
+                    weightData.push(parseFloat(entry[`${stage}_weight`] || 0));
+                } else {
+                    qtyData.push(0);
+                    weightData.push(0);
+                }
+            }
 
             const ctx = canvas.getContext('2d');
             historyChart = new Chart(ctx, {

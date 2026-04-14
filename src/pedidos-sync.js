@@ -76,8 +76,8 @@ router.get('/industrial-history', async (req, res) => {
                 qualidade_qty, qualidade_weight,
                 expedicao_qty, expedicao_weight
             FROM industrial_snapshots
-            ORDER BY snapshot_date DESC
-            LIMIT 15
+            WHERE snapshot_date >= DATE_TRUNC('month', CURRENT_DATE)
+            ORDER BY snapshot_date ASC
         `;
         const result = await pool.query(query);
         res.json(result.rows);
