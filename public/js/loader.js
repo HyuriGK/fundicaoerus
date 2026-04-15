@@ -51,7 +51,7 @@
     const startLoading = (loaderEl) => {
         const fill = document.getElementById('loader-progress-fill');
         const percText = document.getElementById('loader-perc');
-        const duration = 1000; // Alterado para 1.0 segundo
+        const duration = 500; // 0.5 segundo
         const startTime = Date.now();
 
         const update = () => {
@@ -73,8 +73,8 @@
                     // Remover do DOM após a transição de fade-out
                     setTimeout(() => {
                         loaderEl.remove();
-                    }, 400); // Mais rápido
-                }, 100); // Mais rápido
+                    }, 300);
+                }, 50);
             }
         };
 
