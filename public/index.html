@@ -9391,6 +9391,110 @@
 
     <script src="js/notifications.js"></script>
 
+    <!-- DAILY BRIEFING MODAL -->
+    <div id="dailyBriefingModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); z-index:99999; align-items:center; justify-content:center;">
+        <div style="background:#111114; border:1px solid rgba(255,255,255,0.08); border-radius:16px; padding:36px 40px; max-width:420px; width:90%; box-shadow:0 25px 60px rgba(0,0,0,0.6); position:relative; animation: dbm-enter 0.4s cubic-bezier(0.16,1,0.3,1) both;">
+            <style>
+                @keyframes dbm-enter {
+                    from { opacity:0; transform:translateY(24px) scale(0.95); }
+                    to   { opacity:1; transform:translateY(0) scale(1); }
+                }
+            </style>
+            <div style="display:flex; align-items:center; gap:14px; margin-bottom:24px;">
+                <div style="width:44px; height:44px; border-radius:10px; background:rgba(251,191,36,0.1); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                    <i class="fa-solid fa-industry" style="color:#fbbf24; font-size:1.2rem;"></i>
+                </div>
+                <div>
+                    <div style="font-size:0.7rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.08em; font-weight:600;">Resumo do dia anterior</div>
+                    <div style="font-size:1rem; font-weight:700; color:#fff; margin-top:2px;">Faturamento em Peso</div>
+                </div>
+            </div>
+
+            <div style="background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.06); border-radius:10px; padding:20px 24px; margin-bottom:24px; text-align:center;">
+                <div id="dbm-day-label" style="font-size:0.8rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:8px;"></div>
+                <div id="dbm-weight" style="font-size:2.4rem; font-weight:800; color:#fbbf24; font-family:'JetBrains Mono', monospace; line-height:1;">---</div>
+                <div style="font-size:0.75rem; color:var(--text-dim); margin-top:6px;">peso total faturado</div>
+            </div>
+
+            <button onclick="closeDailyBriefing()" style="width:100%; background:rgba(251,191,36,0.1); border:1px solid rgba(251,191,36,0.25); color:#fbbf24; font-weight:700; font-size:0.9rem; padding:12px; border-radius:8px; cursor:pointer; transition:0.2s;"
+                onmouseover="this.style.background='rgba(251,191,36,0.2)'" onmouseout="this.style.background='rgba(251,191,36,0.1)'">
+                Entendido
+            </button>
+        </div>
+    </div>
+
+    <script>
+    (function() {
+        function prevBusinessDay(date) {
+            const d = new Date(date);
+            d.setDate(d.getDate() - 1);
+            while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() - 1);
+            return d;
+        }
+
+        function toISODate(d) {
+            return d.toISOString().split('T')[0];
+        }
+
+        function formatWeight(kg) {
+            return kg.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kg';
+        }
+
+        const DIAS = ['domingo','segunda-feira','terça-feira','quarta-feira','quinta-feira','sexta-feira','sábado'];
+        const MESES = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+
+        function formatDayLabel(d) {
+            const dia = DIAS[d.getDay()];
+            const num = String(d.getDate()).padStart(2, '0');
+            const mes = String(d.getMonth() + 1).padStart(2, '0');
+            const ano = d.getFullYear();
+            return `${dia}, ${num}/${mes}/${ano}`;
+        }
+
+        async function showDailyBriefing() {
+            const today = toISODate(new Date());
+            const storageKey = 'erus_briefing_date';
+
+            if (localStorage.getItem(storageKey) === today) return;
+            if (localStorage.getItem('erus_auth') !== 'true') return;
+
+            const prevDay = prevBusinessDay(new Date());
+            const dateStr = toISODate(prevDay);
+
+            const modal = document.getElementById('dailyBriefingModal');
+            document.getElementById('dbm-day-label').textContent = formatDayLabel(prevDay);
+            document.getElementById('dbm-weight').textContent = '...';
+            modal.style.display = 'flex';
+
+            try {
+                const res = await fetch(`/api/faturamento-postgres/detalhado?startDate=${dateStr}&endDate=${dateStr}&limit=100000`);
+                const json = await res.json();
+                let total = 0;
+                if (json.success && Array.isArray(json.data)) {
+                    json.data.forEach(item => {
+                        if (item.excluido_manualmente !== true) total += (item.pesoTotal || 0);
+                    });
+                }
+                document.getElementById('dbm-weight').textContent = formatWeight(total);
+            } catch(e) {
+                document.getElementById('dbm-weight').textContent = 'Erro ao carregar';
+            }
+
+            localStorage.setItem(storageKey, today);
+        }
+
+        window.closeDailyBriefing = function() {
+            document.getElementById('dailyBriefingModal').style.display = 'none';
+        };
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', showDailyBriefing);
+        } else {
+            showDailyBriefing();
+        }
+    })();
+    </script>
+
 
 </body>
 
