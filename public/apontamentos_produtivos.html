@@ -258,43 +258,8 @@
             flex-direction: column !important;
             overflow: hidden !important;
             background-color: var(--bg-body) !important;
-            padding: 16px 24px !important; /* Smaller vertical, fixed horizontal margins */
+            padding: 12px 20px !important; /* Slightly smaller padding to maximize chart area */
             box-sizing: border-box !important;
-        }
-
-        ::-webkit-scrollbar {
-            width: 6px;
-            height: 6px;
-        }
-
-        ::-webkit-scrollbar-track {
-            background: transparent;
-        }
-
-        ::webkit-scrollbar-thumb {
-            background: #3f3f46;
-            border-radius: 10px;
-        }
-
-        ::-webkit-scrollbar-thumb:hover {
-            background: #52525b;
-        }
-
-        @keyframes slideIn {
-            from { transform: translateX(100%); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
-        }
-
-        @keyframes fadeOut {
-            from { transform: translateX(0); opacity: 1; }
-            to { transform: translateX(10px); opacity: 0; }
-        }
-
-        .app-layout {
-            display: flex;
-            flex-direction: column;
-            height: 100vh;
-            overflow: hidden;
         }
 
         /* --- SIDE NAVIGATION (PEDIDOS STANDARD) --- */
@@ -1172,8 +1137,6 @@
                 </table>
             </div>
         </div>
-    </div>
-    </div>
     </div>
 
 
@@ -2057,6 +2020,59 @@
                                 boxWidth: 12,
                                 padding: 15
                             }
+                        },
+                        tooltip: {
+                            itemSort: function (a, b) {
+                                const order = {
+                                    'Produção Diária': 1,
+                                    'Acumulado': 2,
+                                    'Meta Mensal': 3
+                                };
+                                const labelA = a.dataset.label;
+                                const labelB = b.dataset.label;
+                                return (order[labelA] || 99) - (order[labelB] || 99);
+                            },
+                            callbacks: {
+                                label: function (context) {
+                                    const value = context.parsed.y;
+                                    const label = context.dataset.label;
+                                    const formattedValue = value.toLocaleString('pt-BR') + ' Kg';
+
+                                    if (label === 'Produção Diária') {
+                                        return `${label}: ${formattedValue}`;
+                                    } else if (label === 'Acumulado') {
+                                        return `${label}: ${formattedValue}`;
+                                    } else if (label === 'Meta Mensal') {
+                                        const accumData = context.chart.data.datasets[1].data[context.dataIndex];
+                                        const meta = goalValue || 1;
+                                        const percent = (((accumData || 0) / meta) * 100).toFixed(1);
+                                        return `Meta Mensal: ${meta.toLocaleString('pt-BR')} Kg (${percent}%)`;
+                                    }
+                                    return `${label}: ${formattedValue}`;
+                                },
+                                afterBody: () => ['', '🖱 Clique esquerdo para ver os registros'],
+                                footer: function (tooltipItems) {
+                                    return '\nClique na barra para ver os registros.';
+                                }
+                            }
+                        },
+                        datalabels: {
+                            display: true,
+                            anchor: 'end',
+                            align: 'top',
+                            color: window.isGraphicReportRunning ? '#000000' : '#fff',
+                            offset: 4,
+                            font: {
+                                size: window.isGraphicReportRunning ? 14 : 10,
+                                weight: 'bold'
+                            },
+                            formatter: (value) => {
+                                if (!value || value <= 0) return ''; // Hide zero values
+                                if (window.isGraphicReportRunning) {
+                                    return formatNumber(value / 1000, 2) + ' Ton';
+                                }
+                                return formatNumber(value, 0);
+                            }
                         }
                     },
                     onClick: (e, activeElements) => {
@@ -2085,13 +2101,10 @@
                             type: 'linear',
                             display: true,
                             position: 'left',
-                            max: Math.max(...dataDaily) * 1.05 || 100, // Explicitly force bars to take full height
+                            max: Math.max(...dataDaily) * 1.05 || 100,
                             beginAtZero: true,
                             title: {
-                                display: true,
-                                text: 'Produção Diária (Kg)',
-                                color: window.isGraphicReportRunning ? '#000000' : '#a1a1aa',
-                                font: { size: window.isGraphicReportRunning ? 16 : 12, weight: 'bold' }
+                                display: false // Removed redundant title to save space
                             },
                             grid: { color: window.isGraphicReportRunning ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.05)' },
                             ticks: {
@@ -2104,80 +2117,14 @@
                             display: true,
                             position: 'right',
                             title: {
-                                display: true,
-                                text: 'Acumulado / Meta (Kg)',
-                                color: window.isGraphicReportRunning ? '#000000' : '#a1a1aa',
-                                font: { size: window.isGraphicReportRunning ? 16 : 12, weight: 'bold' }
+                                display: false // Removed redundant title to save space
                             },
-                            grid: { display: false, drawOnChartArea: false }, // Prevent grid alignment compression
+                            grid: { display: false, drawOnChartArea: false },
                             beginAtZero: true,
-                            max: Math.max(goalValue, accum * 1.05) || 100, // Scale to goal without excess vacuum
+                            max: Math.max(goalValue, accum * 1.05) || 100,
                             ticks: {
                                 color: window.isGraphicReportRunning ? '#000000' : '#a1a1aa',
                                 font: { size: window.isGraphicReportRunning ? 14 : 12 }
-                            }
-                        }
-                    },
-                    plugins: {
-                        legend: { display: true },
-                        tooltip: {
-                            itemSort: function (a, b) {
-                                // Desired Order: 
-                                // 1. Produção Diária
-                                // 2. Acumulado
-                                // 3. Meta Mensal
-
-                                const order = {
-                                    'Produção Diária': 1,
-                                    'Acumulado': 2,
-                                    'Meta Mensal': 3
-                                , callbacks: { afterBody: () => ['', '🖱 Clique esquerdo para ver os registros'] }
-                            };
-
-                                const labelA = a.dataset.label;
-                                const labelB = b.dataset.label;
-
-                                return (order[labelA] || 99) - (order[labelB] || 99);
-                            },
-                            callbacks: {
-                                label: function (context) {
-                                    const value = context.parsed.y;
-                                    const label = context.dataset.label;
-                                    const formattedValue = value.toLocaleString('pt-BR') + ' Kg';
-
-                                    if (label === 'Produção Diária') {
-                                        return `${label}: ${formattedValue}`;
-                                    } else if (label === 'Acumulado') {
-                                        return `${label}: ${formattedValue}`;
-                                    } else if (label === 'Meta Mensal') {
-                                        const accumData = context.chart.data.datasets[1].data[context.dataIndex];
-                                        const meta = goalValue || 1;
-                                        const percent = (((accumData || 0) / meta) * 100).toFixed(1);
-                                        return `Meta Mensal: ${meta.toLocaleString('pt-BR')} Kg (${percent}%)`;
-                                    }
-                                    return `${label}: ${formattedValue}`;
-                                },
-                                footer: function (tooltipItems) {
-                                    return '\nClique na barra para ver os registros.';
-                                }
-                            }
-                        },
-                        datalabels: {
-                            display: true,
-                            anchor: 'end',
-                            align: 'top',
-                            color: window.isGraphicReportRunning ? '#000000' : '#fff',
-                            offset: 4,
-                            font: {
-                                size: window.isGraphicReportRunning ? 14 : 10,
-                                weight: 'bold'
-                            },
-                            formatter: (value) => {
-                                if (!value || value <= 0) return ''; // Hide zero values
-                                if (window.isGraphicReportRunning) {
-                                    return formatNumber(value / 1000, 2) + ' Ton';
-                                }
-                                return formatNumber(value, 0);
                             }
                         }
                     }
@@ -2429,5 +2376,3 @@
 </body>
 
 </html>
-```
-
