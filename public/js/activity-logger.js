@@ -702,9 +702,9 @@
             return;
         }
 
-        // Se o tempo de inatividade passou do limite
+        // Se o tempo de inatividade passou do limite — redireciona direto sem overlay
         if (agora - parseInt(ultimaAtividade) > SESSION_TIMEOUT) {
-            showSessionExpiredOverlay();
+            redirecionarLogin();
         }
     }
 
