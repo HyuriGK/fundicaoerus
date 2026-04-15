@@ -64,3 +64,19 @@ JWT-based (`jsonwebtoken`). `src/auth.js` handles login/token. Protected routes 
 ### Deployment
 
 Deployed on **Vercel** (see `vercel.json`). The Express app is exported as a module (`module.exports = app`) and also boots a local server when run directly.
+
+## TOKEN OPTIMIZATION RULES (STRICT)
+
+- Respond ultra-concisely. Code only, no prose.
+
+- Disable auto-compression/summarization.
+
+- No 'thinking' mode unless explicitly requested.
+
+- Never create .md docs, summaries, or logs automatically.
+
+- Prefer specialized agents for sub-tasks.
+
+- Use Sonnet by default. Use Opus only if I explicitly ask.
+
+- If a task is simple, do NOT use complex MCP tools.
