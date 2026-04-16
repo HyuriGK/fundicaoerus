@@ -87,11 +87,8 @@ function chunkArray(myArray, chunk_size) {
         // Widen liga column if needed (was VARCHAR(50), now VARCHAR(255))
         await pool.query(`ALTER TABLE producao_apontada_sincronizada ALTER COLUMN liga TYPE VARCHAR(255)`);
 
-        // OTIMIZAÇÃO: Removemos o DELETE global para evitar o "Nuclear Option" toda vez.
-        // Os dados antigos permanecem e os novos são atualizados via ON CONFLICT.
-        // console.log('🧹 Clearing data from 2025 onwards (Clean Slate)...');
-        // await pool.query("DELETE FROM producao_apontada_sincronizada WHERE data_producao >= $1", [startDate]);
-        // console.log('✅ Data cleared.');
+        await pool.query('TRUNCATE TABLE producao_apontada_sincronizada');
+        console.log('🧹 Tabela truncada.');
 
         Firebird.attach(fbOptions, function (err, db) {
             if (err) {
