@@ -288,6 +288,12 @@ function runBat(bat) {
                 if (l.includes('@PROG:')) {
                     const parts = l.split(':');
                     if (parts.length >= 3) currentProg[parts[1]] = parseInt(parts[2]) || 0;
+                } else if (l.includes('Falha definitiva')) {
+                    // Só conta erro após esgotar todas as tentativas do firebird-helper
+                    logEvent(bat.name, l, true);
+                } else if (l.includes('Login falhou') || l.includes('tentativa')) {
+                    // Tentativa intermediária — só exibe no log, não conta como erro
+                    logEvent(bat.name, l, false);
                 } else if (l.includes('\u274C') || (l.toLowerCase().includes('error:') && !l.toLowerCase().includes('warning'))) {
                     logEvent(bat.name, l, true);
                 }
@@ -297,12 +303,23 @@ function runBat(bat) {
         child.stderr.on('data', data => {
             const err = data.toString().trim();
             if (!err || err.includes('terminada') || err.includes('Warning:') || err.includes('SECURITY WARNING:')) return;
-            logEvent(bat.name, err, true);
-            scriptState[bat.name] = 'ERROR';
+            // Tentativas de reconexão do Firebird não são erros definitivos
+            if (err.includes('Login falhou') || err.includes('tentativa')) {
+                logEvent(bat.name, err, false);
+                return;
+            }
+            // Só marca erro definitivo após esgotar tentativas
+            if (err.includes('Falha definitiva') || err.includes('Cannot find module') || err.includes('Finalizado com falha')) {
+                logEvent(bat.name, err, true);
+                scriptState[bat.name] = 'ERROR';
+            } else {
+                logEvent(bat.name, err, true);
+                scriptState[bat.name] = 'ERROR';
+            }
         });
 
         child.on('close', code => {
-            if (code !== 0) {
+            if (code !== 0 && scriptState[bat.name] !== 'DONE') {
                 scriptState[bat.name] = 'ERROR';
                 logEvent(bat.name, `Falha - codigo de saida ${code}`, true);
             } else {
