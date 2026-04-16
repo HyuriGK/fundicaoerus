@@ -1,7 +1,6 @@
 /**
- * MASTER SYNC FOREVER V6 (Scrolling Log + Pinned Dashboard)
- * Orchestrates 6 batch files with a static top status board and 
- * an infinite scrolling log below it.
+ * SGP ERUS — SYNC FOREVER  v7.0
+ * Design: Industrial Premium Terminal UI
  */
 
 const { spawn } = require('child_process');
@@ -9,300 +8,372 @@ const path = require('path');
 const readline = require('readline');
 const fs = require('fs');
 
-// --- ANSI TRUECOLOR UTILS ---
-const reset = '\x1b[0m';
-const bold = '\x1b[1m';
-const dim = '\x1b[2m';
-const italic = '\x1b[3m';
+// ─── ANSI ────────────────────────────────────────────────────────────────────
+const ESC  = '\x1b[';
+const reset  = '\x1b[0m';
+const bold   = '\x1b[1m';
+const dim    = '\x1b[2m';
 
-const rgb = (r, g, b) => `\x1b[38;2;${r};${g};${b}m`;
-const bgRgb = (r, g, b) => `\x1b[48;2;${r};${g};${b}m`;
+const rgb   = (r,g,b) => `\x1b[38;2;${r};${g};${b}m`;
+const bgRgb = (r,g,b) => `\x1b[48;2;${r};${g};${b}m`;
 
-const color = {
-    primary: rgb(0, 191, 255), // DeepSkyBlue
-    secondary: rgb(0, 255, 255), // Cyan
-    success: rgb(0, 200, 83),  // Green
-    warning: rgb(255, 193, 7),  // Amber
-    danger: rgb(255, 82, 82),   // Red
-    info: rgb(33, 150, 243),    // Blue
-    muted: rgb(117, 117, 117),  // Gray
-    white: rgb(255, 255, 255)
+const C = {
+    gold:    rgb(251,191,36),
+    amber:   rgb(217,119,6),
+    cyan:    rgb(34,211,238),
+    blue:    rgb(59,130,246),
+    green:   rgb(16,185,129),
+    red:     rgb(239,68,68),
+    orange:  rgb(249,115,22),
+    white:   rgb(244,244,245),
+    muted:   rgb(113,113,122),
+    border:  rgb(63,63,70),
+    bg:      bgRgb(9,9,11),
+    bgCard:  bgRgb(24,24,27),
+    bgRun:   bgRgb(20,40,20),
+    bgErr:   bgRgb(40,10,10),
+    bgDone:  bgRgb(10,30,20),
 };
 
-// Gradient Generator
-function getGradient(text, start, end) {
-    let result = '';
-    const len = text.length;
-    for (let i = 0; i < len; i++) {
-        const r = Math.floor(start[0] + (end[0] - start[0]) * (i / len));
-        const g = Math.floor(start[1] + (end[1] - start[1]) * (i / len));
-        const b = Math.floor(start[2] + (end[2] - start[2]) * (i / len));
-        result += rgb(r, g, b) + text[i];
-    }
-    return result + reset;
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
+const cur = (x,y) => `${ESC}${y};${x}H`;
+const clearLine = () => `${ESC}2K`;
+const hideCursor = () => process.stdout.write('\x1B[?25l');
+const showCursor = () => process.stdout.write('\x1B[?25h');
+
+function pad(str, len, dir = 'right') {
+    const s = String(str);
+    const plain = s.replace(/\x1b\[[0-9;]*m/g, '');
+    const diff = len - plain.length;
+    if (diff <= 0) return s;
+    return dir === 'right' ? s + ' '.repeat(diff) : ' '.repeat(diff) + s;
 }
 
-// CONFIGURATIONS
-const ROOT_DIR = path.join(__dirname, '..', '..');
-const LOG_FILE = path.join(ROOT_DIR, 'scripts', 'sync', 'sync-errors.log');
-const SYNC_BATS = [
-    { name: 'CUSTOS', file: 'sincronizar_acustos.bat' },
-    { name: 'DEVOLUÇÕES', file: 'sincronizar_adevolucoes.bat' },
-    { name: 'EMISSÕES', file: 'sincronizar_aemissoes.bat' },
-    { name: 'FATURAMENTO', file: 'sincronizar_afaturamento.bat' },
-    { name: 'PEDIDOS', file: 'sincronizar_apedidos.bat' },
-    { name: 'PRODUÇÃO', file: 'sincronizar_aproducao.bat' },
-    { name: 'REFUGOS', file: 'sincronizar_arefugo.bat' },
-    { name: 'SNAPSHOTS', file: 'sincronizar_asnapshots.bat' }
-];
-const DELAY_BETWEEN_SCRIPTS = 10000; // 10 segundos
+function center(str, width) {
+    const plain = str.replace(/\x1b\[[0-9;]*m/g, '');
+    const space = width - plain.length;
+    if (space <= 0) return str;
+    const l = Math.floor(space / 2);
+    return ' '.repeat(l) + str + ' '.repeat(space - l);
+}
 
-// STATE
-let cycleCount = 0;
-let cycleHistory = []; 
-let currentStatus = {};
-let scriptState = {}; // 'IDLE', 'RUNNING', 'DONE', 'ERROR'
-let activeIssues = {}; // Store current error per script
-let totalErrorsCount = 0;
-let logHistory = []; // Last 10 lines of actual events
+function now() {
+    return new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+function gradient(text, from, to) {
+    let out = '';
+    const len = text.length || 1;
+    for (let i = 0; i < text.length; i++) {
+        const t = i / len;
+        const r = Math.round(from[0] + (to[0] - from[0]) * t);
+        const g = Math.round(from[1] + (to[1] - from[1]) * t);
+        const b = Math.round(from[2] + (to[2] - from[2]) * t);
+        out += rgb(r, g, b) + text[i];
+    }
+    return out + reset;
+}
+
+// ─── CONFIG ──────────────────────────────────────────────────────────────────
+const ROOT_DIR = path.join(__dirname, '..', '..');
+const LOG_FILE = path.join(__dirname, 'sync-errors.log');
+
+const SYNC_BATS = [
+    { name: 'CUSTOS',      file: 'sincronizar_acustos.bat',      icon: '💰' },
+    { name: 'DEVOLUÇÕES',  file: 'sincronizar_adevolucoes.bat',  icon: '↩️ ' },
+    { name: 'EMISSÕES',    file: 'sincronizar_aemissoes.bat',     icon: '📤' },
+    { name: 'FATURAMENTO', file: 'sincronizar_afaturamento.bat', icon: '🧾' },
+    { name: 'PEDIDOS',     file: 'sincronizar_apedidos.bat',     icon: '📦' },
+    { name: 'PRODUÇÃO',    file: 'sincronizar_aproducao.bat',    icon: '🏭' },
+    { name: 'REFUGOS',     file: 'sincronizar_arefugo.bat',      icon: '♻️ ' },
+    { name: 'SNAPSHOTS',   file: 'sincronizar_asnapshots.bat',   icon: '📸' },
+];
+
+const DELAY_MS = 10000;
+const W = 72; // total box width (inner)
+
+// ─── STATE ───────────────────────────────────────────────────────────────────
+let cycleCount    = 0;
+let cycleHistory  = [];
+let currentProg   = {};
+let scriptState   = {};
+let activeIssues  = {};
+let totalErrors   = 0;
+let logHistory    = [];
+let lastSuccessAt = {};
 
 SYNC_BATS.forEach(b => {
-    currentStatus[b.name] = '0%';
-    scriptState[b.name] = 'IDLE';
+    currentProg[b.name]  = 0;
+    scriptState[b.name]  = 'IDLE';
 });
 
-/**
- * Pinned Header Drawing (always at the top of the terminal viewport)
- */
-function drawPinnedDashboard(startTime = null) {
+// ─── DRAW ────────────────────────────────────────────────────────────────────
+function drawDashboard(cycleStart) {
+    const lines = buildFrame(cycleStart);
     readline.cursorTo(process.stdout, 0, 0);
     readline.clearScreenDown(process.stdout);
-
-    const avgTime = cycleHistory.length > 0 
-        ? (cycleHistory.reduce((a, b) => a + b, 0) / cycleHistory.length).toFixed(1) 
-        : '--';
-
-    // HEADER
-    const title = '  📊 SGP ERUS - DASHBOARD DE SINCRONIZAÇÃO INDUSTRIAL  ';
-    const headerLine = '═'.repeat(70);
-    console.log(getGradient('╔' + '═'.repeat(68) + '╗', [0, 120, 255], [0, 255, 255]));
-    console.log(getGradient('║', [0, 120, 255], [0, 120, 255]) + 
-                bold + getGradient(title.center(68), [0, 215, 255], [0, 255, 200]) + 
-                getGradient('║', [0, 255, 255], [0, 255, 255]));
-    console.log(getGradient('╠' + '═'.repeat(34) + '╦' + '═'.repeat(33) + '╣', [0, 180, 255], [0, 240, 255]));
-
-    // INFO ROW
-    const col1 = `  🔄 CICLO: ${bold}#${cycleCount.toString().padStart(3, '0')}${reset}`.padEnd(41);
-    const col2 = `⏱️ MÉDIA: ${bold}${avgTime}s${reset}`.padEnd(38);
-    console.log(color.primary + '║' + col1 + color.primary + '║' + col2 + color.primary + '║' + reset);
-    
-    const errCountStr = totalErrorsCount > 0 ? (color.danger + totalErrorsCount.toString().padStart(4, '0') + reset) : (color.success + '0000' + reset);
-    const col3 = `  🚩 ERROS TOTAIS: ${errCountStr}`.padEnd(50);
-    const col4 = `📂 LOG: ${dim}sync-errors.log${reset}`.padEnd(46);
-    console.log(color.primary + '║' + col3 + color.primary + '║' + col4 + color.primary + '║' + reset);
-    
-    console.log(getGradient('╠' + '═'.repeat(68) + '╣', [0, 215, 255], [0, 255, 220]));
-
-    // SCRIPT STATUS TABLE
-    SYNC_BATS.forEach(bat => {
-        const progValue = parseInt(currentStatus[bat.name]) || 0;
-        const state = scriptState[bat.name];
-        
-        let icon = '❄️ ';
-        let stateColor = color.muted;
-        if (state === 'RUNNING') { icon = '🚀 '; stateColor = color.secondary; }
-        else if (state === 'DONE') { icon = '✅ '; stateColor = color.success; }
-        else if (state === 'ERROR') { icon = '⚠️ '; stateColor = color.danger; }
-
-        const barWidth = 24;
-        const filled = Math.floor((progValue / 100) * barWidth);
-        const empty = barWidth - filled;
-        
-        // Progress bar with gradient logic (internally)
-        let barStr = '';
-        for (let i = 0; i < filled; i++) {
-            const r = Math.floor(255 - (i / barWidth) * 155);
-            const g = Math.min(255, Math.floor((i / barWidth) * 255 + 100));
-            barStr += rgb(r, g, 100) + '█';
-        }
-        barStr += color.muted + '░'.repeat(empty);
-
-        const nameLabel = bat.name.padEnd(12);
-        const progText = (progValue + '%').padStart(4);
-        
-        console.log(color.primary + '║' + reset + `  ${stateColor}${icon}${bold}${nameLabel}${reset} ` + 
-                    `[${barStr}${reset}] ` + 
-                    `${stateColor}${progText}${reset}  ` +
-                    `${dim}│${reset} ${stateColor}${state.padEnd(8)}${reset} ` +
-                    color.primary + '║' + reset);
-    });
-
-    console.log(getGradient('╚' + '═'.repeat(68) + '╝', [0, 255, 200], [0, 255, 120]));
-
-    // ACTIVE ISSUES PANEL (Dynamic)
-    const issues = Object.entries(activeIssues);
-    if (issues.length > 0) {
-        console.log('\n' + color.danger + bold + ' 🚨 ALERTAS ATIVOS (PROBLEMAS DETECTADOS):' + reset);
-        issues.forEach(([script, msg]) => {
-            console.log(` ${color.danger}└─ ${bold}${script}:${reset} ${color.warning}${msg}${reset}`);
-        });
-    }
-
-    // LOG HISTORY
-    console.log('\n' + color.muted + ' 🕒 HISTÓRICO RECENTE:' + reset);
-    const lastLogs = logHistory.slice(-8);
-    lastLogs.forEach(entry => {
-        const time = color.muted + '[' + entry.time + ']' + reset;
-        const tag = entry.isError ? (color.danger + entry.script) : (color.info + entry.script);
-        console.log(` ${time} ${tag.padEnd(20)} ${entry.msg}`);
-    });
-    
-    if (startTime) {
-        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-        readline.cursorTo(process.stdout, 0, 30); // Move down to avoid overlapping if logs are short
-        process.stdout.write(dim + `   ⏱️  Tempo de Ciclo Atual: ${elapsed}s` + reset + '\n');
-    }
+    process.stdout.write(lines.join('\n') + '\n');
 }
 
-// String helper for centering
-String.prototype.center = function(width) {
-    const space = width - this.length;
-    if (space <= 0) return this;
-    const left = Math.floor(space / 2);
-    const right = space - left;
-    return ' '.repeat(left) + this + ' '.repeat(right);
-};
+function buildFrame(cycleStart) {
+    const out = [];
+    const W2 = W + 2; // with borders
 
-/**
- * Log an event: Appends to file and PRINTS relevant ones to terminal
- */
+    const avgTime = cycleHistory.length > 0
+        ? (cycleHistory.reduce((a,b)=>a+b,0)/cycleHistory.length).toFixed(1)
+        : '—';
+    const elapsed = cycleStart ? ((Date.now()-cycleStart)/1000).toFixed(1)+'s' : '—';
+
+    // ── TOP BAR ──────────────────────────────────────────────────────────────
+    out.push(C.border + '╔' + '═'.repeat(W2) + '╗' + reset);
+
+    // Title row
+    const titleText = '  ◈  FUNDIÇÃO ERUS  —  SINCRONIZAÇÃO EM TEMPO REAL  ◈  ';
+    out.push(
+        C.border + '║' + reset +
+        bold + gradient(center(titleText, W2), [251,191,36], [249,115,22]) +
+        C.border + '║' + reset
+    );
+
+    // Subtitle
+    const sub = center(dim + 'Sistema de Gestão de Produção  •  SGP v7.0' + reset, W2 + 20);
+    out.push(C.border + '║' + reset + sub + C.border + '║' + reset);
+
+    out.push(C.border + '╠' + '═'.repeat(Math.floor(W2/2)) + '╦' + '═'.repeat(W2 - Math.floor(W2/2) - 1) + '╣' + reset);
+
+    // Stats row 1
+    const cycleStr  = bold + C.gold + '#' + String(cycleCount).padStart(3,'0') + reset;
+    const avgStr    = bold + C.cyan + avgTime + 's' + reset;
+    const errStr    = totalErrors > 0
+        ? bold + C.red   + String(totalErrors).padStart(4,'0') + reset
+        : bold + C.green + '0000' + reset;
+    const elapsStr  = bold + C.amber + elapsed + reset;
+
+    const left1  = '  ' + C.muted + 'CICLO ' + reset + cycleStr + '   ' + C.muted + 'MÉDIA ' + reset + avgStr;
+    const right1 = C.muted + 'ERROS ' + reset + errStr + '   ' + C.muted + 'TEMPO ' + reset + elapsStr + '  ';
+
+    out.push(
+        C.border + '║' + reset +
+        pad(left1,  Math.floor(W2/2) + 12) +
+        C.border + '║' + reset +
+        pad(right1, W2 - Math.floor(W2/2) + 12) +
+        C.border + '║' + reset
+    );
+
+    // Stats row 2
+    const timeStr   = C.muted + 'HORA  ' + reset + bold + C.white + now() + reset;
+    const logStr    = C.muted + 'LOG   ' + reset + dim + 'scripts/sync/sync-errors.log' + reset;
+    const left2  = '  ' + timeStr;
+    const right2 = logStr + '  ';
+    out.push(
+        C.border + '║' + reset +
+        pad(left2,  Math.floor(W2/2) + 8) +
+        C.border + '║' + reset +
+        pad(right2, W2 - Math.floor(W2/2) + 18) +
+        C.border + '║' + reset
+    );
+
+    // ── SECTION: MÓDULOS ─────────────────────────────────────────────────────
+    out.push(C.border + '╠' + '═'.repeat(W2) + '╣' + reset);
+
+    const secTitle = center(bold + C.gold + '▸  MÓDULOS DE SINCRONIZAÇÃO  ◂' + reset, W2 + 20);
+    out.push(C.border + '║' + reset + secTitle + C.border + '║' + reset);
+    out.push(C.border + '╠' + '═'.repeat(W2) + '╣' + reset);
+
+    SYNC_BATS.forEach(bat => {
+        const prog  = currentProg[bat.name] || 0;
+        const state = scriptState[bat.name];
+
+        let stateLabel, stateColor, rowBg;
+        if (state === 'RUNNING') {
+            stateLabel = ' RODANDO '; stateColor = C.cyan;  rowBg = '';
+        } else if (state === 'DONE') {
+            stateLabel = '  PRONTO '; stateColor = C.green; rowBg = '';
+        } else if (state === 'ERROR') {
+            stateLabel = '   ERRO  '; stateColor = C.red;   rowBg = '';
+        } else {
+            stateLabel = '  AGUARD '; stateColor = C.muted; rowBg = '';
+        }
+
+        // Progress bar (30 chars)
+        const BAR = 28;
+        const filled = Math.round((prog / 100) * BAR);
+        let bar = '';
+        for (let i = 0; i < filled; i++) {
+            const t = i / BAR;
+            bar += rgb(Math.round(16+t*235), Math.round(185-t*50), Math.round(129-t*100)) + '█';
+        }
+        bar += C.border + '░'.repeat(BAR - filled) + reset;
+
+        const pct  = bold + stateColor + String(prog).padStart(3) + '%' + reset;
+        const name = bold + stateColor + pad(bat.name, 13) + reset;
+        const badge = bgRgb(30,30,35) + stateColor + bold + stateLabel + reset;
+        const last  = lastSuccessAt[bat.name]
+            ? dim + ' ok ' + lastSuccessAt[bat.name] + reset
+            : dim + '         ' + reset;
+
+        const row = ' ' + bat.icon + ' ' + name + ' [' + bar + '] ' + pct + '  ' + badge + ' ' + last;
+        out.push(C.border + '║' + reset + rowBg + pad(row, W2 + 60) + reset + C.border + '║' + reset);
+    });
+
+    // ── SECTION: ALERTAS ─────────────────────────────────────────────────────
+    const issues = Object.entries(activeIssues);
+    out.push(C.border + '╠' + '═'.repeat(W2) + '╣' + reset);
+
+    if (issues.length > 0) {
+        const alertTitle = center(bold + C.red + '⚠  ALERTAS ATIVOS  ⚠' + reset, W2 + 20);
+        out.push(C.border + '║' + reset + alertTitle + C.border + '║' + reset);
+        issues.slice(0, 3).forEach(([script, msg]) => {
+            const line = '  ' + C.red + '▸ ' + bold + pad(script,12) + reset + C.orange + msg.substring(0, W - 20) + reset;
+            out.push(C.border + '║' + reset + pad(line, W2 + 30) + C.border + '║' + reset);
+        });
+    } else {
+        const okTitle = center(bold + C.green + '✔  TODOS OS MÓDULOS OPERACIONAIS  ✔' + reset, W2 + 20);
+        out.push(C.border + '║' + reset + okTitle + C.border + '║' + reset);
+    }
+
+    // ── SECTION: LOG ─────────────────────────────────────────────────────────
+    out.push(C.border + '╠' + '═'.repeat(W2) + '╣' + reset);
+    const logTitle = center(bold + C.muted + '○  HISTÓRICO DE EVENTOS  ○' + reset, W2 + 20);
+    out.push(C.border + '║' + reset + logTitle + C.border + '║' + reset);
+
+    const lastLogs = logHistory.slice(-6);
+    // pad to always show 6 lines
+    while (lastLogs.length < 6) lastLogs.unshift(null);
+
+    lastLogs.forEach(entry => {
+        if (!entry) {
+            out.push(C.border + '║' + reset + ' '.repeat(W2) + C.border + '║' + reset);
+            return;
+        }
+        const timeStr   = C.border + '[' + reset + dim + entry.time + reset + C.border + ']' + reset;
+        const scriptStr = entry.isError ? C.red + bold + pad(entry.script, 13) : C.green + dim + pad(entry.script, 13);
+        const sep       = reset + C.border + '│' + reset + ' ';
+        const msgColor  = entry.isError ? C.orange : dim;
+        const msgStr    = msgColor + entry.msg.substring(0, W - 28) + reset;
+        const line      = '  ' + timeStr + ' ' + scriptStr + reset + sep + msgStr;
+        out.push(C.border + '║' + reset + pad(line, W2 + 60) + C.border + '║' + reset);
+    });
+
+    // ── BOTTOM ───────────────────────────────────────────────────────────────
+    out.push(C.border + '╠' + '═'.repeat(W2) + '╣' + reset);
+    const footer = center(dim + 'Pressione  Ctrl+C  para encerrar  •  Dados atualizados a cada ciclo' + reset, W2 + 10);
+    out.push(C.border + '║' + reset + footer + C.border + '║' + reset);
+    out.push(C.border + '╚' + '═'.repeat(W2) + '╝' + reset);
+
+    return out;
+}
+
+// ─── LOGGING ─────────────────────────────────────────────────────────────────
 function logEvent(script, message, isError = true) {
-    const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
-    const timeDisplay = new Date().toLocaleTimeString('pt-BR');
+    const ts  = new Date().toISOString().replace('T',' ').substring(0,19);
     const msg = message.trim();
     if (!msg || msg.includes('@PROG')) return;
 
+    const isSpam = msg.includes('SECURITY WARNING') || msg.includes('Warning:') || msg.includes('adopt standard');
+    if (isSpam && !isError) return;
+
     if (isError) {
-        totalErrorsCount++;
-        activeIssues[script] = msg; // Update dynamic alert
+        totalErrors++;
+        activeIssues[script] = msg;
     }
 
-    // Write to file
-    const logEntry = `[${timestamp}] [${script}] ${isError ? 'ERROR' : 'INFO'}: ${msg}\n`;
-    try { fs.appendFileSync(LOG_FILE, logEntry); } catch (e) {}
+    try { fs.appendFileSync(LOG_FILE, `[${ts}] [${script}] ${isError?'ERROR':'INFO'}: ${msg}\n`); } catch(e){}
 
-    // Add to history display
-    const isSpam = msg.includes('SECURITY WARNING') || msg.includes('Warning:') || msg.includes('adopt standard libpq');
-    if (!isSpam || isError) {
-        logHistory.push({ time: timeDisplay, script, msg, isError });
-        if (logHistory.length > 50) logHistory.shift();
-    }
+    logHistory.push({ time: now(), script, msg, isError });
+    if (logHistory.length > 60) logHistory.shift();
 }
 
-/**
- * Runs a single .bat file
- */
-function runBat(batEntry) {
-    return new Promise((resolve) => {
-        scriptState[batEntry.name] = 'RUNNING';
-        const child = spawn('cmd.exe', ['/c', batEntry.file], {
+// ─── RUN BAT ─────────────────────────────────────────────────────────────────
+function runBat(bat) {
+    return new Promise(resolve => {
+        scriptState[bat.name]  = 'RUNNING';
+        currentProg[bat.name]  = 0;
+
+        const child = spawn('cmd.exe', ['/c', bat.file], {
             cwd: ROOT_DIR,
             stdio: ['ignore', 'pipe', 'pipe']
         });
 
-        child.stdout.on('data', (data) => {
-            const lines = data.toString().split('\n');
-            lines.forEach(line => {
-                const trimmedLine = line.trim();
-                if (trimmedLine.includes('@PROG:')) {
-                    const parts = trimmedLine.split(':');
+        child.stdout.on('data', data => {
+            data.toString().split('\n').forEach(line => {
+                const l = line.trim();
+                if (l.includes('@PROG:')) {
+                    const parts = l.split(':');
                     if (parts.length >= 3) {
-                        currentStatus[parts[1]] = parts[2];
+                        const pct = parseInt(parts[2]) || 0;
+                        currentProg[parts[1]] = pct;
                     }
-                } else if (trimmedLine.includes('❌') || (trimmedLine.toLowerCase().includes('error:') && !trimmedLine.toLowerCase().includes('warning'))) {
-                    logEvent(batEntry.name, trimmedLine, true);
-                } else if (trimmedLine.includes('Warning:') || trimmedLine.includes('SECURITY WARNING:')) {
-                    logEvent(batEntry.name, trimmedLine, false);
+                } else if (l.includes('❌') || (l.toLowerCase().includes('error:') && !l.toLowerCase().includes('warning'))) {
+                    logEvent(bat.name, l, true);
                 }
             });
         });
 
-        child.stderr.on('data', (data) => {
-            const errLog = data.toString().trim();
-            if (errLog && !errLog.includes('terminada')) {
-                if (errLog.includes('Warning:') || errLog.includes('SECURITY WARNING:')) {
-                    logEvent(batEntry.name, errLog, false);
-                } else {
-                    logEvent(batEntry.name, errLog, true);
-                    scriptState[batEntry.name] = 'ERROR';
-                }
-            }
+        child.stderr.on('data', data => {
+            const err = data.toString().trim();
+            if (!err || err.includes('terminada')) return;
+            if (err.includes('Warning:') || err.includes('SECURITY WARNING:')) return;
+            logEvent(bat.name, err, true);
+            scriptState[bat.name] = 'ERROR';
         });
 
-        child.on('close', (code) => {
+        child.on('close', code => {
             if (code !== 0) {
-                scriptState[batEntry.name] = 'ERROR';
-                logEvent(batEntry.name, `Finalizado com falha (código ${code})`, true);
+                scriptState[bat.name] = 'ERROR';
+                logEvent(bat.name, `Falha — código de saída ${code}`, true);
             } else {
-                scriptState[batEntry.name] = 'DONE';
-                currentStatus[batEntry.name] = '100%';
-                delete activeIssues[batEntry.name]; // SUCCESS! Clear alerts for this script
-                logEvent(batEntry.name, "Concluído com sucesso", false);
+                scriptState[bat.name]  = 'DONE';
+                currentProg[bat.name]  = 100;
+                lastSuccessAt[bat.name] = now();
+                delete activeIssues[bat.name];
+                logEvent(bat.name, 'Sincronização concluída com sucesso', false);
             }
             resolve();
         });
     });
 }
 
-/**
- * Main Loop
- */
+// ─── MAIN LOOP ───────────────────────────────────────────────────────────────
 async function startForever() {
-    // Clear once at beginning
     console.clear();
-    process.stdout.write('\x1B[?25l');
+    hideCursor();
 
     if (!fs.existsSync(LOG_FILE)) {
-        fs.writeFileSync(LOG_FILE, '--- SYNC FOREVER LOG START ---\n');
+        fs.writeFileSync(LOG_FILE, `=== SGP ERUS SYNC LOG — iniciado em ${new Date().toISOString()} ===\n`);
     }
 
     while (true) {
         cycleCount++;
         SYNC_BATS.forEach(b => {
-            currentStatus[b.name] = '0%';
+            currentProg[b.name] = 0;
             scriptState[b.name] = 'IDLE';
         });
-        
+
         const cycleStart = Date.now();
-        drawPinnedDashboard(cycleStart);
+        const timer = setInterval(() => drawDashboard(cycleStart), 800);
 
-        const timerInterval = setInterval(() => drawPinnedDashboard(cycleStart), 1000);
-
-        // EXECUÇÃO SEQUENCIAL COM INTERVALO DE 10s
         for (let i = 0; i < SYNC_BATS.length; i++) {
-            const bat = SYNC_BATS[i];
-            await runBat(bat);
-            
-            // Aguarda 10 segundos se não for o último script do ciclo
+            await runBat(SYNC_BATS[i]);
             if (i < SYNC_BATS.length - 1) {
-                await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_SCRIPTS));
+                await new Promise(r => setTimeout(r, DELAY_MS));
             }
         }
 
-        clearInterval(timerInterval);
-        
+        clearInterval(timer);
         const duration = (Date.now() - cycleStart) / 1000;
         cycleHistory.push(duration);
         if (cycleHistory.length > 50) cycleHistory.shift();
 
-        drawPinnedDashboard(cycleStart); 
-        logEvent('SYSTEM', `Ciclo #${cycleCount} finalizado em ${duration}s`, false);
+        logEvent('SISTEMA', `Ciclo #${cycleCount} concluído em ${duration.toFixed(1)}s`, false);
+        drawDashboard(cycleStart);
+
+        // Aguarda 30s antes do próximo ciclo
+        await new Promise(r => setTimeout(r, 30000));
     }
 }
 
-process.on('SIGINT', () => {
-    process.stdout.write('\x1B[?25h');
-    process.exit();
-});
+process.on('SIGINT', () => { showCursor(); process.exit(0); });
+process.on('exit',   () => showCursor());
 
 startForever();
