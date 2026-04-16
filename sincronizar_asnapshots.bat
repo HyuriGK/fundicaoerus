@@ -1,2 +1,2 @@
 @echo off
-node scripts/sync-industrial-snapshots.js
+node scripts/sync/sync-industrial-snapshots.js

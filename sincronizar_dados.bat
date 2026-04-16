@@ -8,7 +8,7 @@ echo ======================================================
 echo.
 
 echo [1/1] Sincronizando Roteiros das OPs em aberto...
-node scripts/sync-master.js
+node scripts/sync/sync-master.js
 
 echo.
 echo ======================================================

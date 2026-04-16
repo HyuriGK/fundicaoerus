@@ -1,4 +1,4 @@
 @echo off
 cd /d "%~dp0"
-node scripts/sync-devolucoes.js
+node scripts/sync/sync-devolucoes.js
 exit

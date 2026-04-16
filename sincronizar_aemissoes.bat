@@ -1,4 +1,4 @@
 @echo off
 cd /d "%~dp0"
-node scripts/sync-emissoes.js
+node scripts/sync/sync-emissoes.js
 exit

@@ -35,7 +35,7 @@ echo ┌────────────────────────
 echo │ [1/2] Sincronizando PEDIDOS (2025-2026)...             │
 echo └─────────────────────────────────────────────────────────┘
 echo.
-node scripts/sync-data.js
+node scripts/sync/sync-data.js
 if %ERRORLEVEL% NEQ 0 (
     echo   ❌ Erro ao sincronizar pedidos
     pause
@@ -49,7 +49,7 @@ echo ┌────────────────────────
 echo │ [2/2] Sincronizando FATURAMENTO (2026)...              │
 echo └─────────────────────────────────────────────────────────┘
 echo.
-node scripts/sync-firebird-to-postgres.js
+node scripts/sync/sync-firebird-to-postgres.js
 if %ERRORLEVEL% NEQ 0 (
     echo   ❌ Erro ao sincronizar faturamento
     pause
@@ -64,7 +64,7 @@ echo ┌────────────────────────
 echo │ [3/3] Sincronizando PRODUCAO (2026)...                 │
 echo └─────────────────────────────────────────────────────────┘
 echo.
-node scripts/sync-production-firebird-postgres.js
+node scripts/sync/sync-production-firebird-postgres.js
 if %ERRORLEVEL% NEQ 0 (
     echo   ❌ Erro ao sincronizar producao
     pause

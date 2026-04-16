@@ -11,15 +11,15 @@ echo ╚════════════════════════
 echo.
 
 :: Bloqueia a tela durante a sincronizacao
-node scripts/sync-page-lock.js lock comparativo.html
+node scripts/sync/sync-page-lock.js lock comparativo.html
 
 echo 🚀 Iniciando sincronização...
 echo.
 
-node scripts/sync-assertividade.js
+node scripts/sync/sync-assertividade.js
 
 :: Desbloqueia a tela apos a sincronizacao
-node scripts/sync-page-lock.js unlock comparativo.html
+node scripts/sync/sync-page-lock.js unlock comparativo.html
 
 if %ERRORLEVEL% NEQ 0 (
     echo.

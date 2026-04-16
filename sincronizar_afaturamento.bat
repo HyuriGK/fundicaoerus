@@ -1,4 +1,4 @@
 @echo off
 cd /d "%~dp0"
-node scripts/sync-firebird-to-postgres.js
+node scripts/sync/sync-firebird-to-postgres.js
 exit

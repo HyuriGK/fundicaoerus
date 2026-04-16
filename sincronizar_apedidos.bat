@@ -1,4 +1,4 @@
 @echo off
 cd /d "%~dp0"
-node scripts/sync-master.js
+node scripts/sync/sync-master.js
 exit

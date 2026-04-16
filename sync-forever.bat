@@ -19,7 +19,7 @@ echo.
 echo ======================================================
 echo.
 
-node scripts/sync-forever.js
+node scripts/sync/sync-forever.js
 
 echo.
 echo [ERRO] O processo de sincronização foi interrompido.

@@ -9,7 +9,7 @@ echo.
 echo Este script sincroniza apenas os dados de emissao 
 echo (graficos historicos e pendentes) do Pedidos.html.
 echo.
-node scripts/sync-emissoes.js
+node scripts/sync/sync-emissoes.js
 echo.
 echo ======================================================
 echo Sincronizacao finalizada.
