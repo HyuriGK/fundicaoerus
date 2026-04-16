@@ -62,10 +62,10 @@ function chunkArray(myArray, chunk_size) {
         // Em vez de buscar dados de 2025 inteiros toda vez, buscamos apenas os últimos 90 dias.
         // Isso cobre OPs em aberto e correções recentes com muito mais agilidade.
         let startDateObj = new Date();
-        startDateObj.setDate(startDateObj.getDate() - 90);
+        startDateObj.setDate(startDateObj.getDate() - 105);
         let startDate = startDateObj.toISOString().split('T')[0];
 
-        console.log(`📅 Janela de Sincronização: ${startDate} até hoje (90 dias).`);
+        console.log(`📅 Janela de Sincronização: ${startDate} até hoje (105 dias).`);
 
         // Add columns if they don't exist (migration for existing table)
         await pool.query(`
