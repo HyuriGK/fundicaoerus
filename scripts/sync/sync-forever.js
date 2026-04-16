@@ -98,7 +98,7 @@ const SYNC_BATS = [
 ];
 
 const DELAY_MS = 10000;
-const getW = () => Math.max(80, (process.stdout.columns || 100)) - 4; // dynamic terminal width
+const getW = () => Math.max(80, (process.stdout.columns || 120)) - 2; // dynamic terminal width
 
 
 // ─── STATE ───────────────────────────────────────────────────────────────────
@@ -122,7 +122,25 @@ const B = {
     top: () => { const w = getW(); return bdr + B.tl + B.h.repeat(w) + B.tr + reset; },
     sep: () => { const w = getW(); return bdr + B.ml + B.h.repeat(w) + B.mr + reset; },
     bot: () => { const w = getW(); return bdr + B.bl + B.h.repeat(w) + B.br + reset; },
-    row: (content, w) => { w = w || getW(); return bdr + B.v + reset + padR(content, w) + bdr + B.v + reset; },
+    row: (content, w) => {
+        w = w || getW();
+        // Strip ANSI to measure, then pad or truncate to exactly w visual chars
+        let vis = visLen(content);
+        let out = content;
+        if (vis < w) {
+            out = content + ' '.repeat(w - vis);
+        } else if (vis > w) {
+            // truncate plain chars until fits
+            let acc = 0, result = '';
+            for (const ch of content.replace(/\x1b\[[0-9;]*m/g, '')) {
+                const cw = ch.codePointAt(0) >= 0x1F000 ? 2 : 1;
+                if (acc + cw > w) break;
+                acc += cw; result += ch;
+            }
+            out = result + ' '.repeat(Math.max(0, w - acc));
+        }
+        return bdr + B.v + reset + out + reset + bdr + B.v + reset;
+    },
     blank: () => { const w = getW(); return B.row(' '.repeat(w), w); },
 };
 
