@@ -1516,17 +1516,16 @@
                 <table id="dataTable">
                     <thead>
                         <tr>
-                            <th style="width: 6%;">PEDIDO</th>
+                            <th style="width: 10%;">PEDIDO - OP</th>
                             <th class="sortable-th" id="th-entrega" onclick="toggleSort('entrega')" style="width: 7%;">ENTREGA</th>
                             <th class="sortable-th" id="th-cliente" onclick="toggleSort('cliente')" style="width: 14%; text-align: left;">CLIENTE</th>
                             <th style="width: 7%; text-align: center;">CÓDIGO</th>
                             <th style="width: 13%;">PRODUTO</th>
-                            <th class="sortable-th" id="th-saldo" onclick="toggleSort('saldo')" style="width: 4%;">SALDO</th>
+                            <th class="sortable-th" id="th-saldo" onclick="toggleSort('saldo')" style="width: 10%;">SALDO</th>
                             <th class="sortable-th" id="th-peso_un" onclick="toggleSort('peso_un')" style="width: 7%;">PESO UN</th>
-                            <th class="sortable-th" id="th-peso_total" onclick="toggleSort('peso_total')" style="width: 7%;">PESO TOTAL</th>
+                            <th class="sortable-th" id="th-peso_total" onclick="toggleSort('peso_total')" style="width: 11%;">PESO TOTAL</th>
                             <th class="sortable-th" id="th-valor_total" onclick="toggleSort('valor_total')" style="width: 8%;">TOTAL (R$)</th>
-                            <th style="width: 5%;">OP</th>
-                            <th style="width: 22%;">OBSERVAÇÕES</th>
+                            <th style="width: 13%;">OBSERVAÇÕES</th>
                         </tr>
                         <tr id="filterRow">
                             <th><input class="filter-input-table" data-col="0" placeholder="..."></th>
@@ -1540,10 +1539,8 @@
                             <!-- Total R$ -->
                             <th><input class="filter-input-table" data-col="8" placeholder="...">
                             </th>
-                            <!-- OP -->
+                            <!-- Observações (was 10) -->
                             <th><input class="filter-input-table" data-col="9" placeholder="..."></th>
-                            <!-- Observações -->
-                            <th><input class="filter-input-table" data-col="10" placeholder="..."></th>
                         </tr>
                     </thead>
                     <tbody id="table-body"></tbody>
@@ -2753,7 +2750,7 @@
         function renderTable(list) {
             const tbody = document.getElementById('table-body');
             if (list.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="11" style="text-align:center; padding:20px;">Nenhum registro encontrado.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding:20px;">Nenhum registro encontrado.</td></tr>';
                 return;
             }
             tbody.innerHTML = list.map((item, index) => {
@@ -2819,6 +2816,21 @@
                         <span class="clickable-id" onclick="showItemDetails(this)" data-json='${jsonData}'>
                             ${item.CODIGO_PPR || item.sync_key || '-'}
                         </span>
+                        ${item.OP_PCS && item.OP_PCS !== '-' ? `
+                            - 
+                            <span class="clickable-op" onclick='showOPDetails(${JSON.stringify({
+                                op: item.OP_PCS,
+                                desc: item.NOME_PRODUTO_PPR || item.PRODUTO_PPR,
+                                client: item.NOME_CLIENTE || '-',
+                                emission: formatDateLocal(item.OP_EMISSAO || item.DATA_EMISSAO_PEDIDO),
+                                delivery: formatDateLocal(item.OP_ENTREGA) || entrega,
+                                originalQty: qtdOriginal,
+                                currentSaldo: saldoReal,
+                                route: item.ROTEIRO_PRODUCAO
+                            }).replace(/'/g, "&apos;")})'>
+                                ${item.OP_PCS}
+                            </span>
+                        ` : ''}
                         ${blockedHtml}
                     </td>
                     <td style="text-align:center;">${entrega}</td>
@@ -2833,22 +2845,6 @@
                     <td style="text-align:center;">${weightInputHtml}</td>
                     <td style="text-align:center;">${formatNumber(totalWeightReal)}</td>
                     <td style="text-align:center; color:var(--status-purple); font-weight:bold;">${valorVisible ? formatCurrency(valorTotal) : '-----'}</td>
-                    <td style="text-align:center; font-size: 0.8rem; color:var(--accent-color); font-weight:bold;">
-                        ${item.OP_PCS && item.OP_PCS !== '-' ? `
-                            <span class="clickable-op" onclick='showOPDetails(${JSON.stringify({
-                                op: item.OP_PCS,
-                                desc: item.NOME_PRODUTO_PPR || item.PRODUTO_PPR,
-                                client: item.NOME_CLIENTE || '-',
-                                emission: formatDateLocal(item.OP_EMISSAO || item.DATA_EMISSAO_PEDIDO),
-                                delivery: formatDateLocal(item.OP_ENTREGA) || entrega,
-                                originalQty: qtdOriginal,
-                                currentSaldo: saldoReal,
-                                route: item.ROTEIRO_PRODUCAO
-                            }).replace(/'/g, "&apos;")})'>
-                                ${item.OP_PCS}
-                            </span>
-                        ` : '-'}
-                    </td>
                     <td style="text-align:center;">
                         <input 
                             type="text" 
@@ -3245,7 +3241,7 @@
                 '6': 'PESO_UNIT',
                 '7': 'PESO_LIQUIDO_NPR',
                 '8': 'VALOR_TOTAL',
-                '9': 'OP_PCS'
+                '9': 'observacao'
             };
             // Collect individual column filters
             const filters = {};
@@ -3365,7 +3361,10 @@
                         if (value === 'released') {
                             return hasDate && !isStatusBlocked;
                         }
-                        return String(item[key]) === value;
+                        const pedidoVal = String(item.CODIGO_PPR || '').toLowerCase();
+                        const opVal = String(item.OP_PCS || '').toLowerCase();
+                        const combined = (pedidoVal + ' - ' + opVal).toLowerCase();
+                        return pedidoVal.includes(value) || opVal.includes(value) || combined.includes(value);
                     }
                     if (key === 'SALDO_REAL') {
                         const val = activeChartFilters.stage ? getItemSectorMetrics(item).totalBalance : getCommercialBalance(item);
@@ -4629,7 +4628,7 @@
                 const entrega = item.ENTREGA_PETR ? new Date(item.ENTREGA_PETR).toLocaleDateString('pt-BR') :
                     (item.DATA_ENTREGA_PPR ? new Date(item.DATA_ENTREGA_PPR).toLocaleDateString('pt-BR') : '-');
                 const row = {
-                    "Pedido": item.CODIGO_PPR || '-',
+                    "Pedido - OP": `${item.CODIGO_PPR || '-'} ${item.OP_PCS && item.OP_PCS !== '-' ? '- ' + item.OP_PCS : ''}`,
                     "Ordem Compra (OC)": item.ORDEM_COMPRA_PPR || '-',
                     "Entrega": entrega,
                     "Cliente": item.NOME_CLIENTE || '-',
@@ -4637,8 +4636,7 @@
                     "Produto": item.NOME_PRODUTO_PPR || '-',
                     "Saldo": saldoReal,
                     "Peso Un. (kg)": parseFloat(unitWeight.toFixed(3)),
-                    "Peso Total (kg)": parseFloat(totalWeightReal.toFixed(2)),
-                    "OP": item.OP_PCS || '-'
+                    "Peso Total (kg)": parseFloat(totalWeightReal.toFixed(2))
                 };
                 if (valorVisible) {
                     row["Total (R$)"] = parseFloat(valorTotal.toFixed(2));
