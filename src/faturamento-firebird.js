@@ -58,6 +58,7 @@ router.get('/', async (req, res) => {
                     AND nf.EMISSAO_NOT < '${fim}'
                     AND nf.TIPO_NOT = 'S'
                     AND nf.STATUS_NOT = 'A'
+                    AND nfp.STATUS_NPR = 'A'
                     AND nfp.PRODUTO_NPR IS NOT NULL
                 ORDER BY nf.EMISSAO_NOT DESC, nf.NUMERO_NOT DESC
             `;
@@ -153,6 +154,7 @@ router.get('/diario', async (req, res) => {
                     AND nf.EMISSAO_NOT < '${fim}'
                     AND nf.TIPO_NOT = 'S'
                     AND nf.STATUS_NOT = 'A'
+                    AND nfp.STATUS_NPR = 'A'
                 GROUP BY CAST(nf.EMISSAO_NOT AS DATE)
                 ORDER BY DATA_FATURAMENTO DESC
             `;
@@ -238,6 +240,7 @@ router.get('/top-produtos', async (req, res) => {
                     AND nf.EMISSAO_NOT < '${fim}'
                     AND nf.TIPO_NOT = 'S'
                     AND nf.STATUS_NOT = 'A'
+                    AND nfp.STATUS_NPR = 'A'
                     AND nfp.PRODUTO_NPR IS NOT NULL
                 GROUP BY nfp.PRODUTO_NPR, nfp.NOME_PRODUTO_NPR
                 ORDER BY VALOR_TOTAL_CENTAVOS DESC
@@ -326,6 +329,7 @@ router.get('/estatisticas', async (req, res) => {
                     AND nf.EMISSAO_NOT < '${fim}'
                     AND nf.TIPO_NOT = 'S'
                     AND nf.STATUS_NOT = 'A'
+                    AND nfp.STATUS_NPR = 'A'
             `;
 
             db.query(query, function (err, result) {
