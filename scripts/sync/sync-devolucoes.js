@@ -3,9 +3,9 @@
 // Filtra por FINALIDADE_NOT = 4 e anos 2025/2026
 
 const path = require('path');
-require('dotenv').config({ path: path.resolve(__dirname, '../.env.local') });
-const { Firebird, options: firebirdOptions } = require('../lib/firebird-helper');
-const pool = require('../lib/db');
+require('dotenv').config({ path: path.resolve(__dirname, '../../.env.local') });
+const { Firebird, options: firebirdOptions } = require('../../lib/firebird-helper');
+const pool = require('../../lib/db');
 
 function formatarData(data) {
     if (!data) return null;

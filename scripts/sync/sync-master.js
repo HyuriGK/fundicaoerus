@@ -1,6 +1,6 @@
-const pool = require('../lib/db');
-const { Firebird, options: firebirdOptions } = require('../lib/firebird-helper');
-require('dotenv').config({ path: '.env.local' });
+const pool = require('../../lib/db');
+const { Firebird, options: firebirdOptions } = require('../../lib/firebird-helper');
+require('dotenv').config({ path: require('path').resolve(__dirname, '../../.env.local') });
 
 /**
  * MASTER SYNC (v5.1) - OTIMIZADO

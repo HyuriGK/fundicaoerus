@@ -3,11 +3,11 @@
 // Sincroniza dados de REFUGO (PRODUCAO_SETOR) para PostgreSQL
 // Hierarquia de Cliente: NOTA_FISCAL -> PEDIDO -> PRODUTO
 
-require('dotenv').config({ path: '.env.local' });
+require('dotenv').config({ path: require('path').resolve(__dirname, '../../.env.local') });
 
-const pool = require('../lib/db');
+const pool = require('../../lib/db');
 
-const { Firebird, options: fbOptions } = require('../lib/firebird-helper');
+const { Firebird, options: fbOptions } = require('../../lib/firebird-helper');
 
 // Funções Utilitárias
 const firebirdQuery = (db, query, params = []) => {

@@ -7,14 +7,14 @@ const path = require('path');
 const fs = require('fs');
 
 // Usar helper centralizado e pool existente
-const pool = require('../lib/db');
+const pool = require('../../lib/db');
 
 // =========================================================
 // CONFIGURAÇÕES
 // =========================================================
 
 // Firebird (Somente Leitura)
-const { Firebird, options: firebirdOptions } = require('../lib/firebird-helper');
+const { Firebird, options: firebirdOptions } = require('../../lib/firebird-helper');
 
 
 // =========================================================

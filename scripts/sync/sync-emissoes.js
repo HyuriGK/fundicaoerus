@@ -1,4 +1,4 @@
-const { Firebird, options: FIREBIRD_OPTIONS } = require('../lib/firebird-helper');
+const { Firebird, options: FIREBIRD_OPTIONS } = require('../../lib/firebird-helper');
 const { Pool } = require('pg');
 
 function cleanConnectionString(str) {

@@ -1,7 +1,7 @@
 // scripts/sync-industrial-snapshots.js
-const pool = require('../lib/db');
+const pool = require('../../lib/db');
 const { getItemSectorMetrics } = require('../public/js/shared-utils');
-require('dotenv').config({ path: '.env.local' });
+require('dotenv').config({ path: require('path').resolve(__dirname, '../../.env.local') });
 
 /**
  * Script para capturar um "snapshot" (foto) da Posição Industrial atual.

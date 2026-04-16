@@ -1,6 +1,6 @@
-require('dotenv').config({ path: require('path').resolve(__dirname, '../.env.local') });
-const { Firebird, options: FIREBIRD_OPTIONS } = require('../lib/firebird-helper');
-const pool = require('../lib/db');
+require('dotenv').config({ path: require('path').resolve(__dirname, '../../.env.local') });
+const { Firebird, options: FIREBIRD_OPTIONS } = require('../../lib/firebird-helper');
+const pool = require('../../lib/db');
 
 async function createTableIfNotExists() {
     console.log('📡 Tentando conectar ao Postgres para verificar tabela...');

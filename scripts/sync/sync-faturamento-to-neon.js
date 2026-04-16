@@ -1,9 +1,9 @@
-require('dotenv').config({ path: '.env.local' });
+require('dotenv').config({ path: require('path').resolve(__dirname, '../../.env.local') });
 
 const { Pool } = require('pg');
 
 // Configuração do Firebird
-const { Firebird, options: firebirdOptions } = require('../lib/firebird-helper');
+const { Firebird, options: firebirdOptions } = require('../../lib/firebird-helper');
 
 // Configuração do PostgreSQL (Neon)
 const pgPool = new Pool({

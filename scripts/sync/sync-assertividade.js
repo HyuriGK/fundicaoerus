@@ -1,8 +1,8 @@
 
-const pool = require('../lib/db');
+const pool = require('../../lib/db');
 
 // --- CONFIGURATION ---
-const { Firebird, options: FIREBIRD_OPTIONS } = require('../lib/firebird-helper');
+const { Firebird, options: FIREBIRD_OPTIONS } = require('../../lib/firebird-helper');
 
 
 async function syncAssertividade() {

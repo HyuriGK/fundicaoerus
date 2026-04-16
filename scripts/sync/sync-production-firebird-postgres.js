@@ -1,8 +1,8 @@
 const path = require('path');
 const fs = require('fs');
 
-const { Firebird, options: fbOptions } = require('../lib/firebird-helper');
-const pool = require('../lib/db');
+const { Firebird, options: fbOptions } = require('../../lib/firebird-helper');
+const pool = require('../../lib/db');
 
 // --- Helper Functions ---
 function cleanString(str) {
