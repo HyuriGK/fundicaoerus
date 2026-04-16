@@ -98,6 +98,8 @@ const SYNC_BATS = [
 ];
 
 const DELAY_MS = 10000;
+const getW = () => Math.max(80, (process.stdout.columns || 100)) - 4; // dynamic terminal width
+
 
 // ─── STATE ───────────────────────────────────────────────────────────────────
 let cycleCount   = 0;
@@ -117,11 +119,11 @@ const B = {
     tl: '╔', tr: '╗', bl: '╚', br: '╝',
     h:  '═', v:  '║',
     ml: '╠', mr: '╣',
-    top: () => bdr + B.tl + B.h.repeat(W+2) + B.tr + reset,
-    sep: () => bdr + B.ml + B.h.repeat(W+2) + B.mr + reset,
-    bot: () => bdr + B.bl + B.h.repeat(W+2) + B.br + reset,
-    row: (content) => bdr + B.v + reset + content + bdr + B.v + reset,
-    blank: () => B.row(' '.repeat(W+2)),
+    top: () => { const w = getW(); return bdr + B.tl + B.h.repeat(w) + B.tr + reset; },
+    sep: () => { const w = getW(); return bdr + B.ml + B.h.repeat(w) + B.mr + reset; },
+    bot: () => { const w = getW(); return bdr + B.bl + B.h.repeat(w) + B.br + reset; },
+    row: (content, w) => { w = w || getW(); return bdr + B.v + reset + padR(content, w) + bdr + B.v + reset; },
+    blank: () => { const w = getW(); return B.row(' '.repeat(w), w); },
 };
 
 // ─── DRAW ────────────────────────────────────────────────────────────────────
@@ -134,6 +136,7 @@ function drawDashboard(cycleStart) {
 
 function buildFrame(cycleStart) {
     const out = [];
+    const W = getW(); // dynamic each frame
     const avgTime = cycleHistory.length > 0
         ? (cycleHistory.reduce((a,b)=>a+b,0)/cycleHistory.length).toFixed(1)
         : '--';
@@ -141,17 +144,13 @@ function buildFrame(cycleStart) {
 
     // ── HEADER ───────────────────────────────────────────────────────────────
     out.push(B.top());
-
     const title = gradient('  FUNDICAO ERUS  -  SINCRONIZACAO EM TEMPO REAL  ', [251,191,36],[249,115,22]);
-    out.push(B.row(centerStr(bold + title + reset, W + 2 + 20)));
-
+    out.push(B.row(centerStr(bold + title + reset, W), W));
     const sub = dim + 'Sistema de Gestao de Producao  *  SGP v7.1' + reset;
-    out.push(B.row(centerStr(sub, W + 2 + 10)));
+    out.push(B.row(centerStr(sub, W), W));
 
     // ── STATS ────────────────────────────────────────────────────────────────
     out.push(B.sep());
-
-    // Row 1: CICLO | MEDIA | ERROS | TEMPO
     const cycleV = bold + C.gold  + '#' + String(cycleCount).padStart(3,'0') + reset;
     const avgV   = bold + C.cyan  + avgTime + 's' + reset;
     const errV   = totalErrors > 0
@@ -167,13 +166,17 @@ function buildFrame(cycleStart) {
     const s2 = '  ' + C.muted+'HORA  '+reset + timeV +
                '    ' + C.dim+'LOG  scripts/sync/sync-errors.log'+reset;
 
-    out.push(B.row(padR(' ' + s1, W + 2 + 50)));
-    out.push(B.row(padR(' ' + s2, W + 2 + 20)));
+    out.push(B.row(s1, W));
+    out.push(B.row(s2, W));
 
     // ── MODULES ──────────────────────────────────────────────────────────────
     out.push(B.sep());
-    out.push(B.row(centerStr(bold + C.gold + '>  MODULOS DE SINCRONIZACAO  <' + reset, W + 2 + 20)));
+    out.push(B.row(centerStr(bold + C.gold + '>  MODULOS DE SINCRONIZACAO  <' + reset, W), W));
     out.push(B.sep());
+
+    // Progress bar fills remaining space dynamically
+    const FIXED = 4 + 1 + 12 + 3 + 4 + 2 + 8 + 2 + 10; // icon+name+brackets+pct+badge+ok
+    const BAR = Math.max(20, W - FIXED);
 
     SYNC_BATS.forEach(bat => {
         const prog  = currentProg[bat.name] || 0;
@@ -181,70 +184,60 @@ function buildFrame(cycleStart) {
 
         let stateColor, stateLabel;
         switch (state) {
-            case 'RUNNING': stateColor = C.cyan;   stateLabel = ' RODANDO'; break;
-            case 'DONE':    stateColor = C.green;  stateLabel = '  PRONTO'; break;
-            case 'ERROR':   stateColor = C.red;    stateLabel = '    ERRO '; break;
-            default:        stateColor = C.muted;  stateLabel = '  AGUARD'; break;
+            case 'RUNNING': stateColor = C.cyan;  stateLabel = ' RODANDO'; break;
+            case 'DONE':    stateColor = C.green; stateLabel = '  PRONTO'; break;
+            case 'ERROR':   stateColor = C.red;   stateLabel = '    ERRO'; break;
+            default:        stateColor = C.muted; stateLabel = '  AGUARD'; break;
         }
 
-        // Progress bar: 26 chars
-        const BAR = 26;
         const filled = Math.round((prog / 100) * BAR);
         let bar = '';
         for (let i = 0; i < filled; i++) {
             const t = i / BAR;
-            bar += rgb(
-                Math.round(16  + t * 235),
-                Math.round(185 - t * 50),
-                Math.round(129 - t * 80)
-            ) + '\u2588';
+            bar += rgb(Math.round(16+t*235), Math.round(185-t*50), Math.round(129-t*80)) + '\u2588';
         }
         bar += C.dim + '\u2591'.repeat(BAR - filled) + reset;
 
         const icon  = C.muted + bat.icon + reset;
         const name  = bold + stateColor + padR(bat.name, 11) + reset;
         const pct   = bold + stateColor + padL(prog + '%', 4) + reset;
-        const badge = bgRgb(30,30,35) + stateColor + bold + stateLabel + reset;
+        const badge = stateColor + bold + '[' + stateLabel + ']' + reset;
         const ok    = lastOkAt[bat.name] ? dim + ' ok ' + lastOkAt[bat.name] + reset : '';
 
-        // Fixed layout: icon(4) + name(12) + '[' + bar(26) + '] ' + pct(4) + '  ' + badge(9) + ok
         const row = ' ' + icon + ' ' + name + ' [' + bar + '] ' + pct + '  ' + badge + '  ' + ok;
-        out.push(B.row(padR(row, W + 2 + 60)));
+        out.push(B.row(row, W));
     });
 
     // ── ALERTS ───────────────────────────────────────────────────────────────
     out.push(B.sep());
     const issues = Object.entries(activeIssues);
     if (issues.length > 0) {
-        out.push(B.row(centerStr(bold + C.red + '!  ALERTAS ATIVOS  !' + reset, W + 2 + 20)));
+        out.push(B.row(centerStr(bold + C.red + '!  ALERTAS ATIVOS  !' + reset, W), W));
         issues.slice(0, 3).forEach(([script, msg]) => {
-            const line = '  ' + C.red + '> ' + bold + padR(script, 11) + reset + ' ' + C.orange + msg.substring(0, W - 16) + reset;
-            out.push(B.row(padR(line, W + 2 + 30)));
+            const line = '  ' + C.red + '> ' + bold + padR(script, 11) + reset + ' ' + C.orange + msg.substring(0, W - 20) + reset;
+            out.push(B.row(line, W));
         });
     } else {
-        out.push(B.row(centerStr(bold + C.green + '+  TODOS OS MODULOS OPERACIONAIS  +' + reset, W + 2 + 20)));
+        out.push(B.row(centerStr(bold + C.green + '+  TODOS OS MODULOS OPERACIONAIS  +' + reset, W), W));
     }
 
     // ── LOG ──────────────────────────────────────────────────────────────────
     out.push(B.sep());
-    out.push(B.row(centerStr(C.muted + 'o  HISTORICO DE EVENTOS  o' + reset, W + 2 + 10)));
+    out.push(B.row(centerStr(C.muted + 'o  HISTORICO DE EVENTOS  o' + reset, W), W));
 
     const lastLogs = [...logHistory.slice(-6)];
     while (lastLogs.length < 6) lastLogs.unshift(null);
-
     lastLogs.forEach(e => {
         if (!e) { out.push(B.blank()); return; }
         const t   = C.dim + '[' + e.time + ']' + reset;
         const sc  = e.isError ? C.red + bold + padR(e.script, 12) + reset : C.green + dim + padR(e.script, 12) + reset;
-        const msg = (e.isError ? C.orange : C.dim) + e.msg.substring(0, W - 30) + reset;
-        const line = '  ' + t + ' ' + sc + ' | ' + msg;
-        out.push(B.row(padR(line, W + 2 + 50)));
+        const msg = (e.isError ? C.orange : C.dim) + e.msg.substring(0, W - 35) + reset;
+        out.push(B.row('  ' + t + ' ' + sc + ' | ' + msg, W));
     });
 
     // ── FOOTER ───────────────────────────────────────────────────────────────
     out.push(B.sep());
-    const footer = dim + 'Pressione  Ctrl+C  para encerrar  *  Atualizacao a cada 800ms' + reset;
-    out.push(B.row(centerStr(footer, W + 2 + 10)));
+    out.push(B.row(centerStr(dim + 'Pressione  Ctrl+C  para encerrar  *  Atualizacao a cada 800ms' + reset, W), W));
     out.push(B.bot());
 
     return out;
