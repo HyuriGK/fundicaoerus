@@ -194,7 +194,7 @@ async function sincronizarDetalhado(fbDb) {
     // Em vez de buscar o ano todo, buscamos apenas os últimos 90 dias.
     // Isso reduz o processamento drasticamente e acelera a sincronização.
     const dataInicio = new Date();
-    dataInicio.setDate(dataInicio.getDate() - 90);
+    dataInicio.setDate(dataInicio.getDate() - 120);
     console.log(`📅 Janela de Sincronização: ${dataInicio.toISOString().split('T')[0]} até hoje.`);
 
     const query = `
