@@ -53,6 +53,7 @@ const usinagemExterno = require('../src/usinagem-externo'); // NOVO: Usinagem Ex
 const assertividade = require('../src/assertividade'); // NOVA: Assertividade Sincronizada
 const devolucoes = require('../src/devolucoes'); // NOVA: Devoluções Sincronizadas
 const emissoes = require('../src/emissoes-api'); // NOVO: Histórico de Emissões
+const pedidosObservacoes = require('../src/pedidos-observacoes'); // NOVO: Observações de Pedidos
 
 
 
@@ -84,6 +85,7 @@ app.use('/api/assertividade', assertividade); // NOVA: Assertividade Sincronizad
 app.use('/api/usinagem-externo', usinagemExterno); // NOVO: Usinagem Externa
 app.use('/api/devolucoes', devolucoes); // NOVA: Devoluções Sincronizadas
 app.use('/api/emissoes', emissoes); // NOVO: Histórico de Emissões
+app.use('/api/pedidos-observacoes', pedidosObservacoes); // NOVO: Observações de Pedidos
 
 
 app.use('/api/producao-postgres', require('../src/producao-postgres')); // NOVO: Produção Sincronizada

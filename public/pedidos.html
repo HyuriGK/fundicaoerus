@@ -1520,12 +1520,13 @@
                             <th class="sortable-th" id="th-entrega" onclick="toggleSort('entrega')" style="width: 7%;">ENTREGA</th>
                             <th class="sortable-th" id="th-cliente" onclick="toggleSort('cliente')" style="width: 14%; text-align: left;">CLIENTE</th>
                             <th style="width: 7%; text-align: center;">CÓDIGO</th>
-                            <th style="width: 18%;">PRODUTO</th>
+                            <th style="width: 13%;">PRODUTO</th>
                             <th class="sortable-th" id="th-saldo" onclick="toggleSort('saldo')" style="width: 4%;">SALDO</th>
                             <th class="sortable-th" id="th-peso_un" onclick="toggleSort('peso_un')" style="width: 7%;">PESO UN</th>
                             <th class="sortable-th" id="th-peso_total" onclick="toggleSort('peso_total')" style="width: 7%;">PESO TOTAL</th>
                             <th class="sortable-th" id="th-valor_total" onclick="toggleSort('valor_total')" style="width: 8%;">TOTAL (R$)</th>
                             <th style="width: 5%;">OP</th>
+                            <th style="width: 22%;">OBSERVAÇÕES</th>
                         </tr>
                         <tr id="filterRow">
                             <th><input class="filter-input-table" data-col="0" placeholder="..."></th>
@@ -1541,6 +1542,8 @@
                             </th>
                             <!-- OP -->
                             <th><input class="filter-input-table" data-col="9" placeholder="..."></th>
+                            <!-- Observações -->
+                            <th><input class="filter-input-table" data-col="10" placeholder="..."></th>
                         </tr>
                     </thead>
                     <tbody id="table-body"></tbody>
@@ -2712,14 +2715,45 @@
             } catch (err) {
                 console.error(err);
                 showToast("Erro", "Erro ao salvar peso.", "danger");
-                input.disabled = false;
                 input.focus();
+            }
+        }
+        async function saveObservation(event, syncKey) {
+            if (event.type === 'keydown' && event.key !== 'Enter') return;
+            
+            const input = event.target;
+            const newObs = input.value.trim();
+            const originalObs = input.getAttribute('data-original') || '';
+
+            if (newObs === originalObs && event.type !== 'blur') return;
+
+            input.disabled = true;
+            try {
+                const res = await fetch('/api/pedidos-observacoes/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sync_key: syncKey, observacao: newObs })
+                });
+                if (!res.ok) throw new Error('Falha ao salvar observação');
+                
+                input.setAttribute('data-original', newObs);
+                // Atualizar no rawData para manter o estado se filtrar
+                const item = rawData.find(d => d.sync_key === syncKey);
+                if (item) item.observacao = newObs;
+                
+                showToast("Sucesso", "Observação salva!", "success");
+            } catch (err) {
+                console.error(err);
+                showToast("Erro", "Erro ao salvar observação.", "danger");
+            } finally {
+                input.disabled = false;
+                if (event.type === 'keydown') input.blur();
             }
         }
         function renderTable(list) {
             const tbody = document.getElementById('table-body');
             if (list.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding:20px;">Nenhum registro encontrado.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="11" style="text-align:center; padding:20px;">Nenhum registro encontrado.</td></tr>';
                 return;
             }
             tbody.innerHTML = list.map((item, index) => {
@@ -2802,18 +2836,32 @@
                     <td style="text-align:center; font-size: 0.8rem; color:var(--accent-color); font-weight:bold;">
                         ${item.OP_PCS && item.OP_PCS !== '-' ? `
                             <span class="clickable-op" onclick='showOPDetails(${JSON.stringify({
-                    op: item.OP_PCS,
-                    desc: item.NOME_PRODUTO_PPR || item.PRODUTO_PPR,
-                    client: item.NOME_CLIENTE || '-',
-                    emission: formatDateLocal(item.OP_EMISSAO || item.DATA_EMISSAO_PEDIDO),
-                    delivery: formatDateLocal(item.OP_ENTREGA) || entrega,
-                    originalQty: qtdOriginal,
-                    currentSaldo: saldoReal,
-                    route: item.ROTEIRO_PRODUCAO
-                }).replace(/'/g, "&apos;")})'>
+                                op: item.OP_PCS,
+                                desc: item.NOME_PRODUTO_PPR || item.PRODUTO_PPR,
+                                client: item.NOME_CLIENTE || '-',
+                                emission: formatDateLocal(item.OP_EMISSAO || item.DATA_EMISSAO_PEDIDO),
+                                delivery: formatDateLocal(item.OP_ENTREGA) || entrega,
+                                originalQty: qtdOriginal,
+                                currentSaldo: saldoReal,
+                                route: item.ROTEIRO_PRODUCAO
+                            }).replace(/'/g, "&apos;")})'>
                                 ${item.OP_PCS}
                             </span>
                         ` : '-'}
+                    </td>
+                    <td style="text-align:center;">
+                        <input 
+                            type="text" 
+                            class="obs-edit-input" 
+                            value="${item.observacao || ''}" 
+                            data-original="${item.observacao || ''}"
+                            placeholder="..."
+                            onkeydown="saveObservation(event, '${item.sync_key}')"
+                            onblur="saveObservation(event, '${item.sync_key}')"
+                            style="width: 100%; background: transparent; border: 1px solid transparent; color: var(--text-muted); font-size: 0.8rem; padding: 4px 8px; border-radius: 4px; transition: all 0.2s;"
+                            onfocus="this.style.borderColor='var(--color-primary)'; this.style.background='rgba(255,255,255,0.05)'; this.style.color='#fff';"
+                            onblur="this.style.borderColor='transparent'; this.style.background='transparent'; this.style.color='var(--text-muted)';"
+                        />
                     </td>
                 </tr>
                 `;

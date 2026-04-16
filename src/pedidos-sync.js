@@ -14,9 +14,11 @@ router.get('/', async (req, res) => {
                     p.data,
                     p.updated_at,
                     f.data_fic,
-                    f.pro_codigo_fic AS has_ficha
+                    f.pro_codigo_fic AS has_ficha,
+                    obs.observacao
                 FROM firebird_sync_emissoes p
                 LEFT JOIN ficha_tecnica f ON f.pro_codigo_fic = (p.data->>'PRODUTO_PPR')
+                LEFT JOIN pedidos_observacoes obs ON obs.sync_key = p.sync_key
                 WHERE 
                     ((p.data->>'QUANTIDADE_PPR')::numeric - COALESCE((p.data->>'QUANTIDADE_FATURADA_PPR')::numeric, 0)) > 0 
                     AND (p.data->>'STATUS_PPR') <> 'C'
@@ -33,9 +35,11 @@ router.get('/', async (req, res) => {
                     p.data,
                     p.updated_at,
                     f.data_fic,
-                    f.pro_codigo_fic AS has_ficha
+                    f.pro_codigo_fic AS has_ficha,
+                    obs.observacao
                 FROM firebird_sync_emissoes p
                 LEFT JOIN ficha_tecnica f ON f.pro_codigo_fic = (p.data->>'PRODUTO_PPR')
+                LEFT JOIN pedidos_observacoes obs ON obs.sync_key = p.sync_key
                 ORDER BY 
                     (f.pro_codigo_fic IS NOT NULL) DESC,
                     f.data_fic DESC NULLS LAST,
@@ -49,6 +53,8 @@ router.get('/', async (req, res) => {
         // Extrair o JSONB para o nível raiz para facilitar o frontend
         const pedidos = result.rows.map(row => ({
             ...row.data, // Espalha as propriedades do JSONB
+            sync_key: row.sync_key, // Adiciona explicitamente o sync_key
+            observacao: row.observacao || '', // Adiciona a observação (ou vazio)
             _sync_updated_at: row.updated_at, // Mantém metadata de sync
             _data_fic: row.data_fic, // Adiciona o campo de data da ficha técnica para ordenação
             _has_ficha: !!row.has_ficha // Boolean flag
