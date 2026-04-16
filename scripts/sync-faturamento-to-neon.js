@@ -22,6 +22,12 @@ async function syncFaturamento() {
         pgClient = await pgPool.connect();
         console.log('✅ Conectado ao Neon (PostgreSQL)');
 
+        // Janela de sincronização: 120 dias
+        const startDateObj = new Date();
+        startDateObj.setDate(startDateObj.getDate() - 120);
+        const startDate = startDateObj.toISOString().split('T')[0];
+        console.log(`📅 Janela de Sincronização: ${startDate} até hoje (120 dias).`);
+
         // 2. Criar tabela se não existir
         await pgClient.query(`
             CREATE TABLE IF NOT EXISTS faturamento_firebird (
@@ -43,13 +49,12 @@ async function syncFaturamento() {
         `);
         console.log('✅ Tabela faturamento_firebird verificada/criada');
 
-        // 3. Limpar dados antigos de 2026 (para re-sincronizar)
+        // 3. Limpar dados da janela (para re-sincronizar)
         await pgClient.query(`
-            DELETE FROM faturamento_firebird 
-            WHERE data_faturamento >= '2026-01-01' 
-            AND data_faturamento < '2027-01-01'
-        `);
-        console.log('🗑️  Dados antigos de 2026 removidos');
+            DELETE FROM faturamento_firebird
+            WHERE data_faturamento >= $1
+        `, [startDate]);
+        console.log(`🗑️  Dados da janela (${startDate} em diante) removidos`);
 
         // 4. Conectar ao Firebird
         firebirdDb = await new Promise((resolve, reject) => {
@@ -80,7 +85,7 @@ async function syncFaturamento() {
                     ON nf.EMPRESA_NOT = nfp.EMPRESA_NPR 
                     AND nf.SERIE_NOT = nfp.SERIE_NPR
                     AND nf.CODIGO_NOT = nfp.CODIGO_NPR
-                WHERE nf.EMISSAO_NOT >= '2026-01-01'
+                WHERE nf.EMISSAO_NOT >= '${startDate}'
                     AND nf.EMISSAO_NOT < '2027-01-01'
                     AND nf.TIPO_NOT = 'S'
                     AND nf.STATUS_NOT = 'A'
@@ -158,11 +163,11 @@ async function syncFaturamento() {
 
         // 7. Verificar total no Neon
         const countResult = await pgClient.query(`
-            SELECT COUNT(*) as total, 
+            SELECT COUNT(*) as total,
                    SUM(valor_total) as total_faturado
             FROM faturamento_firebird
-            WHERE data_faturamento >= '2026-01-01'
-        `);
+            WHERE data_faturamento >= $1
+        `, [startDate]);
 
         console.log(`\n💾 Dados no Neon:`);
         console.log(`   Total de registros: ${countResult.rows[0].total}`);
