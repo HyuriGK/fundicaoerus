@@ -7181,10 +7181,6 @@
                     updateUserInfo();
 
 
-                    // Daily briefing — show immediately before any async work
-                    showDailyBriefing();
-
-
                     // Load dependencies
 
 
@@ -9488,12 +9484,16 @@
             const username = localStorage.getItem('erus_user') || localStorage.getItem('erus_username') || 'unknown';
             const storageKey = 'erus_briefing_date_' + username;
             if (localStorage.getItem(storageKey) === today) return;
-            localStorage.setItem(storageKey, today);
+            const modal = document.getElementById('dailyBriefingModal');
+            if (!modal) return;
             const prevDay = prevBusinessDay(new Date());
             const dateStr = toISODate(prevDay);
-            document.getElementById('dbm-day-label').textContent = dbmFormatDayLabel(prevDay);
-            document.getElementById('dbm-weight').textContent = '...';
-            document.getElementById('dailyBriefingModal').style.display = 'flex';
+            const dayLabel = document.getElementById('dbm-day-label');
+            const weightEl = document.getElementById('dbm-weight');
+            if (dayLabel) dayLabel.textContent = dbmFormatDayLabel(prevDay);
+            if (weightEl) weightEl.textContent = '...';
+            modal.style.display = 'flex';
+            localStorage.setItem(storageKey, today);
             try {
                 const res = await fetch(`/api/faturamento-postgres/detalhado?startDate=${dateStr}&endDate=${dateStr}&limit=100000`);
                 const json = await res.json();
@@ -9501,14 +9501,15 @@
                 if (json.success && Array.isArray(json.data)) {
                     json.data.forEach(item => { if (item.excluido_manualmente !== true) total += (item.pesoTotal || 0); });
                 }
-                document.getElementById('dbm-weight').textContent = dbmFormatWeight(total);
+                if (weightEl) weightEl.textContent = dbmFormatWeight(total);
             } catch(e) {
-                document.getElementById('dbm-weight').textContent = 'Erro ao carregar';
+                if (weightEl) weightEl.textContent = 'Erro ao carregar';
             }
         }
         function closeDailyBriefing() {
             document.getElementById('dailyBriefingModal').style.display = 'none';
         }
+        document.addEventListener('DOMContentLoaded', showDailyBriefing);
     </script>
 
 </body>
