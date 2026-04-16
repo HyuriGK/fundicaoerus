@@ -43,8 +43,8 @@ function getGradient(text, start, end) {
 }
 
 // CONFIGURATIONS
-const ROOT_DIR = path.join(__dirname, '..');
-const LOG_FILE = path.join(ROOT_DIR, 'sync-errors.log');
+const ROOT_DIR = path.join(__dirname, '..', '..');
+const LOG_FILE = path.join(ROOT_DIR, 'scripts', 'sync', 'sync-errors.log');
 const SYNC_BATS = [
     { name: 'CUSTOS', file: 'sincronizar_acustos.bat' },
     { name: 'DEVOLUÇÕES', file: 'sincronizar_adevolucoes.bat' },
