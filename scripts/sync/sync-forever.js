@@ -192,9 +192,10 @@ function buildFrame(cycleStart) {
     out.push(B.row(centerStr(bold + C.gold + '>  MODULOS DE SINCRONIZACAO  <' + reset, W), W));
     out.push(B.sep());
 
-    // Progress bar fills remaining space dynamically
-    const FIXED = 4 + 1 + 12 + 3 + 4 + 2 + 8 + 2 + 10; // icon+name+brackets+pct+badge+ok
-    const BAR = Math.max(20, W - FIXED);
+    // Layout: ' '[1] icon[4] ' '[1] name[11] ' ['[2] BAR '] '[2] pct[4] '  '[2] '[badge]'[10] '  ok '[5] time[8]
+    // Total fixed = 50. BAR = W - 50, minus 2 extra safety margin
+    const FIXED = 1 + 4 + 1 + 11 + 2 + 2 + 4 + 2 + 10 + 5 + 8; // = 50
+    const BAR = Math.max(10, W - FIXED - 2);
 
     SYNC_BATS.forEach(bat => {
         const prog  = currentProg[bat.name] || 0;
@@ -220,7 +221,7 @@ function buildFrame(cycleStart) {
         const name  = bold + stateColor + padR(bat.name, 11) + reset;
         const pct   = bold + stateColor + padL(prog + '%', 4) + reset;
         const badge = stateColor + bold + '[' + stateLabel + ']' + reset;
-        const ok    = lastOkAt[bat.name] ? dim + ' ok ' + lastOkAt[bat.name] + reset : '';
+        const ok    = lastOkAt[bat.name] ? dim + '  ok ' + lastOkAt[bat.name] + reset : '         ';
 
         const row = ' ' + icon + ' ' + name + ' [' + bar + '] ' + pct + '  ' + badge + '  ' + ok;
         out.push(B.row(row, W));
