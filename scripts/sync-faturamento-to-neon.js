@@ -80,7 +80,7 @@ async function syncFaturamento() {
                     ON nf.EMPRESA_NOT = nfp.EMPRESA_NPR 
                     AND nf.SERIE_NOT = nfp.SERIE_NPR
                     AND nf.CODIGO_NOT = nfp.CODIGO_NPR
-                WHERE nf.EMISSAO_NOT >= '2025-01-01'
+                WHERE nf.EMISSAO_NOT >= '2026-01-01'
                     AND nf.EMISSAO_NOT < '2027-01-01'
                     AND nf.TIPO_NOT = 'S'
                     AND nf.STATUS_NOT = 'A'
