@@ -1445,51 +1445,133 @@
         function renderDailyChart(data, highlightedDay, contextStart, contextEnd) {
             const ctx = document.getElementById('dailyChart').getContext('2d');
             if (dailyChart) dailyChart.destroy();
-            // Generate Colors: Highlighted gets Primary, others get reduced opacity/gray
-            // If no highlight, all primary
-            const bgColors = data.map(d => {
-                if (!highlightedDay) return '#ea580c';
-                return d.data === highlightedDay ? '#ea580c' : 'rgba(234, 88, 12, 0.3)';
+
+            // Build full calendar for the month
+            const [sy, sm] = contextStart.split('-').map(Number);
+            const monthYear = sy;
+            const feriados = getBrazilianHolidays(monthYear);
+            const feriadoNomes = {
+                [`${monthYear}-01-01`]: 'Ano Novo',
+                [`${monthYear}-04-21`]: 'Tiradentes',
+                [`${monthYear}-05-01`]: 'Dia do Trabalho',
+                [`${monthYear}-09-07`]: 'Independência',
+                [`${monthYear}-10-12`]: 'N. Sra. Aparecida',
+                [`${monthYear}-11-02`]: 'Finados',
+                [`${monthYear}-11-15`]: 'Proclamação da República',
+                [`${monthYear}-11-20`]: 'Consciência Negra',
+                [`${monthYear}-12-25`]: 'Natal',
+            };
+            // Add mobile holidays names
+            const easter = calcEaster(monthYear);
+            const easterDate = new Date(monthYear, easter.month - 1, easter.day);
+            const gf = new Date(easterDate); gf.setDate(easterDate.getDate() - 2);
+            const cc = new Date(easterDate); cc.setDate(easterDate.getDate() + 60);
+            const cv = new Date(easterDate); cv.setDate(easterDate.getDate() - 47);
+            feriadoNomes[fmt2(gf)] = 'Sexta-Feira Santa';
+            feriadoNomes[fmt2(cc)] = 'Corpus Christi';
+            feriadoNomes[fmt2(cv)] = 'Carnaval';
+
+            const dataMap = {};
+            data.forEach(d => { dataMap[d.data] = d.pesoTotal; });
+
+            const allDays = [];
+            const start = new Date(monthYear, sm - 1, 1);
+            const end = new Date(monthYear, sm, 0);
+            for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+                allDays.push(fmt2(new Date(d)));
+            }
+
+            const dowNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+            const labels = allDays.map(ds => {
+                const [y, m, d] = ds.split('-').map(Number);
+                return `${String(d).padStart(2,'0')}/${String(m).padStart(2,'0')}`;
             });
+            const values = allDays.map(ds => dataMap[ds] || 0);
+
+            const bgColors = allDays.map(ds => {
+                if (ds === highlightedDay) return '#ea580c';
+                const dow = new Date(ds + 'T12:00:00').getDay();
+                const isWeekend = dow === 0 || dow === 6;
+                const isFeriado = feriados.has(ds);
+                if (isWeekend || isFeriado) return 'rgba(239, 68, 68, 0.35)';
+                if (highlightedDay) return 'rgba(234, 88, 12, 0.25)';
+                return '#ea580c';
+            });
+
+            const borderColors = allDays.map(ds => {
+                const dow = new Date(ds + 'T12:00:00').getDay();
+                const isWeekend = dow === 0 || dow === 6;
+                const isFeriado = feriados.has(ds);
+                if (isWeekend || isFeriado) return 'rgba(239, 68, 68, 0.8)';
+                return 'transparent';
+            });
+
+            const tooltipLabels = allDays.map(ds => {
+                const dow = new Date(ds + 'T12:00:00').getDay();
+                const isWeekend = dow === 0 || dow === 6;
+                const isFeriado = feriados.has(ds);
+                const parts = [];
+                if (isWeekend) parts.push(dowNames[dow] + ' — fim de semana');
+                if (isFeriado) parts.push('Feriado: ' + (feriadoNomes[ds] || 'Feriado Nacional'));
+                if (!isWeekend && !isFeriado && !dataMap[ds]) parts.push('Dia útil sem faturamento');
+                return parts.join(' | ');
+            });
+
             dailyChart = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: data.map(d => formatDateShort(d.data)),
+                    labels,
                     datasets: [{
                         label: 'Peso (kg)',
-                        data: data.map(d => d.pesoTotal),
+                        data: values,
                         backgroundColor: bgColors,
+                        borderColor: borderColors,
+                        borderWidth: 1,
                         borderRadius: 4
                     }]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                title: (items) => {
+                                    const idx = items[0].dataIndex;
+                                    const ds = allDays[idx];
+                                    const dow = new Date(ds + 'T12:00:00').getDay();
+                                    return `${labels[idx]} (${dowNames[dow]})`;
+                                },
+                                label: (item) => {
+                                    const idx = item.dataIndex;
+                                    const val = values[idx];
+                                    const extra = tooltipLabels[idx];
+                                    const lines = [`Peso: ${val > 0 ? val.toLocaleString('pt-BR', {maximumFractionDigits:0}) + ' kg' : '0 kg'}`];
+                                    if (extra) lines.push(extra);
+                                    return lines;
+                                }
+                            }
+                        }
+                    },
                     scales: {
                         y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#a1a1aa' } },
                         x: {
-                            min: highlightedDay ? data.findIndex(d => d.data === highlightedDay) : undefined,
-                            max: highlightedDay ? data.findIndex(d => d.data === highlightedDay) : undefined,
                             grid: { display: true, color: 'rgba(255,255,255,0.05)' },
-                            ticks: { color: '#a1a1aa' }
+                            ticks: { color: '#a1a1aa', maxRotation: 45, minRotation: 45, font: { size: 10 } }
                         }
                     },
                     onClick: (e, elements) => {
                         if (elements.length > 0) {
                             const index = elements[0].index;
-                            const clickedDate = data[index].data; // YYYY-MM-DD
-                            // Toggle Logic: If clicking the already highlighted day -> Reset to Month View
-                            // Use contextStart/End passed to function to define "Full View"
+                            const clickedDate = allDays[index];
                             if (clickedDate === highlightedDay) {
                                 document.getElementById('startDate').value = contextStart;
                                 document.getElementById('endDate').value = contextEnd;
                             } else {
-                                // Filter to this specific day
                                 document.getElementById('startDate').value = clickedDate;
                                 document.getElementById('endDate').value = clickedDate;
                             }
-                            // Update View
                             renderTable();
                             updateDashboardfromRecords(allData);
                         }
