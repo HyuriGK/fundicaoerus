@@ -2096,35 +2096,74 @@
                             }
                         },
                         tooltip: {
-                            itemSort: function (a, b) {
-                                const order = {
-                                    'Produção Diária': 1,
-                                    'Acumulado': 2,
-                                    'Meta Mensal': 3
-                                };
-                                const labelA = a.dataset.label;
-                                const labelB = b.dataset.label;
-                                return (order[labelA] || 99) - (order[labelB] || 99);
+                            mode: 'index',
+                            intersect: false,
+                            backgroundColor: 'rgba(15,15,18,0.97)',
+                            borderColor: 'rgba(251,191,36,0.25)',
+                            borderWidth: 1,
+                            titleColor: '#f8fafc',
+                            titleFont: { size: 13, weight: 'bold' },
+                            bodyColor: '#cbd5e1',
+                            bodyFont: { size: 12 },
+                            footerColor: '#94a3b8',
+                            footerFont: { size: 11, style: 'italic' },
+                            footerMarginTop: 8,
+                            padding: 14,
+                            cornerRadius: 10,
+                            boxPadding: 5,
+                            itemSort: (a, b) => {
+                                const order = { 'Produção Diária': 0, 'Acumulado': 1, 'Meta Mensal': 2 };
+                                return (order[a.dataset.label] ?? 99) - (order[b.dataset.label] ?? 99);
                             },
                             callbacks: {
-                                label: function (context) {
+                                title: (items) => {
+                                    if (currentMonthFilter === 0) return items[0].label;
+                                    const day = labels[items[0].dataIndex];
+                                    const year2 = parseInt(currentYearFilter) || new Date().getFullYear();
+                                    const ds = `${year2}-${String(currentMonthFilter).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+                                    const dow = new Date(ds + 'T12:00:00').getDay();
+                                    const dowNames4 = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+                                    return `Dia ${day}  —  ${dowNames4[dow]}`;
+                                },
+                                label: (context) => {
                                     const value = context.parsed.y;
                                     const label = context.dataset.label;
-                                    const formattedValue = value.toLocaleString('pt-BR') + ' Kg';
-
-                                    if (label === 'Produção Diária') {
-                                        return `${label}: ${formattedValue}`;
-                                    } else if (label === 'Acumulado') {
-                                        return `${label}: ${formattedValue}`;
-                                    } else if (label === 'Meta Mensal') {
-                                        const accumData = context.chart.data.datasets[1].data[context.dataIndex];
+                                    const fmt = v => `  ${Math.round(v).toLocaleString('pt-BR')} Kg`;
+                                    if (label === 'Produção Diária') return `  Produção: ${Math.round(value).toLocaleString('pt-BR')} Kg`;
+                                    if (label === 'Acumulado') return `  Acumulado: ${Math.round(value).toLocaleString('pt-BR')} Kg`;
+                                    if (label === 'Meta Mensal') {
+                                        const accumData = context.chart.data.datasets[1]?.data[context.dataIndex] || 0;
                                         const meta = goalValue || 1;
-                                        const percent = (((accumData || 0) / meta) * 100).toFixed(1);
-                                        return `Meta Mensal: ${meta.toLocaleString('pt-BR')} Kg (${percent}%)`;
+                                        const percent = ((accumData / meta) * 100).toFixed(1);
+                                        return `  Meta: ${Math.round(value).toLocaleString('pt-BR')} Kg (${percent}%)`;
                                     }
-                                    return `${label}: ${formattedValue}`;
+                                    return fmt(value);
                                 },
-                                afterBody: () => ['', 'Clique na barra para ver os registros.']
+                                footer: (items) => {
+                                    if (currentMonthFilter === 0) return [];
+                                    const idx = items[0].dataIndex;
+                                    const day = labels[idx];
+                                    const year2 = parseInt(currentYearFilter) || new Date().getFullYear();
+                                    const ds = `${year2}-${String(currentMonthFilter).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+                                    const dow = new Date(ds + 'T12:00:00').getDay();
+                                    const feriadosT2 = getBrazilianHolidaysAP(year2);
+                                    const isWeekend = dow === 0 || dow === 6;
+                                    const isFeriado = feriadosT2.has(ds);
+                                    const dataMapF = {};
+                                    filteredData.forEach(d => { dataMapF[d.data] = true; });
+                                    const today5 = new Date(); today5.setHours(0,0,0,0);
+                                    const isSemProd = !isWeekend && !isFeriado && !dataMapF[ds] && new Date(ds + 'T12:00:00') <= today5;
+                                    const dowNames4 = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+                                    if (isSemProd) return ['• Não houve produção', '• Conta para a média diária'];
+                                    if (isWeekend || isFeriado) {
+                                        const lines = [];
+                                        if (isWeekend) lines.push(`• ${dowNames4[dow]} — fim de semana`);
+                                        if (isFeriado) lines.push(`• Feriado: ${getHolidayName(ds, year2)}`);
+                                        lines.push('• Não conta para a média diária');
+                                        return lines;
+                                    }
+                                    return ['Clique na barra para ver os registros.'];
+                                }
                             }
                         },
                         datalabels: {
@@ -2153,16 +2192,13 @@
                             openModalForDay(day);
                         }
                     },
-                    interaction: {
-                        mode: 'index',
-                        intersect: false,
-                    },
+                    interaction: { mode: 'index', intersect: false },
                     scales: {
                         x: {
                             grid: { display: false },
                             ticks: {
                                 autoSkip: false,
-                                maxRotation: 45,
+                                maxRotation: 0,
                                 minRotation: 0,
                                 color: (c) => {
                                     if (currentMonthFilter === 0 || window.isGraphicReportRunning) return window.isGraphicReportRunning ? '#000000' : '#a1a1aa';
