@@ -1579,6 +1579,59 @@
                     }
                 }
             });
+
+            // Tooltip para ticks do eixo X (dias não úteis)
+            const canvas = document.getElementById('dailyChart');
+            let axisTooltip = document.getElementById('dailyAxisTooltip');
+            if (!axisTooltip) {
+                axisTooltip = document.createElement('div');
+                axisTooltip.id = 'dailyAxisTooltip';
+                axisTooltip.style.cssText = 'position:fixed;background:rgba(20,20,22,0.97);border:1px solid rgba(239,68,68,0.5);color:#f8fafc;padding:8px 12px;border-radius:8px;font-size:0.8rem;pointer-events:none;display:none;z-index:9999;max-width:220px;line-height:1.5;box-shadow:0 4px 12px rgba(0,0,0,0.4)';
+                document.body.appendChild(axisTooltip);
+            }
+            canvas.removeEventListener('mousemove', canvas._axisTooltipHandler);
+            canvas.removeEventListener('mouseleave', canvas._axisTooltipLeave);
+
+            canvas._axisTooltipHandler = (e) => {
+                const chart = dailyChart;
+                if (!chart) return;
+                const xAxis = chart.scales.x;
+                const rect = canvas.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+                const tickAreaTop = chart.chartArea.bottom;
+                const tickAreaBottom = rect.height;
+                if (mouseY < tickAreaTop || mouseY > tickAreaBottom) {
+                    axisTooltip.style.display = 'none';
+                    return;
+                }
+                // Find nearest tick
+                let closest = -1, minDist = 20;
+                xAxis.ticks.forEach((_, i) => {
+                    const px = xAxis.getPixelForTick(i);
+                    const dist = Math.abs(mouseX - px);
+                    if (dist < minDist) { minDist = dist; closest = i; }
+                });
+                if (closest === -1) { axisTooltip.style.display = 'none'; return; }
+                const ds = allDays[closest];
+                if (!ds) { axisTooltip.style.display = 'none'; return; }
+                const dow = new Date(ds + 'T12:00:00').getDay();
+                const dowNames2 = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
+                const isWeekend = dow === 0 || dow === 6;
+                const isFeriado = feriados.has(ds);
+                if (!isWeekend && !isFeriado) { axisTooltip.style.display = 'none'; return; }
+                const motivos = [];
+                if (isWeekend) motivos.push(`📅 ${dowNames2[dow]} — fim de semana`);
+                if (isFeriado) motivos.push(`🚫 Feriado: ${feriadoNomes[ds] || 'Feriado Nacional'}`);
+                motivos.push('Não conta para a média diária');
+                axisTooltip.innerHTML = motivos.join('<br>');
+                axisTooltip.style.display = 'block';
+                axisTooltip.style.left = (e.clientX + 12) + 'px';
+                axisTooltip.style.top = (e.clientY - 10) + 'px';
+            };
+            canvas._axisTooltipLeave = () => { axisTooltip.style.display = 'none'; };
+            canvas.addEventListener('mousemove', canvas._axisTooltipHandler);
+            canvas.addEventListener('mouseleave', canvas._axisTooltipLeave);
         }
         function renderAnnualChart(dataValues, highlightIndex) {
             const ctx = document.getElementById('annualChart').getContext('2d');
