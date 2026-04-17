@@ -1553,7 +1553,11 @@
                                     const ds = allDays[c.index];
                                     if (!ds) return '#a1a1aa';
                                     const dow = new Date(ds + 'T12:00:00').getDay();
-                                    return (dow === 0 || dow === 6 || feriados.has(ds)) ? 'rgba(239,68,68,0.9)' : '#a1a1aa';
+                                    if (dow === 0 || dow === 6 || feriados.has(ds)) return 'rgba(239,68,68,0.9)';
+                                    const today2 = new Date(); today2.setHours(0,0,0,0);
+                                    const dDate = new Date(ds + 'T12:00:00');
+                                    if (!dataMap[ds] && dDate <= today2) return 'rgba(147,197,253,0.9)';
+                                    return '#a1a1aa';
                                 },
                                 maxRotation: 45, minRotation: 45, font: { size: 10 }, autoSkip: false
                             }
@@ -1619,12 +1623,19 @@
                 const dowNames2 = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
                 const isWeekend = dow === 0 || dow === 6;
                 const isFeriado = feriados.has(ds);
-                if (!isWeekend && !isFeriado) { axisTooltip.style.display = 'none'; return; }
+                const today3 = new Date(); today3.setHours(0,0,0,0);
+                const dDate2 = new Date(ds + 'T12:00:00');
+                const isSemFat = !isWeekend && !isFeriado && !dataMap[ds] && dDate2 <= today3;
+                if (!isWeekend && !isFeriado && !isSemFat) { axisTooltip.style.display = 'none'; return; }
                 const [dy, dm, dd] = ds.split('-');
                 const motivos = [`<strong>${dd}/${dm}</strong>`];
-                if (isWeekend) motivos.push(`📅 ${dowNames2[dow]} — fim de semana`);
-                if (isFeriado) motivos.push(`🚫 Feriado: ${feriadoNomes[ds] || 'Feriado Nacional'}`);
-                motivos.push('Não conta para a média diária');
+                if (isSemFat) {
+                    motivos.push('📋 Neste dia não teve faturamento');
+                } else {
+                    if (isWeekend) motivos.push(`📅 ${dowNames2[dow]} — fim de semana`);
+                    if (isFeriado) motivos.push(`🚫 Feriado: ${feriadoNomes[ds] || 'Feriado Nacional'}`);
+                    motivos.push('Não conta para a média diária');
+                }
                 axisTooltip.innerHTML = motivos.join('<br>');
                 axisTooltip.style.display = 'block';
                 const ttW = axisTooltip.offsetWidth;
