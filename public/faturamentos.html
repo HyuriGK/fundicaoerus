@@ -1352,9 +1352,20 @@
             });
             const dailyChartData = Object.keys(dailyMap).sort().map(k => ({ data: k, pesoTotal: dailyMap[k] }));
             // Calculate KPI for Chart Header (Avg Daily within Context)
-            const diasComFaturamento = Object.keys(dailyMap).length;
             const totalPesoContext = dailyContextData.reduce((a, b) => a + (b.pesoTotal || 0), 0);
-            document.getElementById('avgDailyWeight').textContent = formatWeight(diasComFaturamento > 0 ? totalPesoContext / diasComFaturamento : 0);
+            // Conta dias úteis trabalhados no mês (seg-sex, excluindo feriados nacionais, até hoje ou fim do mês)
+            const feriadosNacionais = getBrazilianHolidays(year);
+            const today = new Date(); today.setHours(0,0,0,0);
+            const limitDate = monthEnd < today ? monthEnd : today;
+            let diasUteisContexto = 0;
+            for (let d = new Date(monthStart); d <= limitDate; d.setDate(d.getDate() + 1)) {
+                const dow = d.getDay();
+                if (dow === 0 || dow === 6) continue;
+                const ds = fmt(d);
+                if (feriadosNacionais.has(ds)) continue;
+                diasUteisContexto++;
+            }
+            document.getElementById('avgDailyWeight').textContent = formatWeight(diasUteisContexto > 0 ? totalPesoContext / diasUteisContexto : 0);
             renderDailyChart(dailyChartData, highlightedDay, monthStartStr, monthEndStr);
             // --- ABC CHART UPDATE ---
             if (showABC) {
@@ -1374,6 +1385,44 @@
             const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
             const dataValues = months.map((_, idx) => monthlyData[idx] || 0);
             renderAnnualChart(dataValues, highlightIndex);
+        }
+        function getBrazilianHolidays(year) {
+            // Feriados nacionais fixos
+            const fixed = [
+                `${year}-01-01`, // Ano Novo
+                `${year}-04-21`, // Tiradentes
+                `${year}-05-01`, // Trabalho
+                `${year}-09-07`, // Independência
+                `${year}-10-12`, // N. Sra. Aparecida
+                `${year}-11-02`, // Finados
+                `${year}-11-15`, // Proclamação República
+                `${year}-11-20`, // Consciência Negra
+                `${year}-12-25`, // Natal
+            ];
+            // Feriados móveis: Páscoa (algoritmo de Meeus/Jones/Butcher) + derivados
+            const easter = calcEaster(year);
+            const easterDate = new Date(year, easter.month - 1, easter.day);
+            const goodFriday = new Date(easterDate); goodFriday.setDate(easterDate.getDate() - 2);
+            const corpusChristi = new Date(easterDate); corpusChristi.setDate(easterDate.getDate() + 60);
+            const carnival = new Date(easterDate); carnival.setDate(easterDate.getDate() - 47); // terça de carnaval
+            [goodFriday, corpusChristi, carnival].forEach(d => {
+                fixed.push(fmt2(d));
+            });
+            return new Set(fixed);
+        }
+        function calcEaster(year) {
+            const a = year % 19, b = Math.floor(year / 100), c = year % 100;
+            const d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
+            const g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
+            const i = Math.floor(c / 4), k = c % 4;
+            const l = (32 + 2 * e + 2 * i - h - k) % 7;
+            const m = Math.floor((a + 11 * h + 22 * l) / 451);
+            const month = Math.floor((h + l - 7 * m + 114) / 31);
+            const day = ((h + l - 7 * m + 114) % 31) + 1;
+            return { month, day };
+        }
+        function fmt2(d) {
+            return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
         }
         function calcValidDaysRemaining() {
             const now = new Date();
