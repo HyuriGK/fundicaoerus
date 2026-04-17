@@ -644,6 +644,9 @@
                 padding: 0 !important;
                 background: #fff !important;
                 color: #000 !important;
+                width: 19cm !important;
+                height: 27.7cm !important;
+                overflow: hidden !important;
             }
 
             .ambient-bg,
@@ -662,10 +665,13 @@
                 max-width: 100% !important;
                 padding: 0 !important;
                 margin: 0 !important;
+                width: 19cm !important;
             }
 
             #sheetContent {
                 display: block !important;
+                width: 19cm !important;
+                transform-origin: top left !important;
             }
 
             .sheet-container {
@@ -673,6 +679,8 @@
                 box-shadow: none !important;
                 background: #fff !important;
                 border-radius: 0 !important;
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
             }
 
             .info-block {
@@ -1335,45 +1343,72 @@
         // Auto-focus search input
         window.onload = () => document.getElementById('searchInput').focus();
 
-        // Auto-scale: aplica zoom no body inteiro para caber em A4
+        // Auto-scale: mede a altura real com largura de impressão e aplica transform:scale
         (function () {
-            // A4 com margin:1cm = ~754px largura x ~1038px altura disponíveis
-            const PRINT_H_PX = 1038;
+            // A4 retrato com margem 1cm: área útil = 19cm x 27.7cm
+            // 1cm ≈ 37.8px a 96dpi → 718px x 1047px
+            const PRINT_W_PX = 718;
+            const PRINT_H_PX = 1047;
 
-            function applyZoom() {
+            function applyScale() {
+                const content = document.getElementById('sheetContent');
                 const sheet = document.querySelector('.sheet-container');
-                if (!sheet) return;
-
-                // Colapsa alturas fixas antes de medir
                 const imageContainer = document.getElementById('imageContainer');
                 const notesPanel = document.getElementById('notesObservationsPanel');
+                if (!content || !sheet) return;
+
+                // 1) Colapsa alturas fixas (imagem e notas com 500px)
                 imageContainer.style.height = 'auto';
-                imageContainer.style.minHeight = '40px';
+                imageContainer.style.minHeight = '60px';
                 notesPanel.style.height = 'auto';
-                notesPanel.style.minHeight = '40px';
+                notesPanel.style.minHeight = '60px';
                 notesPanel.style.overflow = 'hidden';
 
-                // Remove zoom anterior para medir tamanho real
-                document.body.style.zoom = '';
+                // 2) Força largura de impressão para medir a altura real como será impressa
+                content.style.transform = '';
+                content.style.width = PRINT_W_PX + 'px';
+                content.style.maxWidth = PRINT_W_PX + 'px';
 
+                // Força reflow
+                void content.offsetHeight;
+
+                // 3) Mede altura com largura de impressão
                 const naturalH = sheet.getBoundingClientRect().height;
 
+                // 4) Calcula scale (nunca aumenta além de 1)
+                let scale = 1;
                 if (naturalH > PRINT_H_PX) {
-                    const zoom = PRINT_H_PX / naturalH;
-                    document.body.style.zoom = zoom;
+                    scale = PRINT_H_PX / naturalH;
+                }
+
+                // 5) Aplica transform:scale
+                content.style.transformOrigin = 'top left';
+                content.style.transform = `scale(${scale})`;
+            }
+
+            function resetScale() {
+                const content = document.getElementById('sheetContent');
+                const imageContainer = document.getElementById('imageContainer');
+                const notesPanel = document.getElementById('notesObservationsPanel');
+                if (content) {
+                    content.style.transform = '';
+                    content.style.width = '';
+                    content.style.maxWidth = '';
+                    content.style.transformOrigin = '';
+                }
+                if (imageContainer) {
+                    imageContainer.style.height = '500px';
+                    imageContainer.style.minHeight = '';
+                }
+                if (notesPanel) {
+                    notesPanel.style.height = '500px';
+                    notesPanel.style.overflow = 'auto';
+                    notesPanel.style.minHeight = '';
                 }
             }
 
-            function resetZoom() {
-                document.body.style.zoom = '';
-                const imageContainer = document.getElementById('imageContainer');
-                const notesPanel = document.getElementById('notesObservationsPanel');
-                if (imageContainer) { imageContainer.style.height = '500px'; imageContainer.style.minHeight = ''; }
-                if (notesPanel) { notesPanel.style.height = '500px'; notesPanel.style.overflow = 'auto'; notesPanel.style.minHeight = ''; }
-            }
-
-            window.addEventListener('beforeprint', applyZoom);
-            window.addEventListener('afterprint', resetZoom);
+            window.addEventListener('beforeprint', applyScale);
+            window.addEventListener('afterprint', resetScale);
         })();
     </script>
 
