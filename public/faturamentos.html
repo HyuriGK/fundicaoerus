@@ -1511,24 +1511,45 @@
                 return parts.join(' | ');
             });
 
+            let accDay = 0;
+            const accValues = values.map(v => { accDay += v; return accDay; });
+
             dailyChart = new Chart(ctx, {
                 type: 'bar',
                 data: {
                     labels,
-                    datasets: [{
-                        label: 'Peso (kg)',
-                        data: values,
-                        backgroundColor: bgColors,
-                        borderColor: borderColors,
-                        borderWidth: 1,
-                        borderRadius: 4
-                    }]
+                    datasets: [
+                        {
+                            label: 'Peso (kg)',
+                            data: values,
+                            backgroundColor: bgColors,
+                            borderColor: borderColors,
+                            borderWidth: 1,
+                            borderRadius: 4,
+                            order: 2,
+                            yAxisID: 'y'
+                        },
+                        {
+                            type: 'line',
+                            label: 'Acumulado (kg)',
+                            data: accValues,
+                            borderColor: '#10b981',
+                            backgroundColor: 'rgba(16,185,129,0.1)',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.3,
+                            pointRadius: 2,
+                            order: 1,
+                            yAxisID: 'y1'
+                        }
+                    ]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
                     plugins: {
-                        legend: { display: false },
+                        legend: { display: true, position: 'bottom', labels: { color: '#a1a1aa', boxWidth: 12, padding: 15 } },
                         tooltip: {
                             callbacks: {
                                 title: (items) => {
@@ -1539,9 +1560,11 @@
                                 },
                                 label: (item) => {
                                     const idx = item.dataIndex;
-                                    const val = values[idx];
+                                    const v = item.parsed.y;
+                                    const label = item.dataset.label;
+                                    if (label === 'Acumulado (kg)') return `Acumulado: ${v.toLocaleString('pt-BR', {maximumFractionDigits:0})} kg`;
                                     const extra = tooltipLabels[idx];
-                                    const lines = [`Peso: ${val > 0 ? val.toLocaleString('pt-BR', {maximumFractionDigits:0}) + ' kg' : '0 kg'}`];
+                                    const lines = [`Peso: ${v > 0 ? v.toLocaleString('pt-BR', {maximumFractionDigits:0}) + ' kg' : '0 kg'}`];
                                     if (extra) lines.push(extra);
                                     return lines;
                                 }
@@ -1549,7 +1572,8 @@
                         }
                     },
                     scales: {
-                        y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#a1a1aa' } },
+                        y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#a1a1aa' }, yAxisID: 'y' },
+                        y1: { beginAtZero: true, position: 'right', grid: { display: false }, ticks: { color: '#10b981' } },
                         x: {
                             grid: { display: true, color: 'rgba(255,255,255,0.05)' },
                             ticks: {
@@ -1661,44 +1685,71 @@
         function renderAnnualChart(dataValues, highlightIndex) {
             const ctx = document.getElementById('annualChart').getContext('2d');
             if (annualChart) annualChart.destroy();
-            // Generate Colors
-            const bgColors = dataValues.map((_, idx) => {
+            const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+            // Always show all 12 months
+            const fullData = months.map((_, i) => dataValues[i] || 0);
+            const bgColors = fullData.map((_, idx) => {
                 if (highlightIndex === null) return '#ea580c';
                 return idx === highlightIndex ? '#ea580c' : 'rgba(234, 88, 12, 0.3)';
             });
+            // Acumulado mês a mês
+            let acc = 0;
+            const accumulated = fullData.map(v => { acc += v; return acc; });
             annualChart = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'],
-                    datasets: [{
-                        label: 'Peso (kg)',
-                        data: dataValues,
-                        backgroundColor: bgColors, // Dynamic Colors
-                        borderRadius: 4
-                    }]
+                    labels: months,
+                    datasets: [
+                        {
+                            label: 'Peso Mensal (kg)',
+                            data: fullData,
+                            backgroundColor: bgColors,
+                            borderRadius: 4,
+                            order: 2,
+                            yAxisID: 'y'
+                        },
+                        {
+                            type: 'line',
+                            label: 'Acumulado (kg)',
+                            data: accumulated,
+                            borderColor: '#10b981',
+                            backgroundColor: 'rgba(16,185,129,0.1)',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.3,
+                            pointRadius: 3,
+                            order: 1,
+                            yAxisID: 'y1'
+                        }
+                    ]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { display: true, position: 'bottom', labels: { color: '#a1a1aa', boxWidth: 12, padding: 15 } },
+                        tooltip: {
+                            callbacks: {
+                                label: (ctx2) => {
+                                    const v = ctx2.parsed.y;
+                                    return `${ctx2.dataset.label}: ${v.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} kg`;
+                                }
+                            }
+                        }
+                    },
                     scales: {
                         y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#a1a1aa' } },
-                        x: {
-                            min: highlightIndex !== null ? highlightIndex : undefined,
-                            max: highlightIndex !== null ? highlightIndex : undefined,
-                            grid: { display: true, color: 'rgba(255,255,255,0.05)' },
-                            ticks: { color: '#a1a1aa' }
-                        }
+                        y1: { beginAtZero: true, position: 'right', grid: { display: false }, ticks: { color: '#10b981' } },
+                        x: { grid: { display: true, color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#a1a1aa' } }
                     },
                     onClick: (e, elements) => {
                         if (elements.length > 0) {
                             const index = elements[0].index;
                             if (index === highlightIndex) {
-                                // Reset to full year of the selected year
                                 const year = document.getElementById('yearSelector').value;
                                 document.getElementById('startDate').value = `${year}-01-01`;
                                 document.getElementById('endDate').value = `${year}-12-31`;
-                                // Clear Table Column Filters
                                 document.querySelectorAll('.filter-input-table').forEach(input => input.value = '');
                                 updateDashboardfromRecords(allData);
                                 renderTable();
@@ -1708,10 +1759,10 @@
                                 updatePeriod();
                             }
                         }
+                    },
+                    onHover: (event, chartElement) => {
+                        event.native.target.style.cursor = chartElement[0] ? 'pointer' : 'default';
                     }
-                },
-                onHover: (event, chartElement) => {
-                    event.native.target.style.cursor = chartElement[0] ? 'pointer' : 'default';
                 }
             });
         }
