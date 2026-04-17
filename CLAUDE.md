@@ -67,16 +67,18 @@ Deployed on **Vercel** (see `vercel.json`). The Express app is exported as a mod
 
 ## TOKEN OPTIMIZATION RULES (STRICT)
 
-- Respond ultra-concisely. Code only, no prose.
+- **Respostas curtas** — apenas código, sem prosa.
 
-- Disable auto-compression/summarization.
+- **Sem agentes** — nunca chame runSubagent ou outros agentes.
 
-- No 'thinking' mode unless explicitly requested.
+- **Sem MCP tools** — não use ferramentas de servidor MCP.
 
-- Never create .md docs, summaries, or logs automatically.
+- **Sem contexto automático** — não releia arquivos já lidos antes.
 
-- Prefer specialized agents for sub-tasks.
+- **Sem thinking mode** — a menos que explicitamente solicitado.
 
-- Use Sonnet by default. Use Opus only if I explicitly ask.
+- **Sem summarização** — desabilitar compressão/auto-context.
 
-- If a task is simple, do NOT use complex MCP tools.
+- **Sem docs自动** — nunca crie .md, summaries ou logs automaticamente.
+
+- **Sonnet por padrão** — use Opus apenas se eu pedir.
