@@ -1563,9 +1563,21 @@
                                     const v = item.parsed.y;
                                     const label = item.dataset.label;
                                     if (label === 'Acumulado (kg)') return `Acumulado: ${v.toLocaleString('pt-BR', {maximumFractionDigits:0})} kg`;
-                                    const extra = tooltipLabels[idx];
+                                    const ds = allDays[idx];
+                                    const dow = new Date(ds + 'T12:00:00').getDay();
+                                    const isWeekend = dow === 0 || dow === 6;
+                                    const isFeriado = feriados.has(ds);
+                                    const today3 = new Date(); today3.setHours(0,0,0,0);
+                                    const isSemFat = !isWeekend && !isFeriado && !dataMap[ds] && new Date(ds + 'T12:00:00') <= today3;
                                     const lines = [`Peso: ${v > 0 ? v.toLocaleString('pt-BR', {maximumFractionDigits:0}) + ' kg' : '0 kg'}`];
-                                    if (extra) lines.push(extra);
+                                    if (isSemFat) {
+                                        lines.push('Não houve faturamento');
+                                        lines.push('Conta para a média diária');
+                                    } else if (isWeekend || isFeriado) {
+                                        if (isWeekend) lines.push(`${['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'][dow]} — fim de semana`);
+                                        if (isFeriado) lines.push(`Feriado: ${feriadoNomes[ds] || 'Feriado Nacional'}`);
+                                        lines.push('Não conta para a média diária');
+                                    }
                                     return lines;
                                 }
                             },
@@ -1616,75 +1628,6 @@
                 }
             });
 
-            // Tooltip para ticks do eixo X (dias não úteis)
-            const canvas = document.getElementById('dailyChart');
-            let axisTooltip = document.getElementById('dailyAxisTooltip');
-            if (!axisTooltip) {
-                axisTooltip = document.createElement('div');
-                axisTooltip.id = 'dailyAxisTooltip';
-                axisTooltip.style.cssText = 'position:fixed;background:rgba(20,20,22,0.97);border:1px solid rgba(239,68,68,0.5);color:#f8fafc;padding:8px 12px;border-radius:8px;font-size:0.8rem;pointer-events:none;display:none;z-index:9999;max-width:220px;line-height:1.5;box-shadow:0 4px 12px rgba(0,0,0,0.4)';
-                document.body.appendChild(axisTooltip);
-            }
-            canvas.removeEventListener('mousemove', canvas._axisTooltipHandler);
-            canvas.removeEventListener('mouseleave', canvas._axisTooltipLeave);
-
-            canvas._axisTooltipHandler = (e) => {
-                const chart = dailyChart;
-                if (!chart) return;
-                const xAxis = chart.scales.x;
-                const rect = canvas.getBoundingClientRect();
-                const mouseX = e.clientX - rect.left;
-                const mouseY = e.clientY - rect.top;
-                const tickAreaTop = chart.chartArea.bottom;
-                const tickAreaBottom = rect.height;
-                if (mouseY < tickAreaTop || mouseY > tickAreaBottom) {
-                    axisTooltip.style.display = 'none';
-                    return;
-                }
-                // Find nearest tick
-                let closest = -1, minDist = 20;
-                xAxis.ticks.forEach((_, i) => {
-                    const px = xAxis.getPixelForTick(i);
-                    const dist = Math.abs(mouseX - px);
-                    if (dist < minDist) { minDist = dist; closest = i; }
-                });
-                if (closest === -1) { axisTooltip.style.display = 'none'; return; }
-                const ds = allDays[closest];
-                if (!ds) { axisTooltip.style.display = 'none'; return; }
-                const dow = new Date(ds + 'T12:00:00').getDay();
-                const dowNames2 = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
-                const isWeekend = dow === 0 || dow === 6;
-                const isFeriado = feriados.has(ds);
-                const today3 = new Date(); today3.setHours(0,0,0,0);
-                const dDate2 = new Date(ds + 'T12:00:00');
-                const isSemFat = !isWeekend && !isFeriado && !dataMap[ds] && dDate2 <= today3;
-                if (!isWeekend && !isFeriado && !isSemFat) { axisTooltip.style.display = 'none'; return; }
-                const [dy, dm, dd] = ds.split('-');
-                const motivos = [`<strong>${dd}/${dm}</strong>`];
-                if (isSemFat) {
-                    motivos.push('📋 Não houve faturamento');
-                    motivos.push('Conta para a média diária');
-                } else {
-                    if (isWeekend) motivos.push(`📅 ${dowNames2[dow]} — fim de semana`);
-                    if (isFeriado) motivos.push(`🚫 Feriado: ${feriadoNomes[ds] || 'Feriado Nacional'}`);
-                    motivos.push('Não conta para a média diária');
-                }
-                axisTooltip.innerHTML = motivos.join('<br>');
-                axisTooltip.style.display = 'block';
-                const ttW = axisTooltip.offsetWidth;
-                const ttH = axisTooltip.offsetHeight;
-                const vpW = window.innerWidth;
-                const vpH = window.innerHeight;
-                let tx = e.clientX + 12;
-                let ty = e.clientY - 10;
-                if (tx + ttW > vpW) tx = e.clientX - ttW - 12;
-                if (ty + ttH > vpH) ty = e.clientY - ttH - 10;
-                axisTooltip.style.left = tx + 'px';
-                axisTooltip.style.top = ty + 'px';
-            };
-            canvas._axisTooltipLeave = () => { axisTooltip.style.display = 'none'; };
-            canvas.addEventListener('mousemove', canvas._axisTooltipHandler);
-            canvas.addEventListener('mouseleave', canvas._axisTooltipLeave);
         }
         function renderAnnualChart(dataValues, highlightIndex) {
             const ctx = document.getElementById('annualChart').getContext('2d');
