@@ -1337,10 +1337,25 @@
         // Auto-focus search input
         window.onload = () => document.getElementById('searchInput').focus();
 
+        // Limpeza pós-decodificação: remove metadata de fonte, insere quebras em itens numerados
+        function cleanPlainNotes(s) {
+            if (!s || typeof s !== 'string') return s || '';
+            let result = s.replace(/\r\n?/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+            const lines = result.split('\n');
+            while (lines.length > 0 && /^[\s;]*(?:[A-Za-z][A-Za-z0-9 ]*\s*;[\s;0-9]*)*[\s;]*$/.test(lines[0])) {
+                lines.shift();
+            }
+            result = lines.join('\n').trim();
+            result = result
+                .replace(/([;:])[ \t]+(?=\d+\s*[-–])/g, '$1\n')
+                .replace(/([;:])(?=\d+\s*[-–])/g, '$1\n');
+            return result;
+        }
+
         // RTF -> texto puro (decodifica escapes \'XX em CP1252, \par, \u, etc.)
         function rtfToPlain(rtf) {
             if (!rtf || typeof rtf !== 'string') return rtf || '';
-            if (!rtf.includes("\\'") && !rtf.includes('{\\rtf') && !rtf.includes('\\par')) return rtf;
+            if (!rtf.includes("\\'") && !rtf.includes('{\\rtf') && !rtf.includes('\\par')) return cleanPlainNotes(rtf);
 
             const cp1252 = {
                 0x80: '\u20AC', 0x82: '\u201A', 0x83: '\u0192', 0x84: '\u201E',
@@ -1430,18 +1445,7 @@
                 if (skipUntil === -1) out += c;
                 i++;
             }
-            let result = out.replace(/\n{3,}/g, '\n\n').trim();
-            // Remove linhas iniciais com metadata de fonte (ex: "Tahoma;", ";;", "Arial;10;")
-            const lines = result.split('\n');
-            while (lines.length > 0 && /^[\s;]*(?:[A-Za-z][A-Za-z0-9 ]*\s*;[\s;0-9]*)*[\s;]*$/.test(lines[0]) && lines[0].trim() !== '') {
-                lines.shift();
-            }
-            result = lines.join('\n').trim();
-            // Heurística: garante quebra antes de itens numerados "N - ..." se o RTF vier sem \par entre eles
-            result = result
-                .replace(/([;:])[ \t]+(?=\d+\s*[-–])/g, '$1\n')
-                .replace(/([;:])(?=\d+\s*[-–])/g, '$1\n');
-            return result;
+            return cleanPlainNotes(out);
         }
 
         // Auto-scale: alarga layout até que o zoom que cabe a largura também caiba a altura
