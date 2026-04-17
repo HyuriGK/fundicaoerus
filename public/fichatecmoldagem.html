@@ -644,9 +644,6 @@
                 padding: 0 !important;
                 background: #fff !important;
                 color: #000 !important;
-                width: 19cm !important;
-                height: 27.7cm !important;
-                overflow: hidden !important;
             }
 
             .ambient-bg,
@@ -665,13 +662,10 @@
                 max-width: 100% !important;
                 padding: 0 !important;
                 margin: 0 !important;
-                width: 19cm !important;
             }
 
             #sheetContent {
                 display: block !important;
-                width: 19cm !important;
-                transform-origin: top left !important;
             }
 
             .sheet-container {
@@ -1343,10 +1337,10 @@
         // Auto-focus search input
         window.onload = () => document.getElementById('searchInput').focus();
 
-        // Auto-scale: mede a altura real com largura de impressão e aplica transform:scale
+        // Auto-scale: usa CSS zoom (afeta layout, não só visual) para encolher proporcionalmente
         (function () {
             // A4 retrato com margem 1cm: área útil = 19cm x 27.7cm
-            // 1cm ≈ 37.8px a 96dpi → 718px x 1047px
+            // a 96dpi: 718px x 1047px
             const PRINT_W_PX = 718;
             const PRINT_H_PX = 1047;
 
@@ -1357,33 +1351,34 @@
                 const notesPanel = document.getElementById('notesObservationsPanel');
                 if (!content || !sheet) return;
 
-                // 1) Colapsa alturas fixas (imagem e notas com 500px)
+                // 1) Reset zoom anterior
+                content.style.zoom = '1';
+
+                // 2) Colapsa alturas fixas da imagem/notas (500px) para medir conteúdo real
                 imageContainer.style.height = 'auto';
                 imageContainer.style.minHeight = '60px';
                 notesPanel.style.height = 'auto';
                 notesPanel.style.minHeight = '60px';
                 notesPanel.style.overflow = 'hidden';
 
-                // 2) Força largura de impressão para medir a altura real como será impressa
-                content.style.transform = '';
+                // 3) Força largura de impressão para medir altura corretamente
                 content.style.width = PRINT_W_PX + 'px';
                 content.style.maxWidth = PRINT_W_PX + 'px';
 
                 // Força reflow
                 void content.offsetHeight;
 
-                // 3) Mede altura com largura de impressão
+                // 4) Mede altura real com a largura de impressão
                 const naturalH = sheet.getBoundingClientRect().height;
 
-                // 4) Calcula scale (nunca aumenta além de 1)
-                let scale = 1;
+                // 5) Calcula zoom — só reduz se passar da altura da página
+                let zoom = 1;
                 if (naturalH > PRINT_H_PX) {
-                    scale = PRINT_H_PX / naturalH;
+                    zoom = PRINT_H_PX / naturalH;
                 }
 
-                // 5) Aplica transform:scale
-                content.style.transformOrigin = 'top left';
-                content.style.transform = `scale(${scale})`;
+                // 6) Aplica zoom (encolhe proporcional no layout real)
+                content.style.zoom = zoom;
             }
 
             function resetScale() {
@@ -1391,10 +1386,9 @@
                 const imageContainer = document.getElementById('imageContainer');
                 const notesPanel = document.getElementById('notesObservationsPanel');
                 if (content) {
-                    content.style.transform = '';
+                    content.style.zoom = '';
                     content.style.width = '';
                     content.style.maxWidth = '';
-                    content.style.transformOrigin = '';
                 }
                 if (imageContainer) {
                     imageContainer.style.height = '500px';
