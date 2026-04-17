@@ -636,7 +636,7 @@
         @media print {
             @page {
                 size: A4 portrait;
-                margin: 0;
+                margin: 1cm;
             }
 
             html, body {
@@ -685,19 +685,14 @@
             .item-main-info h2 { color: #000 !important; }
             .section-divider { background: #000 !important; }
             .section-divider span { background: #fff !important; color: #000 !important; }
-            .notes-area { background: #fdfdfd !important; border: 1px solid #ccc !important; }
+            .notes-area { background: #fdfdfd !important; border: 1px solid #ccc !important; overflow: hidden !important; }
             .image-container-large { border: 1px solid #ccc !important; background: #fff !important; }
             .image-container-large i { display: none !important; }
             .sheet-title-container { border-bottom: 2px solid #000 !important; }
             .sheet-title-container h1 { color: #000 !important; }
             table th, table td { border: 1px solid #ccc !important; }
-            table thead { background: #eee !important; -webkit-print-color-adjust: exact; }
+            table thead { background: #eee !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             .print-footer { color: #555 !important; }
-        }
-
-        /* Wrapper used during print scaling */
-        #printScaleWrapper {
-            transform-origin: top left;
         }
 
         /* Loader & Empty */
@@ -1340,46 +1335,36 @@
         // Auto-focus search input
         window.onload = () => document.getElementById('searchInput').focus();
 
-        // Auto-scale to fit exactly one A4 page on print
+        // Auto-scale: aplica zoom no sheetContent para caber em A4 (19cm útil de altura com margem 1cm)
         (function () {
-            // A4 at 96dpi: 794 x 1123px, minus ~6px for @page margin:0 rounding
-            const A4_W = 794;
-            const A4_H = 1123;
+            // A4 imprimível com margin:1cm = 19cm altura x 19cm largura (em px a 96dpi ≈ 714px x 1048px)
+            const PRINT_W_PX = 714;
+            const PRINT_H_PX = 1048;
 
-            function wrapAndScale() {
+            function applyZoom() {
                 const content = document.getElementById('sheetContent');
                 if (!content || content.style.display === 'none') return;
 
-                // Remove previous wrapper if re-printing
-                const existing = document.getElementById('printScaleWrapper');
-                if (existing && existing !== content.parentNode) {
-                    existing.replaceWith(...existing.childNodes);
-                }
+                // Reset zoom para medir tamanho real
+                content.style.zoom = '1';
 
-                // Measure natural size of content
                 const naturalW = content.scrollWidth;
                 const naturalH = content.scrollHeight;
 
-                const scaleX = A4_W / naturalW;
-                const scaleY = A4_H / naturalH;
-                const scale = Math.min(scaleX, scaleY, 1); // never upscale past 100%
+                const scaleX = PRINT_W_PX / naturalW;
+                const scaleY = PRINT_H_PX / naturalH;
+                const zoom = Math.min(scaleX, scaleY);
 
-                content.style.transformOrigin = 'top left';
-                content.style.transform = `scale(${scale})`;
-                content.style.width = (A4_W / scale) + 'px';
-                content.style.overflow = 'visible';
+                content.style.zoom = zoom;
             }
 
-            function resetScale() {
+            function resetZoom() {
                 const content = document.getElementById('sheetContent');
-                if (!content) return;
-                content.style.transform = '';
-                content.style.width = '';
-                content.style.overflow = '';
+                if (content) content.style.zoom = '1';
             }
 
-            window.addEventListener('beforeprint', wrapAndScale);
-            window.addEventListener('afterprint', resetScale);
+            window.addEventListener('beforeprint', applyZoom);
+            window.addEventListener('afterprint', resetZoom);
         })();
     </script>
 
