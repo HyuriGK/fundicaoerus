@@ -2173,9 +2173,10 @@
                                     const dow = new Date(ds + 'T12:00:00').getDay();
                                     const dataMapChart = {};
                                     filteredData.forEach(d => { dataMapChart[d.data] = true; });
-                                    if (dow === 0 || dow === 6 || feriados2.has(ds)) return 'rgba(239,68,68,0.9)';
+                                    const isNaoUtil2 = dow === 0 || dow === 6 || feriados2.has(ds);
+                                    if (isNaoUtil2 && !dataMapChart[ds]) return 'rgba(239,68,68,0.9)';
                                     const today2 = new Date(); today2.setHours(0,0,0,0);
-                                    if (!dataMapChart[ds] && new Date(ds + 'T12:00:00') <= today2) return 'rgba(147,197,253,0.9)';
+                                    if (!isNaoUtil2 && !dataMapChart[ds] && new Date(ds + 'T12:00:00') <= today2) return 'rgba(147,197,253,0.9)';
                                     return '#a1a1aa';
                                 },
                                 font: {
@@ -2255,8 +2256,11 @@
                     const isWeekend = dow === 0 || dow === 6;
                     const isFeriado = feriadosT.has(ds);
                     const today4 = new Date(); today4.setHours(0,0,0,0);
-                    const isSemProd = !isWeekend && !isFeriado && !dataMapT[ds] && new Date(ds + 'T12:00:00') <= today4;
-                    if (!isWeekend && !isFeriado && !isSemProd) { apTooltip.style.display = 'none'; return; }
+                    const isNaoUtil3 = isWeekend || isFeriado;
+                    const temProd = !!dataMapT[ds];
+                    const isSemProd = !isNaoUtil3 && !temProd && new Date(ds + 'T12:00:00') <= today4;
+                    const isNaoUtilSemProd = isNaoUtil3 && !temProd;
+                    if (!isSemProd && !isNaoUtilSemProd) { apTooltip.style.display = 'none'; return; }
                     const [dy, dm, dd] = ds.split('-');
                     const motivos = [`<strong>${dd}/${dm}</strong>`];
                     if (isSemProd) {
@@ -2267,6 +2271,7 @@
                         if (isFeriado) motivos.push(`🚫 Feriado: ${getHolidayName(ds, yearT)}`);
                         motivos.push('Não conta para a média diária');
                     }
+                    // Se foi feriado/fim de semana MAS teve produção, não mostra tooltip (dia válido normal)
                     apTooltip.innerHTML = motivos.join('<br>');
                     apTooltip.style.display = 'block';
                     const ttW = apTooltip.offsetWidth, ttH = apTooltip.offsetHeight;
