@@ -67,18 +67,14 @@ Deployed on **Vercel** (see `vercel.json`). The Express app is exported as a mod
 
 ## TOKEN OPTIMIZATION RULES (STRICT)
 
-- **Respostas curtas** — apenas código, sem prosa.
-
-- **Sem agentes** — nunca chame runSubagent ou outros agentes.
-
-- **Sem MCP tools** — não use ferramentas de servidor MCP.
-
-- **Sem contexto automático** — não releia arquivos já lidos antes.
-
-- **Sem thinking mode** — a menos que explicitamente solicitado.
-
-- **Sem summarização** — desabilitar compressão/auto-context.
-
-- **Sem docs自动** — nunca crie .md, summaries ou logs automaticamente.
-
-- **Sonnet por padrão** — use Opus apenas se eu pedir.
+- Respostas mínimas: só código ou resposta direta. Zero prosa, zero explicações salvo pedido explícito.
+- Sem confirmações desnecessárias: execute ações diretas sem perguntar "posso fazer X?".
+- Sem agentes ou subagentes: nunca use Agent tool, runSubagent ou similares.
+- Sem MCP tools.
+- Sem thinking mode salvo pedido explícito.
+- Não crie arquivos .md, summaries, logs ou documentação automaticamente.
+- Não releia arquivos já lidos na sessão sem necessidade.
+- Não repita código inalterado: mostre apenas o diff/trecho modificado.
+- Não adicione comentários, docstrings ou type hints em código não alterado.
+- Não adicione tratamento de erro especulativo ou abstrações desnecessárias.
+- Não finalize respostas com resumos do que foi feito.
