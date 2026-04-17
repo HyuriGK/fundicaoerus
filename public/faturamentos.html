@@ -1353,17 +1353,17 @@
             const dailyChartData = Object.keys(dailyMap).sort().map(k => ({ data: k, pesoTotal: dailyMap[k] }));
             // Calculate KPI for Chart Header (Avg Daily within Context)
             const totalPesoContext = dailyContextData.reduce((a, b) => a + (b.pesoTotal || 0), 0);
-            // Conta dias úteis trabalhados no mês (seg-sex, excluindo feriados nacionais, até hoje ou fim do mês)
+            // Dias que contam: úteis (seg-sex, excluindo feriados) OU feriado/fim de semana que teve faturamento
             const feriadosNacionais = getBrazilianHolidays(year);
             const today = new Date(); today.setHours(0,0,0,0);
             const limitDate = monthEnd < today ? monthEnd : today;
             let diasUteisContexto = 0;
             for (let d = new Date(monthStart); d <= limitDate; d.setDate(d.getDate() + 1)) {
-                const dow = d.getDay();
-                if (dow === 0 || dow === 6) continue;
                 const ds = fmt(d);
-                if (feriadosNacionais.has(ds)) continue;
-                diasUteisContexto++;
+                const dow = d.getDay();
+                const isNaoUtil = dow === 0 || dow === 6 || feriadosNacionais.has(ds);
+                if (isNaoUtil && !dailyMap[ds]) continue; // não conta se não útil E sem faturamento
+                if (!isNaoUtil || dailyMap[ds]) diasUteisContexto++;
             }
             document.getElementById('avgDailyWeight').textContent = formatWeight(diasUteisContexto > 0 ? totalPesoContext / diasUteisContexto : 0);
             renderDailyChart(dailyChartData, highlightedDay, monthStartStr, monthEndStr);
@@ -1490,21 +1490,11 @@
 
             const bgColors = allDays.map(ds => {
                 if (ds === highlightedDay) return '#ea580c';
-                const dow = new Date(ds + 'T12:00:00').getDay();
-                const isWeekend = dow === 0 || dow === 6;
-                const isFeriado = feriados.has(ds);
-                if (isWeekend || isFeriado) return 'rgba(239, 68, 68, 0.35)';
                 if (highlightedDay) return 'rgba(234, 88, 12, 0.25)';
                 return '#ea580c';
             });
 
-            const borderColors = allDays.map(ds => {
-                const dow = new Date(ds + 'T12:00:00').getDay();
-                const isWeekend = dow === 0 || dow === 6;
-                const isFeriado = feriados.has(ds);
-                if (isWeekend || isFeriado) return 'rgba(239, 68, 68, 0.8)';
-                return 'transparent';
-            });
+            const borderColors = allDays.map(() => 'transparent');
 
             const tooltipLabels = allDays.map(ds => {
                 const dow = new Date(ds + 'T12:00:00').getDay();
@@ -1558,7 +1548,15 @@
                         y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#a1a1aa' } },
                         x: {
                             grid: { display: true, color: 'rgba(255,255,255,0.05)' },
-                            ticks: { color: '#a1a1aa', maxRotation: 45, minRotation: 45, font: { size: 10 } }
+                            ticks: {
+                                color: (c) => {
+                                    const ds = allDays[c.index];
+                                    if (!ds) return '#a1a1aa';
+                                    const dow = new Date(ds + 'T12:00:00').getDay();
+                                    return (dow === 0 || dow === 6 || feriados.has(ds)) ? 'rgba(239,68,68,0.9)' : '#a1a1aa';
+                                },
+                                maxRotation: 45, minRotation: 45, font: { size: 10 }
+                            }
                         }
                     },
                     onClick: (e, elements) => {
