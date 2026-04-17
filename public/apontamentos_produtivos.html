@@ -653,8 +653,9 @@
 
         .filter-group-categories {
             display: flex !important;
+            flex-wrap: wrap;
             gap: 10px !important;
-            margin-left: auto; /* Push to the right */
+            margin-left: auto;
             align-items: center !important;
         }
 
@@ -1069,8 +1070,8 @@
                 
                 <!-- Categories (Pushed to Right) -->
                 <div class="filter-group-categories">
-                    <select id="liga-filter-select" class="sector-select"></select>
-                    <select id="sector-chart-select" class="sector-select"></select>
+                    <div class="months-group" id="liga-filter-buttons"></div>
+                    <div class="months-group" id="sector-filter-buttons"></div>
                 </div>
             </div>
 
@@ -1660,7 +1661,6 @@
 
         // Elements
         const loadingScreen = document.getElementById('loading-screen');
-        const sectorChartSelect = document.getElementById('sector-chart-select');
         const yearFilterSelect = document.getElementById('year-filter-select');
         const monthButtons = document.querySelectorAll('.btn-month');
 
@@ -1727,21 +1727,40 @@
             });
         }
 
-        function setupEventListeners() {
-            // Sector Select
-            sectorChartSelect.addEventListener('change', (e) => {
-                currentSectorFilter = e.target.value;
-                applyFilters();
-            });
-
-            // Liga Select
-            const ligaFilterSelect = document.getElementById('liga-filter-select');
-            if(ligaFilterSelect) {
-                ligaFilterSelect.addEventListener('change', (e) => {
-                    currentLigaFilter = e.target.value;
+        function renderSectorButtons(sectors) {
+            const container = document.getElementById('sector-filter-buttons');
+            container.innerHTML = '';
+            sectors.forEach(s => {
+                const btn = document.createElement('button');
+                btn.className = 'month-btn' + (s === currentSectorFilter ? ' active' : '');
+                btn.textContent = s;
+                btn.onclick = () => {
+                    currentSectorFilter = s;
+                    renderSectorButtons(sectors);
                     applyFilters();
-                });
-            }
+                };
+                container.appendChild(btn);
+            });
+        }
+
+        function renderLigaButtons(ligas) {
+            const container = document.getElementById('liga-filter-buttons');
+            container.innerHTML = '';
+            const all = ['TODAS', ...ligas];
+            all.forEach(l => {
+                const btn = document.createElement('button');
+                btn.className = 'month-btn' + (l === currentLigaFilter ? ' active' : '');
+                btn.textContent = l === 'TODAS' ? 'TODAS AS LIGAS' : l;
+                btn.onclick = () => {
+                    currentLigaFilter = l;
+                    renderLigaButtons(ligas);
+                    applyFilters();
+                };
+                container.appendChild(btn);
+            });
+        }
+
+        function setupEventListeners() {
 
             // Year Select
             yearFilterSelect.addEventListener('change', (e) => {
@@ -1835,21 +1854,10 @@
             // User requested SPECIFIC order. Let's trust user knows these sectors exist.
             // I will add them exactly as requested. 
 
-            sectorChartSelect.innerHTML = '';
-
-            orderedSectors.forEach(s => {
-                const option = document.createElement('option');
-                option.value = s;
-                option.textContent = s;
-                sectorChartSelect.appendChild(option);
-            });
-
-            // Set Default
-            // If currentSectorFilter is not in list, set to first one (MOLDAGEM GERAL)
             if (!orderedSectors.includes(currentSectorFilter)) {
                 currentSectorFilter = 'MOLDAGEM GERAL';
             }
-            sectorChartSelect.value = currentSectorFilter;
+            renderSectorButtons(orderedSectors);
 
             // Years
             const years = [...new Set(allData.map(d => d.data.substring(0, 4)))].sort().reverse();
@@ -1875,22 +1883,9 @@
 
             // Ligas
             const ligas = [...new Set(allData.map(d => d.liga).filter(l => l))].sort();
-            const ligaSelect = document.getElementById('liga-filter-select');
-            if (ligaSelect) {
-                ligaSelect.innerHTML = '<option value="TODAS">TODAS AS LIGAS</option>';
-                ligas.forEach(l => {
-                    const option = document.createElement('option');
-                    option.value = l;
-                    option.textContent = l;
-                    ligaSelect.appendChild(option);
-                });
-                
-                if (currentLigaFilter && ligas.includes(currentLigaFilter)) {
-                    ligaSelect.value = currentLigaFilter;
-                } else {
-                    currentLigaFilter = 'TODAS';
-                    ligaSelect.value = 'TODAS';
-                }
+            {
+                if (!ligas.includes(currentLigaFilter)) currentLigaFilter = 'TODAS';
+                renderLigaButtons(ligas);
             }
         }
 
