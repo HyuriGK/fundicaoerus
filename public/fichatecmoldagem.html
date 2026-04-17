@@ -1337,12 +1337,11 @@
         // Auto-focus search input
         window.onload = () => document.getElementById('searchInput').focus();
 
-        // Auto-scale: usa CSS zoom (afeta layout, não só visual) para encolher proporcionalmente
+        // Auto-scale: alarga layout até que o zoom que cabe a largura também caiba a altura
         (function () {
-            // A4 retrato com margem 1cm: área útil = 19cm x 27.7cm
-            // a 96dpi: 718px x 1047px
+            // A4 retrato com margem 1cm: área útil ~19cm x 27.7cm = 718px x 1047px a 96dpi
             const PRINT_W_PX = 718;
-            const PRINT_H_PX = 1047;
+            const PRINT_H_PX = 1030; // margem de segurança (browsers perdem ~17px no rodapé)
 
             function applyScale() {
                 const content = document.getElementById('sheetContent');
@@ -1351,33 +1350,49 @@
                 const notesPanel = document.getElementById('notesObservationsPanel');
                 if (!content || !sheet) return;
 
-                // 1) Reset zoom anterior
+                // Reset
                 content.style.zoom = '1';
+                content.style.transform = '';
+                content.style.transformOrigin = '';
 
-                // 2) Colapsa alturas fixas da imagem/notas (500px) para medir conteúdo real
-                imageContainer.style.height = 'auto';
-                imageContainer.style.minHeight = '60px';
-                notesPanel.style.height = 'auto';
-                notesPanel.style.minHeight = '60px';
-                notesPanel.style.overflow = 'hidden';
-
-                // 3) Força largura de impressão para medir altura corretamente
-                content.style.width = PRINT_W_PX + 'px';
-                content.style.maxWidth = PRINT_W_PX + 'px';
-
-                // Força reflow
-                void content.offsetHeight;
-
-                // 4) Mede altura real com a largura de impressão
-                const naturalH = sheet.getBoundingClientRect().height;
-
-                // 5) Calcula zoom — só reduz se passar da altura da página
-                let zoom = 1;
-                if (naturalH > PRINT_H_PX) {
-                    zoom = PRINT_H_PX / naturalH;
+                // Colapsa alturas fixas de imagem/notas para medir conteúdo real
+                if (imageContainer) {
+                    imageContainer.style.height = 'auto';
+                    imageContainer.style.minHeight = '60px';
+                }
+                if (notesPanel) {
+                    notesPanel.style.height = 'auto';
+                    notesPanel.style.minHeight = '60px';
+                    notesPanel.style.overflow = 'hidden';
                 }
 
-                // 6) Aplica zoom (encolhe proporcional no layout real)
+                // Começa medindo na largura de impressão
+                let W = PRINT_W_PX;
+                content.style.width = W + 'px';
+                content.style.maxWidth = W + 'px';
+                void content.offsetHeight;
+                let H = sheet.getBoundingClientRect().height;
+
+                // Se cabe na altura, não precisa escalar — usa largura total
+                if (H <= PRINT_H_PX) {
+                    content.style.zoom = '1';
+                    return;
+                }
+
+                // Alarga iterativamente: zoom = PRINT_W/W deve caber também na altura
+                // Condição: H(W) * PRINT_W / W <= PRINT_H
+                let safety = 0;
+                while (H * PRINT_W_PX / W > PRINT_H_PX && safety < 20) {
+                    W = Math.ceil(W * 1.08);
+                    content.style.width = W + 'px';
+                    content.style.maxWidth = W + 'px';
+                    void content.offsetHeight;
+                    H = sheet.getBoundingClientRect().height;
+                    safety++;
+                }
+
+                // Aplica zoom que faz a largura visual bater com a página inteira
+                const zoom = Math.min(1, PRINT_W_PX / W);
                 content.style.zoom = zoom;
             }
 
@@ -1389,6 +1404,8 @@
                     content.style.zoom = '';
                     content.style.width = '';
                     content.style.maxWidth = '';
+                    content.style.transform = '';
+                    content.style.transformOrigin = '';
                 }
                 if (imageContainer) {
                     imageContainer.style.height = '500px';
