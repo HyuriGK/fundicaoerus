@@ -3842,8 +3842,18 @@
         }
         function updateParetoChart(list) {
             const cMap = {};
-            const totalWeightAll = list.reduce((acc, item) => acc + getCorrectedWeight(item, customWeights), 0);
-            list.forEach(item => {
+            const unblocked = list.filter(item => {
+                const isBlockReasonStatus = (
+                    item.STATUS_PED === 'B' ||
+                    item.STATUS_PPR === 'B' ||
+                    (item.STATUS_DESC_PED && String(item.STATUS_DESC_PED).toUpperCase().includes('BLOQ'))
+                );
+                const isBlockReasonNoDate = (!item.ENTREGA_PETR && !item.DATA_ENTREGA_PPR);
+                const isBlockReasonNoOP = (!item.OP_PCS || item.OP_PCS === '-' || String(item.OP_PCS).trim() === '');
+                return !(isBlockReasonStatus || isBlockReasonNoDate || isBlockReasonNoOP);
+            });
+            const totalWeightAll = unblocked.reduce((acc, item) => acc + getCorrectedWeight(item, customWeights), 0);
+            unblocked.forEach(item => {
                 const id = item.ID_CLIENTE_CORE || 'N/A';
                 const name = item.NOME_CLIENTE || `Cliente ${id}`;
                 if (!cMap[id]) cMap[id] = { val: 0, name: name };
