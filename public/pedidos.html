@@ -3957,42 +3957,44 @@
             });
         }
         function updateConcentracaoChart(list) {
-            const cMap = {};
-            const valueMap = {};
-            // Mesma base do index.html: exclui modelos e faturados
-            const carteira = list.filter(item => {
+            // Agrega por nome (igual index.html), exclui modelos (endsWith('1'))
+            const clientWeight = {};
+            const clientValue = {};
+            const clientId = {};
+            list.forEach(item => {
                 const prodCode = String(item.PRODUTO_PPR || '').trim();
-                const isFaturado = String(item.FATURADO_PPR || '').trim().toUpperCase() === 'T';
-                return !prodCode.endsWith('1') && !isFaturado;
-            });
-            carteira.forEach(item => {
+                if (prodCode.endsWith('1')) return;
+                const name = (item.NOME_CLIENTE || 'Desconhecido').trim().toUpperCase();
                 const id = item.ID_CLIENTE_CORE || 'N/A';
-                const name = item.NOME_CLIENTE || `Cliente ${id}`;
                 const w = getCorrectedWeight(item, customWeights);
                 const metrics = getItemSectorMetrics(item);
                 const realQty = metrics.totalBalance;
                 let unitPrice = parseFloat(item.VALOR_PPR || 0);
                 if (item.PRECO_KG && parseFloat(item.PRECO_KG) > 0 && customWeights[item.PRODUTO_PPR]) {
-                    let unitW = realQty > 0 ? (w / realQty) : 0;
+                    const unitW = realQty > 0 ? (w / realQty) : 0;
                     unitPrice = parseFloat(item.PRECO_KG) * unitW;
                 }
-                if (!cMap[id]) { cMap[id] = { val: 0, name: name }; valueMap[id] = 0; }
-                cMap[id].val += w;
-                valueMap[id] += unitPrice * realQty;
+                if (!clientWeight[name]) { clientWeight[name] = 0; clientValue[name] = 0; clientId[name] = id; }
+                clientWeight[name] += w;
+                clientValue[name] += unitPrice * realQty;
             });
+            const cMap = Object.fromEntries(
+                Object.entries(clientWeight).map(([name, val]) => [name, { val, name }])
+            );
+            const valueMap = clientValue;
             const totalWeightAll = Object.values(cMap).reduce((a, b) => a + b.val, 0);
             const sorted = Object.entries(cMap).sort((a, b) => b[1].val - a[1].val).slice(0, 15);
-            const labels = sorted.map(s => s[1].name);
+            const labels = sorted.map(s => s[0]); // nome é a chave
             const dataKg = sorted.map(s => s[1].val);
             const dataVal = sorted.map(s => valueMap[s[0]] || 0);
-            const ids = sorted.map(s => s[0]);
+            const ids = sorted.map(s => clientId[s[0]] || s[0]); // ID numérico por nome
             let cumulative = 0;
             const dataPercent = sorted.map(s => {
                 cumulative += s[1].val;
                 return totalWeightAll > 0 ? (cumulative / totalWeightAll) * 100 : 0;
             });
-            const bgColors = sorted.map(s =>
-                activeChartFilters.client != null && activeChartFilters.client == s[0]
+            const bgColors = ids.map(id =>
+                activeChartFilters.client != null && activeChartFilters.client == id
                     ? '#fff'
                     : chartColorAmber
             );
