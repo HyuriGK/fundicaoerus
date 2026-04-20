@@ -128,19 +128,17 @@ async function syncMaster() {
 
             const pgClient = await pool.connect();
             try {
-                await pgClient.query('BEGIN');
-                
-                // 2. Upsert OPs na tabela do dashboard
+                // 2. Upsert OPs — transação separada para garantir que OPs nunca sejam perdidas
                 console.log('📤 [2/4] Atualizando registros no Postgres...');
                 const totalOPs = opsResults.length;
                 let processed = 0;
-                
+
+                await pgClient.query('BEGIN');
                 for (const op of opsResults) {
                     const syncKey = `OP-${op.OP_PCS}`;
                     op.OP_QUANTIDADE = op.OP_QUANTIDADE || 0;
-                    op.QUANTIDADE_PPR = op.OP_QUANTIDADE; 
+                    op.QUANTIDADE_PPR = op.OP_QUANTIDADE;
 
-                    // Mesclar apontamentos (Mapeamento de setores)
                     const opsData = pointingsMap[op.OP_PCS] || {};
                     const totals = { 10: 0, 11: 0, 12: 0, 20: 0, 30: 0, 40: 0, 50: 0, 60: 0, 100: 0, 101: 0, 105: 0 };
                     Object.keys(opsData).forEach(sector => {
@@ -156,23 +154,27 @@ async function syncMaster() {
                     op.QTY_QUALIDADE = totals[60];
                     op.QTY_EXPEDICAO = totals[100];
                     op.QTY_FATURAMENTO = totals[101];
-                    
+
                     await pgClient.query(`
                         INSERT INTO firebird_sync_pedidos (sync_key, data, updated_at)
                         VALUES ($1, $2, NOW())
                         ON CONFLICT (sync_key) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()
                     `, [syncKey, JSON.stringify(op)]);
-                    
+
                     processed++;
                     if (processed % 50 === 0) {
                         const pct = 20 + Math.floor((processed / totalOPs) * 40);
                         process.stdout.write(`@PROG:PEDIDOS:${pct}%\n`);
                     }
                 }
+                await pgClient.query('COMMIT');
+                console.log(`✅ [2/4] ${totalOPs} OPs salvas no Postgres.`);
 
-                // 3. Sincronizar Roteiros
+                // 3. Sincronizar Roteiros — transação separada (erro aqui não apaga OPs)
                 const uniqueProducts = [...new Set(opsResults.map(op => String(op.PRODUTO_PPR).trim()))];
                 console.log(`📥 [3/4] Sincronizando roteiros para ${uniqueProducts.length} produtos...`);
+
+                await pgClient.query(`ALTER TABLE ficha_tecnica ADD COLUMN IF NOT EXISTS lote_pmt TEXT`);
 
                 const productChunks = [];
                 for (let i = 0; i < uniqueProducts.length; i += 100) productChunks.push(uniqueProducts.slice(i, i + 100));
@@ -181,33 +183,31 @@ async function syncMaster() {
                 for (const chunk of productChunks) {
                     const placeholders = chunk.map(c => `'${c}'`).join(',');
 
-                    // Vínculo Produto -> Ficha
                     const fts = await new Promise(res => db.query(`SELECT PRO_CODIGO_FIC, CODIGO_FIC FROM FICHA_TECNICA WHERE ATIVO_FIC = 'S' AND PRO_CODIGO_FIC IN (${placeholders})`, (e, r) => res(r || [])));
 
-                    // Lote por produto (PRODUTO_MATERIAL)
                     const loteRows = await new Promise(res => db.query(`SELECT PRODUTO_PMT, LOTE_PMT FROM PRODUTO_MATERIAL WHERE PRODUTO_PMT IN (${placeholders})`, (e, r) => res(r || [])));
                     const loteMap = {};
                     loteRows.forEach(l => { loteMap[String(l.PRODUTO_PMT).trim()] = l.LOTE_PMT || null; });
 
-                    // Garantir coluna lote_pmt existe
-                    await pgClient.query(`ALTER TABLE ficha_tecnica ADD COLUMN IF NOT EXISTS lote_pmt TEXT`);
-
                     for (const ft of fts) {
                         const lote = loteMap[String(ft.PRO_CODIGO_FIC).trim()] || null;
-                        await pgClient.query(`
-                            INSERT INTO ficha_tecnica (pro_codigo_fic, codigo_fic, lote_pmt, updated_at)
-                            VALUES ($1, $2, $3, NOW())
-                            ON CONFLICT (pro_codigo_fic) DO UPDATE SET codigo_fic = EXCLUDED.codigo_fic, lote_pmt = EXCLUDED.lote_pmt, updated_at = NOW()
-                        `, [String(ft.PRO_CODIGO_FIC).trim(), ft.CODIGO_FIC, lote]);
+                        try {
+                            await pgClient.query(`
+                                UPDATE ficha_tecnica SET codigo_fic = $2, lote_pmt = $3, updated_at = NOW()
+                                WHERE pro_codigo_fic = $1
+                            `, [String(ft.PRO_CODIGO_FIC).trim(), ft.CODIGO_FIC, lote]);
+                        } catch (e) {
+                            console.error(`  ⚠️ lote update failed for ${ft.PRO_CODIGO_FIC}:`, e.message);
+                        }
                     }
 
-                    // Vínculo OP -> Ficha
                     const opFichas = await new Promise(res => db.query(`SELECT CODIGO_PCP, FIC_CODIGO_PCP FROM PRODUCAO WHERE FIC_CODIGO_PCP IS NOT NULL AND PRODUTO_PCP IN (${placeholders}) AND STATUS_PCP IN ('A', 'N', 'P')`, (e, r) => res(r || [])));
                     for (const opF of opFichas) {
-                        await pgClient.query(`INSERT INTO producao_fichas (op_codigo, ficha_id) VALUES ($1, $2) ON CONFLICT (op_codigo) DO UPDATE SET ficha_id = EXCLUDED.ficha_id`, [String(opF.CODIGO_PCP).trim(), opF.FIC_CODIGO_PCP]);
+                        try {
+                            await pgClient.query(`INSERT INTO producao_fichas (op_codigo, ficha_id) VALUES ($1, $2) ON CONFLICT (op_codigo) DO UPDATE SET ficha_id = EXCLUDED.ficha_id`, [String(opF.CODIGO_PCP).trim(), opF.FIC_CODIGO_PCP]);
+                        } catch (e) { /* ignore */ }
                     }
 
-                    // Etapas do Roteiro
                     const rts = await new Promise(res => db.query(`
                         SELECT FT.CODIGO_FIC, PS.SEQUENCIA_PDS as SEQUENCIA, S.NOME_SET as SETOR
                         FROM FICHA_TECNICA FT
@@ -218,15 +218,15 @@ async function syncMaster() {
                         AND FT.PRO_CODIGO_FIC IN (${placeholders})
                     `, (e, r) => res(r || [])));
                     for (const rt of rts) {
-                        await pgClient.query(`INSERT INTO roteiros_tecnicos (ficha_id, sequencia, setor_nome) VALUES ($1, $2, $3) ON CONFLICT (ficha_id, sequencia) DO UPDATE SET setor_nome = EXCLUDED.setor_nome`, [rt.CODIGO_FIC, rt.SEQUENCIA, String(rt.SETOR).trim().toUpperCase()]);
+                        try {
+                            await pgClient.query(`INSERT INTO roteiros_tecnicos (ficha_id, sequencia, setor_nome) VALUES ($1, $2, $3) ON CONFLICT (ficha_id, sequencia) DO UPDATE SET setor_nome = EXCLUDED.setor_nome`, [rt.CODIGO_FIC, rt.SEQUENCIA, String(rt.SETOR).trim().toUpperCase()]);
+                        } catch (e) { /* ignore */ }
                     }
-                    
+
                     chunkIdx++;
                     const pct = 60 + Math.floor((chunkIdx / productChunks.length) * 35);
                     process.stdout.write(`@PROG:PEDIDOS:${pct}%\n`);
                 }
-
-                await pgClient.query('COMMIT');
 
                 // 4. ATUALIZAR STATUS NO DASHBOARD
                 process.stdout.write('@PROG:PEDIDOS:98%\n');
@@ -239,7 +239,7 @@ async function syncMaster() {
                 `);
 
             } catch (e) {
-                await pgClient.query('ROLLBACK');
+                try { await pgClient.query('ROLLBACK'); } catch (_) {}
                 console.error('\n❌ [Erro Postgres]:', e.message);
             } finally {
                 pgClient.release();
