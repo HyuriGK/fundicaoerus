@@ -129,8 +129,8 @@ async function syncFaturamento() {
                     row.CODIGO_ITEM,
                     row.DESCRICAO ? (typeof row.DESCRICAO === 'string' ? row.DESCRICAO.trim() : String(row.DESCRICAO)) : null,
                     (row.QUANTIDADE || 0),
-                    (row.VALOR_UNITARIO || 0) / 100,
-                    (row.VALOR_TOTAL || 0) / 100,
+                    (row.VALOR_UNITARIO || 0),
+                    (row.VALOR_TOTAL || 0),
                     row.SERIE ? (typeof row.SERIE === 'string' ? row.SERIE.trim() : String(row.SERIE)) : null,
                     row.STATUS ? (typeof row.STATUS === 'string' ? row.STATUS.trim() : String(row.STATUS)) : null
                 ]);
