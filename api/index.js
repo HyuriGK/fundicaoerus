@@ -86,6 +86,8 @@ app.use('/api/usinagem-externo', usinagemExterno); // NOVO: Usinagem Externa
 app.use('/api/devolucoes', devolucoes); // NOVA: Devoluções Sincronizadas
 app.use('/api/emissoes', emissoes); // NOVO: Histórico de Emissões
 app.use('/api/pedidos-observacoes', pedidosObservacoes); // NOVO: Observações de Pedidos
+app.use('/api/pedidos-op-links', require('../src/pedidos-op-links')); // NOVO: Vínculos de OPs
+
 
 
 app.use('/api/producao-postgres', require('../src/producao-postgres')); // NOVO: Produção Sincronizada

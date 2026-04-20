@@ -108,6 +108,14 @@ async function syncEmissoes() {
                 linksMap[key].push(l.PCP_CODIGO_PCPR);
             });
 
+            // 1.2 BUSCAR VÍNCULOS MANUAIS DO POSTGRES
+            console.log('📝 Buscando vínculos manuais do Postgres...');
+            const manualLinksRes = await pgClient.query('SELECT sync_key, op, status FROM pedidos_op_links');
+            const manualLinksMap = {};
+            manualLinksRes.rows.forEach(row => {
+                manualLinksMap[row.sync_key] = row;
+            });
+
             // 2. BUSCAR ROTEIROS DE PRODUÇÃO POR PRODUTO (via Postgres)
             console.log('🗺️ Buscando roteiros de produção por produto...');
             const uniqueProducts = [...new Set(results.map(r => String(r.PRODUTO_PPR).trim()).filter(Boolean))];
@@ -125,11 +133,54 @@ async function syncEmissoes() {
                 routeRes.rows.forEach(row => {
                     routeMap[String(row.produto).trim()] = row.roteiro;
                 });
-                console.log(`✅ Roteiros encontrados para ${routeRes.rows.length} de ${uniqueProducts.length} produtos únicos.`);
+                console.log(`✅ Roteiros encontrados for ${routeRes.rows.length} de ${uniqueProducts.length} produtos únicos.`);
             }
 
-            // 2b. BUSCAR APONTAMENTOS EM LOTE (TURBO)
-            const allOpIds = [...new Set(links.map(l => l.PCP_CODIGO_PCPR))];
+            // 2c. BUSCAR TODAS AS OPS EM ABERTO PARA OS PRODUTOS DA CARTEIRA
+            console.log('🔍 Buscando OPs abertas por produto para sugestões...');
+            const productOpsMap = {};
+            if (uniqueProducts.length > 0) {
+                // Sanitizar e preparar lista de códigos
+                const prodList = uniqueProducts.map(p => `'${p.replace(/'/g, "''")}'`).join(',');
+                const openOpsQuery = `
+                    SELECT 
+                        CODIGO_PCP, PRODUTO_PCP, STATUS_PCP, 
+                        DATA_PCP, ENTREGA_PCP, QUANTIDADE_PCP
+                    FROM PRODUCAO
+                    WHERE STATUS_PCP IN ('N', 'P')
+                      AND PRODUTO_PCP IN (${prodList})
+                    ORDER BY DATA_PCP DESC
+                `;
+                const openOps = await new Promise((resolve, reject) => {
+                    db.query(openOpsQuery, (err, res) => {
+                        if (err) reject(err);
+                        else resolve(res);
+                    });
+                });
+
+                openOps.forEach(op => {
+                    const pCode = String(op.PRODUTO_PCP).trim();
+                    if (!productOpsMap[pCode]) productOpsMap[pCode] = [];
+                    productOpsMap[pCode].push(op);
+                });
+                console.log(`✅ Sugestões carregadas para ${Object.keys(productOpsMap).length} produtos.`);
+            }
+
+            // 2d. COLETAR TODOS OS IDs DE OP QUE PRECISAMOS BUSCAR APONTAMENTOS
+            // Inclui: OPs oficiais, OPs confirmadas manualmente e OPs sugeridas
+            const extendedOpIds = new Set(links.map(l => l.PCP_CODIGO_PCPR));
+            
+            // Adicionar OPs manuais/confirmadas
+            Object.values(manualLinksMap).forEach(ml => {
+                if (ml.status === 'confirmado') extendedOpIds.add(Number(ml.op));
+            });
+            
+            // Adicionar a PRIMEIRA OP sugerida de cada produto (para ter métricas básicas)
+            Object.values(productOpsMap).forEach(ops => {
+                if (ops.length > 0) extendedOpIds.add(Number(ops[0].CODIGO_PCP));
+            });
+
+            const allOpIds = [...extendedOpIds];
             const pointingsMap = {};
 
             if (allOpIds.length > 0) {
@@ -167,8 +218,38 @@ async function syncEmissoes() {
                 // Mesclar apontamentos de TODAS as OPs vinculadas ao item
                 const batchWithMetrics = batch.map(r => {
                     const key = `${r.EMPRESA_PPR}-${r.ANO_PPR}-${r.CODIGO_PPR}-${r.ITEM_PPR}`;
-                    const linkedOps = linksMap[key] || [];
                     const roteiro = routeMap[String(r.PRODUTO_PPR).trim()] || null;
+                    
+                    let linkedOps = linksMap[key] || [];
+                    let suggestedOp = null;
+                    let linkStatus = 'oficial'; // 'oficial', 'confirmado', 'sugerido', 'rejeitado'
+
+                    // Lógica de Vínculo:
+                    // 1. Se tem OP oficial, usa ela.
+                    // 2. Se não, verifica se tem vínculo manual no Postgres.
+                    // 3. Se não, tenta sugerir uma OP do mesmo produto.
+                    
+                    if (linkedOps.length === 0) {
+                        const mLink = manualLinksMap[key];
+                        if (mLink) {
+                            if (mLink.status === 'confirmado') {
+                                linkedOps = [Number(mLink.op)];
+                                linkStatus = 'confirmado';
+                            } else if (mLink.status === 'rejeitado') {
+                                linkStatus = 'rejeitado';
+                            }
+                        }
+                    }
+
+                    if (linkedOps.length === 0 && linkStatus !== 'rejeitado') {
+                        const suggestions = productOpsMap[String(r.PRODUTO_PPR || '').trim()] || [];
+                        if (suggestions.length > 0) {
+                            // Pega a OP mais recente
+                            suggestedOp = suggestions[0];
+                            linkedOps = [Number(suggestedOp.CODIGO_PCP)];
+                            linkStatus = 'sugerido';
+                        }
+                    }
                     
                     const totals = { 10: 0, 11: 0, 12: 0, 20: 0, 30: 0, 40: 0, 50: 0, 60: 0, 100: 0, 101: 0, 105: 0 };
                     
@@ -184,6 +265,9 @@ async function syncEmissoes() {
                     return {
                         ...r,
                         ROTEIRO_PRODUCAO: roteiro,
+                        OP_PCS: linkedOps.length > 0 ? String(linkedOps[0]) : null,
+                        LINK_STATUS: linkStatus,
+                        OP_SUGERIDA_INFO: suggestedOp,
                         QTY_MOLDADA: totals[10] + totals[11] + totals[12],
                         QTY_FUSAO: totals[20],
                         QTY_ACABAMENTO: totals[30],

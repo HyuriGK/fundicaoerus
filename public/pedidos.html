@@ -1144,18 +1144,19 @@
             outline: none;
             box-shadow: 0 0 5px rgba(251, 191, 36, 0.3);
         }
-        .clickable-op {
-            cursor: pointer;
-            color: var(--color-primary);
-            transition: all 0.2s;
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-weight: 700;
-        }
         .clickable-op:hover {
             background: rgba(234, 88, 12, 0.1);
             transform: scale(1.1);
             text-decoration: none;
+        }
+        /* Status de Vínculos */
+        .clickable-op.sugerida {
+            color: #f59e0b; /* Orange/Amber */
+            border-bottom: 1px dotted #f59e0b;
+        }
+        .clickable-op.confirmada {
+            color: #10b981; /* Emerald */
+            border-bottom: 1px solid #10b981;
         }
         .op-detail-row {
             display: flex;
@@ -2839,7 +2840,9 @@
                         </span>
                         ${item.OP_PCS && item.OP_PCS !== '-' ? `
                             - 
-                            <span class="clickable-op" onclick='showOPDetails(${JSON.stringify({
+                            <span class="clickable-op ${item.LINK_STATUS === 'sugerido' ? 'sugerida' : (item.LINK_STATUS === 'confirmado' ? 'confirmada' : '')}" 
+                                  title="${item.LINK_STATUS === 'sugerido' ? 'Sugestão automática por produto' : (item.LINK_STATUS === 'confirmado' ? 'Vínculo confirmado manualmente' : 'Vínculo oficial ERP')}"
+                                  onclick='showOPDetails(${JSON.stringify({
                                 op: item.OP_PCS,
                                 desc: item.NOME_PRODUTO_PPR || item.PRODUTO_PPR,
                                 client: item.NOME_CLIENTE || '-',
@@ -2847,9 +2850,11 @@
                                 delivery: formatDateLocal(item.OP_ENTREGA) || entrega,
                                 originalQty: qtdOriginal,
                                 currentSaldo: saldoReal,
-                                route: item.ROTEIRO_PRODUCAO
+                                route: item.ROTEIRO_PRODUCAO,
+                                linkStatus: item.LINK_STATUS,
+                                syncKey: item.sync_key
                             }).replace(/'/g, "&apos;")})'>
-                                ${item.OP_PCS}
+                                ${item.LINK_STATUS === 'sugerido' ? `<i class="fa-solid fa-wand-magic-sparkles" style="font-size:0.8em; margin-right:4px;"></i>` : ''}${item.OP_PCS}
                             </span>
                         ` : ''}
                         ${blockedHtml}
@@ -4604,7 +4609,7 @@
             }).catch(err => { console.error('Failed to copy: ', err); });
         };
         window.showOPDetails = async function (data) {
-            const { op, desc, client, emission, delivery, originalQty, currentSaldo, route } = data;
+            const { op, desc, client, emission, delivery, originalQty, currentSaldo, route, linkStatus, syncKey } = data;
             const modal = document.getElementById('opDetailsModal');
             const content = document.getElementById('opDetailsContent');
             const opSpan = document.getElementById('opModalNumber');
@@ -4613,6 +4618,42 @@
             const emissionSpan = document.getElementById('opModalEmission');
             const deliverySpan = document.getElementById('opModalDelivery');
             if (!modal || !content) return;
+
+            // Add Confirmation Header if suggested
+            const existingHeader = document.getElementById('opConfirmationHeader');
+            if (existingHeader) existingHeader.remove();
+
+            if (linkStatus === 'sugerido') {
+                const header = document.createElement('div');
+                header.id = 'opConfirmationHeader';
+                header.style = 'background: rgba(245, 158, 11, 0.1); border-bottom: 2px solid #f59e0b; padding: 15px 40px; display: flex; align-items: center; justify-content: space-between; gap: 20px;';
+                header.innerHTML = `
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <i class="fa-solid fa-wand-magic-sparkles" style="color: #f59e0b; font-size: 1.4rem;"></i>
+                        <div>
+                            <strong style="color: #f59e0b; display: block; font-size: 0.95rem;">VÍNCULO SUGERIDO</strong>
+                            <span style="font-size: 0.75rem; color: var(--text-muted);">Esta OP foi identificada automaticamente por possuir o mesmo produto deste pedido.</span>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 10px;">
+                        <button class="btn-modern" onclick="confirmOPLink('${syncKey}', '${op}', 'confirmado')" style="background: #10b981; color: #fff; border: none; font-size: 0.8rem; height: 32px; padding: 0 15px;">Confirmar Vínculo</button>
+                        <button class="btn-modern" onclick="confirmOPLink('${syncKey}', '${op}', 'rejeitado')" style="background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2); font-size: 0.8rem; height: 32px; padding: 0 15px;">Ignorar</button>
+                    </div>
+                `;
+                document.getElementById('opOrderInfo').prepend(header);
+            } else if (linkStatus === 'confirmado') {
+                 const header = document.createElement('div');
+                header.id = 'opConfirmationHeader';
+                header.style = 'background: rgba(16, 185, 129, 0.1); border-bottom: 2px solid #10b981; padding: 10px 40px; display: flex; align-items: center; justify-content: space-between;';
+                header.innerHTML = `
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <i class="fa-solid fa-check-circle" style="color: #10b981; font-size: 1.2rem;"></i>
+                        <span style="font-size: 0.85rem; color: #10b981; font-weight: 600;">VÍNCULO CONFIRMADO MANUALMENTE</span>
+                    </div>
+                    <button class="btn-modern" onclick="confirmOPLink('${syncKey}', '${op}', 'rejeitado')" style="background: transparent; color: var(--text-muted); border: 1px solid var(--border-subtle); padding: 2px 10px; font-size: 0.7rem; height: 24px;">Remover</button>
+                `;
+                document.getElementById('opOrderInfo').prepend(header);
+            }
             opSpan.innerText = op;
             if (descSpan) descSpan.innerHTML = `${desc} <span style="margin-left: 10px; padding: 2px 10px; background: rgba(var(--color-primary-rgb), 0.1); color: var(--color-primary); border-radius: 20px; font-size: 0.8rem; border: 1px solid rgba(var(--color-primary-rgb), 0.2);">Qtd OP: ${originalQty}</span>`;
             if (clientSpan) clientSpan.innerText = client;
@@ -4734,6 +4775,37 @@
             else if (dModal && dModal.style.display === 'flex') closeOPDetails();
             else if (typeof originalCloseModal === 'function') originalCloseModal();
         };
+
+        async function confirmOPLink(syncKey, op, status) {
+            try {
+                const res = await fetch('/api/pedidos-op-links/confirm', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        sync_key: syncKey,
+                        op: op,
+                        status: status,
+                        user: localStorage.getItem('erus_user') || 'Desconhecido'
+                    })
+                });
+
+                if (!res.ok) throw new Error('Erro ao salvar vínculo');
+                
+                showToast(status === 'confirmado' ? "Vínculo Confirmado" : "Vínculo Removido", 
+                          status === 'confirmado' ? `A OP ${op} agora está vinculada a este pedido.` : "A sugestão foi ignorada.", 
+                          status === 'confirmado' ? "success" : "info");
+                
+                closeOPDetails();
+                
+                // Refresh data to show changes
+                setTimeout(() => {
+                    loadDataFromServer();
+                }, 500);
+            } catch (err) {
+                console.error(err);
+                showToast("Erro", "Não foi possível processar o vínculo.", "danger");
+            }
+        }
         // --- EXPORT TO EXCEL ---
         function exportToExcel() {
             if (typeof XLSX === 'undefined') {
