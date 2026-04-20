@@ -1459,6 +1459,16 @@
                         <canvas id="chartHistorical"></canvas>
                     </div>
                 </div>
+            <!-- GRÁFICOS - LINHA 3 (CONCENTRAÇÃO DA CARTEIRA) -->
+            <div id="chartRow3" class="charts-row" style="display: none;">
+                <div class="chart-panel" style="flex: 1;">
+                    <div class="chart-header-row" style="padding: 0 10px;">
+                        <div class="chart-title-flex">Concentração da Carteira - Peso por Cliente (Total)</div>
+                    </div>
+                    <div class="chart-canvas-wrapper">
+                        <canvas id="chartConcentracao"></canvas>
+                    </div>
+                </div>
             </div>
         </main>
         <!-- FOOTER REMOVED -->
@@ -1868,7 +1878,7 @@
         const chartColorAmber = '#fbbf24'; // Amber 400
         let allData = [];
         let customWeights = {}; // Armazena pesos customizados
-        let chartPCP = null, chartPareto = null, chartPending = null, chartHistorical = null;
+        let chartPCP = null, chartPareto = null, chartPending = null, chartHistorical = null, chartConcentracao = null;
         let activeMonthFilter = null, activeClientFilter = null; // Legacy vars, replacing with object below
         let activeChartFilters = { month: null, client: null, stage: null }; // New PowerBI-style filters
         let chartMode = 'delivery'; // Default mode for date filtering
@@ -3502,6 +3512,7 @@
         async function updateCharts(list) {
             updatePCPChart(list);
             updateParetoChart(list);
+            updateConcentracaoChart(list);
             updatePendingChart(list);
             await updateHistoricalChart();
         }
@@ -3936,6 +3947,114 @@
                 }
             });
         }
+        function updateConcentracaoChart(list) {
+            const cMap = {};
+            const valueMap = {};
+            // Considera TODA a carteira (bloqueados + desbloqueados)
+            list.forEach(item => {
+                const id = item.ID_CLIENTE_CORE || 'N/A';
+                const name = item.NOME_CLIENTE || `Cliente ${id}`;
+                const w = getCorrectedWeight(item, customWeights);
+                const metrics = getItemSectorMetrics(item);
+                const realQty = metrics.totalBalance;
+                let unitPrice = parseFloat(item.VALOR_PPR || 0);
+                if (item.PRECO_KG && parseFloat(item.PRECO_KG) > 0 && customWeights[item.PRODUTO_PPR]) {
+                    let unitW = realQty > 0 ? (w / realQty) : 0;
+                    unitPrice = parseFloat(item.PRECO_KG) * unitW;
+                }
+                if (!cMap[id]) { cMap[id] = { val: 0, name: name }; valueMap[id] = 0; }
+                cMap[id].val += w;
+                valueMap[id] += unitPrice * realQty;
+            });
+            const totalWeightAll = Object.values(cMap).reduce((a, b) => a + b.val, 0);
+            const sorted = Object.entries(cMap).sort((a, b) => b[1].val - a[1].val).slice(0, 15);
+            const labels = sorted.map(s => s[1].name);
+            const dataKg = sorted.map(s => s[1].val);
+            const dataVal = sorted.map(s => valueMap[s[0]] || 0);
+            const ids = sorted.map(s => s[0]);
+            let cumulative = 0;
+            const dataPercent = sorted.map(s => {
+                cumulative += s[1].val;
+                return totalWeightAll > 0 ? (cumulative / totalWeightAll) * 100 : 0;
+            });
+            const palette = [
+                '#fbbf24','#f97316','#ef4444','#a78bfa','#34d399',
+                '#60a5fa','#f472b6','#facc15','#4ade80','#fb923c',
+                '#c084fc','#38bdf8','#f87171','#a3e635','#e879f9'
+            ];
+            const bgColors = sorted.map((_, i) => palette[i % palette.length]);
+            if (chartConcentracao) chartConcentracao.destroy();
+            chartConcentracao = new Chart(document.getElementById('chartConcentracao').getContext('2d'), {
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            type: 'line', label: '% Acumulada', data: dataPercent,
+                            borderColor: '#fff', backgroundColor: 'rgba(255,255,255,0.08)',
+                            borderWidth: 2, pointRadius: 3, tension: 0.3, yAxisID: 'yPercent'
+                        },
+                        {
+                            type: 'bar', label: 'Peso (kg)', data: dataKg,
+                            backgroundColor: bgColors, borderRadius: 4, yAxisID: 'y',
+                            extraVal: dataVal
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            type: 'linear', display: true, position: 'left', beginAtZero: true,
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            ticks: { font: { size: 8 }, color: '#a1a1aa' }
+                        },
+                        yPercent: {
+                            type: 'linear', display: true, position: 'right', beginAtZero: true, max: 100,
+                            grid: { drawOnChartArea: false },
+                            ticks: { font: { size: 8 }, color: '#a1a1aa', callback: v => v + '%' }
+                        },
+                        x: {
+                            ticks: {
+                                font: { size: 8 }, color: '#a1a1aa', autoSkip: true,
+                                callback: function (value) {
+                                    const label = this.getLabelForValue(value);
+                                    return typeof label === 'string' ? label.split(' ')[0] : label;
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                title: ctx => ctx[0] ? labels[ctx[0].dataIndex] : '',
+                                label: function (context) {
+                                    if (context.dataset.yAxisID === 'yPercent') {
+                                        return `Acumulado: ${context.parsed.y.toFixed(1)}%`;
+                                    }
+                                    const kg = context.parsed.y || 0;
+                                    const val = context.dataset.extraVal ? context.dataset.extraVal[context.dataIndex] : 0;
+                                    const valStr = valorVisible
+                                        ? val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+                                        : '-----';
+                                    return [`Peso: ${formatNumber(kg)} kg`, `Valor: ${valStr}`];
+                                }
+                            }
+                        }
+                    },
+                    interaction: { mode: 'index', intersect: false },
+                    onClick: (e) => {
+                        const els = chartConcentracao.getElementsAtEventForMode(e, 'index', { intersect: false }, true);
+                        if (els.length > 0) {
+                            const clickedId = ids[els[0].index];
+                            activeChartFilters.client = (activeChartFilters.client == clickedId) ? null : clickedId;
+                            applyColumnFilters();
+                        }
+                    }
+                }
+            });
+        }
         let emissionDataCache = null;
         let emissionClientCache = {}; // Cache by "year-month"
         async function updateHistoricalChart() {
@@ -4333,19 +4452,22 @@
         function toggleCharts() {
             const row1 = document.getElementById('chartRow1');
             const row2 = document.getElementById('chartRow2');
-            if (!row1 || !row2) return;
-            if (row1.style.display === 'none') {
-                row1.style.display = 'flex';
-                row2.style.display = 'none';
+            const row3 = document.getElementById('chartRow3');
+            if (!row1 || !row2 || !row3) return;
+            if (row1.style.display !== 'none') {
+                row1.style.display = 'none'; row2.style.display = 'flex'; row3.style.display = 'none';
+            } else if (row2.style.display !== 'none') {
+                row1.style.display = 'none'; row2.style.display = 'none'; row3.style.display = 'flex';
             } else {
-                row1.style.display = 'none';
-                row2.style.display = 'flex';
+                row1.style.display = 'flex'; row2.style.display = 'none'; row3.style.display = 'none';
             }
-            // Resize all to ensure they fit the new layout
-            if(chartPCP) chartPCP.resize();
-            if(chartPareto) chartPareto.resize();
-            if(chartPending) chartPending.resize();
-            if(chartHistorical) chartHistorical.resize();
+            requestAnimationFrame(() => {
+                if(chartPCP) chartPCP.resize();
+                if(chartPareto) chartPareto.resize();
+                if(chartPending) chartPending.resize();
+                if(chartHistorical) chartHistorical.resize();
+                if(chartConcentracao) chartConcentracao.resize();
+            });
         }
         function toggleIndustrialPosition() {
             const container = document.getElementById('industrialProgressContainer');
@@ -4369,25 +4491,7 @@
             if (chartPending) chartPending.resize();
             if (chartHistorical) chartHistorical.resize();
         }
-        function toggleCharts() {
-            const row1 = document.getElementById('chartRow1');
-            const row2 = document.getElementById('chartRow2');
-            if (!row1 || !row2) return;
-            if (row1.style.display === 'none') {
-                row1.style.display = 'flex';
-                row2.style.display = 'none';
-            } else {
-                row1.style.display = 'none';
-                row2.style.display = 'flex';
-            }
-            // Force chart resize after display change
-            requestAnimationFrame(() => {
-                if (chartPCP) chartPCP.resize();
-                if (chartPareto) chartPareto.resize();
-                if (chartPending) chartPending.resize();
-                if (chartHistorical) chartHistorical.resize();
-            });
-        }
+        // toggleCharts defined above (single implementation)
         window.addEventListener('keydown', (e) => {
             if (e.key === "Escape") {
                 const hModal = document.getElementById('opSectorHistoryModal'); // 4000
