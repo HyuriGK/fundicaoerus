@@ -184,6 +184,20 @@ async function syncEmissoes() {
                 const pct = ((Math.min(i + BATCH_SIZE, results.length) / results.length) * 100).toFixed(0);
                 process.stdout.write(`@PROG:EMISSÕES:${pct}%\n`);
             }
+
+            // 3. LIMPEZA DE REGISTROS DELETADOS NO ERP (Anos 2025/2026)
+            console.log('🧹 Limpando registros que não existem mais no ERP (Anos 2025/2026)...');
+            const validKeys = results.map(r => `${r.EMPRESA_PPR}-${r.ANO_PPR}-${r.CODIGO_PPR}-${r.ITEM_PPR}`);
+            
+            const deleteRes = await pgClient.query(`
+                DELETE FROM firebird_sync_emissoes
+                WHERE (data->>'ANO_PPR')::text IN ('2025', '2026')
+                AND sync_key <> ALL($1::text[])
+            `, [validKeys]);
+            
+            if (deleteRes.rowCount > 0) {
+                console.log(`🗑️ Removidos ${deleteRes.rowCount} registros órfãos do dashboard.`);
+            }
         }
 
         console.log(`\n\n✅ Sincronização de EMISSÕES concluída em ${((Date.now() - startTime)/1000).toFixed(1)}s!`);
