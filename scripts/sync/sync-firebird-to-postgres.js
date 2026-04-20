@@ -22,7 +22,7 @@ const { Firebird, options: firebirdOptions } = require('../../lib/firebird-helpe
 // =========================================================
 
 function centavosParaReais(valor) {
-    return (valor || 0) / 100;
+    return (valor || 0);
 }
 
 function formatarData(data) {
@@ -58,7 +58,7 @@ async function criarTabelasPostgres() {
             total_notas INTEGER DEFAULT 0,
             total_itens INTEGER DEFAULT 0,
             quantidade_total DECIMAL(15,3) DEFAULT 0,
-            valor_total DECIMAL(15,2) DEFAULT 0,
+            valor_total DECIMAL(15,4) DEFAULT 0,
             peso_total DECIMAL(15,3) DEFAULT 0,
             atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )`,
@@ -71,7 +71,7 @@ async function criarTabelasPostgres() {
             total_clientes INTEGER DEFAULT 0,
             total_itens INTEGER DEFAULT 0,
             quantidade_total DECIMAL(15,3) DEFAULT 0,
-            valor_total DECIMAL(15,2) DEFAULT 0,
+            valor_total DECIMAL(15,4) DEFAULT 0,
             ticket_medio DECIMAL(15,2) DEFAULT 0,
             primeira_nota DATE,
             ultima_nota DATE,
@@ -155,8 +155,8 @@ async function sincronizarDetalhado(fbDb) {
         codigo_item VARCHAR(50),
         descricao VARCHAR(255),
         quantidade DECIMAL(15, 3),
-        valor_unitario DECIMAL(15, 2),
-        valor_total DECIMAL(15, 2),
+        valor_unitario DECIMAL(15, 4),
+        valor_total DECIMAL(15, 4),
         status VARCHAR(10),
         excluido_manualmente BOOLEAN DEFAULT FALSE,
         atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
