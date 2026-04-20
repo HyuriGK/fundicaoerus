@@ -183,12 +183,22 @@ async function syncMaster() {
 
                     // Vínculo Produto -> Ficha
                     const fts = await new Promise(res => db.query(`SELECT PRO_CODIGO_FIC, CODIGO_FIC FROM FICHA_TECNICA WHERE ATIVO_FIC = 'S' AND PRO_CODIGO_FIC IN (${placeholders})`, (e, r) => res(r || [])));
+
+                    // Lote por produto (PRODUTO_MATERIAL)
+                    const loteRows = await new Promise(res => db.query(`SELECT PRODUTO_PMT, LOTE_PMT FROM PRODUTO_MATERIAL WHERE PRODUTO_PMT IN (${placeholders})`, (e, r) => res(r || [])));
+                    const loteMap = {};
+                    loteRows.forEach(l => { loteMap[String(l.PRODUTO_PMT).trim()] = l.LOTE_PMT || null; });
+
+                    // Garantir coluna lote_pmt existe
+                    await pgClient.query(`ALTER TABLE ficha_tecnica ADD COLUMN IF NOT EXISTS lote_pmt TEXT`);
+
                     for (const ft of fts) {
+                        const lote = loteMap[String(ft.PRO_CODIGO_FIC).trim()] || null;
                         await pgClient.query(`
-                            INSERT INTO ficha_tecnica (pro_codigo_fic, codigo_fic, updated_at) 
-                            VALUES ($1, $2, NOW())
-                            ON CONFLICT (pro_codigo_fic) DO UPDATE SET codigo_fic = EXCLUDED.codigo_fic, updated_at = NOW()
-                        `, [String(ft.PRO_CODIGO_FIC).trim(), ft.CODIGO_FIC]);
+                            INSERT INTO ficha_tecnica (pro_codigo_fic, codigo_fic, lote_pmt, updated_at)
+                            VALUES ($1, $2, $3, NOW())
+                            ON CONFLICT (pro_codigo_fic) DO UPDATE SET codigo_fic = EXCLUDED.codigo_fic, lote_pmt = EXCLUDED.lote_pmt, updated_at = NOW()
+                        `, [String(ft.PRO_CODIGO_FIC).trim(), ft.CODIGO_FIC, lote]);
                     }
 
                     // Vínculo OP -> Ficha

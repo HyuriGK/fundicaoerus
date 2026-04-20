@@ -108,7 +108,27 @@ async function syncEmissoes() {
                 linksMap[key].push(l.PCP_CODIGO_PCPR);
             });
 
-            // 2. BUSCAR APONTAMENTOS EM LOTE (TURBO)
+            // 2. BUSCAR ROTEIROS DE PRODUÇÃO POR PRODUTO (via Postgres)
+            console.log('🗺️ Buscando roteiros de produção por produto...');
+            const uniqueProducts = [...new Set(results.map(r => String(r.PRODUTO_PPR).trim()).filter(Boolean))];
+            const routeMap = {}; // produto -> 'SETOR1,SETOR2,...'
+
+            if (uniqueProducts.length > 0) {
+                const routeRes = await pgClient.query(`
+                    SELECT ft.pro_codigo_fic AS produto, string_agg(rt.setor_nome, ',' ORDER BY rt.sequencia) AS roteiro
+                    FROM ficha_tecnica ft
+                    JOIN roteiros_tecnicos rt ON rt.ficha_id = ft.codigo_fic
+                    WHERE ft.pro_codigo_fic = ANY($1::text[])
+                    GROUP BY ft.pro_codigo_fic
+                `, [uniqueProducts]);
+
+                routeRes.rows.forEach(row => {
+                    routeMap[String(row.produto).trim()] = row.roteiro;
+                });
+                console.log(`✅ Roteiros encontrados para ${routeRes.rows.length} de ${uniqueProducts.length} produtos únicos.`);
+            }
+
+            // 2b. BUSCAR APONTAMENTOS EM LOTE (TURBO)
             const allOpIds = [...new Set(links.map(l => l.PCP_CODIGO_PCPR))];
             const pointingsMap = {};
 
@@ -148,6 +168,7 @@ async function syncEmissoes() {
                 const batchWithMetrics = batch.map(r => {
                     const key = `${r.EMPRESA_PPR}-${r.ANO_PPR}-${r.CODIGO_PPR}-${r.ITEM_PPR}`;
                     const linkedOps = linksMap[key] || [];
+                    const roteiro = routeMap[String(r.PRODUTO_PPR).trim()] || null;
                     
                     const totals = { 10: 0, 11: 0, 12: 0, 20: 0, 30: 0, 40: 0, 50: 0, 60: 0, 100: 0, 101: 0, 105: 0 };
                     
@@ -162,6 +183,7 @@ async function syncEmissoes() {
 
                     return {
                         ...r,
+                        ROTEIRO_PRODUCAO: roteiro,
                         QTY_MOLDADA: totals[10] + totals[11] + totals[12],
                         QTY_FUSAO: totals[20],
                         QTY_ACABAMENTO: totals[30],

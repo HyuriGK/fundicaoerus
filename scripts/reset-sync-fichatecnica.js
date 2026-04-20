@@ -87,13 +87,13 @@ function getLuvas(db, fichaCodigo) {
 function getMaterial(db, produtoCodigo) {
     return new Promise((resolve) => {
         db.query(`
-            SELECT FIRST 1 M.MATERIAL_MAT 
-            FROM PRODUTO_MATERIAL PM 
-            JOIN MATERIAL M ON M.ID_MAT = PM.MAT_ID_PMT 
+            SELECT FIRST 1 M.MATERIAL_MAT, PM.LOTE_PMT
+            FROM PRODUTO_MATERIAL PM
+            JOIN MATERIAL M ON M.ID_MAT = PM.MAT_ID_PMT
             WHERE PM.PRODUTO_PMT = ?
         `, [produtoCodigo], (err, rows) => {
-            if (err || !rows || rows.length === 0) return resolve(null);
-            resolve(rows[0].MATERIAL_MAT);
+            if (err || !rows || rows.length === 0) return resolve({ material: null, lote: null });
+            resolve({ material: rows[0].MATERIAL_MAT || null, lote: rows[0].LOTE_PMT || null });
         });
     });
 }
@@ -152,6 +152,9 @@ async function syncFichas() {
 
             console.log(`✅ Ordenação concluída. Iniciando loop de processamento...`);
 
+            // Garantir coluna lote_pmt existe (uma vez antes do loop)
+            await pool.query(`ALTER TABLE ficha_tecnica ADD COLUMN IF NOT EXISTS lote_pmt TEXT`);
+
             let count = 0;
             for (const row of results) {
                 try {
@@ -167,8 +170,8 @@ async function syncFichas() {
                     const descricao = blobs.descricao || '';
                     const fotoBase64 = blobs.fotoBuffer ? blobs.fotoBuffer.toString('base64') : null;
 
-                    // Fetch Material
-                    const materialReal = await getMaterial(db, row.PRO_CODIGO_FIC);
+                    // Fetch Material + Lote
+                    const { material: materialReal, lote: loteReal } = await getMaterial(db, row.PRO_CODIGO_FIC);
 
                     // Fetch Machos
                     const machosList = await getMachos(db, row.CODIGO_FIC);
@@ -212,8 +215,9 @@ async function syncFichas() {
                             modelo_fic, peso_bolo_fic, qtde_caixas_macho, pintura_tipo, fornecimento_desc,
                             peso_penca, peso_com_alimentacao, peso_sem_alimentacao, relacao_molde_metal,
                             peso_tampa, peso_fundo, qtde_figuras, tipo_modelo_desc, foto_base64,
-                            peso_machos, detalhes_machos, tinta_refrataria_fic, detalhes_luvas, tipo_ferramental_fic, updated_at
-                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, NOW())
+                            peso_machos, detalhes_machos, tinta_refrataria_fic, detalhes_luvas, tipo_ferramental_fic,
+                            lote_pmt, updated_at
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, NOW())
                         ON CONFLICT (pro_codigo_fic) DO UPDATE SET
                             material_fic = EXCLUDED.material_fic,
                             peso_liquido_fic = EXCLUDED.peso_liquido_fic,
@@ -244,6 +248,7 @@ async function syncFichas() {
                             tinta_refrataria_fic = EXCLUDED.tinta_refrataria_fic,
                             detalhes_luvas = EXCLUDED.detalhes_luvas,
                             tipo_ferramental_fic = EXCLUDED.tipo_ferramental_fic,
+                            lote_pmt = EXCLUDED.lote_pmt,
                             updated_at = NOW();
                     `, [
                         sanitize(row.PRO_CODIGO_FIC), sanitize(materialReal || row.MAT_NOMENCLATURA_FIC), row.PESO_LIQUIDO_FIC, row.PESO_UNIT_PCP_FIC,
@@ -253,7 +258,8 @@ async function syncFichas() {
                         sanitize(row.REFERENCIA_PRO || row.MODELO_FIC), row.CAVIDADE_PESO_BOLO_FIC, row.QTDE_CAIXAS_MACHO_FIC, sanitize(pintura), sanitize(fornecimento),
                         row.PESO_PENCA_FIC, row.PESO_UNITARIO_COM_ALIMENT_FIC, row.PESO_UNITARIO_SEM_ALIMENT_FIC, relacao,
                         row.PESO_TAMPA_FIC, row.PESO_FUNDO_FIC, row.CAVIDADE_QTDE_FIGURAS_FIC, sanitize(tipoModelo), fotoBase64,
-                        row.PESO_MACHOS_FIC, sanitize(detalhesMachos), sanitize(row.TINTA_REFRATARIA_FIC), sanitize(detalhesLuvas), sanitize(row.TIPO_FERRAMENTAL_FIC)
+                        row.PESO_MACHOS_FIC, sanitize(detalhesMachos), sanitize(row.TINTA_REFRATARIA_FIC), sanitize(detalhesLuvas), sanitize(row.TIPO_FERRAMENTAL_FIC),
+                        sanitize(loteReal)
                     ]);
                     count++;
                     if (count % 10 === 0) console.log(`⏳ ${count}/${results.length} registros processados...`);
