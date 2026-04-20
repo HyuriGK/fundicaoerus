@@ -1329,9 +1329,17 @@
                         <i class="fa-solid fa-industry"></i>
                         POSIÇÃO INDUSTRIAL
                     </button>
-                    <button class="btn-action-standard btn-modern" onclick="toggleCharts(); this.blur()" id="btn-toggle-charts" style="background: rgba(255,255,255,0.05); color: var(--text-main); border: 1px solid var(--border-subtle);">
+                    <button class="btn-action-standard btn-modern" onclick="showChartRow(1); this.blur()" id="btn-chart-entrega" style="background: rgba(255,255,255,0.05); color: var(--text-main); border: 1px solid var(--border-subtle);">
+                        <i class="fa-solid fa-truck-fast"></i>
+                        GRÁFICOS DE ENTREGA
+                    </button>
+                    <button class="btn-action-standard btn-modern" onclick="showChartRow(2); this.blur()" id="btn-chart-emissao" style="background: rgba(255,255,255,0.05); color: var(--text-main); border: 1px solid var(--border-subtle);">
                         <i class="fa-solid fa-chart-line"></i>
                         GRÁFICOS DE EMISSÃO
+                    </button>
+                    <button class="btn-action-standard btn-modern" onclick="showChartRow(3); this.blur()" id="btn-chart-concentracao" style="background: rgba(255,255,255,0.05); color: var(--text-main); border: 1px solid var(--border-subtle);">
+                        <i class="fa-solid fa-chart-pie"></i>
+                        CONCENTRAÇÃO DA CARTEIRA
                     </button>
                     <button class="btn-action-standard btn-modern" onclick="openModal(); this.blur()" id="btn-open-registros" style="background: var(--color-primary); color: #000; margin-left: auto;">
                         <i class="fa-solid fa-table-list"></i>
@@ -3512,7 +3520,7 @@
         async function updateCharts(list) {
             updatePCPChart(list);
             updateParetoChart(list);
-            updateConcentracaoChart(list);
+            updateConcentracaoChart(allData); // sempre carteira completa
             updatePendingChart(list);
             await updateHistoricalChart();
         }
@@ -3982,7 +3990,11 @@
                 '#60a5fa','#f472b6','#facc15','#4ade80','#fb923c',
                 '#c084fc','#38bdf8','#f87171','#a3e635','#e879f9'
             ];
-            const bgColors = sorted.map((_, i) => palette[i % palette.length]);
+            const bgColors = sorted.map((s, i) =>
+                activeChartFilters.client != null && activeChartFilters.client == s[0]
+                    ? '#fff'
+                    : palette[i % palette.length]
+            );
             if (chartConcentracao) chartConcentracao.destroy();
             chartConcentracao = new Chart(document.getElementById('chartConcentracao').getContext('2d'), {
                 data: {
@@ -4449,28 +4461,22 @@
                 setTimeout(() => { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 500);
             }, 4000);
         }
-        function toggleCharts() {
-            const row1 = document.getElementById('chartRow1');
-            const row2 = document.getElementById('chartRow2');
-            const row3 = document.getElementById('chartRow3');
-            const btn  = document.getElementById('btn-toggle-charts');
-            if (!row1 || !row2 || !row3) return;
-            if (row1.style.display !== 'none') {
-                row1.style.display = 'none'; row2.style.display = 'flex'; row3.style.display = 'none';
-                if (btn) btn.innerHTML = '<i class="fa-solid fa-chart-bar"></i> CONCENTRAÇÃO DA CARTEIRA';
-            } else if (row2.style.display !== 'none') {
-                row1.style.display = 'none'; row2.style.display = 'none'; row3.style.display = 'flex';
-                if (btn) btn.innerHTML = '<i class="fa-solid fa-chart-line"></i> ENTREGA / PARETO';
-            } else {
-                row1.style.display = 'flex'; row2.style.display = 'none'; row3.style.display = 'none';
-                if (btn) btn.innerHTML = '<i class="fa-solid fa-chart-line"></i> GRÁFICOS DE EMISSÃO';
-            }
+        function showChartRow(n) {
+            const btnMap = { 1: 'btn-chart-entrega', 2: 'btn-chart-emissao', 3: 'btn-chart-concentracao' };
+            const activeStyle = 'background: rgba(251,191,36,0.15); color: var(--color-primary); border: 1px solid var(--color-primary);';
+            const idleStyle   = 'background: rgba(255,255,255,0.05); color: var(--text-main); border: 1px solid var(--border-subtle);';
+            [1, 2, 3].forEach(r => {
+                const el = document.getElementById('chartRow' + r);
+                if (el) el.style.display = r === n ? 'flex' : 'none';
+                const btn = document.getElementById(btnMap[r]);
+                if (btn) btn.style.cssText = r === n ? activeStyle : idleStyle;
+            });
             requestAnimationFrame(() => {
-                if(chartPCP) chartPCP.resize();
-                if(chartPareto) chartPareto.resize();
-                if(chartPending) chartPending.resize();
-                if(chartHistorical) chartHistorical.resize();
-                if(chartConcentracao) chartConcentracao.resize();
+                if (chartPCP) chartPCP.resize();
+                if (chartPareto) chartPareto.resize();
+                if (chartPending) chartPending.resize();
+                if (chartHistorical) chartHistorical.resize();
+                if (chartConcentracao) chartConcentracao.resize();
             });
         }
         function toggleIndustrialPosition() {
@@ -4495,7 +4501,6 @@
             if (chartPending) chartPending.resize();
             if (chartHistorical) chartHistorical.resize();
         }
-        // toggleCharts defined above (single implementation)
         window.addEventListener('keydown', (e) => {
             if (e.key === "Escape") {
                 const hModal = document.getElementById('opSectorHistoryModal'); // 4000
