@@ -4093,10 +4093,13 @@
                                         const total = context.chart.data.datasets[1] ? context.chart.data.datasets[1].extraTotal || 1 : 1;
                                         const pct = total > 0 ? (kg / total * 100).toFixed(1) : '0.0';
                                         const acum = context.parsed.y.toFixed(1);
-                                        const pkgStr = kg > 0 && val > 0 ? (val / kg).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0,00';
-                                        const valStr = valorVisible ? val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-----';
-                                        const pkgDisplay = valorVisible ? `R$/kg: ${pkgStr}` : 'R$/kg: -----';
-                                        return [`Peso: ${formatNumber(kg)} kg`, `Valor: ${valStr}`, `Participação: ${pct}%`, `Acumulado: ${acum}%`, pkgDisplay];
+                                        const lines = [`Peso: ${formatNumber(kg)} kg`, `Participação: ${pct}%`, `Acumulado: ${acum}%`];
+                                        if (canViewValores() && valorVisible) {
+                                            const pkgStr = kg > 0 && val > 0 ? (val / kg).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0,00';
+                                            lines.splice(1, 0, `Valor: ${val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`);
+                                            lines.push(`R$/kg: ${pkgStr}`);
+                                        }
+                                        return lines;
                                     }
                                     return [];
                                 }
@@ -4465,10 +4468,14 @@
         }
         // --- VALOR VISIBILITY TOGGLE ---
         let valorVisible = false;
+        const _valorAuthorizedRoles = ['administrador', 'desenvolvedor', 'comercial', 'diretor', 'gerente comercial'];
+        function canViewValores() {
+            const userRole = localStorage.getItem('erus_role') || '';
+            return _valorAuthorizedRoles.includes(userRole);
+        }
         function toggleValorVisibility() {
             const userRole = localStorage.getItem('erus_role') || '';
-            const authorizedRoles = ['administrador', 'desenvolvedor', 'comercial', 'diretor', 'gerente comercial'];
-            if (userRole === 'visitante' || !authorizedRoles.includes(userRole)) {
+            if (!canViewValores()) {
                 showToast("Você não tem permissão comercial", "Se necessário, entre em contato com o administrador do sistema", "danger");
                 return;
             }
