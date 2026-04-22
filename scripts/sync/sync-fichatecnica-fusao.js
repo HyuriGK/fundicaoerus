@@ -6,6 +6,29 @@ function sanitize(str) {
     return str.replace(/\0/g, '').trim();
 }
 
+function readBlob(blob) {
+    return new Promise((resolve) => {
+        if (!blob) return resolve('');
+        if (typeof blob !== 'function') return resolve(String(blob));
+        blob((err, name, stream) => {
+            if (err) return resolve('');
+            let chunks = [];
+            stream.on('data', chunk => chunks.push(chunk));
+            stream.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')));
+            stream.on('error', () => resolve(''));
+        });
+    });
+}
+
+function getObsVazamento(db, proCodigo) {
+    return new Promise((resolve) => {
+        db.query('SELECT FIRST 1 FUNDICAO_OBS_FIC FROM FICHA_TECNICA WHERE PRO_CODIGO_FIC = ? AND EMP_CODIGO_FIC = 10 AND ATIVO_FIC = ?', [proCodigo, 'S'], async (err, rows) => {
+            if (err || !rows || rows.length === 0) return resolve('');
+            resolve(await readBlob(rows[0].FUNDICAO_OBS_FIC));
+        });
+    });
+}
+
 function getMaterial(db, produtoCodigo) {
     return new Promise((resolve) => {
         db.query(`
@@ -29,6 +52,11 @@ async function syncFichasFusao() {
     await pool.query(`ALTER TABLE ficha_tecnica_fusao ADD COLUMN IF NOT EXISTS peso_penca NUMERIC`);
     await pool.query(`ALTER TABLE ficha_tecnica_fusao ADD COLUMN IF NOT EXISTS peso_com_alimentacao NUMERIC`);
     await pool.query(`ALTER TABLE ficha_tecnica_fusao ADD COLUMN IF NOT EXISTS rendimento_metalico NUMERIC`);
+    await pool.query(`ALTER TABLE ficha_tecnica_fusao ADD COLUMN IF NOT EXISTS temperatura_forno NUMERIC`);
+    await pool.query(`ALTER TABLE ficha_tecnica_fusao ADD COLUMN IF NOT EXISTS temperatura_vazamento NUMERIC`);
+    await pool.query(`ALTER TABLE ficha_tecnica_fusao ADD COLUMN IF NOT EXISTS obs_vazamento TEXT`);
+    await pool.query(`ALTER TABLE ficha_tecnica_fusao ADD COLUMN IF NOT EXISTS fornecimento TEXT`);
+    await pool.query(`ALTER TABLE ficha_tecnica_fusao ADD COLUMN IF NOT EXISTS foto_base64 TEXT`);
 
     Firebird.attach(firebirdOptions, function (err, db) {
         if (err) { console.error('Erro Firebird:', err); process.exit(1); }
@@ -41,6 +69,9 @@ async function syncFichasFusao() {
                 F.RENDIMENTO_METALICO_FIC,
                 F.PESO_PENCA_FIC,
                 F.PESO_UNITARIO_COM_ALIMENT_FIC,
+                F.TEMPERATURA_FORNO_FIC,
+                F.TEMPERATURA_VAZAMENTO_FIC,
+                F.FORNECIMENTO_FIC,
                 F.DATA_FIC,
                 P.NOME_PRO,
                 P.PESO_LIQUIDO_PRO,
@@ -58,17 +89,29 @@ async function syncFichasFusao() {
 
             console.log(`📊 ${results.length} registros recebidos.`);
 
+            // Busca todas as fotos já sincronizadas na ficha de moldagem (Postgres)
+            const fotosResult = await pool.query('SELECT pro_codigo_fic, foto_base64 FROM ficha_tecnica WHERE foto_base64 IS NOT NULL');
+            const fotosMap = {};
+            fotosResult.rows.forEach(r => { fotosMap[String(r.pro_codigo_fic).trim()] = r.foto_base64; });
+
+            const fornMap = { 'BT': 'BRUTO', 'PU': 'PRÉ-USINADO', 'US': 'USINADO', 'FJ': 'FORJADO', 'FB': 'FABRICADO' };
+
             let count = 0;
             for (const row of results) {
                 try {
                     const material = await getMaterial(db, row.PRO_CODIGO_FIC);
+                    const obsVazamento = await getObsVazamento(db, row.PRO_CODIGO_FIC);
+                    const codigo = sanitize(row.PRO_CODIGO_FIC);
+                    const foto = fotosMap[codigo] || null;
+                    const fornecimento = fornMap[String(row.FORNECIMENTO_FIC || '').trim()] || row.FORNECIMENTO_FIC || null;
 
                     await pool.query(`
                         INSERT INTO ficha_tecnica_fusao (
                             pro_codigo, nome_pro, cliente_nome, cli_codigo, material,
                             peso_liquido, peso_bruto, peso_penca, peso_com_alimentacao,
-                            rendimento_metalico, data_ficha, updated_at
-                        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())
+                            rendimento_metalico, temperatura_forno, temperatura_vazamento,
+                            obs_vazamento, fornecimento, foto_base64, data_ficha, updated_at
+                        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,NOW())
                         ON CONFLICT (pro_codigo) DO UPDATE SET
                             nome_pro = EXCLUDED.nome_pro,
                             cliente_nome = EXCLUDED.cliente_nome,
@@ -79,10 +122,15 @@ async function syncFichasFusao() {
                             peso_penca = EXCLUDED.peso_penca,
                             peso_com_alimentacao = EXCLUDED.peso_com_alimentacao,
                             rendimento_metalico = EXCLUDED.rendimento_metalico,
+                            temperatura_forno = EXCLUDED.temperatura_forno,
+                            temperatura_vazamento = EXCLUDED.temperatura_vazamento,
+                            obs_vazamento = EXCLUDED.obs_vazamento,
+                            fornecimento = EXCLUDED.fornecimento,
+                            foto_base64 = EXCLUDED.foto_base64,
                             data_ficha = EXCLUDED.data_ficha,
                             updated_at = NOW()
                     `, [
-                        sanitize(row.PRO_CODIGO_FIC),
+                        codigo,
                         sanitize(row.NOME_PRO),
                         sanitize(row.NOME_CLIENTE),
                         sanitize(row.CLI_CODIGO_FIC),
@@ -92,6 +140,11 @@ async function syncFichasFusao() {
                         row.PESO_PENCA_FIC,
                         row.PESO_UNITARIO_COM_ALIMENT_FIC,
                         row.RENDIMENTO_METALICO_FIC,
+                        row.TEMPERATURA_FORNO_FIC,
+                        row.TEMPERATURA_VAZAMENTO_FIC,
+                        sanitize(obsVazamento),
+                        fornecimento,
+                        foto,
                         row.DATA_FIC || null
                     ]);
                     count++;
