@@ -1504,6 +1504,13 @@
             const PRINT_W_PX = 718;
             const PRINT_H_PX = 980; // margem de segurança conservadora para garantir 1 página
 
+            function restoreHeights() {
+                const imageContainer = document.getElementById('imageContainer');
+                const notesPanel = document.getElementById('notesObservationsPanel');
+                if (imageContainer) { imageContainer.style.flex = '1'; imageContainer.style.height = '0'; imageContainer.style.minHeight = ''; }
+                if (notesPanel) { notesPanel.style.flex = '1'; notesPanel.style.height = '0'; notesPanel.style.minHeight = ''; notesPanel.style.overflow = 'auto'; }
+            }
+
             function applyScale() {
                 const content = document.getElementById('sheetContent');
                 const sheet = document.querySelector('.sheet-container');
@@ -1511,51 +1518,36 @@
                 const notesPanel = document.getElementById('notesObservationsPanel');
                 if (!content || !sheet) return;
 
-                // Reset
                 content.style.zoom = '1';
                 content.style.transform = '';
                 content.style.transformOrigin = '';
 
-                // Colapsa alturas fixas de imagem/notas para medir conteúdo real
-                if (imageContainer) {
-                    imageContainer.style.flex = 'none';
-                    imageContainer.style.height = 'auto';
-                    imageContainer.style.minHeight = '0';
-                }
-                if (notesPanel) {
-                    notesPanel.style.flex = 'none';
-                    notesPanel.style.height = 'auto';
-                    notesPanel.style.minHeight = '0';
-                    notesPanel.style.overflow = 'hidden';
-                }
+                // Colapsa alturas para medir conteúdo sem elas
+                if (imageContainer) { imageContainer.style.flex = 'none'; imageContainer.style.height = 'auto'; imageContainer.style.minHeight = '0'; }
+                if (notesPanel) { notesPanel.style.flex = 'none'; notesPanel.style.height = 'auto'; notesPanel.style.minHeight = '0'; notesPanel.style.overflow = 'hidden'; }
 
-                // Começa medindo na largura de impressão
                 let W = PRINT_W_PX;
                 content.style.width = W + 'px';
                 content.style.maxWidth = W + 'px';
                 void content.offsetHeight;
                 let H = sheet.getBoundingClientRect().height;
 
-                // Se cabe na altura, não precisa escalar — usa largura total
-                if (H <= PRINT_H_PX) {
-                    content.style.zoom = '1';
-                    return;
+                let zoom = 1;
+                if (H > PRINT_H_PX) {
+                    let safety = 0;
+                    while (H * PRINT_W_PX / W > PRINT_H_PX && safety < 20) {
+                        W = Math.ceil(W * 1.08);
+                        content.style.width = W + 'px';
+                        content.style.maxWidth = W + 'px';
+                        void content.offsetHeight;
+                        H = sheet.getBoundingClientRect().height;
+                        safety++;
+                    }
+                    zoom = Math.min(1, PRINT_W_PX / W);
                 }
 
-                // Alarga iterativamente: zoom = PRINT_W/W deve caber também na altura
-                // Condição: H(W) * PRINT_W / W <= PRINT_H
-                let safety = 0;
-                while (H * PRINT_W_PX / W > PRINT_H_PX && safety < 20) {
-                    W = Math.ceil(W * 1.08);
-                    content.style.width = W + 'px';
-                    content.style.maxWidth = W + 'px';
-                    void content.offsetHeight;
-                    H = sheet.getBoundingClientRect().height;
-                    safety++;
-                }
-
-                // Aplica zoom que faz a largura visual bater com a página inteira
-                const zoom = Math.min(1, PRINT_W_PX / W);
+                // Restaura alturas fixas antes da impressão acontecer
+                restoreHeights();
                 content.style.zoom = zoom;
             }
 
