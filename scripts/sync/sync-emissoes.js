@@ -238,6 +238,7 @@ async function syncEmissoes() {
                             } else if (mLink.status === 'rejeitado') {
                                 linkStatus = 'rejeitado';
                             }
+                            // 'removido': ignora o link manual, permite sugestão automática
                         }
                     }
 

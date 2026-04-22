@@ -50,15 +50,34 @@ router.get('/', async (req, res) => {
 
         const result = await pool.query(query);
 
+        // Buscar vínculos manuais confirmados/rejeitados para sobrescrever LINK_STATUS em tempo real
+        const linksResult = await pool.query('SELECT sync_key, op, status FROM pedidos_op_links');
+        const linksMap = {};
+        linksResult.rows.forEach(l => { linksMap[l.sync_key] = l; });
+
         // Extrair o JSONB para o nível raiz para facilitar o frontend
-        const pedidos = result.rows.map(row => ({
-            ...row.data, // Espalha as propriedades do JSONB
-            sync_key: row.sync_key, // Adiciona explicitamente o sync_key
-            observacao: row.observacao || '', // Adiciona a observação (ou vazio)
-            _sync_updated_at: row.updated_at, // Mantém metadata de sync
-            _data_fic: row.data_fic, // Adiciona o campo de data da ficha técnica para ordenação
-            _has_ficha: !!row.has_ficha // Boolean flag
-        }));
+        const pedidos = result.rows.map(row => {
+            const item = {
+                ...row.data,
+                sync_key: row.sync_key,
+                observacao: row.observacao || '',
+                _sync_updated_at: row.updated_at,
+                _data_fic: row.data_fic,
+                _has_ficha: !!row.has_ficha
+            };
+            const manualLink = linksMap[row.sync_key];
+            if (manualLink) {
+                if (manualLink.status === 'confirmado') {
+                    item.LINK_STATUS = 'confirmado';
+                    item.OP_PCS = manualLink.op;
+                } else if (manualLink.status === 'rejeitado') {
+                    item.LINK_STATUS = 'rejeitado';
+                    item.OP_PCS = null;
+                }
+                // 'removido': apaga o link manual, deixa o JSONB original valer (sugerido volta a aparecer)
+            }
+            return item;
+        });
 
         res.json(pedidos);
     } catch (error) {
