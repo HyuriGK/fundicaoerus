@@ -67,10 +67,15 @@ router.get('/list/all', async (req, res) => {
 router.get('/:codigo', async (req, res) => {
     const { codigo } = req.params;
     try {
-        const result = await pool.query(
-            'SELECT * FROM ficha_tecnica_fusao WHERE pro_codigo = $1 LIMIT 1',
-            [codigo]
-        );
+        const result = await pool.query(`
+            SELECT *,
+                peso_liquido as "peso_liquido_pro",
+                peso_bruto as "peso_bruto_pro",
+                peso_penca as "peso_penca_fic",
+                peso_com_alimentacao as "peso_com_alimentacao_fic",
+                rendimento_metalico as "rendimento_metalico_fic"
+            FROM ficha_tecnica_fusao WHERE pro_codigo = $1 LIMIT 1
+        `, [codigo]);
         if (result.rows.length === 0) {
             return res.status(404).json({ error: 'Ficha de Fusão não encontrada.' });
         }
