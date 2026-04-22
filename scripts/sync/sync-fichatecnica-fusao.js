@@ -57,6 +57,8 @@ async function syncFichasFusao() {
     await pool.query(`ALTER TABLE ficha_tecnica_fusao ADD COLUMN IF NOT EXISTS obs_vazamento TEXT`);
     await pool.query(`ALTER TABLE ficha_tecnica_fusao ADD COLUMN IF NOT EXISTS fornecimento TEXT`);
     await pool.query(`ALTER TABLE ficha_tecnica_fusao ADD COLUMN IF NOT EXISTS foto_base64 TEXT`);
+    await pool.query(`ALTER TABLE ficha_tecnica_fusao ADD COLUMN IF NOT EXISTS relacao_metal_molde NUMERIC`);
+    await pool.query(`ALTER TABLE ficha_tecnica_fusao ADD COLUMN IF NOT EXISTS relacao_molde_metal NUMERIC`);
 
     Firebird.attach(firebirdOptions, function (err, db) {
         if (err) { console.error('Erro Firebird:', err); process.exit(1); }
@@ -72,6 +74,8 @@ async function syncFichasFusao() {
                 F.TEMPERATURA_FORNO_FIC,
                 F.TEMPERATURA_VAZAMENTO_FIC,
                 F.FORNECIMENTO_FIC,
+                F.RELACAO_METAL_MOLDE_FIC,
+                F.RELACAO_MOLDE_METAL_FIC,
                 F.DATA_FIC,
                 P.NOME_PRO,
                 P.PESO_LIQUIDO_PRO,
@@ -110,8 +114,9 @@ async function syncFichasFusao() {
                             pro_codigo, nome_pro, cliente_nome, cli_codigo, material,
                             peso_liquido, peso_bruto, peso_penca, peso_com_alimentacao,
                             rendimento_metalico, temperatura_forno, temperatura_vazamento,
-                            obs_vazamento, fornecimento, foto_base64, data_ficha, updated_at
-                        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,NOW())
+                            obs_vazamento, fornecimento, foto_base64,
+                            relacao_metal_molde, relacao_molde_metal, data_ficha, updated_at
+                        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,NOW())
                         ON CONFLICT (pro_codigo) DO UPDATE SET
                             nome_pro = EXCLUDED.nome_pro,
                             cliente_nome = EXCLUDED.cliente_nome,
@@ -127,6 +132,8 @@ async function syncFichasFusao() {
                             obs_vazamento = EXCLUDED.obs_vazamento,
                             fornecimento = EXCLUDED.fornecimento,
                             foto_base64 = EXCLUDED.foto_base64,
+                            relacao_metal_molde = EXCLUDED.relacao_metal_molde,
+                            relacao_molde_metal = EXCLUDED.relacao_molde_metal,
                             data_ficha = EXCLUDED.data_ficha,
                             updated_at = NOW()
                     `, [
@@ -145,6 +152,8 @@ async function syncFichasFusao() {
                         sanitize(obsVazamento),
                         fornecimento,
                         foto,
+                        row.RELACAO_METAL_MOLDE_FIC,
+                        row.RELACAO_MOLDE_METAL_FIC,
                         row.DATA_FIC || null
                     ]);
                     count++;
