@@ -36,24 +36,36 @@ function getMaterialInfo(db, produtoCodigo) {
     return new Promise((resolve) => {
         const cols = ELEMENTOS.map(e => `PM.${e}_MIN_PMT, PM.${e}_MAX_PMT`).join(', ');
         db.query(`
-            SELECT FIRST 1 M.MATERIAL_MAT, PM.MAT_ID_PMT, ${cols}
+            SELECT FIRST 1 M.MATERIAL_MAT, PM.MAT_ID_PMT, ${cols},
+                M.CONTRACAO_MAT, M.LIMITE_RESISTENCIA_MAT, M.LIMITE_ESCOAMENTO_MAT,
+                M.ALONGAMENTO_MAT, M.ESTRICCAO_MAT, M.REDUCAO_AREA_MAT,
+                M.IMPACTO_TESTE_CHARPY_MAT, M.HB_MAX_MAT, M.HB_MAT
             FROM PRODUTO_MATERIAL PM
             JOIN MATERIAL M ON M.ID_MAT = PM.MAT_ID_PMT
             WHERE PM.PRODUTO_PMT = ?
         `, [produtoCodigo], (err, rows) => {
-            if (err || !rows || rows.length === 0) return resolve({ material: null, mat_id: null, composicao: [] });
+            if (err || !rows || rows.length === 0) return resolve({ material: null, mat_id: null, composicao: [], props: {} });
             const row = rows[0];
             const composicao = [];
             for (const el of ELEMENTOS) {
                 const min = parseFloat(row[`${el}_MIN_PMT`]) || 0;
                 const max = parseFloat(row[`${el}_MAX_PMT`]) || 0;
-                if (min === 0 && max === 0) continue; // não presente
+                if (min === 0 && max === 0) continue;
                 composicao.push({ elemento: el, min, max });
             }
             resolve({
                 material: row.MATERIAL_MAT || null,
                 mat_id: row.MAT_ID_PMT || null,
-                composicao: JSON.stringify(composicao)
+                composicao: JSON.stringify(composicao),
+                contracao: row.CONTRACAO_MAT || null,
+                limite_resistencia: row.LIMITE_RESISTENCIA_MAT || null,
+                limite_escoamento: row.LIMITE_ESCOAMENTO_MAT || null,
+                alongamento: row.ALONGAMENTO_MAT || null,
+                estriccao: row.ESTRICCAO_MAT || null,
+                reducao_area: row.REDUCAO_AREA_MAT || null,
+                impacto_charpy: row.IMPACTO_TESTE_CHARPY_MAT || null,
+                hb_max: row.HB_MAX_MAT || null,
+                hb_mat: row.HB_MAT || null
             });
         });
     });
@@ -77,6 +89,15 @@ async function syncFichasFusao() {
     await pool.query(`ALTER TABLE ficha_tecnica_fusao ADD COLUMN IF NOT EXISTS relacao_molde_metal NUMERIC`);
     await pool.query(`ALTER TABLE ficha_tecnica_fusao ADD COLUMN IF NOT EXISTS mat_id TEXT`);
     await pool.query(`ALTER TABLE ficha_tecnica_fusao ADD COLUMN IF NOT EXISTS composicao_quimica JSONB`);
+    await pool.query(`ALTER TABLE ficha_tecnica_fusao ADD COLUMN IF NOT EXISTS contracao_mat NUMERIC`);
+    await pool.query(`ALTER TABLE ficha_tecnica_fusao ADD COLUMN IF NOT EXISTS limite_resistencia_mat NUMERIC`);
+    await pool.query(`ALTER TABLE ficha_tecnica_fusao ADD COLUMN IF NOT EXISTS limite_escoamento_mat NUMERIC`);
+    await pool.query(`ALTER TABLE ficha_tecnica_fusao ADD COLUMN IF NOT EXISTS alongamento_mat NUMERIC`);
+    await pool.query(`ALTER TABLE ficha_tecnica_fusao ADD COLUMN IF NOT EXISTS estriccao_mat NUMERIC`);
+    await pool.query(`ALTER TABLE ficha_tecnica_fusao ADD COLUMN IF NOT EXISTS reducao_area_mat NUMERIC`);
+    await pool.query(`ALTER TABLE ficha_tecnica_fusao ADD COLUMN IF NOT EXISTS impacto_teste_charpy_mat NUMERIC`);
+    await pool.query(`ALTER TABLE ficha_tecnica_fusao ADD COLUMN IF NOT EXISTS hb_max_mat NUMERIC`);
+    await pool.query(`ALTER TABLE ficha_tecnica_fusao ADD COLUMN IF NOT EXISTS hb_mat NUMERIC`);
 
     Firebird.attach(firebirdOptions, function (err, db) {
         if (err) { console.error('Erro Firebird:', err); process.exit(1); }
@@ -134,8 +155,12 @@ async function syncFichasFusao() {
                             rendimento_metalico, temperatura_forno, temperatura_vazamento,
                             obs_vazamento, fornecimento, foto_base64,
                             relacao_metal_molde, relacao_molde_metal,
-                            composicao_quimica, data_ficha, updated_at
-                        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,NOW())
+                            composicao_quimica,
+                            contracao_mat, limite_resistencia_mat, limite_escoamento_mat,
+                            alongamento_mat, estriccao_mat, reducao_area_mat,
+                            impacto_teste_charpy_mat, hb_max_mat, hb_mat,
+                            data_ficha, updated_at
+                        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,NOW())
                         ON CONFLICT (pro_codigo) DO UPDATE SET
                             nome_pro = EXCLUDED.nome_pro,
                             cliente_nome = EXCLUDED.cliente_nome,
@@ -155,6 +180,15 @@ async function syncFichasFusao() {
                             relacao_metal_molde = EXCLUDED.relacao_metal_molde,
                             relacao_molde_metal = EXCLUDED.relacao_molde_metal,
                             composicao_quimica = EXCLUDED.composicao_quimica,
+                            contracao_mat = EXCLUDED.contracao_mat,
+                            limite_resistencia_mat = EXCLUDED.limite_resistencia_mat,
+                            limite_escoamento_mat = EXCLUDED.limite_escoamento_mat,
+                            alongamento_mat = EXCLUDED.alongamento_mat,
+                            estriccao_mat = EXCLUDED.estriccao_mat,
+                            reducao_area_mat = EXCLUDED.reducao_area_mat,
+                            impacto_teste_charpy_mat = EXCLUDED.impacto_teste_charpy_mat,
+                            hb_max_mat = EXCLUDED.hb_max_mat,
+                            hb_mat = EXCLUDED.hb_mat,
                             data_ficha = EXCLUDED.data_ficha,
                             updated_at = NOW()
                     `, [
@@ -177,6 +211,15 @@ async function syncFichasFusao() {
                         row.RELACAO_METAL_MOLDE_FIC,
                         row.RELACAO_MOLDE_METAL_FIC,
                         matInfo.composicao,
+                        matInfo.contracao,
+                        matInfo.limite_resistencia,
+                        matInfo.limite_escoamento,
+                        matInfo.alongamento,
+                        matInfo.estriccao,
+                        matInfo.reducao_area,
+                        matInfo.impacto_charpy,
+                        matInfo.hb_max,
+                        matInfo.hb_mat,
                         row.DATA_FIC || null
                     ]);
                     count++;
