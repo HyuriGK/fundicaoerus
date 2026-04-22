@@ -1416,11 +1416,12 @@
                     <div class="chart-header-row" style="position: relative;">
                         <div class="chart-title-flex">Gráfico de Emissão de Pedidos C/ Entrega Pendente</div>
                         <div style="position: absolute; right: 10px; display: flex; align-items: center; gap: 8px;">
+                            <button id="btnBackPending" class="btn-modern" onclick="backPendingChart()" style="display:none; font-size: 0.65rem; padding: 4px 10px; height: 26px; background: rgba(255,255,255,0.1); color: var(--text-main); border: 1px solid var(--border-subtle);">
+                                <i class="fa-solid fa-arrow-left"></i> Voltar
+                            </button>
                             <button class="btn-modern" onclick="openPendingEmissionRecords()" style="font-size: 0.65rem; padding: 4px 10px; height: 26px; background-color: var(--color-primary); color: #000;">
                                 <i class="fa-solid fa-list-check"></i> Registros
                             </button>
-                             <select id="yearFilterPending" onchange="syncEmissionYear(this.value); updateHistoricalChart().then(() => updatePendingChart(currentFilteredData))" class="year-select">
-                             </select>
                         </div>
                     </div>
                     <div class="chart-canvas-wrapper">
@@ -3307,7 +3308,7 @@
                     // NEW: Check Year as well (from the specialized filter dropdowns)
                     let yearId = 'yearFilterPCP'; // Default to PCP Chart Year
                     if (chartMode === 'delivery') yearId = 'yearFilterPCP';
-                    else if (chartMode === 'emission_pending') yearId = 'yearFilterPending';
+                    else if (chartMode === 'emission_pending') yearId = 'yearFilterHistorical';
                     else if (chartMode === 'emission_total') yearId = 'yearFilterHistorical';
                     const yearEl = document.getElementById(yearId);
                     const selectedYear = yearEl ? (parseInt(yearEl.value) || new Date().getFullYear()) : new Date().getFullYear();
@@ -3534,7 +3535,7 @@
         function initYearFilter() {
             const currentYear = new Date().getFullYear();
             const years = [currentYear - 1, currentYear, currentYear + 1];
-            const selects = ['yearFilterPCP', 'yearFilterPending', 'yearFilterHistorical'];
+            const selects = ['yearFilterPCP', 'yearFilterHistorical'];
             selects.forEach(id => {
                 const select = document.getElementById(id);
                 if (!select) return;
@@ -3657,9 +3658,16 @@
                 }
             });
         }
+        function backPendingChart() {
+            document.getElementById('monthFilterHistorical').value = 'Todos';
+            document.getElementById('filterEmissionStart').value = '';
+            document.getElementById('filterEmissionEnd').value = '';
+            activeChartFilters.month = null;
+            chartMode = 'delivery';
+            updatePendingChart(currentFilteredData);
+        }
         function syncEmissionYear(val) {
             document.getElementById('yearFilterHistorical').value = val;
-            document.getElementById('yearFilterPending').value = val;
             pendingDataCache = null; // Limpa cache ao trocar ano
         }
         function updatePendingChart(list) {
@@ -3671,10 +3679,12 @@
                     chartMode = 'delivery';
                 }
             }
-            const yearEl = document.getElementById('yearFilterPending');
+            const yearEl = document.getElementById('yearFilterHistorical');
             const selectedYear = yearEl ? (parseInt(yearEl.value) || new Date().getFullYear()) : new Date().getFullYear();
             const monthLabels = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
             const titleEl = document.getElementById('chartPending').closest('.chart-panel').querySelector('.chart-title-flex');
+            const btnBack = document.getElementById('btnBackPending');
+            if (btnBack) btnBack.style.display = (selectedMonth !== 'Todos') ? 'inline-flex' : 'none';
             try {
                 if (selectedMonth === 'Todos') {
                     if (titleEl) titleEl.innerText = 'Gráfico de Emissão de Pedidos C/ Entrega Pendente';
@@ -3829,7 +3839,7 @@
                     onClick: (e, elements) => {
                         const monthEl = document.getElementById('monthFilterHistorical');
                         const selectedMonth = monthEl ? monthEl.value : 'Todos';
-                        const yearEl = document.getElementById('yearFilterPending');
+                        const yearEl = document.getElementById('yearFilterHistorical');
                         const selectedYear = yearEl ? (parseInt(yearEl.value) || new Date().getFullYear()) : new Date().getFullYear();
                         if (elements.length > 0) {
                             const index = elements[0].index;
