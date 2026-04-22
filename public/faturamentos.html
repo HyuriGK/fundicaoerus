@@ -1924,6 +1924,44 @@
             }
         }
         function processClients(data) { clientStats = {}; data.forEach(item => { const n = (item.clienteNome || 'Desconhecido').trim(); clientStats[n] = (clientStats[n] || 0) + 1; }); }
+        function getModalFilteredData() {
+            const startInput = document.getElementById('startDate').value;
+            const endInput = document.getElementById('endDate').value;
+            let filtered = allData.filter(item => {
+                const isService = isServiceClient(item);
+                if (startInput && item.data < startInput) return false;
+                if (endInput && item.data > endInput) return false;
+                if (isService) return showServices;
+                const name = (item.clienteNome || 'Desconhecido').trim();
+                if (excludedClients.has(name)) return false;
+                return true;
+            });
+            document.querySelectorAll('.filter-input-table').forEach(input => {
+                const val = input.value.trim().toLowerCase();
+                const col = input.dataset.col;
+                if (val && col) {
+                    filtered = filtered.filter(item => {
+                        let target = '';
+                        if (col == '1') target = formatDate(item.data);
+                        else if (col == '2') target = String(item.pedido || '');
+                        else if (col == '3') target = String(item.clienteCodigo || '');
+                        else if (col == '4') target = String(item.clienteNome || '');
+                        else if (col == '5') target = String(item.codigoItem || '');
+                        else if (col == '6') target = String(item.descricao || '');
+                        else if (col == '7') target = String(item.quantidade || '');
+                        else if (col == '8') target = String(item.valorUnitario || '');
+                        else if (col == '9') target = String(item.pesoUn || '');
+                        else if (col == '10') target = String(item.pesoTotal || '');
+                        else if (col == '11') target = String(item.valorTotal || '');
+                        return target.toLowerCase().includes(val);
+                    });
+                }
+            });
+            return filtered;
+        }
+        function hasActiveModalFilters() {
+            return Array.from(document.querySelectorAll('.filter-input-table')).some(i => i.value.trim() !== '');
+        }
         function applyLocalFilters() {
             renderTable();
         }
@@ -2157,7 +2195,13 @@
                     if (document.getElementById('clientModal').style.display === 'flex') {
                         closeClientModal();
                     } else if (document.getElementById('recordsModal').style.display === 'flex') {
-                        closeRecordsModal();
+                        if (hasActiveModalFilters()) {
+                            const filtered = getModalFilteredData();
+                            closeRecordsModal();
+                            updateDashboardfromRecords(filtered);
+                        } else {
+                            closeRecordsModal();
+                        }
                     }
                 }
             });
