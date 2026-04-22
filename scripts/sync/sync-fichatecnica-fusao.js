@@ -83,6 +83,8 @@ async function syncFichasFusao() {
     await pool.query(`ALTER TABLE ficha_tecnica_fusao ADD COLUMN IF NOT EXISTS temperatura_forno NUMERIC`);
     await pool.query(`ALTER TABLE ficha_tecnica_fusao ADD COLUMN IF NOT EXISTS temperatura_vazamento NUMERIC`);
     await pool.query(`ALTER TABLE ficha_tecnica_fusao ADD COLUMN IF NOT EXISTS obs_vazamento TEXT`);
+    await pool.query(`ALTER TABLE ficha_tecnica_fusao ADD COLUMN IF NOT EXISTS temperatura_forno_min NUMERIC`);
+    await pool.query(`ALTER TABLE ficha_tecnica_fusao ADD COLUMN IF NOT EXISTS temperatura_vazamento_min NUMERIC`);
     await pool.query(`ALTER TABLE ficha_tecnica_fusao ADD COLUMN IF NOT EXISTS fornecimento TEXT`);
     await pool.query(`ALTER TABLE ficha_tecnica_fusao ADD COLUMN IF NOT EXISTS foto_base64 TEXT`);
     await pool.query(`ALTER TABLE ficha_tecnica_fusao ADD COLUMN IF NOT EXISTS relacao_metal_molde NUMERIC`);
@@ -111,7 +113,9 @@ async function syncFichasFusao() {
                 F.PESO_PENCA_FIC,
                 F.PESO_UNITARIO_COM_ALIMENT_FIC,
                 F.TEMPERATURA_FORNO_FIC,
+                F.FORNO_FIC,
                 F.TEMPERATURA_VAZAMENTO_FIC,
+                F.VAZAMENTO_FIC,
                 F.FORNECIMENTO_FIC,
                 F.RELACAO_METAL_MOLDE_FIC,
                 F.RELACAO_MOLDE_METAL_FIC,
@@ -152,7 +156,7 @@ async function syncFichasFusao() {
                         INSERT INTO ficha_tecnica_fusao (
                             pro_codigo, nome_pro, cliente_nome, cli_codigo, material, mat_id,
                             peso_liquido, peso_bruto, peso_penca, peso_com_alimentacao,
-                            rendimento_metalico, temperatura_forno, temperatura_vazamento,
+                            rendimento_metalico, temperatura_forno, temperatura_forno_min, temperatura_vazamento, temperatura_vazamento_min,
                             obs_vazamento, fornecimento, foto_base64,
                             relacao_metal_molde, relacao_molde_metal,
                             composicao_quimica,
@@ -160,7 +164,7 @@ async function syncFichasFusao() {
                             alongamento_mat, estriccao_mat, reducao_area_mat,
                             impacto_teste_charpy_mat, hb_max_mat, hb_mat,
                             data_ficha, updated_at
-                        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,NOW())
+                        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,NOW())
                         ON CONFLICT (pro_codigo) DO UPDATE SET
                             nome_pro = EXCLUDED.nome_pro,
                             cliente_nome = EXCLUDED.cliente_nome,
@@ -173,7 +177,9 @@ async function syncFichasFusao() {
                             peso_com_alimentacao = EXCLUDED.peso_com_alimentacao,
                             rendimento_metalico = EXCLUDED.rendimento_metalico,
                             temperatura_forno = EXCLUDED.temperatura_forno,
+                            temperatura_forno_min = EXCLUDED.temperatura_forno_min,
                             temperatura_vazamento = EXCLUDED.temperatura_vazamento,
+                            temperatura_vazamento_min = EXCLUDED.temperatura_vazamento_min,
                             obs_vazamento = EXCLUDED.obs_vazamento,
                             fornecimento = EXCLUDED.fornecimento,
                             foto_base64 = EXCLUDED.foto_base64,
@@ -204,7 +210,9 @@ async function syncFichasFusao() {
                         row.PESO_UNITARIO_COM_ALIMENT_FIC,
                         row.RENDIMENTO_METALICO_FIC,
                         row.TEMPERATURA_FORNO_FIC,
+                        row.FORNO_FIC,
                         row.TEMPERATURA_VAZAMENTO_FIC,
+                        row.VAZAMENTO_FIC,
                         sanitize(obsVazamento),
                         fornecimento,
                         foto,
