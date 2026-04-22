@@ -29,16 +29,32 @@ function getObsVazamento(db, proCodigo) {
     });
 }
 
-function getMaterial(db, produtoCodigo) {
+// Elementos químicos presentes na tabela PRODUTO_MATERIAL
+const ELEMENTOS = ['C','SI','MN','P','S','CR','NI','MO','AL','V','CU','MG','W','B','CO','TI','NB','PB','SN','ZN','AS','BI','CA','CE','ZR','LA','FE'];
+
+function getMaterialInfo(db, produtoCodigo) {
     return new Promise((resolve) => {
+        const cols = ELEMENTOS.map(e => `PM.${e}_MIN_PMT, PM.${e}_MAX_PMT`).join(', ');
         db.query(`
-            SELECT FIRST 1 M.MATERIAL_MAT
+            SELECT FIRST 1 M.MATERIAL_MAT, PM.MAT_ID_PMT, ${cols}
             FROM PRODUTO_MATERIAL PM
             JOIN MATERIAL M ON M.ID_MAT = PM.MAT_ID_PMT
             WHERE PM.PRODUTO_PMT = ?
         `, [produtoCodigo], (err, rows) => {
-            if (err || !rows || rows.length === 0) return resolve(null);
-            resolve(rows[0].MATERIAL_MAT || null);
+            if (err || !rows || rows.length === 0) return resolve({ material: null, mat_id: null, composicao: [] });
+            const row = rows[0];
+            const composicao = [];
+            for (const el of ELEMENTOS) {
+                const min = parseFloat(row[`${el}_MIN_PMT`]) || 0;
+                const max = parseFloat(row[`${el}_MAX_PMT`]) || 0;
+                if (min === 0 && max === 0) continue; // não presente
+                composicao.push({ elemento: el, min, max });
+            }
+            resolve({
+                material: row.MATERIAL_MAT || null,
+                mat_id: row.MAT_ID_PMT || null,
+                composicao: JSON.stringify(composicao)
+            });
         });
     });
 }
@@ -59,6 +75,8 @@ async function syncFichasFusao() {
     await pool.query(`ALTER TABLE ficha_tecnica_fusao ADD COLUMN IF NOT EXISTS foto_base64 TEXT`);
     await pool.query(`ALTER TABLE ficha_tecnica_fusao ADD COLUMN IF NOT EXISTS relacao_metal_molde NUMERIC`);
     await pool.query(`ALTER TABLE ficha_tecnica_fusao ADD COLUMN IF NOT EXISTS relacao_molde_metal NUMERIC`);
+    await pool.query(`ALTER TABLE ficha_tecnica_fusao ADD COLUMN IF NOT EXISTS mat_id TEXT`);
+    await pool.query(`ALTER TABLE ficha_tecnica_fusao ADD COLUMN IF NOT EXISTS composicao_quimica JSONB`);
 
     Firebird.attach(firebirdOptions, function (err, db) {
         if (err) { console.error('Erro Firebird:', err); process.exit(1); }
@@ -103,7 +121,7 @@ async function syncFichasFusao() {
             let count = 0;
             for (const row of results) {
                 try {
-                    const material = await getMaterial(db, row.PRO_CODIGO_FIC);
+                    const matInfo = await getMaterialInfo(db, row.PRO_CODIGO_FIC);
                     const obsVazamento = await getObsVazamento(db, row.PRO_CODIGO_FIC);
                     const codigo = sanitize(row.PRO_CODIGO_FIC);
                     const foto = fotosMap[codigo] || null;
@@ -111,17 +129,19 @@ async function syncFichasFusao() {
 
                     await pool.query(`
                         INSERT INTO ficha_tecnica_fusao (
-                            pro_codigo, nome_pro, cliente_nome, cli_codigo, material,
+                            pro_codigo, nome_pro, cliente_nome, cli_codigo, material, mat_id,
                             peso_liquido, peso_bruto, peso_penca, peso_com_alimentacao,
                             rendimento_metalico, temperatura_forno, temperatura_vazamento,
                             obs_vazamento, fornecimento, foto_base64,
-                            relacao_metal_molde, relacao_molde_metal, data_ficha, updated_at
-                        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,NOW())
+                            relacao_metal_molde, relacao_molde_metal,
+                            composicao_quimica, data_ficha, updated_at
+                        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,NOW())
                         ON CONFLICT (pro_codigo) DO UPDATE SET
                             nome_pro = EXCLUDED.nome_pro,
                             cliente_nome = EXCLUDED.cliente_nome,
                             cli_codigo = EXCLUDED.cli_codigo,
                             material = COALESCE(EXCLUDED.material, ficha_tecnica_fusao.material),
+                            mat_id = EXCLUDED.mat_id,
                             peso_liquido = EXCLUDED.peso_liquido,
                             peso_bruto = EXCLUDED.peso_bruto,
                             peso_penca = EXCLUDED.peso_penca,
@@ -134,6 +154,7 @@ async function syncFichasFusao() {
                             foto_base64 = EXCLUDED.foto_base64,
                             relacao_metal_molde = EXCLUDED.relacao_metal_molde,
                             relacao_molde_metal = EXCLUDED.relacao_molde_metal,
+                            composicao_quimica = EXCLUDED.composicao_quimica,
                             data_ficha = EXCLUDED.data_ficha,
                             updated_at = NOW()
                     `, [
@@ -141,7 +162,8 @@ async function syncFichasFusao() {
                         sanitize(row.NOME_PRO),
                         sanitize(row.NOME_CLIENTE),
                         sanitize(row.CLI_CODIGO_FIC),
-                        sanitize(material),
+                        sanitize(matInfo.material),
+                        sanitize(String(matInfo.mat_id || '')),
                         row.PESO_LIQUIDO_PRO,
                         row.PESO_BRUTO_PRO,
                         row.PESO_PENCA_FIC,
@@ -154,6 +176,7 @@ async function syncFichasFusao() {
                         foto,
                         row.RELACAO_METAL_MOLDE_FIC,
                         row.RELACAO_MOLDE_METAL_FIC,
+                        matInfo.composicao,
                         row.DATA_FIC || null
                     ]);
                     count++;
