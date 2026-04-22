@@ -2356,19 +2356,8 @@
             const today = new Date();
             let text = "";
             if (currentEmailType === 'novos') {
-                // Logic: Filter orders with Emission Date = Previous Business Day
-                // If Monday (1) -> Friday (today.getDate() - 3)
-                // If Sunday (0) -> Friday (today.getDate() - 2)
-                // Else -> Yesterday (today.getDate() - 1)
-                const dayOfWeek = today.getDay();
-                const targetDate = new Date(today);
-                if (dayOfWeek === 1) {
-                    targetDate.setDate(today.getDate() - 3);
-                } else if (dayOfWeek === 0) {
-                    targetDate.setDate(today.getDate() - 2);
-                } else {
-                    targetDate.setDate(today.getDate() - 1);
-                }
+                // Logic: Filter orders with Emission Date = Previous Business Day (skips weekends and Brazilian holidays)
+                const targetDate = previousBusinessDay(today);
                 // Format helper: Compare YYYY-MM-DD
                 const isSameDay = (d1, d2) => {
                     return d1.getFullYear() === d2.getFullYear() &&
@@ -3151,6 +3140,50 @@
             if (parts.length !== 3) return null;
             return new Date(parts[0], parts[1] - 1, parts[2], 0, 0, 0, 0);
         }
+        function getBrazilianHolidays(year) {
+            // Feriados nacionais fixos
+            const fixed = [
+                `${year}-01-01`, // Confraternização Universal
+                `${year}-04-21`, // Tiradentes
+                `${year}-05-01`, // Dia do Trabalhador
+                `${year}-09-07`, // Independência
+                `${year}-10-12`, // Nossa Senhora Aparecida
+                `${year}-11-02`, // Finados
+                `${year}-11-15`, // Proclamação da República
+                `${year}-12-25`, // Natal
+            ];
+            // Páscoa (algoritmo de Meeus/Jones/Butcher)
+            const a = year % 19, b = Math.floor(year / 100), c = year % 100;
+            const d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
+            const g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
+            const i = Math.floor(c / 4), k = c % 4;
+            const l = (32 + 2 * e + 2 * i - h - k) % 7;
+            const m = Math.floor((a + 11 * h + 22 * l) / 451);
+            const month = Math.floor((h + l - 7 * m + 114) / 31);
+            const day = ((h + l - 7 * m + 114) % 31) + 1;
+            const easter = new Date(year, month - 1, day);
+            const fmt = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+            const addDays = (d, n) => { const r = new Date(d); r.setDate(r.getDate() + n); return r; };
+            const moveable = [
+                fmt(addDays(easter, -47)), // Carnaval segunda
+                fmt(addDays(easter, -48)), // Carnaval terça — na prática terça é -47, mas convenção varia; usamos os 2 dias
+                fmt(addDays(easter, -2)),  // Sexta-feira Santa
+                fmt(easter),               // Páscoa
+                fmt(addDays(easter, 60)),  // Corpus Christi
+            ];
+            return new Set([...fixed, ...moveable]);
+        }
+        function previousBusinessDay(from) {
+            const d = new Date(from);
+            const holidays = getBrazilianHolidays(d.getFullYear());
+            const prevYearHolidays = getBrazilianHolidays(d.getFullYear() - 1);
+            const allHolidays = new Set([...holidays, ...prevYearHolidays]);
+            const fmt = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+            do {
+                d.setDate(d.getDate() - 1);
+            } while (d.getDay() === 0 || d.getDay() === 6 || allHolidays.has(fmt(d)));
+            return d;
+        }
         function applyQuickFilter(type) {
             const today = new Date();
             // Helper to format YYYY-MM-DD
@@ -3169,15 +3202,7 @@
                 document.getElementById('filterDateEnd').value = fmt(end);
             };
             if (type === 'emission_yesterday') {
-                const yesterday = new Date(today);
-                // Business Day Logic:
-                // If Monday (1) -> Friday (-3)
-                // If Sunday (0) -> Friday (-2)
-                // Else -> Yesterday (-1)
-                const day = today.getDay();
-                if (day === 1) yesterday.setDate(today.getDate() - 3);
-                else if (day === 0) yesterday.setDate(today.getDate() - 2);
-                else yesterday.setDate(today.getDate() - 1);
+                const yesterday = previousBusinessDay(today);
                 setEmission(yesterday, yesterday);
             } else if (type === 'emission_today') {
                 setEmission(today, today);
