@@ -1050,7 +1050,13 @@
                     <div class="chart-title">Faturamento Diário (Peso)</div>
                     <div class="chart-header-kpi"><span>Média Dia:</span> <span class="highlight" id="avgDailyWeight">0,00 kg</span> <span style="font-size:0.75rem;color:#94a3b8;margin-left:6px">Considerando: <span id="avgDiasUteis">0</span> dias úteis</span></div>
                 </div>
-                <div style="position: relative; flex: 1; width: 100%; min-height: 0;"><canvas id="dailyChart"></canvas>
+                <div style="position: relative; flex: 1; width: 100%; min-height: 0;">
+                    <canvas id="dailyChart"></canvas>
+                    <div id="dailyChartBlurOverlay" style="display:none; position:absolute; inset:0; backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); background:rgba(9,9,11,0.55); border-radius:8px; z-index:10; display:none; align-items:center; justify-content:center; flex-direction:column; gap:10px; text-align:center; padding:20px;">
+                        <i class="fa-solid fa-eye-slash" style="font-size:1.6rem; color:#a1a1aa;"></i>
+                        <span style="color:#f4f4f5; font-size:0.85rem; font-weight:600; max-width:280px; line-height:1.5;">A visualização neste gráfico não está disponível para o filtro do período aplicado.</span>
+                        <span style="color:#a1a1aa; font-size:0.75rem;">Selecione um mês específico para ver o faturamento diário.</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1137,11 +1143,27 @@
         function selectDashboardMonth(idx) {
             selectedDashboardMonthIndex = idx;
             updateDashboardMonthButtonsUI();
+            if (idx === -1) {
+                showAnnualView();
+                setDailyChartBlur(true);
+            } else {
+                setDailyChartBlur(false);
+            }
             syncPeriodInputs();
+        }
+        function setDailyChartBlur(active) {
+            const overlay = document.getElementById('dailyChartBlurOverlay');
+            if (!overlay) return;
+            overlay.style.display = active ? 'flex' : 'none';
         }
         function changeDashboardYear() {
             selectedDashboardYear = parseInt(document.getElementById('dashboardYearSelect').value);
             syncPeriodInputs();
+            // Ano inteiro selecionado: redireciona para mensal e aplica blur no diário
+            if (selectedDashboardMonthIndex === -1) {
+                showAnnualView();
+                setDailyChartBlur(true);
+            }
         }
         function updateDashboardMonthButtonsUI() {
             document.querySelectorAll('.months-group .month-btn').forEach(b => b.classList.remove('active'));
@@ -1781,7 +1803,8 @@
                     });
                     processClients(allData);
                     renderTable();
-                    updateDashboardfromRecords(allData);
+                    const dataToUse = hasActiveModalFilters() ? getModalFilteredData() : allData;
+                    updateDashboardfromRecords(dataToUse);
                 }
             } catch (e) { console.error(e); }
         }
@@ -2055,7 +2078,10 @@
                 sideBtn.style.backgroundColor = 'rgba(255,255,255,0.03)';
                 sideBtn.style.color = 'var(--text-muted)';
             }
-            updateDashboardfromRecords(allData);
+            // Mantém blur se o período é ano inteiro
+            setDailyChartBlur(selectedDashboardMonthIndex === -1);
+            const _d1 = hasActiveModalFilters() ? getModalFilteredData() : allData;
+            updateDashboardfromRecords(_d1);
         }
         function showAnnualView() {
             showABC = false;
@@ -2065,7 +2091,8 @@
             document.getElementById('btnEvolutionView').classList.remove('active');
             document.getElementById('btnAnnualView').classList.add('active');
             document.getElementById('btnAbcView').classList.remove('active');
-            updateDashboardfromRecords(allData);
+            const _d2 = hasActiveModalFilters() ? getModalFilteredData() : allData;
+            updateDashboardfromRecords(_d2);
         }
         function showABCCharts() {
             showABC = true;
@@ -2083,7 +2110,8 @@
                 sideBtn.style.backgroundColor = 'var(--color-primary)';
                 sideBtn.style.color = '#000';
             }
-            updateDashboardfromRecords(allData);
+            const _d3 = hasActiveModalFilters() ? getModalFilteredData() : allData;
+            updateDashboardfromRecords(_d3);
         }
         function setABCType(type) {
             abcType = type;
