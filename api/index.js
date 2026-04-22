@@ -100,6 +100,7 @@ app.use('/api/custos-dashboard', require('../src/custos-dashboard')); // NOVO: P
 app.use('/api/custos-detalhados', require('../src/custos-detalhados-firebird')); // NOVO: Detalhamento de Custos (Postgres Sync)
 app.use('/api/centro-custos', require('../src/centro-custos')); // NOVO: Centro de Custos (Mapeamento)
 app.use('/api/fichatecnica', require('../src/fichatecnica')); // NOVO: Ficha Técnica (Firebird Read-Only)
+app.use('/api/fichatecnicafusao', require('../src/fichatecnicafusao')); // Ficha Técnica de Fusão
 app.use('/api/communications', require('../src/communications')); // NOVO: Sistema de Comunicação
 
 // Rota temporária de diagnóstico do Firebird
