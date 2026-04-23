@@ -65,7 +65,7 @@ router.get('/', async (req, res) => {
         let fatQuery = `
             SELECT 
                 COALESCE(SUM(f.peso_total), 0) as fat_peso,
-                COALESCE(SUM(f.valor_unitario * f.quantidade * 100), 0) as fat_valor
+                COALESCE(SUM(f.valor_total), 0) as fat_valor
             FROM faturamento_firebird f
             LEFT JOIN faturamento_firebird_preferencias p
                 ON p.nota_fiscal = f.nota_fiscal
@@ -104,8 +104,12 @@ router.get('/', async (req, res) => {
             const customWeights = {};
             weightsRes.rows.forEach(r => customWeights[r.codigo] = parseFloat(r.peso));
 
-            // B. Buscar carteira mais atual sincronizada do Firebird
-            const syncRes = await pool.query('SELECT data FROM firebird_sync_pedidos');
+            // B. Buscar carteira de firebird_sync_emissoes (mesma fonte do pedidos.html)
+            const syncRes = await pool.query(`
+                SELECT data FROM firebird_sync_emissoes
+                WHERE ((data->>'QUANTIDADE_PPR')::numeric - COALESCE((data->>'QUANTIDADE_FATURADA_PPR')::numeric, 0)) > 0
+                  AND (data->>'STATUS_PPR') <> 'C'
+            `);
             const uniquePedidos = new Set();
 
             syncRes.rows.forEach(row => {
@@ -116,10 +120,14 @@ router.get('/', async (req, res) => {
                 const qtdOriginal = Number(item.QUANTIDADE_PPR) || 0;
                 const saldoReal = saldoLiberado > 0 ? saldoLiberado : qtdOriginal;
 
-                let pesoUnitario = qtdOriginal > 0 ? (Number(item.PESO_LIQUIDO_NPR) || 0) / qtdOriginal : 0;
-
-                if (customWeights[item.PRODUTO_PPR]) {
+                // Prioridade: PESO_UNIT (campo direto) > peso customizado > PESO_LIQUIDO_NPR / qtd
+                let pesoUnitario = 0;
+                if (item.PESO_UNIT !== undefined && item.PESO_UNIT !== null && item.PESO_UNIT !== '' && Number(item.PESO_UNIT) > 0) {
+                    pesoUnitario = Number(item.PESO_UNIT);
+                } else if (customWeights[item.PRODUTO_PPR]) {
                     pesoUnitario = customWeights[item.PRODUTO_PPR];
+                } else {
+                    pesoUnitario = qtdOriginal > 0 ? (Number(item.PESO_LIQUIDO_NPR) || 0) / qtdOriginal : 0;
                 }
 
                 carteiraPeso += (pesoUnitario * saldoReal);
@@ -164,7 +172,7 @@ router.get('/', async (req, res) => {
         let prevFatQuery = `
             SELECT 
                 COALESCE(SUM(f.peso_total), 0) as fat_peso,
-                COALESCE(SUM(f.valor_unitario * f.quantidade * 100), 0) as fat_valor
+                COALESCE(SUM(f.valor_total), 0) as fat_valor
             FROM faturamento_firebird f
             LEFT JOIN faturamento_firebird_preferencias p
                 ON p.nota_fiscal = f.nota_fiscal
