@@ -106,8 +106,8 @@
         .sim-card-header { display: flex; justify-content: space-between; align-items: center; }
         .sim-card-title-group { display: flex; align-items: center; gap: 10px; }
         .sim-card-title { font-size: 0.8rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; color: var(--primary); }
-        .btn-gear { background: transparent; border: none; color: var(--text-dim); cursor: pointer; font-size: 0.9rem; transition: var(--transition); padding: 5px; border-radius: 50%; }
-        .btn-gear:hover { color: var(--primary); background: rgba(251, 191, 36, 0.1); transform: rotate(45deg); }
+        .btn-gear { background: transparent; border: none; color: var(--text-dim); cursor: pointer; font-size: 0.9rem; transition: var(--transition); padding: 5px; border-radius: 50%; opacity: 0.6; }
+        .btn-gear:hover { color: var(--primary); background: rgba(251, 191, 36, 0.1); transform: rotate(45deg); opacity: 1; }
         .sim-card-icon { font-size: 1.1rem; color: var(--primary); opacity: 0.8; }
         .card-result { margin-top: 5px; padding-top: 15px; border-top: 1px dashed var(--border-subtle); display: flex; justify-content: space-between; align-items: center; }
         .card-result-label { font-size: 0.75rem; font-weight: 600; color: var(--text-muted); }
@@ -178,7 +178,14 @@
         .kpi-modal-label { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; margin-bottom: 5px; }
         .kpi-modal-value { font-size: 1.8rem; font-weight: 800; font-family: var(--font-mono); color: #fff; }
 
-        @media print { .side-menu, .side-menu-trigger, .summary-panel, .btn-gear, .modal-overlay { display: none !important; } }
+        /* --- PRINT ARTIFACTS FIX --- */
+        .print-only { display: none; }
+
+        @media print { 
+            .side-menu, .side-menu-trigger, .summary-panel, .btn-gear, .modal-overlay, .app-content, header { display: none !important; }
+            .print-only { display: block !important; position: fixed; bottom: 0; width: 100%; padding: 20px; border-top: 1px solid #000; color: #000; text-align: right; }
+            body, html { background: #fff !important; color: #000 !important; }
+        }
     </style>
 </head>
 
@@ -353,143 +360,154 @@
         let currentEditingSector = null;
         let tempLaborGroups = [];
 
-        function fmtBRL(n) { return 'R$ ' + n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+        function fmtBRL(n) { return 'R$ ' + (n || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 
         function renderMainGrid() {
-            const grid = document.getElementById('mainSectorGrid');
-            const summary = document.getElementById('summary-items');
-            grid.innerHTML = '';
-            summary.innerHTML = '';
-
-            Object.keys(SECTORS).forEach(code => {
-                const s = SECTORS[code];
-                const card = document.createElement('div');
-                card.className = 'sim-card';
-                card.style.gridColumn = code === 'ADM' ? 'span 2' : 'span 1';
+            try {
+                const grid = document.getElementById('mainSectorGrid');
+                const summary = document.getElementById('summary-items');
+                if (!grid || !summary) return;
                 
-                let weightInputHtml = '';
-                if (s.multiplierType === 'areia' || code === 'MOL') {
-                    weightInputHtml = `
-                        <div class="input-group" style="margin-top: 10px;">
-                            <label>Peso Bolo de Areia (kg)</label>
-                            <input type="number" id="input-${code}-weight" value="${s.weight}" step="0.1" oninput="updateSectorWeight('${code}', this.value)">
+                grid.innerHTML = '';
+                summary.innerHTML = '';
+
+                Object.keys(SECTORS).forEach(code => {
+                    const s = SECTORS[code];
+                    const card = document.createElement('div');
+                    card.className = 'sim-card';
+                    card.style.gridColumn = code === 'ADM' ? 'span 2' : 'span 1';
+                    
+                    let weightInputHtml = '';
+                    if (s.multiplierType === 'areia' || code === 'MOL') {
+                        weightInputHtml = `
+                            <div class="input-group" style="margin-top: 10px;">
+                                <label>Peso Bolo de Areia (kg)</label>
+                                <input type="number" id="input-${code}-weight" value="${s.weight || 0}" step="0.1" oninput="updateSectorWeight('${code}', this.value)">
+                            </div>
+                        `;
+                    }
+
+                    card.innerHTML = `
+                        <div class="sim-card-header">
+                            <div class="sim-card-title-group">
+                                <span class="sim-card-title">${s.name}</span>
+                                <button class="btn-gear" onclick="openModal('${code}')"><i class="fa-solid fa-gear"></i></button>
+                            </div>
+                            <i class="fa-solid ${s.icon} sim-card-icon"></i>
+                        </div>
+                        ${weightInputHtml}
+                        <div class="card-result">
+                            <span class="card-result-label">Subtotal Setor</span>
+                            <span class="card-result-value" id="val-${code}">R$ 0,00</span>
                         </div>
                     `;
-                }
+                    grid.appendChild(card);
 
-                card.innerHTML = `
-                    <div class="sim-card-header">
-                        <div class="sim-card-title-group">
-                            <span class="sim-card-title">${s.name}</span>
-                            <button class="btn-gear" onclick="openModal('${code}')"><i class="fa-solid fa-gear"></i></button>
-                        </div>
-                        <i class="fa-solid ${s.icon} sim-card-icon"></i>
-                    </div>
-                    ${weightInputHtml}
-                    <div class="card-result">
-                        <span class="card-result-label">Subtotal Setor</span>
-                        <span class="card-result-value" id="val-${code}">R$ 0,00</span>
-                    </div>
-                `;
-                grid.appendChild(card);
-
-                const sLine = document.createElement('div');
-                sLine.className = 'summary-line';
-                sLine.innerHTML = `<span class="summary-label">${s.name}</span><span class="summary-value" id="sum-${code}">R$ 0,00</span>`;
-                summary.appendChild(sLine);
-            });
-            calculate();
+                    const sLine = document.createElement('div');
+                    sLine.className = 'summary-line';
+                    sLine.innerHTML = `<span class="summary-label">${s.name}</span><span class="summary-value" id="sum-${code}">R$ 0,00</span>`;
+                    summary.appendChild(sLine);
+                });
+                calculate();
+            } catch (err) { console.error("Error rendering grid:", err); }
         }
 
         function updateSectorWeight(code, val) {
-            SECTORS[code].weight = parseFloat(val) || 0;
-            saveToStorage();
-            calculate();
+            if (SECTORS[code]) {
+                SECTORS[code].weight = parseFloat(val) || 0;
+                saveToStorage();
+                calculate();
+            }
         }
 
         function calculate() {
-            const pieceWeight = parseFloat(document.getElementById('pieceWeight').value) || 0;
-            let grandTotal = 0;
+            try {
+                const pieceWeight = parseFloat(document.getElementById('pieceWeight').value) || 0;
+                let grandTotal = 0;
 
-            Object.keys(SECTORS).forEach(code => {
-                const s = SECTORS[code];
-                const sandWeight = s.weight || 0;
-                
-                let sectorTotal = 0;
+                Object.keys(SECTORS).forEach(code => {
+                    const s = SECTORS[code];
+                    const sandWeight = s.weight || 0;
+                    let sectorTotal = 0;
 
-                // Handle Material Mixed Multipliers
-                s.materials.forEach(mat => {
-                    const mult = mat.multiplier === 'areia' ? sandWeight : pieceWeight;
-                    sectorTotal += (mat.value * mult);
+                    // Materials
+                    (s.materials || []).forEach(mat => {
+                        const mult = mat.multiplier === 'areia' ? sandWeight : pieceWeight;
+                        sectorTotal += ((mat.value || 0) * mult);
+                    });
+
+                    // Labor
+                    const baseSalaries = (s.laborGroups || []).reduce((acc, g) => acc + ((g.qty || 0) * (g.salary || 0)), 0);
+                    const totalBurden = baseSalaries * (1 + (s.chargesPct || 0) / 100);
+                    const laborRatePerKg = (s.monthlyProduction || 0) > 0 ? (totalBurden / s.monthlyProduction) : 0;
+                    
+                    const laborMult = s.laborMultiplier === 'areia' ? sandWeight : pieceWeight;
+                    sectorTotal += (laborRatePerKg * laborMult);
+                    
+                    const valEl = document.getElementById(`val-${code}`);
+                    if (valEl) valEl.textContent = fmtBRL(sectorTotal);
+
+                    const sumEl = document.getElementById(`sum-${code}`);
+                    if (sumEl) sumEl.textContent = fmtBRL(sectorTotal);
+
+                    grandTotal += sectorTotal;
                 });
 
-                // Handle Labor Mixed Multipliers
-                const baseSalaries = s.laborGroups.reduce((acc, g) => acc + (g.qty * g.salary), 0);
-                const totalBurden = baseSalaries * (1 + (s.chargesPct || 0) / 100);
-                const laborRatePerKg = s.monthlyProduction > 0 ? (totalBurden / s.monthlyProduction) : 0;
-                
-                const laborMult = s.laborMultiplier === 'areia' ? sandWeight : pieceWeight;
-                sectorTotal += (laborRatePerKg * laborMult);
-                
-                const valEl = document.getElementById(`val-${code}`);
-                if (valEl) valEl.textContent = fmtBRL(sectorTotal);
-
-                const sumEl = document.getElementById(`sum-${code}`);
-                if (sumEl) sumEl.textContent = fmtBRL(sectorTotal);
-
-                grandTotal += sectorTotal;
-            });
-
-            document.getElementById('total-cost').textContent = fmtBRL(grandTotal);
-            document.getElementById('print-total').textContent = fmtBRL(grandTotal);
-            const perKg = pieceWeight > 0 ? (grandTotal / pieceWeight) : 0;
-            document.getElementById('cost-per-kg').textContent = fmtBRL(perKg);
+                document.getElementById('total-cost').textContent = fmtBRL(grandTotal);
+                document.getElementById('print-total').textContent = fmtBRL(grandTotal);
+                const perKg = pieceWeight > 0 ? (grandTotal / pieceWeight) : 0;
+                const costPerKgEl = document.getElementById('cost-per-kg');
+                if (costPerKgEl) costPerKgEl.textContent = fmtBRL(perKg);
+            } catch (err) { console.error("Calculation Error:", err); }
         }
 
         function openModal(code) {
-            currentEditingSector = code;
-            const s = SECTORS[code];
-            tempLaborGroups = JSON.parse(JSON.stringify(s.laborGroups));
+            try {
+                if (!SECTORS[code]) return;
+                currentEditingSector = code;
+                const s = SECTORS[code];
+                tempLaborGroups = JSON.parse(JSON.stringify(s.laborGroups || []));
 
-            document.getElementById('modalSubtitle').textContent = `SETOR: ${s.name}`;
-            document.getElementById('monthlyProdInput').value = s.monthlyProduction;
-            document.getElementById('chargesPctInput').value = s.chargesPct || 0;
-            
-            // Context help for labor multiplier
-            const laborMult = s.laborMultiplier || s.multiplierType || 'piece';
-            const multName = laborMult === 'areia' ? 'Bolo de Areia (kg)' : 'Peso da Peça (kg)';
-            document.getElementById('monthlyProdLabel').textContent = `Produção Mensal do Setor (${laborMult === 'areia' ? 'kg Areia' : 'kg Peça'})`;
-            document.getElementById('derivedUnitLabel').textContent = `/ kg de ${laborMult === 'areia' ? 'Areia' : 'Peça'}`;
+                document.getElementById('modalSubtitle').textContent = `SETOR: ${s.name}`;
+                document.getElementById('monthlyProdInput').value = s.monthlyProduction || 0;
+                document.getElementById('chargesPctInput').value = s.chargesPct || 0;
+                
+                const laborMult = s.laborMultiplier || s.multiplierType || 'piece';
+                document.getElementById('monthlyProdLabel').textContent = `Produção Mensal do Setor (${laborMult === 'areia' ? 'kg Areia' : 'kg Peça'})`;
+                document.getElementById('derivedUnitLabel').textContent = `/ kg de ${laborMult === 'areia' ? 'Areia' : 'Peça'}`;
 
-            const matBody = document.getElementById('modalBodyMaterials');
-            matBody.innerHTML = '';
-            s.materials.forEach((mat, idx) => {
-                const matMult = mat.multiplier || s.multiplierType || 'piece';
-                const matUnit = matMult === 'areia' ? 'Bolo Areia' : 'Peso Peça';
-                const group = document.createElement('div');
-                group.className = 'input-group';
-                group.innerHTML = `<label>${mat.label} <span style="font-size: 0.6rem; opacity: 0.5;">(v. ${matUnit})</span></label><input type="number" step="0.01" value="${mat.value}" id="mat-input-${idx}">`;
-                matBody.appendChild(group);
-            });
+                const matBody = document.getElementById('modalBodyMaterials');
+                matBody.innerHTML = '';
+                (s.materials || []).forEach((mat, idx) => {
+                    const matMult = mat.multiplier || s.multiplierType || 'piece';
+                    const matUnit = matMult === 'areia' ? 'Bolo Areia' : 'Peso Peça';
+                    const group = document.createElement('div');
+                    group.className = 'input-group';
+                    group.innerHTML = `<label>${mat.label} <span style="font-size: 0.6rem; opacity: 0.5;">(v. ${matUnit})</span></label><input type="number" step="0.01" value="${mat.value || 0}" id="mat-input-${idx}">`;
+                    matBody.appendChild(group);
+                });
 
-            renderLaborGroups();
-            document.getElementById('modalOverlay').classList.add('active');
-            updateModalTotals();
+                renderLaborGroups();
+                const overlay = document.getElementById('modalOverlay');
+                overlay.classList.add('active');
+                updateModalTotals();
+            } catch (err) { console.error("Error opening modal:", err); }
         }
 
         function closeModal() { document.getElementById('modalOverlay').classList.remove('active'); }
 
         function renderLaborGroups() {
             const body = document.getElementById('laborGroupsBody');
+            if (!body) return;
             body.innerHTML = '';
             tempLaborGroups.forEach((g, idx) => {
                 const row = document.createElement('tr');
                 row.id = `labor-row-${idx}`;
                 row.innerHTML = `
-                    <td><input type="text" class="table-input" value="${g.label}" oninput="updateTempGroup(${idx}, 'label', this.value)"></td>
-                    <td><input type="number" class="table-input" value="${g.qty}" oninput="updateTempGroup(${idx}, 'qty', this.value)"></td>
-                    <td><input type="number" class="table-input" value="${g.salary}" oninput="updateTempGroup(${idx}, 'salary', this.value)"></td>
-                    <td id="labor-row-total-${idx}" style="font-family: var(--font-mono); font-weight: 600;">${fmtBRL(g.qty * g.salary)}</td>
+                    <td><input type="text" class="table-input" value="${g.label || ''}" oninput="updateTempGroup(${idx}, 'label', this.value)"></td>
+                    <td><input type="number" class="table-input" value="${g.qty || 0}" oninput="updateTempGroup(${idx}, 'qty', this.value)"></td>
+                    <td><input type="number" class="table-input" value="${g.salary || 0}" oninput="updateTempGroup(${idx}, 'salary', this.value)"></td>
+                    <td id="labor-row-total-${idx}" style="font-family: var(--font-mono); font-weight: 600;">${fmtBRL((g.qty || 0) * (g.salary || 0))}</td>
                     <td style="text-align: center;"><button class="btn-remove-row" onclick="removeLaborGroup(${idx})"><i class="fa-solid fa-trash-can"></i></button></td>
                 `;
                 body.appendChild(row);
@@ -510,18 +528,18 @@
 
         function updateTempGroup(idx, key, val) {
             const group = tempLaborGroups[idx];
+            if (!group) return;
             if (key === 'label') group.label = val;
             else group[key] = parseFloat(val) || 0;
             const rowTotalEl = document.getElementById(`labor-row-total-${idx}`);
-            if (rowTotalEl) rowTotalEl.textContent = fmtBRL(group.qty * group.salary);
+            if (rowTotalEl) rowTotalEl.textContent = fmtBRL((group.qty || 0) * (group.salary || 0));
             updateModalTotals();
         }
 
         function updateModalTotals() {
-            const baseSalaries = tempLaborGroups.reduce((acc, g) => acc + (g.qty * g.salary), 0);
+            const baseSalaries = tempLaborGroups.reduce((acc, g) => acc + ((g.qty || 0) * (g.salary || 0)), 0);
             const chargesPct = parseFloat(document.getElementById('chargesPctInput').value) || 0;
             const totalBurden = baseSalaries * (1 + (chargesPct / 100));
-            
             const monthlyProd = parseFloat(document.getElementById('monthlyProdInput').value) || 0;
             const derivedRate = monthlyProd > 0 ? (totalBurden / monthlyProd) : 0;
 
@@ -532,10 +550,11 @@
 
         function saveModal() {
             const s = SECTORS[currentEditingSector];
+            if (!s) return;
             s.laborGroups = JSON.parse(JSON.stringify(tempLaborGroups));
             s.monthlyProduction = parseFloat(document.getElementById('monthlyProdInput').value) || 0;
             s.chargesPct = parseFloat(document.getElementById('chargesPctInput').value) || 0;
-            s.materials.forEach((mat, idx) => {
+            (s.materials || []).forEach((mat, idx) => {
                 const input = document.getElementById(`mat-input-${idx}`);
                 if (input) mat.value = parseFloat(input.value) || 0;
             });
@@ -544,25 +563,39 @@
             closeModal();
         }
 
-        function saveToStorage() { localStorage.setItem('erus_calc_pro_v4', JSON.stringify(SECTORS)); }
+        function saveToStorage() { localStorage.setItem('erus_calc_final_v1', JSON.stringify(SECTORS)); }
+        
         function loadFromStorage() {
-            const saved = localStorage.getItem('erus_calc_pro_v4');
+            const saved = localStorage.getItem('erus_calc_final_v1');
             if (saved) {
                 try {
                     const parsed = JSON.parse(saved);
+                    // Merge saved onto default for safe normalization
                     Object.keys(parsed).forEach(code => {
-                        if (SECTORS[code]) SECTORS[code] = parsed[code];
+                        if (SECTORS[code]) {
+                            // Deep merge key arrays and values
+                            const savedS = parsed[code];
+                            SECTORS[code] = { ...SECTORS[code], ...savedS };
+                            // Ensure arrays aren't lost
+                            if (savedS.materials) SECTORS[code].materials = savedS.materials;
+                            if (savedS.laborGroups) SECTORS[code].laborGroups = savedS.laborGroups;
+                        }
                     });
-                } catch (e) { console.error(e); }
+                } catch (e) { console.error("Storage load error:", e); }
             }
         }
+
         function resetAll() {
             if (confirm('Deseja resetar todos os valores configurados?')) {
-                localStorage.removeItem('erus_calc_pro_v4');
+                localStorage.clear();
                 location.reload();
             }
         }
-        window.onbeforeprint = () => { document.getElementById('print-date').textContent = new Date().toLocaleString(); };
+        window.onbeforeprint = () => { 
+            document.getElementById('print-date').textContent = new Date().toLocaleString(); 
+            calculate();
+        };
+
         loadFromStorage();
         renderMainGrid();
     </script>
