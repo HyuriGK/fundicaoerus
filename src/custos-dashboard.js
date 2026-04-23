@@ -58,7 +58,7 @@ router.get('/', async (req, res) => {
         let fatQuery = `
             SELECT 
                 COALESCE(SUM(f.peso_total), 0) as fat_peso,
-                COALESCE(SUM(f.valor_total), 0) as fat_valor
+                COALESCE(SUM(f.valor_unitario * f.quantidade), 0) as fat_valor
             FROM faturamento_firebird f
             LEFT JOIN faturamento_firebird_preferencias p
                 ON p.nota_fiscal = f.nota_fiscal
@@ -164,7 +164,7 @@ router.get('/', async (req, res) => {
         let prevFatQuery = `
             SELECT 
                 COALESCE(SUM(f.peso_total), 0) as fat_peso,
-                COALESCE(SUM(f.valor_total), 0) as fat_valor
+                COALESCE(SUM(f.valor_unitario * f.quantidade), 0) as fat_valor
             FROM faturamento_firebird f
             LEFT JOIN faturamento_firebird_preferencias p
                 ON p.nota_fiscal = f.nota_fiscal
