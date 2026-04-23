@@ -15,13 +15,16 @@ router.get('/', async (req, res) => {
         const nextYear = month === 12 ? year + 1 : year;
         const endDate = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`;
 
-        // Buscar clientes excluídos — mesma lógica do faturamentos.html (showServices=false por padrão)
+        // Buscar clientes excluídos — exclui os da lista, mas NUNCA os clientes de serviço
         let excludedClients = [];
         try {
             const prefRes = await pool.query(`SELECT value FROM app_preferences WHERE key = 'excluded_clients'`);
             if (prefRes.rows.length > 0 && prefRes.rows[0].value) {
                 const rawExcluded = typeof prefRes.rows[0].value === 'string' ? JSON.parse(prefRes.rows[0].value) : prefRes.rows[0].value;
-                excludedClients = Array.isArray(rawExcluded) ? rawExcluded : [];
+                const serviceClients = ['IMEPEL INDUSTRIA MECANICA LTDA', 'STEELROOL INDUSTRIA METALURGICA', 'SPILROD FUNDICAO DE FERRO E ACO LTDA'];
+                excludedClients = (Array.isArray(rawExcluded) ? rawExcluded : []).filter(name =>
+                    !serviceClients.some(s => name.trim().toUpperCase().includes(s))
+                );
             }
         } catch (e) { /* ignore if table doesn't exist */ }
 
