@@ -423,8 +423,12 @@
                 
                 const sectorTotal = multiplier * (matPricePerKg + laborPricePerKg);
                 
-                document.getElementById(`val-${code}`).textContent = fmtBRL(sectorTotal);
-                document.getElementById(`sum-${code}`).textContent = fmtBRL(sectorTotal);
+                const valEl = document.getElementById(`val-${code}`);
+                if (valEl) valEl.textContent = fmtBRL(sectorTotal);
+
+                const sumEl = document.getElementById(`sum-${code}`);
+                if (sumEl) sumEl.textContent = fmtBRL(sectorTotal);
+
                 grandTotal += sectorTotal;
             });
 
@@ -464,11 +468,12 @@
             body.innerHTML = '';
             tempLaborGroups.forEach((g, idx) => {
                 const row = document.createElement('tr');
+                row.id = `labor-row-${idx}`;
                 row.innerHTML = `
                     <td><input type="text" class="table-input" value="${g.label}" oninput="updateTempGroup(${idx}, 'label', this.value)"></td>
                     <td><input type="number" class="table-input" value="${g.qty}" oninput="updateTempGroup(${idx}, 'qty', this.value)"></td>
                     <td><input type="number" class="table-input" value="${g.salary}" oninput="updateTempGroup(${idx}, 'salary', this.value)"></td>
-                    <td style="font-family: var(--font-mono); font-weight: 600;">${fmtBRL(g.qty * g.salary)}</td>
+                    <td id="labor-row-total-${idx}" style="font-family: var(--font-mono); font-weight: 600;">${fmtBRL(g.qty * g.salary)}</td>
                     <td style="text-align: center;"><button class="btn-remove-row" onclick="removeLaborGroup(${idx})"><i class="fa-solid fa-trash-can"></i></button></td>
                 `;
                 body.appendChild(row);
@@ -488,9 +493,15 @@
         }
 
         function updateTempGroup(idx, key, val) {
-            if (key === 'label') tempLaborGroups[idx].label = val;
-            else tempLaborGroups[idx][key] = parseFloat(val) || 0;
-            renderLaborGroups();
+            const group = tempLaborGroups[idx];
+            if (key === 'label') group.label = val;
+            else group[key] = parseFloat(val) || 0;
+            
+            // Only update the calculated totals, avoid full re-render while typing
+            const rowTotalEl = document.getElementById(`labor-row-total-${idx}`);
+            if (rowTotalEl) {
+                rowTotalEl.textContent = fmtBRL(group.qty * group.salary);
+            }
             updateModalTotals();
         }
 
@@ -541,7 +552,6 @@
                 location.reload();
             }
         }
-
         window.onbeforeprint = () => { document.getElementById('print-date').textContent = new Date().toLocaleString(); };
 
         loadFromStorage();
