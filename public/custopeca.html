@@ -106,8 +106,8 @@
         .sim-card-header { display: flex; justify-content: space-between; align-items: center; }
         .sim-card-title-group { display: flex; align-items: center; gap: 10px; }
         .sim-card-title { font-size: 0.8rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; color: var(--primary); }
-        .btn-gear { background: transparent; border: none; color: var(--text-dim); cursor: pointer; font-size: 0.9rem; transition: var(--transition); padding: 5px; border-radius: 50%; opacity: 0.6; }
-        .btn-gear:hover { color: var(--primary); background: rgba(251, 191, 36, 0.1); transform: rotate(45deg); opacity: 1; }
+        .btn-gear { background: transparent; border: none; color: var(--text-dim); cursor: pointer; font-size: 0.9rem; transition: var(--transition); padding: 5px; border-radius: 50%; }
+        .btn-gear:hover { color: var(--primary); background: rgba(251, 191, 36, 0.1); transform: rotate(45deg); }
         .sim-card-icon { font-size: 1.1rem; color: var(--primary); opacity: 0.8; }
         .card-result { margin-top: 5px; padding-top: 15px; border-top: 1px dashed var(--border-subtle); display: flex; justify-content: space-between; align-items: center; }
         .card-result-label { font-size: 0.75rem; font-weight: 600; color: var(--text-muted); }
@@ -138,10 +138,10 @@
 
         /* --- FULLSCREEN MODAL --- */
         .modal-overlay {
-            position: fixed; inset: 0; background: #000; z-index: 3000;
-            display: none; flex-direction: column; opacity: 0; transition: opacity 0.3s;
+            position: fixed; inset: 0; background: #000; z-index: 5000;
+            display: none; flex-direction: column; transition: none; /* Immediate toggle for reliability */
         }
-        .modal-overlay.active { display: flex; opacity: 1; }
+        .modal-overlay.active { display: flex; }
         .modal-header-nav {
             padding: 30px 60px; border-bottom: 1px solid var(--border-subtle);
             display: flex; justify-content: space-between; align-items: center;
@@ -430,26 +430,21 @@
                     const sandWeight = s.weight || 0;
                     let sectorTotal = 0;
 
-                    // Materials
                     (s.materials || []).forEach(mat => {
                         const mult = mat.multiplier === 'areia' ? sandWeight : pieceWeight;
                         sectorTotal += ((mat.value || 0) * mult);
                     });
 
-                    // Labor
                     const baseSalaries = (s.laborGroups || []).reduce((acc, g) => acc + ((g.qty || 0) * (g.salary || 0)), 0);
                     const totalBurden = baseSalaries * (1 + (s.chargesPct || 0) / 100);
                     const laborRatePerKg = (s.monthlyProduction || 0) > 0 ? (totalBurden / s.monthlyProduction) : 0;
-                    
                     const laborMult = s.laborMultiplier === 'areia' ? sandWeight : pieceWeight;
                     sectorTotal += (laborRatePerKg * laborMult);
                     
                     const valEl = document.getElementById(`val-${code}`);
                     if (valEl) valEl.textContent = fmtBRL(sectorTotal);
-
                     const sumEl = document.getElementById(`sum-${code}`);
                     if (sumEl) sumEl.textContent = fmtBRL(sectorTotal);
-
                     grandTotal += sectorTotal;
                 });
 
@@ -463,6 +458,7 @@
 
         function openModal(code) {
             try {
+                console.log("Opening modal for:", code);
                 if (!SECTORS[code]) return;
                 currentEditingSector = code;
                 const s = SECTORS[code];
@@ -488,13 +484,23 @@
                 });
 
                 renderLaborGroups();
-                const overlay = document.getElementById('modalOverlay');
-                overlay.classList.add('active');
                 updateModalTotals();
+                
+                const overlay = document.getElementById('modalOverlay');
+                overlay.style.display = 'flex'; // Ensure display is set
+                overlay.classList.add('active');
+                console.log("Modal is now active");
             } catch (err) { console.error("Error opening modal:", err); }
         }
 
-        function closeModal() { document.getElementById('modalOverlay').classList.remove('active'); }
+        function closeModal() { 
+            console.log("Closing modal");
+            const overlay = document.getElementById('modalOverlay');
+            overlay.classList.remove('active');
+            overlay.style.display = 'none'; // Explicitly hide
+            currentEditingSector = null;
+            tempLaborGroups = [];
+        }
 
         function renderLaborGroups() {
             const body = document.getElementById('laborGroupsBody');
@@ -563,20 +569,17 @@
             closeModal();
         }
 
-        function saveToStorage() { localStorage.setItem('erus_calc_final_v1', JSON.stringify(SECTORS)); }
+        function saveToStorage() { localStorage.setItem('erus_calc_final_v2', JSON.stringify(SECTORS)); }
         
         function loadFromStorage() {
-            const saved = localStorage.getItem('erus_calc_final_v1');
+            const saved = localStorage.getItem('erus_calc_final_v2');
             if (saved) {
                 try {
                     const parsed = JSON.parse(saved);
-                    // Merge saved onto default for safe normalization
                     Object.keys(parsed).forEach(code => {
                         if (SECTORS[code]) {
-                            // Deep merge key arrays and values
                             const savedS = parsed[code];
                             SECTORS[code] = { ...SECTORS[code], ...savedS };
-                            // Ensure arrays aren't lost
                             if (savedS.materials) SECTORS[code].materials = savedS.materials;
                             if (savedS.laborGroups) SECTORS[code].laborGroups = savedS.laborGroups;
                         }
