@@ -67,7 +67,14 @@ router.get('/', async (req, res) => {
                 AND p.data_faturamento = f.data_faturamento
                 AND p.quantidade = f.quantidade
             WHERE f.data_faturamento >= $1 AND f.data_faturamento < $2
-              AND COALESCE(p.excluido, f.excluido_manualmente OR f.pedido IS NULL OR TRIM(f.pedido) = '', false) = false
+              AND COALESCE(p.excluido, f.excluido_manualmente, false) = false
+              AND (
+                  (f.pedido IS NOT NULL AND TRIM(f.pedido) != '')
+                  OR TRIM(f.cliente_nome) ILIKE 'IMEPEL INDUSTRIA%'
+                  OR TRIM(f.cliente_nome) ILIKE 'STEELROOL INDUSTRIA%'
+                  OR TRIM(f.cliente_nome) ILIKE 'SPILROD FUNDICAO%'
+                  OR TRIM(f.cliente_codigo) = '257'
+              )
         `;
         const fatParams = [startDate, endDate];
         if (excludedClients.length > 0) {
@@ -166,7 +173,14 @@ router.get('/', async (req, res) => {
                 AND p.data_faturamento = f.data_faturamento
                 AND p.quantidade = f.quantidade
             WHERE f.data_faturamento >= $1 AND f.data_faturamento < $2
-              AND COALESCE(p.excluido, f.excluido_manualmente OR f.pedido IS NULL OR TRIM(f.pedido) = '', false) = false
+              AND COALESCE(p.excluido, f.excluido_manualmente, false) = false
+              AND (
+                  (f.pedido IS NOT NULL AND TRIM(f.pedido) != '')
+                  OR TRIM(f.cliente_nome) ILIKE 'IMEPEL INDUSTRIA%'
+                  OR TRIM(f.cliente_nome) ILIKE 'STEELROOL INDUSTRIA%'
+                  OR TRIM(f.cliente_nome) ILIKE 'SPILROD FUNDICAO%'
+                  OR TRIM(f.cliente_codigo) = '257'
+              )
         `;
         const prevFatParams = [prevStartDate, prevEndDate];
         if (excludedClients.length > 0) {
