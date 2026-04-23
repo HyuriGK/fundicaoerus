@@ -244,14 +244,13 @@
                 <div class="section-title"><i class="fa-solid fa-chart-line"></i> Cálculo de Rateio</div>
                 
                 <div class="input-group" style="margin-bottom: 20px;">
-                    <label>Producão Mensal do Setor (kg)</label>
+                    <label id="monthlyProdLabel">Producão Mensal do Setor (kg)</label>
                     <input type="number" id="monthlyProdInput" value="10000" oninput="updateModalTotals()">
                 </div>
 
                 <div class="input-group" style="margin-bottom: 30px;">
                     <label>Encargos e Benefícios (%)</label>
                     <input type="number" id="chargesPctInput" value="0" step="1" oninput="updateModalTotals()">
-                    <p style="font-size: 0.6rem; color: var(--text-dim); margin-top: 5px;">FGTS, Férias, 13º, Planos, etc.</p>
                 </div>
 
                 <div class="kpi-modal">
@@ -266,8 +265,8 @@
 
                 <div class="kpi-modal" style="border-top: 1px solid var(--border-subtle); padding-top: 25px; margin-top: 10px;">
                     <div class="kpi-modal-label" style="color: var(--primary);">Custo Mão de Obra Derivado</div>
-                    <div class="kpi-modal-value" style="color: var(--primary);" id="derivedLaborRateLabel">R$ 0,00 <span style="font-size: 0.7rem;">/ kg</span></div>
-                    <p style="font-size: 0.6rem; color: var(--text-dim); margin-top: 8px;">Este valor será usado no cálculo final por peça.</p>
+                    <div class="kpi-modal-value" style="color: var(--primary);" id="derivedLaborRateLabel">R$ 0,00 <span id="derivedUnitLabel" style="font-size: 0.7rem;">/ kg</span></div>
+                    <p style="font-size: 0.6rem; color: var(--text-dim); margin-top: 8px;">Este valor será aplicado ao peso definido para este custo.</p>
                 </div>
             </div>
         </div>
@@ -325,11 +324,11 @@
         // --- DATA STRUCTURE ---
         const SECTORS_DEFAULT = {
             MOL: { name: 'Moldagem', icon: 'fa-box-open', multiplierType: 'areia', weight: 0, 
-                   materials: [{ id: 'sand', label: 'Areia/kg', value: 0.85 }, { id: 'freight', label: 'Frete/kg', value: 0.15 }],
+                   materials: [{ id: 'sand', label: 'Areia/kg', value: 0.85, multiplier: 'areia' }, { id: 'freight', label: 'Frete/kg', value: 0.15, multiplier: 'areia' }],
                    laborGroups: [{ label: 'Equipe Moldagem', qty: 2, salary: 3500 }], 
-                   monthlyProduction: 10000, chargesPct: 0 },
+                   monthlyProduction: 10000, chargesPct: 0, laborMultiplier: 'piece' },
             FUS: { name: 'Fusão', icon: 'fa-fire', multiplierType: 'piece', 
-                   materials: [{ id: 'alloy', label: 'Liga/kg', value: 12.00 }, { id: 'energy', label: 'Energia/kg', value: 2.50 }],
+                   materials: [{ id: 'alloy', label: 'Liga/kg', value: 12.00 }],
                    laborGroups: [{ label: 'Equipe Fusão', qty: 1, salary: 4000 }], 
                    monthlyProduction: 8000, chargesPct: 0 },
             DES: { name: 'Desmoldagem', icon: 'fa-burst', multiplierType: 'piece', 
@@ -369,10 +368,10 @@
                 card.style.gridColumn = code === 'ADM' ? 'span 2' : 'span 1';
                 
                 let weightInputHtml = '';
-                if (s.multiplierType === 'areia') {
+                if (s.multiplierType === 'areia' || code === 'MOL') {
                     weightInputHtml = `
                         <div class="input-group" style="margin-top: 10px;">
-                            <label>Peso Areia do Molde (kg)</label>
+                            <label>Peso Bolo de Areia (kg)</label>
                             <input type="number" id="input-${code}-weight" value="${s.weight}" step="0.1" oninput="updateSectorWeight('${code}', this.value)">
                         </div>
                     `;
@@ -414,14 +413,23 @@
 
             Object.keys(SECTORS).forEach(code => {
                 const s = SECTORS[code];
-                const multiplier = s.multiplierType === 'areia' ? s.weight : pieceWeight;
+                const sandWeight = s.weight || 0;
                 
-                const matPricePerKg = s.materials.reduce((acc, c) => acc + c.value, 0);
+                let sectorTotal = 0;
+
+                // Handle Material Mixed Multipliers
+                s.materials.forEach(mat => {
+                    const mult = mat.multiplier === 'areia' ? sandWeight : pieceWeight;
+                    sectorTotal += (mat.value * mult);
+                });
+
+                // Handle Labor Mixed Multipliers
                 const baseSalaries = s.laborGroups.reduce((acc, g) => acc + (g.qty * g.salary), 0);
                 const totalBurden = baseSalaries * (1 + (s.chargesPct || 0) / 100);
-                const laborPricePerKg = s.monthlyProduction > 0 ? (totalBurden / s.monthlyProduction) : 0;
+                const laborRatePerKg = s.monthlyProduction > 0 ? (totalBurden / s.monthlyProduction) : 0;
                 
-                const sectorTotal = multiplier * (matPricePerKg + laborPricePerKg);
+                const laborMult = s.laborMultiplier === 'areia' ? sandWeight : pieceWeight;
+                sectorTotal += (laborRatePerKg * laborMult);
                 
                 const valEl = document.getElementById(`val-${code}`);
                 if (valEl) valEl.textContent = fmtBRL(sectorTotal);
@@ -447,12 +455,20 @@
             document.getElementById('monthlyProdInput').value = s.monthlyProduction;
             document.getElementById('chargesPctInput').value = s.chargesPct || 0;
             
+            // Context help for labor multiplier
+            const laborMult = s.laborMultiplier || s.multiplierType || 'piece';
+            const multName = laborMult === 'areia' ? 'Bolo de Areia (kg)' : 'Peso da Peça (kg)';
+            document.getElementById('monthlyProdLabel').textContent = `Produção Mensal do Setor (${laborMult === 'areia' ? 'kg Areia' : 'kg Peça'})`;
+            document.getElementById('derivedUnitLabel').textContent = `/ kg de ${laborMult === 'areia' ? 'Areia' : 'Peça'}`;
+
             const matBody = document.getElementById('modalBodyMaterials');
             matBody.innerHTML = '';
             s.materials.forEach((mat, idx) => {
+                const matMult = mat.multiplier || s.multiplierType || 'piece';
+                const matUnit = matMult === 'areia' ? 'Bolo Areia' : 'Peso Peça';
                 const group = document.createElement('div');
                 group.className = 'input-group';
-                group.innerHTML = `<label>${mat.label}</label><input type="number" step="0.01" value="${mat.value}" id="mat-input-${idx}">`;
+                group.innerHTML = `<label>${mat.label} <span style="font-size: 0.6rem; opacity: 0.5;">(v. ${matUnit})</span></label><input type="number" step="0.01" value="${mat.value}" id="mat-input-${idx}">`;
                 matBody.appendChild(group);
             });
 
@@ -496,12 +512,8 @@
             const group = tempLaborGroups[idx];
             if (key === 'label') group.label = val;
             else group[key] = parseFloat(val) || 0;
-            
-            // Only update the calculated totals, avoid full re-render while typing
             const rowTotalEl = document.getElementById(`labor-row-total-${idx}`);
-            if (rowTotalEl) {
-                rowTotalEl.textContent = fmtBRL(group.qty * group.salary);
-            }
+            if (rowTotalEl) rowTotalEl.textContent = fmtBRL(group.qty * group.salary);
             updateModalTotals();
         }
 
@@ -523,20 +535,18 @@
             s.laborGroups = JSON.parse(JSON.stringify(tempLaborGroups));
             s.monthlyProduction = parseFloat(document.getElementById('monthlyProdInput').value) || 0;
             s.chargesPct = parseFloat(document.getElementById('chargesPctInput').value) || 0;
-            
             s.materials.forEach((mat, idx) => {
                 const input = document.getElementById(`mat-input-${idx}`);
                 if (input) mat.value = parseFloat(input.value) || 0;
             });
-
             saveToStorage();
             calculate();
             closeModal();
         }
 
-        function saveToStorage() { localStorage.setItem('erus_calc_pro_v3', JSON.stringify(SECTORS)); }
+        function saveToStorage() { localStorage.setItem('erus_calc_pro_v4', JSON.stringify(SECTORS)); }
         function loadFromStorage() {
-            const saved = localStorage.getItem('erus_calc_pro_v3');
+            const saved = localStorage.getItem('erus_calc_pro_v4');
             if (saved) {
                 try {
                     const parsed = JSON.parse(saved);
@@ -548,12 +558,11 @@
         }
         function resetAll() {
             if (confirm('Deseja resetar todos os valores configurados?')) {
-                localStorage.removeItem('erus_calc_pro_v3');
+                localStorage.removeItem('erus_calc_pro_v4');
                 location.reload();
             }
         }
         window.onbeforeprint = () => { document.getElementById('print-date').textContent = new Date().toLocaleString(); };
-
         loadFromStorage();
         renderMainGrid();
     </script>
