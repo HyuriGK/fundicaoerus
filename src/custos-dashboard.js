@@ -15,23 +15,13 @@ router.get('/', async (req, res) => {
         const nextYear = month === 12 ? year + 1 : year;
         const endDate = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`;
 
-        // Buscar clientes excluídos (mesma lógica do faturamentos.html)
+        // Buscar clientes excluídos — mesma lógica do faturamentos.html (showServices=false por padrão)
         let excludedClients = [];
         try {
             const prefRes = await pool.query(`SELECT value FROM app_preferences WHERE key = 'excluded_clients'`);
             if (prefRes.rows.length > 0 && prefRes.rows[0].value) {
                 const rawExcluded = typeof prefRes.rows[0].value === 'string' ? JSON.parse(prefRes.rows[0].value) : prefRes.rows[0].value;
-                // FORÇAR INCLUSÃO DE SERVIÇOS: Mesmo que estejam na lista de exclusão do faturamento,
-                // na tela de CUSTOS eles devem aparecer sempre (IMEPEL, STEELROOL, SPILROD).
-                const serviceClients = [
-                    "IMEPEL INDUSTRIA MECANICA LTDA",
-                    "STEELROOL INDUSTRIA METALURGICA",
-                    "SPILROD FUNDICAO DE FERRO E ACO LTDA"
-                ];
-                excludedClients = rawExcluded.filter(name => 
-                    !serviceClients.includes(name.trim().toUpperCase()) && 
-                    name.trim() !== "257"
-                );
+                excludedClients = Array.isArray(rawExcluded) ? rawExcluded : [];
             }
         } catch (e) { /* ignore if table doesn't exist */ }
 
@@ -74,15 +64,7 @@ router.get('/', async (req, res) => {
                 AND p.data_faturamento = f.data_faturamento
                 AND p.quantidade = f.quantidade
             WHERE f.data_faturamento >= $1 AND f.data_faturamento < $2
-              AND COALESCE(p.excluido, f.excluido_manualmente, false) = false
-              -- REGRA DE SINCRONISMO: Validar Pedidos vazios, EXCETO para Clientes de Serviço (IMEPEL, STEELROOL, SPILROD)
-              AND (
-                  (f.pedido IS NOT NULL AND TRIM(f.pedido) != '') 
-                  OR TRIM(f.cliente_nome) ILIKE 'IMEPEL INDUSTRIA%'
-                  OR TRIM(f.cliente_nome) ILIKE 'STEELROOL INDUSTRIA%'
-                  OR TRIM(f.cliente_nome) ILIKE 'SPILROD FUNDICAO%'
-                  OR TRIM(f.cliente_codigo) = '257'
-              )
+              AND COALESCE(p.excluido, f.excluido_manualmente OR f.pedido IS NULL OR TRIM(f.pedido) = '', false) = false
         `;
         const fatParams = [startDate, endDate];
         if (excludedClients.length > 0) {
@@ -181,15 +163,7 @@ router.get('/', async (req, res) => {
                 AND p.data_faturamento = f.data_faturamento
                 AND p.quantidade = f.quantidade
             WHERE f.data_faturamento >= $1 AND f.data_faturamento < $2
-              AND COALESCE(p.excluido, f.excluido_manualmente, false) = false
-              -- REGRA DE SINCRONISMO: Validar Pedidos vazios, EXCETO para Clientes de Serviço (IMEPEL, STEELROOL, SPILROD)
-              AND (
-                  (f.pedido IS NOT NULL AND TRIM(f.pedido) != '') 
-                  OR TRIM(f.cliente_nome) ILIKE 'IMEPEL INDUSTRIA%'
-                  OR TRIM(f.cliente_nome) ILIKE 'STEELROOL INDUSTRIA%'
-                  OR TRIM(f.cliente_nome) ILIKE 'SPILROD FUNDICAO%'
-                  OR TRIM(f.cliente_codigo) = '257'
-              )
+              AND COALESCE(p.excluido, f.excluido_manualmente OR f.pedido IS NULL OR TRIM(f.pedido) = '', false) = false
         `;
         const prevFatParams = [prevStartDate, prevEndDate];
         if (excludedClients.length > 0) {
