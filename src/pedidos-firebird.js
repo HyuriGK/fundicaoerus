@@ -117,29 +117,58 @@ router.get('/op-apontamentos', async (req, res) => {
 
         console.log(`📊 [API-POSTGRES] Buscando apontamentos para OP: ${op}`);
 
-        // Query no Postgres para maior rapidez (dados sincronizados)
-        const query = `
-            SELECT 
-                setor,
-                SUM(quantidade) as quantidade,
-                MAX(data_producao) as data
+        // Totais completos (histórico total) do firebird_sync_pedidos
+        const totalsResult = await pool.query(
+            `SELECT data FROM firebird_sync_pedidos WHERE sync_key = $1`,
+            [`OP-${op}`]
+        );
+
+        // Última data por grupo de setor da tabela detalhada (apenas 2026+)
+        const datesResult = await pool.query(`
+            SELECT setor, MAX(data_producao) as data
             FROM producao_apontada_sincronizada
             WHERE op = $1
             GROUP BY setor
-            ORDER BY 1
-        `;
+        `, [op]);
 
-        const result = await pool.query(query, [op]);
+        const lastDateBySetor = {};
+        datesResult.rows.forEach(r => { lastDateBySetor[r.setor] = r.data; });
 
-        console.log(`✅ [API-POSTGRES] OP ${op}: ${result.rows.length} setores encontrados.`);
+        // Mapeamento de chave QTY_* → nome canônico do setor e aliases para buscar data
+        const sectorDef = [
+            { key: 'QTY_MOLDADA',    setor: 'MOLDAGEM PESADA',         aliases: ['MOLDAGEM LEVE', 'MOLDAGEM MANUAL', 'MOLDAGEM PESADA', 'MOLDAGEM MECANIZADA', 'MOLDAGEM EM AREIA', 'MOLDAGEM'] },
+            { key: 'QTY_FUSAO',      setor: 'FUSAO',                   aliases: ['FUSAO', 'FUSÃO', 'FUNDIÇÃO', 'FUNDICAO'] },
+            { key: 'QTY_ACABAMENTO', setor: 'ACABAMENTO',              aliases: ['ACABAMENTO', 'REBARBAÇÃO', 'REBARBACAO', 'GRALHA'] },
+            { key: 'QTY_TT',         setor: 'TRATAMENTO TERMICO',      aliases: ['TRATAMENTO TERMICO', 'TRATAMENTO TÉRMICO', 'NORMALIZACAO', 'TEMPERA'] },
+            { key: 'QTY_USINAGEM',   setor: 'USINAGEM',                aliases: ['USINAGEM', 'TORNEARIA', 'USINAGEM EXPEDICAO'] },
+            { key: 'QTY_QUALIDADE',  setor: 'INSPECAO DE QUALIDADE',   aliases: ['INSPECAO DE QUALIDADE', 'INSPEÇÃO DE QUALIDADE', 'QUALIDADE', 'REVISÃO', 'PRODUZIDA / INSPECIONADO'] },
+            { key: 'QTY_EXPEDICAO',  setor: 'EXPEDICAO',               aliases: ['EXPEDICAO', 'EXPEDIÇÃO', 'LOGÍSTICA'] },
+            { key: 'QTY_FATURAMENTO',setor: 'FATURAMENTO',             aliases: ['FATURAMENTO', 'FATURADO', 'NF', 'SAÍDA'] },
+        ];
 
-        const dataFormatted = result.rows.map(row => ({
-            setor: row.setor || 'DESCONHECIDO',
-            quantidade: parseFloat(row.quantidade),
-            data: row.data
-        }));
+        if (!totalsResult.rows.length) {
+            return res.json([]);
+        }
 
-        res.json(dataFormatted);
+        const opData = totalsResult.rows[0].data;
+        const result = [];
+
+        for (const def of sectorDef) {
+            const qty = parseFloat(opData[def.key] || 0);
+            if (qty <= 0) continue;
+
+            // Busca a data mais recente entre todos os aliases
+            let lastDate = null;
+            for (const alias of def.aliases) {
+                const d = lastDateBySetor[alias];
+                if (d && (!lastDate || d > lastDate)) lastDate = d;
+            }
+
+            result.push({ setor: def.setor, quantidade: qty, data: lastDate });
+        }
+
+        console.log(`✅ [API-POSTGRES] OP ${op}: ${result.length} setores encontrados.`);
+        res.json(result);
 
     } catch (error) {
         console.error('❌ [API-POSTGRES] Erro ao buscar apontamentos da OP:', error);
