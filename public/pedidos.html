@@ -618,8 +618,11 @@
         .segment-acabamento {
             background: linear-gradient(90deg, #10b981, #059669); /* Emerald 500-600 */
         }
-        .segment-tt {
-            background: linear-gradient(90deg, #f59e0b, #d97706); /* Orange 500-600 */
+        .segment-tt-usi {
+            background: linear-gradient(90deg, #f97316, #ea580c); /* Orange 500-600 */
+        }
+        .segment-tt-qual {
+            background: linear-gradient(90deg, #f59e0b, #d97706); /* Amber 500-600 */
         }
         .segment-usinagem {
             background: linear-gradient(90deg, #a855f7, #7e22ce); /* Purple 500-700 */
@@ -1375,7 +1378,8 @@
                         <div class="industrial-bar-mini">
                             <div id="barFusao" class="bar-segment segment-fusao" style="width: 0%" data-tooltip="Fusão" onclick="filterByStage('fusao')"></div>
                             <div id="barAcabamento" class="bar-segment segment-acabamento" style="width: 0%" data-tooltip="Acabamento" onclick="filterByStage('acabamento')"></div>
-                            <div id="barTT" class="bar-segment segment-tt" style="width: 0%" data-tooltip="Tratamento Térmico (TT)" onclick="filterByStage('tt')"></div>
+                            <div id="barTT_Usinagem" class="bar-segment segment-tt-usi" style="width: 0%" data-tooltip="Aguardando Usinagem Externa" onclick="filterByStage('tt_usinagem')"></div>
+                            <div id="barTT_Qualidade" class="bar-segment segment-tt-qual" style="width: 0%" data-tooltip="Aguardando Qualidade" onclick="filterByStage('tt_qualidade')"></div>
                             <div id="barUsinagem" class="bar-segment segment-usinagem" style="width: 0%" data-tooltip="Em Usinagem Externa" onclick="filterByStage('usinagem')"></div>
                             <div id="barQualidade" class="bar-segment segment-qualidade" style="width: 0%" data-tooltip="Qualidade" onclick="filterByStage('qualidade')"></div>
                             <div id="barExpedicao" class="bar-segment segment-expedicao" style="width: 0%" data-tooltip="Expedição" onclick="filterByStage('expedicao')"></div>
@@ -1981,7 +1985,8 @@
                     'moldagem': 'Fusão',
                     'fusao': 'Acabamento',
                     'acabamento': 'Tratamento Térmico (TT)',
-                    'tt': 'Fila Usinagem / Qualidade',
+                    'tt_usinagem': 'Aguardando Usinagem Ext.',
+                    'tt_qualidade': 'Aguardando Qualidade',
                     'usinagem': 'Em Usinagem Ext. / Ag. Qualidade',
                     'qualidade': 'Aguardando Expedição',
                     'expedicao': 'Aguardando Faturamento'
@@ -2889,7 +2894,8 @@
             let kpiMoldagem = { qtd: 0, peso: 0, valor: 0 };
             let kpiFusao = { qtd: 0, peso: 0, valor: 0 };
             let kpiAcabamento = { qtd: 0, peso: 0, valor: 0 };
-            let kpiTT = { qtd: 0, peso: 0, valor: 0 };
+            let kpiTT_Usinagem = { qtd: 0, peso: 0, valor: 0 };
+            let kpiTT_Qualidade = { qtd: 0, peso: 0, valor: 0 };
             let kpiUsinagem = { qtd: 0, peso: 0, valor: 0 };
             let kpiQualidade = { qtd: 0, peso: 0, valor: 0 };
             let kpiExpedicao = { qtd: 0, peso: 0, valor: 0 };
@@ -2948,7 +2954,12 @@
                 addKpi(kpiExpedicao, qExpedicao, item.OP_PCS);
                 addKpi(kpiQualidade, qQualidade, item.OP_PCS);
                 addKpi(kpiUsinagem, qUsinagem, item.OP_PCS);
-                addKpi(kpiTT, qTT, item.OP_PCS);
+                const hasUsinagem = String(item.ROTEIRO_PRODUCAO || '').toUpperCase().includes('USINAGEM');
+                if (hasUsinagem) {
+                    addKpi(kpiTT_Usinagem, qTT, item.OP_PCS);
+                } else {
+                    addKpi(kpiTT_Qualidade, qTT, item.OP_PCS);
+                }
                 addKpi(kpiAcabamento, qAcabamento, item.OP_PCS);
                 addKpi(kpiFusao, qFusao, item.OP_PCS);
                 addKpi(kpiMoldagem, qMoldada, item.OP_PCS);
@@ -2989,9 +3000,9 @@
             if (document.getElementById('avgWeightCard')) document.getElementById('avgWeightCard').innerText = formatNumber(avgWeight);
             // 5. Update Group Headers and Consolidated Progress Bar
             const fundidoGroup = {
-                qtd: kpiFusao.qtd + kpiAcabamento.qtd + kpiTT.qtd + kpiUsinagem.qtd + kpiQualidade.qtd + kpiExpedicao.qtd,
-                peso: kpiFusao.peso + kpiAcabamento.peso + kpiTT.peso + kpiUsinagem.peso + kpiQualidade.peso + kpiExpedicao.peso,
-                valor: kpiFusao.valor + kpiAcabamento.valor + kpiTT.valor + kpiUsinagem.valor + kpiQualidade.valor + kpiExpedicao.valor
+                qtd: kpiFusao.qtd + kpiAcabamento.qtd + kpiTT_Usinagem.qtd + kpiTT_Qualidade.qtd + kpiUsinagem.qtd + kpiQualidade.qtd + kpiExpedicao.qtd,
+                peso: kpiFusao.peso + kpiAcabamento.peso + kpiTT_Usinagem.peso + kpiTT_Qualidade.peso + kpiUsinagem.peso + kpiQualidade.peso + kpiExpedicao.peso,
+                valor: kpiFusao.valor + kpiAcabamento.valor + kpiTT_Usinagem.valor + kpiTT_Qualidade.valor + kpiUsinagem.valor + kpiQualidade.valor + kpiExpedicao.valor
             };
             const formatG = (name, kpi, colorClass) => {
                 const valStr = valorVisible ? formatCurrency(kpi.valor) : '-----';
@@ -3036,7 +3047,8 @@
             updateStageCard('kpiMoldagem', kpiMoldagem, kpiMoldagem.peso, totalWeight);
             updateStageCard('kpiFusao', kpiFusao, fundidoGroup.peso, totalWeight);
             updateStageCard('kpiAcabamento', kpiAcabamento, fundidoGroup.peso, totalWeight);
-            updateStageCard('kpiTT', kpiTT, fundidoGroup.peso, totalWeight);
+            updateStageCard('kpiTT_Usinagem', kpiTT_Usinagem, fundidoGroup.peso, totalWeight);
+            updateStageCard('kpiTT_Qualidade', kpiTT_Qualidade, fundidoGroup.peso, totalWeight);
             updateStageCard('kpiUsinagem', kpiUsinagem, fundidoGroup.peso, totalWeight);
             updateStageCard('kpiQualidade', kpiQualidade, fundidoGroup.peso, totalWeight);
             updateStageCard('kpiExpedicao', kpiExpedicao, fundidoGroup.peso, totalWeight);
@@ -3054,7 +3066,8 @@
                 'kpiMoldagem':   { barId: 'barMoldado',    name: 'Fusão',                  icon: 'fa-layer-group' },
                 'kpiFusao':      { barId: 'barFusao',      name: 'Acabamento',             icon: 'fa-fire-burner' },
                 'kpiAcabamento': { barId: 'barAcabamento', name: 'Tratamento Térmico (TT)', icon: 'fa-broom' },
-                'kpiTT':         { barId: 'barTT',         name: 'Aguard. Usinagem ou Qualidade',  icon: 'fa-truck-arrow-right' },
+                'kpiTT_Usinagem':{ barId: 'barTT_Usinagem',name: 'Aguardando Usinagem Externa', icon: 'fa-truck-arrow-right' },
+                'kpiTT_Qualidade':{ barId: 'barTT_Qualidade',name:'Aguardando Qualidade',   icon: 'fa-clipboard-check' },
                 'kpiUsinagem':   { barId: 'barUsinagem',   name: 'Em Usin. Ext. / Ag. Qualidade',    icon: 'fa-gears' },
                 'kpiQualidade':  { barId: 'barQualidade',  name: 'Aguardando Expedição',   icon: 'fa-check-double' },
                 'kpiExpedicao':  { barId: 'barExpedicao',  name: 'Aguardando Faturamento', icon: 'fa-truck-loading' },
@@ -3460,7 +3473,14 @@
                     else if (s === 'moldagem') { sectorQty = qMoldada; rawQty = metrics.rawMoldada; }
                     else if (s === 'fusao') { sectorQty = qFusao; rawQty = metrics.rawFusao; }
                     else if (s === 'acabamento') { sectorQty = qAcabamento; rawQty = metrics.rawAcabamento; }
-                    else if (s === 'tt') { sectorQty = qTT; rawQty = metrics.rawTT; }
+                    else if (s === 'tt_usinagem') { 
+                        const isUsi = String(item.ROTEIRO_PRODUCAO || '').toUpperCase().includes('USINAGEM');
+                        sectorQty = isUsi ? qTT : 0; rawQty = metrics.rawTT; 
+                    }
+                    else if (s === 'tt_qualidade') { 
+                        const isUsi = String(item.ROTEIRO_PRODUCAO || '').toUpperCase().includes('USINAGEM');
+                        sectorQty = (!isUsi) ? qTT : 0; rawQty = metrics.rawTT; 
+                    }
                     else if (s === 'usinagem') { sectorQty = qUsinagem; rawQty = metrics.rawUsinagem; }
                     else if (s === 'qualidade') { sectorQty = qQualidade; rawQty = metrics.rawQualidade; }
                     else if (s === 'expedicao') { sectorQty = qExpedicao; rawQty = metrics.rawExpedicao; }
