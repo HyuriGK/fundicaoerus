@@ -58,11 +58,8 @@ function chunkArray(myArray, chunk_size) {
         `);
         console.log('✅ Postgres ready.');
 
-        // OTIMIZAÇÃO: Sincronização Incremental (Janela de 90 dias)
-        // Em vez de buscar dados de 2025 inteiros toda vez, buscamos apenas os últimos 90 dias.
-        // Isso cobre OPs em aberto e correções recentes com muito mais agilidade.
         let startDateObj = new Date();
-        let startDate = '2026-01-01';
+        let startDate = '2023-01-01';
 
         console.log(`📅 Janela de Sincronização: ${startDate} até hoje.`);
 
@@ -108,7 +105,7 @@ function chunkArray(myArray, chunk_size) {
                     LOTE_PCS,
                     SETOR_PCS
                 FROM PRODUCAO_SETOR
-                WHERE DATA_PCS >= '${startDate}' AND DATA_PCS <= '2026-12-31'
+                WHERE EMPRESA_PCS = 10 AND DATA_PCS >= '${startDate}' AND DATA_PCS <= '2026-12-31'
                 ORDER BY DATA_PCS DESC
             `;
 

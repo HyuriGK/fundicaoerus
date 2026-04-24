@@ -185,30 +185,22 @@ router.get('/op-setor-detalhes', async (req, res) => {
             return res.status(400).json({ error: 'Número da OP e setores são obrigatórios' });
         }
 
-        // Converte string de setores separada por vírgula em array se necessário
         const sectorList = Array.isArray(setores) ? setores : setores.split(',');
 
         console.log(`📊 [API-POSTGRES] Buscando histórico detalhado OP: ${op} em ${sectorList.length} setores.`);
 
-        const query = `
-            SELECT 
-                data_producao,
-                setor,
-                quantidade
+        const result = await pool.query(`
+            SELECT data_producao, setor, quantidade
             FROM producao_apontada_sincronizada
             WHERE op = $1 AND setor = ANY($2)
             ORDER BY data_producao ASC, id ASC
-        `;
+        `, [op, sectorList]);
 
-        const result = await pool.query(query, [op, sectorList]);
-
-        const dataFormatted = result.rows.map(row => ({
+        res.json(result.rows.map(row => ({
             data: row.data_producao,
             setor: row.setor,
             quantidade: parseFloat(row.quantidade)
-        }));
-
-        res.json(dataFormatted);
+        })));
 
     } catch (error) {
         console.error('❌ [API-POSTGRES] Erro ao buscar histórico da OP:', error);

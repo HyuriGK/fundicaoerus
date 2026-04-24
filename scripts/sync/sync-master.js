@@ -86,19 +86,23 @@ async function syncMaster() {
 
             // --- NOVO: Buscar Apontamentos em Lote (Igual sync-emissoes.js) ---
             const allOpIds = [...new Set(opsResults.map(l => l.OP_PCS))];
+            // Mapa OP → data de emissão (para filtrar apontamentos de reuso de número de OP)
+            const opEmissaoMap = {};
+            opsResults.forEach(op => {
+                if (op.OP_EMISSAO) opEmissaoMap[op.OP_PCS] = op.OP_EMISSAO;
+            });
             const pointingsMap = {};
 
             if (allOpIds.length > 0) {
                 console.log(`🔍 [1.5/4] Buscando apontamentos para ${allOpIds.length} OPs únicas...`);
-                // Dividir em lotes para o Firebird
                 const OP_BATCH_LIMIT = 500;
                 for (let j = 0; j < allOpIds.length; j += OP_BATCH_LIMIT) {
                     const batchIds = allOpIds.slice(j, j + OP_BATCH_LIMIT);
                     const pointingQuery = `
-                        SELECT CODIGO_PCS, SETOR_PCS, SUM(QUANTIDADE_PCS) as TOTAL
+                        SELECT CODIGO_PCS, SETOR_PCS, DATA_PCS, SUM(QUANTIDADE_PCS) as TOTAL
                         FROM PRODUCAO_SETOR
-                        WHERE CODIGO_PCS IN (${batchIds.join(',')})
-                        GROUP BY 1, 2
+                        WHERE EMPRESA_PCS = 10 AND CODIGO_PCS IN (${batchIds.join(',')})
+                        GROUP BY 1, 2, 3
                     `;
                     const pointingRows = await new Promise((resolve, reject) => {
                         db.query(pointingQuery, (err, res) => {
@@ -108,9 +112,13 @@ async function syncMaster() {
                     });
 
                     pointingRows.forEach(row => {
+                        const opEmissao = opEmissaoMap[row.CODIGO_PCS];
+                        // Ignorar apontamentos anteriores à emissão da OP (número de OP reutilizado)
+                        if (opEmissao && row.DATA_PCS && new Date(row.DATA_PCS) < new Date(opEmissao)) return;
+
                         const sId = Number(row.SETOR_PCS);
                         if (!pointingsMap[row.CODIGO_PCS]) pointingsMap[row.CODIGO_PCS] = {};
-                        
+
                         // Map older IDs (1, 2, 3...) to standard IDs (10, 20, 30...) if applicable
                         let targetId = sId;
                         if (sId === 1) targetId = 10;
@@ -118,7 +126,7 @@ async function syncMaster() {
                         else if (sId === 3) targetId = 30;
                         else if (sId === 4) targetId = 40;
                         else if (sId === 5) targetId = 50;
-                        
+
                         if (!pointingsMap[row.CODIGO_PCS][targetId]) pointingsMap[row.CODIGO_PCS][targetId] = 0;
                         pointingsMap[row.CODIGO_PCS][targetId] += row.TOTAL;
                     });
