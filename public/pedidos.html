@@ -2946,10 +2946,21 @@
                     kpi.peso += uW * qty;
                     kpi.valor += uP * qty;
                 };
+                // Verificar se o roteiro desta OP contém USINAGEM
+                const roteiro = String(item.ROTEIRO_PRODUCAO || '').toUpperCase();
+                const roteiroTemUsinagem = roteiro.split(',').map(s => s.trim()).some(s =>
+                    s === 'USINAGEM' || s === 'USINAGEM EXPEDICAO' || s === 'TORNEARIA'
+                );
                 addKpi(kpiExpedicao, qExpedicao, item.OP_PCS);
                 addKpi(kpiQualidade, qQualidade, item.OP_PCS);
                 addKpi(kpiUsinagem, qUsinagem, item.OP_PCS);
-                addKpi(kpiTT, qTT, item.OP_PCS);
+                // qTT = peças aguardando próxima etapa após TT
+                // Se roteiro não tem usinagem, essas peças vão direto para qualidade
+                if (roteiroTemUsinagem) {
+                    addKpi(kpiTT, qTT, item.OP_PCS);
+                } else {
+                    addKpi(kpiQualidade, qTT, item.OP_PCS);
+                }
                 addKpi(kpiAcabamento, qAcabamento, item.OP_PCS);
                 addKpi(kpiFusao, qFusao, item.OP_PCS);
                 addKpi(kpiMoldagem, qMoldada, item.OP_PCS);
@@ -3461,7 +3472,12 @@
                     else if (s === 'moldagem') { sectorQty = qMoldada; rawQty = metrics.rawMoldada; }
                     else if (s === 'fusao') { sectorQty = qFusao; rawQty = metrics.rawFusao; }
                     else if (s === 'acabamento') { sectorQty = qAcabamento; rawQty = metrics.rawAcabamento; }
-                    else if (s === 'tt') { sectorQty = qTT; rawQty = metrics.rawTT; }
+                    else if (s === 'tt') {
+                        const rot = String(item.ROTEIRO_PRODUCAO || '').toUpperCase().split(',').map(x => x.trim());
+                        const temUsinagem = rot.some(x => x === 'USINAGEM' || x === 'USINAGEM EXPEDICAO' || x === 'TORNEARIA');
+                        if (!temUsinagem) return false;
+                        sectorQty = qTT; rawQty = metrics.rawTT;
+                    }
                     else if (s === 'usinagem') { sectorQty = qUsinagem; rawQty = metrics.rawUsinagem; }
                     else if (s === 'qualidade') { sectorQty = qQualidade; rawQty = metrics.rawQualidade; }
                     else if (s === 'expedicao') { sectorQty = qExpedicao; rawQty = metrics.rawExpedicao; }
