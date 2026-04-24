@@ -4727,15 +4727,20 @@
                         if (!lastPointingDate[category] || date > lastPointingDate[category]) lastPointingDate[category] = date;
                     }
                 });
-                const routeExists = route !== null && route !== undefined;
-                let orderedSectors = allGroups;
+                const routeExists = route !== null && route !== undefined && String(route).trim() !== '';
+                const normalize = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '');
+                let orderedSectors;
                 if (routeExists) {
-                    const normalize = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '');
                     const routeNames = String(route).split(',').map(s => normalize(s.trim().toUpperCase()));
                     orderedSectors = allGroups.filter(stage => {
                         const aliases = sectorGroups[stage].map(a => normalize(a.toUpperCase()));
                         return stage === 'EXPEDIÇÃO' || stage === 'FATURAMENTO' || routeNames.some(name => name.length > 0 && aliases.some(alias => name.includes(alias) || alias.includes(name))) || aggregatedData[stage] > 0;
                     });
+                } else {
+                    // Sem roteiro: exibe apenas setores com apontamentos reais + EXPEDIÇÃO e FATURAMENTO
+                    orderedSectors = allGroups.filter(stage =>
+                        stage === 'EXPEDIÇÃO' || stage === 'FATURAMENTO' || aggregatedData[stage] > 0
+                    );
                 }
                 const metaDates = {};
                 let baselineDate = toLocalDate(emission || new Date());

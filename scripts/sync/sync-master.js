@@ -236,7 +236,29 @@ async function syncMaster() {
                     process.stdout.write(`@PROG:PEDIDOS:${pct}%\n`);
                 }
 
-                // 4. ATUALIZAR STATUS NO DASHBOARD
+                // 4. POPULAR ROTEIRO_PRODUCAO em firebird_sync_pedidos a partir de roteiros_tecnicos
+                console.log('📥 [3.5/4] Populando ROTEIRO_PRODUCAO nas OPs...');
+                await pgClient.query(`
+                    UPDATE firebird_sync_pedidos fsp
+                    SET data = jsonb_set(
+                        fsp.data,
+                        '{ROTEIRO_PRODUCAO}',
+                        to_jsonb((
+                            SELECT string_agg(rt.setor_nome, ',' ORDER BY rt.sequencia)
+                            FROM producao_fichas pf
+                            JOIN roteiros_tecnicos rt ON rt.ficha_id = pf.ficha_id
+                            WHERE pf.op_codigo = replace(fsp.sync_key, 'OP-', '')
+                        ))
+                    )
+                    WHERE fsp.sync_key LIKE 'OP-%'
+                      AND EXISTS (
+                        SELECT 1 FROM producao_fichas pf
+                        WHERE pf.op_codigo = replace(fsp.sync_key, 'OP-', '')
+                      )
+                `);
+                console.log('✅ ROTEIRO_PRODUCAO atualizado.');
+
+                // 5. ATUALIZAR STATUS NO DASHBOARD
                 process.stdout.write('@PROG:PEDIDOS:98%\n');
                 console.log('✅ Atualizando status de sincronização...');
                 await pgClient.query("SET TIME ZONE 'America/Sao_Paulo'");
