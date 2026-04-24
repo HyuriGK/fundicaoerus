@@ -93,8 +93,8 @@ function getItemSectorMetrics(item) {
         // SALDO POR SETOR (q* = o que está parado em cada setor)
         qExpedicao:  Math.max(0, cExp - cFat),
         qQualidade:  Math.max(0, cQual - cExp),
-        qUsinagem:   Math.max(0, rawUsinagem - rawQualidade), // apontado na usinagem menos o que saiu para qualidade
-        qTT:         Math.max(0, rawTT - rawUsinagem),        // apontado no TT menos o que saiu para usinagem
+        qUsinagem:   Math.max(0, rawUsinagem - rawQualidade),
+        qTT:         Math.max(0, rawTT - Math.max(rawUsinagem, rawQualidade)),
         qAcabamento: Math.max(0, cAcab - cTT),
         qFusao:      Math.max(0, cFus - cAcab),
         qMoldada:    Math.max(0, cMold - cFus),
