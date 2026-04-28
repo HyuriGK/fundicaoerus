@@ -236,6 +236,7 @@ async function syncFichas() {
 
                     // Fetch Fotos do Relatório
                     const fotosRelatorio = await getFotosRelatorio(db, row.CODIGO_FIC);
+                    if (fotosRelatorio.length > 0) console.log(`📸 Ficha ${row.CODIGO_FIC} (${row.PRO_CODIGO_FIC}): ${fotosRelatorio.length} foto(s) encontrada(s)`);
                     if (fotosRelatorio.length > 0) {
                         await pool.query(`DELETE FROM ficha_tecnica_fotos WHERE pro_codigo_fic = $1`, [sanitize(row.PRO_CODIGO_FIC)]);
                         for (let i = 0; i < fotosRelatorio.length; i++) {
