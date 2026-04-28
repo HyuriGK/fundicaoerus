@@ -42,13 +42,26 @@ function readBlob(blob) {
 function parseObservation(raw) {
     if (!raw) return '';
     try {
-        const obsMatch = raw.match(/OBS:/i);
-        let content = obsMatch ? raw.substring(obsMatch.index) : raw;
+        let content = raw;
+        // Remove grupos RTF com metadados: fonttbl, colortbl, stylesheet, info, etc.
+        content = content.replace(/\{\\fonttbl[^}]*(\{[^}]*\})*[^}]*\}/gi, '');
+        content = content.replace(/\{\\colortbl[^}]*\}/gi, '');
+        content = content.replace(/\{\\stylesheet[^}]*(\{[^}]*\})*[^}]*\}/gi, '');
+        content = content.replace(/\{\\info[^}]*(\{[^}]*\})*[^}]*\}/gi, '');
+        content = content.replace(/\{\\[a-z]+[^}]*\}/gi, '');
+        // Quebras de parágrafo RTF
         content = content.replace(/\\par\b/g, '\n');
+        content = content.replace(/\\pard\b/g, '');
+        // Remove todas as tags RTF restantes
         content = content.replace(/\\[a-z]+[0-9]*/gi, '');
+        // Remove chaves
         content = content.replace(/[{}]/g, '');
+        // Normaliza espaços
         content = content.replace(/[ \t]+/g, ' ');
         content = content.replace(/\n\s*\n/g, '\n');
+        // Busca a partir de OBS: se existir
+        const obsMatch = content.match(/OBS:/i);
+        if (obsMatch) content = content.substring(obsMatch.index);
         return content.trim();
     } catch (e) {
         return raw;
