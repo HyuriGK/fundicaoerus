@@ -29,6 +29,24 @@ router.get('/list/all', async (req, res) => {
     }
 });
 
+// GET /api/fichatecnica/:codigo/fotos
+router.get('/:codigo/fotos', async (req, res) => {
+    const { codigo } = req.params;
+    try {
+        const result = await pool.query(
+            `SELECT foto_base64 as "FOTO_BASE64", ordem as "ORDEM"
+             FROM ficha_tecnica_fotos
+             WHERE pro_codigo_fic = $1
+             ORDER BY ordem ASC`,
+            [codigo]
+        );
+        res.json(result.rows);
+    } catch (err) {
+        console.error('Erro fotos ficha:', err);
+        res.status(500).json({ error: 'Erro ao buscar fotos.' });
+    }
+});
+
 // GET /api/fichatecnica/:codigo
 router.get('/:codigo', async (req, res) => {
     const { codigo } = req.params;

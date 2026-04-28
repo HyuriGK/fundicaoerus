@@ -69,6 +69,23 @@ function getMachos(db, fichaCodigo) {
     });
 }
 
+function getFotosRelatorio(db, fichaCodigo) {
+    return new Promise((resolve) => {
+        db.query(`
+            SELECT FOTO_FTT FROM FICHA_TECNICA_FOTO
+            WHERE FIC_CODIGO_FTT = ? AND EXIBIR_RELATORIO_FTT = 'S'
+        `, [fichaCodigo], async (err, results) => {
+            if (err || !results || results.length === 0) return resolve([]);
+            const fotos = [];
+            for (const r of results) {
+                const buf = await readBlobBuffer(r.FOTO_FTT);
+                if (buf) fotos.push(buf.toString('base64'));
+            }
+            resolve(fotos);
+        });
+    });
+}
+
 function getLuvas(db, fichaCodigo) {
     return new Promise((resolve) => {
         db.query(`
@@ -155,6 +172,18 @@ async function syncFichas() {
             // Garantir coluna lote_pmt existe (uma vez antes do loop)
             await pool.query(`ALTER TABLE ficha_tecnica ADD COLUMN IF NOT EXISTS lote_pmt TEXT`);
 
+            // Garantir tabela de fotos do relatório existe
+            await pool.query(`
+                CREATE TABLE IF NOT EXISTS ficha_tecnica_fotos (
+                    id SERIAL PRIMARY KEY,
+                    pro_codigo_fic TEXT NOT NULL,
+                    foto_base64 TEXT NOT NULL,
+                    ordem INT NOT NULL DEFAULT 0,
+                    updated_at TIMESTAMPTZ DEFAULT NOW()
+                )
+            `);
+            await pool.query(`CREATE INDEX IF NOT EXISTS idx_ficha_tecnica_fotos_pro ON ficha_tecnica_fotos(pro_codigo_fic)`);
+
             let count = 0;
             for (const row of results) {
                 try {
@@ -204,6 +233,18 @@ async function syncFichas() {
                         const qStr = parseFloat(finalQuant.toFixed(3));
                         return `LUVA: ${l.NOME_LUVA || '-'} - QTDE: ${qStr}`;
                     }).join('\n');
+
+                    // Fetch Fotos do Relatório
+                    const fotosRelatorio = await getFotosRelatorio(db, row.CODIGO_FIC);
+                    if (fotosRelatorio.length > 0) {
+                        await pool.query(`DELETE FROM ficha_tecnica_fotos WHERE pro_codigo_fic = $1`, [sanitize(row.PRO_CODIGO_FIC)]);
+                        for (let i = 0; i < fotosRelatorio.length; i++) {
+                            await pool.query(
+                                `INSERT INTO ficha_tecnica_fotos (pro_codigo_fic, foto_base64, ordem, updated_at) VALUES ($1, $2, $3, NOW())`,
+                                [sanitize(row.PRO_CODIGO_FIC), fotosRelatorio[i], i]
+                            );
+                        }
+                    }
 
                     // INSERT complete record into Postgres (NO TRUNCATE HERE)
                     await pool.query(`
