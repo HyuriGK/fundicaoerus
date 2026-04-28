@@ -73,7 +73,7 @@ function getFotosRelatorio(db, fichaCodigo) {
     return new Promise((resolve) => {
         db.query(`
             SELECT FOTO_FTT FROM FICHA_TECNICA_FOTO
-            WHERE FIC_CODIGO_FTT = ? AND EXIBIR_RELATORIO_FTT = 'S'
+            WHERE FIC_CODIGO_FTT = ? AND TRIM(EXIBIR_RELATORIO_FTT) = 'S'
         `, [fichaCodigo], async (err, results) => {
             if (err || !results || results.length === 0) return resolve([]);
             const fotos = [];
