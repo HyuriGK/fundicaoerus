@@ -190,6 +190,8 @@ router.get('/op-setor-detalhes', async (req, res) => {
 
         console.log(`📊 [API-POSTGRES] Buscando histórico detalhado OP: ${op} em ${sectorList.length} setores.`);
 
+        await pool.query(`ALTER TABLE producao_apontada_sincronizada ADD COLUMN IF NOT EXISTS refugo NUMERIC(10,2) DEFAULT 0`);
+
         const result = await pool.query(`
             SELECT data_producao, setor, quantidade, COALESCE(refugo, 0) as refugo
             FROM producao_apontada_sincronizada
