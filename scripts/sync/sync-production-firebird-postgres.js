@@ -77,6 +77,11 @@ function chunkArray(myArray, chunk_size) {
                 EXCEPTION
                     WHEN duplicate_column THEN RAISE NOTICE 'column codigo_peca already exists in producao_apontada_sincronizada.';
                 END;
+                BEGIN
+                    ALTER TABLE producao_apontada_sincronizada ADD COLUMN refugo NUMERIC(10,2) DEFAULT 0;
+                EXCEPTION
+                    WHEN duplicate_column THEN RAISE NOTICE 'column refugo already exists in producao_apontada_sincronizada.';
+                END;
             END $$;
         `);
 
@@ -97,11 +102,12 @@ function chunkArray(myArray, chunk_size) {
             // User restriction: "se baseie em PRODUCAO_SETOR SOMENTE COM AS COLUNAS QUE EU TE MANDEI"
             // Columns: CODIGO_PCS, DATA_PCS, QUANTIDADE_PCS, LOTE_PCS, SETOR_PCS
             const queryPCS = `
-                SELECT 
+                SELECT
                     ID_PCS,
                     CODIGO_PCS,
                     DATA_PCS,
                     QUANTIDADE_PCS,
+                    DQUANTIDADE_REFUGO_PCS,
                     LOTE_PCS,
                     SETOR_PCS
                 FROM PRODUCAO_SETOR
@@ -298,17 +304,17 @@ function chunkArray(myArray, chunk_size) {
                             // Mapped Fields:
                             const op = pcs.CODIGO_PCS ? String(pcs.CODIGO_PCS) : null;
                             const quantidade = parseFloat(pcs.QUANTIDADE_PCS || 0);
+                            const refugo = parseFloat(pcs.DQUANTIDADE_REFUGO_PCS || 0);
                             const codigoPeca = produtoCode;
                             const pesoTotal = quantidade * produtoWeight;
                             const pesoUn = produtoWeight;
                             const produto = produtoName;
-
                             const liga = pcs._materialName || null;
 
                             await pool.query(`
-                                INSERT INTO producao_apontada_sincronizada 
-                                (chave_origem, data_producao, setor, produto, liga, peso_un, quantidade, peso_total, op, codigo_peca, atualizado_em)
-                                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP)
+                                INSERT INTO producao_apontada_sincronizada
+                                (chave_origem, data_producao, setor, produto, liga, peso_un, quantidade, refugo, peso_total, op, codigo_peca, atualizado_em)
+                                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP)
                                 ON CONFLICT (chave_origem) DO UPDATE SET
                                     data_producao = EXCLUDED.data_producao,
                                     setor = EXCLUDED.setor,
@@ -316,11 +322,12 @@ function chunkArray(myArray, chunk_size) {
                                     liga = EXCLUDED.liga,
                                     peso_un = EXCLUDED.peso_un,
                                     quantidade = EXCLUDED.quantidade,
+                                    refugo = EXCLUDED.refugo,
                                     peso_total = EXCLUDED.peso_total,
                                     op = EXCLUDED.op,
                                     codigo_peca = EXCLUDED.codigo_peca,
                                     atualizado_em = CURRENT_TIMESTAMP
-                            `, [chaveOrigem, dataProd, setor, produto, liga, pesoUn, quantidade, pesoTotal, op, codigoPeca]);
+                            `, [chaveOrigem, dataProd, setor, produto, liga, pesoUn, quantidade, refugo, pesoTotal, op, codigoPeca]);
 
                             inserted++;
                         } catch (rowErr) {

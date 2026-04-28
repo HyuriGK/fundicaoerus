@@ -191,7 +191,7 @@ router.get('/op-setor-detalhes', async (req, res) => {
         console.log(`📊 [API-POSTGRES] Buscando histórico detalhado OP: ${op} em ${sectorList.length} setores.`);
 
         const result = await pool.query(`
-            SELECT data_producao, setor, quantidade
+            SELECT data_producao, setor, quantidade, COALESCE(refugo, 0) as refugo
             FROM producao_apontada_sincronizada
             WHERE op = $1 AND setor = ANY($2)
             ORDER BY data_producao ASC, id ASC
@@ -200,7 +200,8 @@ router.get('/op-setor-detalhes', async (req, res) => {
         res.json(result.rows.map(row => ({
             data: row.data_producao,
             setor: row.setor,
-            quantidade: parseFloat(row.quantidade)
+            quantidade: parseFloat(row.quantidade),
+            refugo: parseFloat(row.refugo)
         })));
 
     } catch (error) {
