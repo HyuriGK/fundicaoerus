@@ -61,15 +61,25 @@ function getItemSectorMetrics(item) {
         cFat = targetTotalQty;
     }
 
+    // REFUGOS POR SETOR (peças que morreram em cada etapa)
+    const refugoMoldagem  = Math.max(0, Number(item.REFUGO_MOLDAGEM)  || 0);
+    const refugoFusao     = Math.max(0, Number(item.REFUGO_FUSAO)     || 0);
+    const refugoAcabamento= Math.max(0, Number(item.REFUGO_ACABAMENTO)|| 0);
+    const refugoTT        = Math.max(0, Number(item.REFUGO_TT)        || 0);
+    const refugoUsinagem  = Math.max(0, Number(item.REFUGO_USINAGEM)  || 0);
+    const refugoQualidade = Math.max(0, Number(item.REFUGO_QUALIDADE) || 0);
+    const refugoExpedicao = Math.max(0, Number(item.REFUGO_EXPEDICAO) || 0);
+
     // APONTADOS BRUTOS (Produzido no Setor - valores exatos do ERP)
     const rawFaturamento = Math.max(0, Number(item.QTY_FATURAMENTO) || 0);
     const rawExpedicao   = Math.max(0, Number(item.QTY_EXPEDICAO)   || 0);
-    const rawQualidade   = Math.max(0, Number(item.QTY_QUALIDADE)   || 0);
-    const rawUsinagem    = Math.max(0, Number(item.QTY_USINAGEM)    || 0);
-    const rawTT          = Math.max(0, Number(item.QTY_TT)          || 0);
-    const rawAcabamento  = Math.max(0, Number(item.QTY_ACABAMENTO)  || 0);
-    const rawFusao       = Math.max(0, Number(item.QTY_FUSAO)       || 0);
-    const rawMoldada     = Math.max(0, Number(item.QTY_MOLDADA)     || 0);
+    // Subtrai refugo: peças apontadas no setor mas refugadas não avançam para o próximo
+    const rawQualidade   = Math.max(0, (Number(item.QTY_QUALIDADE)   || 0) - refugoQualidade);
+    const rawUsinagem    = Math.max(0, (Number(item.QTY_USINAGEM)    || 0) - refugoUsinagem);
+    const rawTT          = Math.max(0, (Number(item.QTY_TT)          || 0) - refugoTT);
+    const rawAcabamento  = Math.max(0, (Number(item.QTY_ACABAMENTO)  || 0) - refugoAcabamento);
+    const rawFusao       = Math.max(0, (Number(item.QTY_FUSAO)       || 0) - refugoFusao);
+    const rawMoldada     = Math.max(0, (Number(item.QTY_MOLDADA)     || 0) - refugoMoldagem);
 
     const maxInd = Math.max(rawMoldada, rawFusao, rawAcabamento, rawTT, rawUsinagem, rawQualidade, rawExpedicao);
 
@@ -99,8 +109,12 @@ function getItemSectorMetrics(item) {
         qFusao:      Math.max(0, cFus - cAcab),
         qMoldada:    Math.max(0, cMold - cFus),
         qAguardando: Math.max(0, targetTotalQty - cMold),
-        
-        // APONTADOS BRUTOS (raw* = produzido no setor, valores exatos do ERP)
+
+        // REFUGOS POR SETOR
+        refugoMoldagem, refugoFusao, refugoAcabamento, refugoTT,
+        refugoUsinagem, refugoQualidade, refugoExpedicao,
+
+        // APONTADOS BRUTOS (raw* = produzido no setor já líquido de refugo)
         rawFaturamento,
         rawExpedicao,
         rawQualidade,

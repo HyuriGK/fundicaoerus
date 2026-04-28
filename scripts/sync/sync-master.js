@@ -99,7 +99,7 @@ async function syncMaster() {
                 for (let j = 0; j < allOpIds.length; j += OP_BATCH_LIMIT) {
                     const batchIds = allOpIds.slice(j, j + OP_BATCH_LIMIT);
                     const pointingQuery = `
-                        SELECT CODIGO_PCS, SETOR_PCS, DATA_PCS, SUM(QUANTIDADE_PCS) as TOTAL
+                        SELECT CODIGO_PCS, SETOR_PCS, DATA_PCS, SUM(QUANTIDADE_PCS) as TOTAL, SUM(DQUANTIDADE_REFUGO_PCS) as TOTAL_REFUGO
                         FROM PRODUCAO_SETOR
                         WHERE EMPRESA_PCS = 10 AND CODIGO_PCS IN (${batchIds.join(',')})
                         GROUP BY 1, 2, 3
@@ -129,6 +129,14 @@ async function syncMaster() {
 
                         if (!pointingsMap[row.CODIGO_PCS][targetId]) pointingsMap[row.CODIGO_PCS][targetId] = 0;
                         pointingsMap[row.CODIGO_PCS][targetId] += row.TOTAL;
+
+                        // Acumular refugos por setor
+                        const refugoQty = Number(row.TOTAL_REFUGO) || 0;
+                        if (refugoQty > 0) {
+                            const refKey = `REF_${targetId}`;
+                            if (!pointingsMap[row.CODIGO_PCS][refKey]) pointingsMap[row.CODIGO_PCS][refKey] = 0;
+                            pointingsMap[row.CODIGO_PCS][refKey] += refugoQty;
+                        }
                     });
                 }
                 console.log(`✅ [1.6/4] Pointings extraídos com sucesso para ${Object.keys(pointingsMap).length} OPs.`);
@@ -162,6 +170,15 @@ async function syncMaster() {
                     op.QTY_QUALIDADE = totals[60];
                     op.QTY_EXPEDICAO = totals[100];
                     op.QTY_FATURAMENTO = totals[101];
+
+                    const refs = opsData;
+                    op.REFUGO_MOLDAGEM  = (refs['REF_10'] || 0) + (refs['REF_11'] || 0) + (refs['REF_12'] || 0);
+                    op.REFUGO_FUSAO     = refs['REF_20'] || 0;
+                    op.REFUGO_ACABAMENTO= refs['REF_30'] || 0;
+                    op.REFUGO_TT        = refs['REF_40'] || 0;
+                    op.REFUGO_USINAGEM  = (refs['REF_50'] || 0) + (refs['REF_105'] || 0);
+                    op.REFUGO_QUALIDADE = refs['REF_60'] || 0;
+                    op.REFUGO_EXPEDICAO = refs['REF_100'] || 0;
 
                     await pgClient.query(`
                         INSERT INTO firebird_sync_pedidos (sync_key, data, updated_at)

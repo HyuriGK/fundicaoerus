@@ -190,7 +190,7 @@ async function syncEmissoes() {
                 for (let j = 0; j < allOpIds.length; j += OP_BATCH_LIMIT) {
                     const batchIds = allOpIds.slice(j, j + OP_BATCH_LIMIT);
                     const pointingQuery = `
-                        SELECT CODIGO_PCS, SETOR_PCS, SUM(QUANTIDADE_PCS) as TOTAL
+                        SELECT CODIGO_PCS, SETOR_PCS, SUM(QUANTIDADE_PCS) as TOTAL, SUM(DQUANTIDADE_REFUGO_PCS) as TOTAL_REFUGO
                         FROM PRODUCAO_SETOR
                         WHERE CODIGO_PCS IN (${batchIds.join(',')})
                           AND DATA_PCS >= '2025-01-01' AND DATA_PCS <= '2026-12-31'
@@ -206,6 +206,10 @@ async function syncEmissoes() {
                     pointingRows.forEach(row => {
                         if (!pointingsMap[row.CODIGO_PCS]) pointingsMap[row.CODIGO_PCS] = {};
                         pointingsMap[row.CODIGO_PCS][row.SETOR_PCS] = row.TOTAL;
+                        const refugoQty = Number(row.TOTAL_REFUGO) || 0;
+                        if (refugoQty > 0) {
+                            pointingsMap[row.CODIGO_PCS][`REF_${row.SETOR_PCS}`] = (pointingsMap[row.CODIGO_PCS][`REF_${row.SETOR_PCS}`] || 0) + refugoQty;
+                        }
                     });
                 }
             }
@@ -263,6 +267,15 @@ async function syncEmissoes() {
                         });
                     });
 
+                    // Agregar refugos de todas as OPs vinculadas
+                    const refs = { 10:0, 11:0, 12:0, 20:0, 30:0, 40:0, 50:0, 60:0, 100:0, 105:0 };
+                    linkedOps.forEach(opId => {
+                        const opsData = pointingsMap[opId] || {};
+                        Object.keys(refs).forEach(s => {
+                            refs[s] += Number(opsData[`REF_${s}`] || 0);
+                        });
+                    });
+
                     return {
                         ...r,
                         ROTEIRO_PRODUCAO: roteiro,
@@ -276,7 +289,14 @@ async function syncEmissoes() {
                         QTY_USINAGEM: totals[50] + totals[105],
                         QTY_QUALIDADE: totals[60],
                         QTY_EXPEDICAO: totals[100],
-                        QTY_FATURAMENTO: totals[101]
+                        QTY_FATURAMENTO: totals[101],
+                        REFUGO_MOLDAGEM:   refs[10] + refs[11] + refs[12],
+                        REFUGO_FUSAO:      refs[20],
+                        REFUGO_ACABAMENTO: refs[30],
+                        REFUGO_TT:         refs[40],
+                        REFUGO_USINAGEM:   refs[50] + refs[105],
+                        REFUGO_QUALIDADE:  refs[60],
+                        REFUGO_EXPEDICAO:  refs[100]
                     };
                 });
 
