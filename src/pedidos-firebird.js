@@ -196,7 +196,7 @@ router.get('/op-setor-detalhes', async (req, res) => {
             SELECT data_producao, setor, quantidade, COALESCE(refugo, 0) as refugo
             FROM producao_apontada_sincronizada
             WHERE op = $1 AND setor = ANY($2)
-            ORDER BY data_producao ASC, id ASC
+            ORDER BY data_producao DESC, id DESC
         `, [op, sectorList]);
 
         res.json(result.rows.map(row => ({
