@@ -136,14 +136,14 @@ router.get('/op-apontamentos', async (req, res) => {
 
         // Mapeamento de chave QTY_* → nome canônico do setor e aliases para buscar data
         const sectorDef = [
-            { key: 'QTY_MOLDADA',    setor: 'MOLDAGEM PESADA',         aliases: ['MOLDAGEM LEVE', 'MOLDAGEM MANUAL', 'MOLDAGEM PESADA', 'MOLDAGEM MECANIZADA', 'MOLDAGEM EM AREIA', 'MOLDAGEM'] },
-            { key: 'QTY_FUSAO',      setor: 'FUSAO',                   aliases: ['FUSAO', 'FUSÃO', 'FUNDIÇÃO', 'FUNDICAO'] },
-            { key: 'QTY_ACABAMENTO', setor: 'ACABAMENTO',              aliases: ['ACABAMENTO', 'REBARBAÇÃO', 'REBARBACAO', 'GRALHA'] },
-            { key: 'QTY_TT',         setor: 'TRATAMENTO TERMICO',      aliases: ['TRATAMENTO TERMICO', 'TRATAMENTO TÉRMICO', 'NORMALIZACAO', 'TEMPERA'] },
-            { key: 'QTY_USINAGEM',   setor: 'USINAGEM',                aliases: ['USINAGEM', 'TORNEARIA', 'USINAGEM EXPEDICAO'] },
-            { key: 'QTY_QUALIDADE',  setor: 'INSPECAO DE QUALIDADE',   aliases: ['INSPECAO DE QUALIDADE', 'INSPEÇÃO DE QUALIDADE', 'QUALIDADE', 'REVISÃO', 'PRODUZIDA / INSPECIONADO'] },
-            { key: 'QTY_EXPEDICAO',  setor: 'EXPEDICAO',               aliases: ['EXPEDICAO', 'EXPEDIÇÃO', 'LOGÍSTICA'] },
-            { key: 'QTY_FATURAMENTO',setor: 'FATURAMENTO',             aliases: ['FATURAMENTO', 'FATURADO', 'NF', 'SAÍDA'] },
+            { key: 'QTY_MOLDADA',    refugoKey: 'REFUGO_MOLDAGEM',   setor: 'MOLDAGEM PESADA',         aliases: ['MOLDAGEM LEVE', 'MOLDAGEM MANUAL', 'MOLDAGEM PESADA', 'MOLDAGEM MECANIZADA', 'MOLDAGEM EM AREIA', 'MOLDAGEM'] },
+            { key: 'QTY_FUSAO',      refugoKey: 'REFUGO_FUSAO',      setor: 'FUSAO',                   aliases: ['FUSAO', 'FUSÃO', 'FUNDIÇÃO', 'FUNDICAO'] },
+            { key: 'QTY_ACABAMENTO', refugoKey: 'REFUGO_ACABAMENTO', setor: 'ACABAMENTO',              aliases: ['ACABAMENTO', 'REBARBAÇÃO', 'REBARBACAO', 'GRALHA'] },
+            { key: 'QTY_TT',         refugoKey: 'REFUGO_TT',         setor: 'TRATAMENTO TERMICO',      aliases: ['TRATAMENTO TERMICO', 'TRATAMENTO TÉRMICO', 'NORMALIZACAO', 'TEMPERA'] },
+            { key: 'QTY_USINAGEM',   refugoKey: 'REFUGO_USINAGEM',   setor: 'USINAGEM',                aliases: ['USINAGEM', 'TORNEARIA', 'USINAGEM EXPEDICAO'] },
+            { key: 'QTY_QUALIDADE',  refugoKey: 'REFUGO_QUALIDADE',  setor: 'INSPECAO DE QUALIDADE',   aliases: ['INSPECAO DE QUALIDADE', 'INSPEÇÃO DE QUALIDADE', 'QUALIDADE', 'REVISÃO', 'PRODUZIDA / INSPECIONADO'] },
+            { key: 'QTY_EXPEDICAO',  refugoKey: 'REFUGO_EXPEDICAO',  setor: 'EXPEDICAO',               aliases: ['EXPEDICAO', 'EXPEDIÇÃO', 'LOGÍSTICA'] },
+            { key: 'QTY_FATURAMENTO',refugoKey: null,                 setor: 'FATURAMENTO',             aliases: ['FATURAMENTO', 'FATURADO', 'NF', 'SAÍDA'] },
         ];
 
         if (!totalsResult.rows.length) {
@@ -155,7 +155,8 @@ router.get('/op-apontamentos', async (req, res) => {
 
         for (const def of sectorDef) {
             const qty = parseFloat(opData[def.key] || 0);
-            if (qty <= 0) continue;
+            const refugo = def.refugoKey ? parseFloat(opData[def.refugoKey] || 0) : 0;
+            if (qty <= 0 && refugo <= 0) continue;
 
             // Busca a data mais recente entre todos os aliases
             let lastDate = null;
@@ -164,7 +165,7 @@ router.get('/op-apontamentos', async (req, res) => {
                 if (d && (!lastDate || d > lastDate)) lastDate = d;
             }
 
-            result.push({ setor: def.setor, quantidade: qty, data: lastDate });
+            result.push({ setor: def.setor, quantidade: qty, refugo, data: lastDate });
         }
 
         console.log(`✅ [API-POSTGRES] OP ${op}: ${result.length} setores encontrados.`);

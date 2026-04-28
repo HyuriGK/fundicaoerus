@@ -43,25 +43,61 @@ function parseObservation(raw) {
     if (!raw) return '';
     try {
         let content = raw;
-        // Remove grupos RTF com metadados: fonttbl, colortbl, stylesheet, info, etc.
-        content = content.replace(/\{\\fonttbl[^}]*(\{[^}]*\})*[^}]*\}/gi, '');
-        content = content.replace(/\{\\colortbl[^}]*\}/gi, '');
-        content = content.replace(/\{\\stylesheet[^}]*(\{[^}]*\})*[^}]*\}/gi, '');
-        content = content.replace(/\{\\info[^}]*(\{[^}]*\})*[^}]*\}/gi, '');
-        content = content.replace(/\{\\[a-z]+[^}]*\}/gi, '');
-        // Quebras de parágrafo RTF
+
+        // Remove grupos RTF aninhados (fonttbl, colortbl, etc.) usando contador de chaves
+        function removeRtfGroups(str) {
+            let result = '';
+            let depth = 0;
+            let inGroup = false;
+            let groupStart = -1;
+            for (let i = 0; i < str.length; i++) {
+                if (str[i] === '{') {
+                    if (depth === 0) groupStart = i;
+                    depth++;
+                    // Detecta grupos de controle (fonttbl, colortbl, etc.)
+                    const ahead = str.substring(i + 1, i + 20);
+                    if (/^\\(fonttbl|colortbl|stylesheet|info|pict|object)\b/.test(ahead)) {
+                        inGroup = true;
+                    }
+                } else if (str[i] === '}') {
+                    depth--;
+                    if (depth === 0 && inGroup) {
+                        inGroup = false;
+                        continue; // pula esse grupo inteiro
+                    }
+                }
+                if (!inGroup) result += str[i];
+            }
+            return result;
+        }
+
+        content = removeRtfGroups(content);
+
+        // Converte caracteres especiais RTF (ex: \'d8 → ø)
+        content = content.replace(/\\'([0-9a-fA-F]{2})/g, (m, hex) => {
+            try { return Buffer.from(hex, 'hex').toString('latin1'); } catch { return ''; }
+        });
+
+        // Quebras de parágrafo
         content = content.replace(/\\par\b/g, '\n');
         content = content.replace(/\\pard\b/g, '');
-        // Remove todas as tags RTF restantes
-        content = content.replace(/\\[a-z]+[0-9]*/gi, '');
-        // Remove chaves
+        content = content.replace(/\\line\b/g, '\n');
+
+        // Remove tags RTF restantes
+        content = content.replace(/\\[a-z*]+[0-9]*/gi, '');
+
+        // Remove chaves e lixo RTF
         content = content.replace(/[{}]/g, '');
+
         // Normaliza espaços
         content = content.replace(/[ \t]+/g, ' ');
-        content = content.replace(/\n\s*\n/g, '\n');
+        content = content.replace(/\n[ \t]+/g, '\n');
+        content = content.replace(/\n{3,}/g, '\n\n');
+
         // Busca a partir de OBS: se existir
         const obsMatch = content.match(/OBS:/i);
         if (obsMatch) content = content.substring(obsMatch.index);
+
         return content.trim();
     } catch (e) {
         return raw;

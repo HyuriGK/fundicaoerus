@@ -4777,21 +4777,34 @@
                 });
                 let html = '<div style="display: flex; flex-direction: column; gap: 8px;">';
                 const today = toLocalDate(new Date());
+                // Mapa de refugo por setor canônico
+                const refugoData = {};
+                pointingData.forEach(row => {
+                    const rowSetor = String(row.setor || '').trim().toUpperCase();
+                    const category = allGroups.find(cat => sectorGroups[cat].some(sub => rowSetor === String(sub).trim().toUpperCase()) || rowSetor === String(cat).trim().toUpperCase());
+                    if (category && row.refugo > 0) refugoData[category] = (refugoData[category] || 0) + row.refugo;
+                });
+
                 orderedSectors.forEach(sector => {
                     const realMovedOut = (aggregatedData[sector] || 0);
+                    const refugo = refugoData[sector] || 0;
                     const meta = metaDates[sector];
                     const isRealized = realMovedOut > 0;
                     const referenceDate = isRealized ? toLocalDate(lastPointingDate[sector]) : today;
                     const bizDelay = getBusinessDaysDiff(meta, referenceDate);
                     const isDelayed = bizDelay > 0;
+                    const refugoHtml = refugo > 0
+                        ? `<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(239,68,68,0.12);color:#f87171;padding:2px 8px;border-radius:4px;font-size:0.7rem;font-weight:700;margin-left:8px;"><i class="fa-solid fa-triangle-exclamation" style="font-size:0.65rem;"></i> ${refugo.toLocaleString('pt-BR')} refugo</span>`
+                        : '';
                     html += `
-                        <div class="op-detail-row is-clickable" 
+                        <div class="op-detail-row is-clickable"
                              style="display: flex; align-items: center; justify-content: space-between; padding: 12px 20px; border-radius: 8px; background: ${isRealized ? 'rgba(16, 185, 129, 0.05)' : 'rgba(255,255,255,0.01)'}; border: 1px solid ${isRealized ? 'rgba(16, 185, 129, 0.2)' : 'transparent'}; opacity: ${isRealized ? '1' : '0.6'};"
                              onclick="window.showSectorHistory('${op}', '${sector}')">
                             <div style="display: flex; flex-direction: column; gap: 4px; flex: 1;">
-                                <div style="display: flex; align-items: center;">
+                                <div style="display: flex; align-items: center; flex-wrap: wrap;">
                                     <span style="font-weight: 600; color: ${isRealized ? '#fff' : 'var(--text-muted)'};">${sector}${isRealized ? ' (Realizado)' : ''}</span>
                                     ${isDelayed ? `<span style="background: #450a0a; color: #f87171; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: bold; margin-left:10px;">Atrasado ${bizDelay}d</span>` : (isRealized ? `<span style="background: #064e3b; color: #34d399; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: bold; margin-left:10px;">No Prazo</span>` : '')}
+                                    ${refugoHtml}
                                 </div>
                                 <span style="font-size: 0.7rem; color: var(--text-muted);">Meta: ${meta.toLocaleDateString('pt-BR')} | ${isRealized ? 'Concluiu: ' + referenceDate.toLocaleDateString('pt-BR') : 'Aguardando'}</span>
                             </div>
