@@ -681,8 +681,10 @@
                 box-shadow: none !important;
                 background: #fff !important;
                 border-radius: 0 !important;
-                page-break-inside: auto !important;
-                break-inside: auto !important;
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+                page-break-after: avoid !important;
+                break-after: avoid !important;
             }
 
             .info-block {
@@ -1572,7 +1574,41 @@
             }
 
             function applyScale() {
-                // Sem scale — o browser imprime naturalmente respeitando @page margins
+                const content = document.getElementById('sheetContent');
+                const sheet = document.querySelector('.sheet-container');
+                const imageContainer = document.getElementById('imageContainer');
+                const notesPanel = document.getElementById('notesObservationsPanel');
+                if (!content || !sheet) return;
+
+                // Reset
+                content.style.zoom = '';
+                content.style.width = '';
+                content.style.maxWidth = '';
+
+                // Colapsa image/notes para medir altura real do conteúdo fixo
+                if (imageContainer) { imageContainer.style.flex = 'none'; imageContainer.style.height = '200px'; imageContainer.style.minHeight = '0'; }
+                if (notesPanel) { notesPanel.style.flex = 'none'; notesPanel.style.height = '200px'; notesPanel.style.minHeight = '0'; notesPanel.style.overflow = 'hidden'; }
+
+                // Oculta fotos para não inflar altura
+                const fotosSection = document.getElementById('fotosRelatorioSection');
+                const fotosPrev = fotosSection ? fotosSection.style.display : null;
+                if (fotosSection) fotosSection.style.display = 'none';
+
+                content.style.width = PRINT_W_PX + 'px';
+                void content.offsetHeight;
+                const H = sheet.scrollHeight;
+
+                if (fotosSection && fotosPrev !== null) fotosSection.style.display = fotosPrev;
+
+                if (H > PRINT_H_PX) {
+                    const zoom = PRINT_H_PX / H;
+                    content.style.zoom = zoom;
+                    content.style.width = Math.round(PRINT_W_PX / zoom) + 'px';
+                } else {
+                    content.style.width = PRINT_W_PX + 'px';
+                }
+
+                restoreHeights();
             }
 
             function resetScale() {
