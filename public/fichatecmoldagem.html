@@ -1574,43 +1574,39 @@
                 const notesPanel = document.getElementById('notesObservationsPanel');
                 if (!content || !sheet) return;
 
-                content.style.zoom = '1';
+                // Reset
+                content.style.zoom = '';
                 content.style.transform = '';
                 content.style.transformOrigin = '';
+                content.style.width = '';
+                content.style.maxWidth = '';
 
                 // Colapsa alturas para medir conteúdo sem elas
                 if (imageContainer) { imageContainer.style.flex = 'none'; imageContainer.style.height = 'auto'; imageContainer.style.minHeight = '0'; }
                 if (notesPanel) { notesPanel.style.flex = 'none'; notesPanel.style.height = 'auto'; notesPanel.style.minHeight = '0'; notesPanel.style.overflow = 'hidden'; }
 
-                // Oculta seção de fotos do relatório para não inflar altura da página 1
+                // Oculta fotos para não inflar altura da página 1
                 const fotosSection = document.getElementById('fotosRelatorioSection');
-                const fotosSectionPrevDisplay = fotosSection ? fotosSection.style.display : null;
+                const fotosPrev = fotosSection ? fotosSection.style.display : null;
                 if (fotosSection) fotosSection.style.display = 'none';
 
-                let W = PRINT_W_PX;
-                content.style.width = W + 'px';
-                content.style.maxWidth = W + 'px';
                 void content.offsetHeight;
-                let H = sheet.getBoundingClientRect().height;
+                const H = sheet.getBoundingClientRect().height;
+                const W = sheet.getBoundingClientRect().width;
 
-                let zoom = 1;
-                if (H > PRINT_H_PX) {
-                    let safety = 0;
-                    while (H * PRINT_W_PX / W > PRINT_H_PX && safety < 20) {
-                        W = Math.ceil(W * 1.08);
-                        content.style.width = W + 'px';
-                        content.style.maxWidth = W + 'px';
-                        void content.offsetHeight;
-                        H = sheet.getBoundingClientRect().height;
-                        safety++;
-                    }
-                    zoom = Math.min(1, PRINT_W_PX / W);
-                }
-
-                // Restaura alturas fixas antes da impressão acontecer
+                // Restaura antes de aplicar scale
                 restoreHeights();
-                if (fotosSection && fotosSectionPrevDisplay !== null) fotosSection.style.display = fotosSectionPrevDisplay;
-                content.style.zoom = zoom;
+                if (fotosSection && fotosPrev !== null) fotosSection.style.display = fotosPrev;
+
+                // Se o conteúdo é maior que a página, reduz via transform
+                if (H > PRINT_H_PX || W > PRINT_W_PX) {
+                    const scaleH = PRINT_H_PX / H;
+                    const scaleW = PRINT_W_PX / W;
+                    const scale = Math.min(scaleH, scaleW, 1);
+                    content.style.transformOrigin = 'top left';
+                    content.style.transform = `scale(${scale})`;
+                    content.style.width = (W / scale) + 'px';
+                }
             }
 
             function resetScale() {
@@ -1622,6 +1618,7 @@
                     content.style.width = '';
                     content.style.maxWidth = '';
                     content.style.transform = '';
+                    content.style.transformOrigin = '';
                     content.style.transformOrigin = '';
                 }
                 if (imageContainer) {
