@@ -2616,6 +2616,13 @@
         // UTILITÃÂRIOS
         // ==========================================================================
         // Clock removed as requested (footer removed)
+        function parseDateLocal(str) {
+            if (!str) return null;
+            const s = String(str).slice(0, 10);
+            const parts = s.split('-');
+            if (parts.length === 3) return { y: +parts[0], m: +parts[1], d: +parts[2] };
+            return null;
+        }
         function formatNumber(v, d = 2) {
             if (v === null || isNaN(v)) return '0,00';
             return Number(v).toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });
@@ -3383,9 +3390,9 @@
                 if (activeChartFilters.day !== null) {
                     const dateField = item.ENTREGA_PETR || item.DATA_ENTREGA_PPR;
                     if (!dateField) return false;
-                    const d = new Date(dateField);
+                    const dp = parseDateLocal(dateField);
                     const [dy, dm, dd] = activeChartFilters.day.split('-').map(Number);
-                    if (d.getFullYear() !== dy || (d.getMonth() + 1) !== dm || d.getDate() !== dd) return false;
+                    if (!dp || dp.y !== dy || dp.m !== dm || dp.d !== dd) return false;
                 }
                 // 2. Toolbar Filters
                 // OC Filter
@@ -3629,9 +3636,9 @@
                 if (isBlockReasonStatus || isBlockReasonNoDate || isBlockReasonNoOP) return;
                 const dateField = item.ENTREGA_PETR || item.DATA_ENTREGA_PPR;
                 if (!dateField) return;
-                const d = new Date(dateField);
-                if (d.getFullYear() !== selYear || (d.getMonth() + 1) !== selMonth) return;
-                const dayIdx = d.getDate() - 1;
+                const dp = parseDateLocal(dateField);
+                if (!dp || dp.y !== selYear || dp.m !== selMonth) return;
+                const dayIdx = dp.d - 1;
                 const metrics = getItemSectorMetrics(item);
                 const realQty = metrics.totalBalance;
                 const itemTotalWeight = getCorrectedWeight(item, customWeights);
@@ -3646,8 +3653,8 @@
             const labels = Array.from({ length: daysInMonth }, (_, i) => String(i + 1).padStart(2, '0'));
             const bgColors = labels.map((_, i) => {
                 if (activeChartFilters.day !== null) {
-                    const selD = new Date(activeChartFilters.day);
-                    return (selD.getFullYear() === selYear && (selD.getMonth() + 1) === selMonth && selD.getDate() === (i + 1)) ? '#fff' : chartColorAmber;
+                    const [dy, dm, dd] = activeChartFilters.day.split('-').map(Number);
+                    return (dy === selYear && dm === selMonth && dd === (i + 1)) ? '#fff' : chartColorAmber;
                 }
                 return chartColorAmber;
             });
