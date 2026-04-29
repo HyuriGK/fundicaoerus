@@ -373,7 +373,9 @@ async function startForever() {
         fs.writeFileSync(LOG_FILE, `=== SGP ERUS SYNC LOG - ${new Date().toISOString()} ===\n`);
     }
     if (!fs.existsSync(CYCLE_LOG)) {
-        fs.writeFileSync(CYCLE_LOG, `=== SGP ERUS - HISTORICO DE CICLOS - ${new Date().toISOString()} ===\n`);
+        const now = new Date();
+        const fmtNow = now.toLocaleDateString('pt-BR') + ' ' + now.toLocaleTimeString('pt-BR');
+        fs.writeFileSync(CYCLE_LOG, `=== SGP ERUS - HISTORICO DE CICLOS - ${fmtNow} ===\n`);
     }
 
     while (true) {
