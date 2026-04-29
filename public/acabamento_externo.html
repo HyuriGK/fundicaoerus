@@ -1463,12 +1463,14 @@
             });
         }
         function showCargaDetails(carga) {
-            const isDev = (checkUserRole() === 'desenvolvedor' || checkUserRole() === 'comercial' || checkUserRole() === 'gerente comercial' || checkUserRole() === 'diretor' || checkUserRole() === 'administrador');
+            const role = checkUserRole();
+            const isDev = (role === 'desenvolvedor' || role === 'comercial' || role === 'gerente comercial' || role === 'diretor' || role === 'administrador');
+            const isPPCP = (role === 'ppcp');
             const showValue = isDev && isValorTotalVisible;
             document.getElementById('modalTitle').innerHTML = `Detalhes: <span style="color:var(--color-primary);">${carga}</span>`;
             document.getElementById('cargaModal').setAttribute('data-current-carga', carga);
             // Mostrar/ocultar botões baseado na role
-            if (isDev) {
+            if (isDev || isPPCP) {
                 document.getElementById('recebidoBtn').style.display = 'inline-flex';
                 document.getElementById('generatePdfBtn').style.display = 'inline-flex';
             } else {
@@ -1480,7 +1482,7 @@
             // Show columns for everyone
             h += `<th>TOTAL VENDA (R$)</th><th>CUSTO SERV.</th><th>OBS.</th>`;
             h += `<th>OK</th>`;
-            if (isDev) {
+            if (isDev || isPPCP) {
                 h += `<th>AÇÃO</th>`;
             }
             h += `</tr></thead><tbody>`;
@@ -1489,20 +1491,18 @@
                 h += `<tr>`;
                 h += `<td><a href="#" onclick="showItemDetails(${r.id}); return false;" style="color:var(--color-primary); text-decoration:none; font-weight:bold;">${r.codigo}</a></td>`;
                 h += `<td>${r.descricao}</td><td>${r.cliente || '-'}</td><td>${formatNumber(r.peso)}</td><td>${r.quant}</td>`;
-                // Show values for everyone
                 const vCost = parseFloat(r.valor || 0);
                 const qtd = parseInt(r.quant || 0);
                 const vTotalSales = r.valor_unit ? formatCurrency(parseFloat(r.valor_unit) * qtd) : '-';
                 h += `<td>${showValue ? vTotalSales : 'R$ -----'}</td>`;
                 h += `<td style="color:#ef4444;">${showValue ? formatCurrency(vCost) : 'R$ -----'}</td>`;
                 h += `<td>${r.observacoes || '-'}</td>`;
-                // Verificar permissão para mostrar checkbox
-                if (isDev) {
+                if (isDev || isPPCP) {
                     h += `<td><input type="checkbox" onchange="toggleRecebido(${r.id},'${r.carga}',this.checked)" ${isRec ? 'checked' : ''}></td>`;
                 } else {
                     h += `<td><span class="badge ${isRec ? 'badge-success' : 'badge-pending'}">${isRec ? '✓' : '○'}</span></td>`;
                 }
-                if (isDev) {
+                if (isDev || isPPCP) {
                     h += `<td><i class="fa-solid fa-trash action-icon icon-delete" onclick="excluirRegistro(${r.id})"></i></td>`;
                 }
                 h += `</tr>`;
@@ -1518,7 +1518,7 @@
         }
         async function excluirRegistro(id) {
             const role = checkUserRole();
-            if (role !== 'desenvolvedor' && role !== 'diretor' && role !== 'administrador' && role !== 'gerente comercial') {
+            if (role !== 'desenvolvedor' && role !== 'diretor' && role !== 'administrador' && role !== 'gerente comercial' && role !== 'ppcp') {
                 showToast("Você não tem permissão para excluir", "Apenas administradores podem excluir registros", "danger");
                 return;
             }
@@ -1541,7 +1541,7 @@
         }
         async function toggleRecebido(id, carga, checked) {
             const role = checkUserRole();
-            if (role !== 'desenvolvedor' && role !== 'comercial' && role !== 'diretor' && role !== 'administrador' && role !== 'gerente comercial') {
+            if (role !== 'desenvolvedor' && role !== 'comercial' && role !== 'diretor' && role !== 'administrador' && role !== 'gerente comercial' && role !== 'ppcp') {
                 showToast("Você não tem permissão", "Apenas administradores, comercial, gerente comercial e diretor podem marcar como recebido", "danger");
                 return;
             }
@@ -1549,7 +1549,7 @@
         }
         async function marcarCargaRecebida() {
             const role = checkUserRole();
-            if (role !== 'desenvolvedor' && role !== 'comercial' && role !== 'diretor' && role !== 'administrador' && role !== 'gerente comercial') {
+            if (role !== 'desenvolvedor' && role !== 'comercial' && role !== 'diretor' && role !== 'administrador' && role !== 'gerente comercial' && role !== 'ppcp') {
                 showToast("Você não tem permissão", "Apenas administradores, comercial, gerente comercial e diretor podem receber cargas", "danger");
                 return;
             }
@@ -1596,8 +1596,8 @@
         }
         function generateCargaPDF(carga) {
             const role = checkUserRole();
-            if (role === 'visitante') {
-                showToast("Acesso Negado", "Visitantes não podem gerar relatórios financeiros.", "danger");
+            if (role === 'visitante' || !role) {
+                showToast("Acesso Negado", "Você não tem permissão para gerar relatórios.", "danger");
                 return;
             }
             const { jsPDF } = window.jspdf;
