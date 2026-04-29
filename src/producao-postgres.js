@@ -14,30 +14,32 @@ router.get('/', async (req, res) => {
 
             // --- TIPA 1: Pesos Zerados na PRODUÇÃO (Tabela sincronizada) ---
             const queryGrouped = `
-                SELECT 
+                SELECT
                     t.setor,
                     COUNT(*) as count
                 FROM producao_apontada_sincronizada t
+                LEFT JOIN pesos_customizados pc ON t.codigo_peca = pc.codigo
                 LEFT JOIN produto_pesos_producao p ON t.codigo_peca = p.codigo_peca
-                WHERE COALESCE(NULLIF(t.peso_un, 0), p.peso, 0) = 0
+                WHERE COALESCE(NULLIF(t.peso_un, 0), pc.peso, p.peso, 0) = 0
                 GROUP BY t.setor
                 ORDER BY count DESC
             `;
             const resultGrouped = await pool.query(queryGrouped);
-            
+
             for (const row of resultGrouped.rows) {
                 const count = parseInt(row.count);
                 totalCount += count;
-                
+
                 // Fetch a sample of 2 records for this specific sector
                 const sampleQuery = `
-                    SELECT 
+                    SELECT
                         TO_CHAR(t.data_producao, 'DD/MM/YYYY') as data,
                         t.codigo_peca,
                         t.produto
                     FROM producao_apontada_sincronizada t
+                    LEFT JOIN pesos_customizados pc ON t.codigo_peca = pc.codigo
                     LEFT JOIN produto_pesos_producao p ON t.codigo_peca = p.codigo_peca
-                    WHERE COALESCE(NULLIF(t.peso_un, 0), p.peso, 0) = 0
+                    WHERE COALESCE(NULLIF(t.peso_un, 0), pc.peso, p.peso, 0) = 0
                     AND t.setor = $1
                     LIMIT 2
                 `;
@@ -144,7 +146,7 @@ router.get('/', async (req, res) => {
         const { startDate, endDate, sector, search, limit = 100000 } = req.query;
 
         let query = `
-            SELECT 
+            SELECT
                 t.id,
                 TO_CHAR(t.data_producao, 'YYYY-MM-DD') as data,
                 t.setor,
@@ -152,15 +154,14 @@ router.get('/', async (req, res) => {
                 t.liga,
                 t.op,
                 t.codigo_peca,
-                -- Lógica de Prioridade: ERP > 0 ? ERP : Custom
-                COALESCE(NULLIF(t.peso_un, 0), p.peso, 0) as peso_un,
+                -- Prioridade: ERP > pesos_customizados (carteira) > produto_pesos_producao (legado) > 0
+                COALESCE(NULLIF(t.peso_un, 0), pc.peso, p.peso, 0) as peso_un,
                 t.quantidade,
-                -- Recalcula Total
-                (t.quantidade * COALESCE(NULLIF(t.peso_un, 0), p.peso, 0)) as peso_total,
-                -- Metadados para UI
+                (t.quantidade * COALESCE(NULLIF(t.peso_un, 0), pc.peso, p.peso, 0)) as peso_total,
                 t.peso_un as peso_erp,
-                p.peso as peso_custom
+                COALESCE(pc.peso, p.peso) as peso_custom
             FROM producao_apontada_sincronizada t
+            LEFT JOIN pesos_customizados pc ON t.codigo_peca = pc.codigo
             LEFT JOIN produto_pesos_producao p ON t.codigo_peca = p.codigo_peca
             WHERE 1=1
         `;
@@ -228,11 +229,12 @@ router.get('/stats', async (req, res) => {
         const { startDate, endDate, sector } = req.query;
 
         let query = `
-            SELECT 
+            SELECT
                 COUNT(*) as total_records,
                 SUM(t.quantidade) as total_qty,
-                SUM(t.quantidade * COALESCE(NULLIF(t.peso_un, 0), p.peso, 0)) as total_weight
+                SUM(t.quantidade * COALESCE(NULLIF(t.peso_un, 0), pc.peso, p.peso, 0)) as total_weight
             FROM producao_apontada_sincronizada t
+            LEFT JOIN pesos_customizados pc ON t.codigo_peca = pc.codigo
             LEFT JOIN produto_pesos_producao p ON t.codigo_peca = p.codigo_peca
             WHERE 1=1
         `;
@@ -339,10 +341,10 @@ router.post('/peso', async (req, res) => {
 
     try {
         await pool.query(`
-            INSERT INTO produto_pesos_producao (codigo_peca, peso, updated_at)
-            VALUES ($1, $2, CURRENT_TIMESTAMP)
-            ON CONFLICT (codigo_peca) 
-            DO UPDATE SET peso = EXCLUDED.peso, updated_at = CURRENT_TIMESTAMP
+            INSERT INTO pesos_customizados (codigo, peso)
+            VALUES ($1, $2)
+            ON CONFLICT (codigo)
+            DO UPDATE SET peso = EXCLUDED.peso
         `, [String(codigo_peca), parseFloat(peso)]);
 
         res.json({ success: true, message: 'Peso salvo com sucesso' });
