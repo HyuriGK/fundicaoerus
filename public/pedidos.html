@@ -1414,12 +1414,6 @@
                     <div class="chart-header-row" style="position: relative;">
                         <div class="chart-title-flex" id="chartDailyTitle">Entrega Diária</div>
                         <div style="position: absolute; right: 10px; display: flex; align-items: center; gap: 6px;">
-                            <select id="monthFilterDaily" onchange="updateDailyChart(currentFilteredData)" class="year-select">
-                                <option value="1">Jan</option><option value="2">Fev</option><option value="3">Mar</option>
-                                <option value="4">Abr</option><option value="5">Mai</option><option value="6">Jun</option>
-                                <option value="7">Jul</option><option value="8">Ago</option><option value="9">Set</option>
-                                <option value="10">Out</option><option value="11">Nov</option><option value="12">Dez</option>
-                            </select>
                             <select id="yearFilterDaily" onchange="updateDailyChart(currentFilteredData)" class="year-select">
                             </select>
                         </div>
@@ -3614,9 +3608,8 @@
         function updateDailyChart(list) {
             const el = document.getElementById('chartDaily');
             if (!el) return;
-            const monthEl = document.getElementById('monthFilterDaily');
             const yearEl = document.getElementById('yearFilterDaily');
-            const selMonth = monthEl ? parseInt(monthEl.value) : (new Date().getMonth() + 1);
+            const selMonth = (activeChartFilters.month !== null) ? (activeChartFilters.month + 1) : (new Date().getMonth() + 1);
             const selYear = yearEl ? (parseInt(yearEl.value) || new Date().getFullYear()) : new Date().getFullYear();
             const daysInMonth = new Date(selYear, selMonth, 0).getDate();
             const dayData = Array(daysInMonth).fill(0);
@@ -3729,9 +3722,6 @@
                     select.appendChild(opt);
                 });
             });
-            // Set current month on daily filter
-            const mSel = document.getElementById('monthFilterDaily');
-            if (mSel) mSel.value = String(new Date().getMonth() + 1);
         }
         // Chamar na inicialização
         initYearFilter();
@@ -3767,20 +3757,12 @@
                 }
             });
             const monthLabels = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-            let finalLabels = [...monthLabels];
-            let finalData = [...mData];
-            let finalDataValue = [...mDataValue];
-            let finalBgColors = monthLabels.map((_, idx) => 
+            const finalLabels = [...monthLabels];
+            const finalData = [...mData];
+            const finalDataValue = [...mDataValue];
+            const finalBgColors = monthLabels.map((_, idx) =>
                 (chartMode === 'delivery' && activeChartFilters.month === idx) ? '#fff' : chartColorAmber
             );
-            // ZOOM LOGIC: If a month is selected, show ONLY that month's bar
-            if (chartMode === 'delivery' && activeChartFilters.month !== null) {
-                const idx = activeChartFilters.month;
-                finalLabels = [monthLabels[idx]];
-                finalData = [mData[idx]];
-                finalDataValue = [mDataValue[idx]];
-                finalBgColors = ['#fff'];
-            }
             if (chartPCP) chartPCP.destroy();
             chartPCP = new Chart(document.getElementById('chartPCP').getContext('2d'), {
                 type: 'bar',
@@ -3821,22 +3803,20 @@
                     onClick: (e) => {
                         const activeElements = chartPCP.getElementsAtEventForMode(e, 'index', { intersect: false }, true);
                         if (activeElements.length > 0) {
-                            if (chartMode === 'delivery' && activeChartFilters.month !== null) {
-                                // Já filtrado: limpa o filtro e volta ÃÂ  visualização anual
+                            const clickedIndex = activeElements[0].index;
+                            if (chartMode === 'delivery' && activeChartFilters.month === clickedIndex) {
                                 activeChartFilters.month = null;
-                                // chartMode permanece 'delivery' (estado padrão)
                             } else {
-                                // Sem filtro: aplica o mês clicado
-                                const clickedIndex = activeElements[0].index;
                                 activeChartFilters.month = clickedIndex;
                                 chartMode = 'delivery';
                             }
                         } else {
-                            // Clique fora das barras: limpa filtro
                             activeChartFilters.month = null;
                             chartMode = 'delivery';
                         }
+                        activeChartFilters.day = null;
                         applyColumnFilters();
+                        updateDailyChart(currentFilteredData);
                     }
                 }
             });
