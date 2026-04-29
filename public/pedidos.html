@@ -521,10 +521,10 @@
         }
         .industrial-progress-container {
             position: absolute;
-            top: 45px; /* Right below buttons */
+            top: 45px;
             left: 0;
             right: 0;
-            z-index: 1000;
+            z-index: 1002;
             background: rgba(15, 15, 18, 0.98);
             backdrop-filter: blur(15px);
             border: 1px solid var(--color-primary);
@@ -535,6 +535,21 @@
             gap: 12px;
             box-shadow: 0 20px 40px rgba(0,0,0,0.8), 0 0 20px rgba(251, 191, 36, 0.1);
             animation: ds-fadeInUp 0.3s ease-out;
+            min-height: 320px;
+        }
+        #industrialBlurOverlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 999;
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            background: rgba(0, 0, 0, 0.45);
+            pointer-events: auto;
+        }
+        .kpi-row {
+            position: relative;
+            z-index: 1001;
         }
         /* Standardized Action Buttons */
         .btn-action-standard {
@@ -1414,6 +1429,13 @@
                     <div class="chart-header-row" style="position: relative;">
                         <div class="chart-title-flex" id="chartDailyTitle">Entrega Diária</div>
                         <div style="position: absolute; right: 10px; display: flex; align-items: center; gap: 6px;">
+                            <select id="monthOverrideDaily" onchange="onDailyMonthChange()" class="year-select">
+                                <option value="">Auto</option>
+                                <option value="1">Jan</option><option value="2">Fev</option><option value="3">Mar</option>
+                                <option value="4">Abr</option><option value="5">Mai</option><option value="6">Jun</option>
+                                <option value="7">Jul</option><option value="8">Ago</option><option value="9">Set</option>
+                                <option value="10">Out</option><option value="11">Nov</option><option value="12">Dez</option>
+                            </select>
                             <select id="yearFilterDaily" onchange="updateDailyChart(allData)" class="year-select">
                             </select>
                         </div>
@@ -1497,6 +1519,7 @@
                 </div>
             </div>
         </main>
+        <div id="industrialBlurOverlay" onclick="toggleIndustrialPosition()"></div>
         <!-- FOOTER REMOVED -->
     </div>
     <!-- MODAL DE REGISTROS (FULLSCREEN) -->
@@ -3609,7 +3632,11 @@
             const el = document.getElementById('chartDaily');
             if (!el) return;
             const yearEl = document.getElementById('yearFilterDaily');
-            const selMonth = (activeChartFilters.month !== null) ? (activeChartFilters.month + 1) : (new Date().getMonth() + 1);
+            const overrideEl = document.getElementById('monthOverrideDaily');
+            const overrideVal = overrideEl ? parseInt(overrideEl.value) : NaN;
+            const selMonth = !isNaN(overrideVal) ? overrideVal
+                           : (activeChartFilters.month !== null) ? (activeChartFilters.month + 1)
+                           : (new Date().getMonth() + 1);
             const selYear = yearEl ? (parseInt(yearEl.value) || new Date().getFullYear()) : new Date().getFullYear();
             const daysInMonth = new Date(selYear, selMonth, 0).getDate();
             const dayData = Array(daysInMonth).fill(0);
@@ -3815,11 +3842,17 @@
                             chartMode = 'delivery';
                         }
                         activeChartFilters.day = null;
+                        const ov = document.getElementById('monthOverrideDaily');
+                        if (ov) ov.value = '';
                         applyColumnFilters();
                         updateDailyChart(allData);
                     }
                 }
             });
+        }
+        function onDailyMonthChange() {
+            activeChartFilters.day = null;
+            updateDailyChart(allData);
         }
         function backPendingChart() {
             document.getElementById('monthFilterHistorical').value = 'Todos';
@@ -4680,16 +4713,19 @@
         }
         function toggleIndustrialPosition() {
             const container = document.getElementById('industrialProgressContainer');
+            const overlay = document.getElementById('industrialBlurOverlay');
             const btn = document.getElementById('btn-pos-industrial');
             if (!container) return;
-            
+
             const isOpen = container.style.display === 'flex';
-            
+
             if (!isOpen) {
                 container.style.display = 'flex';
+                if (overlay) overlay.style.display = 'block';
                 if (btn) btn.classList.add('active');
             } else {
                 container.style.display = 'none';
+                if (overlay) overlay.style.display = 'none';
                 if (btn) btn.classList.remove('active');
             }
             
@@ -4709,6 +4745,8 @@
                 const filtersModal = document.getElementById('filtersModal');   // 2500
                 const orderModal = document.getElementById('orderDetailsModal'); // 2000
                 const recordsModal = document.getElementById('recordsModal');   // ?
+                const industrialContainer = document.getElementById('industrialProgressContainer');
+                if (industrialContainer && industrialContainer.style.display === 'flex') { toggleIndustrialPosition(); return; }
                 if (hModal && hModal.style.display === 'flex') closeSectorHistory();
                 else if (dModal && dModal.style.display === 'flex') closeOPDetails();
                 else if (emailModal && emailModal.style.display === 'flex') closeEmailModal();
