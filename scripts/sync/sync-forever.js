@@ -341,7 +341,7 @@ function isWithinSchedule() {
     const day = now.getDay(); // 0=Dom, 1=Seg ... 5=Sex, 6=Sab
     if (day === 0 || day === 6) return false;
     const minutes = now.getHours() * 60 + now.getMinutes();
-    return minutes >= 16 * 60 + 30 && minutes < 16 * 60 + 35;
+    return minutes >= 6 * 60 + 30 && minutes < 18 * 60;
 }
 
 function drawOffSchedule() {
