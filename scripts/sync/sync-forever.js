@@ -335,6 +335,32 @@ function runBat(bat) {
     });
 }
 
+// ─── SCHEDULE ────────────────────────────────────────────────────────────────
+function isWithinSchedule() {
+    const now = new Date();
+    const day = now.getDay(); // 0=Dom, 1=Seg ... 5=Sex, 6=Sab
+    if (day === 0 || day === 6) return false;
+    const minutes = now.getHours() * 60 + now.getMinutes();
+    return minutes >= 6 * 60 + 30 && minutes < 18 * 60;
+}
+
+function drawOffSchedule() {
+    const W = getW();
+    readline.cursorTo(process.stdout, 0, 0);
+    readline.clearScreenDown(process.stdout);
+    const lines = [];
+    lines.push(B.top());
+    lines.push(B.row(centerStr(bold + gradient('  FUNDICAO ERUS  -  SINCRONIZACAO EM TEMPO REAL  ', [251,191,36],[249,115,22]) + reset, W), W));
+    lines.push(B.sep());
+    lines.push(B.row(centerStr(bold + C.amber + 'SINCRONIZACAO PAUSADA - FORA DO HORARIO' + reset, W), W));
+    lines.push(B.row(centerStr(C.muted + 'Segunda a Sexta  |  06:30 - 18:00' + reset, W), W));
+    lines.push(B.row(centerStr(C.white + 'Hora atual: ' + bold + nowTime() + reset, W), W));
+    lines.push(B.sep());
+    lines.push(B.row(centerStr(dim + 'Aguardando proximo horario comercial...' + reset, W), W));
+    lines.push(B.bot());
+    process.stdout.write(lines.join('\n') + '\n');
+}
+
 // ─── MAIN ────────────────────────────────────────────────────────────────────
 async function startForever() {
     console.clear();
@@ -345,6 +371,12 @@ async function startForever() {
     }
 
     while (true) {
+        if (!isWithinSchedule()) {
+            drawOffSchedule();
+            await new Promise(r => setTimeout(r, 60000));
+            continue;
+        }
+
         cycleCount++;
         SYNC_BATS.forEach(b => { currentProg[b.name] = 0; scriptState[b.name] = 'IDLE'; });
 
