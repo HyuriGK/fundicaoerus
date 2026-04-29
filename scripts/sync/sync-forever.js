@@ -82,8 +82,9 @@ function nowTime() {
 }
 
 // ─── CONFIG ──────────────────────────────────────────────────────────────────
-const ROOT_DIR = path.join(__dirname, '..', '..');
-const LOG_FILE = path.join(__dirname, 'sync-errors.log');
+const ROOT_DIR      = path.join(__dirname, '..', '..');
+const LOG_FILE      = path.join(__dirname, 'sync-errors.log');
+const CYCLE_LOG     = path.join(ROOT_DIR, 'sync-ciclos.txt');
 const W        = 66; // inner content width (ASCII-safe)
 
 const SYNC_BATS = [
@@ -183,9 +184,11 @@ function buildFrame(cycleStart) {
                '    ' + C.muted+'TEMPO '+reset + elapsV;
     const s2 = '  ' + C.muted+'HORA  '+reset + timeV +
                '    ' + C.dim+'LOG  scripts/sync/sync-errors.log'+reset;
+    const s3 = '  ' + C.muted+'HORARIO COMERCIAL  '+reset + bold + C.green + 'Seg-Sex  06:30 - 17:30' + reset;
 
     out.push(B.row(s1, W));
     out.push(B.row(s2, W));
+    out.push(B.row(s3, W));
 
     // ── MODULES ──────────────────────────────────────────────────────────────
     out.push(B.sep());
@@ -389,9 +392,15 @@ async function startForever() {
         }
 
         clearInterval(timer);
+        const cycleEnd = new Date();
         const duration = (Date.now() - cycleStart) / 1000;
         cycleHistory.push(duration);
         if (cycleHistory.length > 50) cycleHistory.shift();
+
+        const cycleStartDate = new Date(cycleStart);
+        const fmtDate = d => d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR');
+        const cycleLogLine = `Ciclo #${String(cycleCount).padStart(3,'0')} | Inicio: ${fmtDate(cycleStartDate)} | Fim: ${fmtDate(cycleEnd)} | Duracao: ${duration.toFixed(1)}s\n`;
+        try { fs.appendFileSync(CYCLE_LOG, cycleLogLine); } catch(e) {}
 
         logEvent('SISTEMA', `Ciclo #${cycleCount} concluido em ${duration.toFixed(1)}s`, false);
         drawDashboard(cycleStart);
