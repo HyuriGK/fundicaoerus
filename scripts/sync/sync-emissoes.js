@@ -75,6 +75,7 @@ async function syncEmissoes() {
             LEFT JOIN PEDIDO_PRODUTO_CALCULO_PRECO PC ON P.CODIGO_PPR = PC.PPR_CODIGO_PPRC AND P.ANO_PPR = PC.PPR_ANO_PPRC AND P.ITEM_PPR = PC.PPR_ITEM_PPRC AND P.EMPRESA_PPR = PC.PPR_EMPRESA_PPRC
             WHERE EXTRACT(YEAR FROM D.EMISSAO_PED) IN (2025, 2026)
             AND D.STATUS_PED <> 'C'
+            AND UPPER(D.STATUS_DESC_PED) <> 'CANCELADO'
         `;
 
         const results = await new Promise((resolve, reject) => {
