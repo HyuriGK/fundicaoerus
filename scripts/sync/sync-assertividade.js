@@ -54,7 +54,6 @@ async function syncAssertividade() {
             LEFT JOIN CLIENTE C ON D.CLIENTE_PED = C.CODIGO_CLI AND D.CLI_EMPRESA_PED = C.EMPRESA_CLI
             LEFT JOIN PEDIDO_PRODUTO P ON E.PPR_CODIGO_PETR = P.CODIGO_PPR AND E.PPR_ANO_PETR = P.ANO_PPR AND E.PPR_ITEM_PETR = P.ITEM_PPR AND E.PPR_EMPRESA_PETR = P.EMPRESA_PPR
             WHERE E.PPR_ANO_PETR IN (2025, 2026)
-              AND E.QUANTIDADE_FATURADA_PETR > 0
         `;
 
         db.query(query, async function (err, results) {

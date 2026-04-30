@@ -59,7 +59,7 @@ router.get('/', async (req, res) => {
                 ORDER BY f.data_faturamento DESC, f.nota_fiscal DESC
             `, [anoFiltro]),
             pool.query(`SELECT data FROM firebird_sync_assertividade`),
-            pool.query(`SELECT data FROM firebird_sync_pedidos WHERE data->>'DATA_EMISSAO_PEDIDO' IS NOT NULL`),
+            pool.query(`SELECT data->>'PEDIDO_NUM' as ped, data->>'PRODUTO_PPR' as prod, data->>'DATA_EMISSAO_PEDIDO' as emissao, data->>'OP_ENTREGA' as entrega FROM firebird_sync_pedidos WHERE data->>'PEDIDO_NUM' IS NOT NULL AND data->>'PRODUTO_PPR' IS NOT NULL`),
         ]);
 
         // Mapa assertividade: pedido_codItem exato e fallback por pedido (para data prometida)
@@ -75,15 +75,13 @@ router.get('/', async (req, res) => {
             assertByPed[ped].push(r);
         }
 
-        // Mapa pedidos: pedido_produto -> DATA_EMISSAO_PEDIDO
-        const emissaoMap = {};
+        // Mapa pedidos: pedido_produto -> { emissao, entrega }
+        const pedidosMap = {};
         for (const row of pedRes.rows) {
-            const d = row.data;
-            const ped  = d.PEDIDO_NUM  ?? d.CODIGO_PPR;
-            const prod = d.PRODUTO_PPR;
-            if (!ped || !prod || !d.DATA_EMISSAO_PEDIDO) continue;
-            const k = `${String(ped)}_${String(prod)}`;
-            if (!emissaoMap[k]) emissaoMap[k] = d.DATA_EMISSAO_PEDIDO;
+            const { ped, prod, emissao, entrega } = row;
+            if (!ped || !prod) continue;
+            const k = `${ped}_${prod}`;
+            if (!pedidosMap[k]) pedidosMap[k] = { emissao: emissao || null, entrega: entrega || null };
         }
 
         let onTimeCount = 0, inFullCount = 0, otifCount = 0, atrasosCount = 0;
@@ -124,11 +122,11 @@ router.get('/', async (req, res) => {
                 }
             }
 
-            // Data de emissão: firebird_sync_pedidos (PEDIDO_NUM + PRODUTO_PPR)
-            const pedProdKey  = `${pedidoStr}_${codItemStr}`;
-            const dataEmissao = utcDay(emissaoMap[pedProdKey] || (r ? r.DATA_PETR : null));
-            // Data prometida: assertividade ENTREGA_PETR
-            const dataPromessa = utcDay(r ? r.ENTREGA_PETR : null);
+            const pedProdKey   = `${pedidoStr}_${codItemStr}`;
+            const pedEntry     = pedidosMap[pedProdKey];
+            const dataEmissao  = utcDay((pedEntry && pedEntry.emissao) || (r ? r.DATA_PETR : null));
+            // Data prometida: OP_ENTREGA do firebird_sync_pedidos (data de entrega da OP)
+            const dataPromessa = utcDay((pedEntry && pedEntry.entrega) || (r ? r.ENTREGA_PETR : null));
             const qtdFat       = parseFloat(f.quantidade) || 0;
             const qtdPed       = r ? (parseFloat(r.QUANTIDADE_PPR) || 0) : 0;
 
@@ -162,7 +160,7 @@ router.get('/', async (req, res) => {
                 codigoItem:   codItemStr || '—',
                 cliente,
                 produto:      (f.descricao || '').trim(),
-                dataEmissao:  fmtDate(emissaoMap[pedProdKey] || (r ? r.DATA_PETR : null)),
+                dataEmissao:  fmtDate((pedEntry && pedEntry.emissao) || (r ? r.DATA_PETR : null)),
                 dataPromessa: fmtDate(r ? r.ENTREGA_PETR : null),
                 dataFaturada: fmtDate(f.data_faturamento),
                 qtdFat,
