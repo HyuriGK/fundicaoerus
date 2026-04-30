@@ -84,7 +84,7 @@ router.get('/', async (req, res) => {
             if (!pedidosMap[k]) pedidosMap[k] = { emissao: emissao || null, entrega: entrega || null };
         }
 
-        let onTimeCount = 0, inFullCount = 0, otifCount = 0, atrasosCount = 0;
+        let onTimeCount = 0, inFullCount = 0, otifCount = 0, atrasosCount = 0, prazoTotalDias = 0, prazoCount = 0;
         const porMes     = {};
         const porCliente = {};
         const linhas     = [];
@@ -140,6 +140,7 @@ router.get('/', async (req, res) => {
             if (inFull)  inFullCount++;
             if (isOtif)  otifCount++;
             if (!onTime) atrasosCount++;
+            if (dataEmissao && dataFat) { prazoTotalDias += Math.round((dataFat - dataEmissao) / 86400000); prazoCount++; }
 
             const mesIdx = dataFat.getUTCMonth();
             if (!porMes[mesIdx]) porMes[mesIdx] = { label: MESES[mesIdx], total: 0, onTime: 0, inFull: 0, otif: 0 };
@@ -203,6 +204,7 @@ router.get('/', async (req, res) => {
                 onTime:       total > 0 ? Math.round((onTimeCount  / total) * 100) : 0,
                 inFull:       total > 0 ? Math.round((inFullCount  / total) * 100) : 0,
                 atrasos: atrasosCount,
+                prazoMedio: prazoCount > 0 ? Math.round(prazoTotalDias / prazoCount) : null,
                 otifCount, onTimeCount, inFullCount,
             },
             porMes: mesesOrdenados,
