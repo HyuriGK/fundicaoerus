@@ -84,8 +84,9 @@ router.get('/', async (req, res) => {
             if (!pedidosMap[k]) pedidosMap[k] = { emissao: emissao || null, entrega: entrega || null };
         }
 
-        let onTimeCount = 0, inFullCount = 0, otifCount = 0, atrasosCount = 0;
-        const prazoAcum = {}; // pedProdKey -> { emissao, qtdAcum, qtdPed, ultimaDataFat }
+        let inFullCount = 0;
+        // pedProdKey -> { emissao, dataPromessa, qtdAcum, qtdPed, ultimaDataFat, mesIdx, cliente }
+        const pedAcum = {};
         const porMes     = {};
         const porCliente = {};
         const linhas     = [];
@@ -131,38 +132,22 @@ router.get('/', async (req, res) => {
             const qtdFat       = parseFloat(f.quantidade) || 0;
             const qtdPed       = r ? (parseFloat(r.QUANTIDADE_PPR) || 0) : 0;
 
-            const onTime = dataFat && dataPromessa ? dataFat <= dataPromessa : false;
             const inFull = qtdPed > 0 ? qtdFat >= qtdPed : qtdFat > 0;
-            const isOtif = onTime && inFull;
-            const diasAtraso = (!onTime && dataFat && dataPromessa)
-                ? Math.round((dataFat - dataPromessa) / 86400000) : 0;
-
-            if (onTime)  onTimeCount++;
-            if (inFull)  inFullCount++;
-            if (isOtif)  otifCount++;
-            if (!onTime) atrasosCount++;
-
-            // Acumular para prazo médio (só pedidos com qtdPed conhecida)
-            if (dataEmissao && qtdPed > 0) {
-                if (!prazoAcum[pedProdKey]) prazoAcum[pedProdKey] = { emissao: dataEmissao, qtdAcum: 0, qtdPed, ultimaDataFat: null };
-                prazoAcum[pedProdKey].qtdAcum += qtdFat;
-                if (!prazoAcum[pedProdKey].ultimaDataFat || dataFat > prazoAcum[pedProdKey].ultimaDataFat)
-                    prazoAcum[pedProdKey].ultimaDataFat = dataFat;
-            }
+            if (inFull) inFullCount++;
 
             const mesIdx = dataFat.getUTCMonth();
-            if (!porMes[mesIdx]) porMes[mesIdx] = { label: MESES[mesIdx], total: 0, onTime: 0, inFull: 0, otif: 0 };
-            porMes[mesIdx].total++;
-            if (onTime)  porMes[mesIdx].onTime++;
-            if (inFull)  porMes[mesIdx].inFull++;
-            if (isOtif)  porMes[mesIdx].otif++;
-
             const cliente = (f.cliente_nome || 'Desconhecido').trim();
-            if (!porCliente[cliente]) porCliente[cliente] = { total: 0, onTime: 0, inFull: 0, otif: 0 };
-            porCliente[cliente].total++;
-            if (onTime)  porCliente[cliente].onTime++;
-            if (inFull)  porCliente[cliente].inFull++;
-            if (isOtif)  porCliente[cliente].otif++;
+
+            // Acumular por pedido+item para On Time e prazo médio por entrega completa
+            if (!pedAcum[pedProdKey]) {
+                pedAcum[pedProdKey] = { emissao: dataEmissao, dataPromessa, qtdAcum: 0, qtdPed, ultimaDataFat: null, mesIdx, cliente };
+            }
+            pedAcum[pedProdKey].qtdAcum += qtdFat;
+            if (!pedAcum[pedProdKey].ultimaDataFat || dataFat > pedAcum[pedProdKey].ultimaDataFat)
+                pedAcum[pedProdKey].ultimaDataFat = dataFat;
+
+            const onTimeLinha = dataFat && dataPromessa ? dataFat <= dataPromessa : false;
+            const diasAtraso  = (!onTimeLinha && dataFat && dataPromessa) ? Math.round((dataFat - dataPromessa) / 86400000) : 0;
 
             linhas.push({
                 pedido:       pedidoStr || '—',
@@ -174,20 +159,38 @@ router.get('/', async (req, res) => {
                 dataFaturada: fmtDate(f.data_faturamento),
                 qtdFat,
                 qtdPed:       qtdPed || null,
-                onTime,
+                onTime:       onTimeLinha,
                 inFull,
-                otif: isOtif,
+                otif:         onTimeLinha && inFull,
                 diasAtraso,
             });
         }
 
-        // Prazo médio: só pedidos completamente entregues (qtdAcum >= qtdPed)
-        let prazoTotalDias = 0, prazoCount = 0;
-        for (const v of Object.values(prazoAcum)) {
-            if (v.qtdAcum >= v.qtdPed && v.ultimaDataFat) {
+        // KPIs e gráficos por pedido completo
+        let onTimeCount = 0, otifCount = 0, atrasosCount = 0, prazoTotalDias = 0, prazoCount = 0;
+        for (const v of Object.values(pedAcum)) {
+            const completo = v.qtdPed > 0 ? v.qtdAcum >= v.qtdPed : v.qtdAcum > 0;
+            if (!completo) continue; // pedido ainda não completamente faturado no período
+
+            const onTime = v.ultimaDataFat && v.dataPromessa ? v.ultimaDataFat <= v.dataPromessa : false;
+            if (onTime) onTimeCount++;
+            else atrasosCount++;
+            if (onTime) otifCount++; // inFull sempre true para pedido completo
+
+            if (v.emissao && v.ultimaDataFat) {
                 prazoTotalDias += Math.round((v.ultimaDataFat - v.emissao) / 86400000);
                 prazoCount++;
             }
+
+            if (!porMes[v.mesIdx]) porMes[v.mesIdx] = { label: MESES[v.mesIdx], total: 0, onTime: 0, inFull: 0, otif: 0 };
+            porMes[v.mesIdx].total++;
+            if (onTime) { porMes[v.mesIdx].onTime++; porMes[v.mesIdx].otif++; }
+            porMes[v.mesIdx].inFull++;
+
+            if (!porCliente[v.cliente]) porCliente[v.cliente] = { total: 0, onTime: 0, inFull: 0, otif: 0 };
+            porCliente[v.cliente].total++;
+            if (onTime) { porCliente[v.cliente].onTime++; porCliente[v.cliente].otif++; }
+            porCliente[v.cliente].inFull++;
         }
 
         // Ordenar por data faturada decrescente
@@ -197,7 +200,8 @@ router.get('/', async (req, res) => {
             return db.localeCompare(da);
         });
 
-        const total = linhas.length;
+        const totalLinhas = linhas.length;
+        const total = onTimeCount + atrasosCount; // pedidos completamente faturados
 
         const mesesOrdenados = Object.keys(porMes).map(Number).sort((a, b) => a - b).map(idx => ({
             ...porMes[idx],
@@ -216,7 +220,7 @@ router.get('/', async (req, res) => {
         res.json({
             success: true,
             kpis: {
-                total,
+                total: totalLinhas,
                 otif:         total > 0 ? Math.round((otifCount   / total) * 100) : 0,
                 onTime:       total > 0 ? Math.round((onTimeCount  / total) * 100) : 0,
                 inFull:       total > 0 ? Math.round((inFullCount  / total) * 100) : 0,
