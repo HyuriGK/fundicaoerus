@@ -76,6 +76,7 @@ router.get('/', async (req, res) => {
             linhas.push({
                 pedido:       r.PPR_CODIGO_PETR,
                 item:         r.PPR_ITEM_PETR,
+                codigoItem:   r.PRO_CODIGO_PETR,
                 cliente,
                 produto:      (r.NOME_PRODUTO_PPR || '').trim(),
                 dataPromessa: fmtDate(r.ENTREGA_PETR),
