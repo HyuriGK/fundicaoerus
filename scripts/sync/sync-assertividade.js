@@ -37,7 +37,7 @@ async function syncAssertividade() {
         console.log('📥 Lendo dados de PEDIDO_PRODUTO_ENTREGA (2025/2026)...');
 
         const query = `
-            SELECT 
+            SELECT
                 E.PPR_CODIGO_PETR,
                 E.PPR_ANO_PETR,
                 E.PPR_ITEM_PETR,
@@ -46,6 +46,7 @@ async function syncAssertividade() {
                 E.ENTREGA_PETR,
                 E.DATA_PETR,
                 E.QUANTIDADE_FATURADA_PETR,
+                P.QUANTIDADE_PPR,
                 C.RAZAO_SOCIAL_CLI AS NOME_CLIENTE,
                 P.NOME_PRODUTO_PPR
             FROM PEDIDO_PRODUTO_ENTREGA E

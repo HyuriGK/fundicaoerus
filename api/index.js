@@ -96,6 +96,7 @@ app.use('/api/admin/users', require('../src/admin-users')); // NOVO: Gestão de 
 app.use('/api/ai-assistant', require('../src/ai-assistant')); // NOVO: Assistente de IA
 app.use('/api/audit-logger', require('../src/audit-logger')); // NOVO: Log de Atividades
 app.use('/api/page-locks', require('../src/page-locks')); // NOVO: Bloqueio de Telas
+app.use('/api/otif', require('../src/otif')); // NOVO: OTIF - Indicador de Entrega
 app.use('/api/custos-dashboard', require('../src/custos-dashboard')); // NOVO: Painel de Produção
 app.use('/api/custos-detalhados', require('../src/custos-detalhados-firebird')); // NOVO: Detalhamento de Custos (Postgres Sync)
 app.use('/api/centro-custos', require('../src/centro-custos')); // NOVO: Centro de Custos (Mapeamento)

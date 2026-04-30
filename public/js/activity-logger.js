@@ -52,7 +52,11 @@
                         }
                     } else if (role !== 'desenvolvedor' && role !== 'admin') {
                         // Bloqueio manual — apenas não-devs
-                        showMaintenanceOverlay();
+                        if (lock.lock_reason === 'development') {
+                            showDevelopmentOverlay();
+                        } else {
+                            showMaintenanceOverlay();
+                        }
                     }
                 }
             }
@@ -290,6 +294,226 @@
         document.body.appendChild(overlay);
 
         // Impedir que o usuário use ESC para fechar algo se estiver bloqueado
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') e.preventDefault();
+        }, true);
+    }
+
+    function showDevelopmentOverlay() {
+        if (document.getElementById('development-overlay')) return;
+
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes dev-overlay-fadein {
+                from { opacity: 0; }
+                to { opacity: 1; }
+            }
+            @keyframes dev-modal-enter {
+                0% { opacity: 0; transform: translateY(30px) scale(0.92); }
+                60% { transform: translateY(-6px) scale(1.02); }
+                100% { opacity: 1; transform: translateY(0) scale(1); }
+            }
+            @keyframes dev-icon-float {
+                0%, 100% { transform: translateY(0) rotate(-4deg); }
+                50% { transform: translateY(-8px) rotate(4deg); }
+            }
+            @keyframes dev-pulse-dot {
+                0%, 100% { opacity: 1; transform: scale(1); }
+                50% { opacity: 0.5; transform: scale(1.4); }
+            }
+            @keyframes dev-shimmer {
+                0% { background-position: -200% center; }
+                100% { background-position: 200% center; }
+            }
+            @keyframes dev-border-glow {
+                0%, 100% { border-color: rgba(168, 85, 247, 0.15); }
+                50% { border-color: rgba(168, 85, 247, 0.35); }
+            }
+            @keyframes dev-code-blink {
+                0%, 100% { opacity: 1; }
+                50% { opacity: 0; }
+            }
+            #development-overlay {
+                animation: dev-overlay-fadein 0.6s ease-out forwards;
+            }
+            #development-overlay .dev-modal {
+                animation: dev-modal-enter 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) 0.2s both,
+                           dev-border-glow 3s ease-in-out infinite 1s;
+            }
+            #development-overlay .dev-icon-wrap {
+                animation: dev-icon-float 3s ease-in-out infinite;
+            }
+            #development-overlay .dev-pulse {
+                animation: dev-pulse-dot 2s ease-in-out infinite;
+            }
+            #development-overlay .dev-title {
+                background: linear-gradient(90deg, #fff 0%, #a855f7 30%, #fff 60%, #a855f7 100%);
+                background-size: 200% auto;
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                background-clip: text;
+                animation: dev-shimmer 4s linear infinite;
+            }
+            #development-overlay .dev-btn {
+                transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            }
+            #development-overlay .dev-btn:hover {
+                transform: translateY(-2px) scale(1.04);
+                box-shadow: 0 14px 30px -6px rgba(168, 85, 247, 0.35);
+                background: linear-gradient(135deg, #a855f7, #7e22ce) !important;
+            }
+            #development-overlay .dev-cursor {
+                animation: dev-code-blink 1s step-end infinite;
+            }
+        `;
+        document.head.appendChild(style);
+
+        let blurTarget = document.querySelector('.app-layout');
+        if (!blurTarget) {
+            blurTarget = document.createElement('div');
+            blurTarget.id = 'dev-blur-wrapper';
+            while (document.body.firstChild) {
+                blurTarget.appendChild(document.body.firstChild);
+            }
+            document.body.appendChild(blurTarget);
+        }
+        blurTarget.style.filter = 'blur(8px) saturate(0.5)';
+        blurTarget.style.pointerEvents = 'none';
+        blurTarget.style.userSelect = 'none';
+        blurTarget.style.transition = 'filter 0.6s ease';
+
+        const overlay = document.createElement('div');
+        overlay.id = 'development-overlay';
+        overlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(9, 9, 11, 0.55);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 99999;
+            color: #fff;
+            font-family: 'Inter', sans-serif;
+            text-align: center;
+            padding: 20px;
+            backdrop-filter: blur(2px);
+            opacity: 0;
+        `;
+
+        overlay.innerHTML = `
+            <div class="dev-modal" style="
+                max-width: 520px;
+                width: 100%;
+                background: rgba(15, 15, 20, 0.85);
+                backdrop-filter: blur(40px) saturate(1.5);
+                -webkit-backdrop-filter: blur(40px) saturate(1.5);
+                padding: 48px 40px 40px;
+                border-radius: 28px;
+                border: 1px solid rgba(168, 85, 247, 0.15);
+                box-shadow:
+                    0 0 0 1px rgba(255,255,255,0.04),
+                    0 30px 60px -12px rgba(0, 0, 0, 0.6),
+                    0 0 80px -20px rgba(168, 85, 247, 0.12);
+                position: relative;
+                overflow: hidden;
+            ">
+                <!-- Decorative code icon background -->
+                <div style="position: absolute; top: -30px; right: -30px; opacity: 0.03; pointer-events: none;">
+                    <i class="fa-solid fa-code" style="font-size: 120px; color: #a855f7;"></i>
+                </div>
+                <div style="position: absolute; bottom: -20px; left: -20px; opacity: 0.02; pointer-events: none;">
+                    <i class="fa-solid fa-terminal" style="font-size: 80px; color: #a855f7;"></i>
+                </div>
+
+                <!-- Status indicator -->
+                <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 28px;">
+                    <span class="dev-pulse" style="width: 8px; height: 8px; background: #a855f7; border-radius: 50%; display: inline-block;"></span>
+                    <span style="font-size: 0.75rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #a855f7;">Em Desenvolvimento</span>
+                </div>
+
+                <!-- Icon -->
+                <div class="dev-icon-wrap" style="
+                    width: 88px;
+                    height: 88px;
+                    background: linear-gradient(135deg, rgba(168, 85, 247, 0.15), rgba(168, 85, 247, 0.05));
+                    border-radius: 24px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    margin: 0 auto 28px;
+                    border: 1px solid rgba(168, 85, 247, 0.2);
+                    box-shadow: 0 8px 24px -4px rgba(168, 85, 247, 0.15);
+                ">
+                    <i class="fa-solid fa-code" style="font-size: 36px; color: #a855f7;"></i>
+                </div>
+
+                <!-- Title -->
+                <h1 class="dev-title" style="
+                    font-size: 1.6rem;
+                    font-weight: 800;
+                    margin-bottom: 14px;
+                    letter-spacing: -0.03em;
+                    line-height: 1.2;
+                ">Página em<br>Desenvolvimento</h1>
+
+                <!-- Description -->
+                <p style="
+                    color: #a1a1aa;
+                    line-height: 1.7;
+                    margin-bottom: 12px;
+                    font-size: 0.95rem;
+                    max-width: 400px;
+                    margin-left: auto;
+                    margin-right: auto;
+                ">
+                    Esta página está sendo <strong style="color: #e4e4e7;">desenvolvida</strong> pela equipe técnica e ainda não está disponível.
+                </p>
+                <p style="
+                    color: #71717a;
+                    line-height: 1.6;
+                    margin-bottom: 32px;
+                    font-size: 0.85rem;
+                ">
+                    Em breve esta funcionalidade estará disponível. Agradecemos a paciência.
+                </p>
+
+                <!-- Divider -->
+                <div style="
+                    width: 60px;
+                    height: 2px;
+                    background: linear-gradient(90deg, transparent, rgba(168, 85, 247, 0.4), transparent);
+                    margin: 0 auto 28px;
+                    border-radius: 1px;
+                "></div>
+
+                <!-- Button -->
+                <a href="index.html" class="dev-btn" style="
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 10px;
+                    background: linear-gradient(135deg, #a855f7, #7e22ce);
+                    color: #fff;
+                    padding: 14px 36px;
+                    border-radius: 14px;
+                    font-weight: 700;
+                    font-size: 0.9rem;
+                    text-decoration: none;
+                    box-shadow: 0 10px 25px -5px rgba(168, 85, 247, 0.3);
+                    letter-spacing: 0.01em;
+                ">
+                    <i class="fa-solid fa-arrow-left" style="font-size: 14px;"></i>
+                    Voltar para o Início
+                </a>
+            </div>
+        `;
+
+        document.body.appendChild(overlay);
+
         window.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') e.preventDefault();
         }, true);
