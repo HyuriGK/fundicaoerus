@@ -59,7 +59,7 @@ router.get('/', async (req, res) => {
                 ORDER BY f.data_faturamento DESC, f.nota_fiscal DESC
             `, [anoFiltro]),
             pool.query(`SELECT data FROM firebird_sync_assertividade`),
-            pool.query(`SELECT data->>'PEDIDO_NUM' as ped, data->>'PRODUTO_PPR' as prod, data->>'DATA_EMISSAO_PEDIDO' as emissao, data->>'OP_ENTREGA' as entrega FROM firebird_sync_pedidos WHERE data->>'PEDIDO_NUM' IS NOT NULL AND data->>'PRODUTO_PPR' IS NOT NULL`),
+            pool.query(`SELECT data->>'PEDIDO_NUM' as ped, data->>'PRODUTO_PPR' as prod, data->>'DATA_EMISSAO_PEDIDO' as emissao, data->>'OP_ENTREGA' as entrega, data->>'ENTREGA_PED' as entrega_ped FROM firebird_sync_pedidos WHERE data->>'PEDIDO_NUM' IS NOT NULL AND data->>'PRODUTO_PPR' IS NOT NULL`),
         ]);
 
         // Mapa assertividade: pedido_codItem exato e fallback por pedido (para data prometida)
@@ -81,7 +81,7 @@ router.get('/', async (req, res) => {
             const { ped, prod, emissao, entrega } = row;
             if (!ped || !prod) continue;
             const k = `${ped}_${prod}`;
-            if (!pedidosMap[k]) pedidosMap[k] = { emissao: emissao || null, entrega: entrega || null };
+            if (!pedidosMap[k]) pedidosMap[k] = { emissao: emissao || null, entrega: entrega || null, entregaPed: row.entrega_ped || null };
         }
 
         let onTimeCount = 0, inFullCount = 0, otifCount = 0, atrasosCount = 0;
@@ -164,7 +164,8 @@ router.get('/', async (req, res) => {
                 cliente,
                 produto:      (f.descricao || '').trim(),
                 dataEmissao:  fmtDate((pedEntry && pedEntry.emissao) || (r ? r.DATA_PETR : null)),
-                dataPromessa: fmtDate(r ? r.ENTREGA_PETR : null),
+                dataPromessa:   fmtDate(r ? r.ENTREGA_PETR : null),
+                dataNecessidade: fmtDate(pedEntry ? pedEntry.entregaPed : null),
                 dataFaturada: fmtDate(f.data_faturamento),
                 qtdFat,
                 qtdPed:       qtdPed || null,

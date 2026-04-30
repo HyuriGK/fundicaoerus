@@ -57,6 +57,12 @@ async function syncMaster() {
                             WHERE PP.PCP_CODIGO_PCPR = P.CODIGO_PCP AND PP.PCP_EMPRESA_PCPR = P.EMPRESA_PCP
                         ) as DATA_EMISSAO_PEDIDO,
                         (
+                            SELECT FIRST 1 D.ENTREGA_PED
+                            FROM PRODUCAO_PEDIDO PP
+                            JOIN PEDIDO D ON D.CODIGO_PED = PP.PPR_CODIGO_PCPR AND D.ANO_PED = PP.PPR_ANO_PCPR AND D.EMPRESA_PED = PP.PPR_EMPRESA_PCPR
+                            WHERE PP.PCP_CODIGO_PCPR = P.CODIGO_PCP AND PP.PCP_EMPRESA_PCPR = P.EMPRESA_PCP
+                        ) as ENTREGA_PED,
+                        (
                             SELECT FIRST 1 PPR.FATURADO_PPR
                             FROM PRODUCAO_PEDIDO PP
                             JOIN PEDIDO_PRODUTO PPR ON PPR.CODIGO_PPR = PP.PPR_CODIGO_PCPR AND PPR.ANO_PPR = PP.PPR_ANO_PCPR AND PPR.ITEM_PPR = PP.PPR_ITEM_PCPR AND PPR.EMPRESA_PPR = PP.PPR_EMPRESA_PCPR
