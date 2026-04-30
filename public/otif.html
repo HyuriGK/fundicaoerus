@@ -276,14 +276,22 @@
 
 <script>
 function showToast(title, subtitle, type = 'info') {
-    const container = document.getElementById('toast-container');
-    if (!container) return;
+    let container = document.getElementById('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        container.className = 'toast-container';
+        document.body.appendChild(container);
+    }
     const toast = document.createElement('div');
-    toast.className = `toast${type === 'danger' ? ' danger' : ''}`;
-    const icon = type === 'danger' ? 'fa-circle-exclamation' : type === 'success' ? 'fa-circle-check' : 'fa-circle-info';
-    toast.innerHTML = `<i class="fa-solid ${icon} toast-icon"></i><div class="toast-content"><div class="toast-title">${title}</div><div class="toast-subtitle">${subtitle}</div></div>`;
+    toast.className = `toast ${type}`;
+    const icon = type === 'danger' ? '<i class="fa-solid fa-ban toast-icon"></i>' : '<i class="fa-solid fa-circle-info toast-icon"></i>';
+    toast.innerHTML = `${icon}<div class="toast-content"><span class="toast-title">${title}</span><span class="toast-subtitle">${subtitle}</span></div>`;
     container.appendChild(toast);
-    setTimeout(() => { toast.style.animation = 'fadeOut 0.4s forwards'; setTimeout(() => toast.remove(), 400); }, 3500);
+    setTimeout(() => {
+        toast.style.animation = 'fadeOut 0.5s ease-out forwards';
+        setTimeout(() => { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 500);
+    }, 4000);
 }
 
 let allData = null;
@@ -557,6 +565,14 @@ function setView(view) {
     }, 50);
 }
 
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+function copyCodItem(cod) {
+    navigator.clipboard.writeText(String(cod)).then(() => {
+        showToast('Copiado!', `Código "${cod}" copiado para a área de transferência.`, 'success');
+    }).catch(() => showToast('Erro', 'Falha ao copiar.', 'danger'));
+}
+
 function openModal() {
     if (!allData) return;
     document.getElementById('modalSearch').value = '';
@@ -591,7 +607,7 @@ function renderModalRows(linhas) {
         return `<tr>
             <td style="font-family:var(--font-mono);font-size:0.78rem;color:#71717a;">${l.pedido ?? '—'}</td>
             <td style="font-weight:500;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${l.cliente}">${l.cliente}</td>
-            <td style="font-family:var(--font-mono);font-size:0.82rem;color:#fbbf24;">${l.codigoItem ?? '—'}</td>
+            <td style="font-family:var(--font-mono);font-size:0.82rem;color:#fbbf24;cursor:pointer;" onclick="copyCodItem(${l.codigoItem})" title="Clique para copiar">${l.codigoItem ?? '—'}</td>
             <td style="color:#a1a1aa;font-size:0.78rem;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${l.produto}">${l.produto || '—'}</td>
             <td style="text-align:center;font-family:var(--font-mono);font-size:0.82rem;">${l.dataPromessa || '—'}</td>
             <td style="text-align:center;font-family:var(--font-mono);font-size:0.82rem;color:#71717a;">${l.dataEmissao || '—'}</td>

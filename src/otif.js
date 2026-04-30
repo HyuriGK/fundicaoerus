@@ -42,10 +42,15 @@ router.get('/', async (req, res) => {
 
         const registros = assertRes.rows.map(r => r.data);
 
+        const hoje = new Date();
         const filtrados = registros.filter(r => {
             if (!r.DATA_PETR) return false;
             const d = new Date(r.DATA_PETR);
-            return !isNaN(d) && d.getUTCFullYear() === anoFiltro;
+            if (isNaN(d) || d.getUTCFullYear() !== anoFiltro) return false;
+            // Excluir registros de meses futuros
+            if (d.getUTCFullYear() > hoje.getFullYear()) return false;
+            if (d.getUTCFullYear() === hoje.getFullYear() && d.getUTCMonth() > hoje.getMonth()) return false;
+            return true;
         });
 
         let onTimeCount = 0, inFullCount = 0, otifCount = 0, atrasosCount = 0;
