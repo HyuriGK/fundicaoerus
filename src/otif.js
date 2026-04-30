@@ -36,7 +36,7 @@ router.get('/', async (req, res) => {
         const hoje = new Date();
 
         // Buscar faturamento detalhado (mesma query do faturamentos.html)
-        const [fatRes, assertRes] = await Promise.all([
+        const [fatRes, assertRes, pedRes] = await Promise.all([
             pool.query(`
                 SELECT
                     f.data_faturamento,
@@ -59,21 +59,31 @@ router.get('/', async (req, res) => {
                 ORDER BY f.data_faturamento DESC, f.nota_fiscal DESC
             `, [anoFiltro]),
             pool.query(`SELECT data FROM firebird_sync_assertividade`),
+            pool.query(`SELECT data FROM firebird_sync_pedidos`),
         ]);
 
-        // Mapa 1: pedido + cod_item exato
-        // Mapa 2: pedido -> lista de registros (fallback quando cod_item não bate)
-        const assertExact  = {};
-        const assertByPed  = {};
+        // Mapa assertividade: pedido_codItem exato e fallback por pedido (para data prometida)
+        const assertExact = {};
+        const assertByPed = {};
         for (const row of assertRes.rows) {
             const r = row.data;
             if (!r.PPR_CODIGO_PETR) continue;
-            const ped  = String(r.PPR_CODIGO_PETR);
-            const cod  = String(r.PRO_CODIGO_PETR || '');
-            const kExact = `${ped}_${cod}`;
-            assertExact[kExact] = r;
+            const ped = String(r.PPR_CODIGO_PETR);
+            const cod = String(r.PRO_CODIGO_PETR || '');
+            assertExact[`${ped}_${cod}`] = r;
             if (!assertByPed[ped]) assertByPed[ped] = [];
             assertByPed[ped].push(r);
+        }
+
+        // Mapa pedidos: pedido_codItem -> DATA_EMISSAO_PEDIDO (fonte correta para data de emissão)
+        const emissaoMap = {};
+        const entregaPedMap = {};
+        for (const row of pedRes.rows) {
+            const d = row.data;
+            if (!d.CODIGO_PPR || !d.PRODUTO_PPR) continue;
+            const k = `${String(d.CODIGO_PPR)}_${String(d.PRODUTO_PPR)}`;
+            if (d.DATA_EMISSAO_PEDIDO) emissaoMap[k]   = d.DATA_EMISSAO_PEDIDO;
+            if (d.DATA_ENTREGA_PPR)    entregaPedMap[k] = d.DATA_ENTREGA_PPR;
         }
 
         let onTimeCount = 0, inFullCount = 0, otifCount = 0, atrasosCount = 0;
@@ -114,8 +124,11 @@ router.get('/', async (req, res) => {
                 }
             }
 
-            const dataEmissao  = r ? utcDay(r.DATA_PETR)    : null;
-            const dataPromessa = r ? utcDay(r.ENTREGA_PETR) : null;
+            // Data de emissão: firebird_sync_pedidos (pedido+produto) — fonte mais precisa
+            const pedProdKey   = `${pedidoStr}_${codItemStr}`;
+            const dataEmissao  = utcDay(emissaoMap[pedProdKey] || (r ? r.DATA_PETR : null));
+            // Data prometida: assertividade ENTREGA_PETR, fallback DATA_ENTREGA_PPR de pedidos
+            const dataPromessa = utcDay(r ? r.ENTREGA_PETR : null) || utcDay(entregaPedMap[pedProdKey] || null);
             const qtdFat       = parseFloat(f.quantidade) || 0;
             const qtdPed       = r ? (parseFloat(r.QUANTIDADE_PPR) || 0) : 0;
 
