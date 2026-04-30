@@ -61,13 +61,19 @@ router.get('/', async (req, res) => {
             pool.query(`SELECT data FROM firebird_sync_assertividade`),
         ]);
 
-        // Mapa assertividade: pedido_codItem -> { ENTREGA_PETR, DATA_PETR, QUANTIDADE_FATURADA_PETR, QUANTIDADE_PPR }
-        const assertMap = {};
+        // Mapa 1: pedido + cod_item exato
+        // Mapa 2: pedido -> lista de registros (fallback quando cod_item não bate)
+        const assertExact  = {};
+        const assertByPed  = {};
         for (const row of assertRes.rows) {
             const r = row.data;
-            if (!r.PPR_CODIGO_PETR || !r.PRO_CODIGO_PETR) continue;
-            const k = `${r.PPR_CODIGO_PETR}_${r.PRO_CODIGO_PETR}`;
-            assertMap[k] = r;
+            if (!r.PPR_CODIGO_PETR) continue;
+            const ped  = String(r.PPR_CODIGO_PETR);
+            const cod  = String(r.PRO_CODIGO_PETR || '');
+            const kExact = `${ped}_${cod}`;
+            assertExact[kExact] = r;
+            if (!assertByPed[ped]) assertByPed[ped] = [];
+            assertByPed[ped].push(r);
         }
 
         let onTimeCount = 0, inFullCount = 0, otifCount = 0, atrasosCount = 0;
@@ -87,11 +93,26 @@ router.get('/', async (req, res) => {
             if (dataFat.getUTCFullYear() > hoje.getFullYear()) continue;
             if (dataFat.getUTCFullYear() === hoje.getFullYear() && dataFat.getUTCMonth() > hoje.getMonth()) continue;
 
-            // Cruzar com assertividade pelo pedido + codigo_item
+            // Cruzar com assertividade: tenta exato (pedido+cod_item), depois fallback por pedido
             const pedidoStr  = String(f.pedido || '').trim();
             const codItemStr = String(f.codigo_item || '').trim();
-            const assertKey  = `${pedidoStr}_${codItemStr}`;
-            const r          = assertMap[assertKey];
+            const kExact = `${pedidoStr}_${codItemStr}`;
+            let r = assertExact[kExact];
+            if (!r && assertByPed[pedidoStr]) {
+                // Fallback: pegar o registro do pedido com data de entrega mais próxima da data de faturamento
+                const candidates = assertByPed[pedidoStr];
+                if (candidates.length === 1) {
+                    r = candidates[0];
+                } else {
+                    // Escolher o item com ENTREGA_PETR mais próxima (depois ou antes) da data de faturamento
+                    const dataFatMs = dataFat ? dataFat.getTime() : 0;
+                    r = candidates.reduce((best, cur) => {
+                        const dBest = best.ENTREGA_PETR ? Math.abs(new Date(best.ENTREGA_PETR).getTime() - dataFatMs) : Infinity;
+                        const dCur  = cur.ENTREGA_PETR  ? Math.abs(new Date(cur.ENTREGA_PETR).getTime()  - dataFatMs) : Infinity;
+                        return dCur < dBest ? cur : best;
+                    });
+                }
+            }
 
             const dataEmissao  = r ? utcDay(r.DATA_PETR)    : null;
             const dataPromessa = r ? utcDay(r.ENTREGA_PETR) : null;
