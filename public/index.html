@@ -6312,7 +6312,10 @@
                     { id: 'refugos.html', name: 'Lançamento de Refugo' },
 
 
-                    { id: 'devolucoes.html', name: 'Devoluções' }
+                    { id: 'devolucoes.html', name: 'Devoluções' },
+
+
+                    { id: 'otif.html', name: 'OTIF' }
 
 
                 ];
@@ -6372,19 +6375,19 @@
                     const lockMap = {};
 
 
-                    activeLocks.forEach(l => { 
+                    activeLocks.forEach(l => {
 
 
-                        lockMap[l.page_id] = { 
+                        lockMap[l.page_id] = {
 
 
-                            is_locked: l.is_locked, 
+                            is_locked: l.is_locked,
 
 
-                            lock_reason: l.lock_reason 
+                            lock_reason: l.lock_reason
 
 
-                        }; 
+                        };
 
 
                     });
@@ -6403,24 +6406,25 @@
 
 
                         const isLocked = lockInfo.is_locked === true;
+                        const reason = lockInfo.lock_reason;
 
 
-                        const statusTag = isLocked
+                        let statusTag;
+                        if (!isLocked) {
+                            statusTag = '<span style="color: #10b981; background: rgba(16, 185, 129, 0.1); padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">LIBERADA</span>';
+                        } else if (reason === 'development') {
+                            statusTag = '<span style="color: #a855f7; background: rgba(168, 85, 247, 0.1); padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">DESENVOLVIMENTO</span>';
+                        } else {
+                            statusTag = '<span style="color: #f59e0b; background: rgba(245, 158, 11, 0.1); padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">MANUTENÇÃO</span>';
+                        }
 
 
-                            ? '<span style="color: #ef4444; background: rgba(239, 68, 68, 0.1); padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">BLOQUEADA</span>'
-
-
-                            : '<span style="color: #10b981; background: rgba(16, 185, 129, 0.1); padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">LIBERADA</span>';
-
-
-                        const actionBtn = isLocked
-
-
-                            ? `<button class="modal-close-btn" style="background: rgba(16, 185, 129, 0.1); color: #10b981; border: none; padding: 5px 12px; width: 100px;" onclick="togglePageLock('${page.id}', false)">Liberar</button>`
-
-
-                            : `<button class="modal-close-btn" style="background: rgba(239, 68, 68, 0.1); color: #ef4444; border: none; padding: 5px 12px; width: 100px;" onclick="togglePageLock('${page.id}', true)">Bloquear</button>`;
+                        const actionBtns = isLocked
+                            ? `<button class="modal-close-btn" style="background: rgba(16, 185, 129, 0.1); color: #10b981; border: none; padding: 5px 12px;" onclick="togglePageLock('${page.id}', false, null)">Liberar</button>`
+                            : `<div style="display:flex; gap:6px; justify-content:center;">
+                                <button class="modal-close-btn" style="background: rgba(245, 158, 11, 0.1); color: #f59e0b; border: 1px solid rgba(245,158,11,0.2); padding: 5px 10px; font-size:0.72rem;" onclick="togglePageLock('${page.id}', true, 'maintenance')"><i class="fa-solid fa-wrench" style="margin-right:4px;"></i>Manutenção</button>
+                                <button class="modal-close-btn" style="background: rgba(168, 85, 247, 0.1); color: #a855f7; border: 1px solid rgba(168,85,247,0.2); padding: 5px 10px; font-size:0.72rem;" onclick="togglePageLock('${page.id}', true, 'development')"><i class="fa-solid fa-code" style="margin-right:4px;"></i>Desenvolvimento</button>
+                               </div>`;
 
 
                         return `
@@ -6435,7 +6439,7 @@
                                 <td>${statusTag}</td>
 
 
-                                <td style="text-align: center;">${actionBtn}</td>
+                                <td style="text-align: center;">${actionBtns}</td>
 
 
                             </tr>
@@ -6450,7 +6454,7 @@
                 }
 
 
-                async function togglePageLock(pageId, isLocked) {
+                async function togglePageLock(pageId, isLocked, lockReason) {
 
 
                     try {
@@ -6474,7 +6478,7 @@
                             },
 
 
-                            body: JSON.stringify({ page_id: pageId, is_locked: isLocked })
+                            body: JSON.stringify({ page_id: pageId, is_locked: isLocked, lock_reason: lockReason })
 
 
                         });
@@ -6486,7 +6490,8 @@
                         if (data.success) {
 
 
-                            showToast(isLocked ? 'Página Bloqueada' : 'Página Liberada', `${pageId} agora está ${isLocked ? 'bloqueada' : 'disponível'}.`, isLocked ? 'info' : 'success');
+                            const label = isLocked ? (lockReason === 'development' ? 'Em Desenvolvimento' : 'Em Manutenção') : 'Liberada';
+                            showToast(isLocked ? 'Página Bloqueada' : 'Página Liberada', `${pageId} agora está ${label.toLowerCase()}.`, isLocked ? 'info' : 'success');
 
 
                             loadPageLocks();
@@ -6555,7 +6560,7 @@
                         const isManual = lockInfo.lock_reason === 'manual';
 
 
-                        if (isLocked && isManual) {
+                        if (isLocked && lockInfo.lock_reason === 'development') {
 
 
                             // Salva pai original se não existir
@@ -6582,7 +6587,7 @@
                         } else {
 
 
-                            // Devolver ao pai original se estiver em desenvolvimento e for desbloqueado
+                            // Devolver ao pai original se estiver em desenvolvimento e não for mais 'development'
 
 
                             if (link.dataset.originalGroup && link.closest('#group-desenvolvimento')) {

@@ -25,19 +25,21 @@ router.get('/', async (req, res) => {
 
 // POST: Alterna o bloqueio de uma página (manual, via admin)
 router.post('/toggle', checkDev, async (req, res) => {
-    const { page_id, is_locked } = req.body;
+    const { page_id, is_locked, lock_reason } = req.body;
 
     if (!page_id) {
         return res.status(400).json({ success: false, message: 'ID da página é obrigatório.' });
     }
 
+    const reason = is_locked ? (lock_reason || 'maintenance') : null;
+
     try {
         await pool.query(`
             INSERT INTO page_locks (page_id, is_locked, lock_reason)
             VALUES ($1, $2, $3)
-            ON CONFLICT (page_id) 
+            ON CONFLICT (page_id)
             DO UPDATE SET is_locked = EXCLUDED.is_locked, lock_reason = EXCLUDED.lock_reason, updated_at = CURRENT_TIMESTAMP
-        `, [page_id, is_locked, is_locked ? 'manual' : null]);
+        `, [page_id, is_locked, reason]);
 
         res.json({ success: true, message: `Página ${page_id} ${is_locked ? 'bloqueada' : 'desbloqueada'} com sucesso.` });
     } catch (error) {
