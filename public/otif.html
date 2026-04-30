@@ -126,7 +126,10 @@
         .modal-close:hover { transform: scale(1.1); color: #ff0000; }
         .modal-table-wrap { flex: 1; overflow-y: auto; }
         .modal-table-wrap table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
-        .modal-table-wrap th { background: #18181b; color: var(--text-muted); font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border-subtle); position: sticky; top: 0; z-index: 1; }
+        .modal-table-wrap th { background: #18181b; color: var(--text-muted); font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 8px 12px 6px; text-align: left; border-bottom: 1px solid var(--border-subtle); position: sticky; top: 0; z-index: 1; }
+        .col-filter { display: block; width: 100%; margin-top: 5px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); border-radius: 4px; color: #fff; padding: 3px 7px; font-size: 0.68rem; font-family: var(--font-main); font-weight: 400; text-transform: none; letter-spacing: 0; outline: none; transition: border-color 0.2s; }
+        .col-filter:focus { border-color: var(--color-primary); }
+        .col-filter::placeholder { color: #52525b; }
         .modal-table-wrap td { padding: 9px 12px; border-bottom: 1px solid var(--border-separator, rgba(255,255,255,0.04)); color: var(--text-main); }
         .modal-table-wrap tr:hover td { background: rgba(255,255,255,0.02); }
         .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: 700; }
@@ -244,7 +247,6 @@
         <div class="modal-header">
             <div style="display:flex;align-items:center;gap:20px;">
                 <span class="modal-title">Registros OTIF</span>
-                <input type="text" id="modalSearch" placeholder="Filtrar cliente ou produto..." oninput="filterModal()" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#fff;padding:6px 14px;border-radius:8px;font-size:0.82rem;font-family:'Inter',sans-serif;outline:none;width:260px;">
                 <span id="modalCount" style="font-size:0.78rem;color:#71717a;font-weight:500;"></span>
             </div>
             <span class="modal-close" onclick="closeModal()"><i class="fa-solid fa-xmark"></i></span>
@@ -253,19 +255,19 @@
             <table id="modalTable">
                 <thead>
                     <tr>
-                        <th>Pedido</th>
-                        <th>Cliente</th>
-                        <th>Cód. Item</th>
-                        <th>Produto</th>
-                        <th style="text-align:center;">Data Prometida</th>
-                        <th style="text-align:center;">Data Emissão</th>
-                        <th style="text-align:center;">Data Faturada</th>
-                        <th style="text-align:center;">Qtd Ped.</th>
-                        <th style="text-align:center;">Qtd Fat.</th>
-                        <th style="text-align:center;">Dias Atraso</th>
-                        <th style="text-align:center;">On Time</th>
-                        <th style="text-align:center;">In Full</th>
-                        <th style="text-align:center;">OTIF</th>
+                        <th>Pedido<br><input class="col-filter" data-col="0" placeholder="filtrar..."></th>
+                        <th>Cliente<br><input class="col-filter" data-col="1" placeholder="filtrar..."></th>
+                        <th>Cód. Item<br><input class="col-filter" data-col="2" placeholder="filtrar..."></th>
+                        <th>Produto<br><input class="col-filter" data-col="3" placeholder="filtrar..."></th>
+                        <th style="text-align:center;">Data Emissão<br><input class="col-filter" data-col="4" placeholder="filtrar..."></th>
+                        <th style="text-align:center;">Data Prometida<br><input class="col-filter" data-col="5" placeholder="filtrar..."></th>
+                        <th style="text-align:center;">Data Faturada<br><input class="col-filter" data-col="6" placeholder="filtrar..."></th>
+                        <th style="text-align:center;">Qtd Ped.<br><input class="col-filter" data-col="7" placeholder="filtrar..."></th>
+                        <th style="text-align:center;">Qtd Fat.<br><input class="col-filter" data-col="8" placeholder="filtrar..."></th>
+                        <th style="text-align:center;">Dias Atraso<br><input class="col-filter" data-col="9" placeholder="filtrar..."></th>
+                        <th style="text-align:center;">On Time<br><input class="col-filter" data-col="10" placeholder="filtrar..."></th>
+                        <th style="text-align:center;">In Full<br><input class="col-filter" data-col="11" placeholder="filtrar..."></th>
+                        <th style="text-align:center;">OTIF<br><input class="col-filter" data-col="12" placeholder="filtrar..."></th>
                     </tr>
                 </thead>
                 <tbody id="modalBody"></tbody>
@@ -573,26 +575,57 @@ function copyCodItem(cod) {
     }).catch(() => showToast('Erro', 'Falha ao copiar.', 'danger'));
 }
 
+// Filtros por coluna: col index -> valor
+const colFilters = {};
+
 function openModal() {
     if (!allData) return;
-    document.getElementById('modalSearch').value = '';
+    // Limpar filtros
+    Object.keys(colFilters).forEach(k => delete colFilters[k]);
+    document.querySelectorAll('.col-filter').forEach(i => i.value = '');
     renderModalRows(allData.linhas);
     document.getElementById('recordsModal').classList.add('active');
+    // Attach listeners (só uma vez por abertura, usando flag)
+    document.querySelectorAll('.col-filter').forEach(input => {
+        input.oninput = () => applyColFilters();
+    });
 }
 function closeModal() { document.getElementById('recordsModal').classList.remove('active'); }
 
-function filterModal() {
+function applyColFilters() {
     if (!allData) return;
-    const q = document.getElementById('modalSearch').value.toLowerCase();
-    const filtered = allData.linhas.filter(l =>
-        l.cliente.toLowerCase().includes(q) || l.produto.toLowerCase().includes(q)
-    );
+    // Ler valores de cada input de coluna
+    const filters = [];
+    document.querySelectorAll('.col-filter').forEach(input => {
+        filters[parseInt(input.dataset.col)] = input.value.trim().toLowerCase();
+    });
+
+    const filtered = allData.linhas.filter(l => {
+        // Montar array de células na mesma ordem das colunas
+        const cells = [
+            String(l.pedido ?? ''),
+            l.cliente,
+            String(l.codigoItem ?? ''),
+            l.produto,
+            l.dataEmissao  ?? '',
+            l.dataPromessa ?? '',
+            l.dataFaturada ?? '',
+            String(l.qtdPed ?? ''),
+            String(l.qtdFat ?? ''),
+            String(l.diasAtraso ?? ''),
+            l.onTime ? 'sim' : 'não',
+            l.inFull ? 'sim' : (l.qtdPed ? 'não' : '?'),
+            l.otif   ? 'sim' : 'não',
+        ];
+        return filters.every((f, i) => !f || cells[i].toLowerCase().includes(f));
+    });
     renderModalRows(filtered);
 }
 
 function renderModalRows(linhas) {
     if (!linhas || !linhas.length) {
         document.getElementById('modalBody').innerHTML = '<tr><td colspan="13" style="text-align:center;color:#71717a;padding:30px;">Sem registros</td></tr>';
+        return;
         document.getElementById('modalCount').textContent = '0 registros';
         return;
     }
@@ -609,8 +642,8 @@ function renderModalRows(linhas) {
             <td style="font-weight:500;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${l.cliente}">${l.cliente}</td>
             <td style="font-family:var(--font-mono);font-size:0.82rem;color:#fbbf24;cursor:pointer;" onclick="copyCodItem(${l.codigoItem})" title="Clique para copiar">${l.codigoItem ?? '—'}</td>
             <td style="color:#a1a1aa;font-size:0.78rem;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${l.produto}">${l.produto || '—'}</td>
-            <td style="text-align:center;font-family:var(--font-mono);font-size:0.82rem;">${l.dataPromessa || '—'}</td>
             <td style="text-align:center;font-family:var(--font-mono);font-size:0.82rem;color:#71717a;">${l.dataEmissao || '—'}</td>
+            <td style="text-align:center;font-family:var(--font-mono);font-size:0.82rem;">${l.dataPromessa || '—'}</td>
             <td style="text-align:center;font-family:var(--font-mono);font-size:0.82rem;">${l.dataFaturada || '—'}</td>
             <td style="text-align:center;font-family:var(--font-mono);font-size:0.82rem;color:#71717a;">${l.qtdPed ?? '—'}</td>
             <td style="text-align:center;font-family:var(--font-mono);font-size:0.82rem;">${l.qtdFat}</td>
