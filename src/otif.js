@@ -79,7 +79,7 @@ router.get('/', async (req, res) => {
             if (isOtif)   otifCount++;
             if (!onTime)  atrasosCount++;
 
-            const mesIdx = dataFat.getUTCMonth();
+            const mesIdx = dataFatReal.getUTCMonth();
             if (!porMes[mesIdx]) porMes[mesIdx] = { label: MESES[mesIdx], total: 0, onTime: 0, inFull: 0, otif: 0 };
             porMes[mesIdx].total++;
             if (onTime)  porMes[mesIdx].onTime++;
