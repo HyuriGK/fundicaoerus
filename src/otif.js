@@ -125,8 +125,8 @@ router.get('/', async (req, res) => {
             const pedProdKey   = `${pedidoStr}_${codItemStr}`;
             const pedEntry     = pedidosMap[pedProdKey];
             const dataEmissao  = utcDay((pedEntry && pedEntry.emissao) || (r ? r.DATA_PETR : null));
-            // Data prometida: OP_ENTREGA do firebird_sync_pedidos (data de entrega da OP)
-            const dataPromessa = utcDay((pedEntry && pedEntry.entrega) || (r ? r.ENTREGA_PETR : null));
+            // Data prometida: assertividade (ENTREGA_PETR) primeiro, fallback OP_ENTREGA
+            const dataPromessa = utcDay((r ? r.ENTREGA_PETR : null) || (pedEntry && pedEntry.entrega));
             const qtdFat       = parseFloat(f.quantidade) || 0;
             const qtdPed       = r ? (parseFloat(r.QUANTIDADE_PPR) || 0) : 0;
 
