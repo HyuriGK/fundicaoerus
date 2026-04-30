@@ -99,6 +99,7 @@ router.get('/', async (req, res) => {
                 cliente,
                 produto:      (r.NOME_PRODUTO_PPR || '').trim(),
                 dataPromessa: fmtDate(r.ENTREGA_PETR),
+                dataEmissao:  fmtDate(r.DATA_PETR),
                 dataFaturada: fmtDate(fatMap[fatKey] || null),
                 qtdFat,
                 qtdPed:       qtdPed || null,
