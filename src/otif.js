@@ -23,8 +23,24 @@ router.get('/', async (req, res) => {
         const { ano } = req.query;
         const anoFiltro = parseInt(ano) || new Date().getFullYear();
 
-        const result = await pool.query(`SELECT data FROM firebird_sync_assertividade ORDER BY (data->>'DATA_PETR') ASC`);
-        const registros = result.rows.map(r => r.data);
+        const [assertRes, fatRes] = await Promise.all([
+            pool.query(`SELECT data FROM firebird_sync_assertividade ORDER BY (data->>'DATA_PETR') ASC`),
+            pool.query(`SELECT pedido, codigo_item, data_faturamento FROM faturamento_firebird WHERE data_faturamento IS NOT NULL`),
+        ]);
+
+        // Mapa pedido+codigo_item -> data_faturamento real
+        const fatMap = {};
+        for (const f of fatRes.rows) {
+            if (f.pedido && f.codigo_item) {
+                const k = `${f.pedido}_${f.codigo_item}`;
+                // Manter a mais recente se houver múltiplas
+                if (!fatMap[k] || new Date(f.data_faturamento) > new Date(fatMap[k])) {
+                    fatMap[k] = f.data_faturamento;
+                }
+            }
+        }
+
+        const registros = assertRes.rows.map(r => r.data);
 
         const filtrados = registros.filter(r => {
             if (!r.DATA_PETR) return false;
@@ -38,13 +54,17 @@ router.get('/', async (req, res) => {
         const linhas = [];
 
         for (const r of filtrados) {
-            const dataFat     = parseDate(r.DATA_PETR);
+            const dataEmissao  = parseDate(r.DATA_PETR);
             const dataPromessa = parseDate(r.ENTREGA_PETR);
-            const qtdFat      = parseFloat(r.QUANTIDADE_FATURADA_PETR) || 0;
-            const qtdPed      = parseFloat(r.QUANTIDADE_PPR) || 0;
+            const qtdFat       = parseFloat(r.QUANTIDADE_FATURADA_PETR) || 0;
+            const qtdPed       = parseFloat(r.QUANTIDADE_PPR) || 0;
+
+            // Buscar data de faturamento real via nota fiscal
+            const fatKey = `${r.PPR_CODIGO_PETR}_${r.PRO_CODIGO_PETR}`;
+            const dataFatReal = parseDate(fatMap[fatKey]) || dataEmissao;
 
             // Comparar apenas datas (ignorar horário — UTC midnight)
-            const dataFatDay      = dataFat      ? new Date(Date.UTC(dataFat.getUTCFullYear(),      dataFat.getUTCMonth(),      dataFat.getUTCDate()))      : null;
+            const dataFatDay      = dataFatReal  ? new Date(Date.UTC(dataFatReal.getUTCFullYear(),  dataFatReal.getUTCMonth(),  dataFatReal.getUTCDate()))  : null;
             const dataPromessaDay = dataPromessa ? new Date(Date.UTC(dataPromessa.getUTCFullYear(), dataPromessa.getUTCMonth(), dataPromessa.getUTCDate())) : null;
 
             const onTime = dataFatDay && dataPromessaDay ? dataFatDay <= dataPromessaDay : false;
@@ -75,12 +95,11 @@ router.get('/', async (req, res) => {
 
             linhas.push({
                 pedido:       r.PPR_CODIGO_PETR,
-                item:         r.PPR_ITEM_PETR,
                 codigoItem:   r.PRO_CODIGO_PETR,
                 cliente,
                 produto:      (r.NOME_PRODUTO_PPR || '').trim(),
                 dataPromessa: fmtDate(r.ENTREGA_PETR),
-                dataFaturada: fmtDate(r.DATA_PETR),
+                dataFaturada: fmtDate(fatMap[fatKey] || null),
                 qtdFat,
                 qtdPed:       qtdPed || null,
                 onTime,
