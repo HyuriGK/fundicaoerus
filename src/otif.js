@@ -141,6 +141,13 @@ router.get('/', async (req, res) => {
             pctInFull: v.total > 0 ? Math.round((v.inFull / v.total) * 100) : 0,
         })).sort((a,b) => b.total - a.total).slice(0, 15);
 
+        // Ordenar linhas por data faturada decrescente
+        linhas.sort((a, b) => {
+            const da = a.dataFaturada ? a.dataFaturada.split('/').reverse().join('') : '';
+            const db = b.dataFaturada ? b.dataFaturada.split('/').reverse().join('') : '';
+            return db.localeCompare(da);
+        });
+
         res.json({
             success: true,
             kpis: { total, otif: total > 0 ? Math.round((otifCount/total)*100) : 0, onTime: total > 0 ? Math.round((onTimeCount/total)*100) : 0, inFull: total > 0 ? Math.round((inFullCount/total)*100) : 0, atrasos: atrasosCount, otifCount, onTimeCount, inFullCount },
