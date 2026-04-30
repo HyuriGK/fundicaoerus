@@ -242,22 +242,29 @@
 <div id="recordsModal" class="modal-overlay">
     <div class="modal-card fullscreen">
         <div class="modal-header">
-            <span class="modal-title">Registros OTIF</span>
+            <div style="display:flex;align-items:center;gap:20px;">
+                <span class="modal-title">Registros OTIF</span>
+                <input type="text" id="modalSearch" placeholder="Filtrar cliente ou produto..." oninput="filterModal()" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#fff;padding:6px 14px;border-radius:8px;font-size:0.82rem;font-family:'Inter',sans-serif;outline:none;width:260px;">
+                <span id="modalCount" style="font-size:0.78rem;color:#71717a;font-weight:500;"></span>
+            </div>
             <span class="modal-close" onclick="closeModal()"><i class="fa-solid fa-xmark"></i></span>
         </div>
         <div class="modal-table-wrap">
             <table id="modalTable">
                 <thead>
                     <tr>
+                        <th>Pedido</th>
+                        <th>Item</th>
                         <th>Cliente</th>
                         <th>Produto</th>
-                        <th>Prazo</th>
-                        <th>Faturado</th>
-                        <th>Qtd Pedido</th>
-                        <th>Qtd Fat.</th>
-                        <th>On Time</th>
-                        <th>In Full</th>
-                        <th>OTIF</th>
+                        <th style="text-align:center;">Data Prometida</th>
+                        <th style="text-align:center;">Data Faturada</th>
+                        <th style="text-align:center;">Qtd Ped.</th>
+                        <th style="text-align:center;">Qtd Fat.</th>
+                        <th style="text-align:center;">Dias Atraso</th>
+                        <th style="text-align:center;">On Time</th>
+                        <th style="text-align:center;">In Full</th>
+                        <th style="text-align:center;">OTIF</th>
                     </tr>
                 </thead>
                 <tbody id="modalBody"></tbody>
@@ -540,28 +547,50 @@ function setView(view) {
 
 function openModal() {
     if (!allData) return;
-    const rows = buildModalRows();
-    document.getElementById('modalBody').innerHTML = rows;
+    document.getElementById('modalSearch').value = '';
+    renderModalRows(allData.linhas);
     document.getElementById('recordsModal').classList.add('active');
 }
 function closeModal() { document.getElementById('recordsModal').classList.remove('active'); }
 
-function buildModalRows() {
-    if (!allData || !allData.porCliente) return '<tr><td colspan="9" style="text-align:center;color:#71717a;">Sem dados</td></tr>';
-    // Mostrar resumo por cliente
-    return allData.porCliente.map(c => `
-        <tr>
-            <td>${c.nome}</td>
-            <td style="color:var(--text-muted)">—</td>
-            <td style="color:var(--text-muted)">—</td>
-            <td style="color:var(--text-muted)">—</td>
-            <td style="color:var(--text-muted)">${c.total}</td>
-            <td style="color:var(--text-muted)">${c.onTimeCount ?? c.onTime}</td>
-            <td><span class="badge ${c.pctOnTime >= 90 ? 'badge-success' : c.pctOnTime >= 70 ? 'badge-warning' : 'badge-danger'}">${c.pctOnTime}%</span></td>
-            <td><span class="badge ${c.pctInFull >= 90 ? 'badge-success' : c.pctInFull >= 70 ? 'badge-warning' : 'badge-danger'}">${c.pctInFull}%</span></td>
-            <td><span class="badge ${c.pctOtif >= 90 ? 'badge-success' : c.pctOtif >= 70 ? 'badge-warning' : 'badge-danger'}">${c.pctOtif}%</span></td>
-        </tr>
-    `).join('');
+function filterModal() {
+    if (!allData) return;
+    const q = document.getElementById('modalSearch').value.toLowerCase();
+    const filtered = allData.linhas.filter(l =>
+        l.cliente.toLowerCase().includes(q) || l.produto.toLowerCase().includes(q)
+    );
+    renderModalRows(filtered);
+}
+
+function renderModalRows(linhas) {
+    if (!linhas || !linhas.length) {
+        document.getElementById('modalBody').innerHTML = '<tr><td colspan="12" style="text-align:center;color:#71717a;padding:30px;">Sem registros</td></tr>';
+        document.getElementById('modalCount').textContent = '0 registros';
+        return;
+    }
+    document.getElementById('modalCount').textContent = `${linhas.length.toLocaleString('pt-BR')} registros`;
+    document.getElementById('modalBody').innerHTML = linhas.map(l => {
+        const badgeOT   = l.onTime ? 'badge-success' : 'badge-danger';
+        const badgeIF   = l.inFull ? 'badge-success' : (l.qtdPed ? 'badge-danger' : 'badge-warning');
+        const badgeOTIF = l.otif   ? 'badge-success' : 'badge-danger';
+        const atrasoCell = l.onTime
+            ? '<span style="color:#10b981;font-family:var(--font-mono)">—</span>'
+            : `<span style="color:#ef4444;font-family:var(--font-mono);font-weight:700;">+${l.diasAtraso}d</span>`;
+        return `<tr>
+            <td style="font-family:var(--font-mono);font-size:0.78rem;color:#71717a;">${l.pedido ?? '—'}</td>
+            <td style="font-family:var(--font-mono);font-size:0.78rem;color:#71717a;">${l.item ?? '—'}</td>
+            <td style="font-weight:500;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${l.cliente}">${l.cliente}</td>
+            <td style="color:#a1a1aa;font-size:0.78rem;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${l.produto}">${l.produto || '—'}</td>
+            <td style="text-align:center;font-family:var(--font-mono);font-size:0.82rem;">${l.dataPromessa || '—'}</td>
+            <td style="text-align:center;font-family:var(--font-mono);font-size:0.82rem;">${l.dataFaturada || '—'}</td>
+            <td style="text-align:center;font-family:var(--font-mono);font-size:0.82rem;color:#71717a;">${l.qtdPed ?? '—'}</td>
+            <td style="text-align:center;font-family:var(--font-mono);font-size:0.82rem;">${l.qtdFat}</td>
+            <td style="text-align:center;">${atrasoCell}</td>
+            <td style="text-align:center;"><span class="badge ${badgeOT}">${l.onTime ? 'SIM' : 'NÃO'}</span></td>
+            <td style="text-align:center;"><span class="badge ${badgeIF}">${l.inFull ? 'SIM' : (l.qtdPed ? 'NÃO' : '?')}</span></td>
+            <td style="text-align:center;"><span class="badge ${badgeOTIF}">${l.otif ? 'SIM' : 'NÃO'}</span></td>
+        </tr>`;
+    }).join('');
 }
 
 document.addEventListener('DOMContentLoaded', loadData);
