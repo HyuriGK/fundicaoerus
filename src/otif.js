@@ -4,6 +4,16 @@ const pool = require('../lib/db');
 
 const MESES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 
+// Mesma lógica de isServiceClient do faturamentos.html
+const SERVICE_CLIENTS = ['IMEPEL INDUSTRIA MECANICA LTDA', 'STEELROOL INDUSTRIA METALURGICA', 'SPILROD FUNDICAO DE FERRO E ACO LTDA'];
+const SERVICE_CODES   = ['257'];
+function isServiceClient(clienteCodigo, clienteNome) {
+    const code = String(clienteCodigo || '').trim();
+    const name = (clienteNome || '').trim().toUpperCase();
+    if (SERVICE_CODES.includes(code)) return true;
+    return SERVICE_CLIENTS.some(sc => name === sc || name.includes(sc));
+}
+
 function fmtDate(val) {
     if (!val) return null;
     const d = new Date(val);
@@ -11,14 +21,10 @@ function fmtDate(val) {
     return `${String(d.getUTCDate()).padStart(2,'0')}/${String(d.getUTCMonth()+1).padStart(2,'0')}/${d.getUTCFullYear()}`;
 }
 
-function parseUTC(val) {
+function utcDay(val) {
     if (!val) return null;
     const d = new Date(val);
-    return isNaN(d) ? null : d;
-}
-
-function utcDay(d) {
-    if (!d) return null;
+    if (isNaN(d)) return null;
     return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
 }
 
@@ -29,26 +35,33 @@ router.get('/', async (req, res) => {
         const anoFiltro = parseInt(ano) || new Date().getFullYear();
         const hoje = new Date();
 
-        const [assertRes, fatRes] = await Promise.all([
-            pool.query(`SELECT data FROM firebird_sync_assertividade`),
+        // Buscar faturamento detalhado (mesma query do faturamentos.html)
+        const [fatRes, assertRes] = await Promise.all([
             pool.query(`
-                SELECT pedido, codigo_item, data_faturamento
-                FROM faturamento_firebird
-                WHERE data_faturamento IS NOT NULL
-                  AND EXTRACT(YEAR FROM data_faturamento) = $1
+                SELECT
+                    f.data_faturamento,
+                    f.nota_fiscal,
+                    f.cliente_codigo,
+                    f.cliente_nome,
+                    f.codigo_item,
+                    f.descricao,
+                    f.quantidade,
+                    f.pedido,
+                    COALESCE(p.excluido, f.excluido_manualmente OR f.pedido IS NULL OR f.pedido = '' OR f.pedido = ' ') as excluido_manualmente
+                FROM faturamento_firebird f
+                LEFT JOIN faturamento_firebird_preferencias p
+                    ON p.nota_fiscal = f.nota_fiscal
+                    AND p.codigo_item IS NOT DISTINCT FROM CAST(TRIM(f.codigo_item) AS VARCHAR)
+                    AND COALESCE(p.pedido, '') = COALESCE(TRIM(f.pedido), '')
+                    AND p.data_faturamento = f.data_faturamento
+                    AND p.quantidade = f.quantidade
+                WHERE EXTRACT(YEAR FROM f.data_faturamento) = $1
+                ORDER BY f.data_faturamento DESC, f.nota_fiscal DESC
             `, [anoFiltro]),
+            pool.query(`SELECT data FROM firebird_sync_assertividade`),
         ]);
 
-        // Mapa pedido+codigo_item -> data_faturamento mais recente no ano filtrado
-        const fatMap = {};
-        for (const f of fatRes.rows) {
-            if (f.pedido == null || f.codigo_item == null) continue;
-            const k = `${f.pedido}_${f.codigo_item}`;
-            if (!fatMap[k] || new Date(f.data_faturamento) > new Date(fatMap[k])) {
-                fatMap[k] = f.data_faturamento;
-            }
-        }
-
+        // Mapa assertividade: pedido_codItem -> { ENTREGA_PETR, DATA_PETR, QUANTIDADE_FATURADA_PETR, QUANTIDADE_PPR }
         const assertMap = {};
         for (const row of assertRes.rows) {
             const r = row.data;
@@ -58,50 +71,52 @@ router.get('/', async (req, res) => {
         }
 
         let onTimeCount = 0, inFullCount = 0, otifCount = 0, atrasosCount = 0;
-        const porMes = {};
+        const porMes     = {};
         const porCliente = {};
-        const linhas = [];
+        const linhas     = [];
 
-        for (const [k, dataFatRaw] of Object.entries(fatMap)) {
-            const dataFatReal = parseUTC(dataFatRaw);
-            if (!dataFatReal) continue;
+        for (const f of fatRes.rows) {
+            // Aplicar mesmos filtros do faturamentos.html
+            if (f.excluido_manualmente) continue;
+            if (isServiceClient(f.cliente_codigo, f.cliente_nome)) continue;
+
+            const dataFat = utcDay(f.data_faturamento);
+            if (!dataFat) continue;
 
             // Excluir meses futuros
-            const fatYear  = dataFatReal.getUTCFullYear();
-            const fatMonth = dataFatReal.getUTCMonth();
-            if (fatYear > hoje.getFullYear()) continue;
-            if (fatYear === hoje.getFullYear() && fatMonth > hoje.getMonth()) continue;
+            if (dataFat.getUTCFullYear() > hoje.getFullYear()) continue;
+            if (dataFat.getUTCFullYear() === hoje.getFullYear() && dataFat.getUTCMonth() > hoje.getMonth()) continue;
 
-            const r = assertMap[k]; // pode não existir se pedido não foi sincronizado
-            const dataEmissao  = r ? parseUTC(r.DATA_PETR)     : null;
-            const dataPromessa = r ? parseUTC(r.ENTREGA_PETR)  : null;
-            const qtdFat       = r ? (parseFloat(r.QUANTIDADE_FATURADA_PETR) || 0) : 0;
+            // Cruzar com assertividade pelo pedido + codigo_item
+            const pedidoStr  = String(f.pedido || '').trim();
+            const codItemStr = String(f.codigo_item || '').trim();
+            const assertKey  = `${pedidoStr}_${codItemStr}`;
+            const r          = assertMap[assertKey];
+
+            const dataEmissao  = r ? utcDay(r.DATA_PETR)    : null;
+            const dataPromessa = r ? utcDay(r.ENTREGA_PETR) : null;
+            const qtdFat       = parseFloat(f.quantidade) || 0;
             const qtdPed       = r ? (parseFloat(r.QUANTIDADE_PPR) || 0) : 0;
-            const cliente      = r ? (r.NOME_CLIENTE || 'Desconhecido').trim() : 'Desconhecido';
-            const produto      = r ? (r.NOME_PRODUTO_PPR || '').trim() : '';
-            const [pedidoStr, codItemStr] = k.split('_');
 
-            const dataFatDay      = utcDay(dataFatReal);
-            const dataPromessaDay = utcDay(dataPromessa);
-
-            const onTime = dataFatDay && dataPromessaDay ? dataFatDay <= dataPromessaDay : false;
+            const onTime = dataFat && dataPromessa ? dataFat <= dataPromessa : false;
             const inFull = qtdPed > 0 ? qtdFat >= qtdPed : qtdFat > 0;
             const isOtif = onTime && inFull;
-            const diasAtraso = (!onTime && dataFatDay && dataPromessaDay)
-                ? Math.round((dataFatDay - dataPromessaDay) / 86400000) : 0;
+            const diasAtraso = (!onTime && dataFat && dataPromessa)
+                ? Math.round((dataFat - dataPromessa) / 86400000) : 0;
 
             if (onTime)  onTimeCount++;
             if (inFull)  inFullCount++;
             if (isOtif)  otifCount++;
             if (!onTime) atrasosCount++;
 
-            const mesIdx = fatMonth;
+            const mesIdx = dataFat.getUTCMonth();
             if (!porMes[mesIdx]) porMes[mesIdx] = { label: MESES[mesIdx], total: 0, onTime: 0, inFull: 0, otif: 0 };
             porMes[mesIdx].total++;
             if (onTime)  porMes[mesIdx].onTime++;
             if (inFull)  porMes[mesIdx].inFull++;
             if (isOtif)  porMes[mesIdx].otif++;
 
+            const cliente = (f.cliente_nome || 'Desconhecido').trim();
             if (!porCliente[cliente]) porCliente[cliente] = { total: 0, onTime: 0, inFull: 0, otif: 0 };
             porCliente[cliente].total++;
             if (onTime)  porCliente[cliente].onTime++;
@@ -109,13 +124,13 @@ router.get('/', async (req, res) => {
             if (isOtif)  porCliente[cliente].otif++;
 
             linhas.push({
-                pedido:       pedidoStr,
-                codigoItem:   codItemStr,
+                pedido:       pedidoStr || '—',
+                codigoItem:   codItemStr || '—',
                 cliente,
-                produto,
-                dataEmissao:  fmtDate(dataEmissao),
-                dataPromessa: fmtDate(dataPromessa),
-                dataFaturada: fmtDate(dataFatRaw),
+                produto:      (f.descricao || '').trim(),
+                dataEmissao:  fmtDate(r ? r.DATA_PETR : null),
+                dataPromessa: fmtDate(r ? r.ENTREGA_PETR : null),
+                dataFaturada: fmtDate(f.data_faturamento),
                 qtdFat,
                 qtdPed:       qtdPed || null,
                 onTime,
@@ -125,9 +140,16 @@ router.get('/', async (req, res) => {
             });
         }
 
+        // Ordenar por data faturada decrescente
+        linhas.sort((a, b) => {
+            const da = a.dataFaturada ? a.dataFaturada.split('/').reverse().join('') : '';
+            const db = b.dataFaturada ? b.dataFaturada.split('/').reverse().join('') : '';
+            return db.localeCompare(da);
+        });
+
         const total = linhas.length;
 
-        const mesesOrdenados = Object.keys(porMes).map(Number).sort((a,b) => a-b).map(idx => ({
+        const mesesOrdenados = Object.keys(porMes).map(Number).sort((a, b) => a - b).map(idx => ({
             ...porMes[idx],
             pctOtif:   porMes[idx].total > 0 ? Math.round((porMes[idx].otif   / porMes[idx].total) * 100) : 0,
             pctOnTime: porMes[idx].total > 0 ? Math.round((porMes[idx].onTime / porMes[idx].total) * 100) : 0,
@@ -139,18 +161,18 @@ router.get('/', async (req, res) => {
             pctOtif:   v.total > 0 ? Math.round((v.otif   / v.total) * 100) : 0,
             pctOnTime: v.total > 0 ? Math.round((v.onTime / v.total) * 100) : 0,
             pctInFull: v.total > 0 ? Math.round((v.inFull / v.total) * 100) : 0,
-        })).sort((a,b) => b.total - a.total).slice(0, 15);
-
-        // Ordenar linhas por data faturada decrescente
-        linhas.sort((a, b) => {
-            const da = a.dataFaturada ? a.dataFaturada.split('/').reverse().join('') : '';
-            const db = b.dataFaturada ? b.dataFaturada.split('/').reverse().join('') : '';
-            return db.localeCompare(da);
-        });
+        })).sort((a, b) => b.total - a.total).slice(0, 15);
 
         res.json({
             success: true,
-            kpis: { total, otif: total > 0 ? Math.round((otifCount/total)*100) : 0, onTime: total > 0 ? Math.round((onTimeCount/total)*100) : 0, inFull: total > 0 ? Math.round((inFullCount/total)*100) : 0, atrasos: atrasosCount, otifCount, onTimeCount, inFullCount },
+            kpis: {
+                total,
+                otif:         total > 0 ? Math.round((otifCount   / total) * 100) : 0,
+                onTime:       total > 0 ? Math.round((onTimeCount  / total) * 100) : 0,
+                inFull:       total > 0 ? Math.round((inFullCount  / total) * 100) : 0,
+                atrasos: atrasosCount,
+                otifCount, onTimeCount, inFullCount,
+            },
             porMes: mesesOrdenados,
             porCliente: clientesOrdenados,
             linhas,
