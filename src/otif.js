@@ -165,7 +165,7 @@ router.get('/', async (req, res) => {
                 produto:      (f.descricao || '').trim(),
                 dataEmissao:  fmtDate((pedEntry && pedEntry.emissao) || (r ? r.DATA_PETR : null)),
                 dataPromessa:   fmtDate(r ? r.ENTREGA_PETR : null),
-                dataNecessidade: fmtDate(pedEntry ? pedEntry.entregaPed : null),
+                dataNecessidade: fmtDate(r ? r.ENTREGA_PED : (pedEntry ? pedEntry.entregaPed : null)),
                 dataFaturada: fmtDate(f.data_faturamento),
                 qtdFat,
                 qtdPed:       qtdPed || null,
