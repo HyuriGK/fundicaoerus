@@ -7086,6 +7086,14 @@
 
 
                 let excludedClientsSet = new Set();
+                const _serviceClientCodes = ["257"];
+                const _serviceClientNames = ["IMEPEL INDUSTRIA MECANICA LTDA","STEELROOL INDUSTRIA METALURGICA","SPILROD FUNDICAO DE FERRO E ACO LTDA"];
+                const isServiceItem = (item) => {
+                    const code = String(item.clienteCodigo || '').trim();
+                    if (_serviceClientCodes.includes(code)) return true;
+                    const name = (item.clienteNome || '').trim().toUpperCase();
+                    return _serviceClientNames.some(sc => name === sc || name.includes(sc));
+                };
 
 
                 // Chart Instances
@@ -7350,29 +7358,11 @@
 
 
                         fatTotalWeight = fatData.data.reduce((acc, item) => {
-
-
-                            // 1. Check manual exclusion
-
-
                             if (item.excluido_manualmente === true) return acc;
-
-
-                            // 2. Check excluded clients (synchronized set)
-
-
+                            if (isServiceItem(item)) return acc;
                             const clientName = (item.clienteNome || '').trim();
-
-
                             if (excludedClientsSet.has(clientName)) return acc;
-
-
-                            // 3. Sum physical weight
-
-
                             return acc + (parseFloat(item.pesoTotal || 0));
-
-
                         }, 0);
 
 
@@ -7656,6 +7646,7 @@
 
 
                             if (item.excluido_manualmente === true) return;
+                            if (isServiceItem(item)) return;
 
 
                             const clientName = (item.clienteNome || '').trim();
@@ -9522,7 +9513,7 @@
                 const json = await res.json();
                 let total = 0;
                 if (json.success && Array.isArray(json.data)) {
-                    json.data.forEach(item => { if (item.excluido_manualmente !== true) total += (item.pesoTotal || 0); });
+                    json.data.forEach(item => { if (item.excluido_manualmente !== true && !isServiceItem(item)) total += (item.pesoTotal || 0); });
                 }
                 if (weightEl) weightEl.textContent = dbmFormatWeight(total);
             } catch(e) {
