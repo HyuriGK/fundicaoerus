@@ -96,8 +96,11 @@ const SYNC_BATS = [
     { name: 'PRODUCAO',    file: 'sincronizar_aproducao.bat',      icon: '[PR]' },
     { name: 'REFUGOS',     file: 'sincronizar_arefugo.bat',        icon: '[RF]' },
     { name: 'SNAPSHOTS',   file: 'sincronizar_asnapshots.bat',     icon: '[SS]' },
-    { name: 'MOLDAGEM',    file: 'sincronizar_fichatecmoldagem.bat', icon: '[ML]', intervalMin: 30 },
 ];
+
+const MOLDAGEM_BAT  = { name: 'MOLDAGEM', file: 'sincronizar_fichatecmoldagem.bat', icon: '[ML]' };
+const MOLDAGEM_WAIT = 30 * 60 * 1000; // 30 minutos
+let moldagemNextAt  = null; // timestamp do proximo ciclo (durante espera)
 
 const DELAY_MS = 10000;
 const getW = () => Math.max(80, (process.stdout.columns || 120)) - 2; // dynamic terminal width
@@ -112,9 +115,10 @@ let activeIssues = {};
 let totalErrors  = 0;
 let logHistory   = [];
 let lastOkAt     = {};
-let lastRunAt    = {}; // timestamp ms da ultima execucao (para modulos com intervalMin)
 
 SYNC_BATS.forEach(b => { currentProg[b.name] = 0; scriptState[b.name] = 'IDLE'; });
+currentProg[MOLDAGEM_BAT.name] = 0;
+scriptState[MOLDAGEM_BAT.name] = 'IDLE';
 
 // ─── BOX HELPERS ─────────────────────────────────────────────────────────────
 const bdr = C.border;
@@ -202,15 +206,14 @@ function buildFrame(cycleStart) {
     const FIXED = 1 + 4 + 1 + 11 + 2 + 2 + 4 + 2 + 10 + 5 + 8; // = 50
     const BAR = Math.max(10, W - FIXED - 2);
 
-    SYNC_BATS.forEach(bat => {
+    [...SYNC_BATS, MOLDAGEM_BAT].forEach(bat => {
         const prog  = currentProg[bat.name] || 0;
         const state = scriptState[bat.name];
 
-        // Calcular countdown para modulos com intervalo proprio (ex: MOLDAGEM 30min)
+        // Countdown para MOLDAGEM aguardando pr\u00f3ximo ciclo
         let countdownStr = '';
-        if (bat.intervalMin && state === 'IDLE' && lastRunAt[bat.name]) {
-            const nextRun = lastRunAt[bat.name] + bat.intervalMin * 60 * 1000;
-            const secsLeft = Math.max(0, Math.round((nextRun - Date.now()) / 1000));
+        if (bat.name === 'MOLDAGEM' && state === 'IDLE' && moldagemNextAt) {
+            const secsLeft = Math.max(0, Math.round((moldagemNextAt - Date.now()) / 1000));
             if (secsLeft > 0) {
                 const mm = String(Math.floor(secsLeft / 60)).padStart(2, '0');
                 const ss = String(secsLeft % 60).padStart(2, '0');
@@ -406,18 +409,7 @@ async function startForever() {
         const timer = setInterval(() => drawDashboard(cycleStart), 800);
 
         for (let i = 0; i < SYNC_BATS.length; i++) {
-            const bat = SYNC_BATS[i];
-            // Modulos com intervalo proprio: só roda se já passou o tempo mínimo
-            if (bat.intervalMin) {
-                const last = lastRunAt[bat.name] || 0;
-                const elapsed = Date.now() - last;
-                if (elapsed < bat.intervalMin * 60 * 1000) {
-                    scriptState[bat.name] = 'IDLE';
-                    continue;
-                }
-            }
-            await runBat(bat);
-            if (bat.intervalMin) lastRunAt[bat.name] = Date.now();
+            await runBat(SYNC_BATS[i]);
             if (i < SYNC_BATS.length - 1) await new Promise(r => setTimeout(r, DELAY_MS));
         }
 
@@ -439,7 +431,35 @@ async function startForever() {
     }
 }
 
+// ─── LOOP INDEPENDENTE MOLDAGEM ──────────────────────────────────────────────
+async function startMoldagemLoop() {
+    while (true) {
+        if (!isWithinSchedule()) {
+            await new Promise(r => setTimeout(r, 60000));
+            continue;
+        }
+
+        const moldStart = Date.now();
+        moldagemNextAt  = null;
+        await runBat(MOLDAGEM_BAT);
+
+        const moldDuration = (Date.now() - moldStart) / 1000;
+        const moldStartDate = new Date(moldStart);
+        const fmtDate = d => d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR');
+        const moldLogLine = `[MOLDAGEM] Inicio: ${fmtDate(moldStartDate)} | Fim: ${fmtDate(new Date())} | Duracao: ${moldDuration.toFixed(1)}s\n`;
+        try { fs.appendFileSync(CYCLE_LOG, moldLogLine); } catch(e) {}
+        logEvent('MOLDAGEM', `Ciclo concluido em ${moldDuration.toFixed(1)}s`, false);
+
+        // Aguardar 30 minutos com countdown visível
+        moldagemNextAt = Date.now() + MOLDAGEM_WAIT;
+        scriptState[MOLDAGEM_BAT.name] = 'IDLE';
+        await new Promise(r => setTimeout(r, MOLDAGEM_WAIT));
+        moldagemNextAt = null;
+    }
+}
+
 process.on('SIGINT', () => { process.stdout.write('\x1B[?25h'); process.exit(0); });
 process.on('exit',   () => process.stdout.write('\x1B[?25h'));
 
+startMoldagemLoop(); // inicia imediatamente, paralelo ao loop principal
 startForever();
