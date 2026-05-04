@@ -301,8 +301,15 @@ async function syncEmissoes() {
                     };
                 });
 
-                const keys = batchWithMetrics.map(r => `${r.EMPRESA_PPR}-${r.ANO_PPR}-${r.CODIGO_PPR}-${r.ITEM_PPR}`);
-                const data = batchWithMetrics.map(r => JSON.stringify(r));
+                const seen = new Set();
+                const deduped = batchWithMetrics.filter(r => {
+                    const k = `${r.EMPRESA_PPR}-${r.ANO_PPR}-${r.CODIGO_PPR}-${r.ITEM_PPR}`;
+                    if (seen.has(k)) return false;
+                    seen.add(k);
+                    return true;
+                });
+                const keys = deduped.map(r => `${r.EMPRESA_PPR}-${r.ANO_PPR}-${r.CODIGO_PPR}-${r.ITEM_PPR}`);
+                const data = deduped.map(r => JSON.stringify(r));
 
                 await pgClient.query(`
                     INSERT INTO firebird_sync_emissoes (sync_key, data, updated_at)
