@@ -88,14 +88,15 @@ const CYCLE_LOG     = path.join(ROOT_DIR, 'sync-ciclos.txt');
 const W        = 66; // inner content width (ASCII-safe)
 
 const SYNC_BATS = [
-    { name: 'CUSTOS',      file: 'sincronizar_acustos.bat',      icon: '[$$]' },
-    { name: 'DEVOLUCOES',  file: 'sincronizar_adevolucoes.bat',  icon: '[<<]' },
-    { name: 'EMISSOES',    file: 'sincronizar_aemissoes.bat',    icon: '[>>]' },
-    { name: 'FATURAMENTO', file: 'sincronizar_afaturamento.bat', icon: '[NF]' },
-    { name: 'PEDIDOS',     file: 'sincronizar_apedidos.bat',     icon: '[PD]' },
-    { name: 'PRODUCAO',    file: 'sincronizar_aproducao.bat',    icon: '[PR]' },
-    { name: 'REFUGOS',     file: 'sincronizar_arefugo.bat',      icon: '[RF]' },
-    { name: 'SNAPSHOTS',   file: 'sincronizar_asnapshots.bat',   icon: '[SS]' },
+    { name: 'CUSTOS',      file: 'sincronizar_acustos.bat',        icon: '[$$]' },
+    { name: 'DEVOLUCOES',  file: 'sincronizar_adevolucoes.bat',    icon: '[<<]' },
+    { name: 'EMISSOES',    file: 'sincronizar_aemissoes.bat',      icon: '[>>]' },
+    { name: 'FATURAMENTO', file: 'sincronizar_afaturamento.bat',   icon: '[NF]' },
+    { name: 'PEDIDOS',     file: 'sincronizar_apedidos.bat',       icon: '[PD]' },
+    { name: 'PRODUCAO',    file: 'sincronizar_aproducao.bat',      icon: '[PR]' },
+    { name: 'REFUGOS',     file: 'sincronizar_arefugo.bat',        icon: '[RF]' },
+    { name: 'SNAPSHOTS',   file: 'sincronizar_asnapshots.bat',     icon: '[SS]' },
+    { name: 'MOLDAGEM',    file: 'sincronizar_fichatecmoldagem.bat', icon: '[ML]', intervalMin: 30 },
 ];
 
 const DELAY_MS = 10000;
@@ -111,6 +112,7 @@ let activeIssues = {};
 let totalErrors  = 0;
 let logHistory   = [];
 let lastOkAt     = {};
+let lastRunAt    = {}; // timestamp ms da ultima execucao (para modulos com intervalMin)
 
 SYNC_BATS.forEach(b => { currentProg[b.name] = 0; scriptState[b.name] = 'IDLE'; });
 
@@ -204,6 +206,18 @@ function buildFrame(cycleStart) {
         const prog  = currentProg[bat.name] || 0;
         const state = scriptState[bat.name];
 
+        // Calcular countdown para modulos com intervalo proprio (ex: MOLDAGEM 30min)
+        let countdownStr = '';
+        if (bat.intervalMin && state === 'IDLE' && lastRunAt[bat.name]) {
+            const nextRun = lastRunAt[bat.name] + bat.intervalMin * 60 * 1000;
+            const secsLeft = Math.max(0, Math.round((nextRun - Date.now()) / 1000));
+            if (secsLeft > 0) {
+                const mm = String(Math.floor(secsLeft / 60)).padStart(2, '0');
+                const ss = String(secsLeft % 60).padStart(2, '0');
+                countdownStr = C.amber + ' ' + mm + ':' + ss + reset;
+            }
+        }
+
         let stateColor, stateLabel;
         switch (state) {
             case 'RUNNING': stateColor = C.cyan;  stateLabel = ' RODANDO'; break;
@@ -226,7 +240,7 @@ function buildFrame(cycleStart) {
         const badge = stateColor + bold + '[' + stateLabel + ']' + reset;
         const ok    = lastOkAt[bat.name] ? dim + '  ok ' + lastOkAt[bat.name] + reset : '         ';
 
-        const row = ' ' + icon + ' ' + name + ' [' + bar + '] ' + pct + '  ' + badge + '  ' + ok;
+        const row = ' ' + icon + ' ' + name + ' [' + bar + '] ' + pct + '  ' + badge + '  ' + ok + countdownStr;
         out.push(B.row(row, W));
     });
 
@@ -392,7 +406,18 @@ async function startForever() {
         const timer = setInterval(() => drawDashboard(cycleStart), 800);
 
         for (let i = 0; i < SYNC_BATS.length; i++) {
-            await runBat(SYNC_BATS[i]);
+            const bat = SYNC_BATS[i];
+            // Modulos com intervalo proprio: só roda se já passou o tempo mínimo
+            if (bat.intervalMin) {
+                const last = lastRunAt[bat.name] || 0;
+                const elapsed = Date.now() - last;
+                if (elapsed < bat.intervalMin * 60 * 1000) {
+                    scriptState[bat.name] = 'IDLE';
+                    continue;
+                }
+            }
+            await runBat(bat);
+            if (bat.intervalMin) lastRunAt[bat.name] = Date.now();
             if (i < SYNC_BATS.length - 1) await new Promise(r => setTimeout(r, DELAY_MS));
         }
 
