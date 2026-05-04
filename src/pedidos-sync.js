@@ -71,8 +71,11 @@ router.get('/', async (req, res) => {
                     item.LINK_STATUS = 'confirmado';
                     item.OP_PCS = manualLink.op;
                 } else if (manualLink.status === 'rejeitado') {
-                    item.LINK_STATUS = 'rejeitado';
-                    item.OP_PCS = null;
+                    // Só aplica rejeição se não houver vínculo oficial do ERP
+                    if (item.LINK_STATUS !== 'oficial') {
+                        item.LINK_STATUS = 'rejeitado';
+                        item.OP_PCS = null;
+                    }
                 }
                 // 'removido': apaga o link manual, deixa o JSONB original valer (sugerido volta a aparecer)
             }
