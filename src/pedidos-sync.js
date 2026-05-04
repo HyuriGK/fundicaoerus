@@ -19,8 +19,8 @@ router.get('/', async (req, res) => {
                 FROM firebird_sync_emissoes p
                 LEFT JOIN ficha_tecnica f ON f.pro_codigo_fic = (p.data->>'PRODUTO_PPR')
                 LEFT JOIN pedidos_observacoes obs ON obs.sync_key = p.sync_key
-                WHERE 
-                    ((p.data->>'QUANTIDADE_PPR')::numeric - COALESCE((p.data->>'QUANTIDADE_FATURADA_PPR')::numeric, 0)) > 0 
+                WHERE
+                    ((p.data->>'QUANTIDADE_PPR')::numeric - COALESCE((p.data->>'QUANTIDADE_FATURADA_PPR')::numeric, 0) - COALESCE((p.data->>'QUANTIDADE_DESISTENCIA_PPR')::numeric, 0)) > 0
                     AND (p.data->>'STATUS_PPR') <> 'C'
                 ORDER BY 
                     (f.pro_codigo_fic IS NOT NULL) DESC,

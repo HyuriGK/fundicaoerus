@@ -26,13 +26,15 @@ function getCommercialBalance(item) {
         return Number(item.OP_QUANTIDADE) || 0;
     }
 
+    const qtdDesistencia = Number(item.QUANTIDADE_DESISTENCIA_PPR) || 0;
+
     const saldoLib = Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0;
-    if (saldoLib > 0) return saldoLib;
-    
-    // Fallback: Total quantity - Billed quantity (if SALDO_LIBERADO is 0 or missing)
+    if (saldoLib > 0) return Math.max(0, saldoLib - qtdDesistencia);
+
+    // Fallback: Total quantity - Billed quantity - Desistência
     const qtdOrig = Number(item.QUANTIDADE_PPR) || 0;
     const qtdFat = Number(item.QUANTIDADE_FATURADO_PPR || item.QUANTIDADE_FATURADA_PPR) || 0;
-    return Math.max(0, qtdOrig - qtdFat);
+    return Math.max(0, qtdOrig - qtdFat - qtdDesistencia);
 }
 
 /**
