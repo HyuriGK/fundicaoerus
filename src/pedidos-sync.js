@@ -89,11 +89,14 @@ router.get('/', async (req, res) => {
     }
 });
 
-// Rota para buscar o histórico de snapshots industriais (últimos 15 dias)
+// Rota para buscar o histórico de snapshots industriais por mês/ano
 router.get('/industrial-history', async (req, res) => {
     try {
+        const now = new Date();
+        const month = parseInt(req.query.month) || (now.getMonth() + 1);
+        const year  = parseInt(req.query.year)  || now.getFullYear();
         const query = `
-            SELECT 
+            SELECT
                 TO_CHAR(snapshot_date, 'YYYY-MM-DD') as date,
                 aguardando_qty, aguardando_weight,
                 moldagem_qty, moldagem_weight,
@@ -104,10 +107,11 @@ router.get('/industrial-history', async (req, res) => {
                 qualidade_qty, qualidade_weight,
                 expedicao_qty, expedicao_weight
             FROM industrial_snapshots
-            WHERE snapshot_date >= DATE_TRUNC('month', CURRENT_DATE)
+            WHERE EXTRACT(YEAR  FROM snapshot_date) = $1
+              AND EXTRACT(MONTH FROM snapshot_date) = $2
             ORDER BY snapshot_date ASC
         `;
-        const result = await pool.query(query);
+        const result = await pool.query(query, [year, month]);
         res.json(result.rows);
     } catch (error) {
         console.error('Erro ao buscar histórico industrial:', error);

@@ -5214,8 +5214,26 @@
         <div class="modal-card" style="width: 100vw; height: 100vh; max-width: 100vw; max-height: 100vh; border-radius: 0; background: #09090b; border: none; overflow: hidden; display: flex; flex-direction: column;">
             <div class="modal-header" style="padding: 20px 30px; border-bottom: 1px solid var(--border-subtle);">
                 <div style="flex: 1;">
-                    <h2 id="historyModalTitle" style="font-size: 1.25rem; font-weight: 700; color: #fff;">Histórico: Usinagem Expedição</h2>
-                    <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">Exibição completa do mês atual (1 ao ºltimo dia)</p>
+                    <h2 id="historyModalTitle" style="font-size: 1.25rem; font-weight: 700; color: #fff;">Histórico Industrial</h2>
+                    <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">Selecione o mês e ano para visualizar o histórico</p>
+                </div>
+                <div style="display: flex; align-items: center; gap: 10px; margin-right: 20px;">
+                    <select id="historyMonthSelect" onchange="reloadIndustrialHistory()" style="background: rgba(255,255,255,0.06); border: 1px solid var(--border-subtle); color: #f4f4f5; padding: 6px 10px; border-radius: 6px; font-size: 0.85rem; cursor: pointer; outline: none;">
+                        <option value="1">Janeiro</option>
+                        <option value="2">Fevereiro</option>
+                        <option value="3">Março</option>
+                        <option value="4">Abril</option>
+                        <option value="5">Maio</option>
+                        <option value="6">Junho</option>
+                        <option value="7">Julho</option>
+                        <option value="8">Agosto</option>
+                        <option value="9">Setembro</option>
+                        <option value="10">Outubro</option>
+                        <option value="11">Novembro</option>
+                        <option value="12">Dezembro</option>
+                    </select>
+                    <select id="historyYearSelect" onchange="reloadIndustrialHistory()" style="background: rgba(255,255,255,0.06); border: 1px solid var(--border-subtle); color: #f4f4f5; padding: 6px 10px; border-radius: 6px; font-size: 0.85rem; cursor: pointer; outline: none;">
+                    </select>
                 </div>
                 <span class="modal-close" onclick="closeIndustrialHistoryModal()" style="font-size: 2rem; cursor: pointer;">&times;</span>
             </div>
@@ -5237,65 +5255,84 @@
     <script>
         // --- LÃÂ“GICA DE HISTÃÂ“RICO INDUSTRIAL (CLIQUE DIREITO) ---
         let historyChart = null;
+        let currentHistoryStage = 'moldagem';
+        const historyStageNames = {
+            'aguardando': 'Aguardando Moldagem',
+            'moldagem': 'Moldagem',
+            'fusao': 'Fusão',
+            'acabamento': 'Acabamento',
+            'tt': 'Tratamento Térmico (TT)',
+            'tt_usinagem': 'Aguardando Usinagem Externa',
+            'tt_qualidade': 'Aguardando Qualidade (TT)',
+            'usinagem': 'Usinagem',
+            'qualidade': 'Qualidade',
+            'expedicao': 'Expedição'
+        };
+
+        function initHistorySelects() {
+            const now = new Date();
+            const yearSel = document.getElementById('historyYearSelect');
+            yearSel.innerHTML = '';
+            for (let y = now.getFullYear(); y >= 2024; y--) {
+                const opt = document.createElement('option');
+                opt.value = y; opt.textContent = y;
+                yearSel.appendChild(opt);
+            }
+            document.getElementById('historyMonthSelect').value = now.getMonth() + 1;
+            yearSel.value = now.getFullYear();
+        }
+
         function closeIndustrialHistoryModal() {
             document.getElementById('industrialHistoryModal').style.display = 'none';
         }
-        async function openIndustrialHistory(stage) {
-            const modal = document.getElementById('industrialHistoryModal');
+
+        async function reloadIndustrialHistory() {
+            const month = document.getElementById('historyMonthSelect').value;
+            const year  = document.getElementById('historyYearSelect').value;
             const title = document.getElementById('historyModalTitle');
             const loading = document.getElementById('historyLoading');
             const chartDiv = document.getElementById('historyChartContainer');
             const emptyDiv = document.getElementById('historyEmpty');
-            // Mapeamento amigável de títulos
-            const stageNames = {
-                'aguardando': 'Aguardando Moldagem',
-                'moldagem': 'Moldagem',
-                'fusao': 'Fusão',
-                'acabamento': 'Acabamento',
-                'tt': 'Tratamento Térmico (TT)',
-                'tt_usinagem': 'Aguardando Usinagem Externa',
-                'tt_qualidade': 'Aguardando Qualidade (TT)',
-                'usinagem': 'Usinagem',
-                'qualidade': 'Qualidade',
-                'expedicao': 'Expedição'
-            };
-            title.innerText = `Histórico Industrial: ${stageNames[stage] || stage.toUpperCase()}`;
-            modal.style.display = 'flex';
+            const monthName = document.getElementById('historyMonthSelect').options[document.getElementById('historyMonthSelect').selectedIndex].text;
+            title.innerText = `Histórico: ${historyStageNames[currentHistoryStage] || currentHistoryStage} — ${monthName}/${year}`;
             loading.style.display = 'block';
             chartDiv.style.display = 'none';
             emptyDiv.style.display = 'none';
             try {
-                const response = await fetch('/api/pedidos-sync/industrial-history');
+                const response = await fetch(`/api/pedidos-sync/industrial-history?month=${month}&year=${year}`);
                 const data = await response.json();
                 loading.style.display = 'none';
-                if (!data || data.length === 0) {
-                    emptyDiv.style.display = 'block';
-                    return;
-                }
+                if (!data || data.length === 0) { emptyDiv.style.display = 'block'; return; }
                 chartDiv.style.display = 'block';
-                renderIndustrialHistoryChart(data, stage);
+                renderIndustrialHistoryChart(data, currentHistoryStage, parseInt(month), parseInt(year));
             } catch (err) {
                 console.error("Erro ao carregar histórico:", err);
                 loading.style.display = 'none';
                 showToast("Erro", "Não foi possível carregar o histórico industrial.", "danger");
             }
         }
-        function renderIndustrialHistoryChart(historyLogs, stage) {
+
+        async function openIndustrialHistory(stage) {
+            currentHistoryStage = stage;
+            const modal = document.getElementById('industrialHistoryModal');
+            modal.style.display = 'flex';
+            initHistorySelects();
+            await reloadIndustrialHistory();
+        }
+
+        function renderIndustrialHistoryChart(historyLogs, stage, month, year) {
             const canvas = document.getElementById('industrialHistoryChart');
             if (historyChart) {
                 historyChart.destroy();
             }
-            // Gerar todos os dias do mês atual
-            const now = new Date();
-            const year = now.getFullYear();
-            const month = now.getMonth();
-            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            // Gerar todos os dias do mês selecionado
+            const daysInMonth = new Date(year, month, 0).getDate();
             const labels = [];
             const qtyData = [];
             const weightData = [];
             for (let d = 1; d <= daysInMonth; d++) {
                 const dayStr = String(d).padStart(2, '0');
-                const monthStr = String(month + 1).padStart(2, '0');
+                const monthStr = String(month).padStart(2, '0');
                 const dateKey = `${year}-${monthStr}-${dayStr}`;
                 labels.push(`${dayStr}/${monthStr}`);
                 const entry = historyLogs.find(h => h.date === dateKey);
