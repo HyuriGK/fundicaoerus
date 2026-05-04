@@ -353,7 +353,10 @@ async function syncFichas() {
                         sanitize(loteReal)
                     ]);
                     count++;
-                    if (count % 10 === 0) console.log(`⏳ ${count}/${results.length} registros processados...`);
+                    if (count % 10 === 0) {
+                        const pct = Math.round((count / results.length) * 100);
+                        process.stdout.write(`@PROG:MOLDAGEM:${pct}%\n`);
+                    }
                 } catch (e) {
                     console.error('Erro row:', e.message);
                 }
