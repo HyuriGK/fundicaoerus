@@ -1501,8 +1501,8 @@
                                 <option value="month">Por Mês</option>
                                 <option value="client">Por Cliente</option>
                             </select>
-                            <select id="monthFilterHistorical" onchange="updateHistoricalChart().then(() => updatePendingChart(currentFilteredData))" style="display:none;"></select>
-                            <select id="yearFilterHistorical" onchange="syncEmissionYear(this.value); updateHistoricalChart().then(() => updatePendingChart(currentFilteredData))" style="display:none;"></select>
+                            <select id="monthFilterHistorical" onchange="updateHistoricalChart().then(() => updatePendingChart(allData))" style="display:none;"></select>
+                            <select id="yearFilterHistorical" onchange="syncEmissionYear(this.value); updateHistoricalChart().then(() => updatePendingChart(allData))" style="display:none;"></select>
                         </div>
                     </div>
                     <div class="chart-canvas-wrapper">
@@ -3631,7 +3631,7 @@
             updateParetoChart(list);
             updateDailyChart(allData);
             updateConcentracaoChart(allData);
-            updatePendingChart(list);
+            updatePendingChart(allData);
             await updateHistoricalChart();
         }
         function updateDailyChart(list) {
@@ -3880,12 +3880,6 @@
         function updatePendingChart(list) {
             const monthEl = document.getElementById('monthFilterHistorical');
             let selectedMonth = monthEl ? monthEl.value : 'Todos';
-            if (selectedMonth === 'Todos') {
-                if (chartMode === 'emission_pending' || chartMode === 'emission_total') {
-                    activeChartFilters.month = null;
-                    chartMode = 'delivery';
-                }
-            }
             const yearEl = document.getElementById('yearFilterHistorical');
             const selectedYear = yearEl ? (parseInt(yearEl.value) || new Date().getFullYear()) : new Date().getFullYear();
             const monthLabels = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
@@ -3893,11 +3887,18 @@
             const btnBack = document.getElementById('btnBackPending');
             if (btnBack) btnBack.style.display = (selectedMonth !== 'Todos') ? 'inline-flex' : 'none';
             try {
+                const pendingList = list.filter(item => {
+                    const prodCode = String(item.PRODUTO_PPR || '').trim();
+                    if (prodCode.endsWith('1')) return false;
+                    if (String(item.FATURADO_PPR || '').trim().toUpperCase() === 'T') return false;
+                    if (getCommercialBalance(item) <= 0) return false;
+                    return true;
+                });
                 if (selectedMonth === 'Todos') {
                     if (titleEl) titleEl.innerText = 'Gráfico de Emissão de Pedidos C/ Entrega Pendente';
                     const mData = Array(12).fill(0);
                     const mDataValue = Array(12).fill(0);
-                    list.forEach(item => {
+                    pendingList.forEach(item => {
                         const rawDate = item.DATA_EMISSAO_PEDIDO || item.OP_EMISSAO;
                         const d = rawDate ? toLocalDate(rawDate) : null;
                         if (d && d.getFullYear() === selectedYear) {
@@ -3920,27 +3921,14 @@
                             mDataValue[d.getMonth()] += (vUnit * realQ);
                         }
                     });
-                    let finalLabels = [...monthLabels];
-                    let finalData = [...mData];
-                    let finalDataValue = [...mDataValue];
-                    let finalBgColors = monthLabels.map((_, idx) => 
-                        (chartMode === 'emission_pending' && activeChartFilters.month === idx) ? '#fff' : chartColorAmber
-                    );
-                    if (chartMode === 'emission_pending' && activeChartFilters.month !== null) {
-                        const idx = activeChartFilters.month;
-                        finalLabels = [monthLabels[idx]];
-                        finalData = [mData[idx]];
-                        finalDataValue = [mDataValue[idx]];
-                        finalBgColors = ['#fff'];
-                    }
-                    renderPendingChart(finalLabels, finalData, finalDataValue, finalBgColors);
+                    renderPendingChart(monthLabels, mData, mDataValue, Array(12).fill(chartColorAmber));
                 } else {
                     const mIdx = parseInt(selectedMonth);
                     const monthName = monthLabels[mIdx - 1];
                     const dailyMap = {};
                     let totalMonthWeight = 0;
                     let totalMonthValue = 0;
-                    list.forEach(item => {
+                    pendingList.forEach(item => {
                         const rawDate = item.DATA_EMISSAO_PEDIDO || item.OP_EMISSAO;
                         const d = rawDate ? toLocalDate(rawDate) : null;
                         if (d && d.getFullYear() === selectedYear && (d.getMonth() + 1) === mIdx) {
