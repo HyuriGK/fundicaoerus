@@ -1,0 +1,405 @@
+/**
+ * SGP ERUS — SYNC FOREVER MOLDAGEM  v7.1
+ * Ficha Tecnica de Moldagem — ciclo de 30 minutos
+ */
+
+const { spawn } = require('child_process');
+const path      = require('path');
+const readline  = require('readline');
+const fs        = require('fs');
+
+// ─── ANSI ────────────────────────────────────────────────────────────────────
+const reset  = '\x1b[0m';
+const bold   = '\x1b[1m';
+const dim    = '\x1b[2m';
+const rgb    = (r,g,b) => `\x1b[38;2;${r};${g};${b}m`;
+const bgRgb  = (r,g,b) => `\x1b[48;2;${r};${g};${b}m`;
+
+const C = {
+    gold:   rgb(251,191,36),
+    amber:  rgb(217,119,6),
+    cyan:   rgb(34,211,238),
+    green:  rgb(16,185,129),
+    red:    rgb(239,68,68),
+    orange: rgb(249,115,22),
+    white:  rgb(244,244,245),
+    muted:  rgb(113,113,122),
+    border: rgb(63,63,70),
+    dim:    rgb(82,82,91),
+};
+
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
+function visLen(str) {
+    const plain = str.replace(/\x1b\[[0-9;]*m/g, '');
+    let len = 0;
+    for (const ch of plain) {
+        const cp = ch.codePointAt(0);
+        if (cp >= 0x1F000 || (cp >= 0x2600 && cp <= 0x27BF) || (cp >= 0xFE00 && cp <= 0xFE0F)) {
+            len += 2;
+        } else {
+            len += 1;
+        }
+    }
+    return len;
+}
+
+function padR(str, len) {
+    const diff = len - visLen(str);
+    return str + (diff > 0 ? ' '.repeat(diff) : '');
+}
+
+function padL(str, len) {
+    const diff = len - visLen(str);
+    return (diff > 0 ? ' '.repeat(diff) : '') + str;
+}
+
+function centerStr(str, width) {
+    const diff = width - visLen(str);
+    if (diff <= 0) return str;
+    const l = Math.floor(diff / 2);
+    return ' '.repeat(l) + str + ' '.repeat(diff - l);
+}
+
+function gradient(text, from, to) {
+    let out = '';
+    const len = [...text].length || 1;
+    let i = 0;
+    for (const ch of text) {
+        const t = i++ / len;
+        out += rgb(
+            Math.round(from[0] + (to[0]-from[0]) * t),
+            Math.round(from[1] + (to[1]-from[1]) * t),
+            Math.round(from[2] + (to[2]-from[2]) * t)
+        ) + ch;
+    }
+    return out + reset;
+}
+
+function nowTime() {
+    return new Date().toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+}
+
+// ─── CONFIG ──────────────────────────────────────────────────────────────────
+const ROOT_DIR  = path.join(__dirname, '..', '..');
+const LOG_FILE  = path.join(__dirname, 'sync-errors-moldagem.log');
+const CYCLE_LOG = path.join(ROOT_DIR, 'sync-ciclos-moldagem.txt');
+
+const WAIT_BETWEEN_CYCLES_MS = 30 * 60 * 1000; // 30 minutos
+
+const SYNC_BAT = { name: 'MOLDAGEM', file: 'sincronizar_fichatecmoldagem.bat', icon: '[ML]' };
+
+const getW = () => Math.max(80, (process.stdout.columns || 120)) - 2;
+
+// ─── STATE ───────────────────────────────────────────────────────────────────
+let cycleCount   = 0;
+let cycleHistory = [];
+let currentProg  = 0;
+let scriptState  = 'IDLE';
+let activeIssue  = null;
+let totalErrors  = 0;
+let logHistory   = [];
+let lastOkAt     = null;
+let nextRunAt    = null; // timestamp do proximo ciclo (durante espera)
+
+// ─── BOX HELPERS ─────────────────────────────────────────────────────────────
+const bdr = C.border;
+const B = {
+    tl: '╔', tr: '╗', bl: '╚', br: '╝',
+    h:  '═', v:  '║',
+    ml: '╠', mr: '╣',
+    top: () => { const w = getW(); return bdr + B.tl + B.h.repeat(w) + B.tr + reset; },
+    sep: () => { const w = getW(); return bdr + B.ml + B.h.repeat(w) + B.mr + reset; },
+    bot: () => { const w = getW(); return bdr + B.bl + B.h.repeat(w) + B.br + reset; },
+    row: (content, w) => {
+        w = w || getW();
+        let vis = visLen(content);
+        let out = content;
+        if (vis < w) {
+            out = content + ' '.repeat(w - vis);
+        } else if (vis > w) {
+            let acc = 0, result = '';
+            for (const ch of content.replace(/\x1b\[[0-9;]*m/g, '')) {
+                const cw = ch.codePointAt(0) >= 0x1F000 ? 2 : 1;
+                if (acc + cw > w) break;
+                acc += cw; result += ch;
+            }
+            out = result + ' '.repeat(Math.max(0, w - acc));
+        }
+        return bdr + B.v + reset + out + reset + bdr + B.v + reset;
+    },
+    blank: () => { const w = getW(); return B.row(' '.repeat(w), w); },
+};
+
+// ─── DRAW ────────────────────────────────────────────────────────────────────
+function drawDashboard(cycleStart) {
+    const lines = buildFrame(cycleStart);
+    readline.cursorTo(process.stdout, 0, 0);
+    readline.clearScreenDown(process.stdout);
+    process.stdout.write(lines.join('\n') + '\n');
+}
+
+function buildFrame(cycleStart) {
+    const out = [];
+    const W = getW();
+    const avgTime = cycleHistory.length > 0
+        ? (cycleHistory.reduce((a,b)=>a+b,0)/cycleHistory.length).toFixed(1)
+        : '--';
+    const elapsed = cycleStart ? ((Date.now()-cycleStart)/1000).toFixed(1) : '--';
+
+    // ── HEADER ───────────────────────────────────────────────────────────────
+    out.push(B.top());
+    const title = gradient('  FUNDICAO ERUS  -  FICHA TECNICA DE MOLDAGEM  ', [251,191,36],[249,115,22]);
+    out.push(B.row(centerStr(bold + title + reset, W), W));
+    const sub = dim + 'Sistema de Gestao de Producao  *  SGP v7.1' + reset;
+    out.push(B.row(centerStr(sub, W), W));
+
+    // ── STATS ────────────────────────────────────────────────────────────────
+    out.push(B.sep());
+    const cycleV = bold + C.gold  + '#' + String(cycleCount).padStart(3,'0') + reset;
+    const avgV   = bold + C.cyan  + avgTime + 's' + reset;
+    const errV   = totalErrors > 0
+        ? bold + C.red   + String(totalErrors).padStart(4,'0') + reset
+        : bold + C.green + '0000' + reset;
+    const elapsV = bold + C.amber + elapsed + 's' + reset;
+    const timeV  = bold + C.white + nowTime() + reset;
+
+    const s1 = '  ' + C.muted+'CICLO '+reset + cycleV +
+               '    ' + C.muted+'MEDIA '+reset + avgV +
+               '    ' + C.muted+'ERROS '+reset + errV +
+               '    ' + C.muted+'TEMPO '+reset + elapsV;
+    const s2 = '  ' + C.muted+'HORA  '+reset + timeV +
+               '    ' + C.dim+'LOG  scripts/sync/sync-errors-moldagem.log'+reset;
+    const s3 = '  ' + C.muted+'HORARIO COMERCIAL  '+reset + bold + C.green + 'Seg-Sex  06:30 - 17:30' + reset;
+
+    out.push(B.row(s1, W));
+    out.push(B.row(s2, W));
+    out.push(B.row(s3, W));
+
+    // ── MÓDULO ───────────────────────────────────────────────────────────────
+    out.push(B.sep());
+    out.push(B.row(centerStr(bold + C.gold + '>  MODULO DE SINCRONIZACAO  <' + reset, W), W));
+    out.push(B.sep());
+
+    const FIXED = 1 + 4 + 1 + 11 + 2 + 2 + 4 + 2 + 10 + 5 + 8;
+    const BAR = Math.max(10, W - FIXED - 2);
+
+    const prog  = currentProg || 0;
+    const state = scriptState;
+
+    let stateColor, stateLabel;
+    switch (state) {
+        case 'RUNNING': stateColor = C.cyan;  stateLabel = ' RODANDO'; break;
+        case 'DONE':    stateColor = C.green; stateLabel = '  PRONTO'; break;
+        case 'ERROR':   stateColor = C.red;   stateLabel = '    ERRO'; break;
+        default:        stateColor = C.muted; stateLabel = '  AGUARD'; break;
+    }
+
+    const filled = Math.round((prog / 100) * BAR);
+    let bar = '';
+    for (let i = 0; i < filled; i++) {
+        const t = i / BAR;
+        bar += rgb(Math.round(16+t*235), Math.round(185-t*50), Math.round(129-t*80)) + '█';
+    }
+    bar += C.dim + '░'.repeat(BAR - filled) + reset;
+
+    const icon  = C.muted + SYNC_BAT.icon + reset;
+    const name  = bold + stateColor + padR(SYNC_BAT.name, 11) + reset;
+    const pct   = bold + stateColor + padL(prog + '%', 4) + reset;
+    const badge = stateColor + bold + '[' + stateLabel + ']' + reset;
+    const ok    = lastOkAt ? dim + '  ok ' + lastOkAt + reset : '         ';
+
+    out.push(B.row(' ' + icon + ' ' + name + ' [' + bar + '] ' + pct + '  ' + badge + '  ' + ok, W));
+
+    // ── PRÓXIMO CICLO ────────────────────────────────────────────────────────
+    out.push(B.sep());
+    if (nextRunAt && scriptState === 'DONE') {
+        const secsLeft = Math.max(0, Math.round((nextRunAt - Date.now()) / 1000));
+        const mins = String(Math.floor(secsLeft / 60)).padStart(2, '0');
+        const secs = String(secsLeft % 60).padStart(2, '0');
+        const waitLine = '  ' + C.muted + 'Proximo ciclo em  ' + reset + bold + C.amber + mins + ':' + secs + reset;
+        out.push(B.row(waitLine, W));
+    } else {
+        out.push(B.blank());
+    }
+
+    // ── ALERTS ───────────────────────────────────────────────────────────────
+    out.push(B.sep());
+    if (activeIssue) {
+        out.push(B.row(centerStr(bold + C.red + '!  ALERTAS ATIVOS  !' + reset, W), W));
+        const line = '  ' + C.red + '> ' + bold + padR(SYNC_BAT.name, 11) + reset + ' ' + C.orange + activeIssue.substring(0, W - 20) + reset;
+        out.push(B.row(line, W));
+    } else {
+        out.push(B.row(centerStr(bold + C.green + '+  MODULO OPERACIONAL  +' + reset, W), W));
+    }
+
+    // ── LOG ──────────────────────────────────────────────────────────────────
+    out.push(B.sep());
+    out.push(B.row(centerStr(C.muted + 'o  HISTORICO DE EVENTOS  o' + reset, W), W));
+
+    const lastLogs = [...logHistory.slice(-6)];
+    while (lastLogs.length < 6) lastLogs.unshift(null);
+    lastLogs.forEach(e => {
+        if (!e) { out.push(B.blank()); return; }
+        const t   = C.dim + '[' + e.time + ']' + reset;
+        const sc  = e.isError ? C.red + bold + padR(e.script, 12) + reset : C.green + dim + padR(e.script, 12) + reset;
+        const msg = (e.isError ? C.orange : C.dim) + e.msg.substring(0, W - 35) + reset;
+        out.push(B.row('  ' + t + ' ' + sc + ' | ' + msg, W));
+    });
+
+    // ── FOOTER ───────────────────────────────────────────────────────────────
+    out.push(B.sep());
+    out.push(B.row(centerStr(dim + 'Pressione  Ctrl+C  para encerrar  *  Ciclo a cada 30 minutos' + reset, W), W));
+    out.push(B.bot());
+
+    return out;
+}
+
+// ─── LOGGING ─────────────────────────────────────────────────────────────────
+function logEvent(script, message, isError = true) {
+    const ts  = new Date().toISOString().replace('T',' ').substring(0,19);
+    const msg = message.trim();
+    if (!msg || msg.includes('@PROG')) return;
+    if (!isError && (msg.includes('SECURITY WARNING') || msg.includes('Warning:') || msg.includes('adopt standard'))) return;
+
+    if (isError) { totalErrors++; activeIssue = msg; }
+    try { fs.appendFileSync(LOG_FILE, `[${ts}] [${script}] ${isError?'ERROR':'INFO'}: ${msg}\n`); } catch(e) {}
+    logHistory.push({ time: nowTime(), script, msg, isError });
+    if (logHistory.length > 60) logHistory.shift();
+}
+
+// ─── RUN BAT ─────────────────────────────────────────────────────────────────
+function runBat() {
+    return new Promise(resolve => {
+        scriptState  = 'RUNNING';
+        currentProg  = 0;
+        activeIssue  = null;
+
+        const child = spawn('cmd.exe', ['/c', SYNC_BAT.file], { cwd: ROOT_DIR, stdio: ['ignore','pipe','pipe'] });
+
+        child.stdout.on('data', data => {
+            data.toString().split('\n').forEach(line => {
+                const l = line.trim();
+                if (l.includes('@PROG:')) {
+                    const parts = l.split(':');
+                    if (parts.length >= 3) currentProg = parseInt(parts[2]) || 0;
+                } else if (l.includes('Falha definitiva')) {
+                    logEvent(SYNC_BAT.name, l, true);
+                } else if (l.includes('Login falhou') || l.includes('tentativa')) {
+                    logEvent(SYNC_BAT.name, l, false);
+                } else if (l.includes('❌') || (l.toLowerCase().includes('error:') && !l.toLowerCase().includes('warning'))) {
+                    logEvent(SYNC_BAT.name, l, true);
+                }
+            });
+        });
+
+        child.stderr.on('data', data => {
+            const err = data.toString().trim();
+            if (!err || err.includes('terminada') || err.includes('Warning:') || err.includes('SECURITY WARNING:')) return;
+            if (err.includes('Login falhou') || err.includes('tentativa')) {
+                logEvent(SYNC_BAT.name, err, false);
+                return;
+            }
+            logEvent(SYNC_BAT.name, err, true);
+            scriptState = 'ERROR';
+        });
+
+        child.on('close', code => {
+            if (code !== 0 && scriptState !== 'DONE') {
+                scriptState = 'ERROR';
+                logEvent(SYNC_BAT.name, `Falha - codigo de saida ${code}`, true);
+            } else {
+                scriptState = 'DONE';
+                currentProg = 100;
+                lastOkAt    = nowTime();
+                activeIssue = null;
+                logEvent(SYNC_BAT.name, 'Sincronizacao concluida com sucesso', false);
+            }
+            resolve();
+        });
+    });
+}
+
+// ─── SCHEDULE ────────────────────────────────────────────────────────────────
+function isWithinSchedule() {
+    const now = new Date();
+    const day = now.getDay();
+    if (day === 0 || day === 6) return false;
+    const minutes = now.getHours() * 60 + now.getMinutes();
+    return minutes >= 6 * 60 + 30 && minutes < 17 * 60 + 30;
+}
+
+function drawOffSchedule() {
+    const W = getW();
+    readline.cursorTo(process.stdout, 0, 0);
+    readline.clearScreenDown(process.stdout);
+    const lines = [];
+    lines.push(B.top());
+    lines.push(B.row(centerStr(bold + gradient('  FUNDICAO ERUS  -  FICHA TECNICA DE MOLDAGEM  ', [251,191,36],[249,115,22]) + reset, W), W));
+    lines.push(B.sep());
+    lines.push(B.row(centerStr(bold + C.amber + 'SINCRONIZACAO PAUSADA - FORA DO HORARIO' + reset, W), W));
+    lines.push(B.row(centerStr(C.muted + 'Segunda a Sexta  |  06:30 - 17:30' + reset, W), W));
+    lines.push(B.row(centerStr(C.white + 'Hora atual: ' + bold + nowTime() + reset, W), W));
+    lines.push(B.sep());
+    lines.push(B.row(centerStr(dim + 'Aguardando proximo horario comercial...' + reset, W), W));
+    lines.push(B.bot());
+    process.stdout.write(lines.join('\n') + '\n');
+}
+
+// ─── MAIN ────────────────────────────────────────────────────────────────────
+async function startForever() {
+    console.clear();
+    process.stdout.write('\x1B[?25l');
+
+    if (!fs.existsSync(LOG_FILE)) {
+        fs.writeFileSync(LOG_FILE, `=== SGP ERUS SYNC MOLDAGEM LOG - ${new Date().toISOString()} ===\n`);
+    }
+    if (!fs.existsSync(CYCLE_LOG)) {
+        const now = new Date();
+        const fmtNow = now.toLocaleDateString('pt-BR') + ' ' + now.toLocaleTimeString('pt-BR');
+        fs.writeFileSync(CYCLE_LOG, `=== SGP ERUS - HISTORICO DE CICLOS MOLDAGEM - ${fmtNow} ===\n`);
+    }
+
+    while (true) {
+        if (!isWithinSchedule()) {
+            nextRunAt = null;
+            drawOffSchedule();
+            await new Promise(r => setTimeout(r, 60000));
+            continue;
+        }
+
+        cycleCount++;
+        scriptState = 'IDLE';
+        currentProg = 0;
+        nextRunAt   = null;
+
+        const cycleStart = Date.now();
+        const timer = setInterval(() => drawDashboard(cycleStart), 800);
+
+        await runBat();
+
+        clearInterval(timer);
+
+        const cycleEnd = new Date();
+        const duration = (Date.now() - cycleStart) / 1000;
+        cycleHistory.push(duration);
+        if (cycleHistory.length > 50) cycleHistory.shift();
+
+        const cycleStartDate = new Date(cycleStart);
+        const fmtDate = d => d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR');
+        const cycleLogLine = `Ciclo #${String(cycleCount).padStart(3,'0')} | Inicio: ${fmtDate(cycleStartDate)} | Fim: ${fmtDate(cycleEnd)} | Duracao: ${duration.toFixed(1)}s\n`;
+        try { fs.appendFileSync(CYCLE_LOG, cycleLogLine); } catch(e) {}
+
+        logEvent('SISTEMA', `Ciclo #${cycleCount} concluido em ${duration.toFixed(1)}s`, false);
+
+        // Aguardar 30 minutos exibindo countdown
+        nextRunAt = Date.now() + WAIT_BETWEEN_CYCLES_MS;
+        const waitTimer = setInterval(() => drawDashboard(cycleStart), 800);
+        await new Promise(r => setTimeout(r, WAIT_BETWEEN_CYCLES_MS));
+        clearInterval(waitTimer);
+    }
+}
+
+process.on('SIGINT', () => { process.stdout.write('\x1B[?25h'); process.exit(0); });
+process.on('exit',   () => process.stdout.write('\x1B[?25h'));
+
+startForever();
