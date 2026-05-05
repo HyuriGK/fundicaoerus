@@ -1770,6 +1770,21 @@
 
         // --- INIT ---
         async function init() {
+            // Restore filters from localStorage before fetching data
+            const storedMonth = localStorage.getItem('prod_monthFilter');
+            const storedYear = localStorage.getItem('prod_yearFilter');
+            const storedSector = localStorage.getItem('prod_sectorFilter');
+            const storedGrupo = localStorage.getItem('prod_grupoFilter');
+            const storedLiga = localStorage.getItem('prod_ligaFilter');
+
+            if (storedMonth) currentMonthFilter = parseInt(storedMonth);
+            else currentMonthFilter = new Date().getMonth() + 1;
+
+            if (storedYear) currentYearFilter = storedYear;
+            if (storedSector) currentSectorFilter = storedSector;
+            if (storedGrupo) currentGrupoFilter = storedGrupo;
+            if (storedLiga) currentLigaFilter = storedLiga;
+
             setupEventListeners();
             await fetchData();
             updateClock();
@@ -1991,14 +2006,18 @@
                 yearFilterSelect.appendChild(option);
             });
 
-            const targetYear = new Date().getFullYear().toString();
-            if (years.includes(targetYear)) {
-                yearFilterSelect.value = targetYear;
-                currentYearFilter = targetYear;
+            // Respeitar ano vindo do localStorage ou definir padrão
+            if (currentYearFilter && (currentYearFilter === 'TODOS' || years.includes(currentYearFilter))) {
+                yearFilterSelect.value = currentYearFilter;
             } else {
-                const firstYear = years[0];
-                yearFilterSelect.value = firstYear;
-                currentYearFilter = firstYear;
+                const targetYear = new Date().getFullYear().toString();
+                if (years.includes(targetYear)) {
+                    yearFilterSelect.value = targetYear;
+                    currentYearFilter = targetYear;
+                } else if (years.length > 0) {
+                    yearFilterSelect.value = years[0];
+                    currentYearFilter = years[0];
+                }
             }
 
             refreshGrupoLigaFilters();
@@ -2045,6 +2064,13 @@
 
 
         function applyFilters() {
+            // Persistir filtros
+            localStorage.setItem('prod_monthFilter', currentMonthFilter);
+            localStorage.setItem('prod_yearFilter', currentYearFilter);
+            localStorage.setItem('prod_sectorFilter', currentSectorFilter);
+            localStorage.setItem('prod_grupoFilter', currentGrupoFilter);
+            localStorage.setItem('prod_ligaFilter', currentLigaFilter);
+
             filteredData = allData.filter(item => {
                 const date = new Date(item.data + 'T12:00:00'); // Safe Parse
                 const month = date.getMonth() + 1;
@@ -2659,26 +2685,6 @@
             window.openRecordsModal();
         }
 
-        // Initial Load
-        document.addEventListener('DOMContentLoaded', () => {
-            // Check Last Selection or Default to Current
-            const storedMonth = localStorage.getItem('prod_monthFilter');
-            const storedYear = localStorage.getItem('prod_yearFilter');
-            const storedSector = localStorage.getItem('prod_sectorFilter');
-
-            if (storedMonth) currentMonthFilter = parseInt(storedMonth);
-            else currentMonthFilter = new Date().getMonth() + 1; // Default to current month
-
-            if (storedYear) currentYearFilter = storedYear;
-            if (storedSector) currentSectorFilter = storedSector;
-
-            fetchData();
-
-            // Setup Listeners
-            setupEventListeners();
-
-            // Removed auto-trigger redirect that opened modal
-        });
 
         function showToast(title, subtitle, type = 'info') {
             let container = document.getElementById('toast-container');
