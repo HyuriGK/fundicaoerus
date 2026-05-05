@@ -1787,6 +1787,7 @@
         function selectMonth(idx) {
             currentMonthFilter = idx;
             updateMonthButtonsUI();
+            refreshGrupoLigaFilters();
             applyFilters();
             fetchGoal(); fetchFuncionarios();
         }
@@ -1985,15 +1986,32 @@
                 currentYearFilter = firstYear;
             }
 
-            // Grupos de Material
-            const grupos = [...new Set(allData.map(d => d.grupoMaterial).filter(g => g))].sort();
+            refreshGrupoLigaFilters();
+        }
+
+        function getDataForCurrentPeriod() {
+            return allData.filter(item => {
+                const date = new Date(item.data + 'T12:00:00');
+                const month = date.getMonth() + 1;
+                const year = date.getFullYear().toString();
+                const matchMonth = currentMonthFilter === 0 || month === currentMonthFilter;
+                const matchYear = currentYearFilter === 'TODOS' || year === currentYearFilter;
+                return matchMonth && matchYear;
+            });
+        }
+
+        function refreshGrupoLigaFilters() {
+            const periodData = getDataForCurrentPeriod();
+
+            // Grupos presentes no período atual
+            const grupos = [...new Set(periodData.map(d => d.grupoMaterial).filter(g => g))].sort();
             if (!grupos.includes(currentGrupoFilter)) currentGrupoFilter = 'TODOS';
             renderGrupoButtons(grupos);
 
-            // Ligas (filtered by current grupo)
+            // Ligas filtradas pelo grupo atual, dentro do período
             const ligaSource = currentGrupoFilter === 'TODOS'
-                ? allData
-                : allData.filter(d => d.grupoMaterial === currentGrupoFilter);
+                ? periodData
+                : periodData.filter(d => d.grupoMaterial === currentGrupoFilter);
             const ligas = [...new Set(ligaSource.map(d => d.liga).filter(l => l))].sort();
             if (!ligas.includes(currentLigaFilter)) currentLigaFilter = 'TODAS';
             renderLigaButtons(ligas);
