@@ -103,6 +103,7 @@ app.use('/api/centro-custos', require('../src/centro-custos')); // NOVO: Centro 
 app.use('/api/fichatecnica', require('../src/fichatecnica')); // NOVO: Ficha Técnica (Firebird Read-Only)
 app.use('/api/fichatecnicafusao', require('../src/fichatecnicafusao')); // Ficha Técnica de Fusão
 app.use('/api/communications', require('../src/communications')); // NOVO: Sistema de Comunicação
+app.use('/api/cron/email-pedidos', require('../src/cron-email-pedidos')); // Cron: Email diário de pedidos
 
 // Rota temporária de diagnóstico do Firebird
 app.get('/api/test-firebird', (req, res) => {
