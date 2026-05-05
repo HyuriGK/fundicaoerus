@@ -332,6 +332,39 @@ router.post('/meta', async (req, res) => {
         res.status(500).json({ success: false, error: error.message });
     }
 });
+// GET /api/producao-postgres/funcionarios?mes_ano=YYYY-MM
+router.get('/funcionarios', async (req, res) => {
+    try {
+        const { mes_ano } = req.query;
+        if (!mes_ano) return res.status(400).json({ success: false, error: 'mes_ano is required' });
+        const result = await pool.query(
+            'SELECT quantidade FROM producao_funcionarios WHERE mes_ano = $1',
+            [mes_ano]
+        );
+        const quantidade = result.rows.length > 0 ? parseInt(result.rows[0].quantidade) : 4;
+        res.json({ success: true, quantidade });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// POST /api/producao-postgres/funcionarios
+router.post('/funcionarios', async (req, res) => {
+    try {
+        const { mes_ano, quantidade } = req.body;
+        if (!mes_ano || quantidade === undefined) return res.status(400).json({ success: false, error: 'mes_ano and quantidade are required' });
+        await pool.query(`
+            INSERT INTO producao_funcionarios (mes_ano, quantidade, atualizado_em)
+            VALUES ($1, $2, CURRENT_TIMESTAMP)
+            ON CONFLICT (mes_ano)
+            DO UPDATE SET quantidade = EXCLUDED.quantidade, atualizado_em = CURRENT_TIMESTAMP
+        `, [mes_ano, parseInt(quantidade)]);
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 router.post('/peso', async (req, res) => {
     const { codigo_peca, peso } = req.body;
 

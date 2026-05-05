@@ -1067,10 +1067,10 @@
                     <div class="kpi-subtext">Média baseada nos dias válidos — <span id="avg-dias-uteis">0</span> dias úteis</div>
                 </div>
 
-                <div class="kpi-card kpi-success" title="Kg produzido por funcionário do acabamento">
+                <div class="kpi-card kpi-success" title="Clique para definir nº de funcionários (apenas desenvolvedor)" onclick="abrirModalFuncionarios()" style="cursor:pointer;">
                     <div class="kpi-title">Kg / Dia / Homem</div>
                     <div id="sector-kg-homem-display" class="kpi-value">0,00 Kg</div>
-                    <div class="kpi-subtext">Média diária ÷ 4 funcionários (acabamento)</div>
+                    <div class="kpi-subtext">Média diária ÷ <span id="kpi-num-funcionarios">4</span> funcionários</div>
                 </div>
 
                 <div class="kpi-card kpi-purple" title="Clique para ver os registros" >
@@ -1084,6 +1084,23 @@
                     <div class="kpi-title">Média / Peça</div>
                     <div id="sector-avg-piece-weight-display" class="kpi-value">0,00 Kg</div>
                     <div class="kpi-subtext">Média do peso unitário das peças</div>
+                </div>
+            </div>
+
+            <!-- Modal: Funcionários por Mês -->
+            <div id="modal-funcionarios" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:9999; align-items:center; justify-content:center;">
+                <div style="background:#18181b; border:1px solid rgba(255,255,255,0.1); border-radius:12px; padding:28px 32px; min-width:320px; max-width:380px; box-shadow:0 20px 40px rgba(0,0,0,0.5);">
+                    <div style="font-size:0.7rem; font-weight:700; color:#a1a1aa; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px;">Kg / Dia / Homem</div>
+                    <div style="font-size:1.1rem; font-weight:700; color:#f4f4f5; margin-bottom:20px;">Funcionários do Acabamento</div>
+                    <div style="font-size:0.8rem; color:#a1a1aa; margin-bottom:8px;">Quantidade de funcionários em <span id="modal-func-mesano" style="color:#fbbf24;"></span>:</div>
+                    <input id="input-funcionarios" type="number" min="1" max="99" value="4"
+                        style="width:100%; padding:10px 14px; background:#09090b; border:1px solid rgba(255,255,255,0.15); border-radius:8px; color:#f4f4f5; font-size:1.4rem; font-weight:700; text-align:center; outline:none; margin-bottom:20px;">
+                    <div style="display:flex; gap:10px; justify-content:flex-end;">
+                        <button onclick="document.getElementById('modal-funcionarios').style.display='none'"
+                            style="padding:8px 18px; background:#27272a; border:none; border-radius:8px; color:#a1a1aa; cursor:pointer; font-size:0.85rem;">Cancelar</button>
+                        <button onclick="salvarFuncionarios()"
+                            style="padding:8px 18px; background:#10b981; border:none; border-radius:8px; color:#fff; cursor:pointer; font-size:0.85rem; font-weight:700;">Salvar</button>
+                    </div>
                 </div>
             </div>
 
@@ -1748,7 +1765,7 @@
             currentMonthFilter = idx;
             updateMonthButtonsUI();
             applyFilters();
-            fetchGoal();
+            fetchGoal(); fetchFuncionarios();
         }
 
         function updateMonthButtonsUI() {
@@ -1800,7 +1817,7 @@
             yearFilterSelect.addEventListener('change', (e) => {
                 currentYearFilter = e.target.value;
                 applyFilters();
-                fetchGoal(); // Fetch goal for new year
+                fetchGoal(); fetchFuncionarios(); // Fetch goal for new year
             });
 
             // Goal Edit (Persist to API)
@@ -1849,8 +1866,8 @@
                     // updateFilterUI(); // Removed, replaced by specific UI calls in populateFilters
                     renderMonthButtons();
 
-                    // Initial Goal Fetch
-                    await fetchGoal();
+                    // Initial Goal + Funcionários Fetch
+                    await Promise.all([fetchGoal(), fetchFuncionarios()]);
 
                     applyFilters();
                 } else {
@@ -1979,7 +1996,7 @@
             if (avgDiasEl) avgDiasEl.textContent = diasValidos;
 
             const avgPerPiece = totalQty > 0 ? totalWeight / totalQty : 0;
-            const kgHomem = avgDaily / 4;
+            const kgHomem = avgDaily / (numFuncionarios || 4);
 
             sectorTotalDisplay.innerText = totalWeight.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' Kg';
             sectorAverageDisplay.innerText = avgDaily.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' Kg';
@@ -2019,6 +2036,52 @@
             let month = currentMonthFilter === 0 ? new Date().getMonth() + 1 : currentMonthFilter;
 
             return `${year}-${String(month).padStart(2, '0')}`;
+        }
+
+        // ─── FUNCIONÁRIOS POR MÊS ────────────────────────────────────────────────
+        let numFuncionarios = 4;
+
+        async function fetchFuncionarios() {
+            const mesAno = getMesAnoAsString();
+            try {
+                const res = await fetch(`/api/producao-postgres/funcionarios?mes_ano=${mesAno}`);
+                const data = await res.json();
+                if (data.success) {
+                    numFuncionarios = data.quantidade;
+                    const el = document.getElementById('kpi-num-funcionarios');
+                    if (el) el.textContent = numFuncionarios;
+                    updateKPIs();
+                }
+            } catch (err) { console.error('Erro ao buscar funcionários:', err); }
+        }
+
+        function abrirModalFuncionarios() {
+            const role = (localStorage.getItem('erus_role') || '').trim().toLowerCase();
+            if (role !== 'desenvolvedor') return;
+            const mesAno = getMesAnoAsString();
+            const [year, month] = mesAno.split('-');
+            const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+            document.getElementById('modal-func-mesano').textContent = `${meses[parseInt(month)-1]} ${year}`;
+            document.getElementById('input-funcionarios').value = numFuncionarios;
+            document.getElementById('modal-funcionarios').style.display = 'flex';
+        }
+
+        async function salvarFuncionarios() {
+            const quantidade = parseInt(document.getElementById('input-funcionarios').value);
+            if (!quantidade || quantidade < 1) return;
+            const mesAno = getMesAnoAsString();
+            try {
+                await fetch('/api/producao-postgres/funcionarios', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mes_ano: mesAno, quantidade })
+                });
+                numFuncionarios = quantidade;
+                const el = document.getElementById('kpi-num-funcionarios');
+                if (el) el.textContent = numFuncionarios;
+                document.getElementById('modal-funcionarios').style.display = 'none';
+                updateKPIs();
+            } catch (err) { alert('Erro ao salvar.'); }
         }
 
         // Removed updateGoalDisplay local function as we use fetchGoal now
