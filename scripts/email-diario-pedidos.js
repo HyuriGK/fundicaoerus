@@ -175,8 +175,7 @@ function gerarEmailNovos(allData, customWeights) {
     const dateStr  = formatDate(target);
     const genStr   = formatDate(today);
 
-    let text = `Assunto: Novos Pedidos Incluídos - ${genStr}\n\n`;
-    text += `[ Este e-mail foi gerado e disparado automaticamente pelo SGP - Sistema de Gerenciamento de Processos ]\n\n`;
+    let text = `[ Este e-mail foi gerado e disparado automaticamente pelo SGP - Sistema de Gerenciamento de Processos ]\n\n`;
     text += `Prezados,\n\n`;
     text += `Foram incluídos novos pedidos na carteira ${weekday} (${dateStr}):\n\n`;
     text += `• Total de Novos Pedidos: ${uniqueOrders}\n`;
@@ -239,8 +238,7 @@ function gerarEmailBloqueados(allData, customWeights) {
 
     const genStr = formatDate(today);
 
-    let text = `Assunto: Resumo de Pedidos Bloqueados na Carteira - ${genStr}\n\n`;
-    text += `[ Este e-mail foi gerado e disparado automaticamente pelo SGP - Sistema de Gerenciamento de Processos ]\n\n`;
+    let text = `[ Este e-mail foi gerado e disparado automaticamente pelo SGP - Sistema de Gerenciamento de Processos ]\n\n`;
     text += `Prezados,\n\n`;
     text += `Este e-mail é enviado a todos os setores para que cada um verifique a situação de cada peça em sua área e auxilie no fluxo necessário para o desbloqueio do pedido.\n\n`;
     text += `Segue o resumo de todos os itens atualmente bloqueados na carteira de pedidos:\n\n`;
