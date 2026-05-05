@@ -18,13 +18,13 @@
     };
 
     var CHART_LIGHT = {
-        color:       '#4b5563',
-        borderColor: 'rgba(0,0,0,0.07)',
+        color:       '#0f172a',
+        borderColor: 'rgba(0,0,0,0.15)',
         tooltip: {
             bg:    'rgba(255,255,255,0.98)',
             title: '#b45309',
-            body:  '#374151',
-            border:'rgba(0,0,0,0.1)'
+            body:  '#0f172a',
+            border:'rgba(0,0,0,0.2)'
         }
     };
 
