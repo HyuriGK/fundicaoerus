@@ -1173,6 +1173,7 @@
                             <th>OP</th>
                             <th>Código</th>
                             <th>Produto</th>
+                            <th>Grupo</th>
                             <th>Liga</th>
                             <th>Peso (Un)</th>
                             <th>Quant.</th>
@@ -1189,6 +1190,8 @@
                                     placeholder="Filtro..."></th>
                             <th><input class="filter-input-table column-filter" data-col="produto"
                                     placeholder="Filtro..."></th>
+                            <th><input class="filter-input-table column-filter" data-col="grupo" placeholder="Filtro...">
+                            </th>
                             <th><input class="filter-input-table column-filter" data-col="liga" placeholder="Filtro...">
                             </th>
                             <th><input class="filter-input-table column-filter" data-col="pesoUn"
@@ -1848,20 +1851,19 @@
             select.onchange = (e) => {
                 currentGrupoFilter = e.target.value;
                 currentLigaFilter = 'TODAS';
-                // Ao selecionar um grupo específico, mostrar todos os setores para não perder registros
-                if (currentGrupoFilter !== 'TODOS') {
-                    currentSectorFilter = 'TODOS';
-                    const sectorSelect = document.getElementById('sector-chart-select');
-                    if (sectorSelect) sectorSelect.value = 'TODOS';
-                } else {
-                    currentSectorFilter = 'MOLDAGEM GERAL';
-                    const sectorSelect = document.getElementById('sector-chart-select');
-                    if (sectorSelect) sectorSelect.value = 'MOLDAGEM GERAL';
+                
+                // Redefinir setores se necessário para mostrar todos os registros do grupo
+                if (currentGrupoFilter !== 'TODOS' && currentSectorFilter !== 'TODOS') {
+                    // Opcional: Manter o setor se o usuário quiser filtrar grupo dentro do setor
+                    // Mas a pedido anterior, grupos costumam atravessar setores
                 }
+
                 // Re-render ligas filtered by selected grupo
+                const periodData = getDataForCurrentPeriod();
                 const ligasFiltradas = currentGrupoFilter === 'TODOS'
-                    ? [...new Set(allData.map(d => d.liga).filter(l => l))].sort()
-                    : [...new Set(allData.filter(d => d.grupoMaterial === currentGrupoFilter).map(d => d.liga).filter(l => l))].sort();
+                    ? [...new Set(periodData.map(d => d.liga).filter(l => l))].sort()
+                    : [...new Set(periodData.filter(d => d.grupoMaterial === currentGrupoFilter).map(d => d.liga).filter(l => l))].sort();
+                
                 renderLigaButtons(ligasFiltradas);
                 applyFilters();
             };
@@ -2005,15 +2007,23 @@
 
             // Grupos presentes no período atual
             const grupos = [...new Set(periodData.map(d => d.grupoMaterial).filter(g => g))].sort();
-            if (!grupos.includes(currentGrupoFilter)) currentGrupoFilter = 'TODOS';
+            
+            // Preservar seleção se ainda existir nos novos dados, senão volta para TODOS
+            if (currentGrupoFilter !== 'TODOS' && !grupos.includes(currentGrupoFilter)) {
+                currentGrupoFilter = 'TODOS';
+            }
             renderGrupoButtons(grupos);
 
             // Ligas filtradas pelo grupo atual, dentro do período
             const ligaSource = currentGrupoFilter === 'TODOS'
                 ? periodData
                 : periodData.filter(d => d.grupoMaterial === currentGrupoFilter);
+                
             const ligas = [...new Set(ligaSource.map(d => d.liga).filter(l => l))].sort();
-            if (!ligas.includes(currentLigaFilter)) currentLigaFilter = 'TODAS';
+            
+            if (currentLigaFilter !== 'TODAS' && !ligas.includes(currentLigaFilter)) {
+                currentLigaFilter = 'TODAS';
+            }
             renderLigaButtons(ligas);
         }
 
@@ -2517,6 +2527,7 @@
                 if (colFilters.op && !String(item.op || '').toLowerCase().includes(colFilters.op)) return false;
                 if (colFilters.codigo_peca && !String(item.codigo_peca || '').toLowerCase().includes(colFilters.codigo_peca)) return false;
                 if (colFilters.produto && !item.produto.toLowerCase().includes(colFilters.produto)) return false;
+                if (colFilters.grupo && !String(item.grupoMaterial || '').toLowerCase().includes(colFilters.grupo)) return false;
                 if (colFilters.liga && !item.liga.toLowerCase().includes(colFilters.liga)) return false;
 
                 // Formatação para filtros (usando a mesma formatação da visualização)
@@ -2553,6 +2564,7 @@
                     <td class="copyable" title="Clique para copiar OP" onclick="copyToClipboard('${item.op || ''}', 'OP')">${item.op || '-'}<i class="fa-solid fa-copy copy-icon"></i></td>
                     <td class="copyable" title="Clique para copiar Código" onclick="copyToClipboard('${item.codigo_peca || ''}', 'Código')">${item.codigo_peca || '-'}<i class="fa-solid fa-copy copy-icon"></i></td>
                     <td style="max-width: 300px; overflow:hidden; text-overflow:ellipsis;" title="${item.produto}">${item.produto}</td>
+                    <td title="${item.grupoMaterial || ''}">${item.grupoMaterial || '-'}</td>
                     <td>${item.liga || '-'}</td>
                     <td class="editable-weight-cell" style="position:relative; padding: 4px;">
                         ${isDeveloper ? `

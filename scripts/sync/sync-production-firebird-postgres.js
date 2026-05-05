@@ -248,12 +248,28 @@ function chunkArray(myArray, chunk_size) {
                         console.log(`ℹ️ Lookup MATERIAL size: ${Object.keys(lookupMATERIAL).length}`);
                     }
 
+                    // 3.6 Fetch ALL Materials for fallback mapping (Each Liga must have its Group)
+                    const fallbackMaterialMap = {};
+                    console.log(`ℹ️ Fetching full MATERIAL table for fallback mapping...`);
+                    await new Promise((resolve, reject) => {
+                        db.query('SELECT MATERIAL_MAT, GRUPO_MAT FROM MATERIAL', (err, rows) => {
+                            if (err) return reject(err);
+                            rows.forEach(r => {
+                                const name = (r.MATERIAL_MAT || '').trim().toUpperCase();
+                                if (name) fallbackMaterialMap[name] = (r.GRUPO_MAT || '').trim();
+                            });
+                            resolve();
+                        });
+                    });
+                    console.log(`ℹ️ Fallback MATERIAL map size: ${Object.keys(fallbackMaterialMap).length}`);
+
                     // Attach lookups to main scope for the loop
                     let ligaCount = 0;
                     productionRows.forEach(row => {
                         row._producao = lookupPRODUCAO[row.CODIGO_PCS];
                         row._produto = row._producao ? lookupPRODUTO[row._producao.PRODUTO_PCP] : null;
-                        // Resolve material name + grupo now (while lookups are in scope)
+                        
+                        // Resolve material name + grupo
                         if (row._produto && row._produto.CODIGO_PRO) {
                             const pm = lookupPRODUTO_MATERIAL[row._produto.CODIGO_PRO];
                             if (pm && pm.MAT_ID_PMT) {
@@ -261,10 +277,19 @@ function chunkArray(myArray, chunk_size) {
                                 if (mat && mat.MATERIAL_MAT) {
                                     row._materialName = mat.MATERIAL_MAT.trim();
                                     row._grupoMaterial = mat.GRUPO_MAT ? mat.GRUPO_MAT.trim() : null;
-                                    ligaCount++;
                                 }
                             }
                         }
+
+                        // Fallback: Use Liga Name (MATERIAL_MAT) if group is missing
+                        if (row._materialName && !row._grupoMaterial) {
+                            const upperName = row._materialName.toUpperCase();
+                            if (fallbackMaterialMap[upperName]) {
+                                row._grupoMaterial = fallbackMaterialMap[upperName];
+                            }
+                        }
+                        
+                        if (row._materialName) ligaCount++;
                     });
                     console.log(`ℹ️ Rows with Liga/Material: ${ligaCount} / ${productionRows.length}`);
 
