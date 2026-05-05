@@ -256,7 +256,8 @@ function chunkArray(myArray, chunk_size) {
                             if (err) return reject(err);
                             rows.forEach(r => {
                                 const name = (r.MATERIAL_MAT || '').trim().toUpperCase();
-                                if (name) fallbackMaterialMap[name] = (r.GRUPO_MAT || '').trim();
+                                const group = (r.GRUPO_MAT || '').trim();
+                                if (name && group) fallbackMaterialMap[name] = group;
                             });
                             resolve();
                         });
@@ -265,11 +266,12 @@ function chunkArray(myArray, chunk_size) {
 
                     // Attach lookups to main scope for the loop
                     let ligaCount = 0;
-                    productionRows.forEach(row => {
+                    let grupoCount = 0;
+                    productionRows.forEach((row, idx) => {
                         row._producao = lookupPRODUCAO[row.CODIGO_PCS];
                         row._produto = row._producao ? lookupPRODUTO[row._producao.PRODUTO_PCP] : null;
                         
-                        // Resolve material name + grupo
+                        // 1. Tentar resolver via vínculo oficial (PRODUTO -> MATERIAL)
                         if (row._produto && row._produto.CODIGO_PRO) {
                             const pm = lookupPRODUTO_MATERIAL[row._produto.CODIGO_PRO];
                             if (pm && pm.MAT_ID_PMT) {
@@ -281,7 +283,7 @@ function chunkArray(myArray, chunk_size) {
                             }
                         }
 
-                        // Fallback: Use Liga Name (MATERIAL_MAT) if group is missing
+                        // 2. Fallback: Se não tem grupo mas tem nome de liga, usar o mapa global
                         if (row._materialName && !row._grupoMaterial) {
                             const upperName = row._materialName.toUpperCase();
                             if (fallbackMaterialMap[upperName]) {
@@ -290,7 +292,13 @@ function chunkArray(myArray, chunk_size) {
                         }
                         
                         if (row._materialName) ligaCount++;
+                        if (row._grupoMaterial) grupoCount++;
+
+                        if (idx < 5) {
+                            console.log(`DEBUG Row ${idx}: Liga=${row._materialName}, Grupo=${row._grupoMaterial}`);
+                        }
                     });
+                    console.log(`ℹ️ Ligas resolvidas: ${ligaCount}, Grupos resolvidos: ${grupoCount}`);
                     console.log(`ℹ️ Rows with Liga/Material: ${ligaCount} / ${productionRows.length}`);
 
                 } catch (fetchErr) {
