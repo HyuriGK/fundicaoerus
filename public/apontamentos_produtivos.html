@@ -661,6 +661,7 @@
         }
 
         #liga-filter-select.month-btn,
+        #grupo-filter-select.month-btn,
         #sector-chart-select.month-btn {
             background: #0a0a0c;
             color: var(--text-muted);
@@ -670,26 +671,41 @@
             scrollbar-color: #3f3f46 #0a0a0c;
         }
         #liga-filter-select.month-btn option,
+        #grupo-filter-select.month-btn option,
         #sector-chart-select.month-btn option {
             background: #0a0a0c;
             color: #f8fafc;
         }
         #liga-filter-select.month-btn::-webkit-scrollbar,
+        #grupo-filter-select.month-btn::-webkit-scrollbar,
         #sector-chart-select.month-btn::-webkit-scrollbar {
             width: 6px;
         }
         #liga-filter-select.month-btn::-webkit-scrollbar-track,
+        #grupo-filter-select.month-btn::-webkit-scrollbar-track,
         #sector-chart-select.month-btn::-webkit-scrollbar-track {
             background: #0a0a0c;
         }
         #liga-filter-select.month-btn::-webkit-scrollbar-thumb,
+        #grupo-filter-select.month-btn::-webkit-scrollbar-thumb,
         #sector-chart-select.month-btn::-webkit-scrollbar-thumb {
             background: #3f3f46;
             border-radius: 3px;
         }
         #liga-filter-select.month-btn::-webkit-scrollbar-thumb:hover,
+        #grupo-filter-select.month-btn::-webkit-scrollbar-thumb:hover,
         #sector-chart-select.month-btn::-webkit-scrollbar-thumb:hover {
             background: #52525b;
+        }
+        /* Light theme overrides for the new grupo select */
+        [data-theme="light"] #grupo-filter-select.month-btn {
+            background: rgba(0,0,0,0.03) !important;
+            color: #4b5563 !important;
+            border-color: rgba(0,0,0,0.08) !important;
+        }
+        [data-theme="light"] #grupo-filter-select.month-btn option {
+            background: #ffffff !important;
+            color: #111827 !important;
         }
 
 
@@ -1116,6 +1132,7 @@
                 
                 <!-- Categories (Pushed to Right) -->
                 <div class="filter-group-categories">
+                    <select id="grupo-filter-select" class="month-btn" style="cursor:pointer;" title="Filtrar por grupo de material"></select>
                     <select id="liga-filter-select" class="month-btn" style="cursor:pointer;"></select>
                     <select id="sector-chart-select" class="month-btn" style="cursor:pointer;"></select>
                 </div>
@@ -1318,6 +1335,7 @@
         // Default Sector: MOLDAGEM GERAL (Requested by User)
         let currentSectorFilter = 'MOLDAGEM GERAL';
         let currentLigaFilter = 'TODAS';
+        let currentGrupoFilter = 'TODOS';
 
         // Constantes para Moldagem Geral
         const MOLDAGEM_GERAL_TYPES = ['MOLDAGEM MANUAL', 'MOLDAGEM LEVE', 'MOLDAGEM PESADA'];
@@ -1816,6 +1834,29 @@
             };
         }
 
+        function renderGrupoButtons(grupos) {
+            const select = document.getElementById('grupo-filter-select');
+            select.innerHTML = '<option value="TODOS">TODOS OS GRUPOS</option>';
+            grupos.forEach(g => {
+                const opt = document.createElement('option');
+                opt.value = g;
+                opt.textContent = g;
+                select.appendChild(opt);
+            });
+            select.value = currentGrupoFilter || 'TODOS';
+            select.onchange = (e) => {
+                currentGrupoFilter = e.target.value;
+                // Reset liga filter when grupo changes
+                currentLigaFilter = 'TODAS';
+                // Re-render ligas filtered by selected grupo
+                const ligasFiltradas = currentGrupoFilter === 'TODOS'
+                    ? [...new Set(allData.map(d => d.liga).filter(l => l))].sort()
+                    : [...new Set(allData.filter(d => d.grupoMaterial === currentGrupoFilter).map(d => d.liga).filter(l => l))].sort();
+                renderLigaButtons(ligasFiltradas);
+                applyFilters();
+            };
+        }
+
         function setupEventListeners() {
 
             // Year Select
@@ -1935,12 +1976,18 @@
                 currentYearFilter = firstYear;
             }
 
-            // Ligas
-            const ligas = [...new Set(allData.map(d => d.liga).filter(l => l))].sort();
-            {
-                if (!ligas.includes(currentLigaFilter)) currentLigaFilter = 'TODAS';
-                renderLigaButtons(ligas);
-            }
+            // Grupos de Material
+            const grupos = [...new Set(allData.map(d => d.grupoMaterial).filter(g => g))].sort();
+            if (!grupos.includes(currentGrupoFilter)) currentGrupoFilter = 'TODOS';
+            renderGrupoButtons(grupos);
+
+            // Ligas (filtered by current grupo)
+            const ligaSource = currentGrupoFilter === 'TODOS'
+                ? allData
+                : allData.filter(d => d.grupoMaterial === currentGrupoFilter);
+            const ligas = [...new Set(ligaSource.map(d => d.liga).filter(l => l))].sort();
+            if (!ligas.includes(currentLigaFilter)) currentLigaFilter = 'TODAS';
+            renderLigaButtons(ligas);
         }
 
         // updateMonthButtonsTotals removed
@@ -1978,7 +2025,14 @@
                     matchLiga = item.liga === currentLigaFilter;
                 }
 
-                return matchMonth && matchYear && matchSector && matchLiga;
+                let matchGrupo = false;
+                if (currentGrupoFilter === 'TODOS') {
+                    matchGrupo = true;
+                } else {
+                    matchGrupo = item.grupoMaterial === currentGrupoFilter;
+                }
+
+                return matchMonth && matchYear && matchSector && matchLiga && matchGrupo;
             });
 
             updateKPIs();

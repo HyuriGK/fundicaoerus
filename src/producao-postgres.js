@@ -152,6 +152,7 @@ router.get('/', async (req, res) => {
                 t.setor,
                 t.produto,
                 t.liga,
+                t.grupo_material,
                 t.op,
                 t.codigo_peca,
                 -- Prioridade: ERP > pesos_customizados (carteira) > produto_pesos_producao (legado) > 0
@@ -206,6 +207,7 @@ router.get('/', async (req, res) => {
                 setor: row.setor,
                 produto: row.produto,
                 liga: row.liga || '',
+                grupoMaterial: row.grupo_material || '',
                 op: row.op || '',
                 codigo_peca: row.codigo_peca || '',
                 pesoUn: parseFloat(row.peso_un),
@@ -218,6 +220,23 @@ router.get('/', async (req, res) => {
 
     } catch (error) {
         console.error('❌ Error fetching production data:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// GET /api/producao-postgres/grupos
+// Returns distinct grupo_material values for filter UI
+router.get('/grupos', async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT DISTINCT grupo_material
+            FROM producao_apontada_sincronizada
+            WHERE grupo_material IS NOT NULL AND grupo_material <> ''
+            ORDER BY grupo_material
+        `);
+        res.json({ success: true, grupos: result.rows.map(r => r.grupo_material) });
+    } catch (error) {
+        console.error('❌ Error fetching grupos:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 });

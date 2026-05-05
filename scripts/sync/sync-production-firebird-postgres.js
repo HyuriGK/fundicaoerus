@@ -82,6 +82,11 @@ function chunkArray(myArray, chunk_size) {
                 EXCEPTION
                     WHEN duplicate_column THEN RAISE NOTICE 'column refugo already exists in producao_apontada_sincronizada.';
                 END;
+                BEGIN
+                    ALTER TABLE producao_apontada_sincronizada ADD COLUMN grupo_material VARCHAR(100);
+                EXCEPTION
+                    WHEN duplicate_column THEN RAISE NOTICE 'column grupo_material already exists in producao_apontada_sincronizada.';
+                END;
             END $$;
         `);
 
@@ -239,7 +244,7 @@ function chunkArray(myArray, chunk_size) {
                     console.log(`ℹ️ Unique Material IDs: ${matIds.length}`);
 
                     if (matIds.length > 0) {
-                        await fetchMap(matIds, 'MATERIAL', 'ID_MAT', 'MATERIAL_MAT', lookupMATERIAL);
+                        await fetchMap(matIds, 'MATERIAL', 'ID_MAT', 'MATERIAL_MAT, GRUPO_MAT', lookupMATERIAL);
                         console.log(`ℹ️ Lookup MATERIAL size: ${Object.keys(lookupMATERIAL).length}`);
                     }
 
@@ -248,13 +253,14 @@ function chunkArray(myArray, chunk_size) {
                     productionRows.forEach(row => {
                         row._producao = lookupPRODUCAO[row.CODIGO_PCS];
                         row._produto = row._producao ? lookupPRODUTO[row._producao.PRODUTO_PCP] : null;
-                        // Resolve material name now (while lookups are in scope)
+                        // Resolve material name + grupo now (while lookups are in scope)
                         if (row._produto && row._produto.CODIGO_PRO) {
                             const pm = lookupPRODUTO_MATERIAL[row._produto.CODIGO_PRO];
                             if (pm && pm.MAT_ID_PMT) {
                                 const mat = lookupMATERIAL[pm.MAT_ID_PMT];
                                 if (mat && mat.MATERIAL_MAT) {
                                     row._materialName = mat.MATERIAL_MAT.trim();
+                                    row._grupoMaterial = mat.GRUPO_MAT ? mat.GRUPO_MAT.trim() : null;
                                     ligaCount++;
                                 }
                             }
@@ -310,16 +316,18 @@ function chunkArray(myArray, chunk_size) {
                             const pesoUn = produtoWeight;
                             const produto = produtoName;
                             const liga = pcs._materialName || null;
+                            const grupoMaterial = pcs._grupoMaterial || null;
 
                             await pool.query(`
                                 INSERT INTO producao_apontada_sincronizada
-                                (chave_origem, data_producao, setor, produto, liga, peso_un, quantidade, refugo, peso_total, op, codigo_peca, atualizado_em)
-                                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP)
+                                (chave_origem, data_producao, setor, produto, liga, grupo_material, peso_un, quantidade, refugo, peso_total, op, codigo_peca, atualizado_em)
+                                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, CURRENT_TIMESTAMP)
                                 ON CONFLICT (chave_origem) DO UPDATE SET
                                     data_producao = EXCLUDED.data_producao,
                                     setor = EXCLUDED.setor,
                                     produto = EXCLUDED.produto,
                                     liga = EXCLUDED.liga,
+                                    grupo_material = EXCLUDED.grupo_material,
                                     peso_un = EXCLUDED.peso_un,
                                     quantidade = EXCLUDED.quantidade,
                                     refugo = EXCLUDED.refugo,
@@ -327,7 +335,7 @@ function chunkArray(myArray, chunk_size) {
                                     op = EXCLUDED.op,
                                     codigo_peca = EXCLUDED.codigo_peca,
                                     atualizado_em = CURRENT_TIMESTAMP
-                            `, [chaveOrigem, dataProd, setor, produto, liga, pesoUn, quantidade, refugo, pesoTotal, op, codigoPeca]);
+                            `, [chaveOrigem, dataProd, setor, produto, liga, grupoMaterial, pesoUn, quantidade, refugo, pesoTotal, op, codigoPeca]);
 
                             inserted++;
                         } catch (rowErr) {
