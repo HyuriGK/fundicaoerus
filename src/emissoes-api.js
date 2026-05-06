@@ -245,15 +245,29 @@ router.get('/variacao-diaria', async (req, res) => {
             ORDER BY 1
         `;
 
-        // Saída: peso_total da faturamento_firebird (campo do Firebird, mesma fonte do gráfico de faturamento diário)
+        // Saída: mesma lógica do faturamentos.html
+        // - exclui itens sem pedido (pedido IS NULL/vazio) ou marcados como excluídos
+        // - exclui clientes de serviço (código 257 ou nomes específicos)
+        // - aplica preferências da tabela faturamento_firebird_preferencias
         const faturamentosQuery = `
             SELECT
-                data_faturamento AS dia,
-                SUM(peso_total) AS peso_saida
-            FROM faturamento_firebird
-            WHERE EXTRACT(YEAR  FROM data_faturamento) = $1
-              AND EXTRACT(MONTH FROM data_faturamento) = $2
-              AND data_faturamento IS NOT NULL
+                f.data_faturamento AS dia,
+                SUM(f.peso_total) AS peso_saida
+            FROM faturamento_firebird f
+            LEFT JOIN faturamento_firebird_preferencias p
+                ON p.nota_fiscal = f.nota_fiscal
+                AND p.codigo_item IS NOT DISTINCT FROM CAST(TRIM(f.codigo_item) AS VARCHAR)
+                AND COALESCE(p.pedido, '') = COALESCE(TRIM(f.pedido), '')
+                AND p.data_faturamento = f.data_faturamento
+                AND p.quantidade = f.quantidade
+            WHERE EXTRACT(YEAR  FROM f.data_faturamento) = $1
+              AND EXTRACT(MONTH FROM f.data_faturamento) = $2
+              AND f.data_faturamento IS NOT NULL
+              AND COALESCE(p.excluido, f.excluido_manualmente OR f.pedido IS NULL OR TRIM(COALESCE(f.pedido,'')) = '') = FALSE
+              AND TRIM(CAST(f.cliente_codigo AS TEXT)) <> '257'
+              AND UPPER(TRIM(f.cliente_nome)) NOT LIKE '%IMEPEL INDUSTRIA MECANICA%'
+              AND UPPER(TRIM(f.cliente_nome)) NOT LIKE '%STEELROOL INDUSTRIA METALURGICA%'
+              AND UPPER(TRIM(f.cliente_nome)) NOT LIKE '%SPILROD FUNDICAO DE FERRO E ACO%'
             GROUP BY 1
             ORDER BY 1
         `;
