@@ -85,7 +85,7 @@
         var current = localStorage.getItem(KEY) || 'dark';
         var next    = current === 'dark' ? 'light' : 'dark';
         localStorage.setItem(KEY, next);
-        applyTheme(next);
+        location.reload();
     }
 
     function init() {
