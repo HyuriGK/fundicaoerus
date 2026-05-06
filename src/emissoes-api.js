@@ -301,6 +301,73 @@ router.get('/variacao-diaria', async (req, res) => {
     }
 });
 
+// GET /api/emissoes/variacao-mensal?ano=2026
+// Retorna mês a mês: peso emitido (entrada) e peso faturado (saída) — modo TODOS
+router.get('/variacao-mensal', async (req, res) => {
+    try {
+        const { ano } = req.query;
+        if (!ano) return res.status(400).json({ error: 'ano é obrigatório.' });
+
+        const emissoesQuery = `
+            SELECT
+                EXTRACT(MONTH FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date)::int AS mes,
+                SUM(
+                    CASE
+                        WHEN pc.peso IS NOT NULL THEN pc.peso * CAST(COALESCE(p.data->>'QUANTIDADE_PPR','0') AS NUMERIC)
+                        WHEN CAST(COALESCE(p.data->>'QUANTIDADE_PPR','0') AS NUMERIC) > 0
+                            THEN CAST(COALESCE(p.data->>'PESO_LIQUIDO_NPR','0') AS NUMERIC)
+                        ELSE 0
+                    END
+                ) AS peso_entrada
+            FROM firebird_sync_emissoes p
+            LEFT JOIN pesos_customizados pc ON TRIM(p.data->>'PRODUTO_PPR') = pc.codigo
+            WHERE EXTRACT(YEAR FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) = $1
+              AND p.data->>'DATA_EMISSAO_PEDIDO' IS NOT NULL
+            GROUP BY 1 ORDER BY 1
+        `;
+
+        const faturamentosQuery = `
+            SELECT
+                EXTRACT(MONTH FROM f.data_faturamento)::int AS mes,
+                SUM(f.peso_total) AS peso_saida
+            FROM faturamento_firebird f
+            LEFT JOIN faturamento_firebird_preferencias p
+                ON p.nota_fiscal = f.nota_fiscal
+                AND p.codigo_item IS NOT DISTINCT FROM CAST(TRIM(f.codigo_item) AS VARCHAR)
+                AND COALESCE(p.pedido, '') = COALESCE(TRIM(f.pedido), '')
+                AND p.data_faturamento = f.data_faturamento
+                AND p.quantidade = f.quantidade
+            WHERE EXTRACT(YEAR FROM f.data_faturamento) = $1
+              AND f.data_faturamento IS NOT NULL
+              AND COALESCE(p.excluido, f.excluido_manualmente OR f.pedido IS NULL OR TRIM(COALESCE(f.pedido,'')) = '') = FALSE
+              AND TRIM(CAST(f.cliente_codigo AS TEXT)) <> '257'
+              AND UPPER(TRIM(f.cliente_nome)) NOT LIKE '%IMEPEL INDUSTRIA MECANICA%'
+              AND UPPER(TRIM(f.cliente_nome)) NOT LIKE '%STEELROOL INDUSTRIA METALURGICA%'
+              AND UPPER(TRIM(f.cliente_nome)) NOT LIKE '%SPILROD FUNDICAO DE FERRO E ACO%'
+            GROUP BY 1 ORDER BY 1
+        `;
+
+        const [emRes, fatRes] = await Promise.all([
+            pool.query(emissoesQuery, [ano]),
+            pool.query(faturamentosQuery, [ano])
+        ]);
+
+        const entradaMap = {};
+        emRes.rows.forEach(r => { entradaMap[r.mes] = parseFloat(r.peso_entrada) || 0; });
+        const saidaMap = {};
+        fatRes.rows.forEach(r => { saidaMap[r.mes] = parseFloat(r.peso_saida) || 0; });
+
+        const result = [];
+        for (let m = 1; m <= 12; m++) {
+            result.push({ mes: m, entrada: entradaMap[m] || 0, saida: saidaMap[m] || 0 });
+        }
+        res.json(result);
+    } catch (error) {
+        console.error('Erro ao buscar variação mensal:', error);
+        res.status(500).json({ error: 'Erro interno.' });
+    }
+});
+
 // GET /api/emissoes/variacao-detalhe?data=2026-05-06
 // Retorna linha a linha: entradas (emissões) e saídas (faturamentos) do dia
 router.get('/variacao-detalhe', async (req, res) => {

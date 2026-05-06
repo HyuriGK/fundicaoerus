@@ -1527,19 +1527,15 @@
             <!-- GRÁFICOS - LINHA 4 (VARIAÇÃO DA CARTEIRA) -->
             <div id="chartRow4" class="charts-row" style="display: none;">
                 <div class="chart-panel" style="flex: 1;">
-                    <div class="chart-header-row" style="padding: 0 10px; gap: 10px; flex-wrap: wrap;">
-                        <div class="chart-title-flex">Variação da Carteira - Entrada vs Saída Diária (kg)</div>
-                        <div style="display:flex; align-items:center; gap:8px; margin-left:auto;">
-                            <select class="year-pill-select" id="variacaoYearSelect" onchange="renderVariacaoChart()" style="min-width:80px;"></select>
-                            <select class="year-pill-select" id="variacaoMonthSelect" onchange="renderVariacaoChart()" style="min-width:100px;"></select>
-                        </div>
+                    <div class="chart-header-row" style="padding: 0 10px;">
+                        <div class="chart-title-flex" id="variacaoChartTitle">Variação da Carteira (kg)</div>
                     </div>
                     <div style="display:flex; align-items:center; gap:20px; padding: 4px 12px 0;">
                         <span style="font-size:0.75rem; color:#a1a1aa;">
-                            <span style="display:inline-block;width:12px;height:12px;background:#22c55e;border-radius:2px;margin-right:4px;vertical-align:middle;"></span>Dia positivo (entrada &gt; saída)
+                            <span style="display:inline-block;width:12px;height:12px;background:#22c55e;border-radius:2px;margin-right:4px;vertical-align:middle;"></span>Positivo (entrada &gt; saída)
                         </span>
                         <span style="font-size:0.75rem; color:#a1a1aa;">
-                            <span style="display:inline-block;width:12px;height:12px;background:#ef4444;border-radius:2px;margin-right:4px;vertical-align:middle;"></span>Dia negativo (saída &gt; entrada)
+                            <span style="display:inline-block;width:12px;height:12px;background:#ef4444;border-radius:2px;margin-right:4px;vertical-align:middle;"></span>Negativo (saída &gt; entrada)
                         </span>
                         <span style="font-size:0.75rem; color:#a1a1aa;">
                             <span style="display:inline-block;width:24px;height:3px;background:#10b981;border-radius:2px;margin-right:4px;vertical-align:middle;"></span>Variação Acumulada
@@ -3675,6 +3671,9 @@
             updateConcentracaoChart(allData);
             updatePendingChart(allData);
             await updateHistoricalChart();
+            if (document.getElementById('chartRow4')?.style.display !== 'none') {
+                renderVariacaoChart();
+            }
         }
         function updateDailyChart(list) {
             const el = document.getElementById('chartDaily');
@@ -5361,53 +5360,50 @@
         }
 
         // ── VARIAÇÃO DA CARTEIRA ──────────────────────────────────────────────────
-        let _variacaoInited = false;
-        function initVariacaoSelects() {
-            if (_variacaoInited) return;
-            _variacaoInited = true;
-            const now = new Date();
-            const yearSel = document.getElementById('variacaoYearSelect');
-            const monthSel = document.getElementById('variacaoMonthSelect');
-            const monthNames = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
-            for (let y = now.getFullYear(); y >= 2023; y--) {
-                const opt = document.createElement('option');
-                opt.value = y; opt.textContent = y;
-                if (y === now.getFullYear()) opt.selected = true;
-                yearSel.appendChild(opt);
-            }
-            monthNames.forEach((name, i) => {
-                const opt = document.createElement('option');
-                opt.value = i + 1; opt.textContent = name;
-                if (i + 1 === now.getMonth() + 1) opt.selected = true;
-                monthSel.appendChild(opt);
-            });
-        }
-
         async function renderVariacaoChart() {
-            const ano = document.getElementById('variacaoYearSelect')?.value;
-            const mes = document.getElementById('variacaoMonthSelect')?.value;
-            if (!ano || !mes) return;
-
             const canvas = document.getElementById('chartVariacao');
             if (!canvas) return;
+            if (document.getElementById('chartRow4').style.display === 'none') return;
+
+            const ano     = parseInt(document.getElementById('yearPillSelect')?.value || new Date().getFullYear());
+            const mesIdx  = activePillMonth; // null = todos, 0-11 = mês específico
+            const isTodos = mesIdx === null;
+            const mes     = isTodos ? null : mesIdx + 1; // 1-12
+
+            const titleEl = document.getElementById('variacaoChartTitle');
+            const MONTH_NAMES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 
             try {
-                const res = await fetch(`/api/emissoes/variacao-diaria?ano=${ano}&mes=${mes}`);
-                if (!res.ok) throw new Error('Erro ao buscar dados');
-                const rawData = await res.json();
+                let rawData, labels, varArr, clickData;
 
-                const labels = rawData.map(d => String(new Date(d.dia + 'T12:00:00').getDate()).padStart(2, '0'));
+                if (isTodos) {
+                    // Modo mensal
+                    if (titleEl) titleEl.textContent = `Variação da Carteira ${ano} — Mensal (kg)`;
+                    const res = await fetch(`/api/emissoes/variacao-mensal?ano=${ano}`);
+                    if (!res.ok) throw new Error();
+                    rawData = await res.json();
+                    labels    = MONTH_NAMES.map(m => m.slice(0,3).toUpperCase());
+                    varArr    = rawData.map(d => Math.round((d.entrada - d.saida) * 100) / 100);
+                    clickData = rawData.map(d => ({ mes: d.mes, ano }));
+                } else {
+                    // Modo diário
+                    if (titleEl) titleEl.textContent = `Variação da Carteira — ${MONTH_NAMES[mesIdx]}/${ano} (kg)`;
+                    const res = await fetch(`/api/emissoes/variacao-diaria?ano=${ano}&mes=${mes}`);
+                    if (!res.ok) throw new Error();
+                    rawData = await res.json();
+                    labels    = rawData.map(d => String(new Date(d.dia + 'T12:00:00').getDate()).padStart(2,'0'));
+                    varArr    = rawData.map(d => Math.round((d.entrada - d.saida) * 100) / 100);
+                    clickData = rawData.map(d => ({ dia: d.dia, mes, ano }));
+                }
 
-                const varDiaria = rawData.map(d => Math.round((d.entrada - d.saida) * 100) / 100);
-                const barColors  = varDiaria.map(v => v >= 0 ? 'rgba(34,197,94,0.8)' : 'rgba(239,68,68,0.8)');
-                const barBorders = varDiaria.map(v => v >= 0 ? '#22c55e' : '#ef4444');
+                const barColors  = varArr.map(v => v >= 0 ? 'rgba(34,197,94,0.8)' : 'rgba(239,68,68,0.8)');
+                const barBorders = varArr.map(v => v >= 0 ? '#22c55e' : '#ef4444');
 
                 let acc = 0;
-                const acumulado = rawData.map(d => { acc += (d.entrada - d.saida); return Math.round(acc * 100) / 100; });
+                const acumulado = varArr.map(v => { acc += v; return Math.round(acc * 100) / 100; });
 
-                const maxAbs = Math.max(...varDiaria.map(Math.abs), 1);
+                const maxAbs = Math.max(...varArr.map(Math.abs), 1);
                 const yMax   = Math.ceil(maxAbs * 1.15 / 1000) * 1000 || maxAbs * 1.15;
-
                 const maxAcc = Math.max(...acumulado.map(Math.abs), 1);
                 const y1Max  = Math.ceil(maxAcc * 1.15 / 1000) * 1000 || maxAcc * 1.15;
 
@@ -5418,8 +5414,8 @@
                         datasets: [
                             {
                                 type: 'bar',
-                                label: 'Variação do Dia (kg)',
-                                data: varDiaria,
+                                label: 'Variação (kg)',
+                                data: varArr,
                                 backgroundColor: barColors,
                                 borderColor: barBorders,
                                 borderWidth: 1,
@@ -5453,19 +5449,22 @@
                                 intersect: false,
                                 callbacks: {
                                     title: (items) => {
-                                        const d = String(new Date(rawData[items[0].dataIndex].dia + 'T12:00:00').getDate()).padStart(2,'0');
-                                        return `${d}/${String(mes).padStart(2,'0')}/${ano}`;
+                                        const idx = items[0].dataIndex;
+                                        if (isTodos) return `${MONTH_NAMES[idx]}/${ano}`;
+                                        return `${labels[idx]}/${String(mes).padStart(2,'0')}/${ano}`;
                                     },
                                     label: (item) => {
-                                        const v = item.parsed.y;
+                                        const v   = item.parsed.y;
                                         const idx = item.dataIndex;
                                         const fmt = n => n.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
                                         const sign = v >= 0 ? '+' : '';
-                                        if (item.dataset.label === 'Variação do Dia (kg)') {
+                                        if (item.dataset.label === 'Variação (kg)') {
                                             return [
                                                 `  Entrada: ${fmt(rawData[idx].entrada)} kg`,
                                                 `  Saída:   ${fmt(rawData[idx].saida)} kg`,
-                                                `  Dia:     ${sign}${fmt(v)} kg`
+                                                `  Var.:    ${sign}${fmt(v)} kg`,
+                                                `  ──────────────────`,
+                                                `  Clique para ver registros`
                                             ];
                                         }
                                         return `  Acumulado: ${sign}${fmt(v)} kg`;
@@ -5476,9 +5475,17 @@
                         onClick: (e, elements) => {
                             if (!elements.length) return;
                             const idx = elements[0].index;
-                            openVariacaoDetalhe(rawData[idx].dia, ano, mes);
+                            const cd  = clickData[idx];
+                            if (isTodos) {
+                                // No modo mensal, não abre detalhe (sem data específica)
+                                // Poderia filtrar para o mês — por ora ignora
+                            } else {
+                                openVariacaoDetalhe(cd.dia, cd.ano, cd.mes);
+                            }
                         },
-                        onHover: (e, els) => { e.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
+                        onHover: (e, els) => {
+                            e.native.target.style.cursor = (!isTodos && els.length) ? 'pointer' : 'default';
+                        },
                         scales: {
                             y: {
                                 min: -yMax, max: yMax,
