@@ -1,6 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../lib/db');
+const { attach } = require('../lib/firebird-helper');
+
+const MOLDAGEM_MAP = { 10: 'MOLDAGEM PESADA', 11: 'MOLDAGEM LEVE', 12: 'MOLDAGEM MANUAL' };
 
 // GET /api/fichatecnica/list/all
 router.get('/list/all', async (req, res) => {
@@ -112,6 +115,27 @@ router.get('/:codigo', async (req, res) => {
             details: err.message
         });
     }
+});
+
+// GET /api/fichatecnica/:codigo/tipo-moldagem — busca SET_CODIGO_FTPC do Firebird
+router.get('/:codigo/tipo-moldagem', (req, res) => {
+    const { codigo } = req.params;
+    attach((err, db) => {
+        if (err) return res.status(500).json({ error: 'Firebird connection failed' });
+        const sql = `
+            SELECT FIRST 1 ftp.SET_CODIGO_FTPC
+            FROM FICHA_TECNICA_PROCEDIMENTO ftp
+            WHERE ftp.FIC_CODIGO_FTPC = ?
+              AND ftp.SET_CODIGO_FTPC IN (10, 11, 12)
+        `;
+        db.query(sql, [codigo], (qErr, rows) => {
+            db.detach();
+            if (qErr) return res.status(500).json({ error: qErr.message });
+            if (!rows || rows.length === 0) return res.json({ tipo_moldagem: null });
+            const cod = rows[0].SET_CODIGO_FTPC;
+            res.json({ tipo_moldagem: MOLDAGEM_MAP[cod] || null, codigo: cod });
+        });
+    });
 });
 
 module.exports = router;
