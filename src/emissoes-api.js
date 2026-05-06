@@ -214,7 +214,9 @@ router.get('/pending-list', async (req, res) => {
 });
 
 // GET /api/emissoes/variacao-diaria?ano=2026&mes=5
-// Retorna dia a dia: peso emitido (entrada) e peso faturado (saída) para o mês/ano
+// Entrada: peso total emitido no dia (mesma lógica do gráfico de emissão de pedidos.html)
+//   = customWeights[produto] ?? (PESO_LIQUIDO_NPR / QUANTIDADE_PPR), * QUANTIDADE_PPR
+// Saída: peso_total já calculado na faturamento_firebird (mesma fonte do gráfico diário de faturamentos.html)
 router.get('/variacao-diaria', async (req, res) => {
     try {
         const { ano, mes } = req.query;
@@ -222,41 +224,36 @@ router.get('/variacao-diaria', async (req, res) => {
             return res.status(400).json({ error: 'Ano e mês são obrigatórios.' });
         }
 
-        // Emissões do dia (total emitido, sem filtro de pendente)
+        // Entrada: mesma lógica de pedidos.html — customWeights tem prioridade, fallback PESO_LIQUIDO_NPR/qtd * qtd
         const emissoesQuery = `
             SELECT
                 (p.data->>'DATA_EMISSAO_PEDIDO')::date AS dia,
                 SUM(
-                    COALESCE(pc.peso,
-                        CASE WHEN CAST(COALESCE(p.data->>'QUANTIDADE_PPR','0') AS NUMERIC) > 0
-                             THEN CAST(COALESCE(p.data->>'PESO_LIQUIDO_NPR','0') AS NUMERIC)
-                                  / CAST(p.data->>'QUANTIDADE_PPR' AS NUMERIC)
-                             ELSE 0 END
-                    ) * CAST(COALESCE(p.data->>'QUANTIDADE_PPR','0') AS NUMERIC)
+                    CASE
+                        WHEN pc.peso IS NOT NULL THEN pc.peso * CAST(COALESCE(p.data->>'QUANTIDADE_PPR','0') AS NUMERIC)
+                        WHEN CAST(COALESCE(p.data->>'QUANTIDADE_PPR','0') AS NUMERIC) > 0
+                            THEN CAST(COALESCE(p.data->>'PESO_LIQUIDO_NPR','0') AS NUMERIC)
+                        ELSE 0
+                    END
                 ) AS peso_entrada
             FROM firebird_sync_emissoes p
             LEFT JOIN pesos_customizados pc ON TRIM(p.data->>'PRODUTO_PPR') = pc.codigo
-            WHERE EXTRACT(YEAR FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) = $1
+            WHERE EXTRACT(YEAR  FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) = $1
               AND EXTRACT(MONTH FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) = $2
               AND p.data->>'DATA_EMISSAO_PEDIDO' IS NOT NULL
             GROUP BY 1
             ORDER BY 1
         `;
 
-        // Faturamentos do dia (saída), cruzando codigo_item com pesos_customizados
-        // Para itens sem peso customizado usamos PESO_LIQUIDO_NPR da emissao se disponível,
-        // mas como faturamento não guarda peso unitário, usamos apenas o customizado como fonte
+        // Saída: peso_total da faturamento_firebird (campo do Firebird, mesma fonte do gráfico de faturamento diário)
         const faturamentosQuery = `
             SELECT
-                f.data_faturamento AS dia,
-                SUM(
-                    COALESCE(pc.peso, 0) * f.quantidade
-                ) AS peso_saida
-            FROM faturamento_firebird f
-            LEFT JOIN pesos_customizados pc ON f.codigo_item::text = pc.codigo
-            WHERE EXTRACT(YEAR FROM f.data_faturamento) = $1
-              AND EXTRACT(MONTH FROM f.data_faturamento) = $2
-              AND f.data_faturamento IS NOT NULL
+                data_faturamento AS dia,
+                SUM(peso_total) AS peso_saida
+            FROM faturamento_firebird
+            WHERE EXTRACT(YEAR  FROM data_faturamento) = $1
+              AND EXTRACT(MONTH FROM data_faturamento) = $2
+              AND data_faturamento IS NOT NULL
             GROUP BY 1
             ORDER BY 1
         `;
@@ -266,30 +263,21 @@ router.get('/variacao-diaria', async (req, res) => {
             pool.query(faturamentosQuery, [ano, mes])
         ]);
 
-        // Montar mapa por dia
-        const entradaMap = {};
-        emRes.rows.forEach(r => {
-            const d = r.dia instanceof Date ? r.dia.toISOString().split('T')[0] : String(r.dia).split('T')[0];
-            entradaMap[d] = parseFloat(r.peso_entrada) || 0;
-        });
-        const saidaMap = {};
-        fatRes.rows.forEach(r => {
-            const d = r.dia instanceof Date ? r.dia.toISOString().split('T')[0] : String(r.dia).split('T')[0];
-            saidaMap[d] = parseFloat(r.peso_saida) || 0;
-        });
+        const toDateStr = (v) => v instanceof Date ? v.toISOString().split('T')[0] : String(v).split('T')[0];
 
-        // Gerar todos os dias do mês
+        const entradaMap = {};
+        emRes.rows.forEach(r => { entradaMap[toDateStr(r.dia)] = parseFloat(r.peso_entrada) || 0; });
+
+        const saidaMap = {};
+        fatRes.rows.forEach(r => { saidaMap[toDateStr(r.dia)] = parseFloat(r.peso_saida) || 0; });
+
         const year = parseInt(ano);
         const month = parseInt(mes);
         const daysInMonth = new Date(year, month, 0).getDate();
         const result = [];
         for (let d = 1; d <= daysInMonth; d++) {
             const dateStr = `${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-            result.push({
-                dia: dateStr,
-                entrada: entradaMap[dateStr] || 0,
-                saida: saidaMap[dateStr] || 0
-            });
+            result.push({ dia: dateStr, entrada: entradaMap[dateStr] || 0, saida: saidaMap[dateStr] || 0 });
         }
 
         res.json(result);
