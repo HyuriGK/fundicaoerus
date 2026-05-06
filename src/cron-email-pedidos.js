@@ -45,9 +45,22 @@ function getCommercialBalance(item) {
 
 function getCorrectedWeight(item, customWeights = {}) {
     const cod = String(item.PRODUTO_PPR || '').trim();
-    const custom = customWeights[cod];
-    const weightUn = custom != null ? parseFloat(custom) : (parseFloat(item.PESO_BRUTO_PPR) || parseFloat(item.PESO_LIQUIDO_PPR) || 0);
-    return weightUn * getCommercialBalance(item);
+    const balance = getCommercialBalance(item);
+    const qtdOrig = parseFloat(item.QUANTIDADE_PPR) || 0;
+
+    let unitWeight = 0;
+    if (item.PESO_UNIT !== undefined && item.PESO_UNIT !== null && item.PESO_UNIT !== '' && Number(item.PESO_UNIT) > 0) {
+        unitWeight = Number(item.PESO_UNIT);
+    } else if (customWeights[cod] != null) {
+        unitWeight = parseFloat(customWeights[cod]);
+    } else {
+        const pesoLiqNPR = parseFloat(item.PESO_LIQUIDO_NPR) || 0;
+        const pesoLiqPPR = parseFloat(item.PESO_LIQUIDO_PPR) || 0;
+        const pesoBrutoPPR = parseFloat(item.PESO_BRUTO_PPR) || 0;
+        const pesoRef = pesoLiqNPR || pesoBrutoPPR || pesoLiqPPR;
+        unitWeight = qtdOrig > 0 ? pesoRef / qtdOrig : 0;
+    }
+    return unitWeight * balance;
 }
 
 function calcBusinessDays(startDate, endDate) {
