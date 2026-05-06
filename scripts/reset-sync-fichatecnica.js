@@ -104,6 +104,21 @@ function parseObservation(raw) {
     }
 }
 
+const MOLDAGEM_PROC_MAP = { 10: 'MOLDAGEM PESADA', 11: 'MOLDAGEM LEVE', 12: 'MOLDAGEM MANUAL' };
+
+function getMoldagemProcedimento(db, fichaCodigo) {
+    return new Promise((resolve) => {
+        db.query(
+            `SELECT FIRST 1 SET_CODIGO_FTPC FROM FICHA_TECNICA_PROCEDIMENTO WHERE FIC_CODIGO_FTPC = ? AND SET_CODIGO_FTPC IN (10, 11, 12)`,
+            [fichaCodigo],
+            (err, rows) => {
+                if (err || !rows || rows.length === 0) return resolve(null);
+                resolve(MOLDAGEM_PROC_MAP[rows[0].SET_CODIGO_FTPC] || null);
+            }
+        );
+    });
+}
+
 function getMachos(db, fichaCodigo) {
     return new Promise((resolve) => {
         db.query(`
@@ -251,6 +266,9 @@ async function syncFichas() {
                     // Fetch Material + Lote
                     const { material: materialReal, lote: loteReal } = await getMaterial(db, row.PRO_CODIGO_FIC);
 
+                    // Fetch Tipo Moldagem do Procedimento
+                    const moldagemProcedimento = await getMoldagemProcedimento(db, row.CODIGO_FIC);
+
                     // Fetch Machos
                     const machosList = await getMachos(db, row.CODIGO_FIC);
                     const pinturaMachoMap = { 'N': 'NÃO SE APLICA', 'L': 'LAVAGEM', 'P': 'PINCEL', 'S': 'PISTOLA', 'I': 'IMERSÃO' };
@@ -296,6 +314,9 @@ async function syncFichas() {
                         }
                     }
 
+                    // Garantir coluna tipo_moldagem_procedimento existe
+                    await pool.query(`ALTER TABLE ficha_tecnica ADD COLUMN IF NOT EXISTS tipo_moldagem_procedimento TEXT`);
+
                     // INSERT complete record into Postgres (NO TRUNCATE HERE)
                     await pool.query(`
                         INSERT INTO ficha_tecnica (
@@ -307,8 +328,8 @@ async function syncFichas() {
                             peso_penca, peso_com_alimentacao, peso_sem_alimentacao, relacao_molde_metal,
                             peso_tampa, peso_fundo, qtde_figuras, tipo_modelo_desc, foto_base64,
                             peso_machos, detalhes_machos, tinta_refrataria_fic, detalhes_luvas, tipo_ferramental_fic,
-                            lote_pmt, updated_at
-                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, NOW())
+                            lote_pmt, tipo_moldagem_procedimento, updated_at
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, NOW())
                         ON CONFLICT (pro_codigo_fic) DO UPDATE SET
                             material_fic = EXCLUDED.material_fic,
                             peso_liquido_fic = EXCLUDED.peso_liquido_fic,
@@ -340,6 +361,7 @@ async function syncFichas() {
                             detalhes_luvas = EXCLUDED.detalhes_luvas,
                             tipo_ferramental_fic = EXCLUDED.tipo_ferramental_fic,
                             lote_pmt = EXCLUDED.lote_pmt,
+                            tipo_moldagem_procedimento = EXCLUDED.tipo_moldagem_procedimento,
                             updated_at = NOW();
                     `, [
                         sanitize(row.PRO_CODIGO_FIC), sanitize(materialReal || row.MAT_NOMENCLATURA_FIC), row.PESO_LIQUIDO_FIC, row.PESO_UNIT_PCP_FIC,
@@ -350,7 +372,7 @@ async function syncFichas() {
                         row.PESO_PENCA_FIC, row.PESO_UNITARIO_COM_ALIMENT_FIC, row.PESO_UNITARIO_SEM_ALIMENT_FIC, relacao,
                         row.PESO_TAMPA_FIC, row.PESO_FUNDO_FIC, row.CAVIDADE_QTDE_FIGURAS_FIC, sanitize(tipoModelo), fotoBase64,
                         row.PESO_MACHOS_FIC, sanitize(detalhesMachos), sanitize(row.TINTA_REFRATARIA_FIC), sanitize(detalhesLuvas), sanitize(row.TIPO_FERRAMENTAL_FIC),
-                        sanitize(loteReal)
+                        sanitize(loteReal), moldagemProcedimento
                     ]);
                     count++;
                     if (count % 10 === 0) {
