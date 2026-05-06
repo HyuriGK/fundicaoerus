@@ -1393,6 +1393,7 @@
                         <option value="1" style="background:#18181b; color:#f4f4f5;">GRÁFICOS DE ENTREGA</option>
                         <option value="2" style="background:#18181b; color:#f4f4f5;">GRÁFICOS DE EMISSÃO</option>
                         <option value="3" style="background:#18181b; color:#f4f4f5;">CONCENTRAÇÃO DA CARTEIRA</option>
+                        <option value="4" style="background:#18181b; color:#f4f4f5;">VARIAÇÃO DA CARTEIRA</option>
                     </select>
                     <!-- REGISTROS -->
                     <button class="btn-action-standard btn-modern" onclick="openModal(); this.blur()" id="btn-open-registros" style="background: var(--color-primary); color: #000; flex-shrink:0;">
@@ -1520,6 +1521,32 @@
                     </div>
                     <div class="chart-canvas-wrapper">
                         <canvas id="chartConcentracao"></canvas>
+                    </div>
+                </div>
+            </div>
+            <!-- GRÁFICOS - LINHA 4 (VARIAÇÃO DA CARTEIRA) -->
+            <div id="chartRow4" class="charts-row" style="display: none;">
+                <div class="chart-panel" style="flex: 1;">
+                    <div class="chart-header-row" style="padding: 0 10px; gap: 10px; flex-wrap: wrap;">
+                        <div class="chart-title-flex">Variação da Carteira - Entrada vs Saída Diária (kg)</div>
+                        <div style="display:flex; align-items:center; gap:8px; margin-left:auto;">
+                            <select class="year-pill-select" id="variacaoYearSelect" onchange="renderVariacaoChart()" style="min-width:80px;"></select>
+                            <select class="year-pill-select" id="variacaoMonthSelect" onchange="renderVariacaoChart()" style="min-width:100px;"></select>
+                        </div>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:20px; padding: 4px 12px 0;">
+                        <span style="font-size:0.75rem; color:#a1a1aa;">
+                            <span style="display:inline-block;width:12px;height:12px;background:#fbbf24;border-radius:2px;margin-right:4px;vertical-align:middle;"></span>Entrada (Emissão)
+                        </span>
+                        <span style="font-size:0.75rem; color:#a1a1aa;">
+                            <span style="display:inline-block;width:12px;height:12px;background:#ef4444;border-radius:2px;margin-right:4px;vertical-align:middle;"></span>Saída (Faturamento)
+                        </span>
+                        <span style="font-size:0.75rem; color:#a1a1aa;">
+                            <span style="display:inline-block;width:24px;height:3px;background:#10b981;border-radius:2px;margin-right:4px;vertical-align:middle;"></span>Variação Acumulada
+                        </span>
+                    </div>
+                    <div class="chart-canvas-wrapper">
+                        <canvas id="chartVariacao"></canvas>
                     </div>
                 </div>
             </div>
@@ -1945,7 +1972,7 @@
         const _tc = () => (window.ErusTheme && window.ErusTheme.isLight()) ? '#4b5563' : '#a1a1aa';
         let allData = [];
         let customWeights = {}; // Armazena pesos customizados
-        let chartPCP = null, chartPareto = null, chartPending = null, chartHistorical = null, chartConcentracao = null;
+        let chartPCP = null, chartPareto = null, chartPending = null, chartHistorical = null, chartConcentracao = null, chartVariacao = null;
         let activeMonthFilter = null, activeClientFilter = null; // Legacy vars, replacing with object below
         let activeChartFilters = { month: null, client: null, stage: null, day: null }; // New PowerBI-style filters
         let chartDaily = null;
@@ -4799,23 +4826,29 @@
             const btnMap = { 1: 'btn-chart-entrega', 2: 'btn-chart-emissao', 3: 'btn-chart-concentracao' };
             const activeStyle = 'background: rgba(251,191,36,0.15); color: var(--color-primary); border: 1px solid var(--color-primary);';
             const idleStyle   = 'background: rgba(255,255,255,0.05); color: var(--text-main); border: 1px solid var(--border-subtle);';
-            [1, 2, 3].forEach(r => {
+            [1, 2, 3, 4].forEach(r => {
                 const el = document.getElementById('chartRow' + r);
                 if (el) el.style.display = r === n ? 'flex' : 'none';
                 const btn = document.getElementById(btnMap[r]);
                 if (btn) btn.style.cssText = r === n ? activeStyle : idleStyle;
             });
+            if (n === 4) {
+                initVariacaoSelects();
+                renderVariacaoChart();
+            }
             requestAnimationFrame(() => {
                 if (chartPCP) chartPCP.resize();
                 if (chartPareto) chartPareto.resize();
                 if (chartPending) chartPending.resize();
                 if (chartHistorical) chartHistorical.resize();
                 if (chartConcentracao) chartConcentracao.resize();
-                // Double rAF + timeout ensures layout is fully computed before resize
+                if (chartVariacao) chartVariacao.resize();
                 requestAnimationFrame(() => {
                     if (n === 3 && chartConcentracao) chartConcentracao.resize();
+                    if (n === 4 && chartVariacao) chartVariacao.resize();
                 });
                 if (n === 3) setTimeout(() => { if (chartConcentracao) chartConcentracao.resize(); }, 50);
+                if (n === 4) setTimeout(() => { if (chartVariacao) chartVariacao.resize(); }, 50);
             });
         }
         function toggleIndustrialPosition() {
@@ -5324,6 +5357,145 @@
             } catch (err) {
                 console.error("Erro exportando excel:", err);
                 showToast("Erro", "Falha ao gerar o arquivo Excel.", "danger");
+            }
+        }
+
+        // ── VARIAÇÃO DA CARTEIRA ──────────────────────────────────────────────────
+        let _variacaoInited = false;
+        function initVariacaoSelects() {
+            if (_variacaoInited) return;
+            _variacaoInited = true;
+            const now = new Date();
+            const yearSel = document.getElementById('variacaoYearSelect');
+            const monthSel = document.getElementById('variacaoMonthSelect');
+            const monthNames = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+            for (let y = now.getFullYear(); y >= 2023; y--) {
+                const opt = document.createElement('option');
+                opt.value = y; opt.textContent = y;
+                if (y === now.getFullYear()) opt.selected = true;
+                yearSel.appendChild(opt);
+            }
+            monthNames.forEach((name, i) => {
+                const opt = document.createElement('option');
+                opt.value = i + 1; opt.textContent = name;
+                if (i + 1 === now.getMonth() + 1) opt.selected = true;
+                monthSel.appendChild(opt);
+            });
+        }
+
+        async function renderVariacaoChart() {
+            const ano = document.getElementById('variacaoYearSelect')?.value;
+            const mes = document.getElementById('variacaoMonthSelect')?.value;
+            if (!ano || !mes) return;
+
+            const canvas = document.getElementById('chartVariacao');
+            if (!canvas) return;
+
+            try {
+                const res = await fetch(`/api/emissoes/variacao-diaria?ano=${ano}&mes=${mes}`);
+                if (!res.ok) throw new Error('Erro ao buscar dados');
+                const data = await res.json();
+
+                const labels = data.map(d => {
+                    const dt = new Date(d.dia + 'T12:00:00');
+                    return String(dt.getDate());
+                });
+                const entradas = data.map(d => d.entrada);
+                const saidas   = data.map(d => d.saida);
+
+                // Variação acumulada dia a dia
+                let acc = 0;
+                const acumulado = data.map(d => { acc += (d.entrada - d.saida); return Math.round(acc * 100) / 100; });
+
+                if (chartVariacao) chartVariacao.destroy();
+                chartVariacao = new Chart(canvas.getContext('2d'), {
+                    data: {
+                        labels,
+                        datasets: [
+                            {
+                                type: 'bar',
+                                label: 'Entrada (kg)',
+                                data: entradas,
+                                backgroundColor: 'rgba(251,191,36,0.75)',
+                                borderColor: '#fbbf24',
+                                borderWidth: 1,
+                                borderRadius: 3,
+                                yAxisID: 'y',
+                                datalabels: { display: false }
+                            },
+                            {
+                                type: 'bar',
+                                label: 'Saída (kg)',
+                                data: saidas,
+                                backgroundColor: 'rgba(239,68,68,0.7)',
+                                borderColor: '#ef4444',
+                                borderWidth: 1,
+                                borderRadius: 3,
+                                yAxisID: 'y',
+                                datalabels: { display: false }
+                            },
+                            {
+                                type: 'line',
+                                label: 'Variação Acumulada (kg)',
+                                data: acumulado,
+                                borderColor: '#10b981',
+                                backgroundColor: 'rgba(16,185,129,0.08)',
+                                borderWidth: 2,
+                                fill: true,
+                                tension: 0.3,
+                                pointRadius: 3,
+                                yAxisID: 'y1',
+                                datalabels: { display: false }
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        interaction: { mode: 'index', intersect: false },
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                mode: 'index',
+                                intersect: false,
+                                callbacks: {
+                                    title: (items) => `Dia ${labels[items[0].dataIndex]}/${String(mes).padStart(2,'0')}/${ano}`,
+                                    label: (item) => {
+                                        const v = item.parsed.y;
+                                        const fmt = v.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+                                        if (item.dataset.label === 'Entrada (kg)') return `  Entrada: ${fmt} kg`;
+                                        if (item.dataset.label === 'Saída (kg)')   return `  Saída: ${fmt} kg`;
+                                        const sign = v >= 0 ? '+' : '';
+                                        return `  Variação Acum.: ${sign}${fmt} kg`;
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                position: 'left',
+                                grid: { color: _gc() },
+                                ticks: { color: _tc(), callback: v => v.toLocaleString('pt-BR') }
+                            },
+                            y1: {
+                                position: 'right',
+                                grid: { display: false },
+                                ticks: {
+                                    color: '#10b981',
+                                    callback: v => (v >= 0 ? '+' : '') + v.toLocaleString('pt-BR')
+                                }
+                            },
+                            x: {
+                                grid: { color: _gc() },
+                                ticks: { color: _tc(), maxRotation: 0, font: { size: 10 } }
+                            }
+                        }
+                    }
+                });
+            } catch (err) {
+                console.error('[chartVariacao]', err);
+                showToast('Erro', 'Falha ao carregar dados de variação da carteira.', 'danger');
             }
         }
     </script>
