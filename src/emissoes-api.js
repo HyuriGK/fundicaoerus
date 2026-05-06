@@ -301,5 +301,84 @@ router.get('/variacao-diaria', async (req, res) => {
     }
 });
 
+// GET /api/emissoes/variacao-detalhe?data=2026-05-06
+// Retorna linha a linha: entradas (emissões) e saídas (faturamentos) do dia
+router.get('/variacao-detalhe', async (req, res) => {
+    try {
+        const { data } = req.query;
+        if (!data) return res.status(400).json({ error: 'data é obrigatória (YYYY-MM-DD).' });
+
+        const emissoesQuery = `
+            SELECT
+                p.data->>'CODIGO_PPR'        AS pedido,
+                p.data->>'PRODUTO_PPR'       AS codigo,
+                p.data->>'NOME_PRODUTO_PPR'  AS descricao,
+                p.data->>'NOME_CLIENTE'      AS cliente,
+                CAST(COALESCE(p.data->>'QUANTIDADE_PPR','0') AS NUMERIC) AS quantidade,
+                CASE
+                    WHEN pc.peso IS NOT NULL THEN pc.peso * CAST(COALESCE(p.data->>'QUANTIDADE_PPR','0') AS NUMERIC)
+                    WHEN CAST(COALESCE(p.data->>'QUANTIDADE_PPR','0') AS NUMERIC) > 0
+                        THEN CAST(COALESCE(p.data->>'PESO_LIQUIDO_NPR','0') AS NUMERIC)
+                    ELSE 0
+                END AS peso_total
+            FROM firebird_sync_emissoes p
+            LEFT JOIN pesos_customizados pc ON TRIM(p.data->>'PRODUTO_PPR') = pc.codigo
+            WHERE (p.data->>'DATA_EMISSAO_PEDIDO')::date = $1
+            ORDER BY cliente, codigo
+        `;
+
+        const faturamentosQuery = `
+            SELECT
+                TRIM(COALESCE(f.pedido,''))  AS pedido,
+                CAST(f.codigo_item AS TEXT)  AS codigo,
+                f.descricao,
+                f.cliente_nome               AS cliente,
+                f.quantidade,
+                f.peso_total
+            FROM faturamento_firebird f
+            LEFT JOIN faturamento_firebird_preferencias p
+                ON p.nota_fiscal = f.nota_fiscal
+                AND p.codigo_item IS NOT DISTINCT FROM CAST(TRIM(f.codigo_item) AS VARCHAR)
+                AND COALESCE(p.pedido, '') = COALESCE(TRIM(f.pedido), '')
+                AND p.data_faturamento = f.data_faturamento
+                AND p.quantidade = f.quantidade
+            WHERE f.data_faturamento = $1
+              AND COALESCE(p.excluido, f.excluido_manualmente OR f.pedido IS NULL OR TRIM(COALESCE(f.pedido,'')) = '') = FALSE
+              AND TRIM(CAST(f.cliente_codigo AS TEXT)) <> '257'
+              AND UPPER(TRIM(f.cliente_nome)) NOT LIKE '%IMEPEL INDUSTRIA MECANICA%'
+              AND UPPER(TRIM(f.cliente_nome)) NOT LIKE '%STEELROOL INDUSTRIA METALURGICA%'
+              AND UPPER(TRIM(f.cliente_nome)) NOT LIKE '%SPILROD FUNDICAO DE FERRO E ACO%'
+            ORDER BY f.cliente_nome, f.codigo_item
+        `;
+
+        const [emRes, fatRes] = await Promise.all([
+            pool.query(emissoesQuery, [data]),
+            pool.query(faturamentosQuery, [data])
+        ]);
+
+        res.json({
+            entradas: emRes.rows.map(r => ({
+                pedido:    r.pedido,
+                codigo:    r.codigo,
+                descricao: r.descricao,
+                cliente:   r.cliente,
+                quantidade: parseFloat(r.quantidade) || 0,
+                pesoTotal:  parseFloat(r.peso_total) || 0
+            })),
+            saidas: fatRes.rows.map(r => ({
+                pedido:    r.pedido,
+                codigo:    r.codigo,
+                descricao: r.descricao,
+                cliente:   r.cliente,
+                quantidade: parseFloat(r.quantidade) || 0,
+                pesoTotal:  parseFloat(r.peso_total) || 0
+            }))
+        });
+    } catch (error) {
+        console.error('Erro ao buscar detalhe de variação:', error);
+        res.status(500).json({ error: 'Erro interno.' });
+    }
+});
+
 module.exports = router;
 
