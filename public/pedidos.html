@@ -1536,10 +1536,10 @@
                     </div>
                     <div style="display:flex; align-items:center; gap:20px; padding: 4px 12px 0;">
                         <span style="font-size:0.75rem; color:#a1a1aa;">
-                            <span style="display:inline-block;width:12px;height:12px;background:#fbbf24;border-radius:2px;margin-right:4px;vertical-align:middle;"></span>Entrada (Emissão)
+                            <span style="display:inline-block;width:12px;height:12px;background:#22c55e;border-radius:2px;margin-right:4px;vertical-align:middle;"></span>Dia positivo (entrada &gt; saída)
                         </span>
                         <span style="font-size:0.75rem; color:#a1a1aa;">
-                            <span style="display:inline-block;width:12px;height:12px;background:#ef4444;border-radius:2px;margin-right:4px;vertical-align:middle;"></span>Saída (Faturamento)
+                            <span style="display:inline-block;width:12px;height:12px;background:#ef4444;border-radius:2px;margin-right:4px;vertical-align:middle;"></span>Dia negativo (saída &gt; entrada)
                         </span>
                         <span style="font-size:0.75rem; color:#a1a1aa;">
                             <span style="display:inline-block;width:24px;height:3px;background:#10b981;border-radius:2px;margin-right:4px;vertical-align:middle;"></span>Variação Acumulada
@@ -5396,16 +5396,24 @@
                 if (!res.ok) throw new Error('Erro ao buscar dados');
                 const data = await res.json();
 
-                const labels = data.map(d => {
-                    const dt = new Date(d.dia + 'T12:00:00');
-                    return String(dt.getDate());
-                });
-                const entradas = data.map(d => d.entrada);
-                const saidas   = data.map(d => d.saida);
+                const labels = data.map(d => String(new Date(d.dia + 'T12:00:00').getDate()));
+
+                // Variação diária (entrada - saída) — vela pra cima ou pra baixo
+                const varDiaria = data.map(d => Math.round((d.entrada - d.saida) * 100) / 100);
+                const barColors  = varDiaria.map(v => v >= 0 ? 'rgba(34,197,94,0.8)'  : 'rgba(239,68,68,0.8)');
+                const barBorders = varDiaria.map(v => v >= 0 ? '#22c55e' : '#ef4444');
 
                 // Variação acumulada dia a dia
                 let acc = 0;
                 const acumulado = data.map(d => { acc += (d.entrada - d.saida); return Math.round(acc * 100) / 100; });
+
+                // Simetria do eixo Y: maior valor absoluto das velas
+                const maxAbs = Math.max(...varDiaria.map(Math.abs), 1);
+                const yMax   =  Math.ceil(maxAbs * 1.15 / 1000) * 1000 || maxAbs * 1.15;
+
+                // Eixo Y1 (acumulado): simétrico em torno do zero
+                const maxAcc = Math.max(...acumulado.map(Math.abs), 1);
+                const y1Max  = Math.ceil(maxAcc * 1.15 / 1000) * 1000 || maxAcc * 1.15;
 
                 if (chartVariacao) chartVariacao.destroy();
                 chartVariacao = new Chart(canvas.getContext('2d'), {
@@ -5414,21 +5422,10 @@
                         datasets: [
                             {
                                 type: 'bar',
-                                label: 'Entrada (kg)',
-                                data: entradas,
-                                backgroundColor: 'rgba(251,191,36,0.75)',
-                                borderColor: '#fbbf24',
-                                borderWidth: 1,
-                                borderRadius: 3,
-                                yAxisID: 'y',
-                                datalabels: { display: false }
-                            },
-                            {
-                                type: 'bar',
-                                label: 'Saída (kg)',
-                                data: saidas,
-                                backgroundColor: 'rgba(239,68,68,0.7)',
-                                borderColor: '#ef4444',
+                                label: 'Variação do Dia (kg)',
+                                data: varDiaria,
+                                backgroundColor: barColors,
+                                borderColor: barBorders,
                                 borderWidth: 1,
                                 borderRadius: 3,
                                 yAxisID: 'y',
@@ -5439,7 +5436,7 @@
                                 label: 'Variação Acumulada (kg)',
                                 data: acumulado,
                                 borderColor: '#10b981',
-                                backgroundColor: 'rgba(16,185,129,0.08)',
+                                backgroundColor: 'rgba(16,185,129,0.06)',
                                 borderWidth: 2,
                                 fill: true,
                                 tension: 0.3,
@@ -5462,23 +5459,35 @@
                                     title: (items) => `Dia ${labels[items[0].dataIndex]}/${String(mes).padStart(2,'0')}/${ano}`,
                                     label: (item) => {
                                         const v = item.parsed.y;
-                                        const fmt = v.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-                                        if (item.dataset.label === 'Entrada (kg)') return `  Entrada: ${fmt} kg`;
-                                        if (item.dataset.label === 'Saída (kg)')   return `  Saída: ${fmt} kg`;
+                                        const idx = item.dataIndex;
+                                        const fmt = (n) => n.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
                                         const sign = v >= 0 ? '+' : '';
-                                        return `  Variação Acum.: ${sign}${fmt} kg`;
+                                        if (item.dataset.label === 'Variação do Dia (kg)') {
+                                            return [
+                                                `  Entrada: ${fmt(data[idx].entrada)} kg`,
+                                                `  Saída:   ${fmt(data[idx].saida)} kg`,
+                                                `  Dia:     ${sign}${fmt(v)} kg`
+                                            ];
+                                        }
+                                        return `  Acumulado: ${sign}${fmt(v)} kg`;
                                     }
                                 }
                             }
                         },
                         scales: {
                             y: {
-                                beginAtZero: true,
+                                min: -yMax,
+                                max:  yMax,
                                 position: 'left',
                                 grid: { color: _gc() },
-                                ticks: { color: _tc(), callback: v => v.toLocaleString('pt-BR') }
+                                ticks: {
+                                    color: _tc(),
+                                    callback: v => (v >= 0 ? '+' : '') + v.toLocaleString('pt-BR')
+                                }
                             },
                             y1: {
+                                min: -y1Max,
+                                max:  y1Max,
                                 position: 'right',
                                 grid: { display: false },
                                 ticks: {
