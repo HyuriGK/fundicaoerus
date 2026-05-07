@@ -28,6 +28,7 @@ function readBlobBuffer(blob) {
 function readBlob(blob) {
     return new Promise((resolve) => {
         if (!blob) return resolve('');
+        if (Buffer.isBuffer(blob)) return resolve(blob.toString('latin1'));
         if (typeof blob !== 'function') return resolve(String(blob));
         blob((err, name, stream) => {
             if (err) return resolve('');
