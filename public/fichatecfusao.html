@@ -27,7 +27,9 @@
         * { margin: 0; padding: 0; box-sizing: border-box; -webkit-font-smoothing: antialiased; }
         body { font-family: 'Inter', sans-serif; background-color: var(--bg-main); color: var(--text-main); line-height: 1.4; min-height: 100vh; }
         .ambient-bg { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; background: radial-gradient(circle at 20% 20%, rgba(var(--color-primary-rgb), 0.05) 0%, transparent 40%), radial-gradient(circle at 80% 80%, rgba(var(--color-primary-rgb), 0.03) 0%, transparent 40%); }
-        .container { max-width: 1100px; margin: 0 auto; padding: 25px 20px; }
+        .page-wrapper { min-height: 100vh; overflow-y: auto; }
+        .container { max-width: 1100px; margin: 0 auto; padding: 25px 20px; display: flex; flex-direction: column; align-items: center; }
+        .container > * { width: 100%; max-width: 1100px; }
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-track { background: #09090b; }
         ::-webkit-scrollbar-thumb { background: #27272a; border-radius: 10px; border: 2px solid #09090b; }
@@ -102,9 +104,11 @@
         @media print {
             @page { size: A4 portrait; margin: 1cm; }
             html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; color: #000 !important; }
-            .ambient-bg, .side-menu, .side-menu-trigger, .modal-overlay, .loader, .status-empty, .search-wrapper, header, .tipo-switcher, [data-no-print] { display: none !important; visibility: hidden !important; height: 0 !important; overflow: hidden !important; margin: 0 !important; padding: 0 !important; }
-            .container { max-width: 100% !important; padding: 0 !important; margin: 0 !important; }
-            #sheetContent { display: block !important; }
+            .ambient-bg, .side-menu, .side-menu-trigger, #erus-sidebar, #erus-sidebar-backdrop, #erus-logout-modal, #erus-pref-modal, .modal-overlay, .loader, .status-empty, .search-wrapper, header, .tipo-switcher, [data-no-print] { display: none !important; visibility: hidden !important; height: 0 !important; overflow: hidden !important; margin: 0 !important; padding: 0 !important; }
+            body { padding-left: 0 !important; margin-left: 0 !important; }
+            .page-wrapper { margin-left: 0 !important; }
+            .container { max-width: 100% !important; width: 100% !important; padding: 0 !important; margin: 0 !important; display: block !important; align-items: unset !important; }
+            #sheetContent { display: block !important; width: 100% !important; max-width: 100% !important; margin: 0 !important; }
             .sheet-container { border: 1px solid #000 !important; box-shadow: none !important; background: #fff !important; border-radius: 0 !important; page-break-inside: avoid !important; }
             .info-block { background: #fdfdfd !important; border: 1px solid #ccc !important; }
             .info-label { color: #444 !important; }
@@ -147,6 +151,7 @@
         </div>
     </aside>
 
+    <div class="page-wrapper">
     <div class="container">
         <!-- Seletor de Tipo de Ficha -->
         <div class="tipo-switcher" style="display:flex; justify-content:center; gap:8px; margin-bottom:16px; flex-wrap:wrap;" data-no-print="true">
@@ -181,6 +186,12 @@
             <i class="fa-solid fa-magnifying-glass" style="font-size:3rem; opacity:0.1; margin-bottom:20px; display:block;"></i>
             <h3>Aguardando Consulta</h3>
             <p>Informe o código do produto para carregar os dados técnicos de fusão.</p>
+        </div>
+
+        <div id="pdf-btn-wrapper" data-no-print="true" style="display:none; justify-content:flex-end; margin-bottom:12px;">
+            <button onclick="window.print()" style="display:flex;align-items:center;gap:8px;padding:9px 18px;background:var(--color-primary);color:#000;border:none;border-radius:8px;font-size:0.8rem;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif;transition:all 0.2s;" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">
+                <i class="fa-solid fa-file-pdf"></i> Gerar PDF
+            </button>
         </div>
 
         <div id="sheetContent">
@@ -406,6 +417,7 @@
             </div>
         </div>
     </div>
+    </div><!-- /.page-wrapper -->
 
     <script>
         async function searchSheet() {
@@ -421,8 +433,10 @@
                 populateData(data);
                 document.getElementById('loader').style.display = 'none';
                 document.getElementById('sheetContent').style.display = 'block';
+                document.getElementById('pdf-btn-wrapper').style.display = 'flex';
             } catch (err) {
                 document.getElementById('loader').style.display = 'none';
+                document.getElementById('pdf-btn-wrapper').style.display = 'none';
                 document.getElementById('initialStatus').style.display = 'block';
                 document.querySelector('#initialStatus i').className = 'fa-solid fa-circle-exclamation';
                 document.querySelector('#initialStatus i').style.color = '#ef4444';
@@ -623,9 +637,11 @@
             function applyScale() {
                 const content = document.getElementById('sheetContent');
                 const sheet = document.querySelector('.sheet-container');
+                const wrapper = document.querySelector('.page-wrapper');
                 const imageContainer = document.getElementById('imageContainer');
                 const notesPanel = document.getElementById('notesObservationsPanel');
                 if (!content || !sheet) return;
+                if (wrapper) wrapper.style.marginLeft = '0';
                 content.style.zoom = '1';
                 if (imageContainer) { imageContainer.style.flex = '1'; imageContainer.style.height = 'auto'; imageContainer.style.minHeight = '380px'; }
                 if (notesPanel) { notesPanel.style.flex = '1'; notesPanel.style.height = 'auto'; notesPanel.style.minHeight = '380px'; notesPanel.style.overflow = 'hidden'; }
@@ -634,6 +650,8 @@
                 content.style.maxWidth = W + 'px';
                 void content.offsetHeight;
                 let H = sheet.getBoundingClientRect().height;
+                content.style.width = '';
+                content.style.maxWidth = '';
                 if (H <= PRINT_H_PX) { content.style.zoom = '1'; return; }
                 let safety = 0;
                 while (H * PRINT_W_PX / W > PRINT_H_PX && safety < 20) {
@@ -644,13 +662,17 @@
                     H = sheet.getBoundingClientRect().height;
                     safety++;
                 }
+                content.style.width = '';
+                content.style.maxWidth = '';
                 content.style.zoom = Math.min(1, PRINT_W_PX / W);
             }
             function resetScale() {
                 const content = document.getElementById('sheetContent');
+                const wrapper = document.querySelector('.page-wrapper');
                 const imageContainer = document.getElementById('imageContainer');
                 const notesPanel = document.getElementById('notesObservationsPanel');
                 if (content) { content.style.zoom = ''; content.style.width = ''; content.style.maxWidth = ''; }
+                if (wrapper) wrapper.style.marginLeft = '';
                 if (imageContainer) { imageContainer.style.flex = '1'; imageContainer.style.height = ''; imageContainer.style.minHeight = '380px'; }
                 if (notesPanel) { notesPanel.style.flex = '1'; notesPanel.style.height = ''; notesPanel.style.overflow = 'auto'; notesPanel.style.minHeight = '380px'; }
             }
