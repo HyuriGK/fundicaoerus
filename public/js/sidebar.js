@@ -266,17 +266,25 @@
     '</div>';
 
     function applyPaddingLeft() {
-        // Content offset is always SIDEBAR_WIDTH_COLLAPSED (80px) — never changes
-        var SKIP = ['erus-sidebar', 'erus-sidebar-backdrop', 'erus-logout-modal', 'erus-pref-modal', 'global-loader'];
+        var SKIP_IDS = ['erus-sidebar', 'erus-sidebar-backdrop', 'erus-logout-modal', 'erus-pref-modal', 'global-loader'];
+        // Classes that indicate an overlay/modal/toast — should NOT be shifted
+        var OVERLAY_CLASSES = ['modal-overlay', 'modal', 'toast-container', 'toast', 'overlay', 'dim-layer', 'loading-screen'];
         var children = document.body.children;
         for (var i = 0; i < children.length; i++) {
             var el = children[i];
-            if (SKIP.indexOf(el.id) !== -1) continue;
+            if (SKIP_IDS.indexOf(el.id) !== -1) continue;
+            // Skip overlays/modals by class
+            var isOverlay = OVERLAY_CLASSES.some(function(cls) { return el.classList.contains(cls); });
+            if (isOverlay) continue;
             var pos = window.getComputedStyle(el).position;
             if (pos === 'fixed') {
-                el.style.setProperty('left', SIDEBAR_WIDTH_COLLAPSED, 'important');
-                el.style.setProperty('width', 'calc(100% - ' + SIDEBAR_WIDTH_COLLAPSED + ')', 'important');
-            } else {
+                // Only shift fixed elements that start at left:0 (main layout, not popups)
+                var computedLeft = window.getComputedStyle(el).left;
+                if (computedLeft === '0px' || computedLeft === 'auto') {
+                    el.style.setProperty('left', SIDEBAR_WIDTH_COLLAPSED, 'important');
+                    el.style.setProperty('width', 'calc(100% - ' + SIDEBAR_WIDTH_COLLAPSED + ')', 'important');
+                }
+            } else if (pos !== 'absolute') {
                 el.style.setProperty('margin-left', SIDEBAR_WIDTH_COLLAPSED, 'important');
             }
         }
