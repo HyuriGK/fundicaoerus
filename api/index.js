@@ -54,11 +54,13 @@ const assertividade = require('../src/assertividade'); // NOVA: Assertividade Si
 const devolucoes = require('../src/devolucoes'); // NOVA: Devoluções Sincronizadas
 const emissoes = require('../src/emissoes-api'); // NOVO: Histórico de Emissões
 const pedidosObservacoes = require('../src/pedidos-observacoes'); // NOVO: Observações de Pedidos
+const balanco = require('../src/balanco');
 
 
 
 // --- DEFINIÇÃO DAS ROTAS ---
 // Aqui definimos qual URL chama qual arquivo
+app.use('/api/balanco', balanco);
 app.use('/api/weights', weightsRoutes);
 app.use('/api/faturamento-firebird', faturamentoFirebird);
 app.use('/api/faturamento-postgres', faturamentoPostgres); // NOVO: Dados sincronizados do Firebird
