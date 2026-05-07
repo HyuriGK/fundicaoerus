@@ -5,8 +5,7 @@
     // Inject sidebar CSS
     var style = document.createElement('style');
     style.textContent = [
-        ':root { --erus-sw: ' + SIDEBAR_WIDTH + '; --erus-ease: cubic-bezier(0.16,1,0.3,1); }',
-        'body.erus-sidebar-collapsed { --erus-sw: ' + SIDEBAR_WIDTH_COLLAPSED + '; }',
+        ':root { --erus-ease: cubic-bezier(0.16,1,0.3,1); }',
         // Fixed sidebar
         '#erus-sidebar {',
         '  position: fixed; left: 0; top: 0; bottom: 0;',
@@ -15,7 +14,7 @@
         '  border-right: 1px solid rgba(255,255,255,0.04);',
         '  display: flex; flex-direction: column;',
         '  padding: 20px 14px;',
-        '  z-index: 1000;',
+        '  z-index: 5000;',
         '  transition: width 0.3s var(--erus-ease);',
         '  overflow: hidden;',
         '}',
@@ -78,8 +77,9 @@
         'body.erus-sidebar-collapsed #erus-sidebar .erus-brand { justify-content:center; padding:8px; }',
         'body.erus-sidebar-collapsed #erus-sidebar .erus-brand-icon { width:36px; height:36px; }',
         'body.erus-sidebar-collapsed #erus-sidebar .erus-nav-group-sep { justify-content:center; }',
-        // Push content right
-        'body { transition: padding-left 0.3s var(--erus-ease) !important; }',
+        // Sidebar backdrop (overlay)
+        '#erus-sidebar-backdrop { display:none; position:fixed; inset:0; z-index:4999; background:rgba(0,0,0,0.35); }',
+        'body:not(.erus-sidebar-collapsed) #erus-sidebar-backdrop { display:block; }',
         // Modals
         '#erus-logout-modal, #erus-pref-modal { display:none; position:fixed; inset:0; z-index:9999; align-items:center; justify-content:center; background:rgba(0,0,0,0.6); backdrop-filter:blur(4px); }',
         '#erus-logout-modal.open, #erus-pref-modal.open { display:flex; }',
@@ -258,23 +258,7 @@
     '</div>';
 
     function applyPaddingLeft() {
-        var isCollapsed = document.body.classList.contains('erus-sidebar-collapsed');
-        var w = isCollapsed ? SIDEBAR_WIDTH_COLLAPSED : SIDEBAR_WIDTH;
-        var SKIP = ['erus-sidebar', 'erus-logout-modal', 'erus-pref-modal', 'global-loader'];
-        var children = document.body.children;
-        for (var i = 0; i < children.length; i++) {
-            var el = children[i];
-            if (SKIP.indexOf(el.id) !== -1) continue;
-            var pos = window.getComputedStyle(el).position;
-            if (pos === 'fixed') {
-                el.style.setProperty('left', w, 'important');
-                el.style.setProperty('width', 'calc(100% - ' + w + ')', 'important');
-                el.style.transition = 'left 0.3s var(--erus-ease), width 0.3s var(--erus-ease)';
-            } else {
-                el.style.setProperty('margin-left', w, 'important');
-                el.style.transition = 'margin-left 0.3s var(--erus-ease)';
-            }
-        }
+        // Sidebar is overlay — never pushes content
     }
 
     function init() {
@@ -282,15 +266,14 @@
 
         // Inject sidebar
         document.body.insertAdjacentHTML('afterbegin', sidebarHTML);
+        // Inject backdrop
+        document.body.insertAdjacentHTML('afterbegin', '<div id="erus-sidebar-backdrop"></div>');
         // Inject modals at end
         document.body.insertAdjacentHTML('beforeend', logoutModalHTML);
         document.body.insertAdjacentHTML('beforeend', prefsModalHTML);
 
-        // Collapse state
-        var isSidebarPinned = localStorage.getItem('sidebar_pinned') !== 'false';
-        if (!isSidebarPinned) document.body.classList.add('erus-sidebar-collapsed');
-
-        applyPaddingLeft();
+        // Always start collapsed in secondary pages
+        document.body.classList.add('erus-sidebar-collapsed');
 
         // Auto-expand group of active link
         var activeLink = document.querySelector('#erus-sidebar .erus-nav-link.active');
@@ -303,17 +286,24 @@
             }
         }
 
-        // Brand click = toggle collapse
+        // Brand click = toggle collapse (overlay mode, no push)
         var brandEl = document.getElementById('erus-brand');
         if (brandEl) {
             brandEl.addEventListener('click', function(e) {
                 e.preventDefault();
                 document.body.classList.toggle('erus-sidebar-collapsed');
-                var collapsed = document.body.classList.contains('erus-sidebar-collapsed');
-                localStorage.setItem('sidebar_pinned', !collapsed);
-                applyPaddingLeft();
             });
         }
+
+        // Click outside sidebar to collapse
+        document.addEventListener('click', function(e) {
+            if (!document.body.classList.contains('erus-sidebar-collapsed')) {
+                var sidebar = document.getElementById('erus-sidebar');
+                if (sidebar && !sidebar.contains(e.target)) {
+                    document.body.classList.add('erus-sidebar-collapsed');
+                }
+            }
+        });
 
         // Admin button visibility
         var role = (localStorage.getItem('erus_role') || '').toLowerCase();
@@ -332,8 +322,6 @@
         var icon = document.getElementById('icon-' + id);
         if (isCollapsed) {
             document.body.classList.remove('erus-sidebar-collapsed');
-            localStorage.setItem('sidebar_pinned', 'true');
-            applyPaddingLeft();
             if (group) {
                 group.classList.remove('collapsed');
                 if (icon) { icon.classList.remove('fa-plus'); icon.classList.add('fa-minus'); }
