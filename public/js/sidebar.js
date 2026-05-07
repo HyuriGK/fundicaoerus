@@ -278,6 +278,8 @@
             if (isOverlay) continue;
             var pos = window.getComputedStyle(el).position;
             if (pos === 'fixed') {
+                // Skip tooltips and pointer-events:none elements
+                if (window.getComputedStyle(el).pointerEvents === 'none') continue;
                 // Only shift fixed elements that start at left:0 (main layout, not popups)
                 var computedLeft = window.getComputedStyle(el).left;
                 if (computedLeft === '0px' || computedLeft === 'auto') {
