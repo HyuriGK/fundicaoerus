@@ -258,7 +258,23 @@
     '</div>';
 
     function applyPaddingLeft() {
-        // Sidebar is overlay — never pushes content
+        var isCollapsed = document.body.classList.contains('erus-sidebar-collapsed');
+        var SKIP = ['erus-sidebar', 'erus-sidebar-backdrop', 'erus-logout-modal', 'erus-pref-modal', 'global-loader'];
+        var children = document.body.children;
+        for (var i = 0; i < children.length; i++) {
+            var el = children[i];
+            if (SKIP.indexOf(el.id) !== -1) continue;
+            var pos = window.getComputedStyle(el).position;
+            if (pos === 'fixed') {
+                // Collapsed: push via left. Expanded: full width (overlay mode)
+                el.style.setProperty('left', isCollapsed ? SIDEBAR_WIDTH_COLLAPSED : '0', 'important');
+                el.style.setProperty('width', isCollapsed ? 'calc(100% - ' + SIDEBAR_WIDTH_COLLAPSED + ')' : '100%', 'important');
+                el.style.transition = 'left 0.3s var(--erus-ease), width 0.3s var(--erus-ease)';
+            } else {
+                el.style.setProperty('margin-left', isCollapsed ? SIDEBAR_WIDTH_COLLAPSED : '0', 'important');
+                el.style.transition = 'margin-left 0.3s var(--erus-ease)';
+            }
+        }
     }
 
     function init() {
@@ -274,6 +290,7 @@
 
         // Always start collapsed in secondary pages
         document.body.classList.add('erus-sidebar-collapsed');
+        applyPaddingLeft();
 
         // Auto-expand group of active link
         var activeLink = document.querySelector('#erus-sidebar .erus-nav-link.active');
@@ -286,21 +303,23 @@
             }
         }
 
-        // Brand click = toggle collapse (overlay mode, no push)
+        // Brand click = toggle collapse
         var brandEl = document.getElementById('erus-brand');
         if (brandEl) {
             brandEl.addEventListener('click', function(e) {
                 e.preventDefault();
                 document.body.classList.toggle('erus-sidebar-collapsed');
+                applyPaddingLeft();
             });
         }
 
-        // Click outside sidebar to collapse
+        // Click outside sidebar to collapse (back to 80px mode)
         document.addEventListener('click', function(e) {
             if (!document.body.classList.contains('erus-sidebar-collapsed')) {
                 var sidebar = document.getElementById('erus-sidebar');
                 if (sidebar && !sidebar.contains(e.target)) {
                     document.body.classList.add('erus-sidebar-collapsed');
+                    applyPaddingLeft();
                 }
             }
         });
@@ -322,6 +341,7 @@
         var icon = document.getElementById('icon-' + id);
         if (isCollapsed) {
             document.body.classList.remove('erus-sidebar-collapsed');
+            applyPaddingLeft();
             if (group) {
                 group.classList.remove('collapsed');
                 if (icon) { icon.classList.remove('fa-plus'); icon.classList.add('fa-minus'); }
