@@ -45,36 +45,34 @@ function parseObservation(raw) {
     try {
         let content = raw;
 
-        // Remove grupos RTF aninhados (fonttbl, colortbl, etc.) usando contador de chaves
-        function removeRtfGroups(str) {
+        // Remove grupos de controle RTF (fonttbl, colortbl, etc.) preservando profundidade correta
+        function removeRtfControlGroups(str) {
             let result = '';
-            let depth = 0;
-            let inGroup = false;
-            let groupStart = -1;
-            for (let i = 0; i < str.length; i++) {
+            let i = 0;
+            while (i < str.length) {
                 if (str[i] === '{') {
-                    if (depth === 0) groupStart = i;
-                    depth++;
-                    // Detecta grupos de controle (fonttbl, colortbl, etc.)
-                    const ahead = str.substring(i + 1, i + 20);
+                    const ahead = str.substring(i + 1, i + 25);
                     if (/^\\(fonttbl|colortbl|stylesheet|info|pict|object)\b/.test(ahead)) {
-                        inGroup = true;
-                    }
-                } else if (str[i] === '}') {
-                    depth--;
-                    if (depth === 0 && inGroup) {
-                        inGroup = false;
-                        continue; // pula esse grupo inteiro
+                        // Pula este grupo inteiro contando chaves
+                        let depth = 1;
+                        i++;
+                        while (i < str.length && depth > 0) {
+                            if (str[i] === '{') depth++;
+                            else if (str[i] === '}') depth--;
+                            i++;
+                        }
+                        continue;
                     }
                 }
-                if (!inGroup) result += str[i];
+                result += str[i];
+                i++;
             }
             return result;
         }
 
-        content = removeRtfGroups(content);
+        content = removeRtfControlGroups(content);
 
-        // Converte caracteres especiais RTF (ex: \'d8 → ø)
+        // Converte caracteres especiais RTF (ex: \'d8 → Ø)
         content = content.replace(/\\'([0-9a-fA-F]{2})/g, (m, hex) => {
             try { return Buffer.from(hex, 'hex').toString('latin1'); } catch { return ''; }
         });
@@ -84,10 +82,11 @@ function parseObservation(raw) {
         content = content.replace(/\\pard\b/g, '');
         content = content.replace(/\\line\b/g, '\n');
 
-        // Remove tags RTF restantes
-        content = content.replace(/\\[a-z*]+[0-9]*/gi, '');
+        // Remove comandos RTF restantes (\bold, \fs22, etc.)
+        content = content.replace(/\\[a-zA-Z]+\d*/g, '');
+        content = content.replace(/\\'/g, '');
 
-        // Remove chaves e lixo RTF
+        // Remove chaves
         content = content.replace(/[{}]/g, '');
 
         // Normaliza espaços
