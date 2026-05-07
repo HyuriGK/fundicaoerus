@@ -235,7 +235,11 @@ router.get('/variacao-diaria', async (req, res) => {
                             THEN CAST(COALESCE(p.data->>'PESO_LIQUIDO_NPR','0') AS NUMERIC)
                         ELSE 0
                     END
-                ) AS peso_entrada
+                ) AS peso_entrada,
+                SUM(
+                    CAST(COALESCE(p.data->>'VALOR_PPR','0') AS NUMERIC) *
+                    CAST(COALESCE(p.data->>'QUANTIDADE_PPR','0') AS NUMERIC)
+                ) AS valor_entrada
             FROM firebird_sync_emissoes p
             LEFT JOIN pesos_customizados pc ON TRIM(p.data->>'PRODUTO_PPR') = pc.codigo
             WHERE EXTRACT(YEAR  FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) = $1
@@ -245,14 +249,11 @@ router.get('/variacao-diaria', async (req, res) => {
             ORDER BY 1
         `;
 
-        // Saída: mesma lógica do faturamentos.html
-        // - exclui itens sem pedido (pedido IS NULL/vazio) ou marcados como excluídos
-        // - exclui clientes de serviço (código 257 ou nomes específicos)
-        // - aplica preferências da tabela faturamento_firebird_preferencias
         const faturamentosQuery = `
             SELECT
                 f.data_faturamento AS dia,
-                SUM(f.peso_total) AS peso_saida
+                SUM(f.peso_total) AS peso_saida,
+                SUM(f.valor_total) AS valor_saida
             FROM faturamento_firebird f
             LEFT JOIN faturamento_firebird_preferencias p
                 ON p.nota_fiscal = f.nota_fiscal
@@ -280,10 +281,14 @@ router.get('/variacao-diaria', async (req, res) => {
         const toDateStr = (v) => v instanceof Date ? v.toISOString().split('T')[0] : String(v).split('T')[0];
 
         const entradaMap = {};
-        emRes.rows.forEach(r => { entradaMap[toDateStr(r.dia)] = parseFloat(r.peso_entrada) || 0; });
+        emRes.rows.forEach(r => {
+            entradaMap[toDateStr(r.dia)] = { peso: parseFloat(r.peso_entrada) || 0, valor: parseFloat(r.valor_entrada) || 0 };
+        });
 
         const saidaMap = {};
-        fatRes.rows.forEach(r => { saidaMap[toDateStr(r.dia)] = parseFloat(r.peso_saida) || 0; });
+        fatRes.rows.forEach(r => {
+            saidaMap[toDateStr(r.dia)] = { peso: parseFloat(r.peso_saida) || 0, valor: parseFloat(r.valor_saida) || 0 };
+        });
 
         const year = parseInt(ano);
         const month = parseInt(mes);
@@ -291,7 +296,9 @@ router.get('/variacao-diaria', async (req, res) => {
         const result = [];
         for (let d = 1; d <= daysInMonth; d++) {
             const dateStr = `${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-            result.push({ dia: dateStr, entrada: entradaMap[dateStr] || 0, saida: saidaMap[dateStr] || 0 });
+            const e = entradaMap[dateStr] || { peso: 0, valor: 0 };
+            const s = saidaMap[dateStr] || { peso: 0, valor: 0 };
+            result.push({ dia: dateStr, entrada: e.peso, saida: s.peso, valorEntrada: e.valor, valorSaida: s.valor });
         }
 
         res.json(result);
@@ -318,7 +325,11 @@ router.get('/variacao-mensal', async (req, res) => {
                             THEN CAST(COALESCE(p.data->>'PESO_LIQUIDO_NPR','0') AS NUMERIC)
                         ELSE 0
                     END
-                ) AS peso_entrada
+                ) AS peso_entrada,
+                SUM(
+                    CAST(COALESCE(p.data->>'VALOR_PPR','0') AS NUMERIC) *
+                    CAST(COALESCE(p.data->>'QUANTIDADE_PPR','0') AS NUMERIC)
+                ) AS valor_entrada
             FROM firebird_sync_emissoes p
             LEFT JOIN pesos_customizados pc ON TRIM(p.data->>'PRODUTO_PPR') = pc.codigo
             WHERE EXTRACT(YEAR FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) = $1
@@ -329,7 +340,8 @@ router.get('/variacao-mensal', async (req, res) => {
         const faturamentosQuery = `
             SELECT
                 EXTRACT(MONTH FROM f.data_faturamento)::int AS mes,
-                SUM(f.peso_total) AS peso_saida
+                SUM(f.peso_total) AS peso_saida,
+                SUM(f.valor_total) AS valor_saida
             FROM faturamento_firebird f
             LEFT JOIN faturamento_firebird_preferencias p
                 ON p.nota_fiscal = f.nota_fiscal
@@ -353,13 +365,15 @@ router.get('/variacao-mensal', async (req, res) => {
         ]);
 
         const entradaMap = {};
-        emRes.rows.forEach(r => { entradaMap[r.mes] = parseFloat(r.peso_entrada) || 0; });
+        emRes.rows.forEach(r => { entradaMap[r.mes] = { peso: parseFloat(r.peso_entrada) || 0, valor: parseFloat(r.valor_entrada) || 0 }; });
         const saidaMap = {};
-        fatRes.rows.forEach(r => { saidaMap[r.mes] = parseFloat(r.peso_saida) || 0; });
+        fatRes.rows.forEach(r => { saidaMap[r.mes] = { peso: parseFloat(r.peso_saida) || 0, valor: parseFloat(r.valor_saida) || 0 }; });
 
         const result = [];
         for (let m = 1; m <= 12; m++) {
-            result.push({ mes: m, entrada: entradaMap[m] || 0, saida: saidaMap[m] || 0 });
+            const e = entradaMap[m] || { peso: 0, valor: 0 };
+            const s = saidaMap[m] || { peso: 0, valor: 0 };
+            result.push({ mes: m, entrada: e.peso, saida: s.peso, valorEntrada: e.valor, valorSaida: s.valor });
         }
         res.json(result);
     } catch (error) {
