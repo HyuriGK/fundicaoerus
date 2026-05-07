@@ -87,12 +87,16 @@
         '}',
         'body.erus-sidebar-collapsed #erus-sidebar .erus-nav-link.active i { opacity:1; color:#fbbf24; }',
         'body.erus-sidebar-collapsed #erus-sidebar .erus-nav-link.active::before { display:none; }',
-        // Collapsed group sep — thin divider line only
+        // Collapsed group sep — icon only, centered
         'body.erus-sidebar-collapsed #erus-sidebar .erus-nav-group-sep {',
-        '  justify-content:center; padding:0; margin:8px 14px 4px;',
-        '  height:1px; background:rgba(255,255,255,0.05); border-radius:0; cursor:pointer;',
+        '  justify-content:center; padding:0; margin:10px auto 2px;',
+        '  width:44px; height:28px; border-radius:6px; cursor:pointer;',
+        '  background:transparent;',
         '}',
-        'body.erus-sidebar-collapsed #erus-sidebar .erus-nav-group-sep i:first-child { display:none; }',
+        'body.erus-sidebar-collapsed #erus-sidebar .erus-nav-group-sep i:first-child {',
+        '  display:inline-block; margin-right:0; font-size:0.72rem; opacity:0.35;',
+        '}',
+        'body.erus-sidebar-collapsed #erus-sidebar .erus-nav-group-sep:hover i:first-child { opacity:0.7; }',
         // Collapsed brand
         'body.erus-sidebar-collapsed #erus-sidebar .erus-brand { justify-content:center; padding:8px; margin-bottom:12px; }',
         'body.erus-sidebar-collapsed #erus-sidebar .erus-brand-icon { width:38px; height:38px; }',
