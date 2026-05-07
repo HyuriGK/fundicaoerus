@@ -269,6 +269,7 @@ router.get('/variacao-diaria', async (req, res) => {
               AND UPPER(TRIM(f.cliente_nome)) NOT LIKE '%IMEPEL INDUSTRIA MECANICA%'
               AND UPPER(TRIM(f.cliente_nome)) NOT LIKE '%STEELROOL INDUSTRIA METALURGICA%'
               AND UPPER(TRIM(f.cliente_nome)) NOT LIKE '%SPILROD FUNDICAO DE FERRO E ACO%'
+              AND NOT (TRIM(CAST(f.codigo_item AS TEXT)) LIKE '%1' AND UPPER(TRIM(f.descricao)) LIKE 'MODELO%')
             GROUP BY 1
             ORDER BY 1
         `;
@@ -356,6 +357,7 @@ router.get('/variacao-mensal', async (req, res) => {
               AND UPPER(TRIM(f.cliente_nome)) NOT LIKE '%IMEPEL INDUSTRIA MECANICA%'
               AND UPPER(TRIM(f.cliente_nome)) NOT LIKE '%STEELROOL INDUSTRIA METALURGICA%'
               AND UPPER(TRIM(f.cliente_nome)) NOT LIKE '%SPILROD FUNDICAO DE FERRO E ACO%'
+              AND NOT (TRIM(CAST(f.codigo_item AS TEXT)) LIKE '%1' AND UPPER(TRIM(f.descricao)) LIKE 'MODELO%')
             GROUP BY 1 ORDER BY 1
         `;
 
@@ -429,6 +431,7 @@ router.get('/variacao-detalhe', async (req, res) => {
               AND UPPER(TRIM(f.cliente_nome)) NOT LIKE '%IMEPEL INDUSTRIA MECANICA%'
               AND UPPER(TRIM(f.cliente_nome)) NOT LIKE '%STEELROOL INDUSTRIA METALURGICA%'
               AND UPPER(TRIM(f.cliente_nome)) NOT LIKE '%SPILROD FUNDICAO DE FERRO E ACO%'
+              AND NOT (TRIM(CAST(f.codigo_item AS TEXT)) LIKE '%1' AND UPPER(TRIM(f.descricao)) LIKE 'MODELO%')
             ORDER BY f.cliente_nome, f.codigo_item
         `;
 

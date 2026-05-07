@@ -4313,12 +4313,16 @@
                                     const kg = context.parsed.y;
                                     const val = (context.dataset.extraVal || [])[idx] || 0;
                                     const total = context.dataset.extraTotal || 1;
-                                    const pct = total > 0 ? (kg / total * 100).toFixed(1) : '0.0';
                                     const lines = [`Peso: ${formatNumber(kg)} kg`];
-                                    if (canViewValores() && valorVisible) {
-                                        const pkgStr = kg > 0 && val > 0 ? (val / kg).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0,00';
-                                        lines.push(`Valor: ${val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`);
-                                        lines.push(`R$/kg: ${pkgStr}`);
+                                    if (canViewValores()) {
+                                        if (valorVisible) {
+                                            const pkgStr = kg > 0 && val > 0 ? (val / kg).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0,00';
+                                            lines.push(`Valor: ${val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`);
+                                            lines.push(`R$/kg: ${pkgStr}`);
+                                        } else {
+                                            lines.push(`Valor: -----`);
+                                            lines.push(`R$/kg: -----`);
+                                        }
                                     }
                                     return lines;
                                 }
@@ -4843,17 +4847,10 @@
             if ([2, 3, 4].includes(n)) {
                 kpiBlocked = true;
                 kpiValueIds.forEach(id => { const el = document.getElementById(id); if (el) el.textContent = '-----'; });
-                // n=2 (Emissão): mantém o valorTotalCard interativo; demais: bloqueia também
-                if (n !== 2) {
-                    const valEl = document.getElementById('totalValueCard');
-                    if (valEl) valEl.textContent = '-----';
-                }
                 document.querySelector('.kpi-row').style.pointerEvents = 'none';
-                // n=2: reabilita apenas o card de valor total
-                if (n === 2) {
-                    const valorCard = document.getElementById('valorTotalCard');
-                    if (valorCard) valorCard.style.pointerEvents = 'auto';
-                }
+                // valorTotalCard sempre interativo em todos os seletores
+                const valorCard = document.getElementById('valorTotalCard');
+                if (valorCard) valorCard.style.pointerEvents = 'auto';
             } else {
                 kpiBlocked = false;
                 document.querySelector('.kpi-row').style.pointerEvents = '';
@@ -5493,13 +5490,19 @@
                                                 `  Saída:   ${fmt(rawData[idx].saida)} kg`,
                                                 `  Var.:    ${sign}${fmt(v)} kg`,
                                             ];
-                                            if (canViewValores() && valorVisible) {
+                                            if (canViewValores()) {
                                                 lines.push(`  ──────────────────`);
-                                                lines.push(`  Emitido:   ${fmtBRL(rawData[idx].valorEntrada || 0)}`);
-                                                lines.push(`  Faturado:  ${fmtBRL(rawData[idx].valorSaida || 0)}`);
-                                                const varVal = (rawData[idx].valorEntrada || 0) - (rawData[idx].valorSaida || 0);
-                                                const varSign = varVal >= 0 ? '+' : '';
-                                                lines.push(`  Var. R$:   ${varSign}${fmtBRL(varVal)}`);
+                                                if (valorVisible) {
+                                                    lines.push(`  Emitido:   ${fmtBRL(rawData[idx].valorEntrada || 0)}`);
+                                                    lines.push(`  Faturado:  ${fmtBRL(rawData[idx].valorSaida || 0)}`);
+                                                    const varVal = (rawData[idx].valorEntrada || 0) - (rawData[idx].valorSaida || 0);
+                                                    const varSign = varVal >= 0 ? '+' : '';
+                                                    lines.push(`  Var. R$:   ${varSign}${fmtBRL(varVal)}`);
+                                                } else {
+                                                    lines.push(`  Emitido:   -----`);
+                                                    lines.push(`  Faturado:  -----`);
+                                                    lines.push(`  Var. R$:   -----`);
+                                                }
                                             }
                                             if (!isTodos) {
                                                 lines.push(`  ──────────────────`);
