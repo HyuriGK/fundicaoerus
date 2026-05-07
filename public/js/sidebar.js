@@ -333,12 +333,32 @@
         if (adminBtn && (role === 'desenvolvedor' || role === 'admin')) {
             adminBtn.style.display = 'flex';
         }
-        var devSep = document.getElementById('erus-sep-desenvolvimento');
-        if (devSep && role === 'desenvolvedor') {
-            devSep.style.display = 'flex';
-        }
 
         erusSidebarUpdateThemeUI();
+
+        // Load page locks — move dev pages to "Em desenvolvimento"
+        fetch('/api/page-locks')
+            .then(function(r) { return r.json(); })
+            .then(function(result) {
+                if (!result.success) return;
+                var devGroup = document.getElementById('eg-desenvolvimento');
+                var devSep = document.getElementById('erus-sep-desenvolvimento');
+                if (!devGroup || !devSep) return;
+                var hasLocked = false;
+                result.data.forEach(function(l) {
+                    if (!l.is_locked || l.lock_reason !== 'development') return;
+                    var link = document.querySelector('#erus-sidebar .erus-nav-link[href="' + l.page_id + '"]');
+                    if (!link) return;
+                    if (!link.dataset.originalGroup) {
+                        var parent = link.closest('.erus-nav-group-wrapper');
+                        if (parent) link.dataset.originalGroup = parent.id;
+                    }
+                    devGroup.appendChild(link);
+                    hasLocked = true;
+                });
+                if (hasLocked) devSep.style.display = 'flex';
+            })
+            .catch(function() {});
     }
 
     // ---- Global sidebar functions ----
