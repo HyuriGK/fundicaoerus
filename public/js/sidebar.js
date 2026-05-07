@@ -72,11 +72,34 @@
         'body.erus-sidebar-collapsed #erus-sidebar .erus-nav-group-sep .fa-plus,',
         'body.erus-sidebar-collapsed #erus-sidebar .erus-nav-group-sep .fa-minus,',
         'body.erus-sidebar-collapsed #erus-sidebar .erus-notif-dot { display:none; }',
-        'body.erus-sidebar-collapsed #erus-sidebar .erus-nav-link { justify-content:center; padding:9px; }',
-        'body.erus-sidebar-collapsed #erus-sidebar .erus-nav-link i { margin-right:0; }',
-        'body.erus-sidebar-collapsed #erus-sidebar .erus-brand { justify-content:center; padding:8px; }',
-        'body.erus-sidebar-collapsed #erus-sidebar .erus-brand-icon { width:36px; height:36px; }',
-        'body.erus-sidebar-collapsed #erus-sidebar .erus-nav-group-sep { justify-content:center; }',
+        // Collapsed nav links — icon pill style
+        'body.erus-sidebar-collapsed #erus-sidebar .erus-nav-link {',
+        '  justify-content:center; padding:0;',
+        '  width:44px; height:44px; margin:2px auto;',
+        '  border-radius:12px;',
+        '}',
+        'body.erus-sidebar-collapsed #erus-sidebar .erus-nav-link i {',
+        '  margin-right:0; width:auto; font-size:1rem; opacity:0.55;',
+        '}',
+        'body.erus-sidebar-collapsed #erus-sidebar .erus-nav-link:hover i { opacity:1; }',
+        'body.erus-sidebar-collapsed #erus-sidebar .erus-nav-link.active {',
+        '  background:rgba(251,191,36,0.12); border-radius:12px;',
+        '}',
+        'body.erus-sidebar-collapsed #erus-sidebar .erus-nav-link.active i { opacity:1; color:#fbbf24; }',
+        'body.erus-sidebar-collapsed #erus-sidebar .erus-nav-link.active::before { display:none; }',
+        // Collapsed group sep — thin divider line only
+        'body.erus-sidebar-collapsed #erus-sidebar .erus-nav-group-sep {',
+        '  justify-content:center; padding:0; margin:8px 14px 4px;',
+        '  height:1px; background:rgba(255,255,255,0.05); border-radius:0; cursor:pointer;',
+        '}',
+        'body.erus-sidebar-collapsed #erus-sidebar .erus-nav-group-sep i:first-child { display:none; }',
+        // Collapsed brand
+        'body.erus-sidebar-collapsed #erus-sidebar .erus-brand { justify-content:center; padding:8px; margin-bottom:12px; }',
+        'body.erus-sidebar-collapsed #erus-sidebar .erus-brand-icon { width:38px; height:38px; }',
+        // Collapsed footer links same pill style
+        'body.erus-sidebar-collapsed #erus-sidebar .erus-sidebar-footer .erus-nav-link {',
+        '  width:44px; height:44px; margin:2px auto; padding:0;',
+        '}',
         // Sidebar backdrop (overlay)
         '#erus-sidebar-backdrop { display:none; position:fixed; inset:0; z-index:199; background:rgba(0,0,0,0.35); }',
         'body:not(.erus-sidebar-collapsed) #erus-sidebar-backdrop { display:block; }',
@@ -306,17 +329,6 @@
         // Always start collapsed in secondary pages
         document.body.classList.add('erus-sidebar-collapsed');
         applyPaddingLeft();
-
-        // Auto-expand group of active link
-        var activeLink = document.querySelector('#erus-sidebar .erus-nav-link.active');
-        if (activeLink) {
-            var group = activeLink.closest('.erus-nav-group-wrapper');
-            if (group) {
-                group.classList.remove('collapsed');
-                var icon = document.getElementById('icon-' + group.id);
-                if (icon) { icon.classList.remove('fa-plus'); icon.classList.add('fa-minus'); }
-            }
-        }
 
         // Brand click = toggle collapse
         var brandEl = document.getElementById('erus-brand');
