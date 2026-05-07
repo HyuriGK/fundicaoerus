@@ -100,10 +100,19 @@
         // Collapsed brand
         'body.erus-sidebar-collapsed #erus-sidebar .erus-brand { justify-content:center; padding:8px; margin-bottom:12px; }',
         'body.erus-sidebar-collapsed #erus-sidebar .erus-brand-icon { width:38px; height:38px; }',
-        // Collapsed footer links same pill style
-        'body.erus-sidebar-collapsed #erus-sidebar .erus-sidebar-footer .erus-nav-link {',
-        '  width:44px; height:44px; margin:2px auto; padding:0;',
+        // Collapsed footer links — identical pill style to nav links
+        'body.erus-sidebar-collapsed #erus-sidebar .erus-sidebar-footer {',
+        '  display:flex; flex-direction:column; align-items:center; padding-top:8px;',
         '}',
+        'body.erus-sidebar-collapsed #erus-sidebar .erus-sidebar-footer .erus-nav-link {',
+        '  width:44px; height:44px; margin:2px 0; padding:0;',
+        '  display:flex; align-items:center; justify-content:center;',
+        '  border-radius:12px;',
+        '}',
+        'body.erus-sidebar-collapsed #erus-sidebar .erus-sidebar-footer .erus-nav-link i {',
+        '  margin-right:0; width:auto; font-size:1rem; opacity:0.55;',
+        '}',
+        'body.erus-sidebar-collapsed #erus-sidebar .erus-sidebar-footer .erus-nav-link:hover i { opacity:1; }',
         // Sidebar backdrop (overlay)
         '#erus-sidebar-backdrop { display:none; position:fixed; inset:0; z-index:199; background:rgba(0,0,0,0.35); }',
         'body:not(.erus-sidebar-collapsed) #erus-sidebar-backdrop { display:block; }',
