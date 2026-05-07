@@ -1,40 +1,35 @@
 const express = require('express');
 const router = express.Router();
-const { Firebird, options: firebirdOptions } = require('../lib/firebird-helper');
+const pool = require('../lib/db');
 
-router.get('/pagamentos', (req, res) => {
-    Firebird.attach(firebirdOptions, (err, db) => {
-        if (err) return res.status(500).json({ success: false, error: err.message });
-
-        const query = `
+router.get('/pagamentos', async (req, res) => {
+    try {
+        const result = await pool.query(`
             SELECT
-                p.CODIGO_PAP,
-                p.DESPESA_PAP,
-                p.VALOR_PAP,
-                p.DATA_BAIXA_PAP,
-                p.HISTORICO_CAIXA_PAP
-            FROM PAGAR_PAGAMENTO p
-            WHERE p.DATA_BAIXA_PAP >= '2025-01-01'
-              AND p.DATA_BAIXA_PAP < '2027-01-01'
-              AND p.DATA_BAIXA_PAP IS NOT NULL
-            ORDER BY p.DATA_BAIXA_PAP DESC
-        `;
+                codigo_pap,
+                despesa_pap,
+                valor_pap,
+                data_baixa_pap,
+                historico_pap
+            FROM balanco_pagamentos
+            WHERE data_baixa_pap >= '2025-01-01'
+              AND data_baixa_pap < '2027-01-01'
+            ORDER BY data_baixa_pap DESC
+        `);
 
-        db.query(query, (err, rows) => {
-            db.detach();
-            if (err) return res.status(500).json({ success: false, error: err.message });
+        const data = result.rows.map(r => ({
+            codigo:   r.codigo_pap,
+            despesa:  r.despesa_pap,
+            valor:    parseFloat(r.valor_pap) || 0,
+            data:     r.data_baixa_pap ? r.data_baixa_pap.toISOString().split('T')[0] : null,
+            historico: r.historico_pap || ''
+        }));
 
-            const data = (rows || []).map(r => ({
-                codigo: r.CODIGO_PAP,
-                despesa: r.DESPESA_PAP,
-                valor: parseFloat(r.VALOR_PAP) || 0,
-                data: r.DATA_BAIXA_PAP ? new Date(r.DATA_BAIXA_PAP).toISOString().split('T')[0] : null,
-                historico: r.HISTORICO_CAIXA_PAP || ''
-            }));
-
-            res.json({ success: true, data });
-        });
-    });
+        res.json({ success: true, data });
+    } catch (e) {
+        console.error('❌ Erro /api/balanco/pagamentos:', e.message);
+        res.status(500).json({ success: false, error: e.message });
+    }
 });
 
 module.exports = router;
