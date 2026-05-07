@@ -238,6 +238,17 @@
                 '<a href="devolucoes.html" class="erus-nav-link' + isActive('devolucoes.html') + '">' +
                     '<i class="fa-solid fa-rotate-left"></i><span>Devoluções</span></a>' +
             '</div>' +
+            // FINANCEIRO (somente desenvolvedor)
+            '<div id="erus-sep-financeiro" class="erus-nav-group-sep" onclick="erusSidebarToggleGroup(\'eg-financeiro\')" style="display:none;">' +
+                '<i class="fas fa-balance-scale" style="font-size:0.8rem;color:#52525b;margin-right:8px;flex-shrink:0;"></i>' +
+                '<span class="erus-nav-group-label">Financeiro</span>' +
+                '<div class="erus-nav-group-line"></div>' +
+                '<i class="fa-solid fa-plus" id="icon-eg-financeiro"></i>' +
+            '</div>' +
+            '<div id="eg-financeiro" class="erus-nav-group-wrapper collapsed" style="display:none;">' +
+                '<a href="balanco.html" class="erus-nav-link' + isActive('balanco.html') + '">' +
+                    '<i class="fa-solid fa-scale-balanced"></i><span>Balanço</span></a>' +
+            '</div>' +
             // EM DESENVOLVIMENTO
             '<div id="erus-sep-desenvolvimento" class="erus-nav-group-sep" onclick="erusSidebarToggleGroup(\'eg-desenvolvimento\')" style="display:none;">' +
                 '<i class="fas fa-screwdriver-wrench" style="font-size:0.8rem;color:#ef4444;margin-right:8px;flex-shrink:0;"></i>' +
@@ -376,6 +387,14 @@
         var adminBtn = document.getElementById('erus-admin-btn');
         if (adminBtn && (role === 'desenvolvedor' || role === 'admin')) {
             adminBtn.style.display = 'flex';
+        }
+
+        // FINANCEIRO — apenas desenvolvedor
+        if (role === 'desenvolvedor') {
+            var sepFin = document.getElementById('erus-sep-financeiro');
+            var grpFin = document.getElementById('eg-financeiro');
+            if (sepFin) sepFin.style.display = 'flex';
+            if (grpFin) grpFin.style.display = 'block';
         }
 
         erusSidebarUpdateThemeUI();
