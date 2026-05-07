@@ -89,13 +89,13 @@
         'body.erus-sidebar-collapsed #erus-sidebar .erus-nav-link.active::before { display:none; }',
         // Collapsed group sep — icon only, centered
         'body.erus-sidebar-collapsed #erus-sidebar .erus-nav-group-sep {',
-        '  display:flex; align-items:center; justify-content:center;',
-        '  padding:0; margin:10px auto 2px;',
-        '  width:44px; height:28px; border-radius:6px; cursor:pointer;',
-        '  background:transparent;',
+        '  display:flex !important; align-items:center !important; justify-content:center !important;',
+        '  padding:0 !important; margin:10px auto 2px !important;',
+        '  width:44px !important; height:28px !important; border-radius:6px; cursor:pointer;',
+        '  background:transparent; overflow:visible !important;',
         '}',
         'body.erus-sidebar-collapsed #erus-sidebar .erus-nav-group-sep i:first-child {',
-        '  display:block; margin:0; font-size:0.72rem; opacity:0.35;',
+        '  display:block !important; margin:0 !important; font-size:0.72rem; opacity:0.35;',
         '}',
         'body.erus-sidebar-collapsed #erus-sidebar .erus-nav-group-sep:hover i:first-child { opacity:0.7; }',
         // Collapsed brand — no background, just the logo centered
