@@ -193,6 +193,14 @@
                 '<a href="devolucoes.html" class="erus-nav-link' + isActive('devolucoes.html') + '">' +
                     '<i class="fa-solid fa-rotate-left"></i><span>Devoluções</span></a>' +
             '</div>' +
+            // EM DESENVOLVIMENTO
+            '<div id="erus-sep-desenvolvimento" class="erus-nav-group-sep" onclick="erusSidebarToggleGroup(\'eg-desenvolvimento\')" style="display:none;">' +
+                '<i class="fas fa-screwdriver-wrench" style="font-size:0.8rem;color:#ef4444;margin-right:8px;flex-shrink:0;"></i>' +
+                '<span class="erus-nav-group-label" style="color:#ef4444;">Em desenvolvimento</span>' +
+                '<div class="erus-nav-group-line"></div>' +
+                '<i class="fa-solid fa-plus" id="icon-eg-desenvolvimento"></i>' +
+            '</div>' +
+            '<div id="eg-desenvolvimento" class="erus-nav-group-wrapper collapsed"></div>' +
         '</ul>' +
         '<div class="erus-sidebar-footer">' +
             '<a href="#" id="erus-admin-btn" class="erus-nav-link" onclick="erusSidebarOpenAdmin()" style="display:none;">' +
@@ -258,7 +266,7 @@
     '</div>';
 
     function applyPaddingLeft() {
-        var isCollapsed = document.body.classList.contains('erus-sidebar-collapsed');
+        // Content offset is always SIDEBAR_WIDTH_COLLAPSED (80px) — never changes
         var SKIP = ['erus-sidebar', 'erus-sidebar-backdrop', 'erus-logout-modal', 'erus-pref-modal', 'global-loader'];
         var children = document.body.children;
         for (var i = 0; i < children.length; i++) {
@@ -266,13 +274,10 @@
             if (SKIP.indexOf(el.id) !== -1) continue;
             var pos = window.getComputedStyle(el).position;
             if (pos === 'fixed') {
-                // Collapsed: push via left. Expanded: full width (overlay mode)
-                el.style.setProperty('left', isCollapsed ? SIDEBAR_WIDTH_COLLAPSED : '0', 'important');
-                el.style.setProperty('width', isCollapsed ? 'calc(100% - ' + SIDEBAR_WIDTH_COLLAPSED + ')' : '100%', 'important');
-                el.style.transition = 'left 0.3s var(--erus-ease), width 0.3s var(--erus-ease)';
+                el.style.setProperty('left', SIDEBAR_WIDTH_COLLAPSED, 'important');
+                el.style.setProperty('width', 'calc(100% - ' + SIDEBAR_WIDTH_COLLAPSED + ')', 'important');
             } else {
-                el.style.setProperty('margin-left', isCollapsed ? SIDEBAR_WIDTH_COLLAPSED : '0', 'important');
-                el.style.transition = 'margin-left 0.3s var(--erus-ease)';
+                el.style.setProperty('margin-left', SIDEBAR_WIDTH_COLLAPSED, 'important');
             }
         }
     }
@@ -309,26 +314,28 @@
             brandEl.addEventListener('click', function(e) {
                 e.preventDefault();
                 document.body.classList.toggle('erus-sidebar-collapsed');
-                applyPaddingLeft();
             });
         }
 
-        // Click outside sidebar to collapse (back to 80px mode)
+        // Click outside sidebar to collapse
         document.addEventListener('click', function(e) {
             if (!document.body.classList.contains('erus-sidebar-collapsed')) {
                 var sidebar = document.getElementById('erus-sidebar');
                 if (sidebar && !sidebar.contains(e.target)) {
                     document.body.classList.add('erus-sidebar-collapsed');
-                    applyPaddingLeft();
                 }
             }
         });
 
-        // Admin button visibility
+        // Role-based visibility
         var role = (localStorage.getItem('erus_role') || '').toLowerCase();
         var adminBtn = document.getElementById('erus-admin-btn');
         if (adminBtn && (role === 'desenvolvedor' || role === 'admin')) {
             adminBtn.style.display = 'flex';
+        }
+        var devSep = document.getElementById('erus-sep-desenvolvimento');
+        if (devSep && role === 'desenvolvedor') {
+            devSep.style.display = 'flex';
         }
 
         erusSidebarUpdateThemeUI();
@@ -341,7 +348,6 @@
         var icon = document.getElementById('icon-' + id);
         if (isCollapsed) {
             document.body.classList.remove('erus-sidebar-collapsed');
-            applyPaddingLeft();
             if (group) {
                 group.classList.remove('collapsed');
                 if (icon) { icon.classList.remove('fa-plus'); icon.classList.add('fa-minus'); }
