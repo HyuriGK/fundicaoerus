@@ -253,7 +253,7 @@ router.get('/variacao-diaria', async (req, res) => {
             SELECT
                 f.data_faturamento AS dia,
                 SUM(f.peso_total) AS peso_saida,
-                SUM(f.valor_total) AS valor_saida
+                SUM(f.valor_unitario * f.quantidade) AS valor_saida
             FROM faturamento_firebird f
             LEFT JOIN faturamento_firebird_preferencias p
                 ON p.nota_fiscal = f.nota_fiscal
@@ -342,7 +342,7 @@ router.get('/variacao-mensal', async (req, res) => {
             SELECT
                 EXTRACT(MONTH FROM f.data_faturamento)::int AS mes,
                 SUM(f.peso_total) AS peso_saida,
-                SUM(f.valor_total) AS valor_saida
+                SUM(f.valor_unitario * f.quantidade) AS valor_saida
             FROM faturamento_firebird f
             LEFT JOIN faturamento_firebird_preferencias p
                 ON p.nota_fiscal = f.nota_fiscal
