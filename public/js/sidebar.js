@@ -14,7 +14,7 @@
         '  border-right: 1px solid rgba(255,255,255,0.04);',
         '  display: flex; flex-direction: column;',
         '  padding: 20px 14px;',
-        '  z-index: 5000;',
+        '  z-index: 200;',
         '  transition: width 0.3s var(--erus-ease);',
         '  overflow: hidden;',
         '}',
@@ -78,7 +78,7 @@
         'body.erus-sidebar-collapsed #erus-sidebar .erus-brand-icon { width:36px; height:36px; }',
         'body.erus-sidebar-collapsed #erus-sidebar .erus-nav-group-sep { justify-content:center; }',
         // Sidebar backdrop (overlay)
-        '#erus-sidebar-backdrop { display:none; position:fixed; inset:0; z-index:4999; background:rgba(0,0,0,0.35); }',
+        '#erus-sidebar-backdrop { display:none; position:fixed; inset:0; z-index:199; background:rgba(0,0,0,0.35); }',
         'body:not(.erus-sidebar-collapsed) #erus-sidebar-backdrop { display:block; }',
         // Modals
         '#erus-logout-modal, #erus-pref-modal { display:none; position:fixed; inset:0; z-index:9999; align-items:center; justify-content:center; background:rgba(0,0,0,0.6); backdrop-filter:blur(4px); }',
