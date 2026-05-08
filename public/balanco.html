@@ -279,7 +279,7 @@
             <table class="modal-table" id="modalTable">
                 <thead id="modalThead"></thead>
                 <tbody id="modalTableBody">
-                    <tr><td colspan="5"><div class="empty-state"><i class="fas fa-spinner fa-spin"></i><span>Carregando...</span></div></td></tr>
+                    <tr><td colspan="6"><div class="empty-state"><i class="fas fa-spinner fa-spin"></i><span>Carregando...</span></div></td></tr>
                 </tbody>
             </table>
         </div>
@@ -468,7 +468,7 @@ function renderChartMensal(){
             responsive:true,maintainAspectRatio:false,animation:{duration:350},
             plugins:{
                 legend:{display:false},
-                datalabels:{display:ctx=>ctx.dataset.data[ctx.dataIndex]>0,anchor:'end',align:'end',color:'#a1a1aa',font:{family:"'JetBrains Mono',monospace",size:8,weight:'700'},formatter:v=>v>=1000?'R$'+(v/1000).toFixed(0)+'k':''},
+                datalabels:{display:false},
                 tooltip:{backgroundColor:'rgba(9,9,11,0.95)',borderColor:pal.tip,borderWidth:1,titleColor:pal.tipTitle,bodyColor:'#f4f4f5',callbacks:{label:ctx=>' '+fmt(ctx.parsed.y)}}
             },
             scales:{
@@ -519,7 +519,7 @@ function renderChartDiario(){
 function buildModalThead(){
     const isPag=activeView==='pagamentos';
     const cols=isPag
-        ?[{w:'9%',l:'CÓD. PAG.'},{w:'9%',l:'DESPESA'},{w:'14%',l:'VALOR'},{w:'11%',l:'DATA BAIXA'},{w:'',l:'HISTÓRICO'}]
+        ?[{w:'9%',l:'CÓD. PAG.'},{w:'9%',l:'CÓD. DESPESA'},{w:'',l:'NOME DESPESA'},{w:'14%',l:'VALOR'},{w:'11%',l:'DATA BAIXA'},{w:'',l:'HISTÓRICO'}]
         :[{w:'9%',l:'CÓD. REC.'},{w:'14%',l:'VALOR'},{w:'11%',l:'DATA PAG.'},{w:'',l:'QUEM PAGOU'}];
     document.getElementById('modalThead').innerHTML=`
         <tr>${cols.map(c=>`<th style="${c.w?'width:'+c.w:''}">${c.l}</th>`).join('')}</tr>
@@ -561,11 +561,12 @@ function renderModalTable(){
     document.getElementById('modalCount').textContent=`${modalData.length.toLocaleString('pt-BR')} registros`;
     document.getElementById('modalTotal').textContent=valorOculto?'••••••':fmt(total);
     const mask='••••••';
-    if(modalData.length===0){ tbody.innerHTML=`<tr><td colspan="5"><div class="empty-state"><i class="fas fa-search"></i><span>Nenhum registro encontrado</span></div></td></tr>`; return; }
+    if(modalData.length===0){ tbody.innerHTML=`<tr><td colspan="6"><div class="empty-state"><i class="fas fa-search"></i><span>Nenhum registro encontrado</span></div></td></tr>`; return; }
     if(isPag){
         tbody.innerHTML=modalData.map(r=>`<tr>
             <td class="td-code">${r.codigo||'—'}</td>
             <td class="td-code">${r.despesa||'—'}</td>
+            <td class="td-hist" style="max-width:200px;">${r.nomeDespesa||'—'}</td>
             <td class="td-valor-pag">${valorOculto?mask:fmt(r.valor)}</td>
             <td class="td-date">${fmtDate(r.data)}</td>
             <td class="td-hist">${r.historico||'—'}</td>
@@ -584,9 +585,9 @@ function renderModalTable(){
 function exportarCSV(){
     if(filteredData.length===0){showToast('Atenção','Nenhum dado','danger');return;}
     const isPag=activeView==='pagamentos';
-    const header=isPag?'Código,Despesa,Valor,Data,Histórico':'Código,Valor,Data,Histórico';
+    const header=isPag?'Código,Cód.Despesa,Nome Despesa,Valor,Data,Histórico':'Código,Valor,Data,Histórico';
     const rows=filteredData.map(r=>isPag
-        ?`${r.codigo},"${r.despesa||''}",${r.valor.toFixed(2)},${r.data},"${(r.historico||'').replace(/"/g,'""')}"`
+        ?`${r.codigo},"${r.despesa||''}","${r.nomeDespesa||''}",${r.valor.toFixed(2)},${r.data},"${(r.historico||'').replace(/"/g,'""')}"`
         :`${r.codigo},${r.valor.toFixed(2)},${r.data},"${(r.historico||'').replace(/"/g,'""')}"`
     );
     const csv=[header,...rows].join('\n');

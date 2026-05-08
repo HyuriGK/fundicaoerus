@@ -7,12 +7,16 @@ echo   Sync Balanco Financeiro - Pagamentos e Recebimentos
 echo ======================================================
 echo.
 
-echo [1/2] Sincronizando PAGAR_PAGAMENTO (Firebird -> Postgres)...
+echo [1/3] Sincronizando PAGAR_PAGAMENTO (Firebird -> Postgres)...
 node scripts/sync-balanco-pagamentos.js
 
 echo.
-echo [2/2] Sincronizando RECEBER_PAGAMENTO (Firebird -> Postgres)...
+echo [2/3] Sincronizando RECEBER_PAGAMENTO (Firebird -> Postgres)...
 node scripts/sync-balanco-recebimentos.js
+
+echo.
+echo [3/3] Sincronizando DESPESA (Firebird -> Postgres)...
+node scripts/sync-balanco-despesas.js
 
 echo.
 echo ======================================================
