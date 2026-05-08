@@ -1375,6 +1375,22 @@
                     <div id="totalBlockedWeightCard" class="kpi-value">0,00</div>
                     <div class="kpi-subtext">Sem data (BLOCK)</div>
                 </div>
+                <!-- 5. Total Geral Faturado (com serviços) -->
+                <div class="kpi-card kpi-purple" style="cursor:default;">
+                    <div class="kpi-title">TOTAL GERAL FATURADO</div>
+                    <div class="kpi-value">
+                        <span id="totalFaturadoGeralCard" data-real-value="R$ 0,00">R$ -----</span>
+                    </div>
+                    <div id="totalFaturadoPesoGeralCard" class="kpi-subtext">-- kg</div>
+                </div>
+                <!-- 6. Total Faturado (sem serviços) -->
+                <div class="kpi-card kpi-info" style="cursor:default;">
+                    <div class="kpi-title">TOTAL FATURADO</div>
+                    <div class="kpi-value">
+                        <span id="totalFaturadoCard" data-real-value="R$ 0,00">R$ -----</span>
+                    </div>
+                    <div id="totalFaturadoPesoCard" class="kpi-subtext">-- kg</div>
+                </div>
             </div>
             <!-- DASHBOARD ACTIONS GROUP (Buttons + Industrial Panel) -->
             <div class="dashboard-actions-group">
@@ -1969,6 +1985,14 @@
         const _tc = () => (window.ErusTheme && window.ErusTheme.isLight()) ? '#4b5563' : '#a1a1aa';
         let allData = [];
         let customWeights = {}; // Armazena pesos customizados
+        const _servicoClientIds = ['257', '432']; // IMEPEL, ACO NOBRE - clientes de serviços prestados
+        const _servicoClientNames = ['IMEPEL INDUSTRIA MECANICA LTDA', 'STEELROOL INDUSTRIA METALURGICA', 'SPILROD FUNDICAO DE FERRO E ACO LTDA', 'ACO NOBRE'];
+        const isServicoItem = (item) => {
+            const code = String(item.ID_CLIENTE_CORE || '').trim();
+            if (_servicoClientIds.includes(code)) return true;
+            const name = (item.NOME_CLIENTE || '').trim().toUpperCase();
+            return _servicoClientNames.some(sc => name.includes(sc));
+        };
         let chartPCP = null, chartPareto = null, chartPending = null, chartHistorical = null, chartConcentracao = null, chartVariacao = null;
         let activeMonthFilter = null, activeClientFilter = null; // Legacy vars, replacing with object below
         let activeChartFilters = { month: null, client: null, stage: null, day: null }; // New PowerBI-style filters
@@ -3089,6 +3113,33 @@
                     document.getElementById('totalBlockedWeightCard').style.color = blockedWeight > 0 ? '#ef4444' : '#fff';
                 }
             }
+            // --- Totais Faturados (calculado sobre allData completo) ---
+            let totalFatGeralValor = 0, totalFatGeralPeso = 0;
+            let totalFatSemServValor = 0, totalFatSemServPeso = 0;
+            allData.forEach(item => {
+                if (String(item.FATURADO_PPR || '').trim().toUpperCase() !== 'T') return;
+                const qtdFat = Number(item.QUANTIDADE_FATURADA_PPR || item.QUANTIDADE_PPR || 0);
+                let unitPrice = parseFloat(item.VALOR_PPR || 0);
+                const itemPeso = getCorrectedWeight(item, customWeights);
+                const itemValor = unitPrice * qtdFat;
+                totalFatGeralValor += itemValor;
+                totalFatGeralPeso += itemPeso;
+                if (!isServicoItem(item)) {
+                    totalFatSemServValor += itemValor;
+                    totalFatSemServPeso += itemPeso;
+                }
+            });
+            const _setFatKpi = (idVal, idPeso, valor, peso) => {
+                const elV = document.getElementById(idVal);
+                const elP = document.getElementById(idPeso);
+                if (elV) {
+                    elV.setAttribute('data-real-value', formatCurrency(valor));
+                    elV.textContent = valorVisible ? formatCurrency(valor) : 'R$ -----';
+                }
+                if (elP) elP.textContent = formatNumber(peso) + ' kg';
+            };
+            _setFatKpi('totalFaturadoGeralCard', 'totalFaturadoPesoGeralCard', totalFatGeralValor, totalFatGeralPeso);
+            _setFatKpi('totalFaturadoCard', 'totalFaturadoPesoCard', totalFatSemServValor, totalFatSemServPeso);
             // Avg Weight
             const avgWeight = totalQty > 0 ? (totalWeight / totalQty) : 0;
             if (document.getElementById('avgWeightCard')) document.getElementById('avgWeightCard').innerText = formatNumber(avgWeight);
@@ -4709,13 +4760,16 @@
             const el = document.getElementById('totalValueCard');
             const icon = document.getElementById('valorEyeIcon');
             valorVisible = !valorVisible;
+            const _fatCards = ['totalFaturadoGeralCard', 'totalFaturadoCard'];
             if (valorVisible) {
                 el.textContent = el.getAttribute('data-real-value') || 'R$ 0,00';
                 if (icon) { icon.className = 'fa-solid fa-eye'; icon.style.opacity = '1'; }
+                _fatCards.forEach(id => { const e = document.getElementById(id); if (e) e.textContent = e.getAttribute('data-real-value') || 'R$ 0,00'; });
                 showToast("Visão de Valores Habilitada", "Os valores totais agora estão visíveis no dashboard.", "info");
             } else {
                 el.textContent = 'R$ -----';
                 if (icon) { icon.className = 'fa-solid fa-eye-slash'; icon.style.opacity = '0.6'; }
+                _fatCards.forEach(id => { const e = document.getElementById(id); if (e) e.textContent = 'R$ -----'; });
                 showToast("Valores Ocultos", "Os valores sensíveis foram mascarados para privacidade.", "info");
             }
             applyColumnFilters();
