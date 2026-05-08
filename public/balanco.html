@@ -406,30 +406,40 @@ function updateChartLabels(){
 }
 
 // --- KPIs ---
-function renderKPIs(){
-    // Pagamentos
-    const totalPag=allPagamentos.filter(r=>r.data&&r.data.startsWith(activeYear)).reduce((s,r)=>s+r.valor,0);
-    valorReal=fmt(totalPag);
-    document.getElementById('kpiTotalPag').textContent=valorOculto?'••••••':valorReal;
-    document.getElementById('kpiTotalPagQtd').textContent=`${allPagamentos.filter(r=>r.data&&r.data.startsWith(activeYear)).length.toLocaleString('pt-BR')} registros`;
+function filterByPeriod(src){
+    return src.filter(r=>{
+        if(!r.data)return false;
+        if(r.data.split('-')[0]!==activeYear)return false;
+        if(activeMonth!=='all'&&parseInt(r.data.split('-')[1])!==parseInt(activeMonth))return false;
+        return true;
+    });
+}
 
-    // Recebimentos
-    const totalRec=allRecebimentos.filter(r=>r.data&&r.data.startsWith(activeYear)).reduce((s,r)=>s+r.valor,0);
-    document.getElementById('kpiTotalRec').textContent=fmt(totalRec);
-    document.getElementById('kpiTotalRecQtd').textContent=`${allRecebimentos.filter(r=>r.data&&r.data.startsWith(activeYear)).length.toLocaleString('pt-BR')} registros`;
+function renderKPIs(){
+    const pagPeriodo = filterByPeriod(allPagamentos);
+    const recPeriodo = filterByPeriod(allRecebimentos);
+
+    // Total Saídas
+    const totalPag = pagPeriodo.reduce((s,r)=>s+r.valor,0);
+    valorReal = fmt(totalPag);
+    document.getElementById('kpiTotalPag').textContent = valorOculto ? '••••••' : valorReal;
+    document.getElementById('kpiTotalPagQtd').textContent = `${pagPeriodo.length.toLocaleString('pt-BR')} registros`;
+
+    // Total Entradas
+    const totalRec = recPeriodo.reduce((s,r)=>s+r.valor,0);
+    document.getElementById('kpiTotalRec').textContent = fmt(totalRec);
+    document.getElementById('kpiTotalRecQtd').textContent = `${recPeriodo.length.toLocaleString('pt-BR')} registros`;
 
     // Maior saída
-    const srcPag=allPagamentos.filter(r=>r.data&&r.data.startsWith(activeYear));
-    if(srcPag.length>0){
-        const m=srcPag.reduce((a,b)=>b.valor>a.valor?b:a);
+    if(pagPeriodo.length>0){
+        const m=pagPeriodo.reduce((a,b)=>b.valor>a.valor?b:a);
         document.getElementById('kpiMaior').textContent=fmt(m.valor);
         document.getElementById('kpiMaiorInfo').textContent=fmtDate(m.data)+(m.historico?` · ${m.historico.substring(0,28)}`:'');
     } else { document.getElementById('kpiMaior').textContent='R$ —'; document.getElementById('kpiMaiorInfo').textContent='—'; }
 
     // Maior entrada
-    const srcRec=allRecebimentos.filter(r=>r.data&&r.data.startsWith(activeYear));
-    if(srcRec.length>0){
-        const m=srcRec.reduce((a,b)=>b.valor>a.valor?b:a);
+    if(recPeriodo.length>0){
+        const m=recPeriodo.reduce((a,b)=>b.valor>a.valor?b:a);
         document.getElementById('kpiMaiorRec').textContent=fmt(m.valor);
         document.getElementById('kpiMaiorRecInfo').textContent=fmtDate(m.data)+(m.historico?` · ${m.historico.substring(0,28)}`:'');
     } else { document.getElementById('kpiMaiorRec').textContent='R$ —'; document.getElementById('kpiMaiorRecInfo').textContent='—'; }
