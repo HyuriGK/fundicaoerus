@@ -1422,19 +1422,20 @@
             // Show selected year data, highlight selected month if applicable
             updateAnnualEvolutionDynamic(annualFilteredData, highlightedMonthIndex);
             // KPIs do gráfico mensal: média dia e peso médio/peça sobre o ano
-            const annualPesoTotal = annualFilteredData.reduce((a, b) => a + (b.pesoTotal || 0), 0);
-            const annualQtdTotal = annualFilteredData.reduce((a, b) => a + (b.quantidade || 0), 0);
-            const annualDaysSet = new Set(annualFilteredData.map(i => (i.data || '').split('T')[0]).filter(Boolean));
+            // KPIs gráfico mensal: usa o período filtrado (rangeData), não o ano inteiro
+            const annualKpiData = rangeDataComServicos; // já filtrado por startInput/endInput
+            const annualPesoTotal = annualKpiData.reduce((a, b) => a + (b.pesoTotal || 0), 0);
+            const annualQtdTotal = annualKpiData.reduce((a, b) => a + (b.quantidade || 0), 0);
             const annualFeriadosSet = getBrazilianHolidays(sDate.getFullYear());
             const annualDailyMap = {};
-            annualFilteredData.forEach(item => { const k = (item.data || '').split('T')[0]; if (k) annualDailyMap[k] = (annualDailyMap[k] || 0) + (item.pesoTotal || 0); });
-            let annualDiasUteis = 0;
-            const annualYearStart = new Date(sDate.getFullYear(), 0, 1);
-            const annualYearEnd = new Date(sDate.getFullYear(), 11, 31);
-            const todayAnnual = new Date(); todayAnnual.setHours(0,0,0,0);
-            const annualLimit = annualYearEnd < todayAnnual ? annualYearEnd : todayAnnual;
+            annualKpiData.forEach(item => { const k = (item.data || '').split('T')[0]; if (k) annualDailyMap[k] = (annualDailyMap[k] || 0) + (item.pesoTotal || 0); });
             const fmtA = (d) => { const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),dd=String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${dd}`; };
-            for (let d = new Date(annualYearStart); d <= annualLimit; d.setDate(d.getDate() + 1)) {
+            const annualPeriodStart = startInput ? new Date(startInput + 'T00:00:00') : new Date(sDate.getFullYear(), 0, 1);
+            const annualPeriodEnd = endInput ? new Date(endInput + 'T00:00:00') : new Date(sDate.getFullYear(), 11, 31);
+            const todayAnnual = new Date(); todayAnnual.setHours(0,0,0,0);
+            const annualLimit = annualPeriodEnd < todayAnnual ? annualPeriodEnd : todayAnnual;
+            let annualDiasUteis = 0;
+            for (let d = new Date(annualPeriodStart); d <= annualLimit; d.setDate(d.getDate() + 1)) {
                 const ds = fmtA(d); const dow = d.getDay();
                 const isNaoUtil = dow === 0 || dow === 6 || annualFeriadosSet.has(ds);
                 if (!isNaoUtil || annualDailyMap[ds]) annualDiasUteis++;
