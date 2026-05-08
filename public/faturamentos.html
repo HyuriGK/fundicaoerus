@@ -1022,11 +1022,6 @@
                 <div class="kpi-value" id="pesoDiarioNecessario">0,00 kg</div>
                 <div class="kpi-subtext" id="businessDaysTab">0 Dias Restantes</div>
             </div>
-            <div class="kpi-card">
-                <div class="kpi-title">PESO MÉDIO / PEÇA</div>
-                <div class="kpi-value" id="avgWeightPerPiece">0,00 kg</div>
-                <div class="kpi-subtext">MÉDIA DO PERÍODO</div>
-            </div>
         </div>
         <!-- Elementos ocultos mantidos para compatibilidade com JS existente -->
         <span id="totalValor" style="display:none"></span>
@@ -1058,7 +1053,12 @@
             <div class="chart-panel">
                 <div class="chart-header-row">
                     <div class="chart-title">Faturamento Diário (Peso)</div>
-                    <div class="chart-header-kpi"><span>Média Dia:</span> <span class="highlight" id="avgDailyWeight">0,00 kg</span> <span style="font-size:0.75rem;color:#94a3b8;margin-left:6px">Considerando: <span id="avgDiasUteis">0</span> dias úteis</span></div>
+                    <div class="chart-header-kpi">
+                        <span>Média Dia:</span> <span class="highlight" id="avgDailyWeight">0,00 kg</span>
+                        <span style="font-size:0.75rem;color:#94a3b8;margin-left:6px">Considerando: <span id="avgDiasUteis">0</span> dias úteis</span>
+                        <span style="width:1px;height:14px;background:var(--border-subtle,#3f3f46);margin:0 8px;display:inline-block;vertical-align:middle;"></span>
+                        <span>Peso Médio/Peça:</span> <span class="highlight" id="avgWeightPerPiece">0,00 kg</span>
+                    </div>
                 </div>
                 <div style="position: relative; flex: 1; width: 100%; min-height: 0;">
                     <canvas id="dailyChart"></canvas>
@@ -1075,7 +1075,13 @@
             <div class="chart-panel">
                 <div class="chart-header-row">
                     <div class="chart-title">Evolução Anual (Peso)</div>
-                    <div class="chart-header-kpi"><span>EVOLUÇÃO MENSAL (PESO)</span></div>
+                    <div class="chart-header-kpi">
+                        <span>EVOLUÇÃO MENSAL (PESO)</span>
+                        <span style="width:1px;height:14px;background:var(--border-subtle,#3f3f46);margin:0 8px;display:inline-block;vertical-align:middle;"></span>
+                        <span>Média Dia:</span> <span class="highlight" id="avgDailyWeightAnnual">0,00 kg</span>
+                        <span style="width:1px;height:14px;background:var(--border-subtle,#3f3f46);margin:0 8px;display:inline-block;vertical-align:middle;"></span>
+                        <span>Peso Médio/Peça:</span> <span class="highlight" id="avgWeightPerPieceAnnual">0,00 kg</span>
+                    </div>
                 </div>
                 <div style="position: relative; flex: 1; width: 100%; min-height: 0;"><canvas id="annualChart"></canvas>
                 </div>
@@ -1398,7 +1404,11 @@
                 document.getElementById('metaProgressPercent').textContent = (currentMeta > 0 ? (totalPeso / currentMeta) * 100 : 0).toFixed(1) + '%';
             }
             const totalQtd = rangeData.reduce((acc, curr) => acc + (curr.quantidade || 0), 0);
-            document.getElementById('avgWeightPerPiece').textContent = formatWeight(totalQtd > 0 ? totalPeso / totalQtd : 0);
+            const avgPorPeca = totalQtd > 0 ? totalPeso / totalQtd : 0;
+            const elAvgPeca = document.getElementById('avgWeightPerPiece');
+            if (elAvgPeca) elAvgPeca.textContent = formatWeight(avgPorPeca);
+            const elAvgPecaAnnual = document.getElementById('avgWeightPerPieceAnnual');
+            if (elAvgPecaAnnual) elAvgPecaAnnual.textContent = formatWeight(avgPorPeca);
             // 4. CHART CONTEXT LOGIC
             let sDate = startInput ? new Date(startInput + 'T00:00:00') : new Date();
             let eDate = endInput ? new Date(endInput + 'T00:00:00') : new Date();
@@ -1412,6 +1422,27 @@
             // --- ANNUAL CHART UPDATE ---
             // Show selected year data, highlight selected month if applicable
             updateAnnualEvolutionDynamic(annualFilteredData, highlightedMonthIndex);
+            // KPIs do gráfico mensal: média dia e peso médio/peça sobre o ano
+            const annualPesoTotal = annualFilteredData.reduce((a, b) => a + (b.pesoTotal || 0), 0);
+            const annualQtdTotal = annualFilteredData.reduce((a, b) => a + (b.quantidade || 0), 0);
+            const annualDaysSet = new Set(annualFilteredData.map(i => (i.data || '').split('T')[0]).filter(Boolean));
+            const annualFeriadosSet = getBrazilianHolidays(sDate.getFullYear());
+            const annualDailyMap = {};
+            annualFilteredData.forEach(item => { const k = (item.data || '').split('T')[0]; if (k) annualDailyMap[k] = (annualDailyMap[k] || 0) + (item.pesoTotal || 0); });
+            let annualDiasUteis = 0;
+            const annualYearStart = new Date(sDate.getFullYear(), 0, 1);
+            const annualYearEnd = new Date(sDate.getFullYear(), 11, 31);
+            const todayAnnual = new Date(); todayAnnual.setHours(0,0,0,0);
+            const annualLimit = annualYearEnd < todayAnnual ? annualYearEnd : todayAnnual;
+            const fmtA = (d) => { const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),dd=String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${dd}`; };
+            for (let d = new Date(annualYearStart); d <= annualLimit; d.setDate(d.getDate() + 1)) {
+                const ds = fmtA(d); const dow = d.getDay();
+                const isNaoUtil = dow === 0 || dow === 6 || annualFeriadosSet.has(ds);
+                if (!isNaoUtil || annualDailyMap[ds]) annualDiasUteis++;
+            }
+            const elAvgDayAnnual = document.getElementById('avgDailyWeightAnnual');
+            if (elAvgDayAnnual) elAvgDayAnnual.textContent = formatWeight(annualDiasUteis > 0 ? annualPesoTotal / annualDiasUteis : 0);
+            if (elAvgPecaAnnual) elAvgPecaAnnual.textContent = formatWeight(annualQtdTotal > 0 ? annualPesoTotal / annualQtdTotal : 0);
             // --- DAILY CHART UPDATE ---
             // Show data for the WHOLE MONTH of the start date (Context)
             // Filter globalValid to this month
