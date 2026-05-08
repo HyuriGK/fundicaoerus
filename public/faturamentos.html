@@ -1024,6 +1024,16 @@
                 <div class="kpi-value" id="avgWeightPerPiece">0,00 kg</div>
                 <div class="kpi-subtext">MÉDIA DO PERÍODO</div>
             </div>
+            <div class="kpi-card" style="cursor: default;">
+                <div class="kpi-title">TOTAL GERAL FATURADO</div>
+                <div class="kpi-value" id="totalGeralFaturadoValor">R$ -----</div>
+                <div class="kpi-subtext" id="totalGeralFaturadoPeso">-- kg</div>
+            </div>
+            <div class="kpi-card" style="cursor: default;">
+                <div class="kpi-title">TOTAL FATURADO</div>
+                <div class="kpi-value" id="totalSemServicoValor">R$ -----</div>
+                <div class="kpi-subtext" id="totalSemServicoPeso">-- kg</div>
+            </div>
         </div>
         <!-- PERIOD SELECTOR (Synced from refugos.html) -->
         <div class="toolbar-row">
@@ -1224,7 +1234,7 @@
             "STEELROOL INDUSTRIA METALURGICA",
             "SPILROD FUNDICAO DE FERRO E ACO LTDA"
         ];
-        const serviceCodes = ["257"];
+        const serviceCodes = ["257", "432"];
         function isServiceClient(item) {
             if (!item) return false;
             const name = (item.clienteNome || '').trim().toUpperCase();
@@ -1323,8 +1333,30 @@
             // 3. Update KPIs with Range Data
             const totalFaturado = rangeData.reduce((acc, curr) => acc + calculateCalculatedTotal(curr), 0);
             const totalPeso = rangeData.reduce((acc, curr) => acc + (curr.pesoTotal || 0), 0);
-            document.getElementById('totalWeightValue').textContent = formatWeight(totalPeso);
+            // KPIs: Total Geral (sempre com serviços) e Total sem serviços
+            const rangeDataComServicos = data.filter(item => {
+                const name = (item.clienteNome || 'Desconhecido').trim();
+                if (item.excluido_manualmente === true) return false;
+                if (!isServiceClient(item) && excludedClients.has(name)) return false;
+                if (startInput && item.data < startInput) return false;
+                if (endInput && item.data > endInput) return false;
+                return true;
+            });
+            const totalGeralValor = rangeDataComServicos.reduce((acc, curr) => acc + calculateCalculatedTotal(curr), 0);
+            const totalGeralPeso = rangeDataComServicos.reduce((acc, curr) => acc + (curr.pesoTotal || 0), 0);
+            const rangeDataSemServicos = rangeDataComServicos.filter(item => !isServiceClient(item));
+            const totalSemServValor = rangeDataSemServicos.reduce((acc, curr) => acc + calculateCalculatedTotal(curr), 0);
+            const totalSemServPeso = rangeDataSemServicos.reduce((acc, curr) => acc + (curr.pesoTotal || 0), 0);
             const isVisible = document.getElementById('cardValorTotal').getAttribute('data-visible') === 'true';
+            const elGeral = document.getElementById('totalGeralFaturadoValor');
+            const elGeralPeso = document.getElementById('totalGeralFaturadoPeso');
+            const elSemServ = document.getElementById('totalSemServicoValor');
+            const elSemServPeso = document.getElementById('totalSemServicoPeso');
+            if (elGeral) elGeral.textContent = isVisible ? formatCurrency(totalGeralValor) : 'R$ -----';
+            if (elGeralPeso) elGeralPeso.textContent = formatWeight(totalGeralPeso);
+            if (elSemServ) elSemServ.textContent = isVisible ? formatCurrency(totalSemServValor) : 'R$ -----';
+            if (elSemServPeso) elSemServPeso.textContent = formatWeight(totalSemServPeso);
+            document.getElementById('totalWeightValue').textContent = formatWeight(totalPeso);
             const avgPrice = totalPeso > 0 ? totalFaturado / totalPeso : 0;
             if (isVisible) {
                 document.getElementById('totalValor').textContent = formatCurrency(totalFaturado);
