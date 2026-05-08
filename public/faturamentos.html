@@ -907,9 +907,13 @@
             <div class="toolbar-row">
                 <div class="toolbar-group" style="display: flex; gap: 10px;">
                     <button class="btn-modern" id="btnToggleServices" onclick="toggleServices()"
-                        style="background-color: rgba(255,255,255,0.05); color: var(--text-muted); border-color: var(--border-subtle);">
+                        style="background-color: var(--color-primary); color: #000; border-color: var(--color-primary);">
                         <i class="fa-solid fa-hand-holding-dollar"></i> Serviços Prestados: <span
-                            id="statusServices">OFF</span>
+                            id="statusServices">ON</span>
+                    </button>
+                    <button class="btn-modern" id="btnOnlyServices" onclick="toggleOnlyServices()"
+                        style="background-color: rgba(255,255,255,0.05); color: var(--text-muted); border-color: var(--border-subtle);">
+                        <i class="fa-solid fa-filter"></i> Somente Serviços
                     </button>
                     <button class="btn-modern" onclick="openClientModal()"
                         style="background-color: var(--color-primary); color: #000;">
@@ -980,34 +984,6 @@
                 ESC para fechar</div>
         </div>
     </div>
-    <!-- Modal: Prestação de Serviços -->
-    <div id="servicosModal" class="modal-overlay" style="display:none;">
-        <div class="modal-card fullscreen">
-            <div class="modal-header">
-                <h2 class="modal-title">PRESTAÇÃO DE SERVIÇOS — PERÍODO FILTRADO</h2>
-                <span class="modal-close" onclick="closeServicosModal()" title="Fechar (ESC)">&times;</span>
-            </div>
-            <div class="table-container">
-                <table id="servicosTable">
-                    <thead>
-                        <tr>
-                            <th style="min-width:100px;">Data</th>
-                            <th style="min-width:100px;">Pedido</th>
-                            <th style="min-width:80px;">Cód. Cli</th>
-                            <th style="min-width:250px;">Cliente</th>
-                            <th style="min-width:100px;">Cód. Item</th>
-                            <th style="min-width:300px;">Descrição</th>
-                            <th class="text-right" style="min-width:80px;">Qtd</th>
-                            <th class="text-right" style="min-width:100px;">Peso Total</th>
-                            <th class="text-right" style="min-width:110px;">Valor Total</th>
-                        </tr>
-                    </thead>
-                    <tbody id="servicosTableBody"></tbody>
-                </table>
-            </div>
-            <div style="text-align:center; color:var(--text-muted); margin-top:15px; font-size:0.8rem;">Pressione ESC para fechar</div>
-        </div>
-    </div>
     <!-- Side Menu Trigger Area -->
     <div class="side-menu-trigger"></div>
     <nav class="side-menu">
@@ -1034,7 +1010,7 @@
                 <div id="totalSemServicoPeso" class="kpi-value" style="font-size:1.5rem; font-weight:700;">-- kg</div>
                 <div id="totalSemServicoValor" class="kpi-subtext" style="font-size:0.95rem; color:var(--text-secondary, #a1a1aa);">R$ -----</div>
             </div>
-            <div class="kpi-card" style="cursor: pointer;" onclick="openServicosModal()">
+            <div class="kpi-card" style="cursor: default;">
                 <div class="kpi-title">TOTAL PREST. SERVIÇOS</div>
                 <div id="totalServicosPeso" class="kpi-value" style="font-size:1.5rem; font-weight:700;">-- kg</div>
                 <div id="totalServicosValor" class="kpi-subtext" style="font-size:0.95rem; color:var(--text-secondary, #a1a1aa);">R$ -----</div>
@@ -1171,7 +1147,8 @@
         Chart.defaults.plugins.tooltip.titleFont = { size: 13, weight: '700', family: "'JetBrains Mono', monospace" };
         Chart.defaults.plugins.tooltip.bodyFont = { size: 13, weight: '500', family: "'JetBrains Mono', monospace" };
         Chart.defaults.plugins.tooltip.displayColors = false;
-        let showServices = false;
+        let showServices = true;
+        let onlyServices = false;
         let showABC = false;
         let abcType = 'peso';
         // --- DASHBOARD SELECTOR LOGIC ---
@@ -1897,38 +1874,7 @@
             renderTable(); // Ensure table is rendered with latest data
         }
         function closeRecordsModal() { document.getElementById('recordsModal').style.display = 'none'; document.body.style.overflow = ''; }
-        function openServicosModal() {
-            const startInput = document.getElementById('startDate').value;
-            const endInput = document.getElementById('endDate').value;
-            const isVisible = document.getElementById('cardValorTotal').getAttribute('data-visible') === 'true';
-            const items = allData.filter(item => {
-                if (!isServiceClient(item)) return false;
-                if (item.excluido_manualmente === true) return false;
-                if (startInput && item.data < startInput) return false;
-                if (endInput && item.data > endInput) return false;
-                return true;
-            });
-            const tbody = document.getElementById('servicosTableBody');
-            tbody.innerHTML = items.map(item => {
-                const calculatedTotal = calculateCalculatedTotal(item);
-                const valorTotal = isVisible ? formatCurrency(calculatedTotal) : 'R$ ---';
-                return `<tr>
-                    <td>${formatDate(item.data)}</td>
-                    <td>${item.pedido || '-'}</td>
-                    <td>${item.clienteCodigo || '-'}</td>
-                    <td>${item.clienteNome || '-'}</td>
-                    <td>${item.codigoItem || '-'}</td>
-                    <td>${item.descricao || '-'}</td>
-                    <td class="text-right">${formatNumber(item.quantidade || 0, 0)}</td>
-                    <td class="text-right">${formatWeight(item.pesoTotal || 0)}</td>
-                    <td class="text-right">${valorTotal}</td>
-                </tr>`;
-            }).join('') || `<tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:20px;">Nenhum registro de serviços no período.</td></tr>`;
-            document.getElementById('servicosModal').style.display = 'flex';
-            document.body.style.overflow = 'hidden';
-        }
-        function closeServicosModal() { document.getElementById('servicosModal').style.display = 'none'; document.body.style.overflow = ''; }
-        async function loadRecordsData() {
+async function loadRecordsData() {
             // Carregar histórico completo (2025 e 2026) para o seletor de anos funcionar
             const fullStart = '2025-01-01';
             const fullEnd = '2026-12-31';
@@ -2019,12 +1965,10 @@
             // Filter for display
             let filteredClients = allData.filter(item => {
                 const isService = isServiceClient(item);
-                // Filtro de Data deve ser soberano para TODOS os registros na tabela
                 if (startInput && item.data < startInput) return false;
                 if (endInput && item.data > endInput) return false;
-                if (isService) {
-                    return showServices;
-                }
+                if (onlyServices) return isService;
+                if (isService) return showServices;
                 const name = (item.clienteNome || 'Desconhecido').trim();
                 if (excludedClients.has(name)) return false;
                 return true;
@@ -2193,6 +2137,7 @@
         function toggleClientExclusion(c) { if (excludedClients.has(c)) excludedClients.delete(c); else excludedClients.add(c); renderClientList(); renderTable(); updateDashboardfromRecords(allData); saveClientExclusion(); }
         function toggleServices() {
             showServices = !showServices;
+            if (showServices && onlyServices) { onlyServices = false; _applyOnlyServicesBtn(); }
             const btn = document.getElementById('btnToggleServices');
             const status = document.getElementById('statusServices');
             if (showServices) {
@@ -2200,16 +2145,32 @@
                 btn.style.color = '#000';
                 btn.style.borderColor = 'var(--color-primary)';
                 status.textContent = 'ON';
-                showToast("Serviços Habilitados", "Faturamento agora inclui IMEPEL, STEELROOL e SPILROD.", "success");
             } else {
                 btn.style.backgroundColor = 'rgba(255,255,255,0.05)';
                 btn.style.color = 'var(--text-muted)';
                 btn.style.borderColor = 'var(--border-subtle)';
                 status.textContent = 'OFF';
-                showToast("Serviços Ocultos", "Clientes de prestação de serviços foram removidos dos totais.", "info");
             }
             renderTable();
             updateDashboardfromRecords(allData);
+        }
+        function _applyOnlyServicesBtn() {
+            const btn = document.getElementById('btnOnlyServices');
+            if (!btn) return;
+            if (onlyServices) {
+                btn.style.backgroundColor = '#7c3aed';
+                btn.style.color = '#fff';
+                btn.style.borderColor = '#7c3aed';
+            } else {
+                btn.style.backgroundColor = 'rgba(255,255,255,0.05)';
+                btn.style.color = 'var(--text-muted)';
+                btn.style.borderColor = 'var(--border-subtle)';
+            }
+        }
+        function toggleOnlyServices() {
+            onlyServices = !onlyServices;
+            _applyOnlyServicesBtn();
+            renderTable();
         }
         // --- ABC SEARCH & CHART LOGIC ---
         function showEvolutionView() {
@@ -2376,8 +2337,6 @@
                 if (e.key === 'Escape') {
                     if (document.getElementById('clientModal').style.display === 'flex') {
                         closeClientModal();
-                    } else if (document.getElementById('servicosModal').style.display === 'flex') {
-                        closeServicosModal();
                     } else if (document.getElementById('recordsModal').style.display === 'flex') {
                         if (hasActiveModalFilters()) {
                             const filtered = getModalFilteredData();
