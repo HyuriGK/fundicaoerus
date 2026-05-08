@@ -1051,12 +1051,15 @@
         <div class="charts-row" id="standardChartsRow" style="grid-template-columns: 1fr;">
             <div class="chart-panel">
                 <div class="chart-header-row">
-                    <div class="chart-title">Faturamento Diário (Peso)</div>
+                    <div class="chart-title" id="dailyChartTitle">Faturamento Diário (Peso)</div>
                     <div class="chart-header-kpi">
                         <span>Média Dia:</span> <span class="highlight" id="avgDailyWeight">0,00 kg</span>
                         <span style="font-size:0.75rem;color:#94a3b8;margin-left:6px">Considerando: <span id="avgDiasUteis">0</span> dias úteis</span>
                         <span style="width:1px;height:14px;background:var(--border-subtle,#3f3f46);margin:0 8px;display:inline-block;vertical-align:middle;"></span>
                         <span>Peso Médio/Peça:</span> <span class="highlight" id="avgWeightPerPiece">0,00 kg</span>
+                        <span style="width:1px;height:14px;background:var(--border-subtle,#3f3f46);margin:0 8px;display:inline-block;vertical-align:middle;"></span>
+                        <button id="btnToggleDailyMode" onclick="toggleDailyChartMode()" class="btn-mini-chart active" style="font-size:0.7rem;">Faturamento</button>
+                        <button id="btnToggleDailyModeServ" onclick="toggleDailyChartMode()" class="btn-mini-chart" style="font-size:0.7rem;">Prest. Serviços</button>
                     </div>
                 </div>
                 <div style="position: relative; flex: 1; width: 100%; min-height: 0;">
@@ -1129,6 +1132,8 @@
         let colFilters = {};
         let currentMeta = 0;
         let dailyChart = null, annualChart = null, abcChart = null;
+        let dailyChartMode = 'normal'; // 'normal' | 'servicos'
+        let _lastDailyChartArgs = null; // cache para re-render no toggle
         const _ltFat = window.ErusTheme && window.ErusTheme.isLight();
         const _gc = () => (window.ErusTheme && window.ErusTheme.isLight()) ? 'rgba(0,0,0,0.07)' : 'rgba(255,255,255,0.05)';
         const _tc = () => (window.ErusTheme && window.ErusTheme.isLight()) ? '#4b5563' : '#a1a1aa';
@@ -1472,9 +1477,20 @@
                 dailyMap[k] = (dailyMap[k] || 0) + (item.weightTotal || item.pesoTotal || 0);
             });
             const dailyChartData = Object.keys(dailyMap).sort().map(k => ({ data: k, pesoTotal: dailyMap[k] }));
+            // Dados de serviços para modo alternado
+            const dailyContextServicos = filteredAll.filter(item => {
+                if (!isServiceClient(item)) return false;
+                return item.data >= monthStartStr && item.data <= monthEndStr;
+            });
+            const dailyMapServ = {};
+            dailyContextServicos.forEach(item => { const k = (item.data || '').split('T')[0]; if (k) dailyMapServ[k] = (dailyMapServ[k] || 0) + (item.weightTotal || item.pesoTotal || 0); });
+            const dailyChartDataServ = Object.keys(dailyMapServ).sort().map(k => ({ data: k, pesoTotal: dailyMapServ[k] }));
+            // Cache para reuso no toggle
+            _lastDailyChartArgs = { normal: dailyChartData, servicos: dailyChartDataServ, highlightedDay, monthStartStr, monthEndStr };
             // Calculate KPI for Chart Header (Avg Daily within Context)
-            const totalPesoContext = dailyContextData.reduce((a, b) => a + (b.pesoTotal || 0), 0);
-            // Dias que contam: úteis (seg-sex, excluindo feriados) OU feriado/fim de semana que teve faturamento
+            const activeData = dailyChartMode === 'servicos' ? dailyContextServicos : dailyContextData;
+            const activeMap = dailyChartMode === 'servicos' ? dailyMapServ : dailyMap;
+            const totalPesoContext = activeData.reduce((a, b) => a + (b.pesoTotal || 0), 0);
             const feriadosNacionais = getBrazilianHolidays(year);
             const today = new Date(); today.setHours(0,0,0,0);
             const limitDate = monthEnd < today ? monthEnd : today;
@@ -1483,16 +1499,56 @@
                 const ds = fmt(d);
                 const dow = d.getDay();
                 const isNaoUtil = dow === 0 || dow === 6 || feriadosNacionais.has(ds);
-                if (isNaoUtil && !dailyMap[ds]) continue; // não conta se não útil E sem faturamento
-                if (!isNaoUtil || dailyMap[ds]) diasUteisContexto++;
+                if (isNaoUtil && !activeMap[ds]) continue;
+                if (!isNaoUtil || activeMap[ds]) diasUteisContexto++;
             }
             document.getElementById('avgDailyWeight').textContent = formatWeight(diasUteisContexto > 0 ? totalPesoContext / diasUteisContexto : 0);
             document.getElementById('avgDiasUteis').textContent = diasUteisContexto;
-            renderDailyChart(dailyChartData, highlightedDay, monthStartStr, monthEndStr);
+            renderDailyChart(dailyChartMode === 'servicos' ? dailyChartDataServ : dailyChartData, highlightedDay, monthStartStr, monthEndStr);
             // --- ABC CHART UPDATE ---
             if (showABC) {
                 renderABCChart(rangeData);
             }
+        }
+        function toggleDailyChartMode() {
+            dailyChartMode = dailyChartMode === 'normal' ? 'servicos' : 'normal';
+            const btnNorm = document.getElementById('btnToggleDailyMode');
+            const btnServ = document.getElementById('btnToggleDailyModeServ');
+            const title = document.getElementById('dailyChartTitle');
+            if (dailyChartMode === 'servicos') {
+                btnNorm.classList.remove('active');
+                btnServ.classList.add('active');
+                if (title) title.textContent = 'Faturamento Diário — Prest. Serviços (Peso)';
+            } else {
+                btnServ.classList.remove('active');
+                btnNorm.classList.add('active');
+                if (title) title.textContent = 'Faturamento Diário (Peso)';
+            }
+            if (!_lastDailyChartArgs) return;
+            const { normal, servicos, highlightedDay, monthStartStr, monthEndStr } = _lastDailyChartArgs;
+            const activeData = dailyChartMode === 'servicos' ? servicos : normal;
+            // Recalcular KPI médias
+            const year = parseInt(monthStartStr.split('-')[0]);
+            const month = parseInt(monthStartStr.split('-')[1]) - 1;
+            const monthStart = new Date(year, month, 1);
+            const monthEnd = new Date(year, month + 1, 0);
+            const fmt = (d) => { const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),dd=String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${dd}`; };
+            const activeMap = {};
+            activeData.forEach(item => { activeMap[item.data] = item.pesoTotal; });
+            const totalPeso = activeData.reduce((a, b) => a + (b.pesoTotal || 0), 0);
+            const feriados = getBrazilianHolidays(year);
+            const today = new Date(); today.setHours(0,0,0,0);
+            const limitDate = monthEnd < today ? monthEnd : today;
+            let diasUteis = 0;
+            for (let d = new Date(monthStart); d <= limitDate; d.setDate(d.getDate() + 1)) {
+                const ds = fmt(d); const dow = d.getDay();
+                const isNaoUtil = dow === 0 || dow === 6 || feriados.has(ds);
+                if (isNaoUtil && !activeMap[ds]) continue;
+                if (!isNaoUtil || activeMap[ds]) diasUteis++;
+            }
+            document.getElementById('avgDailyWeight').textContent = formatWeight(diasUteis > 0 ? totalPeso / diasUteis : 0);
+            document.getElementById('avgDiasUteis').textContent = diasUteis;
+            renderDailyChart(activeData, highlightedDay, monthStartStr, monthEndStr);
         }
         function updateAnnualEvolutionDynamic(filteredData, highlightIndex) {
             const monthlyData = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0, 11: 0 };
