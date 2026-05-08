@@ -89,7 +89,7 @@ const W        = 66; // inner content width (ASCII-safe)
 
 const SYNC_BATS = [
     { name: 'CUSTOS',      file: 'sincronizar_acustos.bat',        icon: '[$$]' },
-    { name: 'BALANCO',     file: 'balanco_pagamentos.bat',          icon: '[BL]' },
+    { name: 'BALANCO',     file: 'sincronizar_balanco.bat',         icon: '[BL]' },
     { name: 'DEVOLUCOES',  file: 'sincronizar_adevolucoes.bat',    icon: '[<<]' },
     { name: 'EMISSOES',    file: 'sincronizar_aemissoes.bat',      icon: '[>>]' },
     { name: 'FATURAMENTO', file: 'sincronizar_afaturamento.bat',   icon: '[NF]' },
