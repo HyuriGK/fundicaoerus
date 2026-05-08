@@ -163,35 +163,35 @@
             <!-- KPI Row -->
             <div class="kpi-row">
                 <!-- KPI Recebimentos -->
-                <div id="kpiCardRec" class="kpi-card">
+                <div id="kpiCardRec" class="kpi-card" onclick="toggleValor()" style="cursor:pointer;" title="Clique para ocultar/mostrar">
                     <div class="kpi-icon green"><i class="fas fa-arrow-down"></i></div>
-                    <div class="kpi-label">Total Entradas</div>
+                    <div class="kpi-label">Total Entradas <i class="fas fa-eye" id="kpiEyeIcon" style="font-size:0.6rem;color:var(--text-muted);"></i></div>
                     <div class="kpi-value success" id="kpiTotalRec">R$ —</div>
                     <div class="kpi-sub" id="kpiTotalRecQtd">— registros</div>
                 </div>
                 <!-- KPI Pagamentos -->
                 <div id="kpiCardPag" class="kpi-card" onclick="toggleValor()" style="cursor:pointer;" title="Clique para ocultar/mostrar">
                     <div class="kpi-icon red"><i class="fas fa-arrow-up"></i></div>
-                    <div class="kpi-label">Total Saídas <i class="fas fa-eye" id="kpiEyeIcon" style="font-size:0.6rem;color:var(--text-muted);"></i></div>
+                    <div class="kpi-label">Total Saídas</div>
                     <div class="kpi-value danger" id="kpiTotalPag">R$ —</div>
                     <div class="kpi-sub" id="kpiTotalPagQtd">— registros</div>
                 </div>
                 <!-- KPI Saldo -->
-                <div class="kpi-card">
+                <div class="kpi-card" onclick="toggleValor()" style="cursor:pointer;" title="Clique para ocultar/mostrar">
                     <div class="kpi-icon yellow"><i class="fas fa-balance-scale"></i></div>
                     <div class="kpi-label">Saldo</div>
                     <div class="kpi-value" id="kpiSaldo">R$ —</div>
                     <div class="kpi-sub" id="kpiSaldoSub">—</div>
                 </div>
                 <!-- KPI Maior Recebimento -->
-                <div class="kpi-card">
+                <div class="kpi-card" onclick="toggleValor()" style="cursor:pointer;" title="Clique para ocultar/mostrar">
                     <div class="kpi-icon green"><i class="fas fa-chart-bar"></i></div>
                     <div class="kpi-label">Maior Entrada</div>
                     <div class="kpi-value success" id="kpiMaiorRec">R$ —</div>
                     <div class="kpi-sub" id="kpiMaiorRecInfo">—</div>
                 </div>
                 <!-- KPI Maior Pagamento -->
-                <div class="kpi-card">
+                <div class="kpi-card" onclick="toggleValor()" style="cursor:pointer;" title="Clique para ocultar/mostrar">
                     <div class="kpi-icon red"><i class="fas fa-chart-bar"></i></div>
                     <div class="kpi-label" id="kpiMaiorLabel">Maior Saída</div>
                     <div class="kpi-value danger" id="kpiMaior">R$ —</div>
@@ -228,7 +228,7 @@
                         <option value="recebimentos">GRÁFICOS DE RECEBIMENTOS</option>
                         <option value="variacao" disabled>VARIAÇÃO (EM BREVE)</option>
                     </select>
-                    <button class="btn-action-standard primary" onclick="openModal()" style="padding:6px 14px;font-size:0.72rem;">
+                    <button class="btn-action-standard" onclick="openModal()" style="background:var(--color-primary);color:#000;border-color:var(--color-primary);padding:8px 14px;font-size:0.72rem;">
                         <i class="fas fa-list"></i> REGISTROS
                     </button>
                 </div>
@@ -296,13 +296,14 @@ let allPagamentos = [], allRecebimentos = [];
 let filteredData = [], modalData = [];
 let chartMensalInst = null, chartDiarioInst = null;
 let activeMonth = 'all', activeYear = '2026';
-let valorOculto = false, valorReal = 'R$ —';
+let valorOculto = false;
+const kpiVals = { kpiTotalPag:'R$ —', kpiTotalRec:'R$ —', kpiSaldo:'R$ —', kpiMaior:'R$ —', kpiMaiorRec:'R$ —', kpiMaiorInfo:'—', kpiMaiorRecInfo:'—', kpiSaldoSub:'—' };
 let activeView = 'pagamentos'; // 'pagamentos' | 'recebimentos'
 
 const MESES = ['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'];
 
-const PAL_PAG  = { bar:'rgba(251,191,36,0.82)', border:'rgba(251,191,36,1)', dimBar:'rgba(251,191,36,0.22)', daily:'rgba(239,68,68,0.78)', dailyBorder:'rgba(239,68,68,1)', tip:'rgba(251,191,36,0.3)', tipTitle:'#fbbf24' };
-const PAL_REC  = { bar:'rgba(16,185,129,0.82)',  border:'rgba(16,185,129,1)',  dimBar:'rgba(16,185,129,0.22)',  daily:'rgba(6,182,212,0.78)',   dailyBorder:'rgba(6,182,212,1)',   tip:'rgba(16,185,129,0.3)',  tipTitle:'#10b981' };
+const PAL_PAG  = { bar:'rgba(251,191,36,0.7)', border:'#fbbf24', dimBar:'rgba(251,191,36,0.18)', daily:'rgba(251,191,36,0.7)', dailyBorder:'#fbbf24', tip:'rgba(251,191,36,0.3)', tipTitle:'#fbbf24' };
+const PAL_REC  = { bar:'rgba(6,182,212,0.7)',  border:'#06b6d4', dimBar:'rgba(6,182,212,0.18)',  daily:'rgba(6,182,212,0.7)',  dailyBorder:'#06b6d4',  tip:'rgba(6,182,212,0.3)',  tipTitle:'#06b6d4' };
 
 function fmt(v){ return new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',minimumFractionDigits:2}).format(v||0); }
 function fmtDate(d){ if(!d)return'—'; const p=d.split('-'); return p.length===3?`${p[2]}/${p[1]}/${p[0]}`:d; }
@@ -324,13 +325,11 @@ function toggleValor(){
     applyVisibility();
 }
 function applyVisibility(){
-    const mask='••••••';
-    document.getElementById('kpiTotalPag').textContent=valorOculto?mask:valorReal;
-    ['kpiTotalRec','kpiMaior','kpiMaiorRec'].forEach(id=>{
-        document.getElementById(id).style.filter=valorOculto?'blur(6px)':'';
+    const mask='-----';
+    Object.keys(kpiVals).forEach(id=>{
+        const el=document.getElementById(id);
+        if(el) el.textContent=valorOculto?mask:kpiVals[id];
     });
-    document.getElementById('kpiMaiorInfo').style.filter=valorOculto?'blur(6px)':'';
-    document.getElementById('kpiMaiorRecInfo').style.filter=valorOculto?'blur(6px)':'';
     renderModalTable();
 }
 
@@ -412,35 +411,33 @@ function renderKPIs(){
 
     // Total Saídas
     const totalPag = pagPeriodo.reduce((s,r)=>s+r.valor,0);
-    valorReal = fmt(totalPag);
-    document.getElementById('kpiTotalPag').textContent = valorOculto ? '••••••' : valorReal;
+    kpiVals.kpiTotalPag = fmt(totalPag);
     document.getElementById('kpiTotalPagQtd').textContent = `${pagPeriodo.length.toLocaleString('pt-BR')} registros`;
 
     // Total Entradas
     const totalRec = recPeriodo.reduce((s,r)=>s+r.valor,0);
-    document.getElementById('kpiTotalRec').textContent = fmt(totalRec);
+    kpiVals.kpiTotalRec = fmt(totalRec);
     document.getElementById('kpiTotalRecQtd').textContent = `${recPeriodo.length.toLocaleString('pt-BR')} registros`;
 
     // Saldo
     const saldo = totalRec - totalPag;
-    const kpiSaldoEl = document.getElementById('kpiSaldo');
-    kpiSaldoEl.textContent = fmt(Math.abs(saldo));
-    kpiSaldoEl.className = 'kpi-value ' + (saldo >= 0 ? 'success' : 'danger');
-    document.getElementById('kpiSaldoSub').textContent = saldo >= 0 ? 'Saldo positivo' : 'Saldo negativo';
+    kpiVals.kpiSaldo = fmt(Math.abs(saldo));
+    kpiVals.kpiSaldoSub = saldo >= 0 ? 'Saldo positivo' : 'Saldo negativo';
+    document.getElementById('kpiSaldo').className = 'kpi-value ' + (saldo >= 0 ? 'success' : 'danger');
 
     // Maior saída
     if(pagPeriodo.length>0){
         const m=pagPeriodo.reduce((a,b)=>b.valor>a.valor?b:a);
-        document.getElementById('kpiMaior').textContent=fmt(m.valor);
-        document.getElementById('kpiMaiorInfo').textContent=fmtDate(m.data)+(m.historico?` · ${m.historico.substring(0,28)}`:'');
-    } else { document.getElementById('kpiMaior').textContent='R$ —'; document.getElementById('kpiMaiorInfo').textContent='—'; }
+        kpiVals.kpiMaior = fmt(m.valor);
+        kpiVals.kpiMaiorInfo = fmtDate(m.data)+(m.historico?` · ${m.historico.substring(0,28)}`:'');
+    } else { kpiVals.kpiMaior='R$ —'; kpiVals.kpiMaiorInfo='—'; }
 
     // Maior entrada
     if(recPeriodo.length>0){
         const m=recPeriodo.reduce((a,b)=>b.valor>a.valor?b:a);
-        document.getElementById('kpiMaiorRec').textContent=fmt(m.valor);
-        document.getElementById('kpiMaiorRecInfo').textContent=fmtDate(m.data)+(m.historico?` · ${m.historico.substring(0,28)}`:'');
-    } else { document.getElementById('kpiMaiorRec').textContent='R$ —'; document.getElementById('kpiMaiorRecInfo').textContent='—'; }
+        kpiVals.kpiMaiorRec = fmt(m.valor);
+        kpiVals.kpiMaiorRecInfo = fmtDate(m.data)+(m.historico?` · ${m.historico.substring(0,28)}`:'');
+    } else { kpiVals.kpiMaiorRec='R$ —'; kpiVals.kpiMaiorRecInfo='—'; }
 
     applyVisibility();
 }
