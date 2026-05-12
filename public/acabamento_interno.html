@@ -897,21 +897,17 @@
 <body>
 
 
-    <!-- Toolbar fixo no canto superior direito -->
-    <div id="acabamento-toolbar" style="position:fixed; top:16px; right:24px; z-index:150; display:flex; gap:8px; align-items:center;">
-        <div style="font-size:0.7rem; color:var(--text-muted);">
-            Salvo: <span id="lastUpdateDateTime" style="color:#fff;">-</span>
-            <button id="updateLastUpdateButton" style="background:none;border:none;color:var(--color-primary);cursor:pointer;margin-left:4px;font-size:0.75rem;"><i class="fas fa-sync-alt"></i></button>
-        </div>
-        <button class="btn-glass" id="mapeamentoButton" style="display:none; height:36px; font-size:0.8rem; padding:0 14px;">
-            <i class="fas fa-map"></i> Mapeamento
-        </button>
-        <button class="btn-primary" id="openModalButton" disabled style="height:36px; font-size:0.8rem; padding:0 14px;">
-            <i class="fas fa-calendar-check"></i> Gerar Programação
-        </button>
-    </div>
-
     <div class="main-layout" style="padding-top: 70px;">
+
+        <!-- TOOLBAR -->
+        <div id="acabamento-toolbar" style="display:flex; justify-content:flex-end; align-items:center; gap:8px; flex-shrink:0;">
+            <button class="btn-glass" id="mapeamentoButton" style="display:none; height:36px; font-size:0.8rem; padding:0 14px;">
+                <i class="fas fa-map"></i> Mapeamento
+            </button>
+            <button class="btn-primary" id="openModalButton" disabled style="height:36px; font-size:0.8rem; padding:0 14px;">
+                <i class="fas fa-calendar-check"></i> Gerar Programação
+            </button>
+        </div>
 
         <!-- MAIN CONTENT -->
         <main class="content-area">
@@ -1106,7 +1102,6 @@
         let currentReportData = [];
         let targetDateForPDF = null;
         let materialDaysMap = new Map();
-        let lastUpdateTimestamp = null;
 
         let savedDatesSet = new Set();
 
@@ -1209,8 +1204,6 @@
         const totalWeightValue = document.getElementById('totalWeightValue');
         const backButton = document.getElementById('backButton');
         const initialMessage = document.getElementById('initialMessage');
-        const lastUpdateDateTimeSpan = document.getElementById('lastUpdateDateTime');
-        const updateLastUpdateButton = document.getElementById('updateLastUpdateButton');
         const totalProgrammedWeightPanel = document.getElementById('totalProgrammedWeightPanel');
         const totalProgrammedWeightValue = document.getElementById('totalProgrammedWeightValue');
         const observacoesTextarea = document.getElementById('observacoesTextarea');
@@ -1345,48 +1338,6 @@
             }
         }
 
-        // --- System Update Logic ---
-        async function loadLastUpdate() {
-            lastUpdateDateTimeSpan.textContent = 'Carregando...';
-            try {
-                const response = await fetch('/api/acabamento-interno/load-last-update');
-                if (!response.ok) throw new Error(`Erro: ${response.status}`);
-                const data = await response.json();
-
-                if (data.last_updated) {
-                    lastUpdateTimestamp = data.last_updated;
-                    lastUpdateDateTimeSpan.textContent = formatDateTime(data.last_updated);
-                } else {
-                    lastUpdateDateTimeSpan.textContent = 'N/A';
-                }
-            } catch (error) { lastUpdateDateTimeSpan.textContent = 'Erro'; }
-        }
-
-        updateLastUpdateButton.addEventListener('click', async () => {
-            const password = prompt("Senha para atualizar data/hora:");
-            if (password !== "ATUALIZAR") return alert("Senha incorreta.");
-
-            const btn = updateLastUpdateButton;
-            const originalHTML = btn.innerHTML;
-            btn.disabled = true; btn.innerHTML = '...';
-
-            const now = new Date();
-            const dateToSave = now.toISOString();
-
-            try {
-                const response = await fetch('/api/acabamento-interno/save-last-update', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ last_updated: dateToSave })
-                });
-                const result = await response.json();
-                if (response.ok && result.success) {
-                    lastUpdateTimestamp = dateToSave;
-                    lastUpdateDateTimeSpan.textContent = formatDateTime(now);
-                    alert("Data/Hora atualizada.");
-                } else alert('Erro ao salvar.');
-            } catch (error) { alert('Erro conexão.'); }
-            finally { btn.disabled = false; btn.innerHTML = originalHTML; }
-        });
 
         // --- Correlação Material → Dias ---
         async function loadMaterialDaysCorrelation() {
@@ -1624,7 +1575,6 @@
         window.addEventListener('load', () => {
             loadOpsFromFirebird();
             loadMaterialDaysCorrelation();
-            loadLastUpdate();
             loadSavedSchedulesList();
         });
 
