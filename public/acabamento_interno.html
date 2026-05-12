@@ -673,10 +673,7 @@
             background: rgba(6, 182, 212, 0.1);
         }
 
-        #excelFile,
-        #correlationFile,
-        #materialDaysFile,
-        #posteriorFile {
+        #materialDaysFile {
             display: none !important;
         }
 
@@ -905,25 +902,16 @@
             <button class="side-btn" id="openModalButton" onclick="openModal()" disabled>
                 <i class="fas fa-calendar-check"></i> Gerar Programação
             </button>
-            <button class="side-btn" id="chooseFileButton">
-                <i class="fas fa-file-excel"></i> Carregar Excel
-            </button>
-            <button class="side-btn" id="correlateButton" disabled>
-                <i class="fas fa-list-check"></i> Carregar Descrições
+            <button class="side-btn" id="syncFirebirdButton">
+                <i class="fas fa-sync-alt"></i> Sincronizar OPs
             </button>
             <button class="side-btn" id="correlateMaterialsButton">
                 <i class="fas fa-layer-group"></i> Carregar Materiais
             </button>
-            <button class="side-btn" id="correlatePosteriorButton">
-                <i class="fas fa-clock-rotate-left"></i> Carregar Posteriores
-            </button>
 
             <div class="sidebar-section-title">Banco de Dados</div>
-            <button class="side-btn" id="saveRawDataButton" disabled>
-                <i class="fas fa-cloud-upload-alt"></i> Salvar no Servidor
-            </button>
             <button class="side-btn" id="clearRawDataButton" disabled>
-                <i class="fas fa-trash-alt"></i> Limpar Registros
+                <i class="fas fa-trash-alt"></i> Limpar Cache Local
             </button>
             
             <div class="sidebar-section-title">Programações Salvas</div>
@@ -1047,9 +1035,7 @@
         let allExcelData = [];
         let currentReportData = [];
         let targetDateForPDF = null;
-        let descriptionMap = new Map();
         let materialDaysMap = new Map();
-        let posteriorMap = new Map();
         let lastUpdateTimestamp = null;
 
         let savedDatesSet = new Set();
@@ -1063,17 +1049,10 @@
         const COL_MAP = { DATA: 0, OP: 1, CODIGO: 2, DESCRICAO: 3, MATERIAL: 4, PESO_UN: 5, QTD: 6, LOTE: 7, PESO_TOTAL: 8, CLIENTE: 9, QUANT_FAT: 10 };
 
         // DOM Elements
-        const fileInput = document.getElementById('excelFile');
-        const chooseFileButton = document.getElementById('chooseFileButton');
         const openModalButton = document.getElementById('openModalButton');
-        const correlateButton = document.getElementById('correlateButton');
-        const correlationFile = document.getElementById('correlationFile');
+        const syncFirebirdButton = document.getElementById('syncFirebirdButton');
         const materialDaysFile = document.getElementById('materialDaysFile');
         const correlateMaterialsButton = document.getElementById('correlateMaterialsButton');
-        const saveMaterialDaysButton = document.getElementById('saveMaterialDaysButton');
-        const posteriorFile = document.getElementById('posteriorFile');
-        const correlatePosteriorButton = document.getElementById('correlatePosteriorButton');
-        const savePosteriorButton = document.getElementById('savePosteriorButton');
         const reportModal = document.getElementById('reportModal');
         const closeModalButton = document.querySelector('.modal-close');
         const reportDateInput = document.getElementById('reportDate');
@@ -1085,7 +1064,6 @@
         const totalPanel = document.getElementById('totalPanel');
         const totalWeightValue = document.getElementById('totalWeightValue');
         const backButton = document.getElementById('backButton');
-        const saveRawDataButton = document.getElementById('saveRawDataButton');
         const clearRawDataButton = document.getElementById('clearRawDataButton');
         const initialMessage = document.getElementById('initialMessage');
         const lastUpdateDateTimeSpan = document.getElementById('lastUpdateDateTime');
@@ -1141,29 +1119,34 @@
             } catch (e) { return dateStr; }
         }
 
-        // --- CORREÇÃO AQUI: Forçar conversão para Number ao ler do servidor ---
-        function convertRawDBRowToExcelFormat(rawRow) {
-            const dateStr = rawRow.data;
-            let dateObj = null;
-            if (dateStr) {
-                dateObj = new Date(dateStr + 'T00:00:00');
-                if (isNaN(dateObj.getTime())) {
-                    const parts = dateStr.split('-');
-                    dateObj = new Date(parts[0], parts[1] - 1, parts[2], 0, 0, 0, 0);
-                }
-            }
+        function parseFirebirdDate(str) {
+            if (!str) return null;
+            const s = String(str).slice(0, 10);
+            const parts = s.split('-');
+            if (parts.length !== 3) return null;
+            const d = new Date(parts[0], parts[1] - 1, parts[2], 0, 0, 0, 0);
+            return isNaN(d.getTime()) ? null : d;
+        }
+
+        function convertFirebirdOpToRow(op) {
+            const dateObj = parseFirebirdDate(op.op_entrega);
+            const pesoUn  = Number(op.peso_un) || 0;
+            const quant   = Number(op.quant) || 0;
+            // qty_acabamento = já apontado no setor acabamento — deduzimos da quantidade
+            const qtdAcabamento = Number(op.qty_acabamento) || 0;
+            const qtdPendente = Math.max(0, quant - qtdAcabamento);
             return [
-                dateObj,
-                rawRow.op || '',
-                rawRow.codigo || '',
-                rawRow.descricao || '',
-                rawRow.material || '',
-                Number(rawRow.peso_un) || 0.0,
-                Number(rawRow.quant) || 0, // Garante que é número
-                rawRow.lote || '',
-                Number(rawRow.peso_total) || 0.0, // Garante que é número
-                rawRow.cliente || '',
-                Number(rawRow.quant_fat) || 0
+                dateObj,                     // 0: DATA (OP_ENTREGA)
+                op.op || '',                 // 1: OP
+                op.codigo || '',             // 2: CÓDIGO
+                op.descricao || '',          // 3: DESCRIÇÃO
+                '',                          // 4: MATERIAL (preenchido via materialDaysMap se disponível)
+                pesoUn,                      // 5: PESO UN
+                qtdPendente,                 // 6: QUANT. (já descontado acabamento)
+                op.lote || '',               // 7: LOTE
+                pesoUn * qtdPendente,        // 8: PESO TOTAL
+                op.cliente || '',            // 9: CLIENTE
+                0                            // 10: QUANT_FAT
             ];
         }
 
@@ -1255,71 +1238,7 @@
             finally { btn.disabled = false; btn.innerHTML = originalHTML; }
         });
 
-        // --- Standard Loading Logic ---
-        async function loadPosteriorCorrelation() {
-            try {
-                const response = await fetch('/api/acabamento-interno/load-posterior-correlation');
-                if (!response.ok) return;
-                const data = await response.json();
-                if (data && data.posteriorCorrelation) {
-                    posteriorMap.clear();
-                    data.posteriorCorrelation.forEach(([op, appointments]) => {
-                        const parsedAppointments = appointments.map(a => ({ data: new Date(a.data), quant: a.quant }));
-                        posteriorMap.set(op, parsedAppointments);
-                    });
-                    savePosteriorButton.disabled = false;
-                }
-            } catch (error) { console.error("Erro Posteriores", error); }
-        }
-
-        savePosteriorButton.addEventListener('click', async () => {
-            if (posteriorMap.size === 0) return alert("Nada para salvar.");
-            const dataToSend = Array.from(posteriorMap.entries()).map(([op, appointments]) => {
-                return [op, appointments.map(a => ({ data: a.data.toISOString(), quant: a.quant }))];
-            });
-            const btn = savePosteriorButton;
-            btn.disabled = true; btn.innerHTML = 'Salvando...';
-            try {
-                await fetch('/api/acabamento-interno/save-posterior-correlation', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ posteriorCorrelation: dataToSend })
-                });
-                alert("Posteriores salvos!");
-            } catch (error) { alert('Erro salvar posteriores.'); }
-            finally { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save"></i> Salvar Correlação Posteriores'; }
-        });
-
-        correlatePosteriorButton.addEventListener('click', () => posteriorFile.click());
-        posteriorFile.addEventListener('change', function (event) {
-            const file = event.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = function (e) {
-                const data = new Uint8Array(e.target.result);
-                const workbook = XLSX.read(data, { type: 'array', cellDates: true });
-                const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1 });
-                posteriorMap.clear();
-                let count = 0;
-                jsonData.slice(1).forEach(row => {
-                    let d = row[0];
-                    if (typeof d === 'string' && d.match(/^\d{4}-\d{2}-\d{2}T/)) d = new Date(d);
-                    else if (!(d instanceof Date)) return;
-                    const op = String(row[1] || '').trim();
-                    const q = parsePtBrNumber(row[2]);
-                    if (d && op && q > 0) {
-                        d.setHours(0, 0, 0, 0);
-                        if (!posteriorMap.has(op)) posteriorMap.set(op, []);
-                        posteriorMap.get(op).push({ data: d, quant: q });
-                        count++;
-                    }
-                });
-                savePosteriorButton.disabled = count === 0;
-                alert(`Posteriores: ${count} carregados.`);
-                event.target.value = null;
-            };
-            reader.readAsArrayBuffer(file);
-        });
-
+        // --- Correlação Material → Dias ---
         async function loadMaterialDaysCorrelation() {
             try {
                 const response = await fetch('/api/acabamento-interno/load-material-days');
@@ -1328,24 +1247,9 @@
                 if (data && data.materialDays) {
                     materialDaysMap.clear();
                     data.materialDays.forEach(([m, d]) => materialDaysMap.set(m, d));
-                    saveMaterialDaysButton.disabled = false;
                 }
             } catch (error) { console.error("Erro MaterialDias", error); }
         }
-
-        saveMaterialDaysButton.addEventListener('click', async () => {
-            if (materialDaysMap.size === 0) return alert("Nada para salvar.");
-            const btn = saveMaterialDaysButton;
-            btn.disabled = true; btn.innerHTML = 'Salvando...';
-            try {
-                await fetch('/api/acabamento-interno/save-material-days', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ materialDays: Array.from(materialDaysMap.entries()) })
-                });
-                alert("Material/Dias salvos!");
-            } catch (error) { alert('Erro salvar materiais.'); }
-            finally { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save"></i> Salvar Correlação Materiais'; }
-        });
 
         correlateMaterialsButton.addEventListener('click', () => materialDaysFile.click());
         materialDaysFile.addEventListener('change', function (event) {
@@ -1362,105 +1266,74 @@
                     const d = parseInt(row[1], 10);
                     if (m && !isNaN(d) && d >= 0) { materialDaysMap.set(m, d); count++; }
                 });
-                saveMaterialDaysButton.disabled = count === 0;
+                if (count > 0) {
+                    fetch('/api/acabamento-interno/save-material-days', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ materialDays: Array.from(materialDaysMap.entries()) })
+                    });
+                }
                 alert(`Material/Dias: ${count} mapeados.`);
                 event.target.value = null;
             };
             reader.readAsArrayBuffer(file);
         });
 
-        async function loadRawDataFromServer() {
-            initialMessage.textContent = "Carregando dados salvos...";
-            saveRawDataButton.disabled = true; clearRawDataButton.disabled = true;
-            try {
-                const response = await fetch('/api/acabamento-interno/registros');
-                if (!response.ok) throw new Error(`HTTP: ${response.status}`);
-                const rawData = await response.json();
+        // --- Carregar OPs do Firebird (via Neon sincronizado) ---
+        async function loadOpsFromFirebird() {
+            const btn = syncFirebirdButton;
+            const originalHTML = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Carregando...';
+            initialMessage.textContent = 'Carregando OPs do Firebird...';
+            clearRawDataButton.disabled = true;
 
-                if (rawData.length > 0) {
-                    allExcelData = rawData.map(convertRawDBRowToExcelFormat);
+            try {
+                const response = await fetch('/api/acabamento-interno/ops-firebird');
+                if (!response.ok) throw new Error(`HTTP: ${response.status}`);
+                const ops = await response.json();
+
+                if (ops.length > 0) {
+                    allExcelData = ops
+                        .map(convertFirebirdOpToRow)
+                        .filter(row => row[COL_MAP.QTD] > 0 && row[COL_MAP.DATA] !== null);
                     displayTable(allExcelData, 'mainTableContent');
-                    openModalButton.disabled = false; correlateButton.disabled = false;
-                    saveRawDataButton.disabled = false; clearRawDataButton.disabled = false;
+                    openModalButton.disabled = false;
+                    clearRawDataButton.disabled = false;
                     initialMessage.style.display = 'none';
                 } else {
                     allExcelData = [];
                     displayTable([], 'mainTableContent');
-                    openModalButton.disabled = true; correlateButton.disabled = true;
-                    saveRawDataButton.disabled = true; clearRawDataButton.disabled = true;
+                    openModalButton.disabled = true;
                     initialMessage.style.display = 'block';
-                    initialMessage.textContent = "Nenhum dado. Importe Excel.";
+                    initialMessage.textContent = 'Nenhuma OP ativa encontrada no Firebird.';
                 }
             } catch (error) {
-                initialMessage.textContent = `Erro: ${error.message}`;
-                saveRawDataButton.disabled = true; clearRawDataButton.disabled = false;
+                initialMessage.textContent = `Erro ao carregar OPs: ${error.message}`;
+                initialMessage.style.display = 'block';
             } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalHTML;
             }
         }
 
-        saveRawDataButton.addEventListener('click', async () => {
-            if (allExcelData.length === 0) return alert("Sem dados.");
-            const dataToSend = allExcelData.map(row => {
-                const newRow = [...row];
-                if (newRow.length <= COL_MAP.QUANT_FAT) while (newRow.length <= COL_MAP.QUANT_FAT) newRow.push(0.0);
-                if (newRow[COL_MAP.DATA] instanceof Date) {
-                    const d = newRow[COL_MAP.DATA];
-                    newRow[COL_MAP.DATA] = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-                } else if (typeof newRow[COL_MAP.DATA] !== 'string') newRow[COL_MAP.DATA] = '';
-                return newRow;
-            });
-            const btn = saveRawDataButton;
-            btn.disabled = true; btn.textContent = "Salvando...";
-            try {
-                const response = await fetch('/api/acabamento-interno/import-raw', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(dataToSend)
-                });
-                if (response.ok) { alert("Dados salvos!"); await loadRawDataFromServer(); }
-                else alert('Erro salvar.');
-            } catch (error) { alert('Erro conexão.'); }
-            finally { btn.disabled = false; btn.innerHTML = '<i class="fas fa-cloud-upload-alt"></i> Salvar Dados no Servidor'; }
+        syncFirebirdButton.addEventListener('click', loadOpsFromFirebird);
+
+        clearRawDataButton.addEventListener('click', () => {
+            if (!confirm('Limpar OPs carregadas em memória?')) return;
+            allExcelData = [];
+            displayTable([], 'mainTableContent');
+            openModalButton.disabled = true;
+            clearRawDataButton.disabled = true;
+            initialMessage.style.display = 'block';
+            initialMessage.textContent = 'Cache limpo. Clique em "Sincronizar OPs" para recarregar.';
         });
-
-        clearRawDataButton.addEventListener('click', async () => {
-            if (!confirm("APAGAR TODOS registros brutos?")) return;
-            const btn = clearRawDataButton;
-            btn.disabled = true; btn.textContent = "Limpando...";
-            try {
-                await fetch('/api/acabamento-interno/clear-raw', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
-                alert("Limpo.");
-                allExcelData = []; displayTable([], 'mainTableContent');
-            } catch (error) { alert('Erro limpar.'); }
-            finally { btn.disabled = false; btn.innerHTML = '<i class="fas fa-trash-alt"></i> Limpar Registros Servidor'; await loadRawDataFromServer(); }
-        });
-
-        function applyPosteriorDeduction(dataArray) {
-            if (posteriorMap.size === 0) return dataArray;
-            return dataArray.map(row => {
-                const op = String(row[COL_MAP.OP] || '').trim();
-                const d = row[COL_MAP.DATA];
-                const q = parsePtBrNumber(row[COL_MAP.QTD]);
-                const p = parsePtBrNumber(row[COL_MAP.PESO_UN]);
-                let postQ = 0;
-
-                if (op && posteriorMap.has(op)) {
-                    postQ = posteriorMap.get(op).reduce((sum, post) => {
-                        if (d instanceof Date) { d.setHours(0, 0, 0, 0); if (post.data.getTime() >= d.getTime()) return sum + post.quant; }
-                        else if (d === null) return sum;
-                        return sum;
-                    }, 0);
-                }
-                const realQ = Math.max(0, q - postQ);
-                const newRow = [...row]; newRow[COL_MAP.QTD] = realQ; newRow[COL_MAP.PESO_TOTAL] = p * realQ;
-                return newRow;
-            }).filter(row => row[COL_MAP.QTD] > 0 || row[COL_MAP.DATA] === null);
-        }
 
         backButton.addEventListener('click', () => window.location.href = 'index.html');
 
         window.addEventListener('load', () => {
-            loadRawDataFromServer();
-            loadMaterialDaysCorrelation(); loadPosteriorCorrelation(); loadLastUpdate();
+            loadOpsFromFirebird();
+            loadMaterialDaysCorrelation();
+            loadLastUpdate();
             loadSavedSchedulesList();
         });
 
@@ -1518,67 +1391,6 @@
             return date;
         }
 
-        chooseFileButton.addEventListener('click', () => fileInput.click());
-        fileInput.addEventListener('change', function (event) {
-            const file = event.target.files[0]; if (!file) return;
-            initialMessage.textContent = "Processando...";
-            const reader = new FileReader();
-            reader.onload = function (e) {
-                const workbook = XLSX.read(new Uint8Array(e.target.result), { type: 'array', cellDates: true });
-                const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1 });
-
-                allExcelData = jsonData.slice(1).map(row => {
-                    const d = row[0] instanceof Date ? row[0] : null;
-                    const op = String(row[1] || '').trim();
-                    const cod = String(row[2] || '').trim();
-                    const mat = String(row[3] || '').trim();
-                    const p = parsePtBrNumber(row[4]);
-                    const q = parsePtPtBrNumber(row[5]);
-                    const l = String(row[6] || '').trim();
-                    const newRow = [d, op, cod, "", mat, p, q, l, p * q, "", 0.0];
-                    if (descriptionMap.size > 0 && descriptionMap.has(cod)) {
-                        const corr = descriptionMap.get(cod);
-                        newRow[COL_MAP.DESCRICAO] = corr[0]; newRow[COL_MAP.CLIENTE] = corr[1];
-                    }
-                    return newRow;
-                }).filter(row => row[COL_MAP.DATA] !== null);
-
-                displayTable(allExcelData, 'mainTableContent');
-                openModalButton.disabled = false; correlateButton.disabled = false;
-                saveRawDataButton.disabled = false; clearRawDataButton.disabled = false;
-                initialMessage.style.display = 'none';
-                event.target.value = null;
-            };
-            reader.readAsArrayBuffer(file);
-        });
-
-        correlateButton.addEventListener('click', () => correlationFile.click());
-        correlationFile.addEventListener('change', function (event) {
-            const file = event.target.files[0]; if (!file) return;
-            const reader = new FileReader();
-            reader.onload = function (e) {
-                const workbook = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
-                const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1 });
-                descriptionMap.clear();
-                jsonData.slice(1).forEach(row => {
-                    const c = String(row[2] || '').trim(); if (c) descriptionMap.set(c, [String(row[3] || '').trim(), String(row[4] || '').trim()]);
-                });
-                if (allExcelData.length > 0) applyCorrelation();
-                alert(`Descrições: ${descriptionMap.size} carregadas.`);
-                event.target.value = null;
-            };
-            reader.readAsArrayBuffer(file);
-        });
-
-        function applyCorrelation() {
-            allExcelData = allExcelData.map(row => {
-                const c = String(row[COL_MAP.CODIGO] || '').trim();
-                if (descriptionMap.has(c)) { row[COL_MAP.DESCRICAO] = descriptionMap.get(c)[0]; row[COL_MAP.CLIENTE] = descriptionMap.get(c)[1]; }
-                else { row[COL_MAP.DESCRICAO] = ""; row[COL_MAP.CLIENTE] = ""; }
-                return row;
-            });
-            displayTable(allExcelData, 'mainTableContent');
-        }
 
         // --- CORREÇÃO AQUI: Forçar Number() nas somas para evitar concatenação ---
         function aggregateData(filteredRows) {
@@ -1876,7 +1688,6 @@
             });
 
             let agg = aggregateData(filt);
-            agg = applyPosteriorDeduction(agg);
             currentReportData = agg;
 
             displayTable(agg, 'modalReportContainer');

@@ -84,6 +84,25 @@ const handleGet = async (req, res) => {
             return res.json(list);
         }
 
+        if (action === 'ops-firebird') {
+            const result = await client.query(`
+                SELECT
+                    replace(sync_key, 'OP-', '') AS op,
+                    data->>'PRODUTO_PPR'          AS codigo,
+                    data->>'NOME_PRODUTO_PPR'     AS descricao,
+                    (data->>'PESO_PRODUTO')::numeric AS peso_un,
+                    (data->>'OP_QUANTIDADE')::numeric AS quant,
+                    data->>'LOTE_PCS'             AS lote,
+                    data->>'NOME_CLIENTE'         AS cliente,
+                    data->>'OP_ENTREGA'           AS op_entrega,
+                    COALESCE((data->>'QTY_ACABAMENTO')::numeric, 0) AS qty_acabamento
+                FROM firebird_sync_pedidos
+                WHERE sync_key LIKE 'OP-%'
+                ORDER BY data->>'OP_ENTREGA' ASC NULLS LAST
+            `);
+            return res.json(result.rows);
+        }
+
         return res.status(400).json({ error: 'Action GET desconhecida: ' + action });
 
     } catch (e) {
