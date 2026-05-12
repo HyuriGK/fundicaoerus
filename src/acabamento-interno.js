@@ -95,7 +95,8 @@ const handleGet = async (req, res) => {
                     data->>'LOTE_PCS'             AS lote,
                     data->>'NOME_CLIENTE'         AS cliente,
                     data->>'OP_ENTREGA'           AS op_entrega,
-                    COALESCE((data->>'QTY_ACABAMENTO')::numeric, 0) AS qty_acabamento
+                    COALESCE((data->>'QTY_ACABAMENTO')::numeric, 0) AS qty_acabamento,
+                    data->>'STATUS_PCP'           AS status_pcp
                 FROM firebird_sync_pedidos
                 WHERE sync_key LIKE 'OP-%'
                 ORDER BY data->>'OP_ENTREGA' ASC NULLS LAST
