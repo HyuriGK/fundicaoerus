@@ -108,7 +108,12 @@ const handleGet = async (req, res) => {
                     ) AS material
                 FROM firebird_sync_pedidos fsp
                 WHERE fsp.sync_key LIKE 'OP-%'
-                AND trim(fsp.data->>'STATUS_PCP') = 'N'
+                AND trim(fsp.data->>'STATUS_PCP') IN ('N', 'P')
+                AND fsp.updated_at >= (
+                    SELECT MAX(updated_at) - INTERVAL '10 minutes'
+                    FROM firebird_sync_pedidos
+                    WHERE sync_key LIKE 'OP-%'
+                )
                 ORDER BY fsp.sync_key, fsp.data->>'OP_ENTREGA' ASC NULLS LAST
             `);
             return res.json(result.rows);
