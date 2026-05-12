@@ -897,12 +897,15 @@
 <body>
 
 
-    <!-- Botão Gerar Programação fixo no canto superior direito -->
+    <!-- Toolbar fixo no canto superior direito -->
     <div id="acabamento-toolbar" style="position:fixed; top:16px; right:24px; z-index:150; display:flex; gap:8px; align-items:center;">
         <div style="font-size:0.7rem; color:var(--text-muted);">
             Salvo: <span id="lastUpdateDateTime" style="color:#fff;">-</span>
             <button id="updateLastUpdateButton" style="background:none;border:none;color:var(--color-primary);cursor:pointer;margin-left:4px;font-size:0.75rem;"><i class="fas fa-sync-alt"></i></button>
         </div>
+        <button class="btn-glass" id="mapeamentoButton" style="display:none; height:36px; font-size:0.8rem; padding:0 14px;">
+            <i class="fas fa-map"></i> Mapeamento
+        </button>
         <button class="btn-primary" id="openModalButton" disabled style="height:36px; font-size:0.8rem; padding:0 14px;">
             <i class="fas fa-calendar-check"></i> Gerar Programação
         </button>
@@ -1057,6 +1060,34 @@
         </div>
     </div>
 
+    <!-- MODAL MAPEAMENTO DE MATERIAIS -->
+    <div id="mapeamentoModal" class="modal-overlay" style="z-index:3500;">
+        <div class="modal-card" style="max-width:640px; width:92%; max-height:85vh; display:flex; flex-direction:column;">
+            <div class="modal-header" style="padding:20px 28px; border-bottom:1px solid var(--border-subtle);">
+                <h2 class="modal-title" style="font-size:1.2rem; display:flex; align-items:center; gap:12px;">
+                    <i class="fas fa-map" style="color:var(--color-primary);"></i> Mapeamento de Materiais
+                </h2>
+                <span class="modal-close" onclick="closeMapeamentoModal()">&times;</span>
+            </div>
+            <div class="modal-body" style="padding:24px 28px; flex:1; overflow-y:auto;">
+                <p style="font-size:0.8rem; color:var(--text-muted); margin:0 0 20px;">
+                    Defina quantos dias úteis após o apontamento de fusão cada material deve entrar no acabamento. Padrão: <strong style="color:#fff;">5 dias</strong>.
+                </p>
+                <div id="mapeamentoList" style="display:flex; flex-direction:column; gap:8px;">
+                    <div style="text-align:center; padding:40px; color:var(--text-muted);">
+                        <i class="fa-solid fa-circle-notch fa-spin" style="font-size:1.5rem; color:var(--color-primary);"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer" style="padding:16px 28px; border-top:1px solid var(--border-subtle); display:flex; justify-content:flex-end; gap:10px;">
+                <button class="btn-glass" onclick="closeMapeamentoModal()" style="height:36px; font-size:0.8rem; padding:0 18px;">Cancelar</button>
+                <button class="btn-primary" id="saveMapeamentoButton" onclick="saveMapeamento()" style="height:36px; font-size:0.8rem; padding:0 18px;">
+                    <i class="fas fa-save"></i> Salvar
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- SCRIPT -->
     <script>
         setInterval(() => {
@@ -1087,10 +1118,85 @@
 
         const COL_MAP = { DATA: 0, OP: 1, CODIGO: 2, DESCRICAO: 3, MATERIAL: 4, PESO_UN: 5, QTD: 6, LOTE: 7, PESO_TOTAL: 8, CLIENTE: 9, QUANT_FAT: 10, STATUS: 11 };
 
+        // Mostrar botão Mapeamento apenas para desenvolvedor
+        const mapeamentoButton = document.getElementById('mapeamentoButton');
+        if ((localStorage.getItem('erus_role') || '').toLowerCase() === 'desenvolvedor') {
+            mapeamentoButton.style.display = 'inline-flex';
+        }
+        mapeamentoButton.addEventListener('click', openMapeamentoModal);
+
+        function openMapeamentoModal() {
+            const modal = document.getElementById('mapeamentoModal');
+            modal.style.display = 'flex';
+            const list = document.getElementById('mapeamentoList');
+
+            // Coleta materiais únicos das OPs carregadas
+            const materiaisSet = new Set();
+            allExcelData.forEach(row => {
+                const m = String(row[COL_MAP.MATERIAL] || '').trim();
+                if (m) materiaisSet.add(m);
+            });
+
+            if (materiaisSet.size === 0) {
+                list.innerHTML = `<p style="text-align:center;color:var(--text-muted);padding:20px;">Nenhuma OP carregada. As OPs são carregadas automaticamente ao abrir a página.</p>`;
+                return;
+            }
+
+            const materiais = Array.from(materiaisSet).sort();
+            list.innerHTML = `
+                <div style="display:grid; grid-template-columns:1fr auto; gap:0; border:1px solid var(--border-subtle); border-radius:8px; overflow:hidden;">
+                    <div style="padding:8px 16px; font-size:0.68rem; font-weight:700; letter-spacing:0.08em; color:var(--text-muted); background:rgba(255,255,255,0.04); border-bottom:1px solid var(--border-subtle);">MATERIAL</div>
+                    <div style="padding:8px 16px; font-size:0.68rem; font-weight:700; letter-spacing:0.08em; color:var(--text-muted); background:rgba(255,255,255,0.04); border-bottom:1px solid var(--border-subtle); text-align:center; border-left:1px solid var(--border-subtle);">DIAS ÚTEIS</div>
+                    ${materiais.map((mat, i) => {
+                        const days = materialDaysMap.get(mat) || 5;
+                        const isLast = i === materiais.length - 1;
+                        const border = isLast ? '' : 'border-bottom:1px solid var(--border-subtle);';
+                        return `
+                            <div style="padding:10px 16px; ${border} display:flex; align-items:center; font-size:0.82rem; font-weight:500; color:#fff;">${mat}</div>
+                            <div style="padding:6px 12px; ${border} border-left:1px solid var(--border-subtle); display:flex; align-items:center; justify-content:center;">
+                                <input type="number" data-material="${mat}" value="${days}" min="0" max="60" style="width:60px; text-align:center; background:#27272a; border:1px solid rgba(255,255,255,0.1); border-radius:6px; color:#fff; font-size:0.9rem; font-weight:700; padding:4px 8px; outline:none; font-family:inherit;">
+                            </div>`;
+                    }).join('')}
+                </div>`;
+        }
+
+        function closeMapeamentoModal() {
+            document.getElementById('mapeamentoModal').style.display = 'none';
+        }
+        document.getElementById('mapeamentoModal').addEventListener('click', function(e) {
+            if (e.target === this) closeMapeamentoModal();
+        });
+
+        async function saveMapeamento() {
+            const inputs = document.querySelectorAll('#mapeamentoList input[data-material]');
+            materialDaysMap.clear();
+            inputs.forEach(inp => {
+                const mat = inp.getAttribute('data-material');
+                const days = parseInt(inp.value, 10);
+                if (mat && !isNaN(days) && days >= 0) materialDaysMap.set(mat, days);
+            });
+
+            const btn = document.getElementById('saveMapeamentoButton');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Salvando...';
+            try {
+                const res = await fetch('/api/acabamento-interno/save-material-days', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ materialDays: Array.from(materialDaysMap.entries()) })
+                });
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                closeMapeamentoModal();
+            } catch (err) {
+                alert('Erro ao salvar: ' + err.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-save"></i> Salvar';
+            }
+        }
+
         // DOM Elements
         const openModalButton = document.getElementById('openModalButton');
-        const materialDaysFile = document.getElementById('materialDaysFile');
-        const correlateMaterialsButton = document.getElementById('correlateMaterialsButton');
         const reportModal = document.getElementById('reportModal');
         const closeModalButton = document.querySelector('.modal-close');
         const reportDateInput = document.getElementById('reportDate');
@@ -1879,7 +1985,9 @@
             const filt = allExcelData.filter(row => {
                 const fusaoDate = row[13]; // DATA FUSÃO
                 if (!(fusaoDate instanceof Date)) return false;
-                return getBusinessDayOffsetDateForward(fusaoDate, 5).getTime() === refDate.getTime();
+                const mat = String(row[COL_MAP.MATERIAL] || '').toUpperCase().trim();
+                const days = materialDaysMap.get(mat) || 5;
+                return getBusinessDayOffsetDateForward(fusaoDate, days).getTime() === refDate.getTime();
             });
 
             let agg = aggregateData(filt);
