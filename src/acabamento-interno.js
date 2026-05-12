@@ -86,20 +86,29 @@ const handleGet = async (req, res) => {
 
         if (action === 'ops-firebird') {
             const result = await client.query(`
-                SELECT
-                    replace(sync_key, 'OP-', '') AS op,
-                    data->>'PRODUTO_PPR'          AS codigo,
-                    data->>'NOME_PRODUTO_PPR'     AS descricao,
-                    (data->>'PESO_PRODUTO')::numeric AS peso_un,
-                    (data->>'OP_QUANTIDADE')::numeric AS quant,
-                    data->>'LOTE_PCS'             AS lote,
-                    data->>'NOME_CLIENTE'         AS cliente,
-                    data->>'OP_ENTREGA'           AS op_entrega,
-                    COALESCE((data->>'QTY_ACABAMENTO')::numeric, 0) AS qty_acabamento,
-                    data->>'STATUS_PCP'           AS status_pcp
-                FROM firebird_sync_pedidos
-                WHERE sync_key LIKE 'OP-%'
-                ORDER BY data->>'OP_ENTREGA' ASC NULLS LAST
+                SELECT DISTINCT ON (fsp.sync_key)
+                    replace(fsp.sync_key, 'OP-', '')        AS op,
+                    fsp.data->>'PRODUTO_PPR'                AS codigo,
+                    fsp.data->>'NOME_PRODUTO_PPR'           AS descricao,
+                    (fsp.data->>'PESO_PRODUTO')::numeric    AS peso_un,
+                    (fsp.data->>'OP_QUANTIDADE')::numeric   AS quant,
+                    fsp.data->>'LOTE_PCS'                   AS lote,
+                    fsp.data->>'NOME_CLIENTE'               AS cliente,
+                    fsp.data->>'OP_ENTREGA'                 AS op_entrega,
+                    COALESCE((fsp.data->>'QTY_ACABAMENTO')::numeric, 0) AS qty_acabamento,
+                    fsp.data->>'STATUS_PCP'                 AS status_pcp,
+                    COALESCE(
+                        (SELECT e.data->>'NOME_MATERIAL'
+                         FROM firebird_sync_emissoes e
+                         WHERE e.data->>'PRODUTO_PPR' = fsp.data->>'PRODUTO_PPR'
+                           AND e.data->>'NOME_MATERIAL' IS NOT NULL
+                           AND e.data->>'NOME_MATERIAL' <> ''
+                         LIMIT 1),
+                        ''
+                    ) AS material
+                FROM firebird_sync_pedidos fsp
+                WHERE fsp.sync_key LIKE 'OP-%'
+                ORDER BY fsp.sync_key, fsp.data->>'OP_ENTREGA' ASC NULLS LAST
             `);
             return res.json(result.rows);
         }
