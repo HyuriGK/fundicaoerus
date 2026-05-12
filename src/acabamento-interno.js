@@ -105,7 +105,13 @@ const handleGet = async (req, res) => {
                            AND e.data->>'NOME_MATERIAL' <> ''
                          LIMIT 1),
                         ''
-                    ) AS material
+                    ) AS material,
+                    (
+                        SELECT MAX(pas.data_producao)
+                        FROM producao_apontada_sincronizada pas
+                        WHERE pas.op = replace(fsp.sync_key, 'OP-', '')
+                          AND upper(trim(pas.setor)) IN ('FUSAO', 'FUSÃO', 'FUNDICAO', 'FUNDIÇÃO')
+                    ) AS data_fusao
                 FROM firebird_sync_pedidos fsp
                 WHERE fsp.sync_key LIKE 'OP-%'
                 AND trim(fsp.data->>'STATUS_PCP') IN ('N', 'P')

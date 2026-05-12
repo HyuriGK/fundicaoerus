@@ -1177,22 +1177,24 @@
             const dateObj = parseFirebirdDate(op.op_entrega);
             const pesoUn  = Number(op.peso_un) || 0;
             const quant   = Number(op.quant) || 0;
-            // qty_acabamento = já apontado no setor acabamento — deduzimos da quantidade
             const qtdAcabamento = Number(op.qty_acabamento) || 0;
             const qtdPendente = Math.max(0, quant - qtdAcabamento);
+            const dataFusao = parseFirebirdDate(op.data_fusao); // null se nunca apontou fusão
             return [
-                dateObj,                     // 0: DATA (OP_ENTREGA)
-                op.op || '',                 // 1: OP
-                op.codigo || '',             // 2: CÓDIGO
-                op.descricao || '',          // 3: DESCRIÇÃO
-                (op.material || '').toUpperCase().trim(), // 4: MATERIAL
-                pesoUn,                      // 5: PESO UN
-                qtdPendente,                 // 6: QUANT. (já descontado acabamento)
-                op.lote || '',               // 7: LOTE
-                pesoUn * qtdPendente,        // 8: PESO TOTAL
-                op.cliente || '',            // 9: CLIENTE
-                0,                           // 10: QUANT_FAT
-                op.status_pcp || ''          // 11: STATUS
+                dateObj,                                          // 0: DATA (OP_ENTREGA)
+                op.op || '',                                      // 1: OP
+                op.codigo || '',                                  // 2: CÓDIGO
+                op.descricao || '',                               // 3: DESCRIÇÃO
+                (op.material || '').toUpperCase().trim(),         // 4: MATERIAL
+                pesoUn,                                           // 5: PESO UN
+                qtdPendente,                                      // 6: QUANT.
+                op.lote || '',                                    // 7: LOTE
+                pesoUn * qtdPendente,                            // 8: PESO TOTAL
+                op.cliente || '',                                 // 9: CLIENTE
+                0,                                               // 10: QUANT_FAT
+                op.status_pcp || '',                             // 11: STATUS
+                quant,                                           // 12: QUANT ORIGINAL (para modal)
+                dataFusao,                                       // 13: DATA FUSÃO
             ];
         }
 
@@ -1919,11 +1921,9 @@
             modalTitle.textContent = `Programação: ${refDate.toLocaleDateString('pt-BR')}`;
 
             const filt = allExcelData.filter(row => {
-                if (!(row[COL_MAP.DATA] instanceof Date)) return false;
-                const rd = new Date(row[COL_MAP.DATA]); rd.setHours(0, 0, 0, 0);
-                const mat = String(row[COL_MAP.MATERIAL] || '').toUpperCase().trim();
-                const days = materialDaysMap.get(mat) || 5;
-                return getBusinessDayOffsetDateForward(rd, days).getTime() === refDate.getTime();
+                const fusaoDate = row[13]; // DATA FUSÃO
+                if (!(fusaoDate instanceof Date)) return false;
+                return getBusinessDayOffsetDateForward(fusaoDate, 5).getTime() === refDate.getTime();
             });
 
             let agg = aggregateData(filt);
