@@ -176,6 +176,8 @@
                     '<i class="fa-solid fa-hammer"></i><span>Ficha de Acabamento</span></a>' +
                 '<a href="monitoramento.html" class="erus-nav-link' + isActive('monitoramento.html') + '">' +
                     '<i class="fa-solid fa-display"></i><span>Monitoramento de OPs</span></a>' +
+                '<a href="acabamento_interno.html" class="erus-nav-link' + isActive('acabamento_interno.html') + '">' +
+                    '<i class="fa-solid fa-screwdriver-wrench"></i><span>Prog. Acabamento Interno</span></a>' +
             '</div>' +
             // FATURAMENTO
             '<div class="erus-nav-group-sep" onclick="erusSidebarToggleGroup(\'eg-faturamento\')">' +
@@ -398,6 +400,17 @@
         }
 
         erusSidebarUpdateThemeUI();
+
+        // Auto-expand group containing the active link
+        var activeLink = document.querySelector('#erus-sidebar .erus-nav-link.active');
+        if (activeLink) {
+            var parentGroup = activeLink.closest('.erus-nav-group-wrapper');
+            if (parentGroup) {
+                parentGroup.classList.remove('collapsed');
+                var icon = document.getElementById('icon-' + parentGroup.id);
+                if (icon) { icon.classList.remove('fa-plus'); icon.classList.add('fa-minus'); }
+            }
+        }
 
         // Load page locks — move dev pages to "Em desenvolvimento"
         fetch('/api/page-locks')
