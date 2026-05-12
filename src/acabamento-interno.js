@@ -85,42 +85,61 @@ const handleGet = async (req, res) => {
         }
 
         if (action === 'ops-firebird') {
+            // Uma linha por (OP, data_fusao) — quantidade = apontada naquele dia específico
             const result = await client.query(`
-                SELECT DISTINCT ON (fsp.sync_key)
-                    replace(fsp.sync_key, 'OP-', '')        AS op,
-                    fsp.data->>'PRODUTO_PPR'                AS codigo,
-                    fsp.data->>'NOME_PRODUTO_PPR'           AS descricao,
-                    (fsp.data->>'PESO_PRODUTO')::numeric    AS peso_un,
-                    (fsp.data->>'OP_QUANTIDADE')::numeric   AS quant,
-                    fsp.data->>'LOTE_PCS'                   AS lote,
-                    fsp.data->>'NOME_CLIENTE'               AS cliente,
-                    fsp.data->>'OP_ENTREGA'                 AS op_entrega,
-                    COALESCE((fsp.data->>'QTY_ACABAMENTO')::numeric, 0) AS qty_acabamento,
-                    fsp.data->>'STATUS_PCP'                 AS status_pcp,
-                    COALESCE(
-                        (SELECT e.data->>'NOME_MATERIAL'
-                         FROM firebird_sync_emissoes e
-                         WHERE e.data->>'PRODUTO_PPR' = fsp.data->>'PRODUTO_PPR'
-                           AND e.data->>'NOME_MATERIAL' IS NOT NULL
-                           AND e.data->>'NOME_MATERIAL' <> ''
-                         LIMIT 1),
-                        ''
-                    ) AS material,
-                    (
-                        SELECT MAX(pas.data_producao)
-                        FROM producao_apontada_sincronizada pas
-                        WHERE pas.op = replace(fsp.sync_key, 'OP-', '')
-                          AND upper(trim(pas.setor)) IN ('FUSAO', 'FUSÃO', 'FUNDICAO', 'FUNDIÇÃO')
-                    ) AS data_fusao
-                FROM firebird_sync_pedidos fsp
-                WHERE fsp.sync_key LIKE 'OP-%'
-                AND trim(fsp.data->>'STATUS_PCP') IN ('N', 'P')
-                AND fsp.updated_at >= (
-                    SELECT MAX(updated_at) - INTERVAL '2 hours'
-                    FROM firebird_sync_pedidos
-                    WHERE sync_key LIKE 'OP-%'
+                WITH op_base AS (
+                    SELECT DISTINCT ON (fsp.sync_key)
+                        replace(fsp.sync_key, 'OP-', '')        AS op,
+                        fsp.data->>'PRODUTO_PPR'                AS codigo,
+                        fsp.data->>'NOME_PRODUTO_PPR'           AS descricao,
+                        (fsp.data->>'PESO_PRODUTO')::numeric    AS peso_un,
+                        fsp.data->>'LOTE_PCS'                   AS lote,
+                        fsp.data->>'NOME_CLIENTE'               AS cliente,
+                        fsp.data->>'OP_ENTREGA'                 AS op_entrega,
+                        fsp.data->>'STATUS_PCP'                 AS status_pcp,
+                        COALESCE(
+                            (SELECT e.data->>'NOME_MATERIAL'
+                             FROM firebird_sync_emissoes e
+                             WHERE e.data->>'PRODUTO_PPR' = fsp.data->>'PRODUTO_PPR'
+                               AND e.data->>'NOME_MATERIAL' IS NOT NULL
+                               AND e.data->>'NOME_MATERIAL' <> ''
+                             LIMIT 1),
+                            ''
+                        ) AS material
+                    FROM firebird_sync_pedidos fsp
+                    WHERE fsp.sync_key LIKE 'OP-%'
+                    AND trim(fsp.data->>'STATUS_PCP') IN ('N', 'P')
+                    AND fsp.updated_at >= (
+                        SELECT MAX(updated_at) - INTERVAL '2 hours'
+                        FROM firebird_sync_pedidos
+                        WHERE sync_key LIKE 'OP-%'
+                    )
+                    ORDER BY fsp.sync_key, fsp.data->>'OP_ENTREGA' ASC NULLS LAST
+                ),
+                fusao_por_dia AS (
+                    SELECT
+                        pas.op,
+                        pas.data_producao                       AS data_fusao,
+                        SUM(pas.quantidade)                     AS quant_fusao
+                    FROM producao_apontada_sincronizada pas
+                    WHERE upper(trim(pas.setor)) IN ('FUSAO', 'FUSÃO', 'FUNDICAO', 'FUNDIÇÃO')
+                    GROUP BY pas.op, pas.data_producao
                 )
-                ORDER BY fsp.sync_key, fsp.data->>'OP_ENTREGA' ASC NULLS LAST
+                SELECT
+                    ob.op,
+                    ob.codigo,
+                    ob.descricao,
+                    ob.peso_un,
+                    ob.lote,
+                    ob.cliente,
+                    ob.op_entrega,
+                    ob.status_pcp,
+                    ob.material,
+                    fd.data_fusao,
+                    fd.quant_fusao
+                FROM op_base ob
+                JOIN fusao_por_dia fd ON fd.op = ob.op
+                ORDER BY fd.data_fusao ASC, ob.op ASC
             `);
             return res.json(result.rows);
         }

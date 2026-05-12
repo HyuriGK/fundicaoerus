@@ -1174,12 +1174,10 @@
         }
 
         function convertFirebirdOpToRow(op) {
-            const dateObj = parseFirebirdDate(op.op_entrega);
-            const pesoUn  = Number(op.peso_un) || 0;
-            const quant   = Number(op.quant) || 0;
-            const qtdAcabamento = Number(op.qty_acabamento) || 0;
-            const qtdPendente = Math.max(0, quant - qtdAcabamento);
-            const dataFusao = parseFirebirdDate(op.data_fusao); // null se nunca apontou fusão
+            const dateObj   = parseFirebirdDate(op.op_entrega);
+            const pesoUn    = Number(op.peso_un) || 0;
+            const quant     = Number(op.quant_fusao) || 0; // quantidade apontada naquele dia de fusão
+            const dataFusao = parseFirebirdDate(op.data_fusao);
             return [
                 dateObj,                                          // 0: DATA (OP_ENTREGA)
                 op.op || '',                                      // 1: OP
@@ -1187,9 +1185,9 @@
                 op.descricao || '',                               // 3: DESCRIÇÃO
                 (op.material || '').toUpperCase().trim(),         // 4: MATERIAL
                 pesoUn,                                           // 5: PESO UN
-                qtdPendente,                                      // 6: QUANT.
+                quant,                                           // 6: QUANT. (do dia de fusão)
                 op.lote || '',                                    // 7: LOTE
-                pesoUn * qtdPendente,                            // 8: PESO TOTAL
+                pesoUn * quant,                                  // 8: PESO TOTAL
                 op.cliente || '',                                 // 9: CLIENTE
                 0,                                               // 10: QUANT_FAT
                 op.status_pcp || '',                             // 11: STATUS
@@ -1339,7 +1337,7 @@
                 if (ops.length > 0) {
                     allExcelData = ops
                         .map(convertFirebirdOpToRow)
-                        .filter(row => row[COL_MAP.DATA] !== null);
+                        .filter(row => row[13] instanceof Date); // só rows com data_fusao válida
                     displayTable(allExcelData, 'mainTableContent');
                     openModalButton.disabled = false;
                     clearRawDataButton.disabled = false;
