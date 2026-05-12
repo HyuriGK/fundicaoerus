@@ -64,21 +64,25 @@ const handleGet = async (req, res) => {
             const list = r.rows.map(row => {
                 const p = row.payload;
                 let totalWeight = 0;
-                
+                let totalQty = 0;
+
                 if (Array.isArray(p.autoRows)) {
-                    p.autoRows.forEach(item => { totalWeight += (parseFloat(item[8]) || 0); });
+                    p.autoRows.forEach(item => {
+                        totalWeight += (parseFloat(item[8]) || 0);
+                        totalQty    += (parseFloat(item[6]) || 0);
+                    });
                 }
-                
+
                 if (Array.isArray(p.manualRows)) {
-                    p.manualRows.forEach(item => { totalWeight += (parseFloat(item[8]) || 0); });
+                    p.manualRows.forEach(item => {
+                        totalWeight += (parseFloat(item[8]) || 0);
+                        totalQty    += (parseFloat(item[6]) || 0);
+                    });
                 }
 
                 const dateStr = row.date instanceof Date ? row.date.toISOString().split('T')[0] : row.date;
 
-                return {
-                    date: dateStr,
-                    totalWeight: totalWeight
-                };
+                return { date: dateStr, totalWeight, totalQty };
             });
             
             return res.json(list);
