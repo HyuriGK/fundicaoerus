@@ -57,6 +57,8 @@
         '#erus-sidebar .erus-nav-group-line { height:1px; flex-grow:1; background:linear-gradient(to right,rgba(255,255,255,0.06),transparent); margin:2px 10px 0; }',
         '#erus-sidebar .erus-nav-group-wrapper { overflow:hidden; transition:max-height 0.4s var(--erus-ease); max-height:500px; }',
         '#erus-sidebar .erus-nav-group-wrapper.collapsed { max-height:0; }',
+        '#erus-sidebar .erus-nav-group-sep.active-group > i:first-child { color:#fbbf24 !important; opacity:1 !important; }',
+        '#erus-sidebar .erus-nav-group-sep.active-group { background:rgba(251,191,36,0.06); }',
         // Footer
         '#erus-sidebar .erus-sidebar-footer { margin-top:auto; padding-top:12px; border-top:1px solid rgba(255,255,255,0.04); }',
         '#erus-sidebar .erus-sidebar-footer .erus-nav-link { font-size:0.78rem; }',
@@ -101,6 +103,8 @@
         'body.erus-sidebar-collapsed #erus-sidebar .erus-nav-group-sep i:first-child {',
         '  display:block !important; margin:0 !important; font-size:0.72rem; opacity:0.45;',
         '}',
+        'body.erus-sidebar-collapsed #erus-sidebar .erus-nav-group-sep.active-group { background:rgba(251,191,36,0.1) !important; border-color:rgba(251,191,36,0.3) !important; }',
+        'body.erus-sidebar-collapsed #erus-sidebar .erus-nav-group-sep.active-group i:first-child { color:#fbbf24 !important; opacity:1 !important; }',
         'body.erus-sidebar-collapsed #erus-sidebar .erus-nav-group-sep:hover i:first-child { opacity:0.85; }',
         // Collapsed brand — no background, just the logo centered
         'body.erus-sidebar-collapsed #erus-sidebar .erus-brand {',
@@ -401,14 +405,16 @@
 
         erusSidebarUpdateThemeUI();
 
-        // Auto-expand group containing the active link
+        // Highlight the group separator icon for the active page (no expand)
         var activeLink = document.querySelector('#erus-sidebar .erus-nav-link.active');
         if (activeLink) {
             var parentGroup = activeLink.closest('.erus-nav-group-wrapper');
             if (parentGroup) {
-                parentGroup.classList.remove('collapsed');
-                var icon = document.getElementById('icon-' + parentGroup.id);
-                if (icon) { icon.classList.remove('fa-plus'); icon.classList.add('fa-minus'); }
+                var sep = parentGroup.previousElementSibling;
+                while (sep && !sep.classList.contains('erus-nav-group-sep')) {
+                    sep = sep.previousElementSibling;
+                }
+                if (sep) sep.classList.add('active-group');
             }
         }
 
