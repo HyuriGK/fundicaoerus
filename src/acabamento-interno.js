@@ -110,7 +110,7 @@ const handleGet = async (req, res) => {
                 WHERE fsp.sync_key LIKE 'OP-%'
                 AND trim(fsp.data->>'STATUS_PCP') IN ('N', 'P')
                 AND fsp.updated_at >= (
-                    SELECT MAX(updated_at) - INTERVAL '10 minutes'
+                    SELECT MAX(updated_at) - INTERVAL '2 hours'
                     FROM firebird_sync_pedidos
                     WHERE sync_key LIKE 'OP-%'
                 )
