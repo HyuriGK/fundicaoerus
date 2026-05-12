@@ -124,6 +124,19 @@ const handleGet = async (req, res) => {
                     FROM producao_apontada_sincronizada pas
                     WHERE upper(trim(pas.setor)) IN ('FUSAO', 'FUSÃO', 'FUNDICAO', 'FUNDIÇÃO')
                     GROUP BY pas.op, pas.data_producao
+                ),
+                acabamento_por_fusao AS (
+                    -- Para cada (op, data_fusao), soma o acabamento apontado APÓS aquela data de fusão
+                    SELECT
+                        fd.op,
+                        fd.data_fusao,
+                        COALESCE(SUM(pa.quantidade), 0) AS quant_acabamento
+                    FROM fusao_por_dia fd
+                    LEFT JOIN producao_apontada_sincronizada pa
+                        ON  pa.op = fd.op
+                        AND upper(trim(pa.setor)) IN ('ACABAMENTO', 'REBARBAÇÃO', 'REBARBACAO', 'GRALHA')
+                        AND pa.data_producao > fd.data_fusao
+                    GROUP BY fd.op, fd.data_fusao
                 )
                 SELECT
                     ob.op,
@@ -136,9 +149,10 @@ const handleGet = async (req, res) => {
                     ob.status_pcp,
                     ob.material,
                     fd.data_fusao,
-                    fd.quant_fusao
+                    GREATEST(0, fd.quant_fusao - af.quant_acabamento) AS quant_fusao
                 FROM op_base ob
                 JOIN fusao_por_dia fd ON fd.op = ob.op
+                JOIN acabamento_por_fusao af ON af.op = fd.op AND af.data_fusao = fd.data_fusao
                 ORDER BY fd.data_fusao ASC, ob.op ASC
             `);
             return res.json(result.rows);
