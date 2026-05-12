@@ -896,7 +896,6 @@
 
 <body>
 
-    <input type="file" id="materialDaysFile" accept=".xlsx,.xls" style="display:none">
 
     <!-- Botão Gerar Programação fixo no canto superior direito -->
     <div id="acabamento-toolbar" style="position:fixed; top:16px; right:24px; z-index:150; display:flex; gap:8px; align-items:center;">
@@ -1103,7 +1102,6 @@
         const totalPanel = document.getElementById('totalPanel');
         const totalWeightValue = document.getElementById('totalWeightValue');
         const backButton = document.getElementById('backButton');
-        const clearRawDataButton = document.getElementById('clearRawDataButton');
         const initialMessage = document.getElementById('initialMessage');
         const lastUpdateDateTimeSpan = document.getElementById('lastUpdateDateTime');
         const updateLastUpdateButton = document.getElementById('updateLastUpdateButton');
@@ -1297,37 +1295,10 @@
             } catch (error) { console.error("Erro MaterialDias", error); }
         }
 
-        correlateMaterialsButton.addEventListener('click', () => materialDaysFile.click());
-        materialDaysFile.addEventListener('change', function (event) {
-            const file = event.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = function (e) {
-                const workbook = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
-                const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1 });
-                materialDaysMap.clear();
-                let count = 0;
-                jsonData.forEach(row => {
-                    const m = String(row[0] || '').toUpperCase().trim();
-                    const d = parseInt(row[1], 10);
-                    if (m && !isNaN(d) && d >= 0) { materialDaysMap.set(m, d); count++; }
-                });
-                if (count > 0) {
-                    fetch('/api/acabamento-interno/save-material-days', {
-                        method: 'POST', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ materialDays: Array.from(materialDaysMap.entries()) })
-                    });
-                }
-                alert(`Material/Dias: ${count} mapeados.`);
-                event.target.value = null;
-            };
-            reader.readAsArrayBuffer(file);
-        });
 
         // --- Carregar OPs do Firebird (via Neon sincronizado) ---
         async function loadOpsFromFirebird() {
             initialMessage.textContent = 'Carregando OPs...';
-            clearRawDataButton.disabled = true;
 
             try {
                 const response = await fetch('/api/acabamento-interno/ops-firebird');
@@ -1340,7 +1311,6 @@
                         .filter(row => row[13] instanceof Date && row[COL_MAP.QTD] > 0);
                     displayTable(allExcelData, 'mainTableContent');
                     openModalButton.disabled = false;
-                    clearRawDataButton.disabled = false;
                     initialMessage.style.display = 'none';
                 } else {
                     allExcelData = [];
@@ -1352,20 +1322,8 @@
             } catch (error) {
                 initialMessage.textContent = `Erro ao carregar OPs: ${error.message}`;
                 initialMessage.style.display = 'block';
-            } finally {
-                clearRawDataButton.disabled = allExcelData.length === 0;
             }
         }
-
-        clearRawDataButton.addEventListener('click', () => {
-            if (!confirm('Limpar OPs carregadas em memória?')) return;
-            allExcelData = [];
-            displayTable([], 'mainTableContent');
-            openModalButton.disabled = true;
-            clearRawDataButton.disabled = true;
-            initialMessage.style.display = 'block';
-            initialMessage.textContent = 'Cache limpo.';
-        });
 
         // --- MODAL DE APONTAMENTOS DA OP ---
         // Chaves = nomes canônicos retornados pelo backend (op-apontamentos)
