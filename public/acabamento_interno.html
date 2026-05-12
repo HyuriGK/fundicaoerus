@@ -1125,29 +1125,33 @@
             modal.style.display = 'flex';
             const list = document.getElementById('mapeamentoList');
 
-            // Coleta materiais únicos das OPs carregadas
-            const materiaisSet = new Set();
+            // Coleta materiais únicos e grupos das OPs carregadas
+            const materiaisMap = new Map(); // material -> grupo
             allExcelData.forEach(row => {
                 const m = String(row[COL_MAP.MATERIAL] || '').trim();
-                if (m) materiaisSet.add(m);
+                const g = String(row[14] || '').trim();
+                if (m && !materiaisMap.has(m)) materiaisMap.set(m, g);
             });
 
-            if (materiaisSet.size === 0) {
+            if (materiaisMap.size === 0) {
                 list.innerHTML = `<p style="text-align:center;color:var(--text-muted);padding:20px;">Nenhuma OP carregada. As OPs são carregadas automaticamente ao abrir a página.</p>`;
                 return;
             }
 
-            const materiais = Array.from(materiaisSet).sort();
+            const materiais = Array.from(materiaisMap.keys()).sort();
             list.innerHTML = `
-                <div style="display:grid; grid-template-columns:1fr auto; gap:0; border:1px solid var(--border-subtle); border-radius:8px; overflow:hidden;">
+                <div style="display:grid; grid-template-columns:1fr 1fr auto; gap:0; border:1px solid var(--border-subtle); border-radius:8px; overflow:hidden;">
                     <div style="padding:8px 16px; font-size:0.68rem; font-weight:700; letter-spacing:0.08em; color:var(--text-muted); background:rgba(255,255,255,0.04); border-bottom:1px solid var(--border-subtle);">MATERIAL</div>
+                    <div style="padding:8px 16px; font-size:0.68rem; font-weight:700; letter-spacing:0.08em; color:var(--text-muted); background:rgba(255,255,255,0.04); border-bottom:1px solid var(--border-subtle); border-left:1px solid var(--border-subtle);">GRUPO</div>
                     <div style="padding:8px 16px; font-size:0.68rem; font-weight:700; letter-spacing:0.08em; color:var(--text-muted); background:rgba(255,255,255,0.04); border-bottom:1px solid var(--border-subtle); text-align:center; border-left:1px solid var(--border-subtle);">DIAS ÚTEIS</div>
                     ${materiais.map((mat, i) => {
                         const days = materialDaysMap.get(mat) || 5;
+                        const grupo = materiaisMap.get(mat) || '—';
                         const isLast = i === materiais.length - 1;
                         const border = isLast ? '' : 'border-bottom:1px solid var(--border-subtle);';
                         return `
                             <div style="padding:10px 16px; ${border} display:flex; align-items:center; font-size:0.82rem; font-weight:500; color:#fff;">${mat}</div>
+                            <div style="padding:10px 16px; ${border} border-left:1px solid var(--border-subtle); display:flex; align-items:center; font-size:0.82rem; color:var(--text-muted);">${grupo}</div>
                             <div style="padding:6px 12px; ${border} border-left:1px solid var(--border-subtle); display:flex; align-items:center; justify-content:center;">
                                 <input type="number" data-material="${mat}" value="${days}" min="0" max="60" style="width:60px; text-align:center; background:#27272a; border:1px solid rgba(255,255,255,0.1); border-radius:6px; color:#fff; font-size:0.9rem; font-weight:700; padding:4px 8px; outline:none; font-family:inherit;">
                             </div>`;
@@ -1290,6 +1294,7 @@
                 op.status_pcp || '',                             // 11: STATUS
                 quant,                                           // 12: QUANT ORIGINAL (para modal)
                 dataFusao,                                       // 13: DATA FUSÃO
+                (op.grupo_material || '').trim(),                // 14: GRUPO MATERIAL
             ];
         }
 

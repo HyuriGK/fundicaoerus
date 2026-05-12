@@ -105,7 +105,23 @@ const handleGet = async (req, res) => {
                                AND e.data->>'NOME_MATERIAL' <> ''
                              LIMIT 1),
                             ''
-                        ) AS material
+                        ) AS material,
+                        COALESCE(
+                            (SELECT pas.grupo_material
+                             FROM producao_apontada_sincronizada pas
+                             WHERE upper(trim(pas.liga)) = upper(trim(
+                                 (SELECT e2.data->>'NOME_MATERIAL'
+                                  FROM firebird_sync_emissoes e2
+                                  WHERE e2.data->>'PRODUTO_PPR' = fsp.data->>'PRODUTO_PPR'
+                                    AND e2.data->>'NOME_MATERIAL' IS NOT NULL
+                                    AND e2.data->>'NOME_MATERIAL' <> ''
+                                  LIMIT 1)
+                             ))
+                               AND pas.grupo_material IS NOT NULL
+                               AND pas.grupo_material <> ''
+                             LIMIT 1),
+                            ''
+                        ) AS grupo_material
                     FROM firebird_sync_pedidos fsp
                     WHERE fsp.sync_key LIKE 'OP-%'
                     AND trim(fsp.data->>'STATUS_PCP') IN ('N', 'P')
@@ -148,6 +164,7 @@ const handleGet = async (req, res) => {
                     ob.op_entrega,
                     ob.status_pcp,
                     ob.material,
+                    ob.grupo_material,
                     fd.data_fusao,
                     GREATEST(0, fd.quant_fusao - af.quant_acabamento) AS quant_fusao
                 FROM op_base ob
