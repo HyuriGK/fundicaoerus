@@ -447,6 +447,7 @@
             overflow: hidden;
             display: flex;
             flex-direction: column;
+            gap: 12px;
         }
 
         .table-container {
@@ -899,35 +900,37 @@
 
     <div class="main-layout" style="padding-top: 70px;">
 
-        <!-- TOOLBAR -->
-        <div id="acabamento-toolbar" style="display:flex; justify-content:flex-end; align-items:center; gap:8px; flex-shrink:0;">
-            <button class="btn-glass" id="mapeamentoButton" style="display:none; height:36px; font-size:0.8rem; padding:0 14px;">
-                <i class="fas fa-map"></i> Mapeamento
-            </button>
-            <button class="btn-primary" id="openModalButton" disabled style="height:36px; font-size:0.8rem; padding:0 14px;">
-                <i class="fas fa-calendar-check"></i> Gerar Programação
-            </button>
-        </div>
-
         <!-- MAIN CONTENT -->
         <main class="content-area">
-            <div class="table-container" id="tableContainer">
-                <!-- BLUR OVERLAY FOR MAIN TABLE ONLY -->
-                <div id="blurOverlay" class="blur-overlay">
-                    <button class="btn-primary" onclick="toggleBlur()">
-                        <i class="fas fa-eye"></i> Visualizar Registros
-                    </button>
-                </div>
 
-                <div class="table-scroll-area" id="mainTableScrollArea">
-                    <div id="mainTableContent" style="width: 100%; height: 100%;">
-                        <div
-                            style="height: 100%; display: flex; align-items: center; justify-content: center; color: var(--text-muted);">
-                            <p id="initialMessage">Aguardando carregamento do arquivo Excel ou dados do servidor...</p>
-                        </div>
-                    </div>
+            <!-- TOOLBAR (inside content-area para alinhar com a tabela) -->
+            <div id="acabamento-toolbar" style="display:flex; justify-content:flex-end; align-items:center; gap:8px; flex-shrink:0;">
+                <button class="btn-glass" id="mapeamentoButton" style="display:none; height:36px; font-size:0.8rem; padding:0 14px;">
+                    <i class="fas fa-map"></i> Mapeamento
+                </button>
+                <button class="btn-primary" id="openModalButton" disabled style="height:36px; font-size:0.8rem; padding:0 14px;">
+                    <i class="fas fa-calendar-check"></i> Gerar Programação
+                </button>
+                <button class="btn-glass" id="registrosButton" style="height:36px; font-size:0.8rem; padding:0 14px;">
+                    <i class="fas fa-list"></i> Registros
+                </button>
+            </div>
+
+            <!-- PROGRAMAÇÕES SALVAS -->
+            <div class="table-container" id="savedSchedulesContainer" style="flex-grow:1;">
+                <div style="padding:20px 24px 12px; border-bottom:1px solid var(--border-subtle); display:flex; align-items:center; gap:10px;">
+                    <i class="fas fa-calendar-alt" style="color:var(--color-primary);"></i>
+                    <span style="font-size:0.9rem; font-weight:700; color:#fff;">Programações Salvas</span>
+                </div>
+                <div class="table-scroll-area" style="padding:16px 24px;">
+                    <ul id="savedSchedulesList" style="list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:8px;">
+                        <li style="color:var(--text-muted); padding:40px; text-align:center;">
+                            <i class="fa-solid fa-circle-notch fa-spin" style="font-size:1.5rem; color:var(--color-primary);"></i>
+                        </li>
+                    </ul>
                 </div>
             </div>
+
         </main>
 
         <!-- FOOTER -->
@@ -942,6 +945,30 @@
                 <span id="clock-time" style="color: #fff; font-weight: 700; margin-left:10px;"></span>
             </div>
         </footer>
+    </div>
+
+    <!-- MODAL REGISTROS (OPs e Apontamentos) -->
+    <div id="registrosModal" class="modal-overlay" style="z-index:2500; padding:0;">
+        <div class="modal-card" style="width:100%; height:100%; max-width:none; border-radius:0; background:#18181b; display:flex; flex-direction:column;">
+            <div class="modal-header" style="padding:20px 32px; border-bottom:1px solid var(--border-subtle); flex-shrink:0;">
+                <h2 class="modal-title" style="font-size:1.2rem; display:flex; align-items:center; gap:12px;">
+                    <i class="fas fa-list" style="color:var(--color-primary);"></i> Registros de OPs
+                    <span id="registrosOpsCount" style="font-size:0.8rem; font-weight:400; color:var(--text-muted); margin-left:8px;"></span>
+                </h2>
+                <span class="modal-close" onclick="closeRegistrosModal()" style="font-size:2rem;">&times;</span>
+            </div>
+            <div style="flex:1; overflow:hidden; display:flex; flex-direction:column; padding:0 32px 20px;">
+                <div class="table-container" style="flex:1; margin-top:16px;">
+                    <div class="table-scroll-area" id="mainTableScrollArea">
+                        <div id="mainTableContent" style="width:100%; height:100%;">
+                            <div style="height:100%; display:flex; align-items:center; justify-content:center; color:var(--text-muted);">
+                                <p id="initialMessage">Carregando OPs...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- MODAL -->
@@ -1092,11 +1119,6 @@
             document.getElementById('clock-date').innerText = now.toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric', month: 'short' }).toUpperCase();
         }, 1000);
 
-        // --- BLUR FUNCTION ---
-        function toggleBlur() {
-            const overlay = document.getElementById('blurOverlay');
-            overlay.classList.add('hidden');
-        }
 
         let allExcelData = [];
         let currentReportData = [];
@@ -1119,6 +1141,22 @@
             mapeamentoButton.style.display = 'inline-flex';
         }
         mapeamentoButton.addEventListener('click', openMapeamentoModal);
+
+        // --- MODAL REGISTROS ---
+        const registrosModal = document.getElementById('registrosModal');
+        document.getElementById('registrosButton').addEventListener('click', openRegistrosModal);
+
+        function openRegistrosModal() {
+            registrosModal.style.display = 'flex';
+            const count = allExcelData.length;
+            const el = document.getElementById('registrosOpsCount');
+            if (el) el.textContent = count > 0 ? `(${count} OPs)` : '';
+        }
+
+        function closeRegistrosModal() {
+            registrosModal.style.display = 'none';
+        }
+
 
         function openMapeamentoModal() {
             const modal = document.getElementById('mapeamentoModal');
@@ -1160,11 +1198,6 @@
         }
         document.getElementById('mapeamentoModal').addEventListener('click', function(e) {
             if (e.target === this) closeMapeamentoModal();
-        });
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape' && document.getElementById('mapeamentoModal').style.display === 'flex') {
-                closeMapeamentoModal();
-            }
         });
 
         async function saveMapeamento() {
@@ -1375,6 +1408,9 @@
                     displayTable(allExcelData, 'mainTableContent');
                     openModalButton.disabled = false;
                     initialMessage.style.display = 'none';
+                    const countEl = document.getElementById('registrosOpsCount');
+                    if (countEl) countEl.textContent = `(${allExcelData.length} OPs)`;
+                    document.getElementById('registrosButton').innerHTML = `<i class="fas fa-list"></i> Registros <span style="font-size:0.7rem;opacity:0.7;">(${allExcelData.length})</span>`;
                 } else {
                     allExcelData = [];
                     displayTable([], 'mainTableContent');
@@ -1432,8 +1468,11 @@
             if (e.key === 'Escape') {
                 const hModal = document.getElementById('opSectorHistoryModal');
                 const dModal = document.getElementById('opDetailsModal');
+                const mapeModal = document.getElementById('mapeamentoModal');
                 if (hModal && hModal.style.display === 'flex') closeSectorHistory();
                 else if (dModal && dModal.style.display === 'flex') closeOPDetails();
+                else if (mapeModal && mapeModal.style.display === 'flex') closeMapeamentoModal();
+                else if (registrosModal && registrosModal.style.display === 'flex') closeRegistrosModal();
             }
         });
 
