@@ -115,17 +115,7 @@ async function syncFaturamento() {
                         data_faturamento, nota_fiscal, cliente_codigo, cliente_nome, codigo_item,
                         descricao, quantidade, valor_unitario, valor_total, serie, status, gera_financeiro
                     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-                    ON CONFLICT (nota_fiscal, codigo_item, serie) DO UPDATE SET
-                        data_faturamento = EXCLUDED.data_faturamento,
-                        cliente_codigo = EXCLUDED.cliente_codigo,
-                        cliente_nome = EXCLUDED.cliente_nome,
-                        descricao = EXCLUDED.descricao,
-                        quantidade = EXCLUDED.quantidade,
-                        valor_unitario = EXCLUDED.valor_unitario,
-                        valor_total = EXCLUDED.valor_total,
-                        status = EXCLUDED.status,
-                        gera_financeiro = EXCLUDED.gera_financeiro,
-                        sincronizado_em = NOW()
+                    ON CONFLICT DO NOTHING
                 `, [
                     row.DATA_FATURAMENTO,
                     row.NOTA_FISCAL,
