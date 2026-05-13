@@ -49,6 +49,9 @@ async function syncFaturamento() {
         `);
         console.log('✅ Tabela faturamento_firebird verificada/criada');
 
+        // Garantir coluna gera_financeiro existe
+        await pgClient.query(`ALTER TABLE faturamento_firebird ADD COLUMN IF NOT EXISTS gera_financeiro CHAR(1)`);
+
         // 3. Limpar dados da janela (para re-sincronizar)
         await pgClient.query(`
             DELETE FROM faturamento_firebird
@@ -79,7 +82,8 @@ async function syncFaturamento() {
                     nfp.PRECO_NPR as VALOR_UNITARIO,
                     nfp.TOTAL_NPR as VALOR_TOTAL,
                     nf.SERIE_NOT as SERIE,
-                    nf.STATUS_NOT as STATUS
+                    nf.STATUS_NOT as STATUS,
+                    nf.GERA_FINANCEIRO_NOT as GERA_FINANCEIRO
                 FROM NOTA_FISCAL nf
                 INNER JOIN NOTA_FISCAL_PRODUTO nfp 
                     ON nf.EMPRESA_NOT = nfp.EMPRESA_NPR 
@@ -109,8 +113,8 @@ async function syncFaturamento() {
                 await pgClient.query(`
                     INSERT INTO faturamento_firebird (
                         data_faturamento, nota_fiscal, cliente_codigo, cliente_nome, codigo_item,
-                        descricao, quantidade, valor_unitario, valor_total, serie, status
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                        descricao, quantidade, valor_unitario, valor_total, serie, status, gera_financeiro
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
                     ON CONFLICT (nota_fiscal, codigo_item, serie) DO UPDATE SET
                         data_faturamento = EXCLUDED.data_faturamento,
                         cliente_codigo = EXCLUDED.cliente_codigo,
@@ -120,6 +124,7 @@ async function syncFaturamento() {
                         valor_unitario = EXCLUDED.valor_unitario,
                         valor_total = EXCLUDED.valor_total,
                         status = EXCLUDED.status,
+                        gera_financeiro = EXCLUDED.gera_financeiro,
                         sincronizado_em = NOW()
                 `, [
                     row.DATA_FATURAMENTO,
@@ -132,7 +137,8 @@ async function syncFaturamento() {
                     (row.VALOR_UNITARIO || 0),
                     (row.VALOR_TOTAL || 0),
                     row.SERIE ? (typeof row.SERIE === 'string' ? row.SERIE.trim() : String(row.SERIE)) : null,
-                    row.STATUS ? (typeof row.STATUS === 'string' ? row.STATUS.trim() : String(row.STATUS)) : null
+                    row.STATUS ? (typeof row.STATUS === 'string' ? row.STATUS.trim() : String(row.STATUS)) : null,
+                    row.GERA_FINANCEIRO ? (typeof row.GERA_FINANCEIRO === 'string' ? row.GERA_FINANCEIRO.trim() : String(row.GERA_FINANCEIRO)) : null
                 ]);
                 insertedCount++;
 

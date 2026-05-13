@@ -210,8 +210,9 @@ router.get('/detalhado', async (req, res) => {
                 f.peso_total,
                 f.status,
                 f.pedido,
-                -- Priority: Preference Table > (Current Table OR Default to excluded if no order)
-                COALESCE(p.excluido, f.excluido_manualmente OR f.pedido IS NULL OR f.pedido = '' OR f.pedido = ' ') as excluido_manualmente
+                f.gera_financeiro,
+                -- Priority: Preference Table > (gera_financeiro='N' OR no order)
+                COALESCE(p.excluido, f.excluido_manualmente OR f.gera_financeiro = 'N' OR f.pedido IS NULL OR f.pedido = '' OR f.pedido = ' ') as excluido_manualmente
             FROM faturamento_firebird f
             LEFT JOIN faturamento_firebird_preferencias p 
                 ON p.nota_fiscal = f.nota_fiscal
@@ -276,6 +277,7 @@ router.get('/detalhado', async (req, res) => {
             pesoTotal: parseFloat(row.peso_total || 0),
             status: row.status,
             pedido: row.pedido,
+            gera_financeiro: row.gera_financeiro,
             excluido_manualmente: row.excluido_manualmente // Mantemos snake case aqui para compatibilidade com o frontend
         }));
 
