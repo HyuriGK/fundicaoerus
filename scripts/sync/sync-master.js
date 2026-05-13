@@ -201,6 +201,17 @@ async function syncMaster() {
                 await pgClient.query('COMMIT');
                 console.log(`✅ [2/4] ${totalOPs} OPs salvas no Postgres.`);
 
+                // Remover OPs que saíram do Firebird (finalizadas/encerradas)
+                const activeSyncKeys = opsResults.map(op => `OP-${op.OP_PCS}`);
+                if (activeSyncKeys.length > 0) {
+                    const placeholders = activeSyncKeys.map((_, i) => `$${i + 1}`).join(', ');
+                    const del = await pgClient.query(
+                        `DELETE FROM firebird_sync_pedidos WHERE sync_key LIKE 'OP-%' AND sync_key NOT IN (${placeholders})`,
+                        activeSyncKeys
+                    );
+                    if (del.rowCount > 0) console.log(`🗑️ ${del.rowCount} OPs obsoletas removidas do Postgres.`);
+                }
+
                 // 3. Sincronizar Roteiros — transação separada (erro aqui não apaga OPs)
                 const uniqueProducts = [...new Set(opsResults.map(op => String(op.PRODUTO_PPR).trim()))];
                 console.log(`📥 [3/4] Sincronizando roteiros para ${uniqueProducts.length} produtos...`);
