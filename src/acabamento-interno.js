@@ -107,14 +107,14 @@ const handleGet = async (req, res) => {
                         )                                       AS lote,
                         COALESCE(
                             (SELECT NULLIF(TRIM(CONCAT_WS(', ',
-                                CASE WHEN ft.normalizacao_fic  = 'S' THEN 'NORMALIZAÇÃO' END,
-                                CASE WHEN ft.revenimento_fic   = 'S' THEN 'REVENIMENTO'  END,
-                                CASE WHEN ft.tempera_fic       = 'S' THEN 'TEMPERA'      END,
-                                CASE WHEN ft.solubilizacao_fic = 'S' THEN 'SOLUBILIZAÇÃO'END,
-                                CASE WHEN ft.recozimento_fic   = 'S' THEN 'RECOZIMENTO'  END
+                                CASE WHEN TRIM(ft.normalizacao_fic)  = 'S' THEN 'NORMALIZAÇÃO' END,
+                                CASE WHEN TRIM(ft.revenimento_fic)   = 'S' THEN 'REVENIMENTO'  END,
+                                CASE WHEN TRIM(ft.tempera_fic)       = 'S' THEN 'TEMPERA'      END,
+                                CASE WHEN TRIM(ft.solubilizacao_fic) = 'S' THEN 'SOLUBILIZAÇÃO'END,
+                                CASE WHEN TRIM(ft.recozimento_fic)   = 'S' THEN 'RECOZIMENTO'  END
                             )), '')
                              FROM ficha_tecnica ft
-                             WHERE ft.pro_codigo_fic = fsp.data->>'PRODUTO_PPR'
+                             WHERE TRIM(ft.pro_codigo_fic) = TRIM(fsp.data->>'PRODUTO_PPR')
                              LIMIT 1),
                             ''
                         )                                       AS tratamento_termico,
