@@ -170,6 +170,7 @@ async function sincronizarDetalhado(fbDb) {
     await pool.query(`ALTER TABLE faturamento_firebird ADD COLUMN IF NOT EXISTS peso_total DECIMAL(15, 3) DEFAULT 0`);
     await pool.query(`ALTER TABLE faturamento_firebird ADD COLUMN IF NOT EXISTS excluido_manualmente BOOLEAN DEFAULT FALSE`);
     await pool.query(`ALTER TABLE faturamento_firebird ADD COLUMN IF NOT EXISTS atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP`);
+    await pool.query(`ALTER TABLE faturamento_firebird ADD COLUMN IF NOT EXISTS gera_financeiro CHAR(1)`);
 
     // Atualizar constraint se necessário
     try {
@@ -206,6 +207,7 @@ async function sincronizarDetalhado(fbDb) {
         nf.DESTINATARIO_NOT as COD_CLIENTE_NOT,
         nf.RAZAO_SOCIAL_NOT as CLIENTE_NOME_NOT,
         nf.STATUS_NOT,
+        nf.GERA_FINANCEIRO_NOT,
         nfp.ITEM_NPR,
         nfp.PEDIDO_NPR,
         (SELECT FIRST 1 npe.PEDIDO_NPE FROM NOTA_FISCAL_PEDIDO npe 
@@ -284,11 +286,11 @@ async function sincronizarDetalhado(fbDb) {
                         const isExcluded = prefsMap.has(keyForPref) ? prefsMap.get(keyForPref) : false;
 
                         await pool.query(`
-                            INSERT INTO faturamento_firebird 
-                            (nota_fiscal, serie, item_nota, data_faturamento, cliente_codigo, cliente_nome, 
-                             codigo_item, descricao, quantidade, valor_unitario, valor_total, 
-                             peso_un, peso_total, status, excluido_manualmente, pedido)
-                            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+                            INSERT INTO faturamento_firebird
+                            (nota_fiscal, serie, item_nota, data_faturamento, cliente_codigo, cliente_nome,
+                             codigo_item, descricao, quantidade, valor_unitario, valor_total,
+                             peso_un, peso_total, status, excluido_manualmente, pedido, gera_financeiro)
+                            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
                             ON CONFLICT ON CONSTRAINT faturamento_firebird_nf_serie_item_prod_key DO UPDATE SET
                                 data_faturamento = EXCLUDED.data_faturamento,
                                 cliente_nome = EXCLUDED.cliente_nome,
@@ -301,6 +303,7 @@ async function sincronizarDetalhado(fbDb) {
                                 status = EXCLUDED.status,
                                 excluido_manualmente = EXCLUDED.excluido_manualmente,
                                 pedido = EXCLUDED.pedido,
+                                gera_financeiro = EXCLUDED.gera_financeiro,
                                 atualizado_em = CURRENT_TIMESTAMP
                         `, [
                             notaFiscal,
@@ -318,7 +321,8 @@ async function sincronizarDetalhado(fbDb) {
                             pesoTotal,
                             row.STATUS_NOT,
                             isExcluded,
-                            pedidoFinal
+                            pedidoFinal,
+                            row.GERA_FINANCEIRO_NOT ? String(row.GERA_FINANCEIRO_NOT).trim() : null
                         ]);
 
                         inserted++;
