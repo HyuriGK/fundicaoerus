@@ -185,12 +185,14 @@ const handleGet = async (req, res) => {
                     ob.material,
                     ob.grupo_material,
                     ob.tratamento_termico,
-                    fd.data_fusao,
-                    GREATEST(0, COALESCE(fd.quant_fusao, 0) - COALESCE(af.quant_acabamento, 0)) AS quant_fusao
+                    MAX(fd.data_fusao)                                                                      AS data_fusao,
+                    GREATEST(0, COALESCE(SUM(fd.quant_fusao), 0) - COALESCE(SUM(af.quant_acabamento), 0)) AS quant_fusao
                 FROM op_base ob
                 LEFT JOIN fusao_por_dia fd ON fd.op = ob.op
                 LEFT JOIN acabamento_por_fusao af ON af.op = fd.op AND af.data_fusao = fd.data_fusao
-                ORDER BY fd.data_fusao ASC NULLS LAST, ob.op ASC
+                GROUP BY ob.op, ob.codigo, ob.descricao, ob.peso_un, ob.lote, ob.cliente,
+                         ob.op_entrega, ob.status_pcp, ob.material, ob.grupo_material, ob.tratamento_termico
+                ORDER BY MAX(fd.data_fusao) ASC NULLS LAST, ob.op ASC
             `);
             return res.json(result.rows);
         }
