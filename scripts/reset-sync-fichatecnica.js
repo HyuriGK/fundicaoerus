@@ -210,7 +210,7 @@ async function syncFichas() {
                 F.PESO_UNITARIO_SEM_ALIMENT_FIC, F.RELACAO_MOLDE_METAL_FIC,
                 F.PESO_TAMPA_FIC, F.PESO_FUNDO_FIC, F.CAVIDADE_QTDE_FIGURAS_FIC, F.TIPO_MODELO_FIC,
                 F.PESO_MACHOS_FIC, F.DATA_FIC, F.TINTA_REFRATARIA_FIC, F.TIPO_FERRAMENTAL_FIC,
-                F.NORMALIZACAO_FIC, F.REVENIMENTO_FIC, F.TEMPERA_FIC, F.SOLUBILIZACAO_FIC, F.RECOZIMENTO_FIC,
+                F.NORMALIZACAO_FIC, F.REVENIMENTO_FIC, F.TEMPERA_FIC, F.SOLUBILIZACAO_FIC, F.RECOZIMENTO_FIZ,
                 P.NOME_PRO, P.PESO_LIQUIDO_PRO, P.PESO_BRUTO_PRO, P.SITUACAO_PRO, P.REFERENCIA_PRO,
                 C.RAZAO_SOCIAL_CLI as NOME_CLIENTE
             FROM FICHA_TECNICA F
@@ -387,7 +387,7 @@ async function syncFichas() {
                         row.PESO_MACHOS_FIC, sanitize(detalhesMachos), sanitize(row.TINTA_REFRATARIA_FIC), sanitize(detalhesLuvas), sanitize(row.TIPO_FERRAMENTAL_FIC),
                         sanitize(loteReal), moldagemProcedimento,
                         sanitize(row.NORMALIZACAO_FIC), sanitize(row.REVENIMENTO_FIC),
-                        sanitize(row.TEMPERA_FIC), sanitize(row.SOLUBILIZACAO_FIC), sanitize(row.RECOZIMENTO_FIC)
+                        sanitize(row.TEMPERA_FIC), sanitize(row.SOLUBILIZACAO_FIC), sanitize(row.RECOZIMENTO_FIZ)
                     ]);
                     count++;
                     if (count % 10 === 0) {
