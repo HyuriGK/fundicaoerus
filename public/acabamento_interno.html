@@ -1066,9 +1066,9 @@
         const colunasHeaders = ["DATA", "OP", "CÓDIGO", "DESCRIÇÃO", "MATERIAL", "GRUPO", "PESO UN", "QUANT.", "PESO", "STATUS"];
 
         // Headers Modal/PDF Style (Removed Peso Un, Added Cliente)
-        const modalGenerateHeaders = ["OP", "CÓDIGO", "DESCRIÇÃO", "MATERIAL", "CLIENTE", "QUANT.", "LOTE", "PESO", ""];
+        const modalGenerateHeaders = ["OP", "CÓDIGO", "DESCRIÇÃO", "MATERIAL", "CLIENTE", "QUANT.", "LOTE", "T.T.", "PESO", ""];
 
-        const COL_MAP = { DATA: 0, OP: 1, CODIGO: 2, DESCRICAO: 3, MATERIAL: 4, PESO_UN: 5, QTD: 6, LOTE: 7, PESO_TOTAL: 8, CLIENTE: 9, QUANT_FAT: 10, STATUS: 11 };
+        const COL_MAP = { DATA: 0, OP: 1, CODIGO: 2, DESCRICAO: 3, MATERIAL: 4, PESO_UN: 5, QTD: 6, LOTE: 7, PESO_TOTAL: 8, CLIENTE: 9, QUANT_FAT: 10, STATUS: 11, TRATAMENTO: 15 };
 
         // Mostrar botão Mapeamento apenas para desenvolvedor
         const mapeamentoButton = document.getElementById('mapeamentoButton');
@@ -1269,6 +1269,7 @@
                 quant,                                           // 12: QUANT ORIGINAL (para modal)
                 dataFusao,                                       // 13: DATA FUSÃO
                 (op.grupo_material || '').trim(),                // 14: GRUPO MATERIAL
+                op.tratamento_termico || '',                     // 15: TRATAMENTO TÉRMICO
             ];
         }
 
@@ -1796,8 +1797,8 @@
 
                 let cols;
                 if (isModal) {
-                    // PDF Style Indices: OP, COD, DESC, MAT, CLIENTE, QTD, LOTE, PESO TOTAL
-                    cols = [COL_MAP.OP, COL_MAP.CODIGO, COL_MAP.DESCRICAO, COL_MAP.MATERIAL, COL_MAP.CLIENTE, COL_MAP.QTD, COL_MAP.LOTE, COL_MAP.PESO_TOTAL];
+                    // PDF Style Indices: OP, COD, DESC, MAT, CLIENTE, QTD, LOTE, T.T., PESO TOTAL
+                    cols = [COL_MAP.OP, COL_MAP.CODIGO, COL_MAP.DESCRICAO, COL_MAP.MATERIAL, COL_MAP.CLIENTE, COL_MAP.QTD, COL_MAP.LOTE, COL_MAP.TRATAMENTO, COL_MAP.PESO_TOTAL];
                 } else {
                     // Main Table Indices
                     cols = [COL_MAP.DATA, COL_MAP.OP, COL_MAP.CODIGO, COL_MAP.DESCRICAO, COL_MAP.MATERIAL, 14, COL_MAP.PESO_UN, COL_MAP.QTD, COL_MAP.PESO_TOTAL, COL_MAP.STATUS];
@@ -1834,8 +1835,8 @@
                     if (!isModal) {
                         if ([0, 1, 2, 5, 6, 8].includes(idx)) { td.classList.add('align-center'); }
                     } else {
-                        // Center OP, COD, QTD, LOTE, PESO in Modal
-                        if ([COL_MAP.OP, COL_MAP.CODIGO, COL_MAP.QTD, COL_MAP.LOTE, COL_MAP.PESO_TOTAL].includes(idx)) td.classList.add('align-center');
+                        // Center OP, COD, QTD, LOTE, T.T., PESO in Modal
+                        if ([COL_MAP.OP, COL_MAP.CODIGO, COL_MAP.QTD, COL_MAP.LOTE, COL_MAP.TRATAMENTO, COL_MAP.PESO_TOTAL].includes(idx)) td.classList.add('align-center');
                     }
 
                     // Main Table Editable Peso Un
@@ -1850,8 +1851,8 @@
 
                     // Manual Row Editable logic
                     if (isManual && isModal) {
-                        // Editable text fields: OP, COD, DESC, MAT, CLI, LOTE
-                        if ([COL_MAP.OP, COL_MAP.CODIGO, COL_MAP.DESCRICAO, COL_MAP.MATERIAL, COL_MAP.CLIENTE, COL_MAP.LOTE].includes(idx)) {
+                        // Editable text fields: OP, COD, DESC, MAT, CLI, LOTE, T.T.
+                        if ([COL_MAP.OP, COL_MAP.CODIGO, COL_MAP.DESCRICAO, COL_MAP.MATERIAL, COL_MAP.CLIENTE, COL_MAP.LOTE, COL_MAP.TRATAMENTO].includes(idx)) {
                             td.contentEditable = true; td.classList.add('editable-manual'); td.onblur = updateManualRowsData;
                         }
                         // Editable Numbers: QTD and PESO TOTAL (Since Peso Unit is hidden)
@@ -1889,11 +1890,11 @@
             const rows = Array.from(table.querySelectorAll('tbody tr.manual-row'));
 
             // Map Visual Columns to Data Indices
-            // Visual: OP(0), COD(1), DESC(2), MAT(3), CLI(4), QTD(5), LOTE(6), PESO_TOTAL(7)
-            // Data:   OP(1), COD(2), DESC(3), MAT(4), CLI(9), QTD(6), LOTE(7), PESO_TOTAL(8)
+            // Visual: OP(0), COD(1), DESC(2), MAT(3), CLI(4), QTD(5), LOTE(6), TT(7), PESO_TOTAL(8)
+            // Data:   OP(1), COD(2), DESC(3), MAT(4), CLI(9), QTD(6), LOTE(7), TT(15), PESO_TOTAL(8)
             const visualToDataMap = [
                 COL_MAP.OP, COL_MAP.CODIGO, COL_MAP.DESCRICAO, COL_MAP.MATERIAL, COL_MAP.CLIENTE,
-                COL_MAP.QTD, COL_MAP.LOTE, COL_MAP.PESO_TOTAL
+                COL_MAP.QTD, COL_MAP.LOTE, COL_MAP.TRATAMENTO, COL_MAP.PESO_TOTAL
             ];
 
             const newMan = [];
@@ -2115,6 +2116,7 @@
                         firstNameOf(r[COL_MAP.CLIENTE]),
                         q.toLocaleString('pt-BR', { maximumFractionDigits: 0 }),
                         r[COL_MAP.LOTE],
+                        r[COL_MAP.TRATAMENTO] || '',
                         parsePtBrNumber(r[COL_MAP.PESO_TOTAL]).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                     ]);
                 }
@@ -2127,7 +2129,7 @@
             doc.text(`QTD TOTAL: ${totalQtd} PEÇAS`, 80, 28);
 
             doc.autoTable({
-                head: [["OP", "Cód.", "Descrição", "Material", "Cliente", "Quant.", "Lote", "Peso Total"]],
+                head: [["OP", "Cód.", "Descrição", "Material", "Cliente", "Quant.", "Lote", "T.T.", "Peso Total"]],
                 body: body,
                 startY: 35,
                 theme: 'grid',
@@ -2145,12 +2147,13 @@
                 columnStyles: {
                     0: { cellWidth: 18, halign: 'center' },  // OP
                     1: { cellWidth: 20, halign: 'center' },  // Cod
-                    2: { cellWidth: 59, overflow: 'ellipsize' }, // Desc (Adjusted width 177/3)
-                    3: { cellWidth: 59, overflow: 'ellipsize' },  // Mat (Adjusted width 177/3)
-                    4: { cellWidth: 59, overflow: 'ellipsize' },  // Client (Adjusted width 177/3)
-                    5: { cellWidth: 15, halign: 'center' }, // Qtd
-                    6: { cellWidth: 25, halign: 'center' },  // Lote
-                    7: { cellWidth: 22, halign: 'center' }  // Peso
+                    2: { cellWidth: 50, overflow: 'ellipsize' }, // Desc
+                    3: { cellWidth: 40, overflow: 'ellipsize' }, // Mat
+                    4: { cellWidth: 40, overflow: 'ellipsize' }, // Cliente
+                    5: { cellWidth: 15, halign: 'center' },  // Qtd
+                    6: { cellWidth: 22, halign: 'center' },  // Lote
+                    7: { cellWidth: 35, halign: 'center', overflow: 'ellipsize' }, // T.T.
+                    8: { cellWidth: 22, halign: 'center' }   // Peso
                 },
                 tableWidth: 'auto', margin: { left: 10, right: 10 }
             });

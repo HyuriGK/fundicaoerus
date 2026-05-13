@@ -105,6 +105,19 @@ const handleGet = async (req, res) => {
                             fsp.data->>'LOTE_PCS',
                             ''
                         )                                       AS lote,
+                        COALESCE(
+                            (SELECT NULLIF(TRIM(CONCAT_WS(', ',
+                                CASE WHEN ft.normalizacao_fic = 'S' THEN 'NORMALIZAÇÃO' END,
+                                CASE WHEN ft.revenimento_fic  = 'S' THEN 'REVENIMENTO'  END,
+                                CASE WHEN ft.tempera_fic      = 'S' THEN 'TEMPERA'      END,
+                                CASE WHEN ft.solubilizacao_fic= 'S' THEN 'SOLUBILIZAÇÃO'END,
+                                CASE WHEN ft.recozimento_fic  = 'S' THEN 'RECOZIMENTO'  END
+                            )), '')
+                             FROM ficha_tecnica ft
+                             WHERE ft.pro_codigo_fic = fsp.data->>'PRODUTO_PPR'
+                             LIMIT 1),
+                            ''
+                        )                                       AS tratamento_termico,
                         fsp.data->>'NOME_CLIENTE'               AS cliente,
                         fsp.data->>'OP_ENTREGA'                 AS op_entrega,
                         fsp.data->>'STATUS_PCP'                 AS status_pcp,
@@ -176,6 +189,7 @@ const handleGet = async (req, res) => {
                     ob.status_pcp,
                     ob.material,
                     ob.grupo_material,
+                    ob.tratamento_termico,
                     fd.data_fusao,
                     GREATEST(0, fd.quant_fusao - af.quant_acabamento) AS quant_fusao
                 FROM op_base ob

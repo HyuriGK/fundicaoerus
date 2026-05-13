@@ -210,6 +210,7 @@ async function syncFichas() {
                 F.PESO_UNITARIO_SEM_ALIMENT_FIC, F.RELACAO_MOLDE_METAL_FIC,
                 F.PESO_TAMPA_FIC, F.PESO_FUNDO_FIC, F.CAVIDADE_QTDE_FIGURAS_FIC, F.TIPO_MODELO_FIC,
                 F.PESO_MACHOS_FIC, F.DATA_FIC, F.TINTA_REFRATARIA_FIC, F.TIPO_FERRAMENTAL_FIC,
+                F.NORMALIZACAO_FIC, F.REVENIMENTO_FIC, F.TEMPERA_FIC, F.SOLUBILIZACAO_FIC, F.RECOZIMENTO_FIC,
                 P.NOME_PRO, P.PESO_LIQUIDO_PRO, P.PESO_BRUTO_PRO, P.SITUACAO_PRO, P.REFERENCIA_PRO,
                 C.RAZAO_SOCIAL_CLI as NOME_CLIENTE
             FROM FICHA_TECNICA F
@@ -233,8 +234,13 @@ async function syncFichas() {
 
             console.log(`✅ Ordenação concluída. Iniciando loop de processamento...`);
 
-            // Garantir coluna lote_pmt existe (uma vez antes do loop)
+            // Garantir colunas existem (uma vez antes do loop)
             await pool.query(`ALTER TABLE ficha_tecnica ADD COLUMN IF NOT EXISTS lote_pmt TEXT`);
+            await pool.query(`ALTER TABLE ficha_tecnica ADD COLUMN IF NOT EXISTS normalizacao_fic CHAR(1)`);
+            await pool.query(`ALTER TABLE ficha_tecnica ADD COLUMN IF NOT EXISTS revenimento_fic CHAR(1)`);
+            await pool.query(`ALTER TABLE ficha_tecnica ADD COLUMN IF NOT EXISTS tempera_fic CHAR(1)`);
+            await pool.query(`ALTER TABLE ficha_tecnica ADD COLUMN IF NOT EXISTS solubilizacao_fic CHAR(1)`);
+            await pool.query(`ALTER TABLE ficha_tecnica ADD COLUMN IF NOT EXISTS recozimento_fic CHAR(1)`);
 
             // Garantir tabela de fotos do relatório existe
             await pool.query(`
@@ -328,8 +334,10 @@ async function syncFichas() {
                             peso_penca, peso_com_alimentacao, peso_sem_alimentacao, relacao_molde_metal,
                             peso_tampa, peso_fundo, qtde_figuras, tipo_modelo_desc, foto_base64,
                             peso_machos, detalhes_machos, tinta_refrataria_fic, detalhes_luvas, tipo_ferramental_fic,
-                            lote_pmt, tipo_moldagem_procedimento, updated_at
-                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, NOW())
+                            lote_pmt, tipo_moldagem_procedimento,
+                            normalizacao_fic, revenimento_fic, tempera_fic, solubilizacao_fic, recozimento_fic,
+                            updated_at
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, NOW())
                         ON CONFLICT (pro_codigo_fic) DO UPDATE SET
                             material_fic = EXCLUDED.material_fic,
                             peso_liquido_fic = EXCLUDED.peso_liquido_fic,
@@ -362,6 +370,11 @@ async function syncFichas() {
                             tipo_ferramental_fic = EXCLUDED.tipo_ferramental_fic,
                             lote_pmt = EXCLUDED.lote_pmt,
                             tipo_moldagem_procedimento = EXCLUDED.tipo_moldagem_procedimento,
+                            normalizacao_fic = EXCLUDED.normalizacao_fic,
+                            revenimento_fic = EXCLUDED.revenimento_fic,
+                            tempera_fic = EXCLUDED.tempera_fic,
+                            solubilizacao_fic = EXCLUDED.solubilizacao_fic,
+                            recozimento_fic = EXCLUDED.recozimento_fic,
                             updated_at = NOW();
                     `, [
                         sanitize(row.PRO_CODIGO_FIC), sanitize(materialReal || row.MAT_NOMENCLATURA_FIC), row.PESO_LIQUIDO_FIC, row.PESO_UNIT_PCP_FIC,
@@ -372,7 +385,9 @@ async function syncFichas() {
                         row.PESO_PENCA_FIC, row.PESO_UNITARIO_COM_ALIMENT_FIC, row.PESO_UNITARIO_SEM_ALIMENT_FIC, relacao,
                         row.PESO_TAMPA_FIC, row.PESO_FUNDO_FIC, row.CAVIDADE_QTDE_FIGURAS_FIC, sanitize(tipoModelo), fotoBase64,
                         row.PESO_MACHOS_FIC, sanitize(detalhesMachos), sanitize(row.TINTA_REFRATARIA_FIC), sanitize(detalhesLuvas), sanitize(row.TIPO_FERRAMENTAL_FIC),
-                        sanitize(loteReal), moldagemProcedimento
+                        sanitize(loteReal), moldagemProcedimento,
+                        sanitize(row.NORMALIZACAO_FIC), sanitize(row.REVENIMENTO_FIC),
+                        sanitize(row.TEMPERA_FIC), sanitize(row.SOLUBILIZACAO_FIC), sanitize(row.RECOZIMENTO_FIC)
                     ]);
                     count++;
                     if (count % 10 === 0) {
