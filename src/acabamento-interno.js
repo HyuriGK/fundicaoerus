@@ -97,7 +97,14 @@ const handleGet = async (req, res) => {
                         fsp.data->>'PRODUTO_PPR'                AS codigo,
                         fsp.data->>'NOME_PRODUTO_PPR'           AS descricao,
                         (fsp.data->>'PESO_PRODUTO')::numeric    AS peso_un,
-                        fsp.data->>'LOTE_PCS'                   AS lote,
+                        COALESCE(
+                            (SELECT ft.lote_pmt FROM ficha_tecnica ft
+                             WHERE ft.pro_codigo_fic = fsp.data->>'PRODUTO_PPR'
+                               AND ft.lote_pmt IS NOT NULL AND ft.lote_pmt <> ''
+                             LIMIT 1),
+                            fsp.data->>'LOTE_PCS',
+                            ''
+                        )                                       AS lote,
                         fsp.data->>'NOME_CLIENTE'               AS cliente,
                         fsp.data->>'OP_ENTREGA'                 AS op_entrega,
                         fsp.data->>'STATUS_PCP'                 AS status_pcp,
