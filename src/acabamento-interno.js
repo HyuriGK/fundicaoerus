@@ -89,9 +89,10 @@ const handleGet = async (req, res) => {
         }
 
         if (action === 'ops-firebird') {
-            // Uma linha por (OP, data_fusao) — quantidade = apontada naquele dia específico
+            // Exatamente 1 linha por OP — usa QTY_FUSAO/QTY_ACABAMENTO pré-computados no sync
             const result = await client.query(`
-                WITH op_base AS (
+                SELECT *
+                FROM (
                     SELECT DISTINCT ON (fsp.sync_key)
                         replace(fsp.sync_key, 'OP-', '')        AS op,
                         fsp.data->>'PRODUTO_PPR'                AS codigo,
@@ -102,16 +103,15 @@ const handleGet = async (req, res) => {
                              WHERE ft.pro_codigo_fic = fsp.data->>'PRODUTO_PPR'
                                AND ft.lote_pmt IS NOT NULL AND ft.lote_pmt <> ''
                              LIMIT 1),
-                            fsp.data->>'LOTE_PCS',
-                            ''
+                            fsp.data->>'LOTE_PCS', ''
                         )                                       AS lote,
                         COALESCE(
                             (SELECT NULLIF(TRIM(CONCAT_WS(', ',
-                                CASE WHEN ft.normalizacao_fic = 'S' THEN 'NORMALIZAÇÃO' END,
-                                CASE WHEN ft.revenimento_fic  = 'S' THEN 'REVENIMENTO'  END,
-                                CASE WHEN ft.tempera_fic      = 'S' THEN 'TEMPERA'      END,
-                                CASE WHEN ft.solubilizacao_fic= 'S' THEN 'SOLUBILIZAÇÃO'END,
-                                CASE WHEN ft.recozimento_fic  = 'S' THEN 'RECOZIMENTO'  END
+                                CASE WHEN ft.normalizacao_fic  = 'S' THEN 'NORMALIZAÇÃO' END,
+                                CASE WHEN ft.revenimento_fic   = 'S' THEN 'REVENIMENTO'  END,
+                                CASE WHEN ft.tempera_fic       = 'S' THEN 'TEMPERA'      END,
+                                CASE WHEN ft.solubilizacao_fic = 'S' THEN 'SOLUBILIZAÇÃO'END,
+                                CASE WHEN ft.recozimento_fic   = 'S' THEN 'RECOZIMENTO'  END
                             )), '')
                              FROM ficha_tecnica ft
                              WHERE ft.pro_codigo_fic = fsp.data->>'PRODUTO_PPR'
@@ -127,9 +127,8 @@ const handleGet = async (req, res) => {
                              WHERE e.data->>'PRODUTO_PPR' = fsp.data->>'PRODUTO_PPR'
                                AND e.data->>'NOME_MATERIAL' IS NOT NULL
                                AND e.data->>'NOME_MATERIAL' <> ''
-                             LIMIT 1),
-                            ''
-                        ) AS material,
+                             LIMIT 1), ''
+                        )                                       AS material,
                         COALESCE(
                             (SELECT pas.grupo_material
                              FROM producao_apontada_sincronizada pas
@@ -143,56 +142,23 @@ const handleGet = async (req, res) => {
                              ))
                                AND pas.grupo_material IS NOT NULL
                                AND pas.grupo_material <> ''
-                             LIMIT 1),
-                            ''
-                        ) AS grupo_material
+                             LIMIT 1), ''
+                        )                                       AS grupo_material,
+                        (SELECT MAX(pas.data_producao)
+                         FROM producao_apontada_sincronizada pas
+                         WHERE pas.op = replace(fsp.sync_key, 'OP-', '')
+                           AND upper(trim(pas.setor)) IN ('FUSAO','FUSÃO','FUNDICAO','FUNDIÇÃO')
+                        )                                       AS data_fusao,
+                        GREATEST(0,
+                            COALESCE((fsp.data->>'QTY_FUSAO')::numeric, 0) -
+                            COALESCE((fsp.data->>'QTY_ACABAMENTO')::numeric, 0)
+                        )                                       AS quant_fusao
                     FROM firebird_sync_pedidos fsp
                     WHERE fsp.sync_key LIKE 'OP-%'
-                    AND trim(fsp.data->>'STATUS_PCP') IN ('N', 'P')
-                    ORDER BY fsp.sync_key, fsp.data->>'OP_ENTREGA' ASC NULLS LAST
-                ),
-                fusao_por_dia AS (
-                    SELECT
-                        pas.op,
-                        pas.data_producao                       AS data_fusao,
-                        SUM(pas.quantidade)                     AS quant_fusao
-                    FROM producao_apontada_sincronizada pas
-                    WHERE upper(trim(pas.setor)) IN ('FUSAO', 'FUSÃO', 'FUNDICAO', 'FUNDIÇÃO')
-                    GROUP BY pas.op, pas.data_producao
-                ),
-                acabamento_por_fusao AS (
-                    -- Para cada (op, data_fusao), soma o acabamento apontado APÓS aquela data de fusão
-                    SELECT
-                        fd.op,
-                        fd.data_fusao,
-                        COALESCE(SUM(pa.quantidade), 0) AS quant_acabamento
-                    FROM fusao_por_dia fd
-                    LEFT JOIN producao_apontada_sincronizada pa
-                        ON  pa.op = fd.op
-                        AND upper(trim(pa.setor)) IN ('ACABAMENTO', 'REBARBAÇÃO', 'REBARBACAO', 'GRALHA')
-                        AND pa.data_producao > fd.data_fusao
-                    GROUP BY fd.op, fd.data_fusao
-                )
-                SELECT
-                    ob.op,
-                    ob.codigo,
-                    ob.descricao,
-                    ob.peso_un,
-                    ob.lote,
-                    ob.cliente,
-                    ob.op_entrega,
-                    ob.status_pcp,
-                    ob.material,
-                    ob.grupo_material,
-                    ob.tratamento_termico,
-                    MAX(fd.data_fusao)                                                                      AS data_fusao,
-                    GREATEST(0, COALESCE(SUM(fd.quant_fusao), 0) - COALESCE(SUM(af.quant_acabamento), 0)) AS quant_fusao
-                FROM op_base ob
-                LEFT JOIN fusao_por_dia fd ON fd.op = ob.op
-                LEFT JOIN acabamento_por_fusao af ON af.op = fd.op AND af.data_fusao = fd.data_fusao
-                GROUP BY ob.op, ob.codigo, ob.descricao, ob.peso_un, ob.lote, ob.cliente,
-                         ob.op_entrega, ob.status_pcp, ob.material, ob.grupo_material, ob.tratamento_termico
-                ORDER BY MAX(fd.data_fusao) ASC NULLS LAST, ob.op ASC
+                      AND trim(fsp.data->>'STATUS_PCP') IN ('N', 'P')
+                    ORDER BY fsp.sync_key, fsp.updated_at DESC
+                ) sub
+                ORDER BY data_fusao ASC NULLS LAST, op ASC
             `);
             return res.json(result.rows);
         }
