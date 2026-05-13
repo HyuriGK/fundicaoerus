@@ -48,9 +48,8 @@ async function startSync() {
 
         console.log('✅ Conectado ao Firebird.');
 
-        // 1. Preparar Tabela Postgres
-        await pool.query(`DROP TABLE IF EXISTS refugo_apontado_sincronizado`);
-        await pool.query(`CREATE TABLE refugo_apontado_sincronizado (
+        // 1. Preparar Tabela Postgres (preserva registros existentes)
+        await pool.query(`CREATE TABLE IF NOT EXISTS refugo_apontado_sincronizado (
             id SERIAL PRIMARY KEY,
             chave_origem VARCHAR(100) UNIQUE,
             data_refugo DATE,
@@ -66,11 +65,10 @@ async function startSync() {
             lote VARCHAR(100),
             atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )`);
-        console.log('✅ Tabela refugo_apontado_sincronizado recriada.');
+        console.log('✅ Tabela refugo_apontado_sincronizado verificada.');
 
-        // 2. Buscar Refugos no Firebird (Janela Incremental de 90 dias)
-        const dataInicio = new Date();
-        dataInicio.setDate(dataInicio.getDate() - 90);
+        // 2. Buscar Refugos no Firebird (Janela: 1º de jan do ano anterior até hoje)
+        const dataInicio = new Date(new Date().getFullYear() - 1, 0, 1);
         const dataInicioStr = dataInicio.toISOString().split('T')[0];
         console.log(`📅 Janela de Sincronização: ${dataInicioStr} até hoje.`);
 
