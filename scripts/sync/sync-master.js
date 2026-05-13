@@ -202,8 +202,14 @@ async function syncMaster() {
                 console.log(`✅ [2/4] ${totalOPs} OPs salvas no Postgres.`);
 
                 // Marcar OPs que saíram do Firebird como encerradas (sem deletar)
+                // Só executa se o Firebird trouxe pelo menos 95% do total ativo atual
+                // (protege contra resultado parcial por instabilidade de conexão)
                 const activeSyncKeys = opsResults.map(op => `OP-${op.OP_PCS}`);
-                if (activeSyncKeys.length > 50) {
+                const ativasRes = await pgClient.query(
+                    `SELECT COUNT(*) FROM firebird_sync_pedidos WHERE sync_key LIKE 'OP-%' AND data->>'STATUS_PCP' IN ('A','N','P')`
+                );
+                const ativasCount = parseInt(ativasRes.rows[0].count, 10);
+                if (activeSyncKeys.length >= Math.ceil(ativasCount * 0.95)) {
                     const placeholders = activeSyncKeys.map((_, i) => `$${i + 1}`).join(', ');
                     const upd = await pgClient.query(
                         `UPDATE firebird_sync_pedidos
@@ -214,6 +220,8 @@ async function syncMaster() {
                         activeSyncKeys
                     );
                     if (upd.rowCount > 0) console.log(`🔒 ${upd.rowCount} OPs marcadas como encerradas.`);
+                } else {
+                    console.log(`⚠️ Marcação ignorada: Firebird retornou ${activeSyncKeys.length} vs ${ativasCount} ativos (resultado parcial).`);
                 }
 
 
