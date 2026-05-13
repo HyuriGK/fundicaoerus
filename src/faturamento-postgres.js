@@ -211,8 +211,11 @@ router.get('/detalhado', async (req, res) => {
                 f.status,
                 f.pedido,
                 f.gera_financeiro,
-                -- Priority: Preference Table > (gera_financeiro='N' OR no order)
-                COALESCE(p.excluido, f.excluido_manualmente OR f.gera_financeiro = 'N' OR f.pedido IS NULL OR f.pedido = '' OR f.pedido = ' ') as excluido_manualmente
+                -- gera_financeiro='N' tem prioridade máxima; senão usa preferência do usuário
+                CASE
+                    WHEN f.gera_financeiro = 'N' THEN true
+                    ELSE COALESCE(p.excluido, f.excluido_manualmente OR f.pedido IS NULL OR f.pedido = '' OR f.pedido = ' ')
+                END as excluido_manualmente
             FROM faturamento_firebird f
             LEFT JOIN faturamento_firebird_preferencias p 
                 ON p.nota_fiscal = f.nota_fiscal
