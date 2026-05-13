@@ -149,11 +149,6 @@ const handleGet = async (req, res) => {
                     FROM firebird_sync_pedidos fsp
                     WHERE fsp.sync_key LIKE 'OP-%'
                     AND trim(fsp.data->>'STATUS_PCP') IN ('N', 'P')
-                    AND fsp.updated_at >= (
-                        SELECT MAX(updated_at) - INTERVAL '2 hours'
-                        FROM firebird_sync_pedidos
-                        WHERE sync_key LIKE 'OP-%'
-                    )
                     ORDER BY fsp.sync_key, fsp.data->>'OP_ENTREGA' ASC NULLS LAST
                 ),
                 fusao_por_dia AS (
@@ -191,11 +186,11 @@ const handleGet = async (req, res) => {
                     ob.grupo_material,
                     ob.tratamento_termico,
                     fd.data_fusao,
-                    GREATEST(0, fd.quant_fusao - af.quant_acabamento) AS quant_fusao
+                    GREATEST(0, COALESCE(fd.quant_fusao, 0) - COALESCE(af.quant_acabamento, 0)) AS quant_fusao
                 FROM op_base ob
-                JOIN fusao_por_dia fd ON fd.op = ob.op
-                JOIN acabamento_por_fusao af ON af.op = fd.op AND af.data_fusao = fd.data_fusao
-                ORDER BY fd.data_fusao ASC, ob.op ASC
+                LEFT JOIN fusao_por_dia fd ON fd.op = ob.op
+                LEFT JOIN acabamento_por_fusao af ON af.op = fd.op AND af.data_fusao = fd.data_fusao
+                ORDER BY fd.data_fusao ASC NULLS LAST, ob.op ASC
             `);
             return res.json(result.rows);
         }
