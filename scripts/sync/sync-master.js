@@ -201,16 +201,21 @@ async function syncMaster() {
                 await pgClient.query('COMMIT');
                 console.log(`✅ [2/4] ${totalOPs} OPs salvas no Postgres.`);
 
-                // Remover OPs que saíram do Firebird (finalizadas/encerradas)
+                // Marcar OPs que saíram do Firebird como encerradas (sem deletar)
                 const activeSyncKeys = opsResults.map(op => `OP-${op.OP_PCS}`);
-                if (activeSyncKeys.length > 0) {
+                if (activeSyncKeys.length > 50) {
                     const placeholders = activeSyncKeys.map((_, i) => `$${i + 1}`).join(', ');
-                    const del = await pgClient.query(
-                        `DELETE FROM firebird_sync_pedidos WHERE sync_key LIKE 'OP-%' AND sync_key NOT IN (${placeholders})`,
+                    const upd = await pgClient.query(
+                        `UPDATE firebird_sync_pedidos
+                         SET data = jsonb_set(data, '{STATUS_PCP}', '"F"'), updated_at = NOW()
+                         WHERE sync_key LIKE 'OP-%'
+                           AND data->>'STATUS_PCP' IN ('A','N','P')
+                           AND sync_key NOT IN (${placeholders})`,
                         activeSyncKeys
                     );
-                    if (del.rowCount > 0) console.log(`🗑️ ${del.rowCount} OPs obsoletas removidas do Postgres.`);
+                    if (upd.rowCount > 0) console.log(`🔒 ${upd.rowCount} OPs marcadas como encerradas.`);
                 }
+
 
                 // 3. Sincronizar Roteiros — transação separada (erro aqui não apaga OPs)
                 const uniqueProducts = [...new Set(opsResults.map(op => String(op.PRODUTO_PPR).trim()))];
