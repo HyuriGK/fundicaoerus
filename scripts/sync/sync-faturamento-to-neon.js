@@ -87,7 +87,6 @@ async function syncFaturamento() {
                     AND nf.EMISSAO_NOT < '2027-01-01'
                     AND nf.TIPO_NOT = 'S'
                     AND nf.STATUS_NOT = 'A'
-                    AND nf.NUMERO_NOT IS NOT NULL
                     AND nfp.STATUS_NPR = 'A'
                     AND nfp.PRODUTO_NPR IS NOT NULL
                 ORDER BY nf.EMISSAO_NOT DESC, nf.NUMERO_NOT DESC
@@ -101,9 +100,15 @@ async function syncFaturamento() {
 
         console.log(`📊 ${firebirdData.length} registros encontrados no Firebird`);
 
+        const toInt = v => (v === null || v === undefined || v === '') ? null : parseInt(v, 10) || null;
+        const toStr = v => (v === null || v === undefined) ? null : String(v).trim() || null;
+
         // 6. Inserir dados no Neon
         let insertedCount = 0;
         for (const row of firebirdData) {
+            const notaFiscal = toInt(row.NOTA_FISCAL);
+            if (!notaFiscal) continue; // pula registros sem nota fiscal
+
             try {
                 await pgClient.query(`
                     INSERT INTO faturamento_firebird (
@@ -113,17 +118,17 @@ async function syncFaturamento() {
                     ON CONFLICT DO NOTHING
                 `, [
                     row.DATA_FATURAMENTO,
-                    row.NOTA_FISCAL,
-                    row.CLIENTE_CODIGO,
-                    row.CLIENTE_NOME ? (typeof row.CLIENTE_NOME === 'string' ? row.CLIENTE_NOME.trim() : String(row.CLIENTE_NOME)) : null,
-                    row.CODIGO_ITEM,
-                    row.DESCRICAO ? (typeof row.DESCRICAO === 'string' ? row.DESCRICAO.trim() : String(row.DESCRICAO)) : null,
+                    notaFiscal,
+                    toInt(row.CLIENTE_CODIGO),
+                    toStr(row.CLIENTE_NOME),
+                    toInt(row.CODIGO_ITEM),
+                    toStr(row.DESCRICAO),
                     (row.QUANTIDADE || 0),
                     (row.VALOR_UNITARIO || 0),
                     (row.VALOR_TOTAL || 0),
-                    row.SERIE ? (typeof row.SERIE === 'string' ? row.SERIE.trim() : String(row.SERIE)) : null,
-                    row.STATUS ? (typeof row.STATUS === 'string' ? row.STATUS.trim() : String(row.STATUS)) : null,
-                    row.GERA_FINANCEIRO ? (typeof row.GERA_FINANCEIRO === 'string' ? row.GERA_FINANCEIRO.trim() : String(row.GERA_FINANCEIRO)) : null
+                    toStr(row.SERIE),
+                    toStr(row.STATUS),
+                    toStr(row.GERA_FINANCEIRO)
                 ]);
                 insertedCount++;
 
