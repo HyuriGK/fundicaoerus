@@ -93,6 +93,7 @@ async function syncFaturamento() {
                     AND nf.EMISSAO_NOT < '2027-01-01'
                     AND nf.TIPO_NOT = 'S'
                     AND nf.STATUS_NOT = 'A'
+                    AND nf.NUMERO_NOT IS NOT NULL
                     AND nfp.STATUS_NPR = 'A'
                     AND nfp.PRODUTO_NPR IS NOT NULL
                 ORDER BY nf.EMISSAO_NOT DESC, nf.NUMERO_NOT DESC
