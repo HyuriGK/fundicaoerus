@@ -146,11 +146,21 @@ router.get('/op-apontamentos', async (req, res) => {
             { key: 'QTY_FATURAMENTO',refugoKey: null,                 setor: 'FATURAMENTO',             aliases: ['FATURAMENTO', 'FATURADO', 'NF', 'SAÍDA'] },
         ];
 
-        if (!totalsResult.rows.length) {
-            return res.json([]);
+        let opData = null;
+        if (totalsResult.rows.length) {
+            opData = totalsResult.rows[0].data;
+        } else {
+            // Fallback: OP may not be in firebird_sync_pedidos but its QTY_* fields
+            // are stored in the linked firebird_sync_emissoes item
+            const emissoesResult = await pool.query(
+                `SELECT data FROM firebird_sync_emissoes WHERE data->>'OP_PCS' = $1 LIMIT 1`,
+                [op]
+            );
+            if (!emissoesResult.rows.length) {
+                return res.json([]);
+            }
+            opData = emissoesResult.rows[0].data;
         }
-
-        const opData = totalsResult.rows[0].data;
         const result = [];
 
         for (const def of sectorDef) {
