@@ -72,24 +72,18 @@ function getItemSectorMetrics(item) {
     const refugoQualidade = Math.max(0, Number(item.REFUGO_QUALIDADE) || 0);
     const refugoExpedicao = Math.max(0, Number(item.REFUGO_EXPEDICAO) || 0);
 
-    // PRODUZIDO por setor (líquido de refugo — o que pode avançar para o próximo setor)
+    // APONTADOS BRUTOS (Produzido no Setor - valores exatos do ERP)
     const rawFaturamento = Math.max(0, Number(item.QTY_FATURAMENTO) || 0);
     const rawExpedicao   = Math.max(0, Number(item.QTY_EXPEDICAO)   || 0);
+    // Subtrai refugo: peças apontadas no setor mas refugadas não avançam para o próximo
     const rawQualidade   = Math.max(0, (Number(item.QTY_QUALIDADE)   || 0) - refugoQualidade);
     const rawUsinagem    = Math.max(0, (Number(item.QTY_USINAGEM)    || 0) - refugoUsinagem);
     const rawTT          = Math.max(0, (Number(item.QTY_TT)          || 0) - refugoTT);
     const rawAcabamento  = Math.max(0, (Number(item.QTY_ACABAMENTO)  || 0) - refugoAcabamento);
     const rawFusao       = Math.max(0, (Number(item.QTY_FUSAO)       || 0) - refugoFusao);
     const rawMoldada     = Math.max(0, (Number(item.QTY_MOLDADA)     || 0) - refugoMoldagem);
-
-    // APONTADO por setor (bruto, sem deduzir refugo — barreira de entrada no setor)
-    // Peça apontada em X já saiu da fila do setor anterior, independente do resultado
-    const apontadoExpedicao  = Math.max(0, Number(item.QTY_EXPEDICAO)  || 0); // já é bruto (igual rawExpedicao)
-    const apontadoQualidade  = Math.max(0, Number(item.QTY_QUALIDADE)  || 0);
-    const apontadoUsinagem   = Math.max(0, Number(item.QTY_USINAGEM)   || 0);
-    const apontadoTT         = Math.max(0, Number(item.QTY_TT)         || 0);
-    const apontadoAcabamento = Math.max(0, Number(item.QTY_ACABAMENTO) || 0);
-    const apontadoFusao      = Math.max(0, Number(item.QTY_FUSAO)      || 0);
+    // APONTADO bruto de fusão (sem deduzir refugo) — barreira de saída da fila de moldagem
+    const apontadoFusao  = Math.max(0, Number(item.QTY_FUSAO) || 0);
 
     const maxInd = Math.max(rawMoldada, rawFusao, rawAcabamento, rawTT, rawUsinagem, rawQualidade, rawExpedicao);
 
@@ -98,32 +92,25 @@ function getItemSectorMetrics(item) {
         targetTotalQty = Math.max(cFat, erpFat, maxInd);
     }
 
-    // Cadeia de saída (PRODUZIDO) — quanto pode avançar para o setor seguinte
+    // SALDO POR SETOR (o que está fisicamente parado em cada etapa aguardando a próxima)
+    // Lógica acumulativa: garante que peças que "pularam" etapas sejam corretamente contabilizadas
     const cExp  = Math.max(cFat,  rawExpedicao);
     const cQual = Math.max(cExp,  rawQualidade);
     const cUsi  = Math.max(cQual, rawUsinagem);
     const cTT   = Math.max(cUsi,  rawTT);
     const cAcab = Math.max(cTT,   rawAcabamento);
-    const cFus  = Math.max(cAcab, rawFusao);
-
-    // Cadeia de entrada (APONTADO) — quantas peças já entraram em cada setor
-    // Usada como barreira para calcular o saldo do setor anterior
-    const cExpIn  = cExp; // rawExpedicao já é bruto (sem refugo), igual a apontadoExpedicao
-    const cQualIn = Math.max(cExpIn,  apontadoQualidade);
-    const cUsiIn  = Math.max(cQualIn, apontadoUsinagem);
-    const cTTIn   = Math.max(cUsiIn,  apontadoTT);
-    const cAcabIn = Math.max(cTTIn,   apontadoAcabamento);
-    const cFusIn  = Math.max(cAcabIn, apontadoFusao);
-    const cMold   = Math.max(cFusIn,  rawMoldada);
+    const cFus   = Math.max(cAcab, rawFusao);      // saída de fusão (PRODUZIDO, p/ qFusao)
+    const cFusIn = Math.max(cAcab, apontadoFusao); // entrada em fusão (APONTADO, p/ qMoldada)
+    const cMold  = Math.max(cFusIn, rawMoldada);
 
     const res = {
-        // SALDO POR SETOR: PRODUZIDO do setor atual − APONTADO do setor seguinte
-        qExpedicao:  Math.max(0, cExp  - cFat),
-        qQualidade:  Math.max(0, cQual - cExpIn),
-        qUsinagem:   Math.max(0, cUsi  - cQualIn),
-        qTT:         Math.max(0, cTT   - cUsiIn),
-        qAcabamento: Math.max(0, cAcab - cTTIn),
-        qFusao:      Math.max(0, cFus  - cAcabIn),
+        // SALDO POR SETOR (q* = o que está parado em cada setor)
+        qExpedicao:  Math.max(0, cExp - cFat),
+        qQualidade:  Math.max(0, cQual - cExp),
+        qUsinagem:   Math.max(0, cUsi - cQual),
+        qTT:         Math.max(0, cTT - cUsi),
+        qAcabamento: Math.max(0, cAcab - cTT),
+        qFusao:      Math.max(0, cFus - cAcab),
         qMoldada:    Math.max(0, cMold - cFusIn),
         qAguardando: Math.max(0, targetTotalQty - cMold),
 
