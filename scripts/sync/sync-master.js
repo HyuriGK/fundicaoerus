@@ -83,7 +83,7 @@ async function syncMaster() {
                     FROM PRODUCAO P
                     LEFT JOIN PRODUTO PR ON PR.CODIGO_PRO = P.PRODUTO_PCP
                     WHERE P.EMPRESA_PCP = 10 
-                    AND P.STATUS_PCP IN ('A', 'N', 'P')
+                    AND P.STATUS_PCP NOT IN ('C', 'E')
                 `, (e, r) => e ? rej(e) : res(r));
             });
 
@@ -206,7 +206,7 @@ async function syncMaster() {
                 // (protege contra resultado parcial por instabilidade de conexão)
                 const activeSyncKeys = opsResults.map(op => `OP-${op.OP_PCS}`);
                 const ativasRes = await pgClient.query(
-                    `SELECT COUNT(*) FROM firebird_sync_pedidos WHERE sync_key LIKE 'OP-%' AND data->>'STATUS_PCP' IN ('A','N','P')`
+                    `SELECT COUNT(*) FROM firebird_sync_pedidos WHERE sync_key LIKE 'OP-%' AND data->>'STATUS_PCP' NOT IN ('C','E','F')`
                 );
                 const ativasCount = parseInt(ativasRes.rows[0].count, 10);
                 if (activeSyncKeys.length >= Math.ceil(ativasCount * 0.95)) {
@@ -215,7 +215,7 @@ async function syncMaster() {
                         `UPDATE firebird_sync_pedidos
                          SET data = jsonb_set(data, '{STATUS_PCP}', '"F"'), updated_at = NOW()
                          WHERE sync_key LIKE 'OP-%'
-                           AND data->>'STATUS_PCP' IN ('A','N','P')
+                           AND data->>'STATUS_PCP' NOT IN ('C','E','F')
                            AND sync_key NOT IN (${placeholders})`,
                         activeSyncKeys
                     );
@@ -256,7 +256,7 @@ async function syncMaster() {
                         }
                     }
 
-                    const opFichas = await new Promise(res => db.query(`SELECT CODIGO_PCP, FIC_CODIGO_PCP FROM PRODUCAO WHERE FIC_CODIGO_PCP IS NOT NULL AND PRODUTO_PCP IN (${placeholders}) AND STATUS_PCP IN ('A', 'N', 'P')`, (e, r) => res(r || [])));
+                    const opFichas = await new Promise(res => db.query(`SELECT CODIGO_PCP, FIC_CODIGO_PCP FROM PRODUCAO WHERE FIC_CODIGO_PCP IS NOT NULL AND PRODUTO_PCP IN (${placeholders}) AND STATUS_PCP NOT IN ('C', 'E')`, (e, r) => res(r || [])));
                     for (const opF of opFichas) {
                         try {
                             await pgClient.query(`INSERT INTO producao_fichas (op_codigo, ficha_id) VALUES ($1, $2) ON CONFLICT (op_codigo) DO UPDATE SET ficha_id = EXCLUDED.ficha_id`, [String(opF.CODIGO_PCP).trim(), opF.FIC_CODIGO_PCP]);

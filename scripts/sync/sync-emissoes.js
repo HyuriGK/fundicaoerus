@@ -148,7 +148,7 @@ async function syncEmissoes() {
                         CODIGO_PCP, PRODUTO_PCP, STATUS_PCP, 
                         DATA_PCP, ENTREGA_PCP, QUANTIDADE_PCP
                     FROM PRODUCAO
-                    WHERE STATUS_PCP IN ('N', 'P')
+                    WHERE STATUS_PCP NOT IN ('C', 'E')
                       AND PRODUTO_PCP IN (${prodList})
                     ORDER BY DATA_PCP DESC
                 `;
