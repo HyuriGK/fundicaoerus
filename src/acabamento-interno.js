@@ -156,11 +156,6 @@ const handleGet = async (req, res) => {
                     FROM firebird_sync_pedidos fsp
                     WHERE fsp.sync_key LIKE 'OP-%'
                       AND trim(fsp.data->>'STATUS_PCP') NOT IN ('C', 'E')
-                      AND NOT EXISTS (
-                          SELECT 1 FROM firebird_sync_emissoes e
-                          WHERE e.data->>'OP_PCS' = replace(fsp.sync_key, 'OP-', '')
-                            AND trim(upper(e.data->>'FATURADO_PPR')) = 'T'
-                      )
                     ORDER BY fsp.sync_key, fsp.updated_at DESC
                 ) sub
                 ORDER BY data_fusao ASC NULLS LAST, op ASC
