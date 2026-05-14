@@ -147,15 +147,27 @@ router.get('/op-apontamentos', async (req, res) => {
         ];
 
         let opData = null;
+
+        const emissoesResult = await pool.query(
+            `SELECT data FROM firebird_sync_emissoes WHERE data->>'OP_PCS' = $1 LIMIT 1`,
+            [op]
+        );
+
         if (totalsResult.rows.length) {
-            opData = totalsResult.rows[0].data;
+            opData = { ...totalsResult.rows[0].data };
+            // Mescla com emissoes pegando o max de cada QTY_* — emissoes pode ter
+            // dados mais completos (ex: OP marcada 'F' no pedidos mas producao registrada no emissoes)
+            if (emissoesResult.rows.length) {
+                const eData = emissoesResult.rows[0].data;
+                const qtyKeys = ['QTY_MOLDADA','QTY_FUSAO','QTY_ACABAMENTO','QTY_TT','QTY_USINAGEM','QTY_QUALIDADE','QTY_EXPEDICAO','QTY_FATURAMENTO',
+                                 'REFUGO_MOLDAGEM','REFUGO_FUSAO','REFUGO_ACABAMENTO','REFUGO_TT','REFUGO_USINAGEM','REFUGO_QUALIDADE','REFUGO_EXPEDICAO'];
+                for (const k of qtyKeys) {
+                    const a = parseFloat(opData[k] || 0);
+                    const b = parseFloat(eData[k] || 0);
+                    if (b > a) opData[k] = b;
+                }
+            }
         } else {
-            // Fallback: OP may not be in firebird_sync_pedidos but its QTY_* fields
-            // are stored in the linked firebird_sync_emissoes item
-            const emissoesResult = await pool.query(
-                `SELECT data FROM firebird_sync_emissoes WHERE data->>'OP_PCS' = $1 LIMIT 1`,
-                [op]
-            );
             if (!emissoesResult.rows.length) {
                 return res.json([]);
             }
