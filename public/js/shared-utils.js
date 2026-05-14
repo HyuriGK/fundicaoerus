@@ -53,18 +53,6 @@ function getItemSectorMetrics(item) {
         qtdOrig
     );
 
-    // Faturamento consolidado
-    // Só propaga erpFat pela cadeia se esta OP/item tem evidência de peças próprias faturadas.
-    // Caso contrário, o faturamento pertence a OPs anteriores do mesmo pedido.
-    const hasOwnBilling = rawFaturamento > 0 || rawExpedicao > 0;
-    const chainErpFat = hasOwnBilling ? erpFat : 0;
-
-    let cFat = Math.max(rawFaturamento, chainErpFat);
-
-    if (String(item.FATURADO_PPR || '').trim().toUpperCase() === 'T' || (targetTotalQty > 0 && cFat >= targetTotalQty)) {
-        cFat = targetTotalQty;
-    }
-
     // REFUGOS POR SETOR (peças que morreram em cada etapa)
     const refugoMoldagem  = Math.max(0, Number(item.REFUGO_MOLDAGEM)  || 0);
     const refugoFusao     = Math.max(0, Number(item.REFUGO_FUSAO)     || 0);
@@ -93,6 +81,18 @@ function getItemSectorMetrics(item) {
     const apontadoQualidade  = Math.max(0, Number(item.QTY_QUALIDADE)  || 0);
 
     const maxInd = Math.max(rawMoldada, rawFusao, rawAcabamento, rawTT, rawUsinagem, rawQualidade, rawExpedicao);
+
+    // Faturamento consolidado
+    // Só propaga erpFat pela cadeia se esta OP/item tem evidência de peças próprias faturadas.
+    // Caso contrário, o faturamento pertence a OPs anteriores do mesmo pedido.
+    const hasOwnBilling = rawFaturamento > 0 || rawExpedicao > 0;
+    const chainErpFat = hasOwnBilling ? erpFat : 0;
+
+    let cFat = Math.max(rawFaturamento, chainErpFat);
+
+    if (String(item.FATURADO_PPR || '').trim().toUpperCase() === 'T' || (targetTotalQty > 0 && cFat >= targetTotalQty)) {
+        cFat = targetTotalQty;
+    }
 
     // Ghost residue suppression
     if ((cFat > 0 || chainErpFat > 0) && targetTotalQty > Math.max(cFat, chainErpFat) && saldoLib <= 0) {
