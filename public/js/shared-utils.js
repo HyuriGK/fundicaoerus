@@ -82,6 +82,8 @@ function getItemSectorMetrics(item) {
     const rawAcabamento  = Math.max(0, (Number(item.QTY_ACABAMENTO)  || 0) - refugoAcabamento);
     const rawFusao       = Math.max(0, (Number(item.QTY_FUSAO)       || 0) - refugoFusao);
     const rawMoldada     = Math.max(0, (Number(item.QTY_MOLDADA)     || 0) - refugoMoldagem);
+    // APONTADO bruto de fusão (sem deduzir refugo) — barreira de saída da fila de moldagem
+    const apontadoFusao  = Math.max(0, Number(item.QTY_FUSAO) || 0);
 
     const maxInd = Math.max(rawMoldada, rawFusao, rawAcabamento, rawTT, rawUsinagem, rawQualidade, rawExpedicao);
 
@@ -98,8 +100,9 @@ function getItemSectorMetrics(item) {
     const cUsi  = Math.max(cQual, rawUsinagem);
     const cTT   = Math.max(cUsi,  rawTT);
     const cAcab = Math.max(cTT,   rawAcabamento);
-    const cFus  = Math.max(cAcab, rawFusao);
-    const cMold = Math.max(cFus,  rawMoldada);
+    const cFus   = Math.max(cAcab, rawFusao);      // saída de fusão (PRODUZIDO, p/ qFusao)
+    const cFusIn = Math.max(cAcab, apontadoFusao); // entrada em fusão (APONTADO, p/ qMoldada)
+    const cMold  = Math.max(cFusIn, rawMoldada);
 
     const res = {
         // SALDO POR SETOR (q* = o que está parado em cada setor)
@@ -109,7 +112,7 @@ function getItemSectorMetrics(item) {
         qTT:         Math.max(0, cTT - cUsi),
         qAcabamento: Math.max(0, cAcab - cTT),
         qFusao:      Math.max(0, cFus - cAcab),
-        qMoldada:    Math.max(0, cMold - cFus),
+        qMoldada:    Math.max(0, cMold - cFusIn),
         qAguardando: Math.max(0, targetTotalQty - cMold),
 
         // REFUGOS POR SETOR
