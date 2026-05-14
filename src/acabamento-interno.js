@@ -155,7 +155,7 @@ const handleGet = async (req, res) => {
                         )                                       AS quant_fusao
                     FROM firebird_sync_pedidos fsp
                     WHERE fsp.sync_key LIKE 'OP-%'
-                      AND trim(fsp.data->>'STATUS_PCP') NOT IN ('C', 'E')
+                      AND trim(fsp.data->>'STATUS_PCP') NOT IN ('C', 'E', 'F')
                     ORDER BY fsp.sync_key, fsp.updated_at DESC
                 ) sub
                 ORDER BY data_fusao ASC NULLS LAST, op ASC
