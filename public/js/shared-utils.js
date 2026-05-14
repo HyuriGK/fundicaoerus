@@ -54,11 +54,13 @@ function getItemSectorMetrics(item) {
     );
 
     // Faturamento consolidado
-    let cFat = Math.max(
-        Number(item.QTY_FATURAMENTO) || 0,
-        erpFat
-    );
-    
+    // Só propaga erpFat pela cadeia se esta OP/item tem evidência de peças próprias faturadas.
+    // Caso contrário, o faturamento pertence a OPs anteriores do mesmo pedido.
+    const hasOwnBilling = rawFaturamento > 0 || rawExpedicao > 0;
+    const chainErpFat = hasOwnBilling ? erpFat : 0;
+
+    let cFat = Math.max(rawFaturamento, chainErpFat);
+
     if (String(item.FATURADO_PPR || '').trim().toUpperCase() === 'T' || (targetTotalQty > 0 && cFat >= targetTotalQty)) {
         cFat = targetTotalQty;
     }
@@ -93,8 +95,8 @@ function getItemSectorMetrics(item) {
     const maxInd = Math.max(rawMoldada, rawFusao, rawAcabamento, rawTT, rawUsinagem, rawQualidade, rawExpedicao);
 
     // Ghost residue suppression
-    if ((cFat > 0 || erpFat > 0) && targetTotalQty > Math.max(cFat, erpFat) && saldoLib <= 0) {
-        targetTotalQty = Math.max(cFat, erpFat, maxInd);
+    if ((cFat > 0 || chainErpFat > 0) && targetTotalQty > Math.max(cFat, chainErpFat) && saldoLib <= 0) {
+        targetTotalQty = Math.max(cFat, chainErpFat, maxInd);
     }
 
     // Cadeia de saída (PRODUZIDO) — quanto pode avançar para o setor seguinte
