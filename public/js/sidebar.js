@@ -418,9 +418,7 @@
             document.querySelectorAll('#erus-sidebar .erus-nav-group-sep, #erus-sidebar .erus-nav-group-wrapper').forEach(function(el) {
                 el.style.display = 'none';
             });
-            // Hide dashboard link
-            var dashLink = document.querySelector('#erus-sidebar .erus-nav-link[href="index.html"]');
-            if (dashLink) dashLink.style.display = 'none';
+            // Keep dashboard link visible
             // Show only the group containing the allowed page
             var allowedLink = document.querySelector('#erus-sidebar .erus-nav-link[href="' + allowedPage + '"]');
             if (allowedLink) {
