@@ -176,6 +176,8 @@
                     '<i class="fa-solid fa-file-lines"></i><span>Ordens de Produção</span></a>' +
                 '<a href="fichatecnica.html" class="erus-nav-link' + isActive('fichatecnica.html') + '">' +
                     '<i class="fa-solid fa-file-contract"></i><span>Ficha Técnica</span></a>' +
+                '<a href="fichatecmoldagem.html" class="erus-nav-link' + isActive('fichatecmoldagem.html') + '">' +
+                    '<i class="fa-solid fa-layer-group"></i><span>Ficha de Moldagem</span></a>' +
                 '<a href="fichatecacabamento.html" class="erus-nav-link' + isActive('fichatecacabamento.html') + '">' +
                     '<i class="fa-solid fa-hammer"></i><span>Ficha de Acabamento</span></a>' +
                 '<a href="monitoramento.html" class="erus-nav-link' + isActive('monitoramento.html') + '">' +
@@ -403,6 +405,43 @@
             if (grpFin) grpFin.style.display = 'block';
         }
 
+        // Role-based sidebar filter for restricted roles
+        var restrictedPageMap = {
+            'moldagem': 'fichatecmoldagem.html',
+            'fusão': 'fichatecfusao.html',
+            'fusao': 'fichatecfusao.html',
+            'acabamento': 'fichatecacabamento.html'
+        };
+        if (restrictedPageMap[role]) {
+            var allowedPage = restrictedPageMap[role];
+            // Hide all groups
+            document.querySelectorAll('#erus-sidebar .erus-nav-group-sep, #erus-sidebar .erus-nav-group-wrapper').forEach(function(el) {
+                el.style.display = 'none';
+            });
+            // Hide dashboard link
+            var dashLink = document.querySelector('#erus-sidebar .erus-nav-link[href="index.html"]');
+            if (dashLink) dashLink.style.display = 'none';
+            // Show only the group containing the allowed page
+            var allowedLink = document.querySelector('#erus-sidebar .erus-nav-link[href="' + allowedPage + '"]');
+            if (allowedLink) {
+                allowedLink.style.display = 'flex';
+                var parentGroup = allowedLink.closest('.erus-nav-group-wrapper');
+                if (parentGroup) {
+                    parentGroup.style.display = 'block';
+                    parentGroup.classList.remove('collapsed');
+                    var prevSep = parentGroup.previousElementSibling;
+                    while (prevSep && !prevSep.classList.contains('erus-nav-group-sep')) {
+                        prevSep = prevSep.previousElementSibling;
+                    }
+                    if (prevSep) prevSep.style.display = 'flex';
+                    // Hide other links in the same group
+                    parentGroup.querySelectorAll('.erus-nav-link').forEach(function(link) {
+                        if (link.getAttribute('href') !== allowedPage) link.style.display = 'none';
+                    });
+                }
+            }
+        }
+
         erusSidebarUpdateThemeUI();
 
         // Highlight the group separator icon for the active page (no expand)
@@ -438,7 +477,7 @@
                     devGroup.appendChild(link);
                     hasLocked = true;
                 });
-                if (hasLocked) devSep.style.display = 'flex';
+                if (hasLocked && !restrictedPageMap[role]) devSep.style.display = 'flex';
             })
             .catch(function() {});
     }
