@@ -106,7 +106,9 @@
         'body.erus-sidebar-collapsed #erus-sidebar .erus-nav-group-sep.active-group { background:rgba(251,191,36,0.1) !important; border-color:rgba(251,191,36,0.3) !important; }',
         'body.erus-sidebar-collapsed #erus-sidebar .erus-nav-group-sep.active-group i:first-child { color:#fbbf24 !important; opacity:1 !important; }',
         'body.erus-sidebar-collapsed #erus-sidebar .erus-nav-group-sep:hover i:first-child { opacity:0.85; }',
-        // Role-based hidden — must come AFTER the collapsed display:flex !important rule to win
+        // Role-based hidden — expanded state (no competing !important, simple rule is enough)
+        '#erus-sidebar .erus-role-hidden { display:none !important; }',
+        // Role-based hidden — collapsed state: must match specificity of the display:flex !important sep rule to win
         'body.erus-sidebar-collapsed #erus-sidebar .erus-role-hidden { display:none !important; }',
         // Collapsed brand — no background, just the logo centered
         'body.erus-sidebar-collapsed #erus-sidebar .erus-brand {',
