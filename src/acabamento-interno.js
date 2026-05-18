@@ -118,6 +118,13 @@ const handleGet = async (req, res) => {
                              LIMIT 1),
                             ''
                         )                                       AS tratamento_termico,
+                        COALESCE(
+                            (SELECT ft.fornecimento_desc FROM ficha_tecnica ft
+                             WHERE TRIM(ft.pro_codigo_fic) = TRIM(fsp.data->>'PRODUTO_PPR')
+                               AND ft.fornecimento_desc IS NOT NULL AND ft.fornecimento_desc <> ''
+                             LIMIT 1),
+                            ''
+                        )                                       AS fornecimento,
                         fsp.data->>'NOME_CLIENTE'               AS cliente,
                         fsp.data->>'OP_ENTREGA'                 AS op_entrega,
                         fsp.data->>'STATUS_PCP'                 AS status_pcp,
