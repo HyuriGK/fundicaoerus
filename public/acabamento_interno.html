@@ -962,6 +962,21 @@
                         placeholder="Digite observações importantes sobre esta programação..."></textarea>
                 </div>
 
+                <!-- Modal confirmar exclusão de linha -->
+                <div id="deleteRowModal" style="display:none; position:fixed; inset:0; z-index:9999; align-items:center; justify-content:center; background:rgba(0,0,0,0.6); backdrop-filter:blur(4px);">
+                    <div style="max-width:380px; width:92%; background:#18181b; border:1px solid #27272a; border-radius:14px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.6); padding:28px 28px 22px; text-align:center;">
+                        <div style="width:48px; height:48px; border-radius:12px; background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.25); display:flex; align-items:center; justify-content:center; margin:0 auto 16px; font-size:1.3rem; color:#ef4444;">
+                            <i class="fas fa-trash-can"></i>
+                        </div>
+                        <h3 style="margin:0 0 8px; font-size:1.05rem; font-weight:700; color:#fff;">Remover linha?</h3>
+                        <p id="deleteRowModalDesc" style="margin:0 0 22px; font-size:0.85rem; color:#a1a1aa; line-height:1.5;"></p>
+                        <div style="display:flex; gap:10px;">
+                            <button id="deleteRowCancelBtn" style="flex:1; padding:10px; border-radius:8px; border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.05); color:#fff; cursor:pointer; font-size:0.85rem; font-weight:600; font-family:inherit;">Cancelar</button>
+                            <button id="deleteRowConfirmBtn" style="flex:1; padding:10px; border-radius:8px; border:none; background:#ef4444; color:#fff; cursor:pointer; font-size:0.85rem; font-weight:600; font-family:inherit;">Remover</button>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Legacy -->
                 <div id="totalPanel" style="display: none;"><span id="totalWeightValue">0,00 KG</span></div>
             </div>
@@ -1059,8 +1074,8 @@
         let currentReportData = [];
         let targetDateForPDF = null;
         let grupoDaysMap = new Map();
-
         let savedDatesSet = new Set();
+        let currentModalMode = 'NEW';
 
         // Headers Main Table
         const colunasHeaders = ["DATA", "OP", "CÓDIGO", "DESCRIÇÃO", "MATERIAL", "GRUPO", "PESO UN", "QUANT.", "PESO", "STATUS"];
@@ -1588,6 +1603,7 @@
         });
 
         function setModalMode(mode) {
+            currentModalMode = mode;
             if (mode === 'SAVED') {
                 reportDateInput.style.display = 'none';
                 reportDateLabel.style.display = 'none';
@@ -1679,20 +1695,69 @@
             totalProgrammedWeightValue.textContent = prog.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' KG';
         }
 
+        // --- Modal de confirmação para exclusão de linha ---
+        (function() {
+            const modal = document.getElementById('deleteRowModal');
+            const desc  = document.getElementById('deleteRowModalDesc');
+            const btnCancel  = document.getElementById('deleteRowCancelBtn');
+            const btnConfirm = document.getElementById('deleteRowConfirmBtn');
+            let pendingCallback = null;
+
+            window._showDeleteRowModal = function(label, onConfirm) {
+                desc.textContent = label
+                    ? `A linha "${label}" será removida desta programação.`
+                    : 'Esta linha será removida da programação.';
+                pendingCallback = onConfirm;
+                modal.style.display = 'flex';
+            };
+
+            btnCancel.addEventListener('click', () => { modal.style.display = 'none'; pendingCallback = null; });
+            btnConfirm.addEventListener('click', () => {
+                modal.style.display = 'none';
+                if (typeof pendingCallback === 'function') pendingCallback();
+                pendingCallback = null;
+            });
+            modal.addEventListener('click', (e) => { if (e.target === modal) { modal.style.display = 'none'; pendingCallback = null; } });
+        })();
+
         window.deleteRow = function (index, isManual) {
-            if (!confirm('Remover esta linha da programação?')) return;
             updateManualRowsData();
+
+            // Montar label descritiva para o popup
+            let label = '';
             if (isManual) {
-                const manualIndex = index - currentReportData.length;
-                if (manualIndex >= 0 && manualIndex < manualRowsData.length) {
-                    manualRowsData.splice(manualIndex, 1);
-                }
+                const mi = index - currentReportData.length;
+                if (mi >= 0 && mi < manualRowsData.length) label = manualRowsData[mi][COL_MAP.DESCRICAO] || manualRowsData[mi][COL_MAP.OP] || '';
             } else {
-                if (index >= 0 && index < currentReportData.length) {
-                    currentReportData.splice(index, 1);
-                }
+                if (index >= 0 && index < currentReportData.length) label = currentReportData[index][COL_MAP.DESCRICAO] || currentReportData[index][COL_MAP.OP] || '';
             }
-            displayTable(currentReportData, 'modalReportContainer');
+
+            window._showDeleteRowModal(label, async function() {
+                if (isManual) {
+                    const mi = index - currentReportData.length;
+                    if (mi >= 0 && mi < manualRowsData.length) manualRowsData.splice(mi, 1);
+                } else {
+                    if (index >= 0 && index < currentReportData.length) currentReportData.splice(index, 1);
+                }
+                displayTable(currentReportData, 'modalReportContainer');
+
+                // Auto-salvar quando editando programação já salva
+                if (currentModalMode === 'SAVED' && reportDateInput.value) {
+                    try {
+                        await fetch('/api/acabamento-interno/save-schedule-day', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                date: reportDateInput.value,
+                                autoRows: currentReportData,
+                                manualRows: manualRowsData,
+                                observations: document.getElementById('observacoesTextarea').value || ''
+                            })
+                        });
+                        loadSavedSchedulesList();
+                    } catch(e) { console.error('Erro ao auto-salvar após remover linha', e); }
+                }
+            });
         };
 
         function displayTable(data, containerId) {
