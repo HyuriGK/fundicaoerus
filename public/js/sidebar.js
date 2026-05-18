@@ -106,6 +106,8 @@
         'body.erus-sidebar-collapsed #erus-sidebar .erus-nav-group-sep.active-group { background:rgba(251,191,36,0.1) !important; border-color:rgba(251,191,36,0.3) !important; }',
         'body.erus-sidebar-collapsed #erus-sidebar .erus-nav-group-sep.active-group i:first-child { color:#fbbf24 !important; opacity:1 !important; }',
         'body.erus-sidebar-collapsed #erus-sidebar .erus-nav-group-sep:hover i:first-child { opacity:0.85; }',
+        // Role-based hidden — must come AFTER the collapsed display:flex !important rule to win
+        'body.erus-sidebar-collapsed #erus-sidebar .erus-role-hidden { display:none !important; }',
         // Collapsed brand — no background, just the logo centered
         'body.erus-sidebar-collapsed #erus-sidebar .erus-brand {',
         '  justify-content:center; padding:6px; margin-bottom:12px;',
@@ -414,27 +416,25 @@
         };
         if (restrictedPageMap[role]) {
             var allowedPage = restrictedPageMap[role];
-            // Hide all groups
+            // Hide all groups using class (inline style is overridden by !important in collapsed CSS)
             document.querySelectorAll('#erus-sidebar .erus-nav-group-sep, #erus-sidebar .erus-nav-group-wrapper').forEach(function(el) {
-                el.style.display = 'none';
+                el.classList.add('erus-role-hidden');
             });
-            // Keep dashboard link visible
             // Show only the group containing the allowed page
             var allowedLink = document.querySelector('#erus-sidebar .erus-nav-link[href="' + allowedPage + '"]');
             if (allowedLink) {
-                allowedLink.style.display = 'flex';
                 var parentGroup = allowedLink.closest('.erus-nav-group-wrapper');
                 if (parentGroup) {
-                    parentGroup.style.display = 'block';
+                    parentGroup.classList.remove('erus-role-hidden');
                     parentGroup.classList.remove('collapsed');
                     var prevSep = parentGroup.previousElementSibling;
                     while (prevSep && !prevSep.classList.contains('erus-nav-group-sep')) {
                         prevSep = prevSep.previousElementSibling;
                     }
-                    if (prevSep) prevSep.style.display = 'flex';
+                    if (prevSep) prevSep.classList.remove('erus-role-hidden');
                     // Hide other links in the same group
                     parentGroup.querySelectorAll('.erus-nav-link').forEach(function(link) {
-                        if (link.getAttribute('href') !== allowedPage) link.style.display = 'none';
+                        if (link.getAttribute('href') !== allowedPage) link.classList.add('erus-role-hidden');
                     });
                 }
             }
