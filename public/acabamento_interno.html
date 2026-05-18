@@ -1042,6 +1042,8 @@
     <script>
 
 
+        const isVisitante = (localStorage.getItem('erus_role') || '').toLowerCase() === 'visitante';
+
         let allExcelData = [];
         let currentReportData = [];
         let targetDateForPDF = null;
@@ -1063,6 +1065,11 @@
             mapeamentoButton.style.display = 'inline-flex';
         }
         mapeamentoButton.addEventListener('click', openMapeamentoModal);
+
+        // Visitante: ocultar controles de edição/criação
+        if (isVisitante) {
+            document.getElementById('openModalButton').style.display = 'none';
+        }
 
         // --- MODAL REGISTROS ---
         const registrosModal = document.getElementById('registrosModal');
@@ -1308,10 +1315,15 @@
                         </div>
                     `;
 
-                    li.querySelector('.btn-delete-card').addEventListener('click', function(e) {
-                        e.stopPropagation();
-                        deleteScheduleByDate(item.date, this);
-                    });
+                    const deleteCardBtn = li.querySelector('.btn-delete-card');
+                    if (isVisitante) {
+                        deleteCardBtn.style.display = 'none';
+                    } else {
+                        deleteCardBtn.addEventListener('click', function(e) {
+                            e.stopPropagation();
+                            deleteScheduleByDate(item.date, this);
+                        });
+                    }
 
                     li.addEventListener('click', () => {
                         reportDateInput.value = item.date;
@@ -1604,6 +1616,12 @@
             generatePDFButton.style.display = 'none';
             saveScheduleButton.style.display = 'none';
 
+            if (isVisitante) {
+                observacoesTextarea.readOnly = true;
+                saveScheduleButton.style.display = 'none';
+                addManualRowButton.style.display = 'none';
+            }
+
             setModalMode('NEW');
         }
 
@@ -1887,7 +1905,7 @@
                     }
 
                     // Manual Row Editable logic
-                    if (isManual && isModal) {
+                    if (isManual && isModal && !isVisitante) {
                         // Editable text fields: OP, COD, DESC, MAT, CLI, LOTE, T.T.
                         if ([COL_MAP.OP, COL_MAP.CODIGO, COL_MAP.DESCRICAO, COL_MAP.MATERIAL, COL_MAP.CLIENTE, COL_MAP.LOTE, COL_MAP.TRATAMENTO].includes(idx)) {
                             td.contentEditable = true; td.classList.add('editable-manual'); td.onblur = updateManualRowsData;
@@ -1901,7 +1919,7 @@
                     tr.appendChild(td);
                 });
 
-                if (isModal) {
+                if (isModal && !isVisitante) {
                     const td = document.createElement('td');
                     td.className = 'align-center';
                     td.innerHTML = `<button class="btn-delete-row" onclick="deleteRow(${i}, ${isManual})" title="Remover linha"><i class="fas fa-trash"></i></button>`;
@@ -1990,12 +2008,14 @@
             currentReportData = agg;
 
             displayTable(agg, 'modalReportContainer');
-            addManualRowButton.style.display = 'inline-flex';
+            if (!isVisitante) addManualRowButton.style.display = 'inline-flex';
             if (agg.length > 0 || manualRowsData.length > 0) {
                 generatePDFButton.disabled = false;
                 generatePDFButton.style.display = 'inline-flex';
-                saveScheduleButton.disabled = false;
-                saveScheduleButton.style.display = 'inline-flex';
+                if (!isVisitante) {
+                    saveScheduleButton.disabled = false;
+                    saveScheduleButton.style.display = 'inline-flex';
+                }
             }
         });
 
@@ -2075,12 +2095,14 @@
                 modalTitle.textContent = `Programação (SALVA): ${refDate.toLocaleDateString('pt-BR')}`;
 
                 displayTable(currentReportData, 'modalReportContainer');
-                addManualRowButton.style.display = 'inline-flex';
+                if (!isVisitante) addManualRowButton.style.display = 'inline-flex';
 
                 generatePDFButton.disabled = false;
                 generatePDFButton.style.display = 'inline-flex';
-                saveScheduleButton.disabled = false;
-                saveScheduleButton.style.display = 'inline-flex';
+                if (!isVisitante) {
+                    saveScheduleButton.disabled = false;
+                    saveScheduleButton.style.display = 'inline-flex';
+                }
 
             } catch (error) {
                 console.error(error);
@@ -2123,15 +2145,16 @@
             const doc = new jsPDF('l', 'mm', 'a4');
             const pageWidth = doc.internal.pageSize.width;
 
-            doc.setFillColor(24, 24, 27);
-            doc.rect(0, 0, pageWidth, 32, 'F');
+            doc.setDrawColor(0, 0, 0);
+            doc.setLineWidth(0.4);
+            doc.rect(8, 4, pageWidth - 16, 28);
 
             doc.setFontSize(18);
-            doc.setTextColor(255, 255, 255);
+            doc.setTextColor(20, 20, 20);
             doc.text('PROGRAMAÇÃO DO ACABAMENTO INTERNO', 14, 15);
 
             doc.setFontSize(11);
-            doc.setTextColor(251, 191, 36);
+            doc.setTextColor(60, 60, 60);
             doc.text(`DATA: ${targetDateForPDF.toLocaleDateString('pt-BR')}`, 14, 23);
 
             let total = 0;
@@ -2161,7 +2184,7 @@
 
             // HEADER INFO
             doc.setFontSize(10);
-            doc.setTextColor(255, 255, 255);
+            doc.setTextColor(20, 20, 20);
             doc.text(`PESO TOTAL: ${total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} KG`, 14, 28);
             doc.text(`QTD TOTAL: ${totalQtd} PEÇAS`, 80, 28);
 
@@ -2177,8 +2200,8 @@
                     valign: 'middle', lineWidth: 0.1, lineColor: [200, 200, 200]
                 },
                 headStyles: {
-                    fillColor: [24, 24, 27], textColor: [251, 191, 36],
-                    fontStyle: 'bold', lineWidth: 0.1, lineColor: [24, 24, 27]
+                    fillColor: [255, 255, 255], textColor: [20, 20, 20],
+                    fontStyle: 'bold', lineWidth: 0.3, lineColor: [0, 0, 0]
                 },
                 alternateRowStyles: { fillColor: [245, 245, 245] },
                 columnStyles: {
