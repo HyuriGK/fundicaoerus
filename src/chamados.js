@@ -13,9 +13,14 @@ async function ensureTable(client) {
             status VARCHAR(20) NOT NULL DEFAULT 'aberto',
             resolucao TEXT,
             criado_em TIMESTAMP DEFAULT NOW(),
-            resolvido_em TIMESTAMP
+            resolvido_em TIMESTAMP,
+            anexo_base64 TEXT,
+            anexo_nome VARCHAR(255)
         )
     `);
+    // Adiciona colunas se a tabela já existia sem elas
+    await client.query(`ALTER TABLE ti_chamados ADD COLUMN IF NOT EXISTS anexo_base64 TEXT`);
+    await client.query(`ALTER TABLE ti_chamados ADD COLUMN IF NOT EXISTS anexo_nome VARCHAR(255)`);
 }
 
 // GET /api/chamados — lista todos (desenvolvedor) ou do usuário
@@ -47,14 +52,14 @@ router.get('/', async (req, res) => {
 
 // POST /api/chamados — abrir chamado
 router.post('/', async (req, res) => {
-    const { titulo, descricao, urgencia, usuario } = req.body;
+    const { titulo, descricao, urgencia, usuario, anexo_base64, anexo_nome } = req.body;
     if (!titulo || !usuario) return res.status(400).json({ error: 'titulo e usuario são obrigatórios' });
     const client = await pool.connect();
     try {
         await ensureTable(client);
         const r = await client.query(
-            'INSERT INTO ti_chamados (titulo, descricao, urgencia, usuario) VALUES ($1,$2,$3,$4) RETURNING *',
-            [titulo, descricao || '', urgencia || 'media', usuario]
+            'INSERT INTO ti_chamados (titulo, descricao, urgencia, usuario, anexo_base64, anexo_nome) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
+            [titulo, descricao || '', urgencia || 'media', usuario, anexo_base64 || null, anexo_nome || null]
         );
         res.json(r.rows[0]);
     } catch (e) {
