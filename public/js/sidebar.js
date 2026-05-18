@@ -261,6 +261,19 @@
                 '<a href="balanco.html" class="erus-nav-link' + isActive('balanco.html') + '">' +
                     '<i class="fa-solid fa-scale-balanced"></i><span>Balanço</span></a>' +
             '</div>' +
+            // CHAMADOS TI
+            '<div class="erus-nav-group-sep" onclick="erusSidebarToggleGroup(\'eg-chamados\')">' +
+                '<i class="fas fa-headset" style="font-size:0.8rem;color:#52525b;margin-right:8px;flex-shrink:0;"></i>' +
+                '<span class="erus-nav-group-label">Chamados TI</span>' +
+                '<div class="erus-nav-group-line"></div>' +
+                '<i class="fa-solid fa-plus" id="icon-eg-chamados"></i>' +
+            '</div>' +
+            '<div id="eg-chamados" class="erus-nav-group-wrapper collapsed">' +
+                '<a href="solicitarchamados.html" class="erus-nav-link' + isActive('solicitarchamados.html') + '">' +
+                    '<i class="fa-solid fa-headset"></i><span>Solicitar Chamado</span></a>' +
+                '<a href="chamados.html" id="erus-link-chamados-ti" class="erus-nav-link' + isActive('chamados.html') + '" style="display:none;">' +
+                    '<i class="fa-solid fa-ticket"></i><span>Painel TI</span></a>' +
+            '</div>' +
             // EM DESENVOLVIMENTO
             '<div id="erus-sep-desenvolvimento" class="erus-nav-group-sep" onclick="erusSidebarToggleGroup(\'eg-desenvolvimento\')" style="display:none;">' +
                 '<i class="fas fa-screwdriver-wrench" style="font-size:0.8rem;color:#ef4444;margin-right:8px;flex-shrink:0;"></i>' +
@@ -409,6 +422,12 @@
             if (grpFin) grpFin.style.display = 'block';
         }
 
+        // CHAMADOS TI — Painel TI só para desenvolvedor
+        if (role === 'desenvolvedor') {
+            var linkChamadosTI = document.getElementById('erus-link-chamados-ti');
+            if (linkChamadosTI) linkChamadosTI.style.display = 'flex';
+        }
+
         // Role-based sidebar filter for restricted roles
         var restrictedPageMap = {
             'moldagem': 'fichatecmoldagem.html',
@@ -418,10 +437,21 @@
         };
         if (restrictedPageMap[role]) {
             var allowedPage = restrictedPageMap[role];
-            // Hide all groups using class (inline style is overridden by !important in collapsed CSS)
+            // Hide all groups — except eg-chamados which is visible to everyone
             document.querySelectorAll('#erus-sidebar .erus-nav-group-sep, #erus-sidebar .erus-nav-group-wrapper').forEach(function(el) {
+                if (el.id === 'eg-chamados') return;
+                // The sep immediately before eg-chamados — keep it too (checked below)
                 el.classList.add('erus-role-hidden');
             });
+            // Un-hide the Chamados TI separator (it has no id, so find it via the wrapper's previousElementSibling)
+            var chamadosWrapper = document.getElementById('eg-chamados');
+            if (chamadosWrapper) {
+                var chamadosSep = chamadosWrapper.previousElementSibling;
+                while (chamadosSep && !chamadosSep.classList.contains('erus-nav-group-sep')) {
+                    chamadosSep = chamadosSep.previousElementSibling;
+                }
+                if (chamadosSep) chamadosSep.classList.remove('erus-role-hidden');
+            }
             // Show only the group containing the allowed page
             var allowedLink = document.querySelector('#erus-sidebar .erus-nav-link[href="' + allowedPage + '"]');
             if (allowedLink) {
