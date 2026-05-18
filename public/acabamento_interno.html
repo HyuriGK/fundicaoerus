@@ -1656,7 +1656,6 @@
                 const key = row[COL_MAP.OP] + '|' + row[COL_MAP.CODIGO];
                 if (map.has(key)) {
                     const ex = map.get(key);
-                    // Correção: Converte para número antes de somar
                     ex.quantidade += Number(row[COL_MAP.QTD]) || 0;
                     ex.pesoTotal += Number(row[COL_MAP.PESO_TOTAL]) || 0;
                 } else {
@@ -1667,15 +1666,22 @@
                         descricao: row[COL_MAP.DESCRICAO],
                         material: row[COL_MAP.MATERIAL],
                         pesoUn: Number(row[COL_MAP.PESO_UN]) || 0,
-                        quantidade: Number(row[COL_MAP.QTD]) || 0, // Garante número inicial
+                        quantidade: Number(row[COL_MAP.QTD]) || 0,
                         lote: row[COL_MAP.LOTE],
-                        pesoTotal: Number(row[COL_MAP.PESO_TOTAL]) || 0, // Garante número inicial
+                        pesoTotal: Number(row[COL_MAP.PESO_TOTAL]) || 0,
                         cliente: row[COL_MAP.CLIENTE],
-                        quant_fat: 0.0
+                        quant_fat: 0.0,
+                        tratamento: row[COL_MAP.TRATAMENTO] || '',
+                        fornecimento: row[COL_MAP.FORNECIMENTO] || ''
                     });
                 }
             }
-            return Array.from(map.values()).map(v => [v.data, v.op, v.codigo, v.descricao, v.material, v.pesoUn, v.quantidade, v.lote, v.pesoTotal, v.cliente, v.quant_fat]);
+            // índices 11-14 são placeholders (STATUS, QUANT_ORIG, DATA_FUSAO, GRUPO) — não usados no modal/PDF
+            return Array.from(map.values()).map(v => [
+                v.data, v.op, v.codigo, v.descricao, v.material, v.pesoUn,
+                v.quantidade, v.lote, v.pesoTotal, v.cliente, v.quant_fat,
+                '', 0, null, '', v.tratamento, v.fornecimento
+            ]);
         }
 
         function updateTotalWeightDisplay() {
@@ -2178,8 +2184,8 @@
                         q.toLocaleString('pt-BR', { maximumFractionDigits: 0 }),
                         r[COL_MAP.LOTE],
                         r[COL_MAP.TRATAMENTO] || '',
-                        parsePtBrNumber(r[COL_MAP.PESO_TOTAL]).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-                        r[COL_MAP.FORNECIMENTO] || ''
+                        r[COL_MAP.FORNECIMENTO] || '',
+                        parsePtBrNumber(r[COL_MAP.PESO_TOTAL]).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                     ]);
                 }
             });
@@ -2191,7 +2197,7 @@
             doc.text(`QTD TOTAL: ${totalQtd} PEÇAS`, 80, 28);
 
             doc.autoTable({
-                head: [["OP", "Cód.", "Descrição", "Material", "Cliente", "Quant.", "Lote", "T.T.", "Peso Total", "Fornecimento"]],
+                head: [["OP", "Cód.", "Descrição", "Material", "Cliente", "Quant.", "Lote", "T.T.", "Fornecimento", "Peso Total"]],
                 body: body,
                 startY: 35,
                 theme: 'grid',
@@ -2215,8 +2221,8 @@
                     5: { cellWidth: 13, halign: 'center' },  // Qtd
                     6: { cellWidth: 20, halign: 'center' },  // Lote
                     7: { cellWidth: 30, halign: 'center', overflow: 'ellipsize' }, // T.T.
-                    8: { cellWidth: 22, halign: 'center' },  // Peso
-                    9: { cellWidth: 50, overflow: 'ellipsize' }  // Fornecimento
+                    8: { cellWidth: 50, overflow: 'ellipsize' }, // Fornecimento
+                    9: { cellWidth: 22, halign: 'center' }   // Peso
                 },
                 tableWidth: pageWidth - 16, margin: { left: 8, right: 8 }
             });
