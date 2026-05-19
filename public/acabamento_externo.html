@@ -853,9 +853,12 @@
                     <div id="monthButtons"></div>
                 </div>
                 <!-- Action Buttons (Right Aligned) -->
-                <div class="toolbar-actions" style="display: flex; gap: 10px; margin-left: auto;">
-                    <button class="btn-modern" onclick="abrirModalBusca()" style="background: rgba(255,255,255,0.05); color: var(--text-main); border: 1px solid var(--border-subtle); font-size: 0.79rem; padding: 0 12px; height: 32px;">
-                        <i class="fa-solid fa-magnifying-glass"></i> BUSCA
+                <div class="toolbar-actions" style="display: flex; gap: 8px; margin-left: auto; align-items: center;">
+                    <button id="btnViewDiaria" class="month-btn active" onclick="setView('diaria')">
+                        <i class="fa-solid fa-chart-column"></i> DIÁRIO
+                    </button>
+                    <button id="btnViewMensal" class="month-btn" onclick="setView('mensal')">
+                        <i class="fa-solid fa-chart-bar"></i> MENSAL
                     </button>
                     <button class="btn-modern" id="novoEnvioButtonToolbar" onclick="abrirModalPorId('novoEnvioModal')" style="background: var(--color-primary); color: #000; font-size: 0.79rem; padding: 0 12px; height: 32px; font-weight: 700;">
                         <i class="fa-solid fa-plus-circle"></i> NOVO ENVIO
@@ -865,22 +868,12 @@
                     </button>
                 </div>
             </div>
-            <div style="display:flex; gap:12px; flex:1; min-height:0;">
-                <div class="chart-panel" style="flex:1; min-width:0;">
-                    <div class="chart-header">
-                        <div class="chart-title">Peso Total Terceirizado (KG)</div>
-                    </div>
-                    <div class="chart-container-wrapper">
-                        <canvas id="barChart"></canvas>
-                    </div>
+            <div class="chart-panel" style="flex:1; min-height:0;">
+                <div class="chart-header">
+                    <div class="chart-title" id="mainChartTitle">Terceirizado Diário</div>
                 </div>
-                <div class="chart-panel" style="flex:1; min-width:0;">
-                    <div class="chart-header">
-                        <div class="chart-title" id="dailyChartTitle">Total Terceirizado Diário (KG)</div>
-                    </div>
-                    <div class="chart-container-wrapper">
-                        <canvas id="dailyChart"></canvas>
-                    </div>
+                <div class="chart-container-wrapper">
+                    <canvas id="mainChart"></canvas>
                 </div>
             </div>
         </main>
@@ -1097,7 +1090,7 @@
         let recebidos = {};
         let itensConhecidos = new Map();
         let mainChartInstance = null;
-        let dailyChartInstance = null;
+        let currentView = 'diaria';
         const modalStack = [];
         // Variável para contolar visibilidade do valor total
         let isValorTotalVisible = false;
@@ -1528,8 +1521,17 @@
                 const p = r.data.split('T')[0].split('-');
                 if (p[0] === fA) cD[p[1]] = (cD[p[1]] || 0) + (parseFloat(r.quant || 0) * parseFloat(r.peso || 0));
             });
-            renderChart(cD, true);
-            renderDailyChart();
+            if (currentView === 'mensal') {
+                renderMonthlyChart(cD);
+            } else {
+                renderDailyChart();
+            }
+        }
+        function setView(v) {
+            currentView = v;
+            document.getElementById('btnViewDiaria').classList.toggle('active', v === 'diaria');
+            document.getElementById('btnViewMensal').classList.toggle('active', v === 'mensal');
+            updateDashboardAndCharts();
         }
         function renderDailyChart() {
             const now = new Date();
@@ -1537,7 +1539,7 @@
             const curYear = now.getFullYear().toString();
             const daysInMonth = new Date(parseInt(curYear), parseInt(curMonth), 0).getDate();
             const monthName = MONTHS_SHORT[now.getMonth()];
-            const titleEl = document.getElementById('dailyChartTitle');
+            const titleEl = document.getElementById('mainChartTitle');
             if (titleEl) titleEl.textContent = `Terceirizado Diário — ${monthName}/${curYear}`;
             const dayData = {};
             registros.forEach(r => {
@@ -1555,9 +1557,9 @@
             }
             let acc = 0;
             const accumulated = values.map(v => { acc += v; return acc; });
-            const ctx = document.getElementById('dailyChart').getContext('2d');
-            if (dailyChartInstance) dailyChartInstance.destroy();
-            dailyChartInstance = new Chart(ctx, {
+            const ctx = document.getElementById('mainChart').getContext('2d');
+            if (mainChartInstance) mainChartInstance.destroy();
+            mainChartInstance = new Chart(ctx, {
                 type: 'bar',
                 data: {
                     labels,
@@ -1617,42 +1619,47 @@
                 }
             });
         }
-        function renderChart(data, isM) {
-            let l = [], w = [];
-            const ctx = document.getElementById('barChart').getContext('2d');
-            if (isM) {
-                // Visão Anual (meses)
-                const names = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
-                l = Object.keys(data).sort().map(k => names[parseInt(k) - 1]);
-                w = Object.keys(data).sort().map(k => data[k]);
-            } else {
-                // Visão Mensal (todos os dias do mês)
-                const fM = (selectedMonthIndex + 1).toString().padStart(2, '0');
-                const fA = selectedYear.toString();
-                const daysInMonth = new Date(parseInt(fA), parseInt(fM), 0).getDate();
-                for (let i = 1; i <= daysInMonth; i++) {
-                    const dayStr = i.toString().padStart(2, '0');
-                    const dateKey = `${fA}-${fM}-${dayStr}`;
-                    l.push(dayStr);
-                    w.push(data[dateKey] || 0);
-                }
-            }
-            const maxVal = Math.max(...w, 0);
-            const suggestedMax = maxVal > 0 ? maxVal * 1.2 : 10;
+        function renderMonthlyChart(data) {
+            const names = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+            const l = Object.keys(data).sort().map(k => names[parseInt(k) - 1]);
+            const w = Object.keys(data).sort().map(k => data[k]);
+            const titleEl = document.getElementById('mainChartTitle');
+            if (titleEl) titleEl.textContent = `Peso Total Terceirizado — ${selectedYear}`;
+            let acc = 0;
+            const accumulated = w.map(v => { acc += v; return acc; });
+            const ctx = document.getElementById('mainChart').getContext('2d');
             if (mainChartInstance) mainChartInstance.destroy();
             mainChartInstance = new Chart(ctx, {
                 type: 'bar',
                 data: {
                     labels: l,
-                    datasets: [{
-                        label: 'Peso (KG)',
-                        data: w,
-                        backgroundColor: '#fbbf24',
-                        borderColor: '#fbbf24',
-                        borderWidth: 1,
-                        borderRadius: 4,
-                        hoverBackgroundColor: '#fff'
-                    }]
+                    datasets: [
+                        {
+                            label: 'Peso (KG)',
+                            data: w,
+                            backgroundColor: 'rgba(251,191,36,0.75)',
+                            borderColor: '#fbbf24',
+                            borderWidth: 1,
+                            borderRadius: 4,
+                            order: 2,
+                            yAxisID: 'y',
+                            datalabels: { display: false }
+                        },
+                        {
+                            type: 'line',
+                            label: 'Acumulado (KG)',
+                            data: accumulated,
+                            borderColor: '#10b981',
+                            backgroundColor: 'rgba(16,185,129,0.08)',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.3,
+                            pointRadius: 2,
+                            order: 1,
+                            yAxisID: 'y1',
+                            datalabels: { display: false }
+                        }
+                    ]
                 },
                 options: {
                     responsive: true,
@@ -1660,16 +1667,24 @@
                     plugins: {
                         legend: { display: false },
                         tooltip: {
+                            mode: 'index',
+                            intersect: false,
                             callbacks: {
-                                label: ctx => `Peso: ${formatNumber(ctx.parsed.y)} KG`
+                                label: item => {
+                                    const v = item.parsed.y;
+                                    if (item.dataset.label === 'Acumulado (KG)')
+                                        return `  Acumulado: ${formatNumber(v)} KG`;
+                                    return `  Mensal: ${formatNumber(v)} KG`;
+                                }
                             }
                         },
                         datalabels: { display: false }
                     },
                     interaction: { mode: 'index', intersect: false },
                     scales: {
-                        y: { beginAtZero: true, grid: { color: _gc() }, ticks: { color: _tc() } },
-                        x: { grid: { display: true, color: _gc() }, ticks: { color: _tc() } }
+                        y:  { beginAtZero: true, grid: { color: _gc() }, ticks: { color: _tc() } },
+                        y1: { beginAtZero: true, position: 'right', grid: { display: false }, ticks: { color: '#10b981' } },
+                        x:  { grid: { display: true, color: _gc() }, ticks: { color: _tc() } }
                     }
                 }
             });
