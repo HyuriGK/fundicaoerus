@@ -4318,7 +4318,7 @@
                             <div class="pref-desc" style="font-size:0.75rem; color:var(--text-muted);">Alterne entre o tema escuro padrão e o tema claro.</div>
                         </div>
                         <!-- Toggle Switch -->
-                        <button id="pref-theme-toggle" data-theme-toggle onclick="ErusTheme.toggle(); updatePrefModal();"
+                        <button id="pref-theme-toggle" data-theme-toggle onclick="indexToggleTheme();"
                             style="flex-shrink:0; display:flex; align-items:center; gap:10px; padding:10px 16px; border-radius:24px; border:1px solid rgba(217,119,6,0.25); background:rgba(217,119,6,0.08); color:#d97706; cursor:pointer; font-family:var(--font-main); font-size:0.8rem; font-weight:600; transition:all 0.25s; white-space:nowrap; min-width:148px; justify-content:center;">
                             <i class="fa-solid fa-sun" style="font-size:0.95rem;"></i>
                             <span class="theme-btn-label">Tema Claro</span>
@@ -4337,6 +4337,12 @@
                             <div style="height:4px; border-radius:2px; background:#d1d5db; width:70%;"></div>
                             <div style="height:4px; border-radius:2px; background:#d1d5db; width:50%; margin-top:4px;"></div>
                             <div style="margin-top:8px; font-size:0.65rem; font-weight:700; color:#9ca3af; text-transform:uppercase; letter-spacing:0.05em;">Claro</div>
+                        </div>
+                        <div id="chip-classic" onclick="setTheme('classic')" style="display:none; flex:1; border-radius:0; padding:12px; border:2px solid transparent; cursor:pointer; background:linear-gradient(135deg,#d4d0c8,#c8c4bc); border-top:2px solid #fff; border-left:2px solid #fff; border-right:2px solid #808080; border-bottom:2px solid #808080;">
+                            <div style="height:6px; background:linear-gradient(to right,#000080,#1084d0); margin-bottom:5px;"></div>
+                            <div style="height:4px; background:#d4d0c8; border-top:1px solid #fff; border-left:1px solid #fff; border-right:1px solid #808080; border-bottom:1px solid #808080; width:70%;"></div>
+                            <div style="height:4px; background:#d4d0c8; border-top:1px solid #fff; border-left:1px solid #fff; border-right:1px solid #808080; border-bottom:1px solid #808080; width:50%; margin-top:4px;"></div>
+                            <div style="margin-top:8px; font-size:0.65rem; font-weight:700; color:#000080; text-transform:uppercase; letter-spacing:0.05em; font-family:Tahoma,Arial,sans-serif;">Clássico</div>
                         </div>
                     </div>
                 </div>
@@ -6054,7 +6060,7 @@
                 async function editUserRole(username, currentRole) {
 
 
-                    const newRole = prompt(`Novo role para ${username}? (admin, desenvolvedor, comercial, gerente comercial, diretor, analista, visitante, moldagem, fusão, acabamento)`, currentRole);
+                    const newRole = await classicPrompt(`Novo role para ${username}? (admin, desenvolvedor, comercial, gerente comercial, diretor, analista, visitante, moldagem, fusão, acabamento)`, currentRole);
 
 
                     if (newRole && newRole !== currentRole) {
@@ -6132,7 +6138,7 @@
                 async function deleteUser(username) {
 
 
-                    if (confirm(`Tem certeza que deseja BANIR (excluir) o usuário: ${username}? Essa ação não pode ser desfeita.`)) {
+                    if (await classicConfirm(`Tem certeza que deseja BANIR (excluir) o usuário: ${username}? Essa ação não pode ser desfeita.`)) {
 
 
                         try {
@@ -6201,7 +6207,7 @@
                 async function approveUser(username) {
 
 
-                    if (confirm(`Deseja aprovar o acesso do usuário ${username}?`)) {
+                    if (await classicConfirm(`Deseja aprovar o acesso do usuário ${username}?`)) {
 
 
                         try {
@@ -6270,7 +6276,7 @@
                 async function blockUser(username) {
 
 
-                    if (confirm(`Deseja BLOQUEAR o acesso do usuário ${username}? Ele não poderá mais logar.`)) {
+                    if (await classicConfirm(`Deseja BLOQUEAR o acesso do usuário ${username}? Ele não poderá mais logar.`)) {
 
 
                         try {
@@ -6989,7 +6995,7 @@
                         : `Deseja enviar esta mensagem para ${recipient_ids.length} usuário(s) selecionado(s)?`;
 
 
-                    if (!confirm(confirmMsg)) return;
+                    if (!await classicConfirm(confirmMsg)) return;
 
 
                     try {
@@ -8679,12 +8685,13 @@
                 function updatePrefModal() {
                     const theme = ErusTheme.current();
                     const btn = document.getElementById('pref-theme-toggle');
-                    const chipDark = document.getElementById('chip-dark');
-                    const chipLight = document.getElementById('chip-light');
-                    const amber = 'rgba(217,119,6,0.25)';
-                    const amberBg = 'rgba(217,119,6,0.08)';
-                    const indigo = 'rgba(79,70,229,0.35)';
-                    const indigoBg = 'rgba(79,70,229,0.12)';
+                    const chipDark    = document.getElementById('chip-dark');
+                    const chipLight   = document.getElementById('chip-light');
+                    const chipClassic = document.getElementById('chip-classic');
+                    const role = (localStorage.getItem('erus_role') || '').toLowerCase();
+
+                    // Show classic chip only for desenvolvedor
+                    if (chipClassic) chipClassic.style.display = role === 'desenvolvedor' ? 'block' : 'none';
 
                     if (btn) {
                         const icon = btn.querySelector('i');
@@ -8692,19 +8699,48 @@
                         if (theme === 'light') {
                             if (icon) icon.className = 'fa-solid fa-moon';
                             if (label) label.textContent = 'Tema Escuro';
-                            btn.style.borderColor = indigo;
-                            btn.style.background = indigoBg;
+                            btn.style.borderColor = 'rgba(79,70,229,0.35)';
+                            btn.style.background = 'rgba(79,70,229,0.12)';
                             btn.style.color = '#4f46e5';
+                        } else if (theme === 'classic') {
+                            if (icon) icon.className = 'fa-solid fa-desktop';
+                            if (label) label.textContent = 'Clássico';
+                            btn.style.borderColor = 'rgba(0,0,128,0.4)';
+                            btn.style.background = 'rgba(0,0,128,0.1)';
+                            btn.style.color = '#000080';
                         } else {
                             if (icon) icon.className = 'fa-solid fa-sun';
                             if (label) label.textContent = 'Tema Claro';
-                            btn.style.borderColor = amber;
-                            btn.style.background = amberBg;
+                            btn.style.borderColor = 'rgba(217,119,6,0.25)';
+                            btn.style.background = 'rgba(217,119,6,0.08)';
                             btn.style.color = '#d97706';
                         }
                     }
-                    if (chipDark) chipDark.style.borderColor = theme === 'dark' ? '#fbbf24' : 'transparent';
-                    if (chipLight) chipLight.style.borderColor = theme === 'light' ? '#d97706' : 'transparent';
+                    if (chipDark)    chipDark.style.borderColor    = theme === 'dark'    ? '#fbbf24' : 'transparent';
+                    if (chipLight)   chipLight.style.borderColor   = theme === 'light'   ? '#d97706' : 'transparent';
+                    if (chipClassic && theme === 'classic') {
+                        chipClassic.style.borderTop    = '2px solid #000080';
+                        chipClassic.style.borderLeft   = '2px solid #000080';
+                        chipClassic.style.borderRight  = '2px solid #000040';
+                        chipClassic.style.borderBottom = '2px solid #000040';
+                    } else if (chipClassic) {
+                        chipClassic.style.borderTop    = '2px solid #fff';
+                        chipClassic.style.borderLeft   = '2px solid #fff';
+                        chipClassic.style.borderRight  = '2px solid #808080';
+                        chipClassic.style.borderBottom = '2px solid #808080';
+                    }
+                }
+
+                function indexToggleTheme() {
+                    const current = ErusTheme.current();
+                    const role = (localStorage.getItem('erus_role') || '').toLowerCase();
+                    let next;
+                    if (role === 'desenvolvedor') {
+                        next = current === 'dark' ? 'light' : current === 'light' ? 'classic' : 'dark';
+                    } else {
+                        next = current === 'dark' ? 'light' : 'dark';
+                    }
+                    setTheme(next);
                 }
 
                 function setTheme(theme) {

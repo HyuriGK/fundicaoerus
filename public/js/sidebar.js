@@ -338,6 +338,12 @@
                         '<div style="height:4px;border-radius:2px;background:#d1d5db;width:50%;margin-top:4px;"></div>' +
                         '<div style="margin-top:8px;font-size:0.65rem;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.05em;">Claro</div>' +
                     '</div>' +
+                    '<div id="erus-chip-classic" onclick="erusSidebarSetTheme(\'classic\')" style="display:none;flex:1;border-radius:0;padding:12px;border:2px solid transparent;cursor:pointer;background:linear-gradient(135deg,#d4d0c8,#c8c4bc);border-top:2px solid #fff;border-left:2px solid #fff;border-right:2px solid #808080;border-bottom:2px solid #808080;">' +
+                        '<div style="height:6px;background:linear-gradient(to right,#000080,#1084d0);margin-bottom:5px;"></div>' +
+                        '<div style="height:4px;background:#d4d0c8;border-top:1px solid #fff;border-left:1px solid #fff;border-right:1px solid #808080;border-bottom:1px solid #808080;width:70%;"></div>' +
+                        '<div style="height:4px;background:#d4d0c8;border-top:1px solid #fff;border-left:1px solid #fff;border-right:1px solid #808080;border-bottom:1px solid #808080;width:50%;margin-top:4px;"></div>' +
+                        '<div style="margin-top:8px;font-size:0.65rem;font-weight:700;color:#000080;text-transform:uppercase;letter-spacing:0.05em;font-family:Tahoma,Arial,sans-serif;">Clássico</div>' +
+                    '</div>' +
                 '</div>' +
             '</div>' +
             '<div style="padding:16px 28px 20px;display:flex;justify-content:flex-end;">' +
@@ -412,6 +418,12 @@
         var adminBtn = document.getElementById('erus-admin-btn');
         if (adminBtn && (role === 'desenvolvedor' || role === 'admin')) {
             adminBtn.style.display = 'flex';
+        }
+
+        // CLASSIC THEME CHIP — apenas desenvolvedor
+        if (role === 'desenvolvedor') {
+            var chipClassic = document.getElementById('erus-chip-classic');
+            if (chipClassic) chipClassic.style.display = 'flex';
         }
 
         // FINANCEIRO — apenas desenvolvedor
@@ -573,7 +585,14 @@
 
     window.erusSidebarToggleTheme = function() {
         var current = localStorage.getItem('erus_theme') || 'dark';
-        erusSidebarSetTheme(current === 'dark' ? 'light' : 'dark');
+        var role = (localStorage.getItem('erus_role') || '').toLowerCase();
+        var next;
+        if (role === 'desenvolvedor') {
+            next = current === 'dark' ? 'light' : current === 'light' ? 'classic' : 'dark';
+        } else {
+            next = current === 'dark' ? 'light' : 'dark';
+        }
+        erusSidebarSetTheme(next);
     };
 
     window.erusSidebarSetTheme = function(theme) {
@@ -586,8 +605,9 @@
     window.erusSidebarUpdateThemeUI = function() {
         var theme = localStorage.getItem('erus_theme') || 'dark';
         var btn = document.getElementById('erus-theme-btn');
-        var chipDark = document.getElementById('erus-chip-dark');
-        var chipLight = document.getElementById('erus-chip-light');
+        var chipDark    = document.getElementById('erus-chip-dark');
+        var chipLight   = document.getElementById('erus-chip-light');
+        var chipClassic = document.getElementById('erus-chip-classic');
         if (btn) {
             var icon = btn.querySelector('i');
             var label = btn.querySelector('span');
@@ -597,6 +617,12 @@
                 btn.style.borderColor = 'rgba(79,70,229,0.35)';
                 btn.style.background = 'rgba(79,70,229,0.12)';
                 btn.style.color = '#4f46e5';
+            } else if (theme === 'classic') {
+                if (icon) icon.className = 'fa-solid fa-desktop';
+                if (label) label.textContent = 'Clássico';
+                btn.style.borderColor = 'rgba(0,0,128,0.4)';
+                btn.style.background = 'rgba(0,0,128,0.1)';
+                btn.style.color = '#000080';
             } else {
                 if (icon) icon.className = 'fa-solid fa-sun';
                 if (label) label.textContent = 'Tema Claro';
@@ -605,8 +631,15 @@
                 btn.style.color = '#d97706';
             }
         }
-        if (chipDark) chipDark.style.borderColor = theme === 'dark' ? '#fbbf24' : 'transparent';
-        if (chipLight) chipLight.style.borderColor = theme === 'light' ? '#d97706' : 'transparent';
+        if (chipDark)    chipDark.style.borderColor    = theme === 'dark'    ? '#fbbf24' : 'transparent';
+        if (chipLight)   chipLight.style.borderColor   = theme === 'light'   ? '#d97706' : 'transparent';
+        if (chipClassic) chipClassic.style.borderColor = theme === 'classic' ? '#000080' : 'transparent';
+        if (chipClassic && theme === 'classic') {
+            chipClassic.style.borderTop    = '2px solid ' + (theme === 'classic' ? '#000080' : '#fff');
+            chipClassic.style.borderLeft   = '2px solid ' + (theme === 'classic' ? '#000080' : '#fff');
+            chipClassic.style.borderRight  = '2px solid ' + (theme === 'classic' ? '#000040' : '#808080');
+            chipClassic.style.borderBottom = '2px solid ' + (theme === 'classic' ? '#000040' : '#808080');
+        }
     };
 
     if (document.readyState === 'loading') {
