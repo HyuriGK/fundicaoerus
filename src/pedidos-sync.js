@@ -2,34 +2,46 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../lib/db');
 
-// Rota para buscar peso efetivo de um produto por código (usado por acabamento_externo)
-// Prioridade: PESO_UNIT (Firebird) > pesos_customizados (manual)
+// Rota para buscar peso unitário de um produto por código (usado por acabamento_externo)
+// Prioridade: pesos_customizados (manual) > PESO_LIQUIDO_NPR / QUANTIDADE_PPR (Firebird calculado)
 router.get('/peso-lookup', async (req, res) => {
     const { codigo } = req.query;
     if (!codigo) return res.json({ peso: null, source: null });
     const cod = String(codigo).trim().toUpperCase();
     try {
-        // 1. PESO_UNIT do Firebird (mais recente com peso válido)
+        // 1. Peso customizado cadastrado manualmente em pedidos.html
+        const cwRes = await pool.query(
+            `SELECT peso FROM pesos_customizados WHERE UPPER(codigo) = $1`,
+            [cod]
+        );
+        if (cwRes.rows.length > 0 && Number(cwRes.rows[0].peso) > 0) {
+            return res.json({ peso: Number(cwRes.rows[0].peso), source: 'custom' });
+        }
+        // 2. Calculado do Firebird: PESO_LIQUIDO_NPR / QUANTIDADE_PPR
         const fbRes = await pool.query(
-            `SELECT (data->>'PESO_UNIT')::numeric AS peso
+            `SELECT
+               (data->>'PESO_LIQUIDO_NPR')::numeric AS peso_liquido,
+               GREATEST(
+                 COALESCE((data->>'OP_QUANTIDADE')::numeric, 0),
+                 COALESCE((data->>'QUANTIDADE_PPR')::numeric, 0)
+               ) AS qty
              FROM firebird_sync_emissoes
              WHERE UPPER(data->>'PRODUTO_PPR') = $1
-               AND data->>'PESO_UNIT' IS NOT NULL
-               AND (data->>'PESO_UNIT')::numeric > 0
+               AND (data->>'PESO_LIQUIDO_NPR')::numeric > 0
+               AND GREATEST(
+                 COALESCE((data->>'OP_QUANTIDADE')::numeric, 0),
+                 COALESCE((data->>'QUANTIDADE_PPR')::numeric, 0)
+               ) > 0
              ORDER BY updated_at DESC
              LIMIT 1`,
             [cod]
         );
         if (fbRes.rows.length > 0) {
-            return res.json({ peso: Number(fbRes.rows[0].peso), source: 'firebird' });
-        }
-        // 2. Peso customizado (cadastrado manualmente em pedidos.html)
-        const cwRes = await pool.query(
-            `SELECT peso FROM pesos_customizados WHERE UPPER(codigo) = $1`,
-            [cod]
-        );
-        if (cwRes.rows.length > 0 && cwRes.rows[0].peso > 0) {
-            return res.json({ peso: Number(cwRes.rows[0].peso), source: 'custom' });
+            const { peso_liquido, qty } = fbRes.rows[0];
+            const unitWeight = Number(peso_liquido) / Number(qty);
+            if (unitWeight > 0) {
+                return res.json({ peso: Math.round(unitWeight * 1000) / 1000, source: 'firebird' });
+            }
         }
         return res.json({ peso: null, source: null });
     } catch (err) {
