@@ -313,16 +313,6 @@
         }
         /* --- BOTÃÂ•ES MODERNOS --- */
         .btn-modern {
-            padding: 8px 16px;
-            border-radius: 6px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            font-weight: 600;
-            font-size: 0.9rem;
-            cursor: pointer;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            transition: all 0.2s;
             background-color: #27272a;
             color: #fff;
         }
@@ -1393,15 +1383,11 @@
                         <select class="year-pill-select" id="yearPillSelect" onchange="onYearPillChange()" style="flex-shrink:0;"></select>
                         <div id="monthPillsContainer" style="display:flex; gap:4px; flex-wrap:nowrap;"></div>
                     </div>
-                    <!-- DIREITA: GRÁFICOS + REGISTROS -->
+                    <!-- DIREITA: EVOLUÇÃO + REGISTROS -->
                     <div style="display:flex; gap:6px; align-items:center; margin-left:auto; flex-shrink:0;">
-                        <select class="year-pill-select" id="chartSelectDropdown" onchange="selectChartFromDropdown(parseInt(this.value))" style="width:auto; padding:0 12px;">
-                            <option value="1" style="background:#18181b; color:#f4f4f5;">GRÁFICOS DE ENTREGA</option>
-                            <option value="2" style="background:#18181b; color:#f4f4f5;">GRÁFICOS DE EMISSÃO</option>
-                            <option value="3" style="background:#18181b; color:#f4f4f5;">CONCENTRAÇÃO DA CARTEIRA</option>
-                            <option value="4" style="background:#18181b; color:#f4f4f5;">VARIAÇÃO DA CARTEIRA</option>
-                        </select>
-                        <button class="btn-action-standard btn-modern" onclick="openModal(); this.blur()" id="btn-open-registros" style="background: var(--color-primary); color: #000; flex-shrink:0;">
+                        <button id="btnViewMensal" class="month-btn active" onclick="setDeliveryView('mensal')">EVOLUÇÃO MENSAL</button>
+                        <button id="btnViewDiaria" class="month-btn" onclick="setDeliveryView('diaria')">EVOLUÇÃO DIÁRIA</button>
+                        <button class="btn-modern" onclick="openModal(); this.blur()" id="btn-open-registros" style="background: rgba(255,255,255,0.05); color: var(--text-main); border: 1px solid var(--border-subtle); flex-shrink:0;">
                             <i class="fa-solid fa-table-list"></i>
                             REGISTROS
                         </button>
@@ -4758,6 +4744,39 @@
             showChartRow(n);
         }
 
+        let currentDeliveryView = 'mensal';
+
+        function setDeliveryView(mode) {
+            currentDeliveryView = mode;
+            const btnMensal = document.getElementById('btnViewMensal');
+            const btnDiaria = document.getElementById('btnViewDiaria');
+            if (btnMensal) btnMensal.classList.toggle('active', mode === 'mensal');
+            if (btnDiaria) btnDiaria.classList.toggle('active', mode === 'diaria');
+            showChartRow(1);
+            applyDeliveryViewPanels(mode);
+        }
+
+        function applyDeliveryViewPanels(mode) {
+            const pcpPanel = document.getElementById('chartPCP')?.closest('.chart-panel');
+            const dailyPanel = document.getElementById('chartDaily')?.closest('.chart-panel');
+            if (!pcpPanel || !dailyPanel) return;
+            if (mode === 'mensal') {
+                pcpPanel.style.display = '';
+                pcpPanel.style.flex = '1';
+                dailyPanel.style.display = 'none';
+                requestAnimationFrame(() => { if (chartPCP) chartPCP.resize(); });
+            } else {
+                pcpPanel.style.display = 'none';
+                dailyPanel.style.display = '';
+                dailyPanel.style.flex = '1';
+                const now = new Date();
+                const overrideEl = document.getElementById('monthOverrideDaily');
+                if (overrideEl) overrideEl.value = now.getMonth() + 1;
+                updateDailyChart(allData);
+                requestAnimationFrame(() => { if (chartDaily) chartDaily.resize(); });
+            }
+        }
+
         // ── BARRA MÊS/ANO ─────────────────────────────────────────────────────────
         const MONTHS_PILL = ['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'];
         let activePillMonth = null; // null = todos
@@ -4785,7 +4804,7 @@
             sel.className = 'year-select';
             sel.id = 'monthPillSelect';
             const optAll = document.createElement('option');
-            optAll.value = ''; optAll.textContent = 'TODOS';
+            optAll.value = ''; optAll.textContent = 'ANO';
             sel.appendChild(optAll);
             MONTHS_PILL.forEach((m, i) => {
                 const opt = document.createElement('option');
@@ -4865,6 +4884,9 @@
             }
             if (n === 4) {
                 renderVariacaoChart();
+            }
+            if (n === 1) {
+                applyDeliveryViewPanels(currentDeliveryView);
             }
             requestAnimationFrame(() => {
                 if (chartPCP) chartPCP.resize();
@@ -4956,6 +4978,7 @@
             if (typeof setupFilters === 'function') setupFilters();
             initMonthYearBar();
             await loadDataFromServer();
+            setDeliveryView('mensal');
             
             const role = localStorage.getItem('erus_role');
             const btnEmail = document.getElementById('btnGerarEmail');
