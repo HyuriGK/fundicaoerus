@@ -1086,7 +1086,7 @@
         Chart.defaults.plugins.tooltip.borderColor = _ltAcab ? 'rgba(0,0,0,0.1)' : 'rgba(251,191,36,0.3)';
         Chart.register(ChartDataLabels);
         const MONTHS_SHORT = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
-        let selectedMonthIndex = -1; // -1 = visão anual (ANO)
+        let selectedMonthIndex = new Date().getMonth(); // mês vigente (0-11)
         let selectedYear = new Date().getFullYear();
         let registros = [];
         let recebidos = {};
@@ -1515,14 +1515,15 @@
             </div>`;
             document.getElementById('statsPanel').innerHTML = kpiHtml;
             renderTable(filtrados);
-            let cD = {};
-            if (fM === "") { for (let i = 1; i <= 12; i++) cD[i.toString().padStart(2, '0')] = 0; filtrados.forEach(r => { const m = r.data.split('T')[0].split('-')[1]; cD[m] += (parseFloat(r.quant || 0) * parseFloat(r.peso || 0)); }); }
-            else {
-                const fM = (selectedMonthIndex + 1).toString().padStart(2, '0');
-                const fA = selectedYear.toString();
-                filtrados.forEach(r => { const d = r.data.split('T')[0]; cD[d] = (cD[d] || 0) + (parseFloat(r.quant || 0) * parseFloat(r.peso || 0)); });
-            }
-            renderChart(cD, selectedMonthIndex === -1);
+            // Gráfico principal: sempre visão anual do ano selecionado
+            const cD = {};
+            for (let i = 1; i <= 12; i++) cD[i.toString().padStart(2, '0')] = 0;
+            registros.forEach(r => {
+                if (!r.data) return;
+                const p = r.data.split('T')[0].split('-');
+                if (p[0] === fA) cD[p[1]] = (cD[p[1]] || 0) + (parseFloat(r.quant || 0) * parseFloat(r.peso || 0));
+            });
+            renderChart(cD, true);
             renderDailyChart();
         }
         function renderDailyChart() {
@@ -1584,15 +1585,7 @@
                                 label: ctx => `Peso: ${formatNumber(ctx.parsed.y)} KG`
                             }
                         },
-                        datalabels: {
-                            display: ctx => ctx.dataset.data[ctx.dataIndex] > 0,
-                            align: 'top',
-                            anchor: 'end',
-                            offset: 4,
-                            color: _ltAcab ? '#1a1f2e' : '#ffffff',
-                            font: { family: "'JetBrains Mono', monospace", weight: 'bold', size: 10 },
-                            formatter: v => formatNumber(v, 0)
-                        }
+                        datalabels: { display: false }
                     },
                     interaction: { mode: 'index', intersect: false },
                     scales: {
@@ -1600,7 +1593,11 @@
                             beginAtZero: true,
                             suggestedMax: maxVal > 0 ? maxVal * 1.2 : 10,
                             grid: { color: _gc() },
-                            ticks: { color: _tc(), callback: v => formatNumber(v) + ' KG' }
+                            ticks: {
+                                color: _tc(),
+                                maxTicksLimit: 6,
+                                callback: v => v >= 1000 ? (v / 1000).toFixed(1).replace('.', ',') + 'k' : v
+                            }
                         },
                         x: { grid: { color: _gc() }, ticks: { color: _tc() } }
                     }
@@ -1673,23 +1670,7 @@
                                 }
                             }
                         },
-                        datalabels: {
-                            display: function (context) {
-                                return context.dataset.data[context.dataIndex] > 0;
-                            },
-                            align: 'top',
-                            anchor: 'end',
-                            offset: 4,
-                            color: _ltAcab ? '#1a1f2e' : '#ffffff',
-                            font: {
-                                family: "'JetBrains Mono', monospace",
-                                weight: 'bold',
-                                size: 10
-                            },
-                            formatter: function (value) {
-                                return formatNumber(value, 0);
-                            }
-                        }
+                        datalabels: { display: false }
                     },
                     interaction: {
                         mode: 'index',
@@ -1702,9 +1683,8 @@
                             grid: { color: _gc() },
                             ticks: {
                                 color: _tc(),
-                                callback: function (value) {
-                                    return formatNumber(value) + ' KG';
-                                }
+                                maxTicksLimit: 6,
+                                callback: v => v >= 1000 ? (v / 1000).toFixed(1).replace('.', ',') + 'k' : v
                             }
                         },
                         x: {
