@@ -663,6 +663,86 @@
                 transform: translateY(10px);
             }
         }
+        /* --- CUSTOM CONFIRM DIALOG --- */
+        #customConfirmOverlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.65);
+            z-index: 9000;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(4px);
+        }
+        #customConfirmOverlay.visible {
+            display: flex;
+        }
+        #customConfirmBox {
+            background: #18181b;
+            border: 1px solid rgba(251,191,36,0.25);
+            border-top: 3px solid #f59e0b;
+            border-radius: 12px;
+            padding: 28px 32px 24px;
+            width: 420px;
+            max-width: 92vw;
+            box-shadow: 0 25px 50px rgba(0,0,0,0.6);
+            animation: confirmPop 0.18s ease-out;
+        }
+        @keyframes confirmPop {
+            from { transform: scale(0.92); opacity: 0; }
+            to   { transform: scale(1);    opacity: 1; }
+        }
+        #customConfirmBox .confirm-icon {
+            font-size: 2rem;
+            color: #f59e0b;
+            margin-bottom: 14px;
+        }
+        #customConfirmBox .confirm-title {
+            font-size: 1rem;
+            font-weight: 700;
+            color: #f4f4f5;
+            margin-bottom: 8px;
+        }
+        #customConfirmBox .confirm-msg {
+            font-size: 0.875rem;
+            color: #a1a1aa;
+            line-height: 1.55;
+            margin-bottom: 24px;
+        }
+        #customConfirmBox .confirm-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+        #customConfirmBox .btn-confirm-cancel {
+            padding: 9px 18px;
+            border-radius: 7px;
+            border: 1px solid rgba(255,255,255,0.12);
+            background: rgba(255,255,255,0.05);
+            color: #a1a1aa;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.15s, color 0.15s;
+        }
+        #customConfirmBox .btn-confirm-cancel:hover {
+            background: rgba(255,255,255,0.1);
+            color: #f4f4f5;
+        }
+        #customConfirmBox .btn-confirm-ok {
+            padding: 9px 18px;
+            border-radius: 7px;
+            border: none;
+            background: #f59e0b;
+            color: #000;
+            font-size: 0.85rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        #customConfirmBox .btn-confirm-ok:hover {
+            background: #fbbf24;
+        }
         /* Ajuste para os formulários de busca */
         #buscaModal .form-row {
             align-items: flex-start;
@@ -720,6 +800,18 @@
     </script>
     <!-- TOAST CONTAINER -->
     <div id="toast-container" class="toast-container"></div>
+    <!-- CUSTOM CONFIRM DIALOG -->
+    <div id="customConfirmOverlay">
+        <div id="customConfirmBox">
+            <div class="confirm-icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
+            <div class="confirm-title" id="customConfirmTitle"></div>
+            <div class="confirm-msg" id="customConfirmMsg"></div>
+            <div class="confirm-actions">
+                <button class="btn-confirm-cancel" id="customConfirmCancel">Cancelar</button>
+                <button class="btn-confirm-ok" id="customConfirmOk">Continuar mesmo assim</button>
+            </div>
+        </div>
+    </div>
 
     <div id="loading-screen">
         <div class="spinner"></div>
@@ -1072,6 +1164,24 @@
             else if (origem === 'rebarba') { if (r > t) r = t; e = t - r; }
             tIn.value = t; eIn.value = e; rIn.value = r;
         }
+        function showCustomConfirm(title, msg) {
+            return new Promise(resolve => {
+                document.getElementById('customConfirmTitle').textContent = title;
+                document.getElementById('customConfirmMsg').textContent = msg;
+                const overlay = document.getElementById('customConfirmOverlay');
+                overlay.classList.add('visible');
+                const ok = document.getElementById('customConfirmOk');
+                const cancel = document.getElementById('customConfirmCancel');
+                const cleanup = (result) => {
+                    overlay.classList.remove('visible');
+                    ok.replaceWith(ok.cloneNode(true));
+                    cancel.replaceWith(cancel.cloneNode(true));
+                    resolve(result);
+                };
+                document.getElementById('customConfirmOk').addEventListener('click', () => cleanup(true), { once: true });
+                document.getElementById('customConfirmCancel').addEventListener('click', () => cleanup(false), { once: true });
+            });
+        }
         async function carregarItensConhecidos() { return Promise.resolve(); }
         async function verificarCodigoParaAutopreenchimento() {
             const cod = document.getElementById('inputCodigo').value.trim().toUpperCase();
@@ -1093,11 +1203,10 @@
                     }
                     // Aviso de saldo zerado
                     if ((data.saldo === 0 || data.saldo === null) && (data.peso || data.descricao)) {
-                        const continuar = await new Promise(resolve => {
-                            setTimeout(() => {
-                                resolve(confirm('⚠️ Este código não tem saldo em aberto na carteira.\nDeseja continuar com a terceirização mesmo assim?'));
-                            }, 80);
-                        });
+                        const continuar = await showCustomConfirm(
+                            'Sem saldo em aberto na carteira',
+                            'Este código não possui quantidade a faturar na carteira de pedidos. Deseja continuar com a terceirização mesmo assim?'
+                        );
                         if (!continuar) {
                             document.getElementById('inputCodigo').value = '';
                             document.getElementById('inputPesoUn').value = '';
