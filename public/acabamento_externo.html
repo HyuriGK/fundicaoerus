@@ -860,12 +860,22 @@
                     </button>
                 </div>
             </div>
-            <div class="chart-panel">
-                <div class="chart-header">
-                    <div class="chart-title">Peso Total Terceirizado (KG)</div>
+            <div style="display:flex; gap:12px; flex:1; min-height:0;">
+                <div class="chart-panel" style="flex:1; min-width:0;">
+                    <div class="chart-header">
+                        <div class="chart-title">Peso Total Terceirizado (KG)</div>
+                    </div>
+                    <div class="chart-container-wrapper">
+                        <canvas id="barChart"></canvas>
+                    </div>
                 </div>
-                <div class="chart-container-wrapper">
-                    <canvas id="barChart"></canvas>
+                <div class="chart-panel" style="flex:1; min-width:0;">
+                    <div class="chart-header">
+                        <div class="chart-title" id="dailyChartTitle">Total Terceirizado Diário (KG)</div>
+                    </div>
+                    <div class="chart-container-wrapper">
+                        <canvas id="dailyChart"></canvas>
+                    </div>
                 </div>
             </div>
         </main>
@@ -1076,12 +1086,13 @@
         Chart.defaults.plugins.tooltip.borderColor = _ltAcab ? 'rgba(0,0,0,0.1)' : 'rgba(251,191,36,0.3)';
         Chart.register(ChartDataLabels);
         const MONTHS_SHORT = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
-        let selectedMonthIndex = new Date().getMonth(); // 0-11
+        let selectedMonthIndex = -1; // -1 = visão anual (ANO)
         let selectedYear = new Date().getFullYear();
         let registros = [];
         let recebidos = {};
         let itensConhecidos = new Map();
         let mainChartInstance = null;
+        let dailyChartInstance = null;
         const modalStack = [];
         // Variável para contolar visibilidade do valor total
         let isValorTotalVisible = false;
@@ -1512,6 +1523,89 @@
                 filtrados.forEach(r => { const d = r.data.split('T')[0]; cD[d] = (cD[d] || 0) + (parseFloat(r.quant || 0) * parseFloat(r.peso || 0)); });
             }
             renderChart(cD, selectedMonthIndex === -1);
+            renderDailyChart();
+        }
+        function renderDailyChart() {
+            const now = new Date();
+            const curMonth = (now.getMonth() + 1).toString().padStart(2, '0');
+            const curYear = now.getFullYear().toString();
+            const daysInMonth = new Date(parseInt(curYear), parseInt(curMonth), 0).getDate();
+            const monthName = MONTHS_SHORT[now.getMonth()];
+            const titleEl = document.getElementById('dailyChartTitle');
+            if (titleEl) titleEl.textContent = `Terceirizado Diário — ${monthName}/${curYear}`;
+            const dayData = {};
+            registros.forEach(r => {
+                if (!r.data) return;
+                const p = r.data.split('T')[0].split('-');
+                if (p[0] === curYear && p[1] === curMonth) {
+                    dayData[p[2]] = (dayData[p[2]] || 0) + (parseFloat(r.quant || 0) * parseFloat(r.peso || 0));
+                }
+            });
+            const labels = [], values = [];
+            for (let i = 1; i <= daysInMonth; i++) {
+                const d = i.toString().padStart(2, '0');
+                labels.push(d);
+                values.push(dayData[d] || 0);
+            }
+            const maxVal = Math.max(...values, 0);
+            const ctx = document.getElementById('dailyChart').getContext('2d');
+            if (dailyChartInstance) dailyChartInstance.destroy();
+            dailyChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [{
+                        label: 'Peso (KG)',
+                        data: values,
+                        backgroundColor: 'rgba(6,182,212,0.75)',
+                        borderColor: '#06b6d4',
+                        borderWidth: 1,
+                        borderRadius: 4,
+                        hoverBackgroundColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            backgroundColor: _ltAcab ? 'rgba(255,255,255,0.98)' : 'rgba(24,24,27,0.95)',
+                            titleColor: _ltAcab ? '#0369a1' : '#06b6d4',
+                            bodyColor: _ltAcab ? '#374151' : '#f4f4f5',
+                            borderColor: _ltAcab ? 'rgba(0,0,0,0.1)' : 'rgba(6,182,212,0.3)',
+                            borderWidth: 1,
+                            cornerRadius: 6,
+                            padding: 12,
+                            displayColors: false,
+                            callbacks: {
+                                label: ctx => `Peso: ${formatNumber(ctx.parsed.y)} KG`
+                            }
+                        },
+                        datalabels: {
+                            display: ctx => ctx.dataset.data[ctx.dataIndex] > 0,
+                            align: 'top',
+                            anchor: 'end',
+                            offset: 4,
+                            color: _ltAcab ? '#1a1f2e' : '#ffffff',
+                            font: { family: "'JetBrains Mono', monospace", weight: 'bold', size: 10 },
+                            formatter: v => formatNumber(v, 0)
+                        }
+                    },
+                    interaction: { mode: 'index', intersect: false },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            suggestedMax: maxVal > 0 ? maxVal * 1.2 : 10,
+                            grid: { color: _gc() },
+                            ticks: { color: _tc(), callback: v => formatNumber(v) + ' KG' }
+                        },
+                        x: { grid: { color: _gc() }, ticks: { color: _tc() } }
+                    }
+                }
+            });
         }
         function renderChart(data, isM) {
             let l = [], w = [];
