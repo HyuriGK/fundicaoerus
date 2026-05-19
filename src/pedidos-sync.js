@@ -2,6 +2,42 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../lib/db');
 
+// Rota para buscar peso efetivo de um produto por código (usado por acabamento_externo)
+// Prioridade: PESO_UNIT (Firebird) > pesos_customizados (manual)
+router.get('/peso-lookup', async (req, res) => {
+    const { codigo } = req.query;
+    if (!codigo) return res.json({ peso: null, source: null });
+    const cod = String(codigo).trim().toUpperCase();
+    try {
+        // 1. PESO_UNIT do Firebird (mais recente com peso válido)
+        const fbRes = await pool.query(
+            `SELECT (data->>'PESO_UNIT')::numeric AS peso
+             FROM firebird_sync_emissoes
+             WHERE UPPER(data->>'PRODUTO_PPR') = $1
+               AND data->>'PESO_UNIT' IS NOT NULL
+               AND (data->>'PESO_UNIT')::numeric > 0
+             ORDER BY updated_at DESC
+             LIMIT 1`,
+            [cod]
+        );
+        if (fbRes.rows.length > 0) {
+            return res.json({ peso: Number(fbRes.rows[0].peso), source: 'firebird' });
+        }
+        // 2. Peso customizado (cadastrado manualmente em pedidos.html)
+        const cwRes = await pool.query(
+            `SELECT peso FROM pesos_customizados WHERE UPPER(codigo) = $1`,
+            [cod]
+        );
+        if (cwRes.rows.length > 0 && cwRes.rows[0].peso > 0) {
+            return res.json({ peso: Number(cwRes.rows[0].peso), source: 'custom' });
+        }
+        return res.json({ peso: null, source: null });
+    } catch (err) {
+        console.error('Erro ao buscar peso por código:', err);
+        res.status(500).json({ error: 'Erro interno' });
+    }
+});
+
 // Rota para buscar os pedidos sincronizados
 router.get('/', async (req, res) => {
     const { carteiraOnly } = req.query;

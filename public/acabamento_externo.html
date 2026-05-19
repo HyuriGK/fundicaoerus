@@ -1073,15 +1073,32 @@
             tIn.value = t; eIn.value = e; rIn.value = r;
         }
         async function carregarItensConhecidos() { return Promise.resolve(); }
-        function verificarCodigoParaAutopreenchimento() {
+        async function verificarCodigoParaAutopreenchimento() {
             const cod = document.getElementById('inputCodigo').value.trim().toUpperCase();
-            if (cod && itensConhecidos.has(cod)) {
+            if (!cod) return;
+            let pesoFromPedidos = false;
+            // 1. Busca peso da carteira de pedidos (prioridade máxima)
+            try {
+                const res = await fetch(`/api/pedidos-sync/peso-lookup?codigo=${encodeURIComponent(cod)}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.peso && data.peso > 0) {
+                        document.getElementById('inputPesoUn').value = data.peso;
+                        pesoFromPedidos = true;
+                    }
+                }
+            } catch (e) { /* ignora erros de rede */ }
+            // 2. Se o código existe em registros anteriores, oferece preencher descricao/cliente
+            // (e peso apenas se não veio de pedidos)
+            if (itensConhecidos.has(cod)) {
                 setTimeout(() => {
                     if (confirm('Código encontrado. Preencher dados automaticamente?')) {
                         const item = itensConhecidos.get(cod);
                         document.getElementById('inputDescricao').value = item.descricao;
-                        document.getElementById('inputPesoUn').value = item.peso;
                         document.getElementById('inputCliente').value = item.cliente;
+                        if (!pesoFromPedidos) {
+                            document.getElementById('inputPesoUn').value = item.peso;
+                        }
                     }
                 }, 100);
             }

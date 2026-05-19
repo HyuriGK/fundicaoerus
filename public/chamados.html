@@ -74,10 +74,10 @@
         .filter-btn.active-andamento{background:rgba(251,191,36,0.1);border-color:rgba(251,191,36,0.35);color:#fbbf24}
         .filter-btn.active-resolvido{background:rgba(16,185,129,0.1);border-color:rgba(16,185,129,0.35);color:#10b981}
 
-        .scroll-area{flex:1;overflow-y:auto;padding:24px 32px 28px}
+        .scroll-area{flex:1;overflow:hidden;padding:24px 32px 28px;display:flex;flex-direction:column}
 
         /* ── KPI cards ── */
-        .kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px}
+        .kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px;flex-shrink:0}
         .kpi-card{
             background:var(--bg-card);border:1px solid var(--border-subtle);
             border-radius:14px;padding:18px 20px;
@@ -98,7 +98,9 @@
         .table-card{
             background:var(--bg-card);border:1px solid var(--border-subtle);
             border-radius:16px;overflow:hidden;
+            flex:1;min-height:0;display:flex;flex-direction:column;
         }
+        #tableArea{flex:1;overflow-y:auto;min-height:0}
         .table-header{
             padding:16px 22px;border-bottom:1px solid var(--border-subtle);
             display:flex;align-items:center;justify-content:space-between;gap:12px;
@@ -126,6 +128,8 @@
         .td-titulo{max-width:240px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500}
         .td-usuario{color:var(--text-muted);font-size:0.78rem}
         .td-date{color:#52525b;font-size:0.75rem;font-family:var(--font-mono);white-space:nowrap}
+        .td-tempo{color:#a1a1aa;font-size:0.75rem;font-family:var(--font-mono);white-space:nowrap}
+        thead{position:sticky;top:0;z-index:1;background:#111113}
 
         /* ── Badges ── */
         .badge{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-size:0.67rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em}
@@ -182,7 +186,7 @@
             border-radius:8px;padding:12px 14px;
         }
         .modal-meta-row{
-            display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;
+            display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px;
         }
         .modal-meta-item{
             background:rgba(255,255,255,0.02);border:1px solid var(--border-subtle);
@@ -394,6 +398,10 @@
                     <label><i class="fa-regular fa-clock" style="margin-right:4px"></i> Aberto em</label>
                     <span id="modalData"></span>
                 </div>
+                <div class="modal-meta-item">
+                    <label><i class="fa-solid fa-stopwatch" style="margin-right:4px"></i> Tempo de resolução</label>
+                    <span id="modalTempo">—</span>
+                </div>
             </div>
             <div class="modal-section">
                 <div class="modal-section-label">Descrição</div>
@@ -476,6 +484,18 @@
         return d.toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
     }
 
+    function formatDuration(criado, resolvido) {
+        if (!criado || !resolvido) return '—';
+        const diff = new Date(resolvido) - new Date(criado);
+        if (diff < 0) return '—';
+        const mins  = Math.floor(diff / 60000);
+        const hours = Math.floor(mins / 60);
+        const days  = Math.floor(hours / 24);
+        if (days > 0)  return `${days}d ${hours % 24}h ${mins % 60}min`;
+        if (hours > 0) return `${hours}h ${mins % 60}min`;
+        return `${mins}min`;
+    }
+
     function badgeUrgencia(u) {
         return `<span class="badge badge-${u}"><i class="fa-solid fa-${urgIcons[u]||'circle'}"></i>${urgLabels[u]||u}</span>`;
     }
@@ -537,6 +557,7 @@
                     <th>Urgência</th>
                     <th>Status</th>
                     <th>Aberto em</th>
+                    <th>Tempo resolução</th>
                 </tr>
             </thead>
             <tbody>
@@ -548,6 +569,7 @@
                     <td>${badgeUrgencia(c.urgencia)}</td>
                     <td>${badgeStatus(c.status)}</td>
                     <td class="td-date">${formatDate(c.criado_em)}</td>
+                    <td class="td-tempo">${formatDuration(c.criado_em, c.resolvido_em)}</td>
                 </tr>`).join('')}
             </tbody>
         </table>`;
@@ -562,6 +584,7 @@
         document.getElementById('modalBadges').innerHTML = badgeUrgencia(c.urgencia) + badgeStatus(c.status);
         document.getElementById('modalUsuario').textContent = c.usuario;
         document.getElementById('modalData').textContent = formatDate(c.criado_em);
+        document.getElementById('modalTempo').textContent = formatDuration(c.criado_em, c.resolvido_em);
         document.getElementById('modalDesc').textContent = c.descricao || 'Sem descrição adicional.';
         document.getElementById('modalStatus').value = c.status;
         document.getElementById('modalResolucao').value = c.resolucao || '';
