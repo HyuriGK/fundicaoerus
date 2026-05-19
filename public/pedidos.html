@@ -1361,12 +1361,14 @@
                 <div class="kpi-card kpi-info" onclick="filterByReleased()" title="Clique para ver os registros">
                     <div class="kpi-title">Peso Liberado (kg)</div>
                     <div id="totalReleasedWeightCard" class="kpi-value">0,00</div>
+                    <div id="releasedValueCard" class="kpi-subtext" style="display:none; color:var(--status-info); font-weight:700; font-size:0.78rem;">R$ 0,00</div>
                     <div class="kpi-subtext">Com data de entrega</div>
                 </div>
                 <!-- 4. Peso Bloqueado -->
                 <div class="kpi-card kpi-danger" onclick="filterByBlocked()" title="Clique para ver os registros">
                     <div class="kpi-title">Peso Bloqueado (kg)</div>
                     <div id="totalBlockedWeightCard" class="kpi-value">0,00</div>
+                    <div id="blockedValueCard" class="kpi-subtext" style="display:none; color:var(--status-danger); font-weight:700; font-size:0.78rem;">R$ 0,00</div>
                     <div class="kpi-subtext">Sem data (BLOCK)</div>
                 </div>
             </div>
@@ -2982,6 +2984,7 @@
             let totalValue = 0;
             let totalQty = 0;
             let releasedWeight = 0; // Com data de entrega
+            let releasedValue = 0;
             // Stage KPIs (Now detailed by sector)
             let kpiAguardando = { qtd: 0, peso: 0, valor: 0 };
             let kpiMoldagem = { qtd: 0, peso: 0, valor: 0 };
@@ -3013,7 +3016,7 @@
                     (!item.OP_PCS || item.OP_PCS === '-' || String(item.OP_PCS).trim() === '')
                 );
                 const isReleased = hasDate && !isStatusBlocked;
-                if (isReleased) releasedWeight += itemTotalWeight;
+                if (isReleased) { releasedWeight += itemTotalWeight; releasedValue += itemTotalValue; }
                 // Use centralized industrial metrics (already calculated)
                 const { qExpedicao, qQualidade, qUsinagem, qTT, qAcabamento, qFusao, qMoldada, qAguardando, targetTotalQty } = metrics;
                 // Unit metrics for direct multiplication
@@ -3058,8 +3061,9 @@
                 addKpi(kpiMoldagem, qMoldada, item.OP_PCS);
                 addKpi(kpiAguardando, qAguardando, item.OP_PCS);
             });
-            // "Blocked" Weight = Total - Released (Items without delivery date)
+            // "Blocked" Weight/Value = Total - Released
             const blockedWeight = totalWeight - releasedWeight;
+            const blockedValue = totalValue - releasedValue;
             // Count unique orders with OP in the current list
             const ordersWithOP = new Set(
                 list
@@ -3087,6 +3091,18 @@
                 if (document.getElementById('totalBlockedWeightCard')) {
                     document.getElementById('totalBlockedWeightCard').innerText = formatNumber(blockedWeight);
                     document.getElementById('totalBlockedWeightCard').style.color = blockedWeight > 0 ? '#ef4444' : '#fff';
+                }
+                const releasedValEl = document.getElementById('releasedValueCard');
+                if (releasedValEl) {
+                    releasedValEl.setAttribute('data-real-value', formatCurrency(releasedValue));
+                    releasedValEl.textContent = valorVisible ? formatCurrency(releasedValue) : 'R$ 0,00';
+                    releasedValEl.style.display = valorVisible ? '' : 'none';
+                }
+                const blockedValEl = document.getElementById('blockedValueCard');
+                if (blockedValEl) {
+                    blockedValEl.setAttribute('data-real-value', formatCurrency(blockedValue));
+                    blockedValEl.textContent = valorVisible ? formatCurrency(blockedValue) : 'R$ 0,00';
+                    blockedValEl.style.display = valorVisible ? '' : 'none';
                 }
             }
             // Avg Weight
@@ -4723,6 +4739,11 @@
                 if (icon) { icon.className = 'fa-solid fa-eye-slash'; icon.style.opacity = '0.6'; }
                 showToast("Valores Ocultos", "Os valores sensíveis foram mascarados para privacidade.", "info");
             }
+            // Sync released/blocked value cards immediately
+            const rEl = document.getElementById('releasedValueCard');
+            const bEl = document.getElementById('blockedValueCard');
+            if (rEl) { rEl.textContent = valorVisible ? (rEl.getAttribute('data-real-value') || 'R$ 0,00') : 'R$ 0,00'; rEl.style.display = valorVisible ? '' : 'none'; }
+            if (bEl) { bEl.textContent = valorVisible ? (bEl.getAttribute('data-real-value') || 'R$ 0,00') : 'R$ 0,00'; bEl.style.display = valorVisible ? '' : 'none'; }
             applyColumnFilters();
             const detailModal = document.getElementById('orderDetailsModal');
             if (detailModal && detailModal.style.display === 'flex' && currentSelectedItem) {
