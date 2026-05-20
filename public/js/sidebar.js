@@ -484,6 +484,12 @@
             }
         }
 
+        // Ficha de Moldagem only visible to role 'moldagem'
+        if (role !== 'moldagem') {
+            var moldLink = document.querySelector('#erus-sidebar .erus-nav-link[href="fichatecmoldagem.html"]');
+            if (moldLink) moldLink.style.display = 'none';
+        }
+
         erusSidebarUpdateThemeUI();
 
         // Highlight the group separator icon for the active page (no expand)
