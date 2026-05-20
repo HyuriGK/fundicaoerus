@@ -112,7 +112,7 @@ async function sincronizarFaturamentoDiario() {
                     SUM(valor_total) as valor_total,
                     SUM(peso_total) as peso_total
                 FROM faturamento_firebird
-                WHERE data_faturamento >= '2026-01-01' AND (excluido_manualmente = FALSE OR excluido_manualmente IS NULL)
+                WHERE data_faturamento >= '2025-01-01' AND (excluido_manualmente = FALSE OR excluido_manualmente IS NULL)
                 GROUP BY data_faturamento
             )
             INSERT INTO faturamento_diario 
@@ -191,11 +191,7 @@ async function sincronizarDetalhado(fbDb) {
 
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_fat_fb_data ON faturamento_firebird(data_faturamento DESC)`);
 
-    // OTIMIZAÇÃO: Sincronização Incremental (Janela de 90 dias)
-    // Em vez de buscar o ano todo, buscamos apenas os últimos 90 dias.
-    // Isso reduz o processamento drasticamente e acelera a sincronização.
-    const dataInicio = new Date();
-    dataInicio.setDate(dataInicio.getDate() - 90);
+    const dataInicio = new Date('2025-01-01');
     console.log(`📅 Janela de Sincronização: ${dataInicio.toISOString().split('T')[0]} até hoje.`);
 
     const query = `
@@ -363,7 +359,7 @@ async function sincronizarEstatisticas() {
                     MIN(data_faturamento) as primeira_nota,
                     MAX(data_faturamento) as ultima_nota
                 FROM faturamento_firebird
-                WHERE data_faturamento >= '2026-01-01' AND (excluido_manualmente = FALSE OR excluido_manualmente IS NULL)
+                WHERE data_faturamento >= '2025-01-01' AND (excluido_manualmente = FALSE OR excluido_manualmente IS NULL)
             )
             INSERT INTO faturamento_estatisticas 
             (periodo, total_notas, total_clientes, total_itens, quantidade_total, 
