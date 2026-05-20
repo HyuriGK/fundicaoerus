@@ -769,9 +769,13 @@
             color: #fbbf24;
             box-shadow: 0 1px 4px rgba(251,191,36,0.15), inset 0 0 0 1px rgba(251,191,36,0.25);
         }
-        .chart-view-btn:hover:not(.active) {
+        .chart-view-btn:hover:not(.active):not(:disabled) {
             background: rgba(255,255,255,0.05);
             color: #a1a1aa;
+        }
+        .chart-view-btn:disabled {
+            opacity: 0.25;
+            cursor: not-allowed;
         }
 
         #daily-chart-main-panel .chart-canvas-wrapper {
@@ -1080,19 +1084,19 @@
             <!-- KPIS ROW -->
             <div class="kpi-row">
                 <div class="kpi-card kpi-default" title="Clique para ver os registros" >
-                    <div class="kpi-title">Total Produzido</div>
+                    <div class="kpi-title" id="kpi-title-total">Total Produzido</div>
                     <div id="sector-total-display" class="kpi-value">0,00 Kg</div>
-                    <div class="kpi-subtext">Peso total apontado no setor</div>
+                    <div class="kpi-subtext" id="kpi-sub-total">Peso total apontado no setor</div>
                 </div>
 
                 <div class="kpi-card kpi-info" title="Clique para ver os registros" >
-                    <div class="kpi-title">Média Diária</div>
+                    <div class="kpi-title" id="kpi-title-avg">Média Diária</div>
                     <div id="sector-average-display" class="kpi-value">0,00 Kg</div>
                     <div class="kpi-subtext">Média considerando <span id="avg-dias-uteis">0</span> dias úteis</div>
                 </div>
 
                 <div class="kpi-card kpi-success" title="Clique para definir nº de funcionários (apenas desenvolvedor)" onclick="abrirModalFuncionarios()" style="cursor:pointer;">
-                    <div class="kpi-title">Kg / Dia / Homem</div>
+                    <div class="kpi-title" id="kpi-title-homem">Kg / Dia / Homem</div>
                     <div id="sector-kg-homem-display" class="kpi-value">0,00 Kg</div>
                     <div class="kpi-subtext">Média diária ÷ <span id="kpi-num-funcionarios">4</span> funcionários</div>
                 </div>
@@ -1354,6 +1358,8 @@
 
         // Constantes para Moldagem Geral
         const MOLDAGEM_GERAL_TYPES = ['MOLDAGEM MANUAL', 'MOLDAGEM LEVE', 'MOLDAGEM PESADA'];
+        // Setores que habilitam o seletor de Caixas
+        const CAIXAS_ALLOWED_SECTORS = ['MOLDAGEM GERAL', 'MOLDAGEM LEVE', 'MOLDAGEM MANUAL', 'MOLDAGEM PESADA', 'FUSAO'];
         // const WEEKLY_GOAL = 30000; // Calculated dynamically
         const MOLDAGEM_SECTORS = ['moldagem leve', 'moldagem rollover', 'moldagem pesada', 'moldagem manual'];
         const PRIMARY_SECTORS = ['ACABAMENTO', 'EXPEDICAO', 'FUSAO', 'MOLDAGEM GERAL'];
@@ -2092,6 +2098,7 @@
                 return matchMonth && matchYear && matchSector && matchLiga && matchGrupo;
             });
 
+            updateCaixasToggle();
             updateKPIs();
             renderChart();
             renderTable();
@@ -2101,7 +2108,7 @@
             const totalWeight = filteredData.reduce((sum, item) => sum + item.pesoTotal, 0);
             const totalQty = filteredData.reduce((sum, item) => sum + item.quantidade, 0);
 
-            // Dias válidos: úteis (excl. feriados) + feriados/fins de semana que tiveram produção
+            // Dias válidos
             const dataMapKPI = {};
             filteredData.forEach(d => { dataMapKPI[d.data] = (dataMapKPI[d.data] || 0) + d.pesoTotal; });
             const year = parseInt(currentYearFilter) || new Date().getFullYear();
@@ -2113,13 +2120,44 @@
 
             const avgPerPiece = totalQty > 0 ? totalWeight / totalQty : 0;
             const kgHomem = avgDaily / (numFuncionarios || 4);
-
-            sectorTotalDisplay.innerText = totalWeight.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' Kg';
-            sectorAverageDisplay.innerText = avgDaily.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' Kg';
             const kgHomemEl = document.getElementById('sector-kg-homem-display');
-            if (kgHomemEl) kgHomemEl.innerText = kgHomem.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' Kg';
-            sectorAvgPieceWeightDisplay.innerText = avgPerPiece.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' Kg';
-            footerTotal.innerText = sectorTotalDisplay.innerText;
+
+            const isCaixasMode = chartViewMode === 'caixas';
+
+            if (isCaixasMode) {
+                // Calcular total de caixas
+                const totalCaixas = filteredData.reduce((sum, item) => {
+                    return sum + (item.quantidade / (figurasMap[item.codigo_peca] || 1));
+                }, 0);
+                const avgCaixas = diasValidos > 0 ? totalCaixas / diasValidos : 0;
+                const cxHomem = avgCaixas / (numFuncionarios || 4);
+
+                const fmtCx = (v) => v.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' cx';
+
+                sectorTotalDisplay.innerText = fmtCx(totalCaixas);
+                sectorAverageDisplay.innerText = fmtCx(avgCaixas);
+                if (kgHomemEl) kgHomemEl.innerText = fmtCx(cxHomem);
+                sectorAvgPieceWeightDisplay.innerText = avgPerPiece.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' Kg';
+
+                document.getElementById('kpi-title-total').innerText = 'Total Produzido';
+                document.getElementById('kpi-sub-total').innerText = 'Total de caixas moldadas no setor';
+                document.getElementById('kpi-title-avg').innerText = 'Média Diária';
+                document.getElementById('kpi-title-homem').innerText = 'Cx / Dia / Homem';
+
+                footerTotal.innerText = fmtCx(totalCaixas);
+            } else {
+                sectorTotalDisplay.innerText = totalWeight.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' Kg';
+                sectorAverageDisplay.innerText = avgDaily.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' Kg';
+                if (kgHomemEl) kgHomemEl.innerText = kgHomem.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' Kg';
+                sectorAvgPieceWeightDisplay.innerText = avgPerPiece.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' Kg';
+
+                document.getElementById('kpi-title-total').innerText = 'Total Produzido';
+                document.getElementById('kpi-sub-total').innerText = 'Peso total apontado no setor';
+                document.getElementById('kpi-title-avg').innerText = 'Média Diária';
+                document.getElementById('kpi-title-homem').innerText = 'Kg / Dia / Homem';
+
+                footerTotal.innerText = sectorTotalDisplay.innerText;
+            }
         }
 
         async function fetchGoal() {
@@ -2202,10 +2240,24 @@
 
         // Removed updateGoalDisplay local function as we use fetchGoal now
 
+        function updateCaixasToggle() {
+            const allowed = CAIXAS_ALLOWED_SECTORS.includes(currentSectorFilter);
+            const btnCaixas = document.getElementById('btn-view-caixas');
+            btnCaixas.disabled = !allowed;
+            if (!allowed && chartViewMode === 'caixas') {
+                chartViewMode = 'peso';
+                document.getElementById('btn-view-peso').classList.add('active');
+                btnCaixas.classList.remove('active');
+            }
+        }
+
         function setChartViewMode(mode) {
+            const allowed = CAIXAS_ALLOWED_SECTORS.includes(currentSectorFilter);
+            if (mode === 'caixas' && !allowed) return;
             chartViewMode = mode;
             document.getElementById('btn-view-peso').classList.toggle('active', mode === 'peso');
             document.getElementById('btn-view-caixas').classList.toggle('active', mode === 'caixas');
+            updateKPIs();
             renderChart();
         }
 
