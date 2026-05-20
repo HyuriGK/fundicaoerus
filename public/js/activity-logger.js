@@ -890,10 +890,10 @@
 
         if (rolePermissions[role]) {
             const allowedPage = rolePermissions[role];
-            // Access to index.html is allowed, but restricted to the specific page otherwise
-            if (page !== 'index.html' && page !== allowedPage) {
+            const alwaysAllowed = ['index.html', 'solicitarchamados.html'];
+            if (!alwaysAllowed.includes(page) && page !== allowedPage) {
                 window.location.replace(allowedPage);
-                return true; 
+                return true;
             }
         }
         return false;
