@@ -737,6 +737,35 @@
             display: flex !important;
             align-items: center !important;
             background: transparent !important;
+            justify-content: space-between !important;
+        }
+        .chart-view-toggle {
+            display: flex;
+            gap: 3px;
+        }
+        .chart-view-btn {
+            padding: 3px 9px;
+            font-size: 0.68rem;
+            font-weight: 600;
+            border-radius: 6px;
+            border: 1px solid rgba(255,255,255,0.08);
+            background: transparent;
+            color: #52525b;
+            cursor: pointer;
+            transition: all 0.15s;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            font-family: var(--font-main);
+            line-height: 1;
+        }
+        .chart-view-btn.active {
+            background: rgba(251,191,36,0.12);
+            border-color: rgba(251,191,36,0.35);
+            color: #fbbf24;
+        }
+        .chart-view-btn:hover:not(.active) {
+            background: rgba(255,255,255,0.04);
+            color: #a1a1aa;
         }
 
         #daily-chart-main-panel .chart-canvas-wrapper {
@@ -1112,7 +1141,11 @@
             <!-- MAIN CHART -->
             <div class="chart-panel" id="daily-chart-main-panel">
                 <div class="chart-header">
-                    <div class="chart-title">Produção Diária (KG)</div>
+                    <div class="chart-title" id="chart-main-title">Produção Diária (KG)</div>
+                    <div class="chart-view-toggle">
+                        <button class="chart-view-btn active" id="btn-view-peso" onclick="setChartViewMode('peso')">Peso</button>
+                        <button class="chart-view-btn" id="btn-view-caixas" onclick="setChartViewMode('caixas')">Caixas</button>
+                    </div>
                 </div>
                 <div class="chart-canvas-wrapper">
                     <canvas id="dailyProductionChart"></canvas>
@@ -1303,6 +1336,7 @@
         let allData = [];
         let filteredData = [];
         let figurasMap = {};
+        let chartViewMode = 'peso';
         const MONTHS_SHORT = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
         // Default Month: Current Month
         let currentMonthFilter = new Date().getMonth() + 1;
@@ -2162,138 +2196,127 @@
 
         // Removed updateGoalDisplay local function as we use fetchGoal now
 
+        function setChartViewMode(mode) {
+            chartViewMode = mode;
+            document.getElementById('btn-view-peso').classList.toggle('active', mode === 'peso');
+            document.getElementById('btn-view-caixas').classList.toggle('active', mode === 'caixas');
+            renderChart();
+        }
+
         function renderChart() {
             let labels = [];
             let dataDaily = [];
-            let chartTitle = "Produção Diária (KG)";
 
-            const MOLDAGEM_SECTORS_CHART = ['MOLDAGEM GERAL', 'MOLDAGEM LEVE', 'MOLDAGEM MANUAL', 'MOLDAGEM PESADA'];
-            const showCaixas = MOLDAGEM_SECTORS_CHART.includes(currentSectorFilter);
-
+            // Build labels and daily Kg data
             if (currentMonthFilter === 0) {
-                // ANO mode: Group by Month
-                chartTitle = "Produção Mensal (KG)";
                 labels = MONTHS_SHORT;
                 const monthlyMap = {};
-
                 filteredData.forEach(item => {
-                    const date = new Date(item.data + 'T12:00:00');
-                    const monthIdx = date.getMonth(); // 0-11
+                    const monthIdx = new Date(item.data + 'T12:00:00').getMonth();
                     monthlyMap[monthIdx] = (monthlyMap[monthIdx] || 0) + item.pesoTotal;
                 });
-
                 dataDaily = labels.map((_, i) => monthlyMap[i] || 0);
             } else {
-                // Month mode: Group by Day
                 const dailyMap = {};
                 filteredData.forEach(item => {
                     const day = parseInt(item.data.split('-')[2]);
                     dailyMap[day] = (dailyMap[day] || 0) + item.pesoTotal;
                 });
-
                 const daysInMonth = new Date(parseInt(currentYearFilter) || 2024, currentMonthFilter, 0).getDate();
                 labels = Array.from({ length: daysInMonth }, (_, i) => i + 1);
                 dataDaily = labels.map(day => dailyMap[day] || 0);
             }
 
-            // Caixas Moldadas (only for moldagem sectors)
-            let dataCaixas = null;
-            if (showCaixas) {
-                const caixasMap = {};
-                filteredData.forEach(item => {
-                    const figuras = (figurasMap[item.codigo_peca] || 1);
-                    const caixas = item.quantidade / figuras;
-                    if (currentMonthFilter === 0) {
-                        const monthIdx = new Date(item.data + 'T12:00:00').getMonth();
-                        caixasMap[monthIdx] = (caixasMap[monthIdx] || 0) + caixas;
-                    } else {
-                        const day = parseInt(item.data.split('-')[2]);
-                        caixasMap[day] = (caixasMap[day] || 0) + caixas;
-                    }
+            // Build caixas data (always computed, used only in caixas mode)
+            const caixasMap = {};
+            filteredData.forEach(item => {
+                const figuras = (figurasMap[item.codigo_peca] || 1);
+                const caixas = item.quantidade / figuras;
+                if (currentMonthFilter === 0) {
+                    const monthIdx = new Date(item.data + 'T12:00:00').getMonth();
+                    caixasMap[monthIdx] = (caixasMap[monthIdx] || 0) + caixas;
+                } else {
+                    const day = parseInt(item.data.split('-')[2]);
+                    caixasMap[day] = (caixasMap[day] || 0) + caixas;
+                }
+            });
+            const dataCaixas = labels.map((l, i) => {
+                const key = currentMonthFilter === 0 ? i : l;
+                return caixasMap[key] || 0;
+            });
+
+            const isCaixasMode = chartViewMode === 'caixas';
+
+            // Chart title
+            const titleEl = document.getElementById('chart-main-title');
+            if (titleEl) {
+                if (isCaixasMode) titleEl.innerText = currentMonthFilter === 0 ? 'Produção Mensal (Caixas)' : 'Produção Diária (Caixas)';
+                else titleEl.innerText = currentMonthFilter === 0 ? 'Produção Mensal (KG)' : 'Produção Diária (KG)';
+            }
+
+            // Accumulated line (peso mode only)
+            let accum = 0;
+            const dataCumulative = dataDaily.map(val => { accum += val; return accum; });
+
+            const goalValue = parseFloat(sectorGoalDisplay.innerText.replace(/[^0-9]/g, '')) || 0;
+
+            // Active bar data and color
+            const activeBarData = isCaixasMode ? dataCaixas : dataDaily;
+            const activeBarColor = isCaixasMode ? '#fbbf24' : '#ea580c';
+            const activeBarColorReport = isCaixasMode ? '#d97706' : '#c2410c';
+
+            // Datasets
+            const datasets = [];
+            if (isCaixasMode) {
+                datasets.push({
+                    label: 'Caixas por Dia',
+                    data: dataCaixas,
+                    backgroundColor: (ctx2) => window.isGraphicReportRunning ? activeBarColorReport : activeBarColor,
+                    borderRadius: 4,
+                    order: 1,
+                    yAxisID: 'y'
                 });
-                dataCaixas = labels.map((l, i) => {
-                    const key = currentMonthFilter === 0 ? i : l;
-                    return caixasMap[key] || 0;
+            } else {
+                datasets.push({
+                    label: 'Produção Diária',
+                    data: dataDaily,
+                    backgroundColor: (ctx2) => window.isGraphicReportRunning ? '#c2410c' : '#ea580c',
+                    borderRadius: 4,
+                    order: 2,
+                    yAxisID: 'y'
+                });
+                datasets.push({
+                    type: 'line',
+                    label: 'Acumulado',
+                    data: dataCumulative,
+                    borderColor: '#10b981',
+                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 2,
+                    order: 1,
+                    yAxisID: 'y1',
+                    datalabels: { display: false }
                 });
             }
 
-            // Update Chart Title in UI
-            const titleEl = document.querySelector('.chart-title');
-            if (titleEl) titleEl.innerText = chartTitle;
-
-            // Cumulative Production (Line)
-            let accum = 0;
-            const dataCumulative = dataDaily.map(val => {
-                accum += val;
-                return accum;
-            });
-
-            // Goal Line (Only relevant in month mode, but we'll show it if available)
-            const goalValue = parseFloat(sectorGoalDisplay.innerText.replace(/[^0-9]/g, '')) || 0;
-            const dataGoal = labels.map(() => goalValue);
+            // Y axis max for bars
+            const barMax = (() => {
+                const raw = Math.max(...activeBarData) * 1.05 || 100;
+                const step = isCaixasMode ? 10 : 2000;
+                return Math.ceil(raw / step) * step;
+            })();
 
             if (chartInstance) chartInstance.destroy();
 
             chartInstance = new Chart(ctx, {
                 type: 'bar',
-                data: {
-                    labels: labels,
-                    datasets: [
-                        {
-                            label: 'Produção Diária',
-                            data: dataDaily,
-                            backgroundColor: (context) => {
-                                return window.isGraphicReportRunning ? '#c2410c' : '#ea580c';
-                            },
-                            borderRadius: 4,
-                            order: 2,
-                            yAxisID: 'y'
-                        },
-                        {
-                            type: 'line',
-                            label: 'Acumulado',
-                            data: dataCumulative,
-                            borderColor: '#10b981',
-                            backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                            borderWidth: 3,
-                            fill: true,
-                            tension: 0.3,
-                            pointRadius: 2,
-                            order: 1,
-                            yAxisID: 'y1',
-                            datalabels: { display: false }
-                        },
-                        ...(dataCaixas ? [{
-                            type: 'line',
-                            label: 'Caixas Moldadas',
-                            data: dataCaixas,
-                            borderColor: '#fbbf24',
-                            backgroundColor: 'rgba(251, 191, 36, 0.08)',
-                            borderWidth: 3,
-                            fill: false,
-                            tension: 0.3,
-                            pointRadius: 5,
-                            pointBackgroundColor: '#fbbf24',
-                            pointBorderColor: '#fff',
-                            pointBorderWidth: 2,
-                            pointHoverRadius: 7,
-                            order: 0,
-                            yAxisID: 'y2',
-                            datalabels: { display: false }
-                        }] : [])
-                    ]
-                },
+                data: { labels, datasets },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    layout: {
-                        padding: {
-                            top: 0,
-                            bottom: 0,
-                            left: 0,
-                            right: 0
-                        }
-                    },
+                    layout: { padding: { top: 0, bottom: 0, left: 0, right: 0 } },
                     plugins: {
                         legend: {
                             display: true,
@@ -2312,7 +2335,7 @@
                             footerMarginTop: 8,
                             cornerRadius: 10,
                             itemSort: (a, b) => {
-                                const order = { 'Produção Diária': 0, 'Caixas Moldadas': 1, 'Acumulado': 2, 'Meta Mensal': 3 };
+                                const order = { 'Produção Diária': 0, 'Caixas por Dia': 0, 'Acumulado': 1, 'Meta Mensal': 2 };
                                 return (order[a.dataset.label] ?? 99) - (order[b.dataset.label] ?? 99);
                             },
                             callbacks: {
@@ -2327,18 +2350,17 @@
                                 },
                                 label: (context) => {
                                     const value = context.parsed.y;
-                                    const label = context.dataset.label;
-                                    const fmt = v => `  ${Math.round(v).toLocaleString('pt-BR')} Kg`;
-                                    if (label === 'Produção Diária') return `  Produção: ${Math.round(value).toLocaleString('pt-BR')} Kg`;
-                                    if (label === 'Caixas Moldadas') return `  Caixas: ${value.toLocaleString('pt-BR', {minimumFractionDigits:1, maximumFractionDigits:1})} cx`;
-                                    if (label === 'Acumulado') return `  Acumulado: ${Math.round(value).toLocaleString('pt-BR')} Kg`;
-                                    if (label === 'Meta Mensal') {
+                                    const lbl = context.dataset.label;
+                                    if (lbl === 'Produção Diária') return `  Produção: ${Math.round(value).toLocaleString('pt-BR')} Kg`;
+                                    if (lbl === 'Caixas por Dia') return `  Caixas: ${value.toLocaleString('pt-BR', {minimumFractionDigits:1, maximumFractionDigits:1})} cx`;
+                                    if (lbl === 'Acumulado') return `  Acumulado: ${Math.round(value).toLocaleString('pt-BR')} Kg`;
+                                    if (lbl === 'Meta Mensal') {
                                         const accumData = context.chart.data.datasets[1]?.data[context.dataIndex] || 0;
                                         const meta = goalValue || 1;
                                         const percent = ((accumData / meta) * 100).toFixed(1);
                                         return `  Meta: ${Math.round(value).toLocaleString('pt-BR')} Kg (${percent}%)`;
                                     }
-                                    return fmt(value);
+                                    return `  ${Math.round(value).toLocaleString('pt-BR')}`;
                                 },
                                 footer: (items) => {
                                     if (currentMonthFilter === 0) return [];
@@ -2373,15 +2395,14 @@
                             align: 'top',
                             color: window.isGraphicReportRunning ? '#000000' : ((window.ErusTheme && window.ErusTheme.isLight()) ? '#1a1f2e' : '#fff'),
                             offset: 4,
-                            font: {
-                                size: window.isGraphicReportRunning ? 14 : 10,
-                                weight: 'bold'
-                            },
-                            formatter: (value) => {
-                                if (!value || value <= 0) return ''; // Hide zero values
-                                if (window.isGraphicReportRunning) {
-                                    return formatNumber(value / 1000, 2) + ' Ton';
+                            font: { size: window.isGraphicReportRunning ? 14 : 10, weight: 'bold' },
+                            formatter: (value, context) => {
+                                if (!value || value <= 0) return '';
+                                if (context.dataset.yAxisID === 'y1') return '';
+                                if (isCaixasMode) {
+                                    return value % 1 === 0 ? value.toLocaleString('pt-BR') : value.toLocaleString('pt-BR', {minimumFractionDigits:1, maximumFractionDigits:1});
                                 }
+                                if (window.isGraphicReportRunning) return formatNumber(value / 1000, 2) + ' Ton';
                                 return formatNumber(value, 0);
                             }
                         }
@@ -2428,20 +2449,19 @@
                             type: 'linear',
                             display: true,
                             position: 'left',
-                            max: (() => { const raw = Math.max(...dataDaily) * 1.05 || 100; const step = 2000; return Math.ceil(raw / step) * step; })(),
+                            max: barMax,
                             beginAtZero: true,
-                            title: {
-                                display: false // Removed redundant title to save space
-                            },
+                            title: { display: false },
                             grid: { color: window.isGraphicReportRunning ? 'rgba(0,0,0,0.1)' : (window.ErusTheme && window.ErusTheme.isLight() ? 'rgba(0,0,0,0.07)' : 'rgba(255,255,255,0.05)') },
                             ticks: {
-                                color: window.isGraphicReportRunning ? '#000000' : (window.ErusTheme && window.ErusTheme.isLight() ? '#4b5563' : '#a1a1aa'),
-                                font: { size: window.isGraphicReportRunning ? 14 : 12 }
+                                color: isCaixasMode ? '#fbbf24' : (window.isGraphicReportRunning ? '#000000' : (window.ErusTheme && window.ErusTheme.isLight() ? '#4b5563' : '#a1a1aa')),
+                                font: { size: window.isGraphicReportRunning ? 14 : 12 },
+                                callback: isCaixasMode ? (v) => Number.isInteger(v) ? v + ' cx' : null : undefined
                             }
                         },
                         y1: {
                             type: 'linear',
-                            display: true,
+                            display: !isCaixasMode,
                             position: 'right',
                             title: { display: false },
                             grid: { display: false, drawOnChartArea: false },
@@ -2450,25 +2470,6 @@
                             ticks: {
                                 color: window.isGraphicReportRunning ? '#000000' : (window.ErusTheme && window.ErusTheme.isLight() ? '#4b5563' : '#a1a1aa'),
                                 font: { size: window.isGraphicReportRunning ? 14 : 12 }
-                            }
-                        },
-                        y2: {
-                            type: 'linear',
-                            display: showCaixas,
-                            position: 'left',
-                            grid: { display: false, drawOnChartArea: false },
-                            beginAtZero: true,
-                            max: dataCaixas ? (Math.max(...dataCaixas) * 1.25 || 10) : 10,
-                            ticks: {
-                                color: '#fbbf24',
-                                font: { size: 11 },
-                                callback: (v) => Math.round(v) + ' cx'
-                            },
-                            title: {
-                                display: showCaixas,
-                                text: 'Caixas',
-                                color: '#fbbf24',
-                                font: { size: 11, weight: '600' }
                             }
                         }
                     }
