@@ -741,30 +741,36 @@
         }
         .chart-view-toggle {
             display: flex;
-            gap: 3px;
+            align-items: center;
+            background: rgba(0,0,0,0.35);
+            border: 1px solid rgba(255,255,255,0.07);
+            border-radius: 8px;
+            padding: 2px;
+            gap: 2px;
         }
         .chart-view-btn {
-            padding: 3px 9px;
-            font-size: 0.68rem;
+            padding: 4px 12px;
+            font-size: 0.67rem;
             font-weight: 600;
             border-radius: 6px;
-            border: 1px solid rgba(255,255,255,0.08);
+            border: none;
             background: transparent;
             color: #52525b;
             cursor: pointer;
-            transition: all 0.15s;
+            transition: background 0.18s, color 0.18s, box-shadow 0.18s;
             text-transform: uppercase;
-            letter-spacing: 0.04em;
+            letter-spacing: 0.05em;
             font-family: var(--font-main);
-            line-height: 1;
+            line-height: 1.4;
+            white-space: nowrap;
         }
         .chart-view-btn.active {
-            background: rgba(251,191,36,0.12);
-            border-color: rgba(251,191,36,0.35);
+            background: linear-gradient(135deg, rgba(251,191,36,0.22), rgba(217,119,6,0.18));
             color: #fbbf24;
+            box-shadow: 0 1px 4px rgba(251,191,36,0.15), inset 0 0 0 1px rgba(251,191,36,0.25);
         }
         .chart-view-btn:hover:not(.active) {
-            background: rgba(255,255,255,0.04);
+            background: rgba(255,255,255,0.05);
             color: #a1a1aa;
         }
 
@@ -1143,8 +1149,8 @@
                 <div class="chart-header">
                     <div class="chart-title" id="chart-main-title">Produção Diária (KG)</div>
                     <div class="chart-view-toggle">
-                        <button class="chart-view-btn active" id="btn-view-peso" onclick="setChartViewMode('peso')">Peso</button>
-                        <button class="chart-view-btn" id="btn-view-caixas" onclick="setChartViewMode('caixas')">Caixas</button>
+                        <button class="chart-view-btn active" id="btn-view-peso" onclick="setChartViewMode('peso')"><i class="fa-solid fa-weight-hanging" style="margin-right:5px;font-size:0.6rem;opacity:0.8;"></i>Peso</button>
+                        <button class="chart-view-btn" id="btn-view-caixas" onclick="setChartViewMode('caixas')"><i class="fa-solid fa-box" style="margin-right:5px;font-size:0.6rem;opacity:0.8;"></i>Caixas</button>
                     </div>
                 </div>
                 <div class="chart-canvas-wrapper">
@@ -2254,16 +2260,17 @@
                 else titleEl.innerText = currentMonthFilter === 0 ? 'Produção Mensal (KG)' : 'Produção Diária (KG)';
             }
 
-            // Accumulated line (peso mode only)
-            let accum = 0;
-            const dataCumulative = dataDaily.map(val => { accum += val; return accum; });
+            // Accumulated lines
+            let accumKg = 0;
+            const dataCumulative = dataDaily.map(val => { accumKg += val; return accumKg; });
+            let accumCx = 0;
+            const dataCumulativeCaixas = dataCaixas.map(val => { accumCx += val; return accumCx; });
 
             const goalValue = parseFloat(sectorGoalDisplay.innerText.replace(/[^0-9]/g, '')) || 0;
 
-            // Active bar data and color
+            // Active bar data
             const activeBarData = isCaixasMode ? dataCaixas : dataDaily;
-            const activeBarColor = isCaixasMode ? '#fbbf24' : '#ea580c';
-            const activeBarColorReport = isCaixasMode ? '#d97706' : '#c2410c';
+            const accumMax = isCaixasMode ? accumCx : accumKg;
 
             // Datasets
             const datasets = [];
@@ -2271,10 +2278,24 @@
                 datasets.push({
                     label: 'Caixas por Dia',
                     data: dataCaixas,
-                    backgroundColor: (ctx2) => window.isGraphicReportRunning ? activeBarColorReport : activeBarColor,
+                    backgroundColor: (ctx2) => window.isGraphicReportRunning ? '#d97706' : '#fbbf24',
                     borderRadius: 4,
-                    order: 1,
+                    order: 2,
                     yAxisID: 'y'
+                });
+                datasets.push({
+                    type: 'line',
+                    label: 'Acumulado',
+                    data: dataCumulativeCaixas,
+                    borderColor: '#10b981',
+                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 2,
+                    order: 1,
+                    yAxisID: 'y1',
+                    datalabels: { display: false }
                 });
             } else {
                 datasets.push({
@@ -2353,7 +2374,9 @@
                                     const lbl = context.dataset.label;
                                     if (lbl === 'Produção Diária') return `  Produção: ${Math.round(value).toLocaleString('pt-BR')} Kg`;
                                     if (lbl === 'Caixas por Dia') return `  Caixas: ${value.toLocaleString('pt-BR', {minimumFractionDigits:1, maximumFractionDigits:1})} cx`;
-                                    if (lbl === 'Acumulado') return `  Acumulado: ${Math.round(value).toLocaleString('pt-BR')} Kg`;
+                                    if (lbl === 'Acumulado') return isCaixasMode
+                                        ? `  Acumulado: ${value.toLocaleString('pt-BR', {minimumFractionDigits:1, maximumFractionDigits:1})} cx`
+                                        : `  Acumulado: ${Math.round(value).toLocaleString('pt-BR')} Kg`;
                                     if (lbl === 'Meta Mensal') {
                                         const accumData = context.chart.data.datasets[1]?.data[context.dataIndex] || 0;
                                         const meta = goalValue || 1;
@@ -2461,15 +2484,16 @@
                         },
                         y1: {
                             type: 'linear',
-                            display: !isCaixasMode,
+                            display: true,
                             position: 'right',
                             title: { display: false },
                             grid: { display: false, drawOnChartArea: false },
                             beginAtZero: true,
-                            max: Math.max(goalValue, accum * 1.05) || 100,
+                            max: Math.max(isCaixasMode ? 0 : goalValue, accumMax * 1.05) || 100,
                             ticks: {
                                 color: window.isGraphicReportRunning ? '#000000' : (window.ErusTheme && window.ErusTheme.isLight() ? '#4b5563' : '#a1a1aa'),
-                                font: { size: window.isGraphicReportRunning ? 14 : 12 }
+                                font: { size: window.isGraphicReportRunning ? 14 : 12 },
+                                callback: isCaixasMode ? (v) => Number.isInteger(v) ? v + ' cx' : null : undefined
                             }
                         }
                     }
