@@ -1464,8 +1464,13 @@
                             <option value="10">Out</option><option value="11">Nov</option><option value="12">Dez</option>
                         </select>
                         <select id="yearFilterDaily" onchange="updateDailyChart(allData)" class="year-select" style="display:none;"></select>
-                        <div class="chart-canvas-wrapper">
+                        <div class="chart-canvas-wrapper" style="position:relative;">
                             <canvas id="chartDaily"></canvas>
+                            <div id="dailyChartBlurOverlay" style="display:none; position:absolute; inset:0; backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); background:rgba(9,9,11,0.55); border-radius:8px; z-index:10; align-items:center; justify-content:center; flex-direction:column; gap:10px; text-align:center; padding:20px;">
+                                <i class="fa-solid fa-eye-slash" style="font-size:1.6rem; color:#a1a1aa;"></i>
+                                <span style="color:#f4f4f5; font-size:0.85rem; font-weight:600; max-width:420px; line-height:1.5; text-align:center;">A visualização neste gráfico não está disponível para o filtro do período aplicado.</span>
+                                <span style="color:#a1a1aa; font-size:0.75rem;">Selecione um mês específico para ver a entrega diária.</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -4786,17 +4791,20 @@
             const row1 = document.getElementById('chartRow1');
             if (row1) row1.style.display = 'flex';
             if (mode === 'diaria') {
-                if (activePillMonth === null) {
-                    setDeliveryView('mensal');
-                    return;
-                }
                 const overrideEl = document.getElementById('monthOverrideDaily');
-                if (overrideEl) overrideEl.value = activePillMonth + 1;
+                if (activePillMonth !== null && overrideEl) overrideEl.value = activePillMonth + 1;
+                setDailyChartBlur(activePillMonth === null);
                 updateDailyChart(allData);
                 requestAnimationFrame(() => { if (chartDaily) chartDaily.resize(); });
             } else {
                 requestAnimationFrame(() => { if (chartPCP) chartPCP.resize(); });
             }
+        }
+
+        function setDailyChartBlur(active) {
+            const overlay = document.getElementById('dailyChartBlurOverlay');
+            if (!overlay) return;
+            overlay.style.display = active ? 'flex' : 'none';
         }
 
         // ── BARRA MÊS/ANO ─────────────────────────────────────────────────────────
@@ -4850,8 +4858,9 @@
             if (monthIndex !== null) {
                 const overrideEl = document.getElementById('monthOverrideDaily');
                 if (overrideEl) overrideEl.value = monthIndex + 1;
-            } else if (currentDeliveryView === 'diaria') {
-                setDeliveryView('mensal');
+            }
+            if (currentDeliveryView === 'diaria') {
+                setDailyChartBlur(monthIndex === null);
             }
             updatePillMonthUI();
             applyColumnFilters();
