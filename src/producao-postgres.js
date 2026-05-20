@@ -352,32 +352,43 @@ router.post('/meta', async (req, res) => {
     }
 });
 // GET /api/producao-postgres/funcionarios?mes_ano=YYYY-MM
+// Returns all sectors for that month as { funcionarios: { 'SETOR': quantidade, ... } }
 router.get('/funcionarios', async (req, res) => {
     try {
         const { mes_ano } = req.query;
         if (!mes_ano) return res.status(400).json({ success: false, error: 'mes_ano is required' });
         const result = await pool.query(
-            'SELECT quantidade FROM producao_funcionarios WHERE mes_ano = $1',
+            'SELECT setor, quantidade FROM producao_funcionarios WHERE mes_ano = $1',
             [mes_ano]
         );
-        const quantidade = result.rows.length > 0 ? parseInt(result.rows[0].quantidade) : 4;
-        res.json({ success: true, quantidade });
+        const funcionarios = {};
+        result.rows.forEach(r => { funcionarios[r.setor] = parseInt(r.quantidade); });
+        res.json({ success: true, funcionarios });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }
 });
 
 // POST /api/producao-postgres/funcionarios
+// Body: { mes_ano, setor, quantidade } or { mes_ano, funcionarios: { setor: quantidade } }
 router.post('/funcionarios', async (req, res) => {
     try {
-        const { mes_ano, quantidade } = req.body;
-        if (!mes_ano || quantidade === undefined) return res.status(400).json({ success: false, error: 'mes_ano and quantidade are required' });
-        await pool.query(`
-            INSERT INTO producao_funcionarios (mes_ano, quantidade, atualizado_em)
-            VALUES ($1, $2, CURRENT_TIMESTAMP)
-            ON CONFLICT (mes_ano)
-            DO UPDATE SET quantidade = EXCLUDED.quantidade, atualizado_em = CURRENT_TIMESTAMP
-        `, [mes_ano, parseInt(quantidade)]);
+        const { mes_ano, setor, quantidade, funcionarios } = req.body;
+        if (!mes_ano) return res.status(400).json({ success: false, error: 'mes_ano is required' });
+
+        const entries = funcionarios
+            ? Object.entries(funcionarios)
+            : [[setor, quantidade]];
+
+        for (const [s, q] of entries) {
+            if (!s || q === undefined) continue;
+            await pool.query(`
+                INSERT INTO producao_funcionarios (mes_ano, setor, quantidade, atualizado_em)
+                VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+                ON CONFLICT (mes_ano, setor)
+                DO UPDATE SET quantidade = EXCLUDED.quantidade, atualizado_em = CURRENT_TIMESTAMP
+            `, [mes_ano, s, parseInt(q)]);
+        }
         res.json({ success: true });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });

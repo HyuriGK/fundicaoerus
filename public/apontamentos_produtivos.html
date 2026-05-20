@@ -1115,14 +1115,13 @@
                 </div>
             </div>
 
-            <!-- Modal: Funcionários por Mês -->
+            <!-- Modal: Funcionários por Mês / Setor -->
             <div id="modal-funcionarios" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:9999; align-items:center; justify-content:center;">
-                <div style="background:#18181b; border:1px solid rgba(255,255,255,0.1); border-radius:12px; padding:28px 32px; min-width:320px; max-width:380px; box-shadow:0 20px 40px rgba(0,0,0,0.5);">
-                    <div style="font-size:0.7rem; font-weight:700; color:#a1a1aa; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px;">Kg / Dia / Homem</div>
-                    <div style="font-size:1.1rem; font-weight:700; color:#f4f4f5; margin-bottom:20px;">Funcionários do Acabamento</div>
-                    <div style="font-size:0.8rem; color:#a1a1aa; margin-bottom:8px;">Quantidade de funcionários em <span id="modal-func-mesano" style="color:#fbbf24;"></span>:</div>
-                    <input id="input-funcionarios" type="number" min="1" max="99" value="4"
-                        style="width:100%; padding:10px 14px; background:#09090b; border:1px solid rgba(255,255,255,0.15); border-radius:8px; color:#f4f4f5; font-size:1.4rem; font-weight:700; text-align:center; outline:none; margin-bottom:20px;">
+                <div style="background:#18181b; border:1px solid rgba(255,255,255,0.1); border-radius:12px; padding:28px 32px; min-width:420px; max-width:520px; box-shadow:0 20px 40px rgba(0,0,0,0.5); max-height:90vh; overflow-y:auto;">
+                    <div style="font-size:0.7rem; font-weight:700; color:#a1a1aa; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px;">Kg / Dia / Homem &amp; Cx / Dia / Homem</div>
+                    <div style="font-size:1.1rem; font-weight:700; color:#f4f4f5; margin-bottom:4px;">Funcionários por Setor</div>
+                    <div style="font-size:0.8rem; color:#a1a1aa; margin-bottom:20px;">Referência: <span id="modal-func-mesano" style="color:#fbbf24;"></span></div>
+                    <div id="modal-func-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:20px;"></div>
                     <div style="display:flex; gap:10px; justify-content:flex-end;">
                         <button onclick="document.getElementById('modal-funcionarios').style.display='none'"
                             style="padding:8px 18px; background:#27272a; border:none; border-radius:8px; color:#a1a1aa; cursor:pointer; font-size:0.85rem;">Cancelar</button>
@@ -2119,8 +2118,11 @@
             if (avgDiasEl) avgDiasEl.textContent = diasValidos;
 
             const avgPerPiece = totalQty > 0 ? totalWeight / totalQty : 0;
-            const kgHomem = avgDaily / (numFuncionarios || 4);
+            const numFunc = getFuncionariosBySetor(currentSectorFilter);
+            const kgHomem = avgDaily / numFunc;
             const kgHomemEl = document.getElementById('sector-kg-homem-display');
+            const numFuncEl = document.getElementById('kpi-num-funcionarios');
+            if (numFuncEl) numFuncEl.textContent = numFunc;
 
             const isCaixasMode = chartViewMode === 'caixas';
 
@@ -2130,7 +2132,7 @@
                     return sum + (item.quantidade / (figurasMap[item.codigo_peca] || 1));
                 }, 0);
                 const avgCaixas = diasValidos > 0 ? totalCaixas / diasValidos : 0;
-                const cxHomem = avgCaixas / (numFuncionarios || 4);
+                const cxHomem = avgCaixas / numFunc;
 
                 const fmtCx = (v) => v.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' cx';
 
@@ -2192,8 +2194,21 @@
             return `${year}-${String(month).padStart(2, '0')}`;
         }
 
-        // ─── FUNCIONÁRIOS POR MÊS ────────────────────────────────────────────────
-        let numFuncionarios = 4;
+        // ─── FUNCIONÁRIOS POR MÊS / SETOR ────────────────────────────────────────
+        const FUNC_SECTORS = [
+            'MOLDAGEM GERAL',
+            'MOLDAGEM LEVE',
+            'MOLDAGEM PESADA',
+            'MOLDAGEM MANUAL',
+            'FUSAO',
+            'ACABAMENTO',
+            'USINAGEM EXPEDICAO'
+        ];
+        let funcionariosMap = {}; // { 'SETOR': quantidade }
+
+        function getFuncionariosBySetor(setor) {
+            return funcionariosMap[setor] || 4;
+        }
 
         async function fetchFuncionarios() {
             const mesAno = getMesAnoAsString();
@@ -2201,9 +2216,7 @@
                 const res = await fetch(`/api/producao-postgres/funcionarios?mes_ano=${mesAno}`);
                 const data = await res.json();
                 if (data.success) {
-                    numFuncionarios = data.quantidade;
-                    const el = document.getElementById('kpi-num-funcionarios');
-                    if (el) el.textContent = numFuncionarios;
+                    funcionariosMap = data.funcionarios || {};
                     updateKPIs();
                 }
             } catch (err) { console.error('Erro ao buscar funcionários:', err); }
@@ -2216,23 +2229,38 @@
             const [year, month] = mesAno.split('-');
             const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
             document.getElementById('modal-func-mesano').textContent = `${meses[parseInt(month)-1]} ${year}`;
-            document.getElementById('input-funcionarios').value = numFuncionarios;
+
+            const grid = document.getElementById('modal-func-grid');
+            grid.innerHTML = '';
+            FUNC_SECTORS.forEach(setor => {
+                const label = setor === 'FUSAO' ? 'FUSÃO' : setor === 'USINAGEM EXPEDICAO' ? 'USINAGEM / EXPEDIÇÃO' : setor;
+                const val = funcionariosMap[setor] || '';
+                grid.innerHTML += `
+                    <div style="display:flex; flex-direction:column; gap:4px;">
+                        <label style="font-size:0.65rem; font-weight:700; color:#a1a1aa; text-transform:uppercase; letter-spacing:0.05em;">${label}</label>
+                        <input data-setor="${setor}" type="number" min="1" max="999" value="${val}" placeholder="–"
+                            style="width:100%; padding:8px 10px; background:#09090b; border:1px solid rgba(255,255,255,0.15); border-radius:8px; color:#f4f4f5; font-size:1.1rem; font-weight:700; text-align:center; outline:none;">
+                    </div>`;
+            });
             document.getElementById('modal-funcionarios').style.display = 'flex';
         }
 
         async function salvarFuncionarios() {
-            const quantidade = parseInt(document.getElementById('input-funcionarios').value);
-            if (!quantidade || quantidade < 1) return;
             const mesAno = getMesAnoAsString();
+            const inputs = document.querySelectorAll('#modal-func-grid input[data-setor]');
+            const funcionarios = {};
+            inputs.forEach(inp => {
+                const q = parseInt(inp.value);
+                if (inp.dataset.setor && q >= 1) funcionarios[inp.dataset.setor] = q;
+            });
+            if (Object.keys(funcionarios).length === 0) return;
             try {
                 await fetch('/api/producao-postgres/funcionarios', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ mes_ano: mesAno, quantidade })
+                    body: JSON.stringify({ mes_ano: mesAno, funcionarios })
                 });
-                numFuncionarios = quantidade;
-                const el = document.getElementById('kpi-num-funcionarios');
-                if (el) el.textContent = numFuncionarios;
+                funcionariosMap = { ...funcionariosMap, ...funcionarios };
                 document.getElementById('modal-funcionarios').style.display = 'none';
                 updateKPIs();
             } catch (err) { alert('Erro ao salvar.'); }
