@@ -406,4 +406,22 @@ router.post('/peso', async (req, res) => {
     }
 });
 
+// GET /api/producao-postgres/figuras
+// Returns a map of { codigo_peca: qtde_figuras } for all codes in ficha_tecnica
+router.get('/figuras', async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT pro_codigo_fic as codigo_peca, qtde_figuras
+            FROM ficha_tecnica
+            WHERE qtde_figuras IS NOT NULL AND qtde_figuras > 0
+        `);
+        const map = {};
+        result.rows.forEach(r => { map[r.codigo_peca] = parseInt(r.qtde_figuras); });
+        res.json({ success: true, figuras: map });
+    } catch (error) {
+        console.error('❌ Error fetching figuras:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 module.exports = router;
