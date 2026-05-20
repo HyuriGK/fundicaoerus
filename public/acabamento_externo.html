@@ -866,8 +866,13 @@
                 <div class="chart-header">
                     <div class="chart-title" id="mainChartTitle">Terceirizado Diário</div>
                 </div>
-                <div class="chart-container-wrapper">
+                <div class="chart-container-wrapper" style="position:relative;">
                     <canvas id="mainChart"></canvas>
+                    <div id="dailyChartBlurOverlay" style="display:none; position:absolute; inset:0; backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); background:rgba(9,9,11,0.55); border-radius:8px; z-index:10; align-items:center; justify-content:center; flex-direction:column; gap:10px; text-align:center; padding:20px;">
+                        <i class="fa-solid fa-eye-slash" style="font-size:1.6rem; color:#a1a1aa;"></i>
+                        <span style="color:#f4f4f5; font-size:0.85rem; font-weight:600; max-width:420px; line-height:1.5; text-align:center;">A visualização neste gráfico não está disponível para o filtro do período aplicado.</span>
+                        <span style="color:#a1a1aa; font-size:0.75rem;">Selecione um mês específico para ver a evolução diária.</span>
+                    </div>
                 </div>
             </div>
         </main>
@@ -1409,6 +1414,7 @@
         function selectMonth(idx) {
             selectedMonthIndex = idx;
             updateMonthButtonsUI();
+            if (currentView === 'diaria') setDailyChartBlur(idx === -1);
             updateDashboardAndCharts();
         }
         function changeYear() {
@@ -1517,18 +1523,25 @@
                 renderDailyChart();
             }
         }
+        function setDailyChartBlur(active) {
+            const overlay = document.getElementById('dailyChartBlurOverlay');
+            if (!overlay) return;
+            overlay.style.display = active ? 'flex' : 'none';
+        }
         function setView(v) {
             currentView = v;
             document.getElementById('btnViewDiaria').classList.toggle('active', v === 'diaria');
             document.getElementById('btnViewMensal').classList.toggle('active', v === 'mensal');
+            if (v === 'diaria') setDailyChartBlur(selectedMonthIndex === -1);
+            else setDailyChartBlur(false);
             updateDashboardAndCharts();
         }
         function renderDailyChart() {
-            const now = new Date();
-            const curMonth = (now.getMonth() + 1).toString().padStart(2, '0');
-            const curYear = now.getFullYear().toString();
+            const useMonth = selectedMonthIndex === -1 ? new Date().getMonth() : selectedMonthIndex;
+            const curMonth = (useMonth + 1).toString().padStart(2, '0');
+            const curYear = selectedYear.toString();
             const daysInMonth = new Date(parseInt(curYear), parseInt(curMonth), 0).getDate();
-            const monthName = MONTHS_SHORT[now.getMonth()];
+            const monthName = MONTHS_SHORT[useMonth];
             const titleEl = document.getElementById('mainChartTitle');
             if (titleEl) titleEl.textContent = `Terceirizado Diário — ${monthName}/${curYear}`;
             const dayData = {};
