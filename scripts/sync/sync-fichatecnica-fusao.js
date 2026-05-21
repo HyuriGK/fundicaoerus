@@ -154,9 +154,10 @@ async function syncFichasFusao() {
             let count = 0;
             for (const row of results) {
                 try {
+                    const codigo = sanitize(row.PRO_CODIGO_FIC);
+                    if (!codigo) continue;
                     const matInfo = await getMaterialInfo(db, row.PRO_CODIGO_FIC);
                     const obsVazamento = await getObsVazamento(db, row.PRO_CODIGO_FIC);
-                    const codigo = sanitize(row.PRO_CODIGO_FIC);
                     const foto = fotosMap[codigo] || null;
                     const fornecimento = fornMap[String(row.FORNECIMENTO_FIC || '').trim()] || row.FORNECIMENTO_FIC || null;
 
