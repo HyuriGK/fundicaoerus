@@ -57,7 +57,7 @@ const handleGet = async (req, res) => {
             return res.json(result.rows[0].payload);
         }
 
-        // 4b. STATUS DE OPs (processadas = QTY_ACABAMENTO >= QTY_FUSAO, saldo zerado)
+        // 4b. STATUS DE OPs (processadas = acabamento >= fusão, calculado direto dos apontamentos)
         if (action === 'ops-status') {
             const opsParam = req.query.ops || '';
             if (!opsParam) return res.json({});
@@ -65,14 +65,19 @@ const handleGet = async (req, res) => {
             if (!opsList.length) return res.json({});
 
             const result = await client.query(`
-                SELECT DISTINCT ON (replace(fsp.sync_key, 'OP-', ''))
-                    replace(fsp.sync_key, 'OP-', '') AS op
-                FROM firebird_sync_pedidos fsp
-                WHERE replace(fsp.sync_key, 'OP-', '') = ANY($1)
-                  AND COALESCE((fsp.data->>'QTY_FUSAO')::numeric, 0) > 0
-                  AND COALESCE((fsp.data->>'QTY_ACABAMENTO')::numeric, 0) >=
-                      COALESCE((fsp.data->>'QTY_FUSAO')::numeric, 0)
-                ORDER BY replace(fsp.sync_key, 'OP-', ''), fsp.updated_at DESC
+                SELECT op
+                FROM producao_apontada_sincronizada
+                WHERE op = ANY($1)
+                GROUP BY op
+                HAVING
+                    SUM(CASE WHEN upper(trim(setor)) IN ('FUSAO','FUSÃO','FUNDICAO','FUNDIÇÃO')
+                        THEN quantidade ELSE 0 END) > 0
+                    AND
+                    SUM(CASE WHEN upper(trim(setor)) IN ('ACABAMENTO','REBARBAÇÃO','REBARBACAO','GRALHA','RETRABALHO DE ACABAMENTO')
+                        THEN quantidade ELSE 0 END)
+                    >=
+                    SUM(CASE WHEN upper(trim(setor)) IN ('FUSAO','FUSÃO','FUNDICAO','FUNDIÇÃO')
+                        THEN quantidade ELSE 0 END)
             `, [opsList]);
 
             const processed = {};
