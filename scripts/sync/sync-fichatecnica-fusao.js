@@ -6,6 +6,14 @@ function sanitize(str) {
     return str.replace(/\0/g, '').trim();
 }
 
+function toNumeric(val) {
+    if (val === null || val === undefined) return null;
+    if (typeof val === 'number') return val;
+    const s = String(val).replace(/\0/g, '').trim().replace(',', '.');
+    const n = parseFloat(s);
+    return isNaN(n) ? null : n;
+}
+
 function readBlob(blob) {
     return new Promise((resolve) => {
         if (!blob) return resolve('');
@@ -204,30 +212,30 @@ async function syncFichasFusao() {
                         sanitize(row.CLI_CODIGO_FIC),
                         sanitize(matInfo.material),
                         sanitize(String(matInfo.mat_id || '')),
-                        row.PESO_LIQUIDO_PRO,
-                        row.PESO_BRUTO_PRO,
-                        row.PESO_PENCA_FIC,
-                        row.PESO_UNITARIO_COM_ALIMENT_FIC,
-                        row.RENDIMENTO_METALICO_FIC,
-                        row.TEMPERATURA_FORNO_FIC,
-                        row.FORNO_FIC,
-                        row.TEMPERATURA_VAZAMENTO_FIC,
-                        row.VAZAMENTO_FIC,
+                        toNumeric(row.PESO_LIQUIDO_PRO),
+                        toNumeric(row.PESO_BRUTO_PRO),
+                        toNumeric(row.PESO_PENCA_FIC),
+                        toNumeric(row.PESO_UNITARIO_COM_ALIMENT_FIC),
+                        toNumeric(row.RENDIMENTO_METALICO_FIC),
+                        toNumeric(row.TEMPERATURA_FORNO_FIC),
+                        toNumeric(row.FORNO_FIC),
+                        toNumeric(row.TEMPERATURA_VAZAMENTO_FIC),
+                        toNumeric(row.VAZAMENTO_FIC),
                         sanitize(obsVazamento),
                         fornecimento,
                         foto,
-                        row.RELACAO_METAL_MOLDE_FIC,
-                        row.RELACAO_MOLDE_METAL_FIC,
+                        toNumeric(row.RELACAO_METAL_MOLDE_FIC),
+                        toNumeric(row.RELACAO_MOLDE_METAL_FIC),
                         matInfo.composicao,
-                        matInfo.contracao,
-                        matInfo.limite_resistencia,
-                        matInfo.limite_escoamento,
-                        matInfo.alongamento,
-                        matInfo.estriccao,
-                        matInfo.reducao_area,
-                        matInfo.impacto_charpy,
-                        matInfo.hb_max,
-                        matInfo.hb_mat,
+                        toNumeric(matInfo.contracao),
+                        toNumeric(matInfo.limite_resistencia),
+                        toNumeric(matInfo.limite_escoamento),
+                        toNumeric(matInfo.alongamento),
+                        toNumeric(matInfo.estriccao),
+                        toNumeric(matInfo.reducao_area),
+                        toNumeric(matInfo.impacto_charpy),
+                        toNumeric(matInfo.hb_max),
+                        toNumeric(matInfo.hb_mat),
                         row.DATA_FIC || null
                     ]);
                     count++;
