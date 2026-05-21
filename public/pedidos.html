@@ -1508,8 +1508,13 @@
                             <select id="yearFilterHistorical" onchange="syncEmissionYear(this.value); updateHistoricalChart().then(() => updatePendingChart(allData))" style="display:none;"></select>
                         </div>
                     </div>
-                    <div class="chart-canvas-wrapper">
+                    <div class="chart-canvas-wrapper" style="position:relative;">
                         <canvas id="chartHistorical"></canvas>
+                        <div id="historicalBlurOverlay" style="display:none; position:absolute; inset:0; backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); background:rgba(9,9,11,0.55); border-radius:8px; z-index:10; align-items:center; justify-content:center; flex-direction:column; gap:10px; text-align:center; padding:20px;">
+                            <i class="fa-solid fa-eye-slash" style="font-size:1.6rem; color:#a1a1aa;"></i>
+                            <span style="color:#f4f4f5; font-size:0.85rem; font-weight:600; max-width:420px; line-height:1.5; text-align:center;">A visualização neste gráfico não está disponível para o filtro do período aplicado.</span>
+                            <span style="color:#a1a1aa; font-size:0.75rem;">Selecione um mês específico para ver a emissão diária.</span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -4360,8 +4365,27 @@
                 const modeEl = document.getElementById('modeFilterHistorical');
                 const selectedYear = yearEl ? (parseInt(yearEl.value) || new Date().getFullYear()) : new Date().getFullYear();
                 const rawMonth = monthEl ? monthEl.value : 'Todos';
-                const selectedMonth = (rawMonth === 'Todos' || !rawMonth || isNaN(parseInt(rawMonth))) ? 'Todos' : rawMonth;
                 const viewMode = modeEl ? modeEl.value : 'month';
+
+                // Se chartRow5 está ativo, respeita currentDeliveryView
+                const row5Active = document.getElementById('chartRow5')?.style.display !== 'none';
+                const histOverlay = document.getElementById('historicalBlurOverlay');
+                let selectedMonth;
+                if (!row5Active) {
+                    if (histOverlay) histOverlay.style.display = 'none';
+                    selectedMonth = (rawMonth === 'Todos' || !rawMonth || isNaN(parseInt(rawMonth))) ? 'Todos' : rawMonth;
+                } else if (currentDeliveryView === 'mensal') {
+                    if (histOverlay) histOverlay.style.display = 'none';
+                    selectedMonth = 'Todos';
+                } else if (currentDeliveryView === 'diaria' && activePillMonth === null) {
+                    // diária + ANO → overlay, renderiza mensal atrás
+                    if (histOverlay) histOverlay.style.display = 'flex';
+                    selectedMonth = 'Todos';
+                } else {
+                    // diária + mês específico
+                    if (histOverlay) histOverlay.style.display = 'none';
+                    selectedMonth = String(activePillMonth + 1);
+                }
                 const titleEl = modeEl.closest('.chart-panel').querySelector('.chart-title-flex');
                 const ctx = document.getElementById('chartHistorical').getContext('2d');
                 const monthLabels = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
@@ -4769,10 +4793,27 @@
             document.getElementById('btnViewMensal')?.classList.toggle('active', mode === 'mensal');
             document.getElementById('btnViewDiaria')?.classList.toggle('active', mode === 'diaria');
 
-            // If variação chart is active, just re-render it and return
+            // If variação chart is active
             const row4 = document.getElementById('chartRow4');
             if (row4 && row4.style.display !== 'none') {
+                if (mode === 'diaria' && activePillMonth === null) {
+                    // ANO selecionado + diária → switch para mensal automaticamente
+                    currentDeliveryView = 'mensal';
+                    document.getElementById('btnViewMensal')?.classList.add('active');
+                    document.getElementById('btnViewDiaria')?.classList.remove('active');
+                }
                 renderVariacaoChart();
+                return;
+            }
+            // If emissão de pedidos chart is active
+            const row5 = document.getElementById('chartRow5');
+            if (row5 && row5.style.display !== 'none') {
+                if (mode === 'diaria' && activePillMonth === null) {
+                    currentDeliveryView = 'mensal';
+                    document.getElementById('btnViewMensal')?.classList.add('active');
+                    document.getElementById('btnViewDiaria')?.classList.remove('active');
+                }
+                updateHistoricalChart();
                 return;
             }
 
@@ -4876,10 +4917,28 @@
                 const overrideEl = document.getElementById('monthOverrideDaily');
                 if (overrideEl) overrideEl.value = monthIndex + 1;
             }
-            // If variação chart is active, just re-render it
+            // If variação chart is active
             const row4 = document.getElementById('chartRow4');
             if (row4 && row4.style.display !== 'none') {
+                if (currentDeliveryView === 'diaria' && monthIndex === null) {
+                    currentDeliveryView = 'mensal';
+                    document.getElementById('btnViewMensal')?.classList.add('active');
+                    document.getElementById('btnViewDiaria')?.classList.remove('active');
+                }
                 renderVariacaoChart();
+                updateKPIsForView();
+                updatePillMonthUI();
+                return;
+            }
+            // If emissão de pedidos chart is active
+            const row5 = document.getElementById('chartRow5');
+            if (row5 && row5.style.display !== 'none') {
+                if (currentDeliveryView === 'diaria' && monthIndex === null) {
+                    currentDeliveryView = 'mensal';
+                    document.getElementById('btnViewMensal')?.classList.add('active');
+                    document.getElementById('btnViewDiaria')?.classList.remove('active');
+                }
+                updateHistoricalChart();
                 updateKPIsForView();
                 updatePillMonthUI();
                 return;
@@ -4946,6 +5005,11 @@
                 if (n === 4) {
                     btnDiaria.textContent = 'VARIAÇÃO DIÁRIA';
                     btnMensal.textContent = 'VARIAÇÃO MENSAL';
+                    btnDiaria.style.display = '';
+                    btnMensal.style.display = '';
+                } else if (n === 5) {
+                    btnDiaria.textContent = 'EMISSÃO DIÁRIA';
+                    btnMensal.textContent = 'EMISSÃO MENSAL';
                     btnDiaria.style.display = '';
                     btnMensal.style.display = '';
                 } else if (n === 3) {
