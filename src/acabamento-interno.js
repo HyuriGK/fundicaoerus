@@ -219,10 +219,14 @@ const handleGet = async (req, res) => {
                     od.material,
                     od.grupo_material,
                     fc.data_fusao,
-                    GREATEST(0, LEAST(fc.qtd_dia, fc.cum_ate - od.qty_acabamento)) AS quant_fusao
-                FROM fusion_cumsum fc
-                JOIN op_details od ON od.op = fc.op
-                WHERE GREATEST(0, LEAST(fc.qtd_dia, fc.cum_ate - od.qty_acabamento)) > 0
+                    CASE
+                        WHEN fc.op IS NULL THEN 0
+                        ELSE GREATEST(0, LEAST(fc.qtd_dia, fc.cum_ate - od.qty_acabamento))
+                    END AS quant_fusao
+                FROM op_details od
+                LEFT JOIN fusion_cumsum fc ON fc.op = od.op
+                WHERE fc.op IS NULL
+                   OR GREATEST(0, LEAST(fc.qtd_dia, fc.cum_ate - od.qty_acabamento)) > 0
                 ORDER BY fc.data_fusao ASC NULLS LAST, od.op ASC
             `);
             return res.json(result.rows);
