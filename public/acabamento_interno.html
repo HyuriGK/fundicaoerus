@@ -1717,6 +1717,11 @@
                 pendingCallback = onConfirm;
                 modal.style.display = 'flex';
             };
+            window._showDeleteModal = function(message, onConfirm) {
+                desc.textContent = message;
+                pendingCallback = onConfirm;
+                modal.style.display = 'flex';
+            };
 
             btnCancel.addEventListener('click', () => { modal.style.display = 'none'; pendingCallback = null; });
             btnConfirm.addEventListener('click', () => {
@@ -2139,25 +2144,29 @@
             }
         });
 
-        async function deleteScheduleByDate(dateStr, cardBtn) {
-            if (!confirm(`Apagar programação de ${dateStr.split('-').reverse().join('/')}?`)) return;
-            if (cardBtn) { cardBtn.disabled = true; cardBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; }
-            try {
-                const response = await fetch('/api/acabamento-interno/delete-schedule-day', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ date: dateStr })
-                });
-                if (response.ok) {
-                    loadSavedSchedulesList();
-                } else {
-                    alert("Erro ao apagar.");
-                    if (cardBtn) { cardBtn.disabled = false; cardBtn.innerHTML = '<i class="fas fa-trash"></i>'; }
+        function deleteScheduleByDate(dateStr, cardBtn) {
+            window._showDeleteModal(
+                `A programação de ${dateStr.split('-').reverse().join('/')} será apagada por completo.`,
+                async function() {
+                    if (cardBtn) { cardBtn.disabled = true; cardBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; }
+                    try {
+                        const response = await fetch('/api/acabamento-interno/delete-schedule-day', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ date: dateStr })
+                        });
+                        if (response.ok) {
+                            loadSavedSchedulesList();
+                        } else {
+                            alert("Erro ao apagar.");
+                            if (cardBtn) { cardBtn.disabled = false; cardBtn.innerHTML = '<i class="fas fa-trash"></i>'; }
+                        }
+                    } catch (error) {
+                        alert("Erro de conexão.");
+                        if (cardBtn) { cardBtn.disabled = false; cardBtn.innerHTML = '<i class="fas fa-trash"></i>'; }
+                    }
                 }
-            } catch (error) {
-                alert("Erro de conexão.");
-                if (cardBtn) { cardBtn.disabled = false; cardBtn.innerHTML = '<i class="fas fa-trash"></i>'; }
-            }
+            );
         }
 
         // --- PDF GENERATION UPDATED ---
