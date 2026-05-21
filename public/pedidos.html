@@ -1486,8 +1486,13 @@
  </button>
                         </div>
                     </div>
-                    <div class="chart-canvas-wrapper">
+                    <div class="chart-canvas-wrapper" style="position:relative;">
                         <canvas id="chartPending"></canvas>
+                        <div id="pendingBlurOverlay" style="display:none; position:absolute; inset:0; backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); background:rgba(9,9,11,0.55); border-radius:8px; z-index:10; align-items:center; justify-content:center; flex-direction:column; gap:10px; text-align:center; padding:20px;">
+                            <i class="fa-solid fa-eye-slash" style="font-size:1.6rem; color:#a1a1aa;"></i>
+                            <span style="color:#f4f4f5; font-size:0.85rem; font-weight:600; max-width:420px; line-height:1.5; text-align:center;">A visualização neste gráfico não está disponível para o filtro do período aplicado.</span>
+                            <span style="color:#a1a1aa; font-size:0.75rem;">Selecione um mês específico para ver a emissão diária.</span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -4798,14 +4803,17 @@
             const btnDiaria = document.getElementById('btnViewDiaria');
             const btnMensal = document.getElementById('btnViewMensal');
             if (!btnDiaria || !btnMensal) return;
-            const hideRows = [2, 3]; // rows onde os botões ficam ocultos
+            const hideRows = [3]; // rows onde os botões ficam ocultos
             if (hideRows.includes(n)) {
                 btnDiaria.style.display = 'none';
                 btnMensal.style.display = 'none';
             } else {
                 btnDiaria.style.display = '';
                 btnMensal.style.display = '';
-                if (n === 4) {
+                if (n === 2) {
+                    btnDiaria.textContent = 'PENDENTE DIÁRIA';
+                    btnMensal.textContent = 'PENDENTE MENSAL';
+                } else if (n === 4) {
                     btnDiaria.textContent = 'VARIAÇÃO DIÁRIA';
                     btnMensal.textContent = 'VARIAÇÃO MENSAL';
                 } else if (n === 5) {
@@ -4820,11 +4828,32 @@
 
         let currentDeliveryView = 'mensal';
 
+        function applyPendingDeliveryView() {
+            const overlay = document.getElementById('pendingBlurOverlay');
+            if (currentDeliveryView === 'diaria' && activePillMonth === null) {
+                if (overlay) overlay.style.display = 'flex';
+                return;
+            }
+            if (overlay) overlay.style.display = 'none';
+            if (currentDeliveryView === 'mensal') {
+                document.getElementById('monthFilterHistorical').value = 'Todos';
+            } else {
+                document.getElementById('monthFilterHistorical').value = String(activePillMonth + 1);
+            }
+            updatePendingChart(allData);
+        }
+
         function setDeliveryView(mode) {
             currentDeliveryView = mode;
             document.getElementById('btnViewMensal')?.classList.toggle('active', mode === 'mensal');
             document.getElementById('btnViewDiaria')?.classList.toggle('active', mode === 'diaria');
 
+            // If emissão c/ entrega pendente chart is active
+            const row2 = document.getElementById('chartRow2');
+            if (row2 && row2.style.display !== 'none') {
+                applyPendingDeliveryView();
+                return;
+            }
             // If variação chart is active
             const row4 = document.getElementById('chartRow4');
             if (row4 && row4.style.display !== 'none') {
@@ -4938,6 +4967,19 @@
                 const overrideEl = document.getElementById('monthOverrideDaily');
                 if (overrideEl) overrideEl.value = monthIndex + 1;
             }
+            // If emissão c/ entrega pendente chart is active
+            const row2 = document.getElementById('chartRow2');
+            if (row2 && row2.style.display !== 'none') {
+                if (currentDeliveryView === 'diaria' && monthIndex === null) {
+                    currentDeliveryView = 'mensal';
+                    document.getElementById('btnViewMensal')?.classList.add('active');
+                    document.getElementById('btnViewDiaria')?.classList.remove('active');
+                }
+                applyPendingDeliveryView();
+                updateKPIsForView();
+                updatePillMonthUI();
+                return;
+            }
             // If variação chart is active
             const row4 = document.getElementById('chartRow4');
             if (row4 && row4.style.display !== 'none') {
@@ -5033,12 +5075,13 @@
                 document.querySelector('.kpi-row').style.pointerEvents = '';
                 applyColumnFilters();
             }
+            if (n === 2) {
+                applyPendingDeliveryView();
+            }
             if (n === 4) {
                 renderVariacaoChart();
             }
             if (n === 5) {
-                const row2 = document.getElementById('chartRow2');
-                if (row2) row2.style.display = 'none'; // garantir que row2 está escondido
                 updateHistoricalChart();
             }
             if (n === 1) {
