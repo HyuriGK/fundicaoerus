@@ -100,8 +100,10 @@ const SYNC_BATS = [
 ];
 
 const MOLDAGEM_BAT  = { name: 'MOLDAGEM', file: 'sincronizar_fichatecmoldagem.bat', icon: '[ML]' };
+const FUSAO_BAT     = { name: 'FUSAO FT',  file: 'sincronizar_fichatecfusao.bat',    icon: '[FU]' };
 const MOLDAGEM_WAIT = 30 * 60 * 1000; // 30 minutos
-let moldagemNextAt  = null; // timestamp do proximo ciclo (durante espera)
+let moldagemNextAt  = null;
+let fusaoNextAt     = null;
 
 const DELAY_MS = 10000;
 const getW = () => Math.max(80, (process.stdout.columns || 120)) - 2; // dynamic terminal width
@@ -120,6 +122,8 @@ let lastOkAt     = {};
 SYNC_BATS.forEach(b => { currentProg[b.name] = 0; scriptState[b.name] = 'IDLE'; });
 currentProg[MOLDAGEM_BAT.name] = 0;
 scriptState[MOLDAGEM_BAT.name] = 'IDLE';
+currentProg[FUSAO_BAT.name] = 0;
+scriptState[FUSAO_BAT.name] = 'IDLE';
 
 // ─── BOX HELPERS ─────────────────────────────────────────────────────────────
 const bdr = C.border;
@@ -207,14 +211,15 @@ function buildFrame(cycleStart) {
     const FIXED = 1 + 4 + 1 + 11 + 2 + 2 + 4 + 2 + 10 + 5 + 8; // = 50
     const BAR = Math.max(10, W - FIXED - 2);
 
-    [...SYNC_BATS, MOLDAGEM_BAT].forEach(bat => {
+    [...SYNC_BATS, MOLDAGEM_BAT, FUSAO_BAT].forEach(bat => {
         const prog  = currentProg[bat.name] || 0;
         const state = scriptState[bat.name];
 
-        // Countdown para MOLDAGEM aguardando pr\u00f3ximo ciclo
+        // Countdown para loops independentes aguardando pr\u00f3ximo ciclo
         let countdownStr = '';
-        if (bat.name === 'MOLDAGEM' && state === 'IDLE' && moldagemNextAt) {
-            const secsLeft = Math.max(0, Math.round((moldagemNextAt - Date.now()) / 1000));
+        const nextAtMap = { 'MOLDAGEM': moldagemNextAt, 'FUSAO FT': fusaoNextAt };
+        if (nextAtMap[bat.name] && state === 'IDLE') {
+            const secsLeft = Math.max(0, Math.round((nextAtMap[bat.name] - Date.now()) / 1000));
             if (secsLeft > 0) {
                 const mm = String(Math.floor(secsLeft / 60)).padStart(2, '0');
                 const ss = String(secsLeft % 60).padStart(2, '0');
@@ -432,6 +437,29 @@ async function startForever() {
     }
 }
 
+// ─── LOOP INDEPENDENTE FUSAO ─────────────────────────────────────────────────
+async function startFusaoLoop() {
+    while (true) {
+        if (!isWithinSchedule()) {
+            await new Promise(r => setTimeout(r, 60000));
+            continue;
+        }
+
+        fusaoNextAt = null;
+        await runBat(FUSAO_BAT);
+
+        const fmtDate = d => d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR');
+        const line = `[FUSAO FT] Fim: ${fmtDate(new Date())}\n`;
+        try { fs.appendFileSync(CYCLE_LOG, line); } catch(e) {}
+        logEvent('FUSAO FT', `Ciclo concluido`, false);
+
+        fusaoNextAt = Date.now() + MOLDAGEM_WAIT;
+        scriptState[FUSAO_BAT.name] = 'IDLE';
+        await new Promise(r => setTimeout(r, MOLDAGEM_WAIT));
+        fusaoNextAt = null;
+    }
+}
+
 // ─── LOOP INDEPENDENTE MOLDAGEM ──────────────────────────────────────────────
 async function startMoldagemLoop() {
     while (true) {
@@ -462,5 +490,6 @@ async function startMoldagemLoop() {
 process.on('SIGINT', () => { process.stdout.write('\x1B[?25h'); process.exit(0); });
 process.on('exit',   () => process.stdout.write('\x1B[?25h'));
 
-startMoldagemLoop(); // inicia imediatamente, paralelo ao loop principal
+startMoldagemLoop();
+startFusaoLoop();
 startForever();
