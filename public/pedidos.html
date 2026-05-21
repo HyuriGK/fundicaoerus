@@ -1388,7 +1388,8 @@
                         <button id="btnViewMensal" class="month-btn active" onclick="setDeliveryView('mensal')">ENTREGA MENSAL</button>
                         <select class="year-pill-select" id="chartSelectDropdown" onchange="selectChartFromDropdown(parseInt(this.value))" style="width:auto; padding:0 12px;">
                             <option value="1" style="background:#18181b; color:#f4f4f5;">GRÁFICOS DE ENTREGA</option>
-                            <option value="2" style="background:#18181b; color:#f4f4f5;">GRÁFICOS DE EMISSÃO</option>
+                            <option value="2" style="background:#18181b; color:#f4f4f5;">EMISSÃO C/ ENTREGA PENDENTE</option>
+                            <option value="5" style="background:#18181b; color:#f4f4f5;">EMISSÃO DE PEDIDOS</option>
                             <option value="3" style="background:#18181b; color:#f4f4f5;">CONCENTRAÇÃO DA CARTEIRA</option>
                             <option value="4" style="background:#18181b; color:#f4f4f5;">VARIAÇÃO DA CARTEIRA</option>
                         </select>
@@ -1473,9 +1474,9 @@
             </div>
             <!-- GRÃÂFICOS - LINHA 2 (EMISSÃO) -->
             <!-- GRÃÂ FICOS - LINHA 2 (EMISSÃO) -->
+            <!-- GRÁFICOS - LINHA 2 (EMISSÃO C/ ENTREGA PENDENTE) -->
             <div id="chartRow2" class="charts-row" style="display: none;">
-                <!-- BOTTOM LEFT: Emissão (Entrega Pendente) -->
-                <div class="chart-panel">
+                <div class="chart-panel" style="flex:1;">
                     <div class="chart-header-row" style="position: relative;">
                         <div class="chart-title-flex">Gráfico de Emissão de Pedidos C/ Entrega Pendente</div>
                         <div style="position: absolute; right: 10px; display: flex; align-items: center; gap: 8px;">
@@ -1489,12 +1490,12 @@
                         <canvas id="chartPending"></canvas>
                     </div>
                 </div>
-                <!-- BOTTOM RIGHT: Emissão Histórica Mensal -->
-                <div class="chart-panel">
-                    <div class="chart-header-row"
-                        style="position: relative; display: flex; align-items: center; gap: 10px;">
+            </div>
+            <!-- GRÁFICOS - LINHA 5 (EMISSÃO DE PEDIDOS) -->
+            <div id="chartRow5" class="charts-row" style="display: none;">
+                <div class="chart-panel" style="flex:1;">
+                    <div class="chart-header-row" style="position: relative; display: flex; align-items: center; gap: 10px;">
                         <div class="chart-title-flex">Gráfico de Emissão de Pedidos</div>
-                        <!-- Filters Column Right -->
                         <div style="position: absolute; right: 10px; display: flex; align-items: center; gap: 6px;">
                             <button class="btn-modern" onclick="openHistoricalEmissionRecords()" style="font-size: 0.65rem; padding: 4px 10px; height: 26px; background-color: var(--color-primary); color: #000; margin-right: 5px;"> Registros
  </button>
@@ -4914,8 +4915,8 @@
             const yEl = document.getElementById('yearFilterHistorical');
             if (mEl) mEl.value = (monthIndex !== null && monthIndex !== undefined) ? String(monthIndex + 1) : 'Todos';
             if (yEl) yEl.value = yr;
-            const row2 = document.getElementById('chartRow2');
-            if (row2 && row2.style.display !== 'none') {
+            const row5 = document.getElementById('chartRow5');
+            if (row5 && row5.style.display !== 'none') {
                 updateHistoricalChart();
             }
         }
@@ -4929,14 +4930,17 @@
             const btnMap = { 1: 'btn-chart-entrega', 2: 'btn-chart-emissao', 3: 'btn-chart-concentracao' };
             const activeStyle = 'background: rgba(251,191,36,0.15); color: var(--color-primary); border: 1px solid var(--color-primary);';
             const idleStyle   = 'background: rgba(255,255,255,0.05); color: var(--text-main); border: 1px solid var(--border-subtle);';
-            [1, 2, 3, 4].forEach(r => {
+            [1, 2, 3, 4, 5].forEach(r => {
                 const el = document.getElementById('chartRow' + r);
                 if (el) el.style.display = r === n ? 'flex' : 'none';
                 const btn = document.getElementById(btnMap[r]);
                 if (btn) btn.style.cssText = r === n ? activeStyle : idleStyle;
             });
+            // Sync dropdown value
+            const dropdown = document.getElementById('chartSelectDropdown');
+            if (dropdown) dropdown.value = String(n);
             const kpiValueIds = ['totalOrdersCard', 'totalWeightCard', 'totalReleasedWeightCard', 'totalBlockedWeightCard'];
-            if ([2, 3, 4].includes(n)) {
+            if ([2, 3, 4, 5].includes(n)) {
                 kpiBlocked = true;
                 kpiValueIds.forEach(id => { const el = document.getElementById(id); if (el) el.textContent = '-----'; });
                 document.querySelector('.kpi-row').style.pointerEvents = 'none';
@@ -4950,6 +4954,11 @@
             }
             if (n === 4) {
                 renderVariacaoChart();
+            }
+            if (n === 5) {
+                const row2 = document.getElementById('chartRow2');
+                if (row2) row2.style.display = 'none'; // garantir que row2 está escondido
+                updateHistoricalChart();
             }
             if (n === 1) {
                 const mensalRow = document.getElementById('chartRowMensal');
@@ -4967,9 +4976,11 @@
                 requestAnimationFrame(() => {
                     if (n === 3 && chartConcentracao) chartConcentracao.resize();
                     if (n === 4 && chartVariacao) chartVariacao.resize();
+                    if (n === 5 && chartHistorical) chartHistorical.resize();
                 });
                 if (n === 3) setTimeout(() => { if (chartConcentracao) chartConcentracao.resize(); }, 50);
                 if (n === 4) setTimeout(() => { if (chartVariacao) chartVariacao.resize(); }, 50);
+                if (n === 5) setTimeout(() => { if (chartHistorical) chartHistorical.resize(); }, 50);
             });
         }
         function toggleIndustrialPosition() {
@@ -4979,7 +4990,7 @@
             if (!container) return;
 
             const isOpen = container.style.display === 'flex';
-            const blurTargets = ['chartRow1','chartRow2','chartRow3']
+            const blurTargets = ['chartRow1','chartRow2','chartRow3','chartRow5']
                 .map(id => document.getElementById(id)).filter(Boolean);
 
             if (!isOpen) {
