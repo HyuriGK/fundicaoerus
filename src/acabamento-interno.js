@@ -57,6 +57,34 @@ const handleGet = async (req, res) => {
             return res.json(result.rows[0].payload);
         }
 
+        // 4b. STATUS DE OPs (processadas = têm apontamento pós-fusão)
+        if (action === 'ops-status') {
+            const opsParam = req.query.ops || '';
+            if (!opsParam) return res.json({});
+            const opsList = opsParam.split(',').map(s => s.trim()).filter(Boolean);
+            if (!opsList.length) return res.json({});
+
+            const postFusionSetores = [
+                'ACABAMENTO','REBARBAÇÃO','REBARBACAO','GRALHA','SUBSTITUICAO','RETRABALHO DE ACABAMENTO',
+                'TRATAMENTO TERMICO','TRATAMENTO TÉRMICO','NORMALIZACAO','NORMALIZAÇÃO','TEMPERA','TÊMPERA','REVENIMENTO','SOLUBILIZAÇÃO','RECOZIMENTO',
+                'USINAGEM','TORNEARIA','RETORNO USINAGEM','SERVICO DE USINAGEM','SERVIÇO DE USINAGEM','USINAGEM EXPEDICAO',
+                'INSPECAO DE QUALIDADE','INSPEÇÃO DE QUALIDADE','QUALIDADE','REVISÃO','PRODUZIDA / INSPECIONADO',
+                'EXPEDICAO','EXPEDIÇÃO','LOGÍSTICA',
+                'FATURAMENTO','FATURADO'
+            ];
+
+            const result = await client.query(`
+                SELECT DISTINCT op
+                FROM producao_apontada_sincronizada
+                WHERE op = ANY($1)
+                  AND upper(trim(setor)) = ANY($2::text[])
+            `, [opsList, postFusionSetores.map(s => s.toUpperCase())]);
+
+            const processed = {};
+            result.rows.forEach(r => { processed[r.op] = true; });
+            return res.json(processed);
+        }
+
         // 4. LISTAR TODOS OS AGENDAMENTOS (MENU LATERAL)
         if (action === 'list-schedules') {
             const r = await client.query("SELECT date, payload FROM ai_daily_schedules ORDER BY date DESC");

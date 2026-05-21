@@ -618,6 +618,12 @@
             background: rgba(6, 182, 212, 0.1);
         }
 
+        tr.processed-row td {
+            text-decoration: line-through;
+            opacity: 0.38;
+            color: var(--text-muted) !important;
+        }
+
         #materialDaysFile {
             display: none !important;
         }
@@ -1174,6 +1180,21 @@
         const controlSeparator = document.getElementById('controlSeparator');
 
         let manualRowsData = [];
+        let processedOpsSet = new Set();
+
+        async function fetchOpsStatus(rows) {
+            const ops = [...new Set(
+                [...rows, ...manualRowsData]
+                    .map(r => String(r[COL_MAP.OP] || '').trim())
+                    .filter(Boolean)
+            )];
+            if (!ops.length) { processedOpsSet = new Set(); return; }
+            try {
+                const res = await fetch(`/api/acabamento-interno/ops-status?ops=${ops.join(',')}`);
+                const data = await res.json();
+                processedOpsSet = new Set(Object.keys(data).filter(k => data[k]));
+            } catch(e) { processedOpsSet = new Set(); }
+        }
 
         function formatDateTime(date) {
             const d = new Date(date);
@@ -1845,6 +1866,10 @@
                 const tr = document.createElement('tr'); tr.setAttribute('data-row-index', i);
                 const isManual = isModal && i >= numAgg;
                 if (isManual) tr.classList.add('manual-row');
+                if (isModal && !isManual && processedOpsSet.has(String(row[COL_MAP.OP] || ''))) {
+                    tr.classList.add('processed-row');
+                    tr.title = 'Já possui apontamento de acabamento ou etapa posterior';
+                }
 
                 let cols;
                 if (isModal) {
@@ -2003,7 +2028,7 @@
             let agg = aggregateData(filt);
             currentReportData = agg;
 
-            displayTable(agg, 'modalReportContainer');
+            fetchOpsStatus(agg).then(() => displayTable(agg, 'modalReportContainer'));
             if (!isVisitante) addManualRowButton.style.display = 'inline-flex';
             if (agg.length > 0 || manualRowsData.length > 0) {
                 generatePDFButton.disabled = false;
@@ -2090,6 +2115,7 @@
                 targetDateForPDF = refDate;
                 modalTitle.textContent = `Programação (SALVA): ${refDate.toLocaleDateString('pt-BR')}`;
 
+                await fetchOpsStatus(currentReportData);
                 displayTable(currentReportData, 'modalReportContainer');
                 if (!isVisitante) addManualRowButton.style.display = 'inline-flex';
 
@@ -2134,8 +2160,9 @@
         generatePDFButton.addEventListener('click', () => {
             updateManualRowsData();
 
-            const all = [...currentReportData, ...manualRowsData];
-            if (all.length === 0) return alert("Nada para PDF.");
+            const all = [...currentReportData, ...manualRowsData]
+                .filter(r => !processedOpsSet.has(String(r[COL_MAP.OP] || '')));
+            if (all.length === 0) return alert("Nada para PDF — todas as OPs já foram processadas.");
 
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF('l', 'mm', 'a4');
