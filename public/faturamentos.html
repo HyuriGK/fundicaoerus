@@ -938,6 +938,7 @@
                     <thead>
                         <tr>
                             <th class="checkbox-cell" id="colInclHeader">Incl.</th>
+                            <th class="checkbox-cell" id="colFatPesoHeader">Fat Peso</th>
                             <th style="min-width: 100px;">Data</th>
                             <th style="min-width: 100px;">Pedido</th>
                             <th style="min-width: 80px;">Cód. Cli</th>
@@ -952,6 +953,7 @@
                         </tr>
                         <tr id="filterRow">
                             <th id="colInclFilter"></th>
+                            <th id="colFatPesoFilter"></th>
                             <th><input class="filter-input-table" data-col="1" placeholder="..."
                                     oninput="applyLocalFilters()"></th>
                             <th><input class="filter-input-table" data-col="2" placeholder="..."
@@ -1139,6 +1141,7 @@
         let selectedDashboardMonthIndex = new Date().getMonth(); // 0-based
         let allData = [];
         let excludedClients = new Set();
+        let fatPesoOverrides = new Map(); // key → true/false (explicit override)
         let clientStats = {};
         let colFilters = {};
         let currentMeta = 0;
@@ -1347,6 +1350,13 @@
             // 3. Update KPIs with Range Data
             const totalFaturado = rangeData.reduce((acc, curr) => acc + calculateCalculatedTotal(curr), 0);
             const totalPeso = rangeData.reduce((acc, curr) => acc + (curr.pesoTotal || 0), 0);
+            // FAT PESO: weight totals use independent fat_peso state (not INCL.)
+            const rangeFatPeso = data.filter(item => {
+                if (startInput && item.data < startInput) return false;
+                if (endInput && item.data > endInput) return false;
+                return getFatPesoState(item);
+            });
+            const totalPesoFat = rangeFatPeso.reduce((acc, curr) => acc + (curr.pesoTotal || 0), 0);
             // KPIs: Total Geral (sempre com serviços) e Total sem serviços
             const rangeDataComServicos = data.filter(item => {
                 if (item.gera_financeiro === 'N') return false;
@@ -1359,10 +1369,15 @@
                 return true;
             });
             const totalGeralValor = rangeDataComServicos.reduce((acc, curr) => acc + calculateCalculatedTotal(curr), 0);
-            const totalGeralPeso = rangeDataComServicos.reduce((acc, curr) => acc + (curr.pesoTotal || 0), 0);
+            const rangeFatPesoComServ = data.filter(item => {
+                if (startInput && item.data < startInput) return false;
+                if (endInput && item.data > endInput) return false;
+                return getFatPesoState(item);
+            });
+            const totalGeralPeso = rangeFatPesoComServ.reduce((acc, curr) => acc + (curr.pesoTotal || 0), 0);
             const rangeDataSemServicos = rangeDataComServicos.filter(item => !isServiceClient(item));
             const totalSemServValor = rangeDataSemServicos.reduce((acc, curr) => acc + calculateCalculatedTotal(curr), 0);
-            const totalSemServPeso = rangeDataSemServicos.reduce((acc, curr) => acc + (curr.pesoTotal || 0), 0);
+            const totalSemServPeso = rangeFatPesoComServ.filter(item => !isServiceClient(item)).reduce((acc, curr) => acc + (curr.pesoTotal || 0), 0);
             const isVisible = document.getElementById('cardValorTotal').getAttribute('data-visible') === 'true';
             const elGeral = document.getElementById('totalGeralFaturadoValor');
             const elGeralPeso = document.getElementById('totalGeralFaturadoPeso');
@@ -1374,13 +1389,13 @@
             if (elSemServPeso) elSemServPeso.textContent = formatWeight(totalSemServPeso);
             const rangeDataSoServicos = rangeDataComServicos.filter(item => isServiceClient(item));
             const totalServValor = rangeDataSoServicos.reduce((acc, curr) => acc + calculateCalculatedTotal(curr), 0);
-            const totalServPeso = rangeDataSoServicos.reduce((acc, curr) => acc + (curr.pesoTotal || 0), 0);
+            const totalServPeso = rangeFatPesoComServ.filter(item => isServiceClient(item)).reduce((acc, curr) => acc + (curr.pesoTotal || 0), 0);
             const elServ = document.getElementById('totalServicosValor');
             const elServPeso = document.getElementById('totalServicosPeso');
             if (elServ) elServ.textContent = isVisible ? formatCurrency(totalServValor) : 'R$ -----';
             if (elServPeso) elServPeso.textContent = formatWeight(totalServPeso);
-            document.getElementById('totalWeightValue').textContent = formatWeight(totalPeso);
-            const avgPrice = totalPeso > 0 ? totalFaturado / totalPeso : 0;
+            document.getElementById('totalWeightValue').textContent = formatWeight(totalPesoFat);
+            const avgPrice = totalPesoFat > 0 ? totalFaturado / totalPesoFat : 0;
             if (isVisible) {
                 document.getElementById('totalValor').textContent = formatCurrency(totalFaturado);
                 document.getElementById('avgPriceTab').textContent = `R$ ${avgPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / kg`;
@@ -1416,7 +1431,7 @@
                 document.getElementById('metaProgressPercent').textContent = (currentMeta > 0 ? (totalSemServPeso / currentMeta) * 100 : 0).toFixed(1) + '%';
             }
             const totalQtd = rangeData.reduce((acc, curr) => acc + (curr.quantidade || 0), 0);
-            const avgPorPeca = totalQtd > 0 ? totalPeso / totalQtd : 0;
+            const avgPorPeca = totalQtd > 0 ? totalPesoFat / totalQtd : 0;
             const elAvgPeca = document.getElementById('avgWeightPerPiece');
             if (elAvgPeca) elAvgPeca.textContent = formatWeight(avgPorPeca);
             const elAvgPecaAnnual = document.getElementById('avgWeightPerPieceAnnual');
@@ -1970,7 +1985,40 @@ async function loadRecordsData() {
                 }
             } catch (e) { console.error(e); }
         }
-        async function loadPreferences() { try { const res = await (await fetch('/api/preferences/excluded_clients')).json(); if (res.success) excludedClients = new Set(res.data || []); } catch (e) { console.error(e); } }
+        async function loadPreferences() {
+            try { const res = await (await fetch('/api/preferences/excluded_clients')).json(); if (res.success) excludedClients = new Set(res.data || []); } catch (e) { console.error(e); }
+            try { const res = await (await fetch('/api/preferences/fat_peso_overrides')).json(); if (res.success) { fatPesoOverrides = new Map(Object.entries(res.data || {})); } } catch (e) { console.error(e); }
+        }
+        function itemKey(item) {
+            const codigoClean = item.codigoItem ? String(item.codigoItem).trim() : '';
+            const pedidoClean = item.pedido ? String(item.pedido).trim() : '';
+            const dataClean = item.data ? String(item.data).split('T')[0] : '';
+            const quantClean = item.quantidade || 0;
+            return `${item.notaFiscal}-${codigoClean}-${pedidoClean}-${dataClean}-${quantClean}`;
+        }
+        function getFatPesoState(item) {
+            const key = itemKey(item);
+            if (fatPesoOverrides.has(key)) return fatPesoOverrides.get(key);
+            const isService = isServiceClient(item);
+            const isIgnored = item.gera_financeiro === 'N' || (item.excluido_manualmente === true && (!isService || !showServices));
+            return !isIgnored;
+        }
+        async function toggleFatPeso(idx) {
+            const item = allData[idx];
+            const key = itemKey(item);
+            const currentState = getFatPesoState(item);
+            const newState = !currentState;
+            fatPesoOverrides.set(key, newState);
+            try {
+                await fetch('/api/preferences/fat_peso_overrides', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ value: Object.fromEntries(fatPesoOverrides) })
+                });
+            } catch (e) { console.error(e); }
+            renderTable();
+            updateDashboardfromRecords(allData);
+        }
         async function saveClientExclusion() { await fetch('/api/preferences/excluded_clients', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ value: Array.from(excludedClients) }) }); }
         async function toggleRowExclusion(idx) {
             const item = allData[idx];
@@ -2029,6 +2077,11 @@ async function loadRecordsData() {
             if (headerCell) headerCell.style.display = isDev ? '' : 'none';
             if (filterCell) filterCell.style.display = isDev ? '' : 'none';
             if (clientBtn) clientBtn.style.display = isDev ? 'flex' : 'none';
+            // FAT PESO column always visible
+            const fpHeader = document.getElementById('colFatPesoHeader');
+            const fpFilter = document.getElementById('colFatPesoFilter');
+            if (fpHeader) fpHeader.style.display = '';
+            if (fpFilter) fpFilter.style.display = '';
             // Filter for display
             let filteredClients = allData.filter(item => {
                 const isService = isServiceClient(item);
@@ -2072,9 +2125,12 @@ async function loadRecordsData() {
                 const isService = isServiceClient(item);
                 const isIgnored = item.gera_financeiro === 'N' || (item.excluido_manualmente === true && (!isService || !showServices));
                 const inclCell = `<td class="checkbox-cell" style="${isDev ? '' : 'display: none;'}" onclick="event.stopPropagation()"><input type="checkbox" ${!isIgnored ? 'checked' : ''} onclick="toggleRowExclusion(${globalIdx})"></td>`;
+                const fatPesoChecked = getFatPesoState(item);
+                const fatPesoCell = `<td class="checkbox-cell" onclick="event.stopPropagation()"><input type="checkbox" ${fatPesoChecked ? 'checked' : ''} onclick="toggleFatPeso(${globalIdx})"></td>`;
                 return `
                 <tr class="${isIgnored ? 'row-ignored' : ''}">
                     ${inclCell}
+                    ${fatPesoCell}
                     <td>${formatDate(item.data)}</td>
                     <td class="copyable" onclick="copyToClipboard('${item.pedido || ''}', 'Pedido')">${item.pedido || ''} <i class="fa-regular fa-copy" style="font-size:0.7em; margin-left:5px; opacity:0.5;"></i></td>
                     <td>${item.clienteCodigo || ''}</td>
@@ -2087,7 +2143,7 @@ async function loadRecordsData() {
                     <td class="text-right">${formatNumber(item.pesoTotal, 2)}</td>
                     <td class="text-right" style="color:var(--color-primary); font-weight:600;">${valorTotal}</td>
                 </tr>
-            `}).join('') || '<tr><td colspan="12" style="text-align:center; padding: 20px;">Nenhum registro.</td></tr>';
+            `}).join('') || '<tr><td colspan="13" style="text-align:center; padding: 20px;">Nenhum registro.</td></tr>';
             const incl = filteredClients.filter(item => {
                 const isService = isServiceClient(item);
                 if (isService) return showServices;
@@ -2097,7 +2153,7 @@ async function loadRecordsData() {
             const elWeight = document.getElementById('totalWeight');
             const elValue = document.getElementById('totalValue');
             if (elRecords) elRecords.textContent = incl.length;
-            if (elWeight) elWeight.textContent = formatWeight(incl.reduce((a, b) => a + (b.pesoTotal || 0), 0));
+            if (elWeight) elWeight.textContent = formatWeight(filteredClients.filter(item => getFatPesoState(item)).reduce((a, b) => a + (b.pesoTotal || 0), 0));
             if (elValue) {
                 if (isVisible) {
                     elValue.textContent = formatCurrency(incl.reduce((a, b) => a + calculateCalculatedTotal(b), 0));
