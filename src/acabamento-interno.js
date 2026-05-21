@@ -89,22 +89,42 @@ const handleGet = async (req, res) => {
         }
 
         if (action === 'ops-firebird') {
-            // Exatamente 1 linha por OP — usa QTY_FUSAO/QTY_ACABAMENTO pré-computados no sync
+            // Uma linha por (OP + data_fusao). Desconto do já acabado começa pelos lotes mais antigos.
             const result = await client.query(`
-                SELECT *
-                FROM (
-                    SELECT DISTINCT ON (fsp.sync_key)
-                        replace(fsp.sync_key, 'OP-', '')        AS op,
-                        fsp.data->>'PRODUTO_PPR'                AS codigo,
-                        fsp.data->>'NOME_PRODUTO_PPR'           AS descricao,
-                        (fsp.data->>'PESO_PRODUTO')::numeric    AS peso_un,
+                WITH fusion_apts AS (
+                    SELECT
+                        pas.op,
+                        pas.data_producao                                                        AS data_fusao,
+                        SUM(pas.quantidade)                                                      AS qtd_dia
+                    FROM producao_apontada_sincronizada pas
+                    WHERE upper(trim(pas.setor)) IN ('FUSAO','FUSÃO','FUNDICAO','FUNDIÇÃO')
+                    GROUP BY pas.op, pas.data_producao
+                ),
+                fusion_cumsum AS (
+                    SELECT
+                        op,
+                        data_fusao,
+                        qtd_dia,
+                        SUM(qtd_dia) OVER (
+                            PARTITION BY op
+                            ORDER BY data_fusao ASC
+                            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+                        )                                                                        AS cum_ate
+                    FROM fusion_apts
+                ),
+                op_details AS (
+                    SELECT DISTINCT ON (replace(fsp.sync_key, 'OP-', ''))
+                        replace(fsp.sync_key, 'OP-', '')                                        AS op,
+                        fsp.data->>'PRODUTO_PPR'                                                AS codigo,
+                        fsp.data->>'NOME_PRODUTO_PPR'                                           AS descricao,
+                        (fsp.data->>'PESO_PRODUTO')::numeric                                    AS peso_un,
                         COALESCE(
                             (SELECT ft.lote_pmt FROM ficha_tecnica ft
                              WHERE ft.pro_codigo_fic = fsp.data->>'PRODUTO_PPR'
                                AND ft.lote_pmt IS NOT NULL AND ft.lote_pmt <> ''
                              LIMIT 1),
                             fsp.data->>'LOTE_PCS', ''
-                        )                                       AS lote,
+                        )                                                                       AS lote,
                         COALESCE(
                             (SELECT NULLIF(TRIM(CONCAT_WS(', ',
                                 CASE WHEN TRIM(ft.normalizacao_fic)  = 'S' THEN 'NORMALIZAÇÃO' END,
@@ -117,17 +137,18 @@ const handleGet = async (req, res) => {
                              WHERE TRIM(ft.pro_codigo_fic) = TRIM(fsp.data->>'PRODUTO_PPR')
                              LIMIT 1),
                             ''
-                        )                                       AS tratamento_termico,
+                        )                                                                       AS tratamento_termico,
                         COALESCE(
                             (SELECT ft.fornecimento_desc FROM ficha_tecnica ft
                              WHERE TRIM(ft.pro_codigo_fic) = TRIM(fsp.data->>'PRODUTO_PPR')
                                AND ft.fornecimento_desc IS NOT NULL AND ft.fornecimento_desc <> ''
                              LIMIT 1),
                             ''
-                        )                                       AS fornecimento,
-                        fsp.data->>'NOME_CLIENTE'               AS cliente,
-                        fsp.data->>'OP_ENTREGA'                 AS op_entrega,
-                        fsp.data->>'STATUS_PCP'                 AS status_pcp,
+                        )                                                                       AS fornecimento,
+                        fsp.data->>'NOME_CLIENTE'                                               AS cliente,
+                        fsp.data->>'OP_ENTREGA'                                                 AS op_entrega,
+                        fsp.data->>'STATUS_PCP'                                                 AS status_pcp,
+                        COALESCE((fsp.data->>'QTY_ACABAMENTO')::numeric, 0)                     AS qty_acabamento,
                         COALESCE(
                             (SELECT e.data->>'NOME_MATERIAL'
                              FROM firebird_sync_emissoes e
@@ -135,7 +156,7 @@ const handleGet = async (req, res) => {
                                AND e.data->>'NOME_MATERIAL' IS NOT NULL
                                AND e.data->>'NOME_MATERIAL' <> ''
                              LIMIT 1), ''
-                        )                                       AS material,
+                        )                                                                       AS material,
                         COALESCE(
                             (SELECT pas.grupo_material
                              FROM producao_apontada_sincronizada pas
@@ -150,22 +171,31 @@ const handleGet = async (req, res) => {
                                AND pas.grupo_material IS NOT NULL
                                AND pas.grupo_material <> ''
                              LIMIT 1), ''
-                        )                                       AS grupo_material,
-                        (SELECT MAX(pas.data_producao)
-                         FROM producao_apontada_sincronizada pas
-                         WHERE pas.op = replace(fsp.sync_key, 'OP-', '')
-                           AND upper(trim(pas.setor)) IN ('FUSAO','FUSÃO','FUNDICAO','FUNDIÇÃO')
-                        )                                       AS data_fusao,
-                        GREATEST(0,
-                            COALESCE((fsp.data->>'QTY_FUSAO')::numeric, 0) -
-                            COALESCE((fsp.data->>'QTY_ACABAMENTO')::numeric, 0)
-                        )                                       AS quant_fusao
+                        )                                                                       AS grupo_material
                     FROM firebird_sync_pedidos fsp
                     WHERE fsp.sync_key LIKE 'OP-%'
                       AND trim(fsp.data->>'STATUS_PCP') NOT IN ('C', 'E', 'F')
-                    ORDER BY fsp.sync_key, fsp.updated_at DESC
-                ) sub
-                ORDER BY data_fusao ASC NULLS LAST, op ASC
+                    ORDER BY replace(fsp.sync_key, 'OP-', ''), fsp.updated_at DESC
+                )
+                SELECT
+                    od.op,
+                    od.codigo,
+                    od.descricao,
+                    od.peso_un,
+                    od.lote,
+                    od.tratamento_termico,
+                    od.fornecimento,
+                    od.cliente,
+                    od.op_entrega,
+                    od.status_pcp,
+                    od.material,
+                    od.grupo_material,
+                    fc.data_fusao,
+                    GREATEST(0, LEAST(fc.qtd_dia, fc.cum_ate - od.qty_acabamento)) AS quant_fusao
+                FROM fusion_cumsum fc
+                JOIN op_details od ON od.op = fc.op
+                WHERE GREATEST(0, LEAST(fc.qtd_dia, fc.cum_ate - od.qty_acabamento)) > 0
+                ORDER BY fc.data_fusao ASC NULLS LAST, od.op ASC
             `);
             return res.json(result.rows);
         }
