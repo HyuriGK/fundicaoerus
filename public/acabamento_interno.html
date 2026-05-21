@@ -1180,7 +1180,7 @@
         const controlSeparator = document.getElementById('controlSeparator');
 
         let manualRowsData = [];
-        let processedOpsSet = new Set();
+        let opsBalanceMap = new Map(); // op → saldo real (fusão - acabamento)
 
         async function fetchOpsStatus(rows) {
             const ops = [...new Set(
@@ -1188,12 +1188,12 @@
                     .map(r => String(r[COL_MAP.OP] || '').trim())
                     .filter(Boolean)
             )];
-            if (!ops.length) { processedOpsSet = new Set(); return; }
+            if (!ops.length) { opsBalanceMap = new Map(); return; }
             try {
                 const res = await fetch(`/api/acabamento-interno/ops-status?ops=${ops.join(',')}`);
                 const data = await res.json();
-                processedOpsSet = new Set(Object.keys(data).filter(k => data[k]));
-            } catch(e) { processedOpsSet = new Set(); }
+                opsBalanceMap = new Map(Object.entries(data).map(([k, v]) => [k, parseFloat(v)]));
+            } catch(e) { opsBalanceMap = new Map(); }
         }
 
         function formatDateTime(date) {
@@ -1696,9 +1696,19 @@
 
         function updateTotalWeightDisplay() {
             let prog = 0;
-            prog = currentReportData.reduce((s, r) => s + (Number(r[COL_MAP.PESO_TOTAL]) || 0), 0);
+            currentReportData.forEach(r => {
+                const opStr = String(r[COL_MAP.OP] || '');
+                const origQty = Number(r[COL_MAP.QTD]) || 0;
+                const origPeso = Number(r[COL_MAP.PESO_TOTAL]) || 0;
+                if (opsBalanceMap.has(opStr) && origQty > 0) {
+                    const bal = opsBalanceMap.get(opStr);
+                    prog += (Math.min(origQty, bal) / origQty) * origPeso;
+                } else {
+                    prog += origPeso;
+                }
+            });
             prog += manualRowsData.reduce((s, r) => s + (Number(r[COL_MAP.PESO_TOTAL]) || 0), 0);
-            document.getElementById('totalWeightValue').textContent = prog.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' KG'; // Legacy
+            document.getElementById('totalWeightValue').textContent = prog.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' KG';
             totalProgrammedWeightValue.textContent = prog.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' KG';
         }
 
@@ -1866,9 +1876,21 @@
                 const tr = document.createElement('tr'); tr.setAttribute('data-row-index', i);
                 const isManual = isModal && i >= numAgg;
                 if (isManual) tr.classList.add('manual-row');
-                if (isModal && !isManual && processedOpsSet.has(String(row[COL_MAP.OP] || ''))) {
-                    tr.classList.add('processed-row');
-                    tr.title = 'Já possui apontamento de acabamento ou etapa posterior';
+
+                let adjQty = null, adjPeso = null;
+                if (isModal && !isManual) {
+                    const opStr = String(row[COL_MAP.OP] || '');
+                    if (opsBalanceMap.has(opStr)) {
+                        const bal = opsBalanceMap.get(opStr);
+                        const origQty = Number(row[COL_MAP.QTD]) || 0;
+                        const origPeso = Number(row[COL_MAP.PESO_TOTAL]) || 0;
+                        adjQty = Math.min(origQty, bal);
+                        adjPeso = origQty > 0 ? (adjQty / origQty) * origPeso : 0;
+                        if (adjQty <= 0) {
+                            tr.classList.add('processed-row');
+                            tr.title = 'Todas as peças já passaram pelo acabamento';
+                        }
+                    }
                 }
 
                 let cols;
@@ -1883,6 +1905,12 @@
                 cols.forEach((idx, visualIndex) => {
                     const td = document.createElement('td');
                     let val = row[idx];
+
+                    // Substituir qty/peso pelo saldo real quando disponível
+                    if (isModal && !isManual && adjQty !== null) {
+                        if (idx === COL_MAP.QTD) val = adjQty;
+                        if (idx === COL_MAP.PESO_TOTAL) val = adjPeso;
+                    }
 
                     if (idx === COL_MAP.DATA) {
                         if (val instanceof Date) {
@@ -2160,8 +2188,24 @@
         generatePDFButton.addEventListener('click', () => {
             updateManualRowsData();
 
-            const all = [...currentReportData, ...manualRowsData]
-                .filter(r => !processedOpsSet.has(String(r[COL_MAP.OP] || '')));
+            const all = [...currentReportData, ...manualRowsData].reduce((acc, r) => {
+                const opStr = String(r[COL_MAP.OP] || '');
+                const origQty = Number(r[COL_MAP.QTD]) || 0;
+                const origPeso = Number(r[COL_MAP.PESO_TOTAL]) || 0;
+                let qty = origQty, peso = origPeso;
+                if (opsBalanceMap.has(opStr) && origQty > 0) {
+                    const bal = opsBalanceMap.get(opStr);
+                    qty = Math.min(origQty, bal);
+                    peso = (qty / origQty) * origPeso;
+                }
+                if (qty > 0) {
+                    const row = [...r];
+                    row[COL_MAP.QTD] = qty;
+                    row[COL_MAP.PESO_TOTAL] = peso;
+                    acc.push(row);
+                }
+                return acc;
+            }, []);
             if (all.length === 0) return alert("Nada para PDF — todas as OPs já foram processadas.");
 
             const { jsPDF } = window.jspdf;

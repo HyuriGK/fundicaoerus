@@ -57,7 +57,7 @@ const handleGet = async (req, res) => {
             return res.json(result.rows[0].payload);
         }
 
-        // 4b. STATUS DE OPs (processadas = acabamento >= fusão, calculado direto dos apontamentos)
+        // 4b. SALDO REAL DE OPs (fusão - acabamento, calculado direto dos apontamentos)
         if (action === 'ops-status') {
             const opsParam = req.query.ops || '';
             if (!opsParam) return res.json({});
@@ -65,24 +65,24 @@ const handleGet = async (req, res) => {
             if (!opsList.length) return res.json({});
 
             const result = await client.query(`
-                SELECT op
+                SELECT
+                    op,
+                    GREATEST(0,
+                        SUM(CASE WHEN upper(trim(setor)) IN ('FUSAO','FUSÃO','FUNDICAO','FUNDIÇÃO')
+                            THEN quantidade ELSE 0 END) -
+                        SUM(CASE WHEN upper(trim(setor)) IN ('ACABAMENTO','REBARBAÇÃO','REBARBACAO','GRALHA','RETRABALHO DE ACABAMENTO')
+                            THEN quantidade ELSE 0 END)
+                    ) AS saldo
                 FROM producao_apontada_sincronizada
                 WHERE op = ANY($1)
                 GROUP BY op
-                HAVING
-                    SUM(CASE WHEN upper(trim(setor)) IN ('FUSAO','FUSÃO','FUNDICAO','FUNDIÇÃO')
-                        THEN quantidade ELSE 0 END) > 0
-                    AND
-                    SUM(CASE WHEN upper(trim(setor)) IN ('ACABAMENTO','REBARBAÇÃO','REBARBACAO','GRALHA','RETRABALHO DE ACABAMENTO')
-                        THEN quantidade ELSE 0 END)
-                    >=
-                    SUM(CASE WHEN upper(trim(setor)) IN ('FUSAO','FUSÃO','FUNDICAO','FUNDIÇÃO')
-                        THEN quantidade ELSE 0 END)
+                HAVING SUM(CASE WHEN upper(trim(setor)) IN ('FUSAO','FUSÃO','FUNDICAO','FUNDIÇÃO')
+                    THEN quantidade ELSE 0 END) > 0
             `, [opsList]);
 
-            const processed = {};
-            result.rows.forEach(r => { processed[r.op] = true; });
-            return res.json(processed);
+            const balances = {};
+            result.rows.forEach(r => { balances[r.op] = parseFloat(r.saldo); });
+            return res.json(balances);
         }
 
         // 4. LISTAR TODOS OS AGENDAMENTOS (MENU LATERAL)
