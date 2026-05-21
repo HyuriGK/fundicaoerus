@@ -57,28 +57,23 @@ const handleGet = async (req, res) => {
             return res.json(result.rows[0].payload);
         }
 
-        // 4b. STATUS DE OPs (processadas = têm apontamento pós-fusão)
+        // 4b. STATUS DE OPs (processadas = QTY_ACABAMENTO >= QTY_FUSAO, saldo zerado)
         if (action === 'ops-status') {
             const opsParam = req.query.ops || '';
             if (!opsParam) return res.json({});
             const opsList = opsParam.split(',').map(s => s.trim()).filter(Boolean);
             if (!opsList.length) return res.json({});
 
-            const postFusionSetores = [
-                'ACABAMENTO','REBARBAÇÃO','REBARBACAO','GRALHA','SUBSTITUICAO','RETRABALHO DE ACABAMENTO',
-                'TRATAMENTO TERMICO','TRATAMENTO TÉRMICO','NORMALIZACAO','NORMALIZAÇÃO','TEMPERA','TÊMPERA','REVENIMENTO','SOLUBILIZAÇÃO','RECOZIMENTO',
-                'USINAGEM','TORNEARIA','RETORNO USINAGEM','SERVICO DE USINAGEM','SERVIÇO DE USINAGEM','USINAGEM EXPEDICAO',
-                'INSPECAO DE QUALIDADE','INSPEÇÃO DE QUALIDADE','QUALIDADE','REVISÃO','PRODUZIDA / INSPECIONADO',
-                'EXPEDICAO','EXPEDIÇÃO','LOGÍSTICA',
-                'FATURAMENTO','FATURADO'
-            ];
-
             const result = await client.query(`
-                SELECT DISTINCT op
-                FROM producao_apontada_sincronizada
-                WHERE op = ANY($1)
-                  AND upper(trim(setor)) = ANY($2::text[])
-            `, [opsList, postFusionSetores.map(s => s.toUpperCase())]);
+                SELECT DISTINCT ON (replace(fsp.sync_key, 'OP-', ''))
+                    replace(fsp.sync_key, 'OP-', '') AS op
+                FROM firebird_sync_pedidos fsp
+                WHERE replace(fsp.sync_key, 'OP-', '') = ANY($1)
+                  AND COALESCE((fsp.data->>'QTY_FUSAO')::numeric, 0) > 0
+                  AND COALESCE((fsp.data->>'QTY_ACABAMENTO')::numeric, 0) >=
+                      COALESCE((fsp.data->>'QTY_FUSAO')::numeric, 0)
+                ORDER BY replace(fsp.sync_key, 'OP-', ''), fsp.updated_at DESC
+            `, [opsList]);
 
             const processed = {};
             result.rows.forEach(r => { processed[r.op] = true; });
