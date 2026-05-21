@@ -1696,17 +1696,7 @@
 
         function updateTotalWeightDisplay() {
             let prog = 0;
-            currentReportData.forEach(r => {
-                const opStr = String(r[COL_MAP.OP] || '');
-                const origQty = Number(r[COL_MAP.QTD]) || 0;
-                const origPeso = Number(r[COL_MAP.PESO_TOTAL]) || 0;
-                if (opsBalanceMap.has(opStr) && origQty > 0) {
-                    const bal = opsBalanceMap.get(opStr);
-                    prog += (Math.min(origQty, bal) / origQty) * origPeso;
-                } else {
-                    prog += origPeso;
-                }
-            });
+            prog = currentReportData.reduce((s, r) => s + (Number(r[COL_MAP.PESO_TOTAL]) || 0), 0);
             prog += manualRowsData.reduce((s, r) => s + (Number(r[COL_MAP.PESO_TOTAL]) || 0), 0);
             document.getElementById('totalWeightValue').textContent = prog.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' KG';
             totalProgrammedWeightValue.textContent = prog.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' KG';
@@ -1877,19 +1867,11 @@
                 const isManual = isModal && i >= numAgg;
                 if (isManual) tr.classList.add('manual-row');
 
-                let adjQty = null, adjPeso = null;
                 if (isModal && !isManual) {
                     const opStr = String(row[COL_MAP.OP] || '');
-                    if (opsBalanceMap.has(opStr)) {
-                        const bal = opsBalanceMap.get(opStr);
-                        const origQty = Number(row[COL_MAP.QTD]) || 0;
-                        const origPeso = Number(row[COL_MAP.PESO_TOTAL]) || 0;
-                        adjQty = Math.min(origQty, bal);
-                        adjPeso = origQty > 0 ? (adjQty / origQty) * origPeso : 0;
-                        if (adjQty <= 0) {
-                            tr.classList.add('processed-row');
-                            tr.title = 'Todas as peças já passaram pelo acabamento';
-                        }
+                    if (opsBalanceMap.has(opStr) && opsBalanceMap.get(opStr) <= 0) {
+                        tr.classList.add('processed-row');
+                        tr.title = 'Todas as peças já passaram pelo acabamento';
                     }
                 }
 
@@ -1905,12 +1887,6 @@
                 cols.forEach((idx, visualIndex) => {
                     const td = document.createElement('td');
                     let val = row[idx];
-
-                    // Substituir qty/peso pelo saldo real quando disponível
-                    if (isModal && !isManual && adjQty !== null) {
-                        if (idx === COL_MAP.QTD) val = adjQty;
-                        if (idx === COL_MAP.PESO_TOTAL) val = adjPeso;
-                    }
 
                     if (idx === COL_MAP.DATA) {
                         if (val instanceof Date) {
