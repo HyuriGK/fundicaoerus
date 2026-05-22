@@ -7,7 +7,8 @@ const { logActivity } = require('./lib/logger');
 router.get('/', async (req, res) => {
     const client = await pool.connect();
     try {
-        await client.query(`CREATE TABLE IF NOT EXISTS acabamento_externo_previsoes (carga VARCHAR PRIMARY KEY, previsao_entrega DATE)`);
+        await client.query(`CREATE TABLE IF NOT EXISTS acabamento_externo_previsoes (carga VARCHAR PRIMARY KEY, previsao_entrega DATE, data_entrega DATE)`);
+        await client.query(`ALTER TABLE acabamento_externo_previsoes ADD COLUMN IF NOT EXISTS data_entrega DATE`);
         const registros = await client.query('SELECT * FROM acabamento_externo_registros ORDER BY data DESC, id DESC');
         // Nota: Ajustei a query de recebidos para retornar o formato esperado pelo front
         const recebidos = await client.query('SELECT registro_id as id, carga FROM acabamento_externo_recebidos');
@@ -117,10 +118,17 @@ router.post('/', async (req, res) => {
 
         // 6b. SALVAR PREVISÃO DE ENTREGA
         if (action === 'save-previsao') {
-            await client.query(
-                `INSERT INTO acabamento_externo_previsoes (carga, previsao_entrega) VALUES ($1, $2) ON CONFLICT (carga) DO UPDATE SET previsao_entrega = $2`,
-                [data.carga, data.previsao_entrega || null]
-            );
+            if (data.field === 'data_entrega') {
+                await client.query(
+                    `INSERT INTO acabamento_externo_previsoes (carga, data_entrega) VALUES ($1, $2) ON CONFLICT (carga) DO UPDATE SET data_entrega = $2`,
+                    [data.carga, data.value || null]
+                );
+            } else {
+                await client.query(
+                    `INSERT INTO acabamento_externo_previsoes (carga, previsao_entrega) VALUES ($1, $2) ON CONFLICT (carga) DO UPDATE SET previsao_entrega = $2`,
+                    [data.carga, data.value || null]
+                );
+            }
             return res.status(200).json({ success: true });
         }
 

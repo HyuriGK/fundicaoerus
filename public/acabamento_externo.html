@@ -942,7 +942,8 @@
                         <tr>
                             <th>CARGA</th>
                             <th>DATA EXPEDIÇÃO</th>
-                            <th>PREVISÃO DE ENTREGA</th>
+                            <th>DATA ACORDADA</th>
+                            <th>DATA DE ENTREGA</th>
                             <th>TERCEIRO</th>
                             <th>PESO TOTAL (KG)</th>
                             <th>QTD TOTAL</th>
@@ -953,6 +954,7 @@
                         <tr class="filter-row">
                             <th><input class="filter-input-table" placeholder="Filtro..." /></th>
                             <th><input class="filter-input-table" placeholder="Filtro..." /></th>
+                            <th></th>
                             <th></th>
                             <th><input class="filter-input-table" placeholder="Filtro..." /></th>
                             <th><input class="filter-input-table" placeholder="Filtro..." /></th>
@@ -1342,7 +1344,12 @@
                 recebidos = {};
                 data.recebidos.forEach(i => { if (!recebidos[i.carga]) recebidos[i.carga] = []; recebidos[i.carga].push(i); });
                 previsoes = {};
-                (data.previsoes || []).forEach(p => { previsoes[p.carga] = p.previsao_entrega ? p.previsao_entrega.split('T')[0] : ''; });
+                (data.previsoes || []).forEach(p => {
+                    previsoes[p.carga] = {
+                        acordada: p.previsao_entrega ? p.previsao_entrega.split('T')[0] : '',
+                        entrega: p.data_entrega ? p.data_entrega.split('T')[0] : ''
+                    };
+                });
             } catch (e) { throw e; }
         }
         function renderTable(dadosParaExibir = registros) {
@@ -1380,9 +1387,12 @@
                 const tr = document.createElement('tr');
                 tr.className = 'group-row';
                 tr.onclick = () => showCargaDetails(c);
-                const prevVal = previsoes[c] || '';
-                const prevDisplay = prevVal ? formatDate(prevVal) : '<span style="color:#52525b;font-size:0.75rem;">—</span>';
-                const prevCell = `<td onclick="event.stopPropagation()"><div style="display:flex;align-items:center;gap:6px;">${prevDisplay}<button onclick="event.stopPropagation();document.getElementById('prevInput_${c}').showPicker()" style="background:rgba(255,255,255,0.07);border:1px solid var(--border-subtle);color:#a1a1aa;border-radius:4px;padding:2px 6px;cursor:pointer;font-size:0.7rem;"><i class="fa-regular fa-calendar"></i></button><input type="date" id="prevInput_${c}" value="${prevVal}" style="position:absolute;opacity:0;pointer-events:none;width:0;height:0;" onchange="salvarPrevisao('${c}',this.value)"></div></td>`;
+                const prev = previsoes[c] || {};
+                const makeDateCell = (val, inputId, field) => {
+                    const display = val ? formatDate(val) : '<span style="color:#52525b;font-size:0.75rem;">—</span>';
+                    return `<td onclick="event.stopPropagation()"><div style="display:flex;align-items:center;gap:6px;">${display}<button onclick="event.stopPropagation();document.getElementById('${inputId}').showPicker()" style="background:rgba(255,255,255,0.07);border:1px solid var(--border-subtle);color:#a1a1aa;border-radius:4px;padding:2px 6px;cursor:pointer;font-size:0.7rem;"><i class="fa-regular fa-calendar"></i></button><input type="date" id="${inputId}" value="${val||''}" style="position:absolute;opacity:0;pointer-events:none;width:0;height:0;" onchange="salvarPrevisao('${c}','${field}',this.value)"></div></td>`;
+                };
+                const prevCell = makeDateCell(prev.acordada || '', `prevInput_${c}_acordada`, 'previsao_entrega') + makeDateCell(prev.entrega || '', `prevInput_${c}_entrega`, 'data_entrega');
                 let rowHTML = `<td>${c}</td><td>${formatDate(p.data)}</td>${prevCell}<td>${p.terceiro}</td><td>${formatNumber(tP)}</td><td>${tQ}</td>`;
                 // Only sum Sales Value for pending items (not received)
                 const vSales = its.reduce((s, i) => {
@@ -1400,10 +1410,12 @@
             updateFooterTotals(totalWeight, totalQty);
             applyColumnFilters();
         }
-        async function salvarPrevisao(carga, date) {
-            previsoes[carga] = date;
+        async function salvarPrevisao(carga, field, date) {
+            if (!previsoes[carga]) previsoes[carga] = {};
+            if (field === 'data_entrega') previsoes[carga].entrega = date;
+            else previsoes[carga].acordada = date;
             renderTable();
-            try { await apiRequest('previsao', 'POST', { carga, previsao_entrega: date || null }); }
+            try { await apiRequest('previsao', 'POST', { carga, field, value: date || null }); }
             catch (e) { console.error('Erro ao salvar previsão:', e); }
         }
         function renderMonthButtons() {
@@ -1947,4 +1959,6 @@
     <script src="js/notifications.js"></script>
 </body>
 </html>
+
+
 
