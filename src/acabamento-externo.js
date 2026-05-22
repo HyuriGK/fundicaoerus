@@ -13,7 +13,7 @@ router.get('/', async (req, res) => {
         // Nota: Ajustei a query de recebidos para retornar o formato esperado pelo front
         const recebidos = await client.query('SELECT registro_id as id, carga FROM acabamento_externo_recebidos');
         const itens = await client.query('SELECT * FROM acabamento_externo_itens');
-        const previsoes = await client.query('SELECT carga, previsao_entrega FROM acabamento_externo_previsoes');
+        const previsoes = await client.query('SELECT carga, previsao_entrega, data_entrega FROM acabamento_externo_previsoes');
 
         return res.status(200).json({
             registros: registros.rows,
