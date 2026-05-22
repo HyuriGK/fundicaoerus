@@ -4949,6 +4949,12 @@
                         </div>
 
 
+                        <div class="admin-item-card" style="--card-accent: #f97316;" onclick="switchAdminView('permissions')">
+                            <i class="fa-solid fa-key admin-item-icon" style="color: #f97316;"></i>
+                            <div class="admin-item-title">Permissões</div>
+                            <div class="admin-item-desc">Controlar quais telas cada role pode acessar</div>
+                        </div>
+
                         <div class="admin-item-card" style="opacity: 0.4; cursor: not-allowed;">
 
 
@@ -5402,6 +5408,23 @@
             </div>
 
 
+            <!-- PERMISSÕES VIEW -->
+                <div id="adminPermissionsView" class="admin-view-transition" style="display:none;">
+                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
+                        <span style="color:#a1a1aa; font-size:0.8rem;">Marque quais telas cada role pode acessar. <strong style="color:#f97316;">Desenvolvedor</strong> sempre tem acesso total.</span>
+                        <div style="display:flex; gap:8px; align-items:center;">
+                            <button onclick="permissionsSelectAll(true)" style="background:rgba(16,185,129,0.12); border:1px solid rgba(16,185,129,0.3); color:#10b981; border-radius:6px; padding:5px 12px; cursor:pointer; font-size:0.75rem;">Liberar Tudo</button>
+                            <button onclick="permissionsSelectAll(false)" style="background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.2); color:#ef4444; border-radius:6px; padding:5px 12px; cursor:pointer; font-size:0.75rem;">Bloquear Tudo</button>
+                        </div>
+                    </div>
+                    <div style="overflow:auto; max-height:calc(80vh - 140px);">
+                        <table id="permissionsTable" style="width:100%; border-collapse:collapse; font-size:0.78rem; min-width:900px;">
+                            <thead id="permissionsTableHead"></thead>
+                            <tbody id="permissionsTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
             <!-- SCRIPT DA SIDEBAR -->
 
 
@@ -5434,6 +5457,7 @@
 
                     const communicationView = document.getElementById('adminCommunicationView');
 
+                    const permissionsView = document.getElementById('adminPermissionsView');
 
                     const backBtn = document.getElementById('adminBackBtn');
 
@@ -5463,6 +5487,8 @@
 
 
                     communicationView.style.display = 'none';
+
+                    if (permissionsView) permissionsView.style.display = 'none';
 
 
                     if (view === 'dashboard') {
@@ -5570,11 +5596,139 @@
                         loadCommUsers();
 
 
+                    } else if (view === 'permissions') {
+                        if (permissionsView) permissionsView.style.display = 'block';
+                        backBtn.style.display = 'flex';
+                        title.textContent = 'Permissões por Role';
+                        icon.className = 'fa-solid fa-key';
+                        loadPermissionsMatrix();
                     }
 
 
                 }
 
+
+                // ── PERMISSIONS MATRIX ───────────────────────────────────────────
+                const _PERM_PAGES = [
+                    { cat: 'Dashboard',       pages: [{ key: 'index.html', label: 'Dashboard' }] },
+                    { cat: 'Comercial',        pages: [{ key: 'pedidos.html', label: 'Carteira de Pedidos' }, { key: 'clientes.html', label: 'Clientes' }] },
+                    { cat: 'PPCP',             pages: [
+                        { key: 'apontamentos_produtivos.html', label: 'Apontamentos Produtivos' },
+                        { key: 'ordemdeproducao.html', label: 'Ordens de Produção' },
+                        { key: 'fichatecnica.html', label: 'Ficha Técnica' },
+                        { key: 'fichatecmoldagem.html', label: 'Ficha Moldagem' },
+                        { key: 'fichatecfusao.html', label: 'Ficha Fusão' },
+                        { key: 'fichatecacabamento.html', label: 'Ficha Acabamento' },
+                        { key: 'monitoramento.html', label: 'Monitoramento OPs' },
+                        { key: 'acabamento_interno.html', label: 'Acabamento Interno' }
+                    ]},
+                    { cat: 'Faturamento',      pages: [{ key: 'faturamentos.html', label: 'Produção Faturada' }] },
+                    { cat: 'Terceirização',    pages: [{ key: 'acabamento_externo.html', label: 'Acabamento Externo' }] },
+                    { cat: 'Custos',           pages: [{ key: 'custos.html', label: 'Custos Gerais' }, { key: 'custopeca.html', label: 'Calculadora de Custos' }] },
+                    { cat: 'Indicadores',      pages: [{ key: 'otif.html', label: 'OTIF' }] },
+                    { cat: 'Controles',        pages: [{ key: 'aderencia.html', label: 'Aderência' }, { key: 'refugos.html', label: 'Refugos' }, { key: 'devolucoes.html', label: 'Devoluções' }] },
+                    { cat: 'Financeiro',       pages: [{ key: 'balanco.html', label: 'Balanço' }] },
+                    { cat: 'Chamados TI',      pages: [{ key: 'solicitarchamados.html', label: 'Solicitar Chamado' }, { key: 'chamados.html', label: 'Painel TI' }] },
+                    { cat: 'Comunicação',      pages: [{ key: 'comunicacao.html', label: 'Comunicação' }, { key: 'reuniao.html', label: 'Reuniões' }, { key: 'relatorio.html', label: 'Relatórios' }] },
+                ];
+                const _PERM_ROLES = [
+                    { key: 'administrador',    label: 'Admin' },
+                    { key: 'comercial',        label: 'Comercial' },
+                    { key: 'gerente comercial',label: 'Ger. Comercial' },
+                    { key: 'diretor',          label: 'Diretor' },
+                    { key: 'analista',         label: 'Analista' },
+                    { key: 'ppcp',             label: 'PPCP' },
+                    { key: 'visitante',        label: 'Visitante' },
+                    { key: 'moldagem',         label: 'Moldagem' },
+                    { key: 'fusão',            label: 'Fusão' },
+                    { key: 'acabamento',       label: 'Acabamento' },
+                ];
+
+                let _permData = {}; // { role: { page_key: bool } }
+
+                async function loadPermissionsMatrix() {
+                    try {
+                        const res = await fetch('/api/permissions', { headers: { 'x-role': localStorage.getItem('erus_role') } });
+                        const rows = await res.json();
+                        _permData = {};
+                        rows.forEach(r => {
+                            if (!_permData[r.role]) _permData[r.role] = {};
+                            _permData[r.role][r.page_key] = r.allowed;
+                        });
+                        renderPermissionsMatrix();
+                    } catch(e) { console.error('Erro ao carregar permissões', e); }
+                }
+
+                function isAllowed(role, pageKey) {
+                    if (_permData[role] && typeof _permData[role][pageKey] === 'boolean') return _permData[role][pageKey];
+                    return true; // default: allowed
+                }
+
+                function renderPermissionsMatrix() {
+                    const thead = document.getElementById('permissionsTableHead');
+                    const tbody = document.getElementById('permissionsTableBody');
+                    if (!thead || !tbody) return;
+
+                    // Header row
+                    let headHtml = '<tr><th style="text-align:left; padding:8px 12px; background:#0c0c0f; color:#71717a; font-weight:700; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.08em; position:sticky; top:0; z-index:2; min-width:180px;">Tela</th>';
+                    headHtml += '<th style="padding:8px 6px; background:#0c0c0f; color:#fbbf24; font-weight:700; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.06em; text-align:center; position:sticky; top:0; z-index:2; min-width:70px;">Dev</th>';
+                    _PERM_ROLES.forEach(r => {
+                        headHtml += `<th style="padding:8px 6px; background:#0c0c0f; color:#a1a1aa; font-weight:700; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.06em; text-align:center; position:sticky; top:0; z-index:2; min-width:70px;">${r.label}</th>`;
+                    });
+                    headHtml += '</tr>';
+                    thead.innerHTML = headHtml;
+
+                    // Body rows
+                    let bodyHtml = '';
+                    _PERM_PAGES.forEach(group => {
+                        // Category separator row
+                        bodyHtml += `<tr><td colspan="${_PERM_ROLES.length + 2}" style="padding:10px 12px 4px; color:#f97316; font-size:0.65rem; font-weight:800; text-transform:uppercase; letter-spacing:0.12em; background:rgba(249,115,22,0.06); border-top:1px solid rgba(249,115,22,0.15);">${group.cat}</td></tr>`;
+                        group.pages.forEach(page => {
+                            bodyHtml += `<tr style="border-bottom:1px solid rgba(255,255,255,0.04);">`;
+                            bodyHtml += `<td style="padding:7px 12px; color:#d4d4d8; font-size:0.78rem;">${page.label}</td>`;
+                            // Desenvolvedor — always on, not editable
+                            bodyHtml += `<td style="text-align:center; padding:7px 4px;"><input type="checkbox" checked disabled style="accent-color:#fbbf24; opacity:0.5; width:15px; height:15px; cursor:not-allowed;"></td>`;
+                            _PERM_ROLES.forEach(r => {
+                                const checked = isAllowed(r.key, page.key) ? 'checked' : '';
+                                bodyHtml += `<td style="text-align:center; padding:7px 4px;"><input type="checkbox" ${checked} onchange="togglePermission('${r.key}','${page.key}',this.checked)" style="accent-color:#f97316; width:15px; height:15px; cursor:pointer;"></td>`;
+                            });
+                            bodyHtml += `</tr>`;
+                        });
+                    });
+                    tbody.innerHTML = bodyHtml;
+                }
+
+                async function togglePermission(role, pageKey, allowed) {
+                    if (!_permData[role]) _permData[role] = {};
+                    _permData[role][pageKey] = allowed;
+                    try {
+                        await fetch('/api/permissions', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'x-role': localStorage.getItem('erus_role') },
+                            body: JSON.stringify({ role, page_key: pageKey, allowed })
+                        });
+                    } catch(e) { console.error('Erro ao salvar permissão', e); }
+                }
+
+                async function permissionsSelectAll(allowed) {
+                    const promises = [];
+                    _PERM_PAGES.forEach(group => {
+                        group.pages.forEach(page => {
+                            _PERM_ROLES.forEach(r => {
+                                if (!_permData[r.key]) _permData[r.key] = {};
+                                _permData[r.key][page.key] = allowed;
+                                promises.push(fetch('/api/permissions', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json', 'x-role': localStorage.getItem('erus_role') },
+                                    body: JSON.stringify({ role: r.key, page_key: page.key, allowed })
+                                }));
+                            });
+                        });
+                    });
+                    await Promise.all(promises);
+                    renderPermissionsMatrix();
+                }
+                // ── END PERMISSIONS MATRIX ────────────────────────────────────────
 
                 async function openAdminModal() {
 

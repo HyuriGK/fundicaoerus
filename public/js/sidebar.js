@@ -528,6 +528,26 @@
                 if (hasLocked && !restrictedPageMap[role]) devSep.style.display = 'flex';
             })
             .catch(function() {});
+
+        // Load role permissions and enforce sidebar visibility
+        if (role !== 'desenvolvedor' && !restrictedPageMap[role]) {
+            fetch('/api/permissions')
+                .then(function(r) { return r.json(); })
+                .then(function(rows) {
+                    var blocked = {};
+                    rows.forEach(function(r2) {
+                        if (r2.role === role && r2.allowed === false) blocked[r2.page_key] = true;
+                    });
+                    Object.keys(blocked).forEach(function(pageKey) {
+                        var link = document.querySelector('#erus-sidebar .erus-nav-link[href="' + pageKey + '"]');
+                        if (link) link.classList.add('erus-role-hidden');
+                    });
+                    // Redirect if current page is blocked
+                    var currentPage = window.location.pathname.split('/').pop() || 'index.html';
+                    if (blocked[currentPage]) window.location.href = 'index.html';
+                })
+                .catch(function() {});
+        }
     }
 
     // ---- Global sidebar functions ----
