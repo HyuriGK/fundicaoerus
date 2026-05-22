@@ -7,15 +7,18 @@ const { logActivity } = require('./lib/logger');
 router.get('/', async (req, res) => {
     const client = await pool.connect();
     try {
+        await client.query(`CREATE TABLE IF NOT EXISTS acabamento_externo_previsoes (carga VARCHAR PRIMARY KEY, previsao_entrega DATE)`);
         const registros = await client.query('SELECT * FROM acabamento_externo_registros ORDER BY data DESC, id DESC');
         // Nota: Ajustei a query de recebidos para retornar o formato esperado pelo front
         const recebidos = await client.query('SELECT registro_id as id, carga FROM acabamento_externo_recebidos');
         const itens = await client.query('SELECT * FROM acabamento_externo_itens');
+        const previsoes = await client.query('SELECT carga, previsao_entrega FROM acabamento_externo_previsoes');
 
         return res.status(200).json({
             registros: registros.rows,
             recebidos: recebidos.rows,
-            itens: itens.rows
+            itens: itens.rows,
+            previsoes: previsoes.rows
         });
     } catch (error) {
         console.error('Erro GET acabamento-externo:', error);
@@ -109,6 +112,15 @@ router.post('/', async (req, res) => {
             const user = req.headers['x-user'] || 'Sistema';
             logActivity(user, 'DELETE_REGISTRO', 'acabamento_externo', { id: registroId, data: data });
 
+            return res.status(200).json({ success: true });
+        }
+
+        // 6b. SALVAR PREVISÃO DE ENTREGA
+        if (action === 'save-previsao') {
+            await client.query(
+                `INSERT INTO acabamento_externo_previsoes (carga, previsao_entrega) VALUES ($1, $2) ON CONFLICT (carga) DO UPDATE SET previsao_entrega = $2`,
+                [data.carga, data.previsao_entrega || null]
+            );
             return res.status(200).json({ success: true });
         }
 

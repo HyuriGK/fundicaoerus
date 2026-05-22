@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <script src="js/loader.js"></script>
@@ -941,7 +941,8 @@
                     <thead>
                         <tr>
                             <th>CARGA</th>
-                            <th>DATA</th>
+                            <th>DATA EXPEDIÇÃO</th>
+                            <th>PREVISÃO DE ENTREGA</th>
                             <th>TERCEIRO</th>
                             <th>PESO TOTAL (KG)</th>
                             <th>QTD TOTAL</th>
@@ -952,6 +953,7 @@
                         <tr class="filter-row">
                             <th><input class="filter-input-table" placeholder="Filtro..." /></th>
                             <th><input class="filter-input-table" placeholder="Filtro..." /></th>
+                            <th></th>
                             <th><input class="filter-input-table" placeholder="Filtro..." /></th>
                             <th><input class="filter-input-table" placeholder="Filtro..." /></th>
                             <th><input class="filter-input-table" placeholder="Filtro..." /></th>
@@ -1082,6 +1084,7 @@
         let selectedYear = new Date().getFullYear();
         let registros = [];
         let recebidos = {};
+        let previsoes = {};
         let itensConhecidos = new Map();
         let mainChartInstance = null;
         let currentView = 'diaria';
@@ -1125,7 +1128,8 @@
                     'itens-delete': 'delete-item',
                     'delete': 'delete-registro',
                     'delete-all-terceiro': 'clear-all',
-                    'import': 'import'
+                    'import': 'import',
+                    'previsao': 'save-previsao'
                 };
                 const action = actionMap[actionOrEndpoint] || actionOrEndpoint;
                 url += `?action=${action}`;
@@ -1337,6 +1341,8 @@
                 data.itens.forEach(item => { item.peso = parseFloat(item.peso); itensConhecidos.set(item.codigo, item); });
                 recebidos = {};
                 data.recebidos.forEach(i => { if (!recebidos[i.carga]) recebidos[i.carga] = []; recebidos[i.carga].push(i); });
+                previsoes = {};
+                (data.previsoes || []).forEach(p => { previsoes[p.carga] = p.previsao_entrega ? p.previsao_entrega.split('T')[0] : ''; });
             } catch (e) { throw e; }
         }
         function renderTable(dadosParaExibir = registros) {
@@ -1374,7 +1380,10 @@
                 const tr = document.createElement('tr');
                 tr.className = 'group-row';
                 tr.onclick = () => showCargaDetails(c);
-                let rowHTML = `<td>${c}</td><td>${formatDate(p.data)}</td><td>${p.terceiro}</td><td>${formatNumber(tP)}</td><td>${tQ}</td>`;
+                const prevVal = previsoes[c] || '';
+                const prevDisplay = prevVal ? formatDate(prevVal) : '<span style="color:#52525b;font-size:0.75rem;">—</span>';
+                const prevCell = `<td onclick="event.stopPropagation()"><div style="display:flex;align-items:center;gap:6px;">${prevDisplay}<button onclick="event.stopPropagation();document.getElementById('prevInput_${c}').showPicker()" style="background:rgba(255,255,255,0.07);border:1px solid var(--border-subtle);color:#a1a1aa;border-radius:4px;padding:2px 6px;cursor:pointer;font-size:0.7rem;"><i class="fa-regular fa-calendar"></i></button><input type="date" id="prevInput_${c}" value="${prevVal}" style="position:absolute;opacity:0;pointer-events:none;width:0;height:0;" onchange="salvarPrevisao('${c}',this.value)"></div></td>`;
+                let rowHTML = `<td>${c}</td><td>${formatDate(p.data)}</td>${prevCell}<td>${p.terceiro}</td><td>${formatNumber(tP)}</td><td>${tQ}</td>`;
                 // Only sum Sales Value for pending items (not received)
                 const vSales = its.reduce((s, i) => {
                     const isItemRec = recebidos[c]?.some(rec => rec.id === i.id);
@@ -1390,6 +1399,12 @@
             // Atualizar footer
             updateFooterTotals(totalWeight, totalQty);
             applyColumnFilters();
+        }
+        async function salvarPrevisao(carga, date) {
+            previsoes[carga] = date;
+            renderTable();
+            try { await apiRequest('previsao', 'POST', { carga, previsao_entrega: date || null }); }
+            catch (e) { console.error('Erro ao salvar previsão:', e); }
         }
         function renderMonthButtons() {
             const container = document.getElementById('monthButtons');
@@ -1932,3 +1947,4 @@
     <script src="js/notifications.js"></script>
 </body>
 </html>
+
