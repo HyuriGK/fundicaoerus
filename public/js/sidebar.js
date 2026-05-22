@@ -413,6 +413,15 @@
             }
         });
 
+        // ESC closes pref/logout modals
+        document.addEventListener('keydown', function(e) {
+            if (e.key !== 'Escape') return;
+            var pref = document.getElementById('erus-pref-modal');
+            if (pref && pref.classList.contains('open')) { pref.classList.remove('open'); return; }
+            var logout = document.getElementById('erus-logout-modal');
+            if (logout && logout.classList.contains('open')) { logout.classList.remove('open'); }
+        });
+
         // Role-based visibility
         var role = (localStorage.getItem('erus_role') || '').toLowerCase();
         var adminBtn = document.getElementById('erus-admin-btn');
