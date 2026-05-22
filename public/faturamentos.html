@@ -1574,17 +1574,20 @@
         }
         function updateAnnualEvolutionDynamic(filteredData, highlightIndex) {
             const monthlyData = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0, 11: 0 };
+            const monthlyValor = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0, 11: 0 };
             filteredData.forEach(item => {
                 if (!item.data) return;
                 const [y, m, d] = item.data.split('-').map(Number);
                 const monthKey = m - 1;
                 if (monthlyData[monthKey] !== undefined) {
                     monthlyData[monthKey] += (item.pesoTotal || 0);
+                    monthlyValor[monthKey] += calculateCalculatedTotal(item);
                 }
             });
             const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
             const dataValues = months.map((_, idx) => monthlyData[idx] || 0);
-            renderAnnualChart(dataValues, highlightIndex);
+            const valorValues = months.map((_, idx) => monthlyValor[idx] || 0);
+            renderAnnualChart(dataValues, valorValues, highlightIndex);
         }
         function getBrazilianHolidays(year) {
             // Feriados nacionais fixos
@@ -1844,12 +1847,13 @@
             });
 
         }
-        function renderAnnualChart(dataValues, highlightIndex) {
+        function renderAnnualChart(dataValues, valorValues, highlightIndex) {
             const ctx = document.getElementById('annualChart').getContext('2d');
             if (annualChart) annualChart.destroy();
             const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
             // Always show all 12 months
             const fullData = months.map((_, i) => dataValues[i] || 0);
+            const fullValor = months.map((_, i) => (valorValues || [])[i] || 0);
             const bgColors = fullData.map((_, idx) => {
                 if (highlightIndex === null) return '#ea580c';
                 return idx === highlightIndex ? '#ea580c' : 'rgba(234, 88, 12, 0.3)';
@@ -1857,6 +1861,8 @@
             // Acumulado mês a mês
             let acc = 0;
             const accumulated = fullData.map(v => { acc += v; return acc; });
+            let accVal = 0;
+            const accumulatedValor = fullValor.map(v => { accVal += v; return accVal; });
             annualChart = new Chart(ctx, {
                 type: 'bar',
                 data: {
@@ -1906,8 +1912,14 @@
                                 label: (ctx2) => {
                                     const v = ctx2.parsed.y;
                                     const label = ctx2.dataset.label;
-                                    if (label === 'Acumulado (kg)') return `Acumulado: ${v.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} kg`;
-                                    return `Peso: ${v.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} kg`;
+                                    const idx = ctx2.dataIndex;
+                                    if (label === 'Acumulado (kg)') return `  Acumulado: ${v.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} kg`;
+                                    const isVisible = document.getElementById('cardValorTotal')?.getAttribute('data-visible') === 'true';
+                                    const accValStr = isVisible ? formatCurrency(accumulatedValor[idx]) : 'R$ ---';
+                                    return [
+                                        `  Peso: ${v.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} kg`,
+                                        `  Acumulado R$: ${accValStr}`
+                                    ];
                                 }
                             },
                             itemSort: (a, b) => {
