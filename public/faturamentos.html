@@ -1493,20 +1493,23 @@
                 return item.data >= monthStartStr && item.data <= monthEndStr;
             });
             const dailyMap = {};
+            const dailyValorMap = {};
             dailyContextData.forEach(item => {
                 const k = (item.data || '').split('T')[0];
                 if (!k) return;
                 dailyMap[k] = (dailyMap[k] || 0) + (item.weightTotal || item.pesoTotal || 0);
+                dailyValorMap[k] = (dailyValorMap[k] || 0) + calculateCalculatedTotal(item);
             });
-            const dailyChartData = Object.keys(dailyMap).sort().map(k => ({ data: k, pesoTotal: dailyMap[k] }));
+            const dailyChartData = Object.keys(dailyMap).sort().map(k => ({ data: k, pesoTotal: dailyMap[k], valorTotal: dailyValorMap[k] || 0 }));
             // Dados de serviços para modo alternado
             const dailyContextServicos = filteredAll.filter(item => {
                 if (!isServiceClient(item)) return false;
                 return item.data >= monthStartStr && item.data <= monthEndStr;
             });
             const dailyMapServ = {};
-            dailyContextServicos.forEach(item => { const k = (item.data || '').split('T')[0]; if (k) dailyMapServ[k] = (dailyMapServ[k] || 0) + (item.weightTotal || item.pesoTotal || 0); });
-            const dailyChartDataServ = Object.keys(dailyMapServ).sort().map(k => ({ data: k, pesoTotal: dailyMapServ[k] }));
+            const dailyValorMapServ = {};
+            dailyContextServicos.forEach(item => { const k = (item.data || '').split('T')[0]; if (k) { dailyMapServ[k] = (dailyMapServ[k] || 0) + (item.weightTotal || item.pesoTotal || 0); dailyValorMapServ[k] = (dailyValorMapServ[k] || 0) + calculateCalculatedTotal(item); } });
+            const dailyChartDataServ = Object.keys(dailyMapServ).sort().map(k => ({ data: k, pesoTotal: dailyMapServ[k], valorTotal: dailyValorMapServ[k] || 0 }));
             // Cache para reuso no toggle
             _lastDailyChartArgs = { normal: dailyChartData, servicos: dailyChartDataServ, highlightedDay, monthStartStr, monthEndStr };
             // Calculate KPI for Chart Header (Avg Daily within Context)
@@ -1679,7 +1682,8 @@
             feriadoNomes[fmt2(cv)] = 'Carnaval';
 
             const dataMap = {};
-            data.forEach(d => { dataMap[d.data] = d.pesoTotal; });
+            const valorMap = {};
+            data.forEach(d => { dataMap[d.data] = d.pesoTotal; valorMap[d.data] = d.valorTotal || 0; });
 
             const allDays = [];
             const start = new Date(monthYear, sm - 1, 1);
@@ -1713,6 +1717,9 @@
 
             let accDay = 0;
             const accValues = values.map(v => { accDay += v; return accDay; });
+            const valorValues = allDays.map(ds => valorMap[ds] || 0);
+            let accValDay = 0;
+            const accValorValues = valorValues.map(v => { accValDay += v; return accValDay; });
 
             dailyChart = new Chart(ctx, {
                 type: 'bar',
@@ -1777,8 +1784,14 @@
                                 label: (item) => {
                                     const v = item.parsed.y;
                                     const label = item.dataset.label;
+                                    const idx = item.dataIndex;
                                     if (label === 'Acumulado (kg)') return `  Acumulado: ${v.toLocaleString('pt-BR', {maximumFractionDigits:0})} kg`;
-                                    return `  Faturado: ${v > 0 ? v.toLocaleString('pt-BR', {maximumFractionDigits:0}) + ' kg' : '0 kg'}`;
+                                    const isVisible = document.getElementById('cardValorTotal')?.getAttribute('data-visible') === 'true';
+                                    const accValStr = isVisible ? formatCurrency(accValorValues[idx]) : 'R$ ---';
+                                    return [
+                                        `  Faturado: ${v > 0 ? v.toLocaleString('pt-BR', {maximumFractionDigits:0}) + ' kg' : '0 kg'}`,
+                                        `  Acumulado R$: ${accValStr}`
+                                    ];
                                 },
                                 footer: (items) => {
                                     const idx = items[0].dataIndex;
