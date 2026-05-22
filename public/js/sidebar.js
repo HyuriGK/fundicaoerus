@@ -505,8 +505,8 @@
             }
         }
 
-        // Load page locks — move dev pages to "Em desenvolvimento"
-        fetch('/api/page-locks')
+        // Load page-locks and permissions together, apply group-hiding after both finish
+        var pageLocksPromise = fetch('/api/page-locks')
             .then(function(r) { return r.json(); })
             .then(function(result) {
                 if (!result.success) return;
@@ -529,36 +529,21 @@
             })
             .catch(function() {});
 
-        // Load role permissions and enforce sidebar visibility
+        var permissionsPromise = Promise.resolve();
         if (role !== 'desenvolvedor' && !restrictedPageMap[role]) {
-            fetch('/api/permissions')
+            var blocked = {};
+            permissionsPromise = fetch('/api/permissions')
                 .then(function(r) { return r.json(); })
                 .then(function(rows) {
-                    var blocked = {};
                     rows.forEach(function(r2) {
-                        if (r2.role === role && r2.allowed === false) blocked[r2.page_key] = true;
+                        if (r2.role === role && (r2.allowed === false || r2.allowed === 'false' || r2.allowed === 'f')) {
+                            blocked[r2.page_key] = true;
+                        }
                     });
                     Object.keys(blocked).forEach(function(pageKey) {
                         var link = document.querySelector('#erus-sidebar .erus-nav-link[href="' + pageKey + '"]');
                         if (!link) link = document.querySelector('#erus-sidebar .erus-nav-link[data-page-key="' + pageKey + '"]');
                         if (link) link.classList.add('erus-role-hidden');
-                    });
-                    // Hide groups where all links are blocked
-                    document.querySelectorAll('#erus-sidebar .erus-nav-group-wrapper').forEach(function(wrapper) {
-                        var links = wrapper.querySelectorAll('.erus-nav-link');
-                        var allHidden = links.length > 0 && Array.from(links).every(function(l) {
-                            return l.classList.contains('erus-role-hidden') || l.style.display === 'none';
-                        });
-                        if (allHidden) {
-                            wrapper.classList.add('erus-role-hidden');
-                            wrapper.style.setProperty('display', 'none', 'important');
-                            var sep = wrapper.previousElementSibling;
-                            while (sep && !sep.classList.contains('erus-nav-group-sep')) sep = sep.previousElementSibling;
-                            if (sep) {
-                                sep.classList.add('erus-role-hidden');
-                                sep.style.setProperty('display', 'none', 'important');
-                            }
-                        }
                     });
                     // Redirect if current page is blocked
                     var currentPage = window.location.pathname.split('/').pop() || 'index.html';
@@ -566,6 +551,27 @@
                 })
                 .catch(function() {});
         }
+
+        // After BOTH fetches complete, hide groups whose links are all blocked
+        // (page-locks may have moved links between groups, so we must wait for both)
+        Promise.all([pageLocksPromise, permissionsPromise]).then(function() {
+            // Groups controlled by other logic — skip them
+            var skipGroups = { 'eg-desenvolvimento': true, 'eg-financeiro': true };
+            document.querySelectorAll('#erus-sidebar .erus-nav-group-wrapper').forEach(function(wrapper) {
+                if (skipGroups[wrapper.id]) return;
+                var links = wrapper.querySelectorAll('.erus-nav-link');
+                // Hide if empty (links moved away by page-locks) OR all links are blocked
+                var allHidden = links.length === 0 || Array.from(links).every(function(l) {
+                    return l.classList.contains('erus-role-hidden') || l.style.display === 'none';
+                });
+                if (allHidden) {
+                    wrapper.style.setProperty('display', 'none', 'important');
+                    var sep = wrapper.previousElementSibling;
+                    while (sep && !sep.classList.contains('erus-nav-group-sep')) sep = sep.previousElementSibling;
+                    if (sep) sep.style.setProperty('display', 'none', 'important');
+                }
+            });
+        }).catch(function() {});
     }
 
     // ---- Global sidebar functions ----
