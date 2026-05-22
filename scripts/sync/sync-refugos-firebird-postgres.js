@@ -48,7 +48,7 @@ async function startSync() {
 
         console.log('✅ Conectado ao Firebird.');
 
-        // 1. Preparar Tabela Postgres (preserva registros existentes)
+        // 1. Preparar Tabela Postgres e limpar antes do sync
         await pool.query(`CREATE TABLE IF NOT EXISTS refugo_apontado_sincronizado (
             id SERIAL PRIMARY KEY,
             chave_origem VARCHAR(100) UNIQUE,
@@ -65,7 +65,8 @@ async function startSync() {
             lote VARCHAR(100),
             atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )`);
-        console.log('✅ Tabela refugo_apontado_sincronizado verificada.');
+        await pool.query('TRUNCATE TABLE refugo_apontado_sincronizado RESTART IDENTITY');
+        console.log('✅ Tabela refugo_apontado_sincronizado verificada e limpa.');
 
         // 2. Buscar Refugos no Firebird (Janela: 1º de jan do ano anterior até hoje)
         const dataInicio = new Date(new Date().getFullYear() - 1, 0, 1);
