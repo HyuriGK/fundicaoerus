@@ -1088,6 +1088,7 @@
         let recebidos = {};
         let previsoes = {};
         let itensConhecidos = new Map();
+        let currentFilteredData = [];
         let mainChartInstance = null;
         let currentView = 'diaria';
         const modalStack = [];
@@ -1389,8 +1390,11 @@
                 tr.onclick = () => showCargaDetails(c);
                 const prev = previsoes[c] || {};
                 const makeDateCell = (val, inputId, field) => {
-                    const display = val ? formatDate(val) : '<span style="color:#52525b;font-size:0.75rem;">—</span>';
-                    return `<td onclick="event.stopPropagation()"><div style="display:flex;align-items:center;gap:6px;">${display}<button onclick="event.stopPropagation();document.getElementById('${inputId}').showPicker()" style="background:rgba(255,255,255,0.07);border:1px solid var(--border-subtle);color:#a1a1aa;border-radius:4px;padding:2px 6px;cursor:pointer;font-size:0.7rem;"><i class="fa-regular fa-calendar"></i></button><input type="date" id="${inputId}" value="${val||''}" style="position:absolute;opacity:0;pointer-events:none;width:0;height:0;" onchange="salvarPrevisao('${c}','${field}',this.value)"></div></td>`;
+                    const btnLabel = val ? formatDate(val) : 'definir data';
+                    const btnStyle = val
+                        ? 'background:rgba(255,255,255,0.07);border:1px solid var(--border-subtle);color:#f4f4f5;border-radius:4px;padding:3px 8px;cursor:pointer;font-size:0.75rem;display:flex;align-items:center;gap:5px;'
+                        : 'background:transparent;border:1px dashed #52525b;color:#71717a;border-radius:4px;padding:3px 8px;cursor:pointer;font-size:0.75rem;display:flex;align-items:center;gap:5px;';
+                    return `<td onclick="event.stopPropagation()"><button onclick="event.stopPropagation();document.getElementById('${inputId}').showPicker()" style="${btnStyle}"><i class="fa-regular fa-calendar"></i>${btnLabel}</button><input type="date" id="${inputId}" value="${val||''}" style="position:absolute;opacity:0;pointer-events:none;width:0;height:0;" onchange="salvarPrevisao('${c}','${field}',this.value)"></td>`;
                 };
                 const prevCell = makeDateCell(prev.acordada || '', `prevInput_${c}_acordada`, 'previsao_entrega') + makeDateCell(prev.entrega || '', `prevInput_${c}_entrega`, 'data_entrega');
                 let rowHTML = `<td>${c}</td><td>${formatDate(p.data)}</td>${prevCell}<td>${p.terceiro}</td><td>${formatNumber(tP)}</td><td>${tQ}</td>`;
@@ -1414,7 +1418,7 @@
             if (!previsoes[carga]) previsoes[carga] = {};
             if (field === 'data_entrega') previsoes[carga].entrega = date;
             else previsoes[carga].acordada = date;
-            renderTable();
+            renderTable(currentFilteredData.length ? currentFilteredData : undefined);
             try { await apiRequest('previsao', 'POST', { carga, field, value: date || null }); }
             catch (e) { console.error('Erro ao salvar previsão:', e); }
         }
@@ -1534,6 +1538,7 @@
                 <div class="kpi-subtext">Custo total no período</div>
             </div>`;
             document.getElementById('statsPanel').innerHTML = kpiHtml;
+            currentFilteredData = filtrados;
             renderTable(filtrados);
             // Gráfico principal: sempre visão anual do ano selecionado
             const cD = {};
