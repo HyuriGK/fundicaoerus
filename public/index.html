@@ -5687,13 +5687,16 @@
                     // Body rows
                     let bodyHtml = '';
                     _PERM_PAGES.forEach(group => {
-                        // Compute category all-allowed state
-                        const catAllAllowed = group.pages.every(p => _PERM_ROLES.every(r => isAllowed(r.key, p.key)));
-                        const catId = group.cat.replace(/\s+/g, '_');
-                        // Category separator row with toggle checkbox
+                        const catBg = 'background:rgba(249,115,22,0.06); border-top:1px solid rgba(249,115,22,0.15);';
+                        // Category separator row — one checkbox per role column
                         bodyHtml += `<tr>`;
-                        bodyHtml += `<td colspan="${_PERM_ROLES.length + 1}" style="padding:8px 12px 4px; color:#f97316; font-size:0.65rem; font-weight:800; text-transform:uppercase; letter-spacing:0.12em; background:rgba(249,115,22,0.06); border-top:1px solid rgba(249,115,22,0.15);">${group.cat}</td>`;
-                        bodyHtml += `<td style="text-align:center; padding:6px 4px; background:rgba(249,115,22,0.06); border-top:1px solid rgba(249,115,22,0.15);"><input type="checkbox" id="cat_${catId}" ${catAllAllowed ? 'checked' : ''} onchange="toggleCategoryPermission('${group.cat}',this.checked)" style="accent-color:#f97316; width:14px; height:14px; cursor:pointer;" title="Ativar/desativar categoria toda"></td>`;
+                        bodyHtml += `<td style="padding:8px 12px 4px; color:#f97316; font-size:0.65rem; font-weight:800; text-transform:uppercase; letter-spacing:0.12em; ${catBg}">${group.cat}</td>`;
+                        // Dev column — always on
+                        bodyHtml += `<td style="text-align:center; padding:6px 4px; ${catBg}"><input type="checkbox" checked disabled style="accent-color:#fbbf24; opacity:0.5; width:14px; height:14px; cursor:not-allowed;"></td>`;
+                        _PERM_ROLES.forEach(r => {
+                            const catAllowed = group.pages.every(p => isAllowed(r.key, p.key));
+                            bodyHtml += `<td style="text-align:center; padding:6px 4px; ${catBg}"><input type="checkbox" ${catAllowed ? 'checked' : ''} onchange="toggleCategoryPermission('${group.cat}','${r.key}',this.checked)" style="accent-color:#f97316; width:14px; height:14px; cursor:pointer;" title="Ativar/desativar categoria para ${r.label}"></td>`;
+                        });
                         bodyHtml += `</tr>`;
                         group.pages.forEach(page => {
                             bodyHtml += `<tr style="border-bottom:1px solid rgba(255,255,255,0.04);">`;
@@ -5741,20 +5744,18 @@
                     renderPermissionsMatrix();
                 }
 
-                async function toggleCategoryPermission(catName, allowed) {
+                async function toggleCategoryPermission(catName, role, allowed) {
                     const group = _PERM_PAGES.find(g => g.cat === catName);
                     if (!group) return;
                     const promises = [];
                     group.pages.forEach(page => {
-                        _PERM_ROLES.forEach(r => {
-                            if (!_permData[r.key]) _permData[r.key] = {};
-                            _permData[r.key][page.key] = allowed;
-                            promises.push(fetch('/api/permissions', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json', 'x-role': localStorage.getItem('erus_role') },
-                                body: JSON.stringify({ role: r.key, page_key: page.key, allowed })
-                            }));
-                        });
+                        if (!_permData[role]) _permData[role] = {};
+                        _permData[role][page.key] = allowed;
+                        promises.push(fetch('/api/permissions', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'x-role': localStorage.getItem('erus_role') },
+                            body: JSON.stringify({ role, page_key: page.key, allowed })
+                        }));
                     });
                     await Promise.all(promises);
                     renderPermissionsMatrix();
@@ -5837,10 +5838,10 @@
                             var links = wrapper.querySelectorAll('.nav-link');
                             var allHidden = links.length > 0 && Array.from(links).every(function(l) { return l.style.display === 'none'; });
                             if (allHidden) {
-                                wrapper.style.display = 'none';
+                                wrapper.style.setProperty('display', 'none', 'important');
                                 var sep = wrapper.previousElementSibling;
                                 while (sep && !sep.classList.contains('nav-group-separator')) sep = sep.previousElementSibling;
-                                if (sep) sep.style.display = 'none';
+                                if (sep) sep.style.setProperty('display', 'none', 'important');
                             }
                         });
                     } catch(e) { console.error('Erro permissões sidebar', e); }

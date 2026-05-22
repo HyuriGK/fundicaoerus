@@ -551,9 +551,13 @@
                         });
                         if (allHidden) {
                             wrapper.classList.add('erus-role-hidden');
+                            wrapper.style.setProperty('display', 'none', 'important');
                             var sep = wrapper.previousElementSibling;
                             while (sep && !sep.classList.contains('erus-nav-group-sep')) sep = sep.previousElementSibling;
-                            if (sep) sep.classList.add('erus-role-hidden');
+                            if (sep) {
+                                sep.classList.add('erus-role-hidden');
+                                sep.style.setProperty('display', 'none', 'important');
+                            }
                         }
                     });
                     // Redirect if current page is blocked
