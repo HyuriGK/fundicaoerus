@@ -219,7 +219,7 @@
                 '<i class="fa-solid fa-plus" id="icon-eg-custos"></i>' +
             '</div>' +
             '<div id="eg-custos" class="erus-nav-group-wrapper collapsed">' +
-                '<a href="#" onclick="erusSidebarAccessCustos(event)" class="erus-nav-link' + isActive('custos.html') + '">' +
+                '<a href="#" data-page-key="custos.html" onclick="erusSidebarAccessCustos(event)" class="erus-nav-link' + isActive('custos.html') + '">' +
                     '<i class="fa-solid fa-file-invoice-dollar"></i><span>Custos Gerais</span></a>' +
                 '<a href="custopeca.html" class="erus-nav-link' + isActive('custopeca.html') + '">' +
                     '<i class="fa-solid fa-calculator"></i><span>Calculadora</span></a>' +
@@ -540,7 +540,21 @@
                     });
                     Object.keys(blocked).forEach(function(pageKey) {
                         var link = document.querySelector('#erus-sidebar .erus-nav-link[href="' + pageKey + '"]');
+                        if (!link) link = document.querySelector('#erus-sidebar .erus-nav-link[data-page-key="' + pageKey + '"]');
                         if (link) link.classList.add('erus-role-hidden');
+                    });
+                    // Hide groups where all links are blocked
+                    document.querySelectorAll('#erus-sidebar .erus-nav-group-wrapper').forEach(function(wrapper) {
+                        var links = wrapper.querySelectorAll('.erus-nav-link');
+                        var allHidden = links.length > 0 && Array.from(links).every(function(l) {
+                            return l.classList.contains('erus-role-hidden') || l.style.display === 'none';
+                        });
+                        if (allHidden) {
+                            wrapper.classList.add('erus-role-hidden');
+                            var sep = wrapper.previousElementSibling;
+                            while (sep && !sep.classList.contains('erus-nav-group-sep')) sep = sep.previousElementSibling;
+                            if (sep) sep.classList.add('erus-role-hidden');
+                        }
                     });
                     // Redirect if current page is blocked
                     var currentPage = window.location.pathname.split('/').pop() || 'index.html';
