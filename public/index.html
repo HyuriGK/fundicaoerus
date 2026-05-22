@@ -7589,6 +7589,7 @@
 
 
                 let excludedClientsSet = new Set();
+                let fatPesoOverridesMap = new Map();
                 const _serviceClientCodes = ["257"];
                 const _serviceClientNames = ["IMEPEL INDUSTRIA MECANICA LTDA","STEELROOL INDUSTRIA METALURGICA","SPILROD FUNDICAO DE FERRO E ACO LTDA"];
                 const isServiceItem = (item) => {
@@ -7722,13 +7723,16 @@
                     try {
 
 
-                        const [wRes, pRes] = await Promise.all([
+                        const [wRes, pRes, fpRes] = await Promise.all([
 
 
                             fetch('/api/weights/list'),
 
 
-                            fetch('/api/preferences/excluded_clients')
+                            fetch('/api/preferences/excluded_clients'),
+
+
+                            fetch('/api/preferences/fat_peso_overrides')
 
 
                         ]);
@@ -7741,6 +7745,12 @@
 
 
                         if (prefs.success) excludedClientsSet = new Set(prefs.data || []);
+
+
+                        const fpPrefs = await fpRes.json();
+
+
+                        if (fpPrefs.success) fatPesoOverridesMap = new Map(Object.entries(fpPrefs.data || {}));
 
 
                     } catch (e) { console.error('Error loading config:', e); }
@@ -7857,20 +7867,23 @@
                         dashboardData.detailedBilling = fatData.data;
 
 
-                        // All records for the month, filtered exactly like faturamentos.html
-
-
-                        const isModeloItem = (item) => {
-                            const cod = String(item.codigoItem || '').trim();
-                            const desc = String(item.descricao || '').trim().toUpperCase();
-                            return cod.endsWith('1') && desc.startsWith('MODELO');
+                        // Mesma lógica de getFatPesoState + loadRecordsData do faturamentos.html
+                        const _itemKey = (item) => {
+                            const cod = item.codigoItem ? String(item.codigoItem).trim() : '';
+                            const ped = item.pedido ? String(item.pedido).trim() : '';
+                            const dat = item.data ? String(item.data).split('T')[0] : '';
+                            return `${item.notaFiscal}-${cod}-${ped}-${dat}-${item.quantidade || 0}`;
                         };
                         fatTotalWeight = fatData.data.reduce((acc, item) => {
-                            if (item.excluido_manualmente === true) return acc;
                             if (isServiceItem(item)) return acc;
-                            if (isModeloItem(item)) return acc;
-                            const clientName = (item.clienteNome || '').trim();
-                            if (excludedClientsSet.has(clientName)) return acc;
+                            const key = _itemKey(item);
+                            if (fatPesoOverridesMap.has(key)) return fatPesoOverridesMap.get(key) ? acc + (parseFloat(item.pesoTotal || 0)) : acc;
+                            if (item.gera_financeiro === 'N') return acc;
+                            const cod = String(item.codigoItem || '').trim();
+                            const desc = String(item.descricao || '').trim().toUpperCase();
+                            const semPedido = !item.pedido || String(item.pedido).trim() === '';
+                            const isModelo = cod.endsWith('1') && desc.startsWith('MODELO');
+                            if (item.excluido_manualmente === true || semPedido || isModelo) return acc;
                             return acc + (parseFloat(item.pesoTotal || 0));
                         }, 0);
 
