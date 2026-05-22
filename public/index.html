@@ -3518,6 +3518,10 @@
 
         }
 
+        #adminUserModal.permissions-mode .modal-body {
+            padding: 6px 10px 0;
+        }
+
 
         /* --- DARK SCROLLBAR (Admin Modal) --- */
 
@@ -5409,15 +5413,15 @@
 
 
             <!-- PERMISSÕES VIEW -->
-                <div id="adminPermissionsView" class="admin-view-transition" style="display:none;">
-                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
-                        <span style="color:#a1a1aa; font-size:0.8rem;">Marque quais telas cada role pode acessar. <strong style="color:#f97316;">Desenvolvedor</strong> sempre tem acesso total.</span>
+                <div id="adminPermissionsView" class="admin-view-transition" style="display:none; flex-direction:column; height:100%;">
+                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; flex-wrap:wrap; gap:8px; flex-shrink:0;">
+                        <span style="color:#a1a1aa; font-size:0.78rem;">Marque quais telas cada role pode acessar. <strong style="color:#f97316;">Desenvolvedor</strong> sempre tem acesso total.</span>
                         <div style="display:flex; gap:8px; align-items:center;">
                             <button onclick="permissionsSelectAll(true)" style="background:rgba(16,185,129,0.12); border:1px solid rgba(16,185,129,0.3); color:#10b981; border-radius:6px; padding:5px 12px; cursor:pointer; font-size:0.75rem;">Liberar Tudo</button>
                             <button onclick="permissionsSelectAll(false)" style="background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.2); color:#ef4444; border-radius:6px; padding:5px 12px; cursor:pointer; font-size:0.75rem;">Bloquear Tudo</button>
                         </div>
                     </div>
-                    <div style="overflow:auto; max-height:calc(80vh - 140px);">
+                    <div style="overflow:auto; flex:1; min-height:0;">
                         <table id="permissionsTable" style="width:100%; border-collapse:collapse; font-size:0.78rem; min-width:900px;">
                             <thead id="permissionsTableHead"></thead>
                             <tbody id="permissionsTableBody"></tbody>
@@ -5489,6 +5493,7 @@
                     communicationView.style.display = 'none';
 
                     if (permissionsView) permissionsView.style.display = 'none';
+                    document.getElementById('adminUserModal').classList.remove('permissions-mode');
 
 
                     if (view === 'dashboard') {
@@ -5597,7 +5602,8 @@
 
 
                     } else if (view === 'permissions') {
-                        if (permissionsView) permissionsView.style.display = 'block';
+                        if (permissionsView) permissionsView.style.display = 'flex';
+                        document.getElementById('adminUserModal').classList.add('permissions-mode');
                         backBtn.style.display = 'flex';
                         title.textContent = 'Permissões por Role';
                         icon.className = 'fa-solid fa-key';
@@ -5681,11 +5687,17 @@
                     // Body rows
                     let bodyHtml = '';
                     _PERM_PAGES.forEach(group => {
-                        // Category separator row
-                        bodyHtml += `<tr><td colspan="${_PERM_ROLES.length + 2}" style="padding:10px 12px 4px; color:#f97316; font-size:0.65rem; font-weight:800; text-transform:uppercase; letter-spacing:0.12em; background:rgba(249,115,22,0.06); border-top:1px solid rgba(249,115,22,0.15);">${group.cat}</td></tr>`;
+                        // Compute category all-allowed state
+                        const catAllAllowed = group.pages.every(p => _PERM_ROLES.every(r => isAllowed(r.key, p.key)));
+                        const catId = group.cat.replace(/\s+/g, '_');
+                        // Category separator row with toggle checkbox
+                        bodyHtml += `<tr>`;
+                        bodyHtml += `<td colspan="${_PERM_ROLES.length + 1}" style="padding:8px 12px 4px; color:#f97316; font-size:0.65rem; font-weight:800; text-transform:uppercase; letter-spacing:0.12em; background:rgba(249,115,22,0.06); border-top:1px solid rgba(249,115,22,0.15);">${group.cat}</td>`;
+                        bodyHtml += `<td style="text-align:center; padding:6px 4px; background:rgba(249,115,22,0.06); border-top:1px solid rgba(249,115,22,0.15);"><input type="checkbox" id="cat_${catId}" ${catAllAllowed ? 'checked' : ''} onchange="toggleCategoryPermission('${group.cat}',this.checked)" style="accent-color:#f97316; width:14px; height:14px; cursor:pointer;" title="Ativar/desativar categoria toda"></td>`;
+                        bodyHtml += `</tr>`;
                         group.pages.forEach(page => {
                             bodyHtml += `<tr style="border-bottom:1px solid rgba(255,255,255,0.04);">`;
-                            bodyHtml += `<td style="padding:7px 12px; color:#d4d4d8; font-size:0.78rem;">${page.label}</td>`;
+                            bodyHtml += `<td style="padding:7px 12px; color:#d4d4d8; font-size:0.78rem;">${page.label} <span style="color:#52525b; font-size:0.68rem;">(${page.key})</span></td>`;
                             // Desenvolvedor — always on, not editable
                             bodyHtml += `<td style="text-align:center; padding:7px 4px;"><input type="checkbox" checked disabled style="accent-color:#fbbf24; opacity:0.5; width:15px; height:15px; cursor:not-allowed;"></td>`;
                             _PERM_ROLES.forEach(r => {
@@ -5723,6 +5735,25 @@
                                     body: JSON.stringify({ role: r.key, page_key: page.key, allowed })
                                 }));
                             });
+                        });
+                    });
+                    await Promise.all(promises);
+                    renderPermissionsMatrix();
+                }
+
+                async function toggleCategoryPermission(catName, allowed) {
+                    const group = _PERM_PAGES.find(g => g.cat === catName);
+                    if (!group) return;
+                    const promises = [];
+                    group.pages.forEach(page => {
+                        _PERM_ROLES.forEach(r => {
+                            if (!_permData[r.key]) _permData[r.key] = {};
+                            _permData[r.key][page.key] = allowed;
+                            promises.push(fetch('/api/permissions', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', 'x-role': localStorage.getItem('erus_role') },
+                                body: JSON.stringify({ role: r.key, page_key: page.key, allowed })
+                            }));
                         });
                     });
                     await Promise.all(promises);
