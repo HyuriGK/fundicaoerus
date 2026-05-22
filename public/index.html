@@ -5822,21 +5822,26 @@
                     const role = (localStorage.getItem('erus_role') || '').toLowerCase();
                     if (role === 'desenvolvedor') return;
                     try {
-                        const res = await fetch('/api/permissions');
+                        const res = await fetch('/api/permissions', { cache: 'no-store' });
                         const rows = await res.json();
                         const blocked = {};
                         rows.forEach(function(r) {
-                            if (r.role === role && r.allowed === false) blocked[r.page_key] = true;
+                            if (r.role === role && (r.allowed === false || r.allowed === 'false' || r.allowed === 'f')) {
+                                blocked[r.page_key] = true;
+                            }
                         });
                         Object.keys(blocked).forEach(function(pageKey) {
                             var link = document.querySelector('#sidebar .nav-link[href="' + pageKey + '"]');
                             if (!link) link = document.querySelector('#sidebar .nav-link[data-page-key="' + pageKey + '"]');
                             if (link) link.style.display = 'none';
                         });
-                        // Hide groups where all links are hidden
+                        // Groups controlled by other logic — skip them
+                        var skipGroups = { 'group-financeiro': true, 'group-desenvolvimento': true };
                         document.querySelectorAll('#sidebar .nav-group-wrapper').forEach(function(wrapper) {
+                            if (skipGroups[wrapper.id]) return;
                             var links = wrapper.querySelectorAll('.nav-link');
-                            var allHidden = links.length > 0 && Array.from(links).every(function(l) { return l.style.display === 'none'; });
+                            // Hide if empty OR all links are hidden
+                            var allHidden = links.length === 0 || Array.from(links).every(function(l) { return l.style.display === 'none'; });
                             if (allHidden) {
                                 wrapper.style.setProperty('display', 'none', 'important');
                                 var sep = wrapper.previousElementSibling;
