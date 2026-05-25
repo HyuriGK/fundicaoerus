@@ -8,6 +8,8 @@ const path      = require('path');
 const readline  = require('readline');
 const fs        = require('fs');
 
+require('dotenv').config({ path: path.join(__dirname, '../../.env.local'), override: true });
+
 // ─── ANSI ────────────────────────────────────────────────────────────────────
 const reset  = '\x1b[0m';
 const bold   = '\x1b[1m';
