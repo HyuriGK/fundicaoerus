@@ -97,7 +97,7 @@ async function syncData() {
                 if (err) {
                     if (retries < 3) {
                         retries++;
-                        console.warn(`⏳ Falha ao conectar no Firebird. Tentativa ${retries}/3...`);
+                        console.warn(`⏳ Falha ao conectar no Firebird. Tentativa ${retries}/3... [${err.message}]`);
                         setTimeout(connect, 2000);
                     } else {
                         reject(err);
