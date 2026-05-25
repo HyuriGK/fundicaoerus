@@ -10,7 +10,14 @@ router.get('/monthly-summary', async (req, res) => {
                 EXTRACT(YEAR FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) as ano,
                 EXTRACT(MONTH FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) as mes,
                 SUM(COALESCE(pc.peso * CAST(COALESCE(p.data->>'QUANTIDADE_PPR', '0') AS NUMERIC), CAST(COALESCE(p.data->>'PESO_LIQUIDO_NPR', '0') AS NUMERIC))) as total_peso,
-                SUM(CAST(COALESCE(p.data->>'VALOR_PPR', '0') AS NUMERIC) * CAST(COALESCE(p.data->>'QUANTIDADE_PPR', '0') AS NUMERIC)) as total_valor
+                SUM(
+                    CASE
+                        WHEN pc.peso IS NOT NULL AND CAST(COALESCE(p.data->>'PRECO_KG', '0') AS NUMERIC) > 0
+                            THEN CAST(COALESCE(p.data->>'PRECO_KG', '0') AS NUMERIC) * pc.peso * CAST(COALESCE(p.data->>'QUANTIDADE_PPR', '0') AS NUMERIC)
+                        ELSE
+                            CAST(COALESCE(p.data->>'VALOR_PPR', '0') AS NUMERIC) * CAST(COALESCE(p.data->>'QUANTIDADE_PPR', '0') AS NUMERIC)
+                    END
+                ) as total_valor
             FROM firebird_sync_emissoes p
             LEFT JOIN pesos_customizados pc ON TRIM(p.data->>'PRODUTO_PPR') = pc.codigo
             WHERE p.data->>'DATA_EMISSAO_PEDIDO' IS NOT NULL
@@ -55,7 +62,14 @@ router.get('/client-summary', async (req, res) => {
                 p.data->>'NOME_CLIENTE' as cliente,
                 p.data->>'ID_CLIENTE_CORE' as id_cliente,
                 SUM(COALESCE(pc.peso * CAST(COALESCE(p.data->>'QUANTIDADE_PPR', '0') AS NUMERIC), CAST(COALESCE(p.data->>'PESO_LIQUIDO_NPR', '0') AS NUMERIC))) as total_peso,
-                SUM(CAST(COALESCE(p.data->>'VALOR_PPR', '0') AS NUMERIC) * CAST(COALESCE(p.data->>'QUANTIDADE_PPR', '0') AS NUMERIC)) as total_valor
+                SUM(
+                    CASE
+                        WHEN pc.peso IS NOT NULL AND CAST(COALESCE(p.data->>'PRECO_KG', '0') AS NUMERIC) > 0
+                            THEN CAST(COALESCE(p.data->>'PRECO_KG', '0') AS NUMERIC) * pc.peso * CAST(COALESCE(p.data->>'QUANTIDADE_PPR', '0') AS NUMERIC)
+                        ELSE
+                            CAST(COALESCE(p.data->>'VALOR_PPR', '0') AS NUMERIC) * CAST(COALESCE(p.data->>'QUANTIDADE_PPR', '0') AS NUMERIC)
+                    END
+                ) as total_valor
             FROM firebird_sync_emissoes p
             LEFT JOIN pesos_customizados pc ON TRIM(p.data->>'PRODUTO_PPR') = pc.codigo
             ${whereClause}
