@@ -4365,6 +4365,7 @@
         }
         let emissionDataCache = null;
         let emissionClientCache = {}; // Cache by "year-month"
+        let selectedHistoricalDay = null;
         async function updateHistoricalChart() {
             try {
                 const yearEl = document.getElementById('yearFilterHistorical');
@@ -4425,6 +4426,9 @@
                                 valueData[row.mes - 1] = row.totalValor;
                             }
                         });
+                        const monthlyBgColors = monthLabels.map((_, i) =>
+                            (activePillMonth !== null && i === activePillMonth) ? '#ffffff' : chartColorAmber
+                        );
                         if (chartHistorical) chartHistorical.destroy();
                         chartHistorical = new Chart(ctx, {
                             type: 'bar',
@@ -4433,7 +4437,7 @@
                                 datasets: [{
                                     label: 'Peso (kg)',
                                     data: weightData,
-                                    backgroundColor: chartColorAmber,
+                                    backgroundColor: monthlyBgColors,
                                     borderRadius: 4,
                                     extraData: valueData
                                 }]
@@ -4487,28 +4491,12 @@
                             weightData.push(dailyMap[i] ? dailyMap[i].peso : 0);
                             valueData.push(dailyMap[i] ? dailyMap[i].valor : 0);
                         }
-                        // --- LITERAL ZOOM LOGIC ---
-                        // Check if a specific day is filtered in the dashboard
-                        const fStart = document.getElementById('filterEmissionStart')?.value;
-                        const fEnd = document.getElementById('filterEmissionEnd')?.value;
-                        let finalLabels = labels;
-                        let finalWeight = weightData;
-                        let finalValue = valueData;
-                        let finalBgColors = Array(labels.length).fill(chartColorAmber);
-                        if (fStart && fStart === fEnd) {
-                            const d = toLocalDate(fStart);
-                            if (d.getFullYear() === selectedYear && (d.getMonth() + 1) === mIdx) {
-                                const dayNum = d.getDate();
-                                const idx = dayNum - 1;
-                                // ZooMêshow only this day
-                                if (idx >= 0 && idx < labels.length) {
-                                    finalLabels = [labels[idx]];
-                                    finalWeight = [weightData[idx]];
-                                    finalValue = [valueData[idx]];
-                                    finalBgColors = ['#fff']; // Highlight
-                                }
-                            }
-                        }
+                        const finalLabels = labels;
+                        const finalWeight = weightData;
+                        const finalValue = valueData;
+                        const finalBgColors = labels.map((_, i) =>
+                            (selectedHistoricalDay !== null && i === selectedHistoricalDay - 1) ? '#ffffff' : chartColorAmber
+                        );
                         if (titleEl) {
                             const valStr = valorVisible ? totalMonthValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-----';
                             titleEl.innerHTML = `Emissão ${monthName}/${selectedYear} <span style="font-size: 0.85rem; color: var(--color-primary); margin-left:15px;">Total: ${formatNumber(totalMonthWeight, 0)} kg | ${valStr}</span>`;
@@ -4670,32 +4658,25 @@
                                     applyColumnFilters();
                                 }
                             } else {
-                                // CLICKED ON A DAY BAR -> Filter specifically for that day (or Clear if already filtered)
+                                // CLICKED ON A DAY BAR -> highlight bar + filter
+                                const dayNum = index + 1;
+                                const targetDate = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
                                 const fStart = document.getElementById('filterEmissionStart').value;
                                 const fEnd = document.getElementById('filterEmissionEnd').value;
-                                // Determine dayNum based on current view mode
-                                let dayNum;
-                                if (chartHistorical.data.labels.length === 1) {
-                                    // In Zoom mode: get day from label "Dia XX"
-                                    const label = chartHistorical.data.labels[0];
-                                    dayNum = parseInt(label.replace('Dia ', ''));
-                                } else {
-                                    // In Month mode: get day from index
-                                    dayNum = index + 1;
-                                }
-                                const targetDate = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
                                 if (fStart === targetDate && fEnd === targetDate) {
-                                    // TOGGLE OFF: Clear day filter
+                                    // Toggle off
                                     document.getElementById('filterEmissionStart').value = '';
                                     document.getElementById('filterEmissionEnd').value = '';
+                                    selectedHistoricalDay = null;
                                 } else {
-                                    // TOGGLE ON: Set day filter
                                     document.getElementById('filterEmissionStart').value = targetDate;
                                     document.getElementById('filterEmissionEnd').value = targetDate;
+                                    selectedHistoricalDay = dayNum;
                                 }
                                 chartMode = 'emission_total';
                                 activeChartFilters.month = parseInt(selectedMonth) - 1;
                                 applyColumnFilters();
+                                await updateHistoricalChart();
                             }
                         } else {
                             // Pareto Click -> Filtrar por esse cliente no dashboard
@@ -4989,6 +4970,7 @@
 
         function selectPillMonth(monthIndex) {
             activePillMonth = monthIndex;
+            selectedHistoricalDay = null;
             const yr = parseInt(document.getElementById('yearPillSelect').value);
             syncYearPillToCharts(yr);
             syncEmissaoFilters(monthIndex, yr);
