@@ -4633,68 +4633,61 @@
                 },
                 onClick: async (e, elements) => {
                     const activeElements = chartHistorical.getElementsAtEventForMode(e, 'index', { intersect: false }, true);
-                    if (activeElements.length > 0) {
-                        const index = activeElements[0].index;
-                        const yearEl = document.getElementById('yearFilterHistorical');
-                        const monthEl = document.getElementById('monthFilterHistorical');
-                        const modeEl = document.getElementById('modeFilterHistorical');
-                        const selectedYear = yearEl ? (parseInt(yearEl.value) || new Date().getFullYear()) : new Date().getFullYear();
-                        const selectedMonth = monthEl ? monthEl.value : 'Todos';
-                        const viewMode = modeEl ? modeEl.value : 'month';
-                        if (viewMode === 'month') {
-                            if (selectedMonth === 'Todos') {
-                                // CLICKED ON A MONTH BAR -> drill down to daily view
-                                const targetMonth = index + 1;
-                                if (row5Active) {
-                                    activePillMonth = index;
-                                    updatePillMonthUI();
-                                    currentDeliveryView = 'diaria';
-                                    document.getElementById('btnViewMensal')?.classList.remove('active');
-                                    document.getElementById('btnViewDiaria')?.classList.add('active');
-                                    document.getElementById('filterEmissionStart').value = '';
-                                    document.getElementById('filterEmissionEnd').value = '';
-                                    await updateHistoricalChart();
-                                } else {
-                                    document.getElementById('monthFilterHistorical').value = String(targetMonth);
-                                    chartMode = 'emission_total';
-                                    activeChartFilters.month = index;
-                                    applyColumnFilters();
-                                }
-                            } else {
-                                // CLICKED ON A DAY BAR -> highlight bar + filter
-                                const dayNum = index + 1;
-                                const targetDate = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
-                                const fStart = document.getElementById('filterEmissionStart').value;
-                                const fEnd = document.getElementById('filterEmissionEnd').value;
-                                if (fStart === targetDate && fEnd === targetDate) {
-                                    // Toggle off
-                                    document.getElementById('filterEmissionStart').value = '';
-                                    document.getElementById('filterEmissionEnd').value = '';
-                                    selectedHistoricalDay = null;
-                                } else {
-                                    document.getElementById('filterEmissionStart').value = targetDate;
-                                    document.getElementById('filterEmissionEnd').value = targetDate;
-                                    selectedHistoricalDay = dayNum;
-                                }
-                                chartMode = 'emission_total';
-                                activeChartFilters.month = parseInt(selectedMonth) - 1;
-                                applyColumnFilters();
-                                await updateHistoricalChart();
-                            }
-                        } else {
-                            // Pareto Click -> Filtrar por esse cliente no dashboard
-                            const clientName = labels[index];
-                            // Find client ID in data
-                            const clientRow = data.find(r => r.name === clientName);
-                            const clickedId = clientRow ? clientRow.ID_CLIENTE_CORE : null;
-                            activeChartFilters.client = (activeChartFilters.client == clickedId) ? null : clickedId;
-                            chartMode = 'emission_total'; // Keep it in historical mode to show 'T' records
-                            applyColumnFilters();
-                        }
-                    } else {
+                    if (activeElements.length === 0) {
                         chartMode = null;
                         activeChartFilters.month = null;
                         activeChartFilters.client = null;
+                        applyColumnFilters();
+                        return;
+                    }
+                    const index = activeElements[0].index;
+                    const modeEl = document.getElementById('modeFilterHistorical');
+                    const viewMode = modeEl ? modeEl.value : 'month';
+                    const selectedYear = parseInt(document.getElementById('yearPillSelect')?.value) || new Date().getFullYear();
+                    const isMonthlyView = (currentDeliveryView === 'mensal') || (activePillMonth === null);
+
+                    if (viewMode === 'month') {
+                        if (isMonthlyView) {
+                            // Clique em barra de MÊS → drill down para diária
+                            activePillMonth = index;
+                            selectedHistoricalDay = null;
+                            updatePillMonthUI();
+                            currentDeliveryView = 'diaria';
+                            document.getElementById('btnViewMensal')?.classList.remove('active');
+                            document.getElementById('btnViewDiaria')?.classList.add('active');
+                            document.getElementById('filterEmissionStart').value = '';
+                            document.getElementById('filterEmissionEnd').value = '';
+                            await updateHistoricalChart();
+                        } else {
+                            // Clique em barra de DIA → destacar + filtrar
+                            const selectedMonth = activePillMonth + 1; // 1-indexed
+                            const dayNum = index + 1;
+                            const targetDate = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+                            const fStart = document.getElementById('filterEmissionStart').value;
+                            const fEnd = document.getElementById('filterEmissionEnd').value;
+                            if (fStart === targetDate && fEnd === targetDate) {
+                                document.getElementById('filterEmissionStart').value = '';
+                                document.getElementById('filterEmissionEnd').value = '';
+                                selectedHistoricalDay = null;
+                            } else {
+                                document.getElementById('filterEmissionStart').value = targetDate;
+                                document.getElementById('filterEmissionEnd').value = targetDate;
+                                selectedHistoricalDay = dayNum;
+                            }
+                            chartMode = 'emission_total';
+                            activeChartFilters.month = activePillMonth;
+                            applyColumnFilters();
+                            await updateHistoricalChart();
+                        }
+                    } else {
+                        // Pareto Click → filtrar por cliente
+                        const clientName = chartHistorical.data.labels[index];
+                        const cacheKey = `${selectedYear}-${activePillMonth !== null ? activePillMonth + 1 : 'Todos'}`;
+                        const cached = emissionClientCache[cacheKey] || [];
+                        const clientRow = cached.find(r => r.name === clientName);
+                        const clickedId = clientRow ? clientRow.ID_CLIENTE_CORE : null;
+                        activeChartFilters.client = (activeChartFilters.client == clickedId) ? null : clickedId;
+                        chartMode = 'emission_total';
                         applyColumnFilters();
                     }
                 }
