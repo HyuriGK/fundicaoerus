@@ -126,6 +126,8 @@
         .month-btn:hover { background:rgba(255,255,255,0.06) !important; color:#fff !important; }
         .month-btn.active { background:var(--color-primary) !important; color:#000 !important; border-color:var(--color-primary) !important; font-weight:800 !important; }
         .month-btn.all-btn.active { background:var(--status-info) !important; color:#000 !important; border-color:var(--status-info) !important; }
+        .month-btn.btn-danger { background:rgba(239,68,68,0.12) !important; border-color:rgba(239,68,68,0.4) !important; color:#ef4444 !important; }
+        .month-btn.btn-danger:hover { background:rgba(239,68,68,0.22) !important; color:#fff !important; }
         .year-select { background:rgba(255,255,255,0.03) !important; background-image:none !important; border:1px solid var(--border-subtle) !important; color:#fff !important; padding:0 !important; border-radius:6px !important; font-family:var(--font-mono) !important; font-size:0.79rem !important; font-weight:700 !important; width:70px !important; height:32px !important; cursor:pointer !important; transition:all 0.2s !important; text-align:center !important; text-align-last:center !important; appearance:none !important; -webkit-appearance:none !important; outline:none !important; }
         .year-select:hover { border-color:var(--border-highlight) !important; background:rgba(255,255,255,0.03) !important; }
         .view-btn { background:rgba(255,255,255,0.02) !important; border:1px solid rgba(255,255,255,0.06) !important; color:var(--text-dim) !important; border-radius:6px !important; font-size:0.78rem !important; padding:6px 12px !important; transition:all 0.2s !important; }
@@ -1142,9 +1144,9 @@
                     <select id="grupo-filter-select" class="month-btn" style="cursor:pointer;" title="Filtrar por grupo de material"></select>
                     <select id="liga-filter-select" class="month-btn" style="cursor:pointer;"></select>
                     <select id="sector-chart-select" class="month-btn" style="cursor:pointer;"></select>
-                    <button onclick="openRecordsModal()" class="month-btn">REGISTROS</button>
                     <button onclick="generateCompleteReport()" class="month-btn">PDF</button>
-                    <button onclick="openParadaModal(null)" class="month-btn" style="background:rgba(239,68,68,0.15);border-color:rgba(239,68,68,0.4);color:#ef4444;">REGISTRAR PARADA</button>
+                    <button onclick="openRecordsModal()" class="month-btn">REGISTROS</button>
+                    <button onclick="openParadaModal(null)" class="month-btn btn-danger">REGISTRAR PARADA</button>
                 </div>
             </div>
 
@@ -1193,6 +1195,7 @@
                 <div>
                     <label style="font-size:0.75rem;color:#a1a1aa;display:block;margin-bottom:4px;">SETOR AFETADO</label>
                     <select id="parada-setor" style="width:100%;box-sizing:border-box;background:#18181b;border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#fff;padding:8px 12px;font-size:0.85rem;">
+                        <option value="Moldagem Geral">Moldagem Geral (Leve + Manual + Pesada)</option>
                         <option value="Moldagem Leve">Moldagem Leve</option>
                         <option value="Moldagem Manual">Moldagem Manual</option>
                         <option value="Moldagem Pesada">Moldagem Pesada</option>
@@ -2191,6 +2194,42 @@
             if (numFuncEl) numFuncEl.textContent = numFunc;
 
             const isCaixasMode = chartViewMode === 'caixas';
+            const isParadasMode = chartViewMode === 'paradas';
+
+            if (isParadasMode) {
+                // Calcular horas totais de parada no período filtrado
+                let totalHoras = 0;
+                let diasComParada = new Set();
+                const y = parseInt(currentYearFilter) || new Date().getFullYear();
+                Object.entries(paradasRegistradas).forEach(([date, list]) => {
+                    const d = new Date(date + 'T12:00:00');
+                    const matchYear = d.getFullYear() === y;
+                    const matchMonth = currentMonthFilter === 0 || d.getMonth() + 1 === currentMonthFilter;
+                    if (!matchYear || !matchMonth) return;
+                    list.forEach(p => {
+                        if (paradaAfetaSetor(p.setor, currentSectorFilter)) {
+                            const h = calcParadaHours(p);
+                            totalHoras += h;
+                            if (h > 0) diasComParada.add(date);
+                        }
+                    });
+                });
+                const diasP = diasComParada.size || 1;
+                const mediaHoras = totalHoras / diasP;
+                const fmtH = (v) => v.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + 'h';
+
+                sectorTotalDisplay.innerText = fmtH(totalHoras);
+                sectorAverageDisplay.innerText = fmtH(mediaHoras);
+                if (kgHomemEl) kgHomemEl.innerText = '-----';
+
+                document.getElementById('kpi-title-total').innerText = 'Horas Acumuladas';
+                document.getElementById('kpi-sub-total').innerText = `Em ${diasComParada.size} dia(s) com parada`;
+                document.getElementById('kpi-title-avg').innerText = 'Média de Horas / Dia';
+                document.getElementById('kpi-title-homem').innerText = 'Kg / Dia / Homem';
+
+                footerTotal.innerText = fmtH(totalHoras);
+                return;
+            }
 
             if (isCaixasMode) {
                 // Calcular total de caixas
@@ -2521,8 +2560,7 @@
                             if (activeElements.length > 0) {
                                 const day = labels[activeElements[0].index];
                                 const ds2 = `${currentYearFilter}-${String(currentMonthFilter).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-                                const lista = paradasRegistradas[ds2];
-                                if (lista && lista.length > 0) openParadaDetalheModal(ds2);
+                                if (isParadaAtiva(ds2, currentSectorFilter)) openParadaDetalheModal(ds2);
                             }
                         },
                         interaction: { mode: 'index', intersect: false }
@@ -2540,8 +2578,7 @@
                         if (!elems.length) return;
                         const day = labels[elems[0].index];
                         const ds2 = `${currentYearFilter}-${String(currentMonthFilter).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-                        const lista = paradasRegistradas[ds2];
-                        if (lista && lista.length > 0) openParadaDetalheModal(ds2);
+                        if (isParadaAtiva(ds2, currentSectorFilter)) openParadaDetalheModal(ds2);
                     };
                     cv.addEventListener('contextmenu', cv._paradaHandler);
                 }
@@ -2799,8 +2836,7 @@
                     if (!elems.length) return;
                     const day = labels[elems[0].index];
                     const ds = `${currentYearFilter}-${String(currentMonthFilter).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-                    const lista = paradasRegistradas[ds];
-                    if (lista && lista.length > 0) openParadaDetalheModal(ds);
+                    if (isParadaAtiva(ds, currentSectorFilter)) openParadaDetalheModal(ds);
                 };
                 canvasAP2.addEventListener('contextmenu', canvasAP2._paradaHandler);
             }
@@ -3116,6 +3152,7 @@
             if (paradaSetor === 'Geral (Toda a Fábrica)') return true;
             if (chartSetor === 'TODOS') return true;
             const map = {
+                'Moldagem Geral':     ['MOLDAGEM GERAL', 'MOLDAGEM LEVE', 'MOLDAGEM MANUAL', 'MOLDAGEM PESADA'],
                 'Moldagem Leve':      ['MOLDAGEM LEVE',  'MOLDAGEM GERAL'],
                 'Moldagem Manual':    ['MOLDAGEM MANUAL', 'MOLDAGEM GERAL'],
                 'Moldagem Pesada':    ['MOLDAGEM PESADA', 'MOLDAGEM GERAL'],
