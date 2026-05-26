@@ -1224,8 +1224,8 @@
             </div>
             <div id="parada-detalhe-content" style="display:flex;flex-direction:column;gap:12px;"></div>
             <div style="display:flex;gap:10px;margin-top:20px;">
-                <button id="parada-detalhe-editar" style="flex:1;padding:9px;background:rgba(251,191,36,0.12);border:1px solid rgba(251,191,36,0.3);border-radius:8px;color:#fbbf24;font-weight:600;font-size:0.82rem;cursor:pointer;">EDITAR</button>
-                <button id="parada-detalhe-remover" style="flex:1;padding:9px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:8px;color:#ef4444;font-weight:600;font-size:0.82rem;cursor:pointer;">REMOVER</button>
+                <button id="parada-detalhe-editar" style="flex:1;padding:9px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.4);border-radius:8px;color:#ef4444;font-weight:600;font-size:0.82rem;cursor:pointer;">+ ADICIONAR PARADA</button>
+                <button id="parada-detalhe-remover" style="display:none;"></button>
                 <button onclick="document.getElementById('parada-detalhe-modal').style.display='none'" style="flex:1;padding:9px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#a1a1aa;font-weight:600;font-size:0.82rem;cursor:pointer;">FECHAR</button>
             </div>
         </div>
@@ -2426,7 +2426,7 @@
                     backgroundColor: (ctx2) => {
                         if (currentMonthFilter !== 0) {
                             const ds = `${currentYearFilter}-${String(currentMonthFilter).padStart(2,'0')}-${String(labels[ctx2.dataIndex]).padStart(2,'0')}`;
-                            if (paradasRegistradas[ds]) return '#ef4444';
+                            if (isParadaAtiva(ds, currentSectorFilter)) return '#ef4444';
                         }
                         return window.isGraphicReportRunning ? '#d97706' : '#fbbf24';
                     },
@@ -2455,7 +2455,7 @@
                     backgroundColor: (ctx2) => {
                         if (currentMonthFilter !== 0) {
                             const ds = `${currentYearFilter}-${String(currentMonthFilter).padStart(2,'0')}-${String(labels[ctx2.dataIndex]).padStart(2,'0')}`;
-                            if (paradasRegistradas[ds]) return '#ef4444';
+                            if (isParadaAtiva(ds, currentSectorFilter)) return '#ef4444';
                         }
                         return window.isGraphicReportRunning ? '#c2410c' : '#ea580c';
                     },
@@ -2547,7 +2547,7 @@
                                     const idx = items[0].dataIndex;
                                     const day = labels[idx];
                                     const dsF = `${parseInt(currentYearFilter)||new Date().getFullYear()}-${String(currentMonthFilter).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-                                    if (paradasRegistradas[dsF]) return ['⛔ Registro de parada neste dia', '(clique direito para ver mais informações)'];
+                                    if (isParadaAtiva(dsF, currentSectorFilter)) return ['⛔ Registro de parada neste dia', '(clique direito para ver mais informações)'];
                                     const year2 = parseInt(currentYearFilter) || new Date().getFullYear();
                                     const ds = `${year2}-${String(currentMonthFilter).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
                                     const dow = new Date(ds + 'T12:00:00').getDay();
@@ -2671,7 +2671,8 @@
                     if (!elems.length) return;
                     const day = labels[elems[0].index];
                     const ds = `${currentYearFilter}-${String(currentMonthFilter).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-                    if (paradasRegistradas[ds]) openParadaDetalheModal(ds);
+                    const lista = paradasRegistradas[ds];
+                    if (lista && lista.length > 0) openParadaDetalheModal(ds);
                     else openParadaModal(ds);
                 };
                 canvasAP2.addEventListener('contextmenu', canvasAP2._paradaHandler);
@@ -2963,24 +2964,59 @@
         // =========================================================
         // PARADAS
         // =========================================================
-        let paradasRegistradas = JSON.parse(localStorage.getItem('paradas_ap') || '{}');
+        let paradasRegistradas = (() => {
+            const raw = JSON.parse(localStorage.getItem('paradas_ap') || '{}');
+            // Migra formato antigo (objeto único) para array
+            Object.keys(raw).forEach(k => {
+                if (!Array.isArray(raw[k])) raw[k] = [raw[k]];
+            });
+            return raw;
+        })();
+        let _paradaEditDate = null;
+        let _paradaEditIdx = null;
 
         function saveParadas() {
             localStorage.setItem('paradas_ap', JSON.stringify(paradasRegistradas));
         }
 
-        function openParadaModal(dateStr) {
+        // Retorna true se a parada do setor informado afeta o seletor do gráfico atual
+        function paradaAfetaSetor(paradaSetor, chartSetor) {
+            if (!chartSetor) return false;
+            if (paradaSetor === 'Geral (Toda a Fábrica)') return true;
+            if (chartSetor === 'TODOS') return true;
+            const map = {
+                'Moldagem Leve':      ['MOLDAGEM LEVE',  'MOLDAGEM GERAL'],
+                'Moldagem Manual':    ['MOLDAGEM MANUAL', 'MOLDAGEM GERAL'],
+                'Moldagem Pesada':    ['MOLDAGEM PESADA', 'MOLDAGEM GERAL'],
+                'Fusão':              ['FUSAO'],
+                'Acabamento':         ['ACABAMENTO'],
+                'Tratamento Térmico': ['TRATAMENTO TERMICO'],
+                'Qualidade':          ['INSPECAO DE QUALIDADE'],
+                'Expedição':          ['EXPEDICAO', 'USINAGEM EXPEDICAO'],
+            };
+            return (map[paradaSetor] || []).includes(chartSetor);
+        }
+
+        function isParadaAtiva(dateStr, chartSetor) {
+            const list = paradasRegistradas[dateStr];
+            if (!list || list.length === 0) return false;
+            return list.some(p => paradaAfetaSetor(p.setor, chartSetor));
+        }
+
+        function openParadaModal(dateStr, editIdx = null) {
             const modal = document.getElementById('parada-modal');
             const today = dateStr || (currentMonthFilter !== 0
                 ? `${currentYearFilter}-${String(currentMonthFilter).padStart(2,'0')}-${String(new Date().getDate()).padStart(2,'0')}`
                 : new Date().toISOString().slice(0,10));
+            _paradaEditDate = today;
+            _paradaEditIdx = editIdx;
             document.getElementById('parada-data').value = today;
             document.getElementById('parada-inicio').value = '';
             document.getElementById('parada-fim').value = '';
             document.getElementById('parada-motivo').value = '';
             document.getElementById('parada-setor').value = 'Moldagem Leve';
-            if (paradasRegistradas[today]) {
-                const p = paradasRegistradas[today];
+            if (editIdx !== null && paradasRegistradas[today]?.[editIdx]) {
+                const p = paradasRegistradas[today][editIdx];
                 document.getElementById('parada-inicio').value = p.inicio || '';
                 document.getElementById('parada-fim').value = p.fim || '';
                 document.getElementById('parada-motivo').value = p.motivo || '';
@@ -2991,6 +3027,8 @@
 
         function closeParadaModal() {
             document.getElementById('parada-modal').style.display = 'none';
+            _paradaEditDate = null;
+            _paradaEditIdx = null;
         }
 
         function salvarParada() {
@@ -3001,40 +3039,52 @@
             const setor = document.getElementById('parada-setor').value;
             const motivo = document.getElementById('parada-motivo').value.trim();
             if (!motivo) { alert('Informe o motivo da parada.'); return; }
-            paradasRegistradas[data] = { data, inicio, fim, setor, motivo };
+            if (!paradasRegistradas[data]) paradasRegistradas[data] = [];
+            if (_paradaEditIdx !== null && _paradaEditDate === data) {
+                paradasRegistradas[data][_paradaEditIdx] = { data, inicio, fim, setor, motivo };
+            } else {
+                paradasRegistradas[data].push({ data, inicio, fim, setor, motivo });
+            }
             saveParadas();
             closeParadaModal();
             renderChart();
         }
 
         function openParadaDetalheModal(dateStr) {
-            const p = paradasRegistradas[dateStr];
-            if (!p) return;
+            const list = paradasRegistradas[dateStr];
+            if (!list || list.length === 0) return;
             const [y, m, d] = dateStr.split('-');
             const content = document.getElementById('parada-detalhe-content');
-            const row = (label, value) => `
-                <div style="background:rgba(255,255,255,0.04);border-radius:8px;padding:10px 14px;">
-                    <div style="font-size:0.7rem;color:#a1a1aa;margin-bottom:3px;">${label}</div>
-                    <div style="font-size:0.9rem;color:#f4f4f5;font-weight:500;">${value || '—'}</div>
-                </div>`;
-            content.innerHTML =
-                row('DATA', `${d}/${m}/${y}`) +
-                row('PERÍODO', p.inicio && p.fim ? `${p.inicio} até ${p.fim}` : (p.inicio || p.fim || '—')) +
-                row('SETOR AFETADO', p.setor) +
-                row('MOTIVO', p.motivo);
+            const field = (label, value) =>
+                `<div style="display:flex;gap:8px;"><span style="font-size:0.72rem;color:#a1a1aa;min-width:70px;padding-top:1px;">${label}</span><span style="font-size:0.85rem;color:#f4f4f5;">${value || '—'}</span></div>`;
+            content.innerHTML = list.map((p, i) => `
+                <div style="background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.2);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:6px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                        <span style="font-size:0.72rem;color:#ef4444;font-weight:700;letter-spacing:.05em;">PARADA ${i+1}</span>
+                        <div style="display:flex;gap:8px;">
+                            <button onclick="openParadaModal('${dateStr}',${i});document.getElementById('parada-detalhe-modal').style.display='none';" style="padding:3px 10px;background:rgba(251,191,36,0.12);border:1px solid rgba(251,191,36,0.3);border-radius:6px;color:#fbbf24;font-size:0.72rem;cursor:pointer;">EDITAR</button>
+                            <button onclick="removerParada('${dateStr}',${i})" style="padding:3px 10px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:6px;color:#ef4444;font-size:0.72rem;cursor:pointer;">REMOVER</button>
+                        </div>
+                    </div>
+                    ${field('SETOR', p.setor)}
+                    ${field('PERÍODO', p.inicio && p.fim ? `${p.inicio} até ${p.fim}` : (p.inicio || p.fim || '—'))}
+                    ${field('MOTIVO', p.motivo)}
+                </div>`).join('');
             document.getElementById('parada-detalhe-editar').onclick = () => {
                 document.getElementById('parada-detalhe-modal').style.display = 'none';
                 openParadaModal(dateStr);
             };
-            document.getElementById('parada-detalhe-remover').onclick = () => {
-                if (confirm('Remover o registro de parada deste dia?')) {
-                    delete paradasRegistradas[dateStr];
-                    saveParadas();
-                    document.getElementById('parada-detalhe-modal').style.display = 'none';
-                    renderChart();
-                }
-            };
+            document.getElementById('parada-detalhe-remover').style.display = 'none';
             document.getElementById('parada-detalhe-modal').style.display = 'flex';
+        }
+
+        function removerParada(dateStr, idx) {
+            if (!confirm('Remover esta parada?')) return;
+            paradasRegistradas[dateStr].splice(idx, 1);
+            if (paradasRegistradas[dateStr].length === 0) delete paradasRegistradas[dateStr];
+            saveParadas();
+            document.getElementById('parada-detalhe-modal').style.display = 'none';
+            renderChart();
         }
 
         function copyToClipboard(text, type) {
