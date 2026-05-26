@@ -490,7 +490,6 @@
             flex: 1; min-height: 0;
             scrollbar-width: thin;
             scrollbar-color: rgba(255,255,255,0.15) transparent;
-            scroll-behavior: smooth;
         }
         #concentracaoScrollWrapper::-webkit-scrollbar { height: 5px; }
         #concentracaoScrollWrapper::-webkit-scrollbar-track { background: transparent; }
@@ -4456,9 +4455,20 @@
             if (!wrapper || concentracaoAllLabels.length === 0) return;
 
             const barCenter = barIndex * concentracaoBarPx + concentracaoBarPx / 2;
-            const scrollLeft = Math.max(0, barCenter - wrapper.clientWidth / 2);
-            wrapper.scrollTo({ left: scrollLeft, behavior: 'smooth' });
-            setTimeout(() => flashConcentracaoBar(barIndex), 500);
+            const targetScroll = Math.max(0, barCenter - wrapper.clientWidth / 2);
+            const startScroll = wrapper.scrollLeft;
+            const distance = targetScroll - startScroll;
+            const duration = Math.min(800, Math.max(300, Math.abs(distance) / 2));
+            const startTime = performance.now();
+            function easeInOutCubic(t) { return t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2,3)/2; }
+            function animateScroll(now) {
+                const elapsed = now - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                wrapper.scrollLeft = startScroll + distance * easeInOutCubic(progress);
+                if (progress < 1) requestAnimationFrame(animateScroll);
+            }
+            requestAnimationFrame(animateScroll);
+            setTimeout(() => flashConcentracaoBar(barIndex), duration + 80);
         }
 
         function flashConcentracaoBar(barIndex) {
