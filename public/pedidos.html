@@ -2042,8 +2042,11 @@
             const selectedMonth = (activePillMonth !== null && activePillMonth !== undefined)
                 ? String(activePillMonth + 1)
                 : 'Todos';
+            const day = (currentDeliveryView === 'diaria' && selectedHistoricalDay !== null)
+                ? selectedHistoricalDay
+                : null;
             chartMode = 'emission_total';
-            showHistoricalRecords(selectedYear, selectedMonth);
+            showHistoricalRecords(selectedYear, selectedMonth, day);
         }
         let isModelosHidden = true; // Inicia OCULTO por padrão
         let backlogDataState = null; // Backup for commercial backlog when viewing history
@@ -4725,12 +4728,18 @@
                 window.closeModal = originalClose; // Reset
             };
         }
-        async function showHistoricalRecords(year, month) {
+        async function showHistoricalRecords(year, month, day = null) {
             try {
-                const res = await fetch(`/api/emissoes/list?ano=${year}&mes=${month}`);
+                let url = `/api/emissoes/list?ano=${year}&mes=${month}`;
+                if (day) url += `&dia=${day}`;
+                const res = await fetch(url);
                 if (!res.ok) throw new Error('Erro ao buscar registros históricos');
                 const records = await res.json();
-                const title = `Emissões - ${month < 10 ? '0' + month : month}/${year}`;
+                const monthLabels = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+                const mName = month !== 'Todos' ? monthLabels[parseInt(month) - 1] : '';
+                const title = day
+                    ? `Emissões - Dia ${String(day).padStart(2,'0')}/${String(month).padStart(2,'0')}/${year}`
+                    : `Emissões - ${mName}/${year}`;
                 showHistoricalDetails(records, title);
             } catch (err) {
                 console.error(err);

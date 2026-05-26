@@ -96,7 +96,7 @@ router.get('/client-summary', async (req, res) => {
 // GET /api/emissoes/list
 router.get('/list', async (req, res) => {
     try {
-        const { ano, mes } = req.query;
+        const { ano, mes, dia } = req.query;
         if (!ano) {
             return res.status(400).json({ error: 'Ano é obrigatório.' });
         }
@@ -105,8 +105,13 @@ router.get('/list', async (req, res) => {
         const params = [ano];
 
         if (mes && mes !== 'Todos') {
-            whereClause += " AND EXTRACT(MONTH FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) = $2";
+            whereClause += ` AND EXTRACT(MONTH FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) = $${params.length + 1}`;
             params.push(mes);
+        }
+
+        if (dia) {
+            whereClause += ` AND EXTRACT(DAY FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) = $${params.length + 1}`;
+            params.push(dia);
         }
 
         const query = `
