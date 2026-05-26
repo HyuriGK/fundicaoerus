@@ -2034,7 +2034,22 @@
         function openPendingEmissionRecords() {
             chartMode = 'emission_pending';
             applyColumnFilters();
-            openModal();
+            const modal = document.getElementById('recordsModal');
+            const titleEl = document.getElementById('recordsModalTitle');
+            const monthLabels = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+            if (titleEl) {
+                if (currentDeliveryView === 'diaria' && selectedHistoricalDay !== null && activePillMonth !== null) {
+                    const m = String(activePillMonth + 1).padStart(2, '0');
+                    const d = String(selectedHistoricalDay).padStart(2, '0');
+                    const y = parseInt(document.getElementById('yearPillSelect')?.value) || new Date().getFullYear();
+                    titleEl.innerHTML = `<i class="fa-solid fa-list-check" style="margin-right:15px;"></i>Registros: Emissão Pendente - Dia ${d}/${m}/${y}`;
+                } else if (activePillMonth !== null) {
+                    titleEl.innerHTML = `<i class="fa-solid fa-list-check" style="margin-right:15px;"></i>Registros: Emissão Pendente - ${monthLabels[activePillMonth]}`;
+                } else {
+                    titleEl.innerHTML = `<i class="fa-solid fa-list-check" style="margin-right:15px;"></i>Registros: Emissão C/ Entrega Pendente`;
+                }
+            }
+            modal.style.display = 'flex';
         }
         function openHistoricalEmissionRecords() {
             const yearEl = document.getElementById('yearPillSelect');
@@ -3945,14 +3960,11 @@
             pendingDataCache = null; // Limpa cache ao trocar ano
         }
         function updatePendingChart(list) {
-            const monthEl = document.getElementById('monthFilterHistorical');
-            let selectedMonth = monthEl ? monthEl.value : 'Todos';
-            const yearEl = document.getElementById('yearFilterHistorical');
-            const selectedYear = yearEl ? (parseInt(yearEl.value) || new Date().getFullYear()) : new Date().getFullYear();
+            const selectedYear = parseInt(document.getElementById('yearPillSelect')?.value) || new Date().getFullYear();
+            const isMonthlyView = (currentDeliveryView === 'mensal') || (activePillMonth === null);
+            const selectedMonth = isMonthlyView ? 'Todos' : String(activePillMonth + 1);
             const monthLabels = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
             const titleEl = document.getElementById('chartPending').closest('.chart-panel').querySelector('.chart-title-flex');
-            const btnBack = document.getElementById('btnBackPending');
-            if (btnBack) btnBack.style.display = (selectedMonth !== 'Todos') ? 'inline-flex' : 'none';
             try {
                 const pendingList = list.filter(item => {
                     const prodCode = String(item.PRODUTO_PPR || '').trim();
@@ -3988,7 +4000,10 @@
                             mDataValue[d.getMonth()] += (vUnit * realQ);
                         }
                     });
-                    renderPendingChart(monthLabels, mData, mDataValue, Array(12).fill(chartColorAmber));
+                    const monthlyBgColors = monthLabels.map((_, i) =>
+                        (activePillMonth !== null && i === activePillMonth) ? '#ffffff' : chartColorAmber
+                    );
+                    renderPendingChart(monthLabels, mData, mDataValue, monthlyBgColors);
                 } else {
                     const mIdx = parseInt(selectedMonth);
                     const monthName = monthLabels[mIdx - 1];
@@ -4036,28 +4051,10 @@
                         const valStr = valorVisible ? totalMonthValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-----';
                         titleEl.innerText = `Emissão Pendente ${monthName}/${selectedYear}: ${totalMonthWeight.toLocaleString('pt-BR')} kg | ${valStr}`;
                     }
-                    const fStart = document.getElementById('filterEmissionStart')?.value;
-                    const fEnd = document.getElementById('filterEmissionEnd')?.value;
-                    let finalLabels = labels;
-                    let finalWeight = weightData;
-                    let finalValue = valueData;
-                    let finalBgColors = Array(labels.length).fill(chartColorAmber);
-                    if (fStart && fStart === fEnd) {
-                        const d = toLocalDate(fStart);
-                        if (d.getFullYear() === selectedYear && (d.getMonth() + 1) === mIdx) {
-                            const dayNum = d.getDate();
-                            const idx = dayNum - 1;
-                            if (idx >= 0 && idx < labels.length) {
-                                finalLabels = [labels[idx]];
-                                finalWeight = [weightData[idx]];
-                                finalValue = [valueData[idx]];
-                                finalBgColors = ['#fff'];
-                                const dayValStr = valorVisible ? weightData[idx].toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-----';
-                                titleEl.innerText = `Emissão Pendente Dia ${dayNum}: ${weightData[idx].toLocaleString('pt-BR')} kg | ${dayValStr}`;
-                            }
-                        }
-                    }
-                    renderPendingChart(finalLabels, finalWeight, finalValue, finalBgColors);
+                    const finalBgColors = labels.map((_, i) =>
+                        (selectedHistoricalDay !== null && i === selectedHistoricalDay - 1) ? '#ffffff' : chartColorAmber
+                    );
+                    renderPendingChart(labels, weightData, valueData, finalBgColors);
                 }
             } catch (err) {
                 console.error('Erro ao atualizar gráfico pendente:', err);
@@ -4099,39 +4096,41 @@
                     },
                     interaction: { mode: 'index', intersect: false },
                     onClick: (e, elements) => {
-                        const monthEl = document.getElementById('monthFilterHistorical');
-                        const selectedMonth = monthEl ? monthEl.value : 'Todos';
-                        const yearEl = document.getElementById('yearFilterHistorical');
-                        const selectedYear = yearEl ? (parseInt(yearEl.value) || new Date().getFullYear()) : new Date().getFullYear();
-                        if (elements.length > 0) {
-                            const index = elements[0].index;
-                            if (selectedMonth === 'Todos') {
-                                // Zoom into specific month
-                                document.getElementById('monthFilterHistorical').value = String(index + 1);
-                                chartMode = 'emission_pending';
-                                activeChartFilters.month = index;
-                            } else {
-                                // Zoom into specific day (Literal Zoom)
-                                const fStart = document.getElementById('filterEmissionStart')?.value;
-                                const fEnd = document.getElementById('filterEmissionEnd')?.value;
-                                let dayNum;
-                                if (chartPending.data.labels.length === 1) {
-                                    dayNum = parseInt(chartPending.data.labels[0].replace('Dia ', ''));
-                                } else {
-                                    dayNum = index + 1;
-                                }
-                                const targetDate = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
-                                if (fStart === targetDate && fEnd === targetDate) {
-                                    document.getElementById('filterEmissionStart').value = '';
-                                    document.getElementById('filterEmissionEnd').value = '';
-                                } else {
-                                    document.getElementById('filterEmissionStart').value = targetDate;
-                                    document.getElementById('filterEmissionEnd').value = targetDate;
-                                }
-                                chartMode = 'emission_pending';
-                                activeChartFilters.month = parseInt(selectedMonth) - 1;
-                            }
+                        const selectedYear = parseInt(document.getElementById('yearPillSelect')?.value) || new Date().getFullYear();
+                        const isMonthlyView = (currentDeliveryView === 'mensal') || (activePillMonth === null);
+                        if (elements.length === 0) {
+                            chartMode = null;
+                            activeChartFilters.month = null;
                             applyColumnFilters();
+                            return;
+                        }
+                        const index = elements[0].index;
+                        if (isMonthlyView) {
+                            // Clique em barra de MÊS → apenas seleciona (barra branca)
+                            activePillMonth = (activePillMonth === index) ? null : index;
+                            selectedHistoricalDay = null;
+                            updatePillMonthUI();
+                            updatePendingChart(allData);
+                        } else {
+                            // Clique em barra de DIA → destacar + filtrar
+                            const selectedMonth = activePillMonth + 1;
+                            const dayNum = index + 1;
+                            const targetDate = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+                            const fStart = document.getElementById('filterEmissionStart')?.value;
+                            const fEnd = document.getElementById('filterEmissionEnd')?.value;
+                            if (fStart === targetDate && fEnd === targetDate) {
+                                document.getElementById('filterEmissionStart').value = '';
+                                document.getElementById('filterEmissionEnd').value = '';
+                                selectedHistoricalDay = null;
+                            } else {
+                                document.getElementById('filterEmissionStart').value = targetDate;
+                                document.getElementById('filterEmissionEnd').value = targetDate;
+                                selectedHistoricalDay = dayNum;
+                            }
+                            chartMode = 'emission_pending';
+                            activeChartFilters.month = activePillMonth;
+                            applyColumnFilters();
+                            updatePendingChart(allData);
                         }
                     }
                 }
