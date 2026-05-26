@@ -485,7 +485,6 @@
             text-overflow: ellipsis;
         }
         /* --- CONCENTRAÇÃO CHART SCROLL & SEARCH --- */
-        #chartRow3 .chart-panel { overflow: visible; }
         #concentracaoScrollWrapper {
             overflow-x: auto; overflow-y: hidden;
             flex: 1; min-height: 0;
@@ -506,8 +505,8 @@
         }
         #concentracaoSearch:focus { border-color: rgba(251,191,36,0.4); }
         #concentracaoSuggestions {
-            display: none; position: absolute; left: 0; right: 0; top: calc(100% + 3px);
-            z-index: 300; background: #1c1c20; border: 1px solid rgba(255,255,255,0.1);
+            display: none; position: fixed;
+            z-index: 9999; background: #1c1c20; border: 1px solid rgba(255,255,255,0.1);
             border-radius: 7px; overflow-y: auto; max-height: 190px;
             box-shadow: 0 8px 28px rgba(0,0,0,0.5);
         }
@@ -4421,8 +4420,9 @@
             });
         }
         function onConcentracaoSearch(value) {
+            const input = document.getElementById('concentracaoSearch');
             const suggestions = document.getElementById('concentracaoSuggestions');
-            if (!suggestions) return;
+            if (!suggestions || !input) return;
             const q = value.trim().toUpperCase();
             if (!q) { suggestions.style.display = 'none'; return; }
             const matches = concentracaoAllLabels
@@ -4430,6 +4430,10 @@
                 .filter(item => item.name.includes(q))
                 .slice(0, 12);
             if (matches.length === 0) { suggestions.style.display = 'none'; return; }
+            const rect = input.getBoundingClientRect();
+            suggestions.style.top  = (rect.bottom + 3) + 'px';
+            suggestions.style.left = rect.left + 'px';
+            suggestions.style.width = rect.width + 'px';
             suggestions.innerHTML = matches.map(item =>
                 `<div class="concentracao-suggestion-item"
                       onmousedown="selectConcentracaoClient(${item.index}, ${JSON.stringify(item.name)})">${item.name}</div>`
@@ -4442,16 +4446,48 @@
             if (input) input.value = name;
             const suggestions = document.getElementById('concentracaoSuggestions');
             if (suggestions) suggestions.style.display = 'none';
+
             const wrapper = document.getElementById('concentracaoScrollWrapper');
-            if (!wrapper || !chartConcentracao) return;
-            const chartArea = chartConcentracao.chartArea;
-            if (!chartArea) return;
+            const canvasInner = document.getElementById('concentracaoCanvasInner');
+            if (!wrapper || !canvasInner) return;
+
             const totalBars = concentracaoAllLabels.length;
-            const barAreaWidth = chartArea.right - chartArea.left;
-            const barWidth = barAreaWidth / totalBars;
-            const barCenter = chartArea.left + barIndex * barWidth + barWidth / 2;
-            const scrollLeft = barCenter - wrapper.clientWidth / 2;
-            wrapper.scrollTo({ left: Math.max(0, scrollLeft), behavior: 'smooth' });
+            if (totalBars === 0) return;
+
+            let barCenter;
+            if (chartConcentracao && chartConcentracao.chartArea) {
+                const ca = chartConcentracao.chartArea;
+                const barW = (ca.right - ca.left) / totalBars;
+                barCenter = ca.left + barIndex * barW + barW / 2;
+            } else {
+                barCenter = (barIndex + 0.5) * (canvasInner.offsetWidth / totalBars);
+            }
+
+            wrapper.scrollTo({ left: Math.max(0, barCenter - wrapper.clientWidth / 2), behavior: 'smooth' });
+            setTimeout(() => flashConcentracaoBar(barIndex), 380);
+        }
+
+        function flashConcentracaoBar(barIndex) {
+            if (!chartConcentracao) return;
+            const ds = chartConcentracao.data.datasets.find(d => d.type === 'bar' || !d.yAxisID || d.yAxisID === 'y');
+            if (!ds || !Array.isArray(ds.backgroundColor)) return;
+            const original = [...ds.backgroundColor];
+            let tick = 0;
+            const flashes = 6; // 3 piscadas = 6 alternâncias
+            function step() {
+                if (tick >= flashes) {
+                    ds.backgroundColor = original;
+                    chartConcentracao.update('none');
+                    return;
+                }
+                const colors = [...original];
+                colors[barIndex] = tick % 2 === 0 ? '#ffffff' : chartColorAmber;
+                ds.backgroundColor = colors;
+                chartConcentracao.update('none');
+                tick++;
+                setTimeout(step, 280);
+            }
+            step();
         }
 
         let emissionDataCache = null;
@@ -5204,7 +5240,13 @@
                     if (n === 4 && chartVariacao) chartVariacao.resize();
                     if (n === 5 && chartHistorical) chartHistorical.resize();
                 });
-                if (n === 3) setTimeout(() => { if (chartConcentracao) chartConcentracao.resize(); }, 50);
+                if (n === 3) setTimeout(() => {
+                    if (typeof allData !== 'undefined' && allData && allData.length > 0) {
+                        updateConcentracaoChart(allData);
+                    } else if (chartConcentracao) {
+                        chartConcentracao.resize();
+                    }
+                }, 50);
                 if (n === 4) setTimeout(() => { if (chartVariacao) chartVariacao.resize(); }, 50);
                 if (n === 5) setTimeout(() => { if (chartHistorical) chartHistorical.resize(); }, 50);
             });
