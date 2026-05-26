@@ -144,9 +144,9 @@ router.get('/logs', checkDevRole, async (req, res) => {
 // LISTAR LOGS DE UM USUÁRIO ESPECÍFICO
 router.get('/:username/logs', checkDevRole, async (req, res) => {
     const { username } = req.params;
+    const limitParam = req.query.limit;
 
     try {
-        // Primeiro pegamos o nome real do usuário para filtrar os logs
         const userResult = await pool.query('SELECT name FROM users WHERE username = $1', [username]);
         if (userResult.rows.length === 0) {
             return res.status(404).json({ success: false, message: 'Usuário não encontrado.' });
@@ -154,10 +154,11 @@ router.get('/:username/logs', checkDevRole, async (req, res) => {
 
         const displayName = userResult.rows[0].name;
 
-        const result = await pool.query(
-            'SELECT * FROM audit_logs WHERE user_name = $1 ORDER BY created_at DESC LIMIT 100',
-            [displayName]
-        );
+        const query = limitParam === 'all'
+            ? 'SELECT * FROM audit_logs WHERE user_name = $1 ORDER BY created_at DESC'
+            : `SELECT * FROM audit_logs WHERE user_name = $1 ORDER BY created_at DESC LIMIT ${parseInt(limitParam) || 100}`;
+
+        const result = await pool.query(query, [displayName]);
 
         res.json({ success: true, logs: result.rows });
     } catch (error) {

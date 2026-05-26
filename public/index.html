@@ -2296,26 +2296,12 @@
 
 
         .logs-table-container {
-
-
+        .logs-table-container {
             flex: 1;
-
-
             overflow-y: auto;
-
-
             margin-top: 15px;
-
-
             padding-right: 5px;
-
-
-            min-height: 0; /* Crucial para o scroll em flexboxes */
-
-
-            height: calc(100vh - 150px);
-
-
+            min-height: 0;
         }
 
 
@@ -9549,85 +9535,49 @@
                 }
 
 
-                // --- FUNÁÁES DE LOGS POR USUÁRIO ---
+                // --- FUNÇÕES DE LOGS POR USUÁRIO ---
 
+                let _currentLogsUsername = null;
 
                 async function openUserLogs(username, displayName) {
+                    _currentLogsUsername = username;
+                    document.getElementById('userLogsLimit').value = '100';
+                    document.getElementById('logUserDisplayName').textContent = displayName;
+                    document.getElementById('userLogsModal').style.display = 'flex';
+                    await _fetchUserLogs(username, '100');
+                }
 
+                async function reloadUserLogs() {
+                    if (!_currentLogsUsername) return;
+                    const limit = document.getElementById('userLogsLimit').value;
+                    await _fetchUserLogs(_currentLogsUsername, limit);
+                }
 
-                    const modal = document.getElementById('userLogsModal');
-
-
-                    const userNameSpan = document.getElementById('logUserDisplayName');
-
-
+                async function _fetchUserLogs(username, limit) {
                     const tbody = document.querySelector('#userLogsTable tbody');
-
-
                     const noLogsMsg = document.getElementById('noUserLogsMessage');
-
-
                     const table = document.getElementById('userLogsTable');
 
-
-                    userNameSpan.textContent = displayName;
-
-
                     tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:30px;">Carregando logs...</td></tr>';
-
-
                     noLogsMsg.style.display = 'none';
-
-
                     table.style.display = 'table';
 
-
-                    modal.style.display = 'flex';
-
-
                     try {
-
-
-                        const response = await fetch(`/api/admin/users/${username}/logs`, {
-
-
+                        const response = await fetch(`/api/admin/users/${username}/logs?limit=${limit}`, {
                             headers: { 'x-role': localStorage.getItem('erus_role') }
-
-
                         });
-
-
                         const data = await response.json();
-
-
                         if (data.success) {
-
-
                             renderUserLogs(data.logs);
-
-
                         } else {
-
-
                             showToast("Erro", "Falha ao buscar logs", "danger");
-
-
                         }
-
-
                     } catch (error) {
-
-
                         console.error(error);
-
-
                         showToast("Erro", "Erro de conexão", "danger");
-
-
                     }
-
-
                 }
+
 
 
                 function renderUserLogs(logs) {
@@ -10020,19 +9970,24 @@
                 </div>
 
 
-                <button class="modal-close-btn" onclick="closeUserLogsModal()"> Fechar
-
-
- </button>
+                <div style="display:flex; align-items:center; gap:12px;">
+                    <select id="userLogsLimit" onchange="reloadUserLogs()" style="background:#18181b; color:#a1a1aa; border:1px solid rgba(255,255,255,0.08); border-radius:8px; padding:6px 10px; font-size:0.78rem; cursor:pointer; outline:none;">
+                        <option value="50">Últimos 50</option>
+                        <option value="100" selected>Últimos 100</option>
+                        <option value="200">Últimos 200</option>
+                        <option value="all">Todos</option>
+                    </select>
+                    <button class="modal-close-btn" onclick="closeUserLogsModal()">Fechar</button>
+                </div>
 
 
             </div>
 
 
-            <div class="modal-content" style="padding: 24px; display: flex; flex-direction: column;">
+            <div class="modal-content" style="padding: 24px; flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden;">
 
 
-                <div class="logs-table-container">
+                <div class="logs-table-container" style="flex:1; min-height:0; overflow-y:auto; height:auto;">
 
 
                     <table class="logs-table" id="userLogsTable">
