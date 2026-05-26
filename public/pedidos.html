@@ -484,6 +484,40 @@
             overflow: hidden;
             text-overflow: ellipsis;
         }
+        /* --- CONCENTRAÇÃO CHART SCROLL & SEARCH --- */
+        #chartRow3 .chart-panel { overflow: visible; }
+        #concentracaoScrollWrapper {
+            overflow-x: auto; overflow-y: hidden;
+            flex: 1; min-height: 0;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255,255,255,0.15) transparent;
+        }
+        #concentracaoScrollWrapper::-webkit-scrollbar { height: 5px; }
+        #concentracaoScrollWrapper::-webkit-scrollbar-track { background: transparent; }
+        #concentracaoScrollWrapper::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
+        #concentracaoScrollWrapper::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.28); }
+        #concentracaoCanvasInner { position: relative; height: 100%; min-height: 220px; }
+        #concentracaoCanvasInner canvas { position: absolute; inset: 0; width: 100% !important; height: 100% !important; }
+        #concentracaoSearch {
+            width: 100%; background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.08); color: #f4f4f5;
+            border-radius: 7px; padding: 5px 12px; font-size: 0.74rem; outline: none;
+            transition: border-color 0.2s;
+        }
+        #concentracaoSearch:focus { border-color: rgba(251,191,36,0.4); }
+        #concentracaoSuggestions {
+            display: none; position: absolute; left: 0; right: 0; top: calc(100% + 3px);
+            z-index: 300; background: #1c1c20; border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 7px; overflow-y: auto; max-height: 190px;
+            box-shadow: 0 8px 28px rgba(0,0,0,0.5);
+        }
+        .concentracao-suggestion-item {
+            padding: 7px 12px; cursor: pointer; font-size: 0.74rem; color: #d4d4d8;
+            border-bottom: 1px solid rgba(255,255,255,0.04); transition: background 0.1s;
+        }
+        .concentracao-suggestion-item:last-child { border-bottom: none; }
+        .concentracao-suggestion-item:hover { background: rgba(251,191,36,0.08); color: #fff; }
+
         /* --- TABLE & MODAL --- */
         .modal-overlay {
             display: none;
@@ -1518,11 +1552,21 @@
             <!-- GRÁFICOS - LINHA 3 (CONCENTRAÇÃO DA CARTEIRA) -->
             <div id="chartRow3" class="charts-row" style="display: none;">
                 <div class="chart-panel" style="flex: 1;">
-                    <div class="chart-header-row" style="padding: 0 10px;">
+                    <div class="chart-header-row" style="padding: 0 10px; flex-shrink: 0;">
                         <div class="chart-title-flex">Concentração da Carteira - Peso por Cliente (Total)</div>
                     </div>
-                    <div class="chart-canvas-wrapper">
-                        <canvas id="chartConcentracao"></canvas>
+                    <div style="padding: 0 0 8px; position: relative; flex-shrink: 0;">
+                        <input id="concentracaoSearch" type="text" autocomplete="off"
+                               placeholder="Pesquisar cliente..."
+                               oninput="onConcentracaoSearch(this.value)"
+                               onfocus="onConcentracaoSearch(this.value)"
+                               onblur="setTimeout(()=>{ const s=document.getElementById('concentracaoSuggestions'); if(s) s.style.display='none'; },160)">
+                        <div id="concentracaoSuggestions"></div>
+                    </div>
+                    <div id="concentracaoScrollWrapper">
+                        <div id="concentracaoCanvasInner">
+                            <canvas id="chartConcentracao"></canvas>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -4234,8 +4278,10 @@
                 }
             });
         }
+        let concentracaoAllLabels = [];
+        let concentracaoAllIds = [];
+
         function updateConcentracaoChart(list) {
-            // Agrega por nome (igual index.html), exclui modelos (endsWith('1'))
             const clientWeight = {};
             const clientValue = {};
             const clientId = {};
@@ -4261,11 +4307,13 @@
             );
             const valueMap = clientValue;
             const totalWeightAll = Object.values(cMap).reduce((a, b) => a + b.val, 0);
-            const sorted = Object.entries(cMap).sort((a, b) => b[1].val - a[1].val).slice(0, 15);
-            const labels = sorted.map(s => s[0]); // nome é a chave
+            const sorted = Object.entries(cMap).sort((a, b) => b[1].val - a[1].val);
+            const labels = sorted.map(s => s[0]);
             const dataKg = sorted.map(s => s[1].val);
             const dataVal = sorted.map(s => valueMap[s[0]] || 0);
-            const ids = sorted.map(s => clientId[s[0]] || s[0]); // ID numérico por nome
+            const ids = sorted.map(s => clientId[s[0]] || s[0]);
+            concentracaoAllLabels = labels;
+            concentracaoAllIds = ids;
             let cumulative = 0;
             const dataPercent = sorted.map(s => {
                 cumulative += s[1].val;
@@ -4276,6 +4324,13 @@
                     ? '#fff'
                     : chartColorAmber
             );
+            // Calcula largura dinâmica para scroll horizontal
+            const scrollWrapper = document.getElementById('concentracaoScrollWrapper');
+            const canvasInner = document.getElementById('concentracaoCanvasInner');
+            const MIN_BAR_PX = 56;
+            const wrapperW = scrollWrapper ? scrollWrapper.clientWidth : 800;
+            const canvasW = Math.max(wrapperW, labels.length * MIN_BAR_PX);
+            if (canvasInner) canvasInner.style.width = canvasW + 'px';
             if (chartConcentracao) chartConcentracao.destroy();
             chartConcentracao = new Chart(document.getElementById('chartConcentracao').getContext('2d'), {
                 data: {
@@ -4365,6 +4420,40 @@
                 }
             });
         }
+        function onConcentracaoSearch(value) {
+            const suggestions = document.getElementById('concentracaoSuggestions');
+            if (!suggestions) return;
+            const q = value.trim().toUpperCase();
+            if (!q) { suggestions.style.display = 'none'; return; }
+            const matches = concentracaoAllLabels
+                .map((name, index) => ({ name, index }))
+                .filter(item => item.name.includes(q))
+                .slice(0, 12);
+            if (matches.length === 0) { suggestions.style.display = 'none'; return; }
+            suggestions.innerHTML = matches.map(item =>
+                `<div class="concentracao-suggestion-item"
+                      onmousedown="selectConcentracaoClient(${item.index}, ${JSON.stringify(item.name)})">${item.name}</div>`
+            ).join('');
+            suggestions.style.display = 'block';
+        }
+
+        function selectConcentracaoClient(barIndex, name) {
+            const input = document.getElementById('concentracaoSearch');
+            if (input) input.value = name;
+            const suggestions = document.getElementById('concentracaoSuggestions');
+            if (suggestions) suggestions.style.display = 'none';
+            const wrapper = document.getElementById('concentracaoScrollWrapper');
+            if (!wrapper || !chartConcentracao) return;
+            const chartArea = chartConcentracao.chartArea;
+            if (!chartArea) return;
+            const totalBars = concentracaoAllLabels.length;
+            const barAreaWidth = chartArea.right - chartArea.left;
+            const barWidth = barAreaWidth / totalBars;
+            const barCenter = chartArea.left + barIndex * barWidth + barWidth / 2;
+            const scrollLeft = barCenter - wrapper.clientWidth / 2;
+            wrapper.scrollTo({ left: Math.max(0, scrollLeft), behavior: 'smooth' });
+        }
+
         let emissionDataCache = null;
         let emissionClientCache = {}; // Cache by "year-month"
         let selectedHistoricalDay = null;
