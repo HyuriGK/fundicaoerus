@@ -1155,6 +1155,7 @@
                     <div class="chart-view-toggle">
                         <button class="chart-view-btn active" id="btn-view-peso" onclick="setChartViewMode('peso')"><i class="fa-solid fa-weight-hanging" style="margin-right:5px;font-size:0.6rem;opacity:0.8;"></i>Peso</button>
                         <button class="chart-view-btn" id="btn-view-caixas" onclick="setChartViewMode('caixas')"><i class="fa-solid fa-box" style="margin-right:5px;font-size:0.6rem;opacity:0.8;"></i>Caixas</button>
+                        <button class="chart-view-btn" id="btn-view-paradas" onclick="setChartViewMode('paradas')"><i class="fa-solid fa-circle-stop" style="margin-right:5px;font-size:0.6rem;opacity:0.8;"></i>Paradas</button>
                     </div>
                 </div>
                 <div class="chart-canvas-wrapper">
@@ -2350,8 +2351,17 @@
             chartViewMode = mode;
             document.getElementById('btn-view-peso').classList.toggle('active', mode === 'peso');
             document.getElementById('btn-view-caixas').classList.toggle('active', mode === 'caixas');
+            document.getElementById('btn-view-paradas').classList.toggle('active', mode === 'paradas');
             updateKPIs();
             renderChart();
+        }
+
+        function calcParadaHours(p) {
+            if (!p.inicio || !p.fim) return 0;
+            const [hi, mi] = p.inicio.split(':').map(Number);
+            const [hf, mf] = p.fim.split(':').map(Number);
+            const diff = (hf * 60 + mf) - (hi * 60 + mi);
+            return diff > 0 ? diff / 60 : 0;
         }
 
         function renderChart() {
@@ -2397,11 +2407,35 @@
             });
 
             const isCaixasMode = chartViewMode === 'caixas';
+            const isParadasMode = chartViewMode === 'paradas';
+
+            // Build paradas data
+            const dataParadas = labels.map((l, i) => {
+                let ds;
+                if (currentMonthFilter === 0) {
+                    // monthly: sum all days of that month
+                    const y = parseInt(currentYearFilter) || new Date().getFullYear();
+                    let total = 0;
+                    Object.entries(paradasRegistradas).forEach(([date, list]) => {
+                        const d = new Date(date + 'T12:00:00');
+                        if (d.getFullYear() === y && d.getMonth() === i) {
+                            list.forEach(p => { if (paradaAfetaSetor(p.setor, currentSectorFilter)) total += calcParadaHours(p); });
+                        }
+                    });
+                    return total;
+                } else {
+                    ds = `${currentYearFilter}-${String(currentMonthFilter).padStart(2,'0')}-${String(l).padStart(2,'0')}`;
+                    const list = paradasRegistradas[ds];
+                    if (!list) return 0;
+                    return list.reduce((acc, p) => paradaAfetaSetor(p.setor, currentSectorFilter) ? acc + calcParadaHours(p) : acc, 0);
+                }
+            });
 
             // Chart title
             const titleEl = document.getElementById('chart-main-title');
             if (titleEl) {
                 if (isCaixasMode) titleEl.innerText = currentMonthFilter === 0 ? 'Produção Mensal (Caixas)' : 'Produção Diária (Caixas)';
+                else if (isParadasMode) titleEl.innerText = currentMonthFilter === 0 ? 'Horas Paradas por Mês' : 'Horas Paradas por Dia';
                 else titleEl.innerText = currentMonthFilter === 0 ? 'Produção Mensal (KG)' : 'Produção Diária (KG)';
             }
 
@@ -2419,6 +2453,100 @@
 
             // Datasets
             const datasets = [];
+            if (isParadasMode) {
+                let accumH = 0;
+                const dataCumulativaH = dataParadas.map(v => { accumH += v; return accumH; });
+                datasets.push({
+                    label: 'Horas Paradas',
+                    data: dataParadas,
+                    backgroundColor: (ctx2) => '#ef4444',
+                    borderRadius: 4,
+                    order: 2,
+                    yAxisID: 'y',
+                    datalabels: {
+                        display: true, anchor: 'end', align: 'top', offset: 4,
+                        color: '#fff', font: { size: 10, weight: 'bold' },
+                        formatter: v => v > 0 ? v.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + 'h' : ''
+                    }
+                });
+                datasets.push({
+                    type: 'line', label: 'Acumulado (h)',
+                    data: dataCumulativaH,
+                    borderColor: '#fbbf24', backgroundColor: 'rgba(251,191,36,0.08)',
+                    borderWidth: 2, fill: true, tension: 0.3, pointRadius: 2,
+                    order: 1, yAxisID: 'y1', datalabels: { display: false }
+                });
+                if (chartInstance) chartInstance.destroy();
+                chartInstance = new Chart(document.getElementById('dailyProductionChart').getContext('2d'), {
+                    type: 'bar',
+                    data: { labels, datasets },
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        scales: {
+                            x: { grid: { display: false }, ticks: { autoSkip: false, maxRotation: 0, font: { size: 11 }, color: '#a1a1aa' } },
+                            y: { beginAtZero: true, position: 'left', grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#a1a1aa', font: { size: 12 }, callback: v => v + 'h' } },
+                            y1: { beginAtZero: true, position: 'right', grid: { display: false }, ticks: { color: '#fbbf24', font: { size: 12 }, callback: v => v + 'h' } }
+                        },
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                callbacks: {
+                                    title: (items) => {
+                                        if (currentMonthFilter === 0) return items[0].label;
+                                        const day = labels[items[0].dataIndex];
+                                        const ds2 = `${currentYearFilter}-${String(currentMonthFilter).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+                                        const dow = new Date(ds2 + 'T12:00:00').getDay();
+                                        return `Dia ${day} — ${['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'][dow]}`;
+                                    },
+                                    label: (ctx2) => {
+                                        if (ctx2.dataset.label === 'Acumulado (h)') return `  Acumulado: ${ctx2.parsed.y.toLocaleString('pt-BR', {minimumFractionDigits:1,maximumFractionDigits:1})}h`;
+                                        const h = ctx2.parsed.y;
+                                        if (h === 0) return '  Sem paradas';
+                                        const day = labels[ctx2.dataIndex];
+                                        const ds2 = `${currentYearFilter}-${String(currentMonthFilter).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+                                        const list = (paradasRegistradas[ds2] || []).filter(p => paradaAfetaSetor(p.setor, currentSectorFilter));
+                                        const lines = [`  Total: ${h.toLocaleString('pt-BR', {minimumFractionDigits:1,maximumFractionDigits:1})}h`];
+                                        list.forEach(p => lines.push(`  • ${p.setor}: ${p.inicio||'?'}-${p.fim||'?'} (${calcParadaHours(p).toFixed(1)}h)`));
+                                        return lines;
+                                    },
+                                    footer: (items) => {
+                                        if (currentMonthFilter === 0 || items[0].parsed.y === 0) return [];
+                                        return ['Clique direito para ver detalhes.'];
+                                    }
+                                }
+                            },
+                            datalabels: {}
+                        },
+                        onClick: (e, activeElements) => {
+                            if (activeElements.length > 0) {
+                                const day = labels[activeElements[0].index];
+                                const ds2 = `${currentYearFilter}-${String(currentMonthFilter).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+                                const lista = paradasRegistradas[ds2];
+                                if (lista && lista.length > 0) openParadaDetalheModal(ds2);
+                            }
+                        },
+                        interaction: { mode: 'index', intersect: false }
+                    }
+                });
+                // right-click
+                if (currentMonthFilter !== 0) {
+                    const cv = document.getElementById('dailyProductionChart');
+                    cv.removeEventListener('contextmenu', cv._paradaHandler);
+                    cv._paradaHandler = (e) => {
+                        e.preventDefault();
+                        const ch = chartInstance;
+                        if (!ch) return;
+                        const elems = ch.getElementsAtEventForMode(e, 'index', { intersect: false }, true);
+                        if (!elems.length) return;
+                        const day = labels[elems[0].index];
+                        const ds2 = `${currentYearFilter}-${String(currentMonthFilter).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+                        const lista = paradasRegistradas[ds2];
+                        if (lista && lista.length > 0) openParadaDetalheModal(ds2);
+                    };
+                    cv.addEventListener('contextmenu', cv._paradaHandler);
+                }
+                return;
+            }
             if (isCaixasMode) {
                 datasets.push({
                     label: 'Caixas por Dia',
