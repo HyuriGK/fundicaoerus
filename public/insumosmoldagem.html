@@ -304,27 +304,6 @@
             }).filter(lv => lv.nome);
     }
 
-    function renderMachos(machos) {
-        if (!machos.length) return '';
-        return `
-        <div>
-            <div class="insumo-section-title"><i class="fa-solid fa-cube"></i> Machos</div>
-            <table class="insumo-table">
-                <thead><tr>
-                    <th>Macho</th><th>Qtde</th><th>Tipo</th><th>Pintura</th>
-                </tr></thead>
-                <tbody>
-                    ${machos.map(m => `<tr>
-                        <td>${m.nome}</td>
-                        <td>${m.qtde}</td>
-                        <td>${m.tipo}</td>
-                        <td>${m.pintura}</td>
-                    </tr>`).join('')}
-                </tbody>
-            </table>
-        </div>`;
-    }
-
     function renderLuvas(luvas) {
         if (!luvas.length) return '';
         return `
@@ -345,20 +324,15 @@
     }
 
     function renderItem(item, idx) {
-        const machos = parseMachos(item.detalhes_machos);
-        const luvas  = parseLuvas(item.detalhes_luvas);
-        const temInsumos = machos.length > 0 || luvas.length > 0;
+        const luvas = parseLuvas(item.detalhes_luvas);
 
         let insumoContent = '';
         if (!item.tem_ficha) {
             insumoContent = `<span class="tag-sem-ficha"><i class="fa-solid fa-triangle-exclamation"></i> Sem ficha técnica cadastrada</span>`;
-        } else if (!temInsumos) {
-            insumoContent = `<span class="tag-sem-ficha"><i class="fa-solid fa-minus"></i> Sem machos e luvas</span>`;
+        } else if (!luvas.length) {
+            insumoContent = `<span class="tag-sem-ficha"><i class="fa-solid fa-minus"></i> Sem luvas cadastradas</span>`;
         } else {
-            const partes = [];
-            if (machos.length) partes.push(renderMachos(machos));
-            if (luvas.length)  partes.push(renderLuvas(luvas));
-            insumoContent = `<div class="insumos-wrap">${partes.join('')}</div>`;
+            insumoContent = `<div class="insumos-wrap">${renderLuvas(luvas)}</div>`;
         }
 
         return `
@@ -481,19 +455,6 @@
         const c = _corridas[idx];
         if (!c) return;
 
-        function buildMachosRows(str) {
-            if (!str) return '';
-            return str.split('\n').map(l => l.trim()).filter(Boolean).map(l => {
-                const p = l.split(' - ');
-                const nome    = p[0] ? p[0].replace(/^MACHO\s*/i,'').trim() : '';
-                const qtde    = p[1] ? p[1].replace(/^QTDE:\s*/i,'').trim() : '';
-                const tipo    = p[2] ? p[2].replace(/^TIPO:\s*/i,'').trim() : '';
-                const pintura = p[3] ? p[3].replace(/^PINTURA:\s*/i,'').trim() : '';
-                if (!nome) return '';
-                return `<tr><td>${nome}</td><td>${qtde}</td><td>${tipo}</td><td>${pintura}</td></tr>`;
-            }).join('');
-        }
-
         function buildLuvasRows(str) {
             if (!str) return '';
             return str.split('\n').map(l => l.trim()).filter(Boolean).map(l => {
@@ -506,16 +467,8 @@
         }
 
         const itensHTML = c.itens.map((item, i) => {
-            const machosRows = buildMachosRows(item.detalhes_machos);
-            const luvasRows  = buildLuvasRows(item.detalhes_luvas);
-            const semFicha   = !item.tem_ficha;
-
-            const machosTable = machosRows ? `
-                <div class="insumo-block">
-                    <div class="insumo-title">MACHOS</div>
-                    <table><thead><tr><th>Macho</th><th>Qtde</th><th>Tipo</th><th>Pintura</th></tr></thead>
-                    <tbody>${machosRows}</tbody></table>
-                </div>` : '';
+            const luvasRows = buildLuvasRows(item.detalhes_luvas);
+            const semFicha  = !item.tem_ficha;
 
             const luvasTable = luvasRows ? `
                 <div class="insumo-block">
@@ -526,8 +479,8 @@
 
             const semFichaMsg = semFicha
                 ? `<div class="sem-ficha">⚠ Sem ficha técnica cadastrada</div>` : '';
-            const semInsumos = !semFicha && !machosRows && !luvasRows
-                ? `<div class="sem-ficha">— Sem machos e luvas</div>` : '';
+            const semInsumos = !semFicha && !luvasRows
+                ? `<div class="sem-ficha">— Sem luvas cadastradas</div>` : '';
 
             return `
             <div class="item">
@@ -537,7 +490,7 @@
                     <span class="item-cod">${item.produto_pcp || ''}</span>
                     <span class="item-qty">Qtde: <strong>${item.quantidade_programada || 0}</strong></span>
                 </div>
-                ${semFichaMsg}${semInsumos}${machosTable}${luvasTable}
+                ${semFichaMsg}${semInsumos}${luvasTable}
             </div>`;
         }).join('');
 
