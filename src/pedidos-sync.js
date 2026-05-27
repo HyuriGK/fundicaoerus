@@ -83,12 +83,13 @@ router.get('/', async (req, res) => {
         let query;
         if (carteiraOnly === 'true') {
             query = `
-                SELECT 
-                    p.sync_key, 
+                SELECT
+                    p.sync_key,
                     p.data,
                     p.updated_at,
                     f.data_fic,
                     f.pro_codigo_fic AS has_ficha,
+                    f.tipo_moldagem_procedimento,
                     obs.observacao
                 FROM firebird_sync_emissoes p
                 LEFT JOIN ficha_tecnica f ON f.pro_codigo_fic = (p.data->>'PRODUTO_PPR')
@@ -96,7 +97,7 @@ router.get('/', async (req, res) => {
                 WHERE
                     ((p.data->>'QUANTIDADE_PPR')::numeric - COALESCE((p.data->>'QUANTIDADE_FATURADA_PPR')::numeric, 0) - COALESCE((p.data->>'QUANTIDADE_DESISTENCIA_PPR')::numeric, 0)) > 0
                     AND (p.data->>'STATUS_PPR') <> 'C'
-                ORDER BY 
+                ORDER BY
                     (f.pro_codigo_fic IS NOT NULL) DESC,
                     f.data_fic DESC NULLS LAST,
                     p.updated_at DESC
@@ -104,17 +105,18 @@ router.get('/', async (req, res) => {
             `;
         } else {
             query = `
-                SELECT 
-                    p.sync_key, 
+                SELECT
+                    p.sync_key,
                     p.data,
                     p.updated_at,
                     f.data_fic,
                     f.pro_codigo_fic AS has_ficha,
+                    f.tipo_moldagem_procedimento,
                     obs.observacao
                 FROM firebird_sync_emissoes p
                 LEFT JOIN ficha_tecnica f ON f.pro_codigo_fic = (p.data->>'PRODUTO_PPR')
                 LEFT JOIN pedidos_observacoes obs ON obs.sync_key = p.sync_key
-                ORDER BY 
+                ORDER BY
                     (f.pro_codigo_fic IS NOT NULL) DESC,
                     f.data_fic DESC NULLS LAST,
                     p.updated_at DESC
@@ -137,7 +139,8 @@ router.get('/', async (req, res) => {
                 observacao: row.observacao || '',
                 _sync_updated_at: row.updated_at,
                 _data_fic: row.data_fic,
-                _has_ficha: !!row.has_ficha
+                _has_ficha: !!row.has_ficha,
+                _tipo_moldagem_procedimento: row.tipo_moldagem_procedimento || null
             };
             const manualLink = linksMap[row.sync_key];
             if (manualLink) {

@@ -3049,6 +3049,7 @@
             let releasedValue = 0;
             // Stage KPIs (Now detailed by sector)
             let kpiAguardando = { qtd: 0, peso: 0, valor: 0 };
+            let moldagemBreakdown = { 'MOLDAGEM PESADA': 0, 'MOLDAGEM LEVE': 0, 'MOLDAGEM MANUAL': 0, 'OUTROS': 0 };
             let kpiMoldagem = { qtd: 0, peso: 0, valor: 0 };
             let kpiFusao = { qtd: 0, peso: 0, valor: 0 };
             let kpiAcabamento = { qtd: 0, peso: 0, valor: 0 };
@@ -3121,7 +3122,22 @@
                 addKpi(kpiAcabamento, qAcabamento, item.OP_PCS);
                 addKpi(kpiFusao, qFusao, item.OP_PCS);
                 addKpi(kpiMoldagem, qMoldada, item.OP_PCS);
-                addKpi(kpiAguardando, qAguardando, item.OP_PCS);
+                if (qAguardando > 0) {
+                    const cleanedOPAg = String(item.OP_PCS || '').trim();
+                    let alreadyCounted = false;
+                    if (cleanedOPAg && cleanedOPAg !== '-') {
+                        if (!kpiAguardando._processedOPs) kpiAguardando._processedOPs = new Set();
+                        alreadyCounted = kpiAguardando._processedOPs.has(cleanedOPAg);
+                    }
+                    addKpi(kpiAguardando, qAguardando, item.OP_PCS);
+                    if (!alreadyCounted) {
+                        const tmProc = String(item._tipo_moldagem_procedimento || '').trim().toUpperCase();
+                        if (tmProc === 'MOLDAGEM PESADA') moldagemBreakdown['MOLDAGEM PESADA'] += qAguardando;
+                        else if (tmProc === 'MOLDAGEM LEVE') moldagemBreakdown['MOLDAGEM LEVE'] += qAguardando;
+                        else if (tmProc === 'MOLDAGEM MANUAL') moldagemBreakdown['MOLDAGEM MANUAL'] += qAguardando;
+                        else moldagemBreakdown['OUTROS'] += qAguardando;
+                    }
+                }
             });
             // "Blocked" Weight/Value = Total - Released
             const blockedWeight = totalWeight - releasedWeight;
@@ -3176,7 +3192,7 @@
                 peso: kpiFusao.peso + kpiAcabamento.peso + kpiTT_Usinagem.peso + kpiTT_Qualidade.peso + kpiUsinagem.peso + kpiQualidade.peso + kpiExpedicao.peso,
                 valor: kpiFusao.valor + kpiAcabamento.valor + kpiTT_Usinagem.valor + kpiTT_Qualidade.valor + kpiUsinagem.valor + kpiQualidade.valor + kpiExpedicao.valor
             };
-            const formatG = (name, kpi, colorClass) => {
+            const formatG = (name, kpi, colorClass, extraContent = '') => {
                 const valStr = valorVisible ? formatCurrency(kpi.valor) : '-----';
                 const pctValue = totalValue > 0 ? ((kpi.valor / totalValue) * 100).toFixed(1) : '0.0';
                 const pctWeight = totalWeight > 0 ? ((kpi.peso / totalWeight) * 100).toFixed(1) : '0.0';
@@ -3204,10 +3220,42 @@
                             </div>
                         </div>
                     </div>
+                    ${extraContent}
+                `;
+            };
+            const buildMoldagemBreakdownHtml = (breakdown, totalQtd) => {
+                if (totalQtd <= 0) return '';
+                const types = [
+                    { key: 'MOLDAGEM PESADA', label: 'Pesada',  color: '#f97316' },
+                    { key: 'MOLDAGEM LEVE',   label: 'Leve',    color: '#3b82f6' },
+                    { key: 'MOLDAGEM MANUAL', label: 'Manual',  color: '#a855f7' },
+                    { key: 'OUTROS',          label: 'S/ tipo', color: '#6b7280' }
+                ];
+                const bars = types.map(t => {
+                    const qty = breakdown[t.key] || 0;
+                    if (qty <= 0) return '';
+                    const pct = ((qty / totalQtd) * 100).toFixed(1);
+                    return `<div style="flex:${qty};background:${t.color};border-radius:2px;" title="${t.label}: ${pct}% (${formatNumber(qty,0)} pçs)"></div>`;
+                }).join('');
+                const labels = types.map(t => {
+                    const qty = breakdown[t.key] || 0;
+                    if (qty <= 0) return '';
+                    const pct = ((qty / totalQtd) * 100).toFixed(1);
+                    return `<span style="display:flex;align-items:center;gap:3px;font-size:0.6rem;color:#ccc;">
+                        <span style="width:7px;height:7px;border-radius:50%;background:${t.color};flex-shrink:0;"></span>
+                        ${t.label} <span style="font-weight:700;color:#fff;">${pct}%</span>
+                    </span>`;
+                }).join('');
+                return `
+                    <div style="margin-top:8px;border-top:1px solid rgba(255,255,255,0.08);padding-top:7px;">
+                        <span style="font-size:0.58rem;text-transform:uppercase;letter-spacing:0.05em;color:#9ca3af;display:block;margin-bottom:4px;">Tipo de Moldagem a Produzir</span>
+                        <div style="display:flex;gap:2px;height:6px;border-radius:3px;overflow:hidden;margin-bottom:5px;">${bars}</div>
+                        <div style="display:flex;flex-wrap:wrap;gap:5px 10px;">${labels}</div>
+                    </div>
                 `;
             };
             if (document.getElementById('groupAguardandoContent')) 
-                document.getElementById('groupAguardandoContent').innerHTML = formatG('Aguardando Moldagem', kpiAguardando, 'stat-value-accent');
+                document.getElementById('groupAguardandoContent').innerHTML = formatG('Aguardando Moldagem', kpiAguardando, 'stat-value-accent', buildMoldagemBreakdownHtml(moldagemBreakdown, kpiAguardando.qtd));
             if (document.getElementById('groupMoldadoContent')) 
                 document.getElementById('groupMoldadoContent').innerHTML = formatG('FUSÃO', kpiMoldagem, 'stat-value-blue');
             if (document.getElementById('groupFundidoContent')) 
