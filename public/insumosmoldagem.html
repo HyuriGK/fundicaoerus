@@ -489,32 +489,40 @@
 
         // ── SEÇÃO 1: Detalhe por item ─────────────────────────────────
         const itensHTML = c.itens.map((item, i) => {
-            const luvas   = parseLuvasPDF(item.detalhes_luvas);
+            const luvas    = parseLuvasPDF(item.detalhes_luvas);
             const semFicha = !item.tem_ficha;
             const qtdePec  = item.quantidade_programada || 0;
 
             const luvasRows = luvas.map(lv =>
-                `<tr><td>${lv.nome}</td><td style="text-align:center">${lv.qtde}</td><td style="text-align:center">${lv.qtde * qtdePec}</td></tr>`
+                `<tr>
+                    <td>${lv.nome}</td>
+                    <td class="num">${lv.qtde}</td>
+                    <td class="total">${lv.qtde * qtdePec}</td>
+                </tr>`
             ).join('');
 
             const luvasTable = luvasRows ? `
-                <div class="insumo-block">
-                    <table><thead><tr><th>Luva</th><th style="text-align:center">Qtde/peça</th><th style="text-align:center">Total (×${qtdePec})</th></tr></thead>
-                    <tbody>${luvasRows}</tbody></table>
-                </div>` : '';
+                <table>
+                    <thead><tr>
+                        <th>Luva</th>
+                        <th style="text-align:center">Qtde/peça</th>
+                        <th style="text-align:center">Total (×${qtdePec})</th>
+                    </tr></thead>
+                    <tbody>${luvasRows}</tbody>
+                </table>` : '';
 
-            const semFichaMsg = semFicha ? `<div class="sem-ficha">⚠ Sem ficha técnica cadastrada</div>` : '';
-            const semInsumos  = !semFicha && !luvasRows ? `<div class="sem-ficha">— Sem luvas cadastradas</div>` : '';
+            const semFichaMsg = semFicha ? `<div class="sem-ficha">⚠ Sem ficha técnica</div>` : '';
+            const semInsumos  = !semFicha && !luvasRows ? `<div class="sem-ficha">— Sem luvas</div>` : '';
 
             return `
             <div class="item">
                 <div class="item-header">
-                    <span class="item-seq">${item.sequencia || i + 1}</span>
+                    <span class="item-seq">#${item.sequencia || i + 1}</span>
                     <span class="item-nome">${item.nome_pro || '—'}</span>
                     <span class="item-cod">${item.produto_pcp || ''}</span>
-                    <span class="item-qty">Qtde programada: <strong>${qtdePec}</strong></span>
                 </div>
-                ${semFichaMsg}${semInsumos}${luvasTable}
+                <div class="item-meta">Qtde programada: <strong>${qtdePec}</strong></div>
+                <div class="item-body">${semFichaMsg}${semInsumos}${luvasTable}</div>
             </div>`;
         }).join('');
 
@@ -550,49 +558,91 @@
 <title>Corrida ${c.corrida_cor} — Insumos de Moldagem</title>
 <style>
     * { margin:0; padding:0; box-sizing:border-box; }
-    body { font-family: Arial, sans-serif; font-size: 11px; color: #111; background: #fff; padding: 20px; }
-    .cracha { max-width: 780px; margin: 0 auto; }
+    @page { size: A4; margin: 12mm 14mm; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 12px; color: #111; background: #fff; }
+    .cracha { width: 100%; }
 
-    .header { display: flex; align-items: center; justify-content: space-between; border-bottom: 3px solid #111; padding-bottom: 10px; margin-bottom: 14px; }
-    .header-left { display: flex; flex-direction: column; gap: 2px; }
-    .empresa { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #555; }
-    .corrida-num { font-size: 26px; font-weight: 900; letter-spacing: -0.02em; line-height: 1; }
-    .header-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; text-align: right; }
-    .meta-row { font-size: 10px; color: #333; }
-    .meta-row strong { color: #111; }
-    .badge { display: inline-block; background: #111; color: #fff; padding: 2px 8px; border-radius: 3px; font-size: 9px; font-weight: 700; letter-spacing: 0.08em; }
+    /* HEADER */
+    .header {
+        display: flex; align-items: stretch; justify-content: space-between;
+        border: 2px solid #111; border-radius: 6px; overflow: hidden; margin-bottom: 16px;
+    }
+    .header-left { padding: 14px 18px; flex: 1; border-right: 2px solid #111; }
+    .empresa { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: #888; margin-bottom: 4px; }
+    .corrida-num { font-size: 30px; font-weight: 900; letter-spacing: -0.03em; line-height: 1; color: #111; }
+    .corrida-sub { font-size: 10px; color: #555; margin-top: 4px; }
+    .header-right { padding: 14px 18px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px 24px; align-content: center; min-width: 260px; }
+    .meta-item { display: flex; flex-direction: column; gap: 1px; }
+    .meta-lbl { font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #999; }
+    .meta-val { font-size: 12px; font-weight: 700; color: #111; }
+    .badge-forno { display: inline-block; background: #111; color: #fff; padding: 3px 10px; border-radius: 4px; font-size: 11px; font-weight: 800; letter-spacing: 0.06em; }
 
-    .section-label { font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.15em; color: #888; margin: 18px 0 8px; border-bottom: 1px solid #e5e5e5; padding-bottom: 4px; }
+    /* SECTION LABEL */
+    .section-label {
+        font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.2em;
+        color: #888; margin: 16px 0 8px; display: flex; align-items: center; gap: 8px;
+    }
+    .section-label::after { content:''; flex:1; height:1px; background:#ddd; }
 
-    .item { border: 1px solid #ddd; border-radius: 4px; margin-bottom: 8px; overflow: hidden; }
-    .item-header { display: flex; align-items: baseline; gap: 8px; background: #f4f4f4; padding: 7px 10px; border-bottom: 1px solid #ddd; }
-    .item-seq { font-size: 9px; font-weight: 700; color: #888; min-width: 16px; }
-    .item-nome { font-size: 11px; font-weight: 700; flex: 1; }
-    .item-cod { font-size: 9px; color: #888; font-family: monospace; }
-    .item-qty { font-size: 10px; color: #333; white-space: nowrap; }
+    /* ITENS GRID */
+    .itens-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 
-    .sem-ficha { padding: 6px 10px; color: #b91c1c; font-size: 10px; font-weight: 600; background: #fef2f2; }
+    /* ITEM CARD */
+    .item {
+        border: 1px solid #d4d4d4; border-radius: 6px; overflow: hidden;
+        display: flex; flex-direction: column;
+    }
+    .item-header {
+        background: #1a1a1a; color: #fff;
+        padding: 8px 12px; display: flex; align-items: center; gap: 10px;
+    }
+    .item-seq {
+        font-size: 9px; font-weight: 800; color: #fbbf24;
+        border: 1px solid #fbbf24; border-radius: 3px;
+        padding: 1px 5px; white-space: nowrap; flex-shrink: 0;
+    }
+    .item-nome { font-size: 11px; font-weight: 700; flex: 1; line-height: 1.3; color: #fff; }
+    .item-cod { font-size: 9px; color: #999; font-family: monospace; flex-shrink: 0; }
 
-    .insumo-block { padding: 6px 10px; }
+    .item-meta {
+        display: flex; align-items: center; justify-content: flex-end;
+        padding: 5px 12px; background: #f7f7f7; border-bottom: 1px solid #e8e8e8;
+        font-size: 10px; color: #555;
+    }
+    .item-meta strong { color: #111; font-size: 12px; margin-left: 4px; }
+
+    .item-body { padding: 8px 12px; flex: 1; }
+
+    .sem-ficha { color: #b91c1c; font-size: 10px; font-weight: 600; font-style: italic; padding: 4px 0; }
 
     table { width: 100%; border-collapse: collapse; }
-    th { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #555; border-bottom: 1px solid #ddd; padding: 3px 6px; text-align: left; background: #fafafa; }
-    td { font-size: 10px; padding: 4px 6px; border-bottom: 1px solid #f0f0f0; }
+    thead tr { border-bottom: 2px solid #e0e0e0; }
+    th { font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: #666; padding: 4px 6px; text-align: left; }
+    td { font-size: 11px; padding: 4px 6px; border-bottom: 1px solid #f0f0f0; color: #222; }
+    td.num { text-align: center; font-weight: 700; }
+    td.total { text-align: center; font-weight: 800; color: #111; background: #f9f9f9; }
     tr:last-child td { border-bottom: none; }
 
     /* RESUMO ALMOXARIFADO */
-    .resumo-box { border: 2px solid #111; border-radius: 6px; overflow: hidden; margin-top: 20px; }
-    .resumo-title { background: #111; color: #fff; padding: 8px 12px; font-size: 11px; font-weight: 800; letter-spacing: 0.05em; display: flex; justify-content: space-between; align-items: center; }
-    .resumo-box table th { background: #f0f0f0; font-size: 10px; padding: 5px 10px; }
-    .resumo-box table td { font-size: 11px; padding: 6px 10px; }
-    .resumo-box tr:nth-child(even) td { background: #fafafa; }
+    .resumo-box { border: 2.5px solid #111; border-radius: 6px; overflow: hidden; margin-top: 20px; }
+    .resumo-title {
+        background: #111; color: #fff; padding: 10px 16px;
+        font-size: 12px; font-weight: 900; letter-spacing: 0.06em;
+        display: flex; justify-content: space-between; align-items: center;
+    }
+    .resumo-title span:last-child { font-size: 9px; font-weight: 400; color: #aaa; }
+    .resumo-box table { margin: 0; }
+    .resumo-box th { font-size: 9px; padding: 6px 14px; background: #f0f0f0; color: #555; }
+    .resumo-box td { font-size: 13px; padding: 8px 14px; }
+    .resumo-box td.num { font-size: 16px; font-weight: 900; color: #111; }
+    .resumo-box tr:nth-child(even) td { background: #f9f9f9; }
 
-    .footer { margin-top: 16px; padding-top: 8px; border-top: 1px solid #ddd; font-size: 9px; color: #999; display: flex; justify-content: space-between; }
+    .footer { margin-top: 14px; padding-top: 8px; border-top: 1px solid #e0e0e0; font-size: 9px; color: #aaa; display: flex; justify-content: space-between; }
 
     @media print {
-        body { padding: 10mm; }
         .item { break-inside: avoid; }
         .resumo-box { break-inside: avoid; }
+        .itens-grid { break-inside: auto; }
     }
 </style>
 </head><body>
@@ -601,18 +651,27 @@
         <div class="header-left">
             <div class="empresa">Fundição Erus — Insumos de Moldagem</div>
             <div class="corrida-num">Corrida #${c.corrida_cor}</div>
+            <div class="corrida-sub">${c.material_mat || ''}</div>
         </div>
         <div class="header-right">
-            <div><span class="badge">Forno ${c.forno_cor || '?'}</span></div>
-            <div class="meta-row"><strong>Data programada:</strong> ${dataFmt}</div>
-            ${c.material_mat ? `<div class="meta-row"><strong>Material:</strong> ${c.material_mat}</div>` : ''}
-            ${c.peso_cor ? `<div class="meta-row"><strong>Peso corrida:</strong> ${c.peso_cor} kg</div>` : ''}
-            <div class="meta-row"><strong>Itens:</strong> ${c.itens.length}</div>
+            <div class="meta-item">
+                <span class="meta-lbl">Forno</span>
+                <span class="meta-val"><span class="badge-forno">Forno ${c.forno_cor || '?'}</span></span>
+            </div>
+            <div class="meta-item">
+                <span class="meta-lbl">Data programada</span>
+                <span class="meta-val">${dataFmt}</span>
+            </div>
+            ${c.peso_cor ? `<div class="meta-item"><span class="meta-lbl">Peso corrida</span><span class="meta-val">${c.peso_cor} kg</span></div>` : '<div></div>'}
+            <div class="meta-item">
+                <span class="meta-lbl">Itens</span>
+                <span class="meta-val">${c.itens.length}</span>
+            </div>
         </div>
     </div>
 
     <div class="section-label">Detalhe por item</div>
-    ${itensHTML}
+    <div class="itens-grid">${itensHTML}</div>
 
     ${resumoHTML}
 
