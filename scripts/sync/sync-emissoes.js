@@ -91,9 +91,11 @@ async function syncEmissoes() {
             // 1. BUSCAR MAPA DE TODOS OS VÍNCULOS PEDIDO -> OP
             console.log('🔗 Mapeando todos os vínculos Pedido -> OP...');
             const linksQuery = `
-                SELECT PPR_EMPRESA_PCPR, PPR_ANO_PCPR, PPR_CODIGO_PCPR, PPR_ITEM_PCPR, PCP_CODIGO_PCPR
-                FROM PRODUCAO_PEDIDO
-                WHERE PPR_ANO_PCPR IN (2025, 2026)
+                SELECT PP.PPR_EMPRESA_PCPR, PP.PPR_ANO_PCPR, PP.PPR_CODIGO_PCPR, PP.PPR_ITEM_PCPR, PP.PCP_CODIGO_PCPR
+                FROM PRODUCAO_PEDIDO PP
+                JOIN PRODUCAO PR ON PR.CODIGO_PCP = PP.PCP_CODIGO_PCPR AND PR.EMPRESA_PCP = PP.PPR_EMPRESA_PCPR
+                WHERE PP.PPR_ANO_PCPR IN (2025, 2026)
+                  AND PR.STATUS_PCP NOT IN ('C', 'E')
             `;
             const links = await new Promise((resolve, reject) => {
                 db.query(linksQuery, (err, res) => {
