@@ -108,8 +108,17 @@
         .corrida-chip.nitens { border-color: rgba(var(--color-primary-rgb),0.3); color: var(--color-primary); background: rgba(var(--color-primary-rgb),0.06); }
         .corrida-chip.sem-ficha { border-color: rgba(239,68,68,0.3); color: #f87171; background: rgba(239,68,68,0.05); }
 
-        .corrida-toggle { margin-left: auto; color: var(--text-muted); font-size: 0.75rem; transition: transform 0.2s; }
+        .corrida-toggle { color: var(--text-muted); font-size: 0.75rem; transition: transform 0.2s; }
         .corrida-card.open .corrida-toggle { transform: rotate(180deg); }
+
+        .btn-pdf {
+            margin-left: auto;
+            background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.25);
+            color: #f87171; border-radius: 7px; padding: 5px 12px; font-size: 0.72rem;
+            font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 6px;
+            transition: all 0.2s; white-space: nowrap; font-family: 'Inter', sans-serif;
+        }
+        .btn-pdf:hover { background: rgba(239,68,68,0.15); border-color: rgba(239,68,68,0.5); color: #fca5a5; }
 
         /* ITEMS TABLE */
         .corrida-body { display: none; border-top: 1px solid var(--border); }
@@ -388,6 +397,9 @@
                     <span class="corrida-chip nitens"><i class="fa-solid fa-list"></i> ${itens.length} ${itens.length === 1 ? 'item' : 'itens'}</span>
                     ${semFichaChip}
                 </div>
+                <button class="btn-pdf" onclick="event.stopPropagation(); gerarPDF(${idx})">
+                    <i class="fa-solid fa-file-pdf"></i> PDF
+                </button>
                 <i class="fa-solid fa-chevron-down corrida-toggle"></i>
             </div>
             <div class="corrida-body">
@@ -462,7 +474,147 @@
         }
 
         document.getElementById('content').innerHTML =
-            corridas.map((c, i) => renderCorrida(c, i)).filter(Boolean).join('');
+            corridas.map((c) => renderCorrida(c, _corridas.indexOf(c))).filter(Boolean).join('');
+    }
+
+    function gerarPDF(idx) {
+        const c = _corridas[idx];
+        if (!c) return;
+
+        function buildMachosRows(str) {
+            if (!str) return '';
+            return str.split('\n').map(l => l.trim()).filter(Boolean).map(l => {
+                const p = l.split(' - ');
+                const nome    = p[0] ? p[0].replace(/^MACHO\s*/i,'').trim() : '';
+                const qtde    = p[1] ? p[1].replace(/^QTDE:\s*/i,'').trim() : '';
+                const tipo    = p[2] ? p[2].replace(/^TIPO:\s*/i,'').trim() : '';
+                const pintura = p[3] ? p[3].replace(/^PINTURA:\s*/i,'').trim() : '';
+                if (!nome) return '';
+                return `<tr><td>${nome}</td><td>${qtde}</td><td>${tipo}</td><td>${pintura}</td></tr>`;
+            }).join('');
+        }
+
+        function buildLuvasRows(str) {
+            if (!str) return '';
+            return str.split('\n').map(l => l.trim()).filter(Boolean).map(l => {
+                const p = l.split(' - ');
+                const nome = p[0] ? p[0].replace(/^LUVA:\s*/i,'').trim() : '';
+                const qtde = p[1] ? p[1].replace(/^QTDE:\s*/i,'').trim() : '';
+                if (!nome) return '';
+                return `<tr><td>${nome}</td><td>${qtde}</td></tr>`;
+            }).join('');
+        }
+
+        const itensHTML = c.itens.map((item, i) => {
+            const machosRows = buildMachosRows(item.detalhes_machos);
+            const luvasRows  = buildLuvasRows(item.detalhes_luvas);
+            const semFicha   = !item.tem_ficha;
+
+            const machosTable = machosRows ? `
+                <div class="insumo-block">
+                    <div class="insumo-title">MACHOS</div>
+                    <table><thead><tr><th>Macho</th><th>Qtde</th><th>Tipo</th><th>Pintura</th></tr></thead>
+                    <tbody>${machosRows}</tbody></table>
+                </div>` : '';
+
+            const luvasTable = luvasRows ? `
+                <div class="insumo-block">
+                    <div class="insumo-title">LUVAS</div>
+                    <table><thead><tr><th>Luva</th><th>Qtde</th></tr></thead>
+                    <tbody>${luvasRows}</tbody></table>
+                </div>` : '';
+
+            const semFichaMsg = semFicha
+                ? `<div class="sem-ficha">⚠ Sem ficha técnica cadastrada</div>` : '';
+            const semInsumos = !semFicha && !machosRows && !luvasRows
+                ? `<div class="sem-ficha">— Sem machos e luvas</div>` : '';
+
+            return `
+            <div class="item">
+                <div class="item-header">
+                    <span class="item-seq">${item.sequencia || i + 1}</span>
+                    <span class="item-nome">${item.nome_pro || '—'}</span>
+                    <span class="item-cod">${item.produto_pcp || ''}</span>
+                    <span class="item-qty">Qtde: <strong>${item.quantidade_programada || 0}</strong></span>
+                </div>
+                ${semFichaMsg}${semInsumos}${machosTable}${luvasTable}
+            </div>`;
+        }).join('');
+
+        const dataFmt = fmtDate(c.data_cor);
+        const html = `<!DOCTYPE html><html lang="pt-BR"><head>
+<meta charset="UTF-8">
+<title>Corrida ${c.corrida_cor} — Insumos de Moldagem</title>
+<style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family: Arial, sans-serif; font-size: 11px; color: #111; background: #fff; padding: 20px; }
+    .cracha { max-width: 780px; margin: 0 auto; }
+
+    /* CABEÇALHO */
+    .header { display: flex; align-items: center; justify-content: space-between; border-bottom: 3px solid #111; padding-bottom: 10px; margin-bottom: 14px; }
+    .header-left { display: flex; flex-direction: column; gap: 2px; }
+    .empresa { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #555; }
+    .corrida-num { font-size: 26px; font-weight: 900; letter-spacing: -0.02em; line-height: 1; }
+    .header-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; text-align: right; }
+    .meta-row { font-size: 10px; color: #333; }
+    .meta-row strong { color: #111; }
+    .badge { display: inline-block; background: #111; color: #fff; padding: 2px 8px; border-radius: 3px; font-size: 9px; font-weight: 700; letter-spacing: 0.08em; }
+
+    /* ITENS */
+    .item { border: 1px solid #ddd; border-radius: 4px; margin-bottom: 10px; overflow: hidden; }
+    .item-header { display: flex; align-items: baseline; gap: 8px; background: #f4f4f4; padding: 7px 10px; border-bottom: 1px solid #ddd; }
+    .item-seq { font-size: 9px; font-weight: 700; color: #888; min-width: 16px; }
+    .item-nome { font-size: 11px; font-weight: 700; flex: 1; }
+    .item-cod { font-size: 9px; color: #888; font-family: monospace; }
+    .item-qty { font-size: 10px; color: #333; white-space: nowrap; }
+
+    .sem-ficha { padding: 6px 10px; color: #b91c1c; font-size: 10px; font-weight: 600; background: #fef2f2; }
+
+    .insumo-block { padding: 8px 10px; }
+    .insumo-block + .insumo-block { border-top: 1px solid #eee; }
+    .insumo-title { font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.12em; color: #555; margin-bottom: 5px; }
+
+    table { width: 100%; border-collapse: collapse; }
+    th { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #555; border-bottom: 1px solid #ddd; padding: 3px 6px; text-align: left; background: #fafafa; }
+    td { font-size: 10px; padding: 4px 6px; border-bottom: 1px solid #f0f0f0; }
+    tr:last-child td { border-bottom: none; }
+
+    .footer { margin-top: 16px; padding-top: 8px; border-top: 1px solid #ddd; font-size: 9px; color: #999; display: flex; justify-content: space-between; }
+
+    @media print {
+        body { padding: 10mm; }
+        .item { break-inside: avoid; }
+    }
+</style>
+</head><body>
+<div class="cracha">
+    <div class="header">
+        <div class="header-left">
+            <div class="empresa">Fundição Erus — Insumos de Moldagem</div>
+            <div class="corrida-num">Corrida #${c.corrida_cor}</div>
+        </div>
+        <div class="header-right">
+            <div><span class="badge">Forno ${c.forno_cor || '?'}</span></div>
+            <div class="meta-row"><strong>Data:</strong> ${dataFmt}</div>
+            ${c.material_mat ? `<div class="meta-row"><strong>Material:</strong> ${c.material_mat}</div>` : ''}
+            ${c.peso_cor ? `<div class="meta-row"><strong>Peso corrida:</strong> ${c.peso_cor} kg</div>` : ''}
+            <div class="meta-row"><strong>Itens:</strong> ${c.itens.length}</div>
+        </div>
+    </div>
+
+    ${itensHTML}
+
+    <div class="footer">
+        <span>Gerado em ${new Date().toLocaleString('pt-BR')}</span>
+        <span>Fundição Erus</span>
+    </div>
+</div>
+<script>window.onload = () => { window.print(); }<\/script>
+</body></html>`;
+
+        const win = window.open('', '_blank');
+        win.document.write(html);
+        win.document.close();
     }
 
     // Forno filter change re-renders without new fetch
