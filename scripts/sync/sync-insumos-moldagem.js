@@ -98,31 +98,16 @@ async function sync() {
             return String(v).split('T')[0];
         };
 
+        // Batch insert (500 rows per query)
+        const BATCH = 500;
         let inserted = 0;
-        for (const row of rows) {
-            if (!row.CODIGO_COR) continue;
-            try {
-                await pgClient.query(`
-                    INSERT INTO corridas_programadas_sync (
-                        codigo_cor, corrida_cor, data_cor, forno_cor, peso_cor, material_mat,
-                        sequencia_item, produto_pcp, pro_empresa_pcp, nome_pro,
-                        quantidade_programada, quantidade_pcp, peso_pcp, situacao_apontamento
-                    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
-                    ON CONFLICT (codigo_cor, sequencia_item) DO UPDATE SET
-                        corrida_cor = EXCLUDED.corrida_cor,
-                        data_cor = EXCLUDED.data_cor,
-                        forno_cor = EXCLUDED.forno_cor,
-                        peso_cor = EXCLUDED.peso_cor,
-                        material_mat = EXCLUDED.material_mat,
-                        produto_pcp = EXCLUDED.produto_pcp,
-                        pro_empresa_pcp = EXCLUDED.pro_empresa_pcp,
-                        nome_pro = EXCLUDED.nome_pro,
-                        quantidade_programada = EXCLUDED.quantidade_programada,
-                        quantidade_pcp = EXCLUDED.quantidade_pcp,
-                        peso_pcp = EXCLUDED.peso_pcp,
-                        situacao_apontamento = EXCLUDED.situacao_apontamento,
-                        synced_at = NOW()
-                `, [
+
+        for (let i = 0; i < rows.length; i += BATCH) {
+            const chunk = rows.slice(i, i + BATCH);
+            const values = [];
+            const placeholders = chunk.map((row, idx) => {
+                const base = idx * 14;
+                values.push(
                     toInt(row.CODIGO_COR),
                     toStr(row.CORRIDA_COR),
                     toDate(row.DATA_COR),
@@ -137,11 +122,21 @@ async function sync() {
                     toNum(row.QUANTIDADE_PCP),
                     toNum(row.PESO_PCP),
                     toStr(row.SITUACAO_APONTAMENTO_CRPG)
-                ]);
-                inserted++;
-            } catch (e) {
-                console.warn(`⚠️  Erro ao inserir corrida ${row.CODIGO_COR} seq ${row.SEQUENCIA_VAZADA_CRPG}:`, e.message);
-            }
+                );
+                return `($${base+1},$${base+2},$${base+3},$${base+4},$${base+5},$${base+6},$${base+7},$${base+8},$${base+9},$${base+10},$${base+11},$${base+12},$${base+13},$${base+14})`;
+            });
+
+            await pgClient.query(`
+                INSERT INTO corridas_programadas_sync (
+                    codigo_cor, corrida_cor, data_cor, forno_cor, peso_cor, material_mat,
+                    sequencia_item, produto_pcp, pro_empresa_pcp, nome_pro,
+                    quantidade_programada, quantidade_pcp, peso_pcp, situacao_apontamento
+                ) VALUES ${placeholders.join(',')}
+                ON CONFLICT (codigo_cor, sequencia_item) DO NOTHING
+            `, values);
+
+            inserted += chunk.length;
+            console.log(`  ↳ ${inserted}/${rows.length} inseridos...`);
         }
 
         console.log(`✅ ${inserted} registros sincronizados com sucesso`);
