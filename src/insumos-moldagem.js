@@ -39,7 +39,7 @@ router.get('/', async (req, res) => {
                 ft.peso_bolo_fic,
                 ft.qtde_figuras
             FROM corridas_programadas_sync c
-            LEFT JOIN ficha_tecnica ft ON ft.pro_codigo_fic = c.produto_pcp
+            LEFT JOIN ficha_tecnica ft ON ft.pro_codigo_fic = c.produto_pcp::text
             WHERE c.data_cor >= $1::date
               AND c.data_cor <= $2::date
               ${fornoFilter}
