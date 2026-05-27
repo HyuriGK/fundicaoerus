@@ -1234,6 +1234,40 @@
             color: #10b981; /* Emerald */
             border-bottom: 1px solid #10b981;
         }
+        .manual-op-wrap {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            vertical-align: middle;
+        }
+        .manual-op-input {
+            width: 46px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 6px;
+            color: var(--text-main);
+            font-family: var(--font-mono);
+            font-size: 0.78rem;
+            padding: 2px 5px;
+            text-align: center;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .manual-op-input:focus {
+            border-color: var(--color-primary);
+            box-shadow: 0 0 4px rgba(251,191,36,0.25);
+        }
+        .manual-op-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: var(--text-muted);
+            padding: 2px 4px;
+            border-radius: 4px;
+            font-size: 0.78rem;
+            transition: color 0.2s;
+        }
+        .manual-op-btn:hover { color: var(--color-primary); }
         .op-detail-row {
             display: flex;
             justify-content: space-between;
@@ -3003,8 +3037,8 @@
                             ${item.CODIGO_PPR || item.sync_key || '-'}
                         </span>
                         ${item.OP_PCS && item.OP_PCS !== '-' ? `
-                            - 
-                            <span class="clickable-op ${item.LINK_STATUS === 'sugerido' ? 'sugerida' : (item.LINK_STATUS === 'confirmado' ? 'confirmada' : '')}" 
+                            -
+                            <span class="clickable-op ${item.LINK_STATUS === 'sugerido' ? 'sugerida' : (item.LINK_STATUS === 'confirmado' ? 'confirmada' : '')}"
                                   title="${item.LINK_STATUS === 'sugerido' ? 'Sugestão automática por produto' : (item.LINK_STATUS === 'confirmado' ? 'Vínculo confirmado manualmente' : 'Vínculo oficial ERP')}"
                                   onclick='showOPDetails(${JSON.stringify({
                                 op: item.OP_PCS,
@@ -3020,7 +3054,18 @@
                             }).replace(/'/g, "&apos;")})'>
                                 ${item.LINK_STATUS === 'sugerido' ? `<i class="fa-solid fa-wand-magic-sparkles" style="font-size:0.8em; margin-right:4px;"></i>` : ''}${item.OP_PCS}
                             </span>
-                        ` : ''}
+                        ` : `
+                            <span class="manual-op-wrap" onclick="event.stopPropagation()">
+                                <input class="manual-op-input" type="text" maxlength="4" placeholder="OP"
+                                    title="Indicar OP manualmente"
+                                    onkeydown="if(event.key==='Enter'){event.preventDefault();manualLinkOP('${item.sync_key}',this.value,'${(item.NOME_PRODUTO_PPR||item.PRODUTO_PPR||'').replace(/'/g,'').replace(/"/g,'')}','${(item.NOME_CLIENTE||'').replace(/'/g,'').replace(/"/g,'')}','${item.ROTEIRO_PRODUCAO||''}')}"
+                                    oninput="this.value=this.value.replace(/\\D/g,'')">
+                                <button class="manual-op-btn" title="Vincular OP"
+                                    onclick="const inp=this.previousElementSibling;manualLinkOP('${item.sync_key}',inp.value,'${(item.NOME_PRODUTO_PPR||item.PRODUTO_PPR||'').replace(/'/g,'').replace(/"/g,'')}','${(item.NOME_CLIENTE||'').replace(/'/g,'').replace(/"/g,'')}','${item.ROTEIRO_PRODUCAO||''}')">
+                                    <i class="fa-solid fa-link"></i>
+                                </button>
+                            </span>
+                        `}
                         ${blockedHtml}
                     </td>
                     <td style="text-align:center;">${entrega}</td>
@@ -5779,6 +5824,28 @@ function flashConcentracaoBar(barIndex) {
             } catch (err) {
                 console.error(err);
                 showToast("Erro", "Não foi possível processar o vínculo.", "danger");
+            }
+        }
+        async function manualLinkOP(syncKey, opVal, desc, client, route) {
+            const op = String(opVal || '').trim();
+            if (!/^\d{1,5}$/.test(op)) {
+                showToast("OP Inválida", "Digite um número de OP válido (até 4 dígitos).", "danger");
+                return;
+            }
+            try {
+                const res = await fetch('/api/pedidos-op-links/confirm', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sync_key: syncKey, op, status: 'confirmado', user: localStorage.getItem('erus_user') || 'Desconhecido' })
+                });
+                if (!res.ok) throw new Error('Erro ao salvar vínculo');
+                showToast("OP Vinculada", `OP ${op} vinculada com sucesso.`, "success");
+                // Abre imediatamente o modal de andamento da OP
+                await showOPDetails({ op, desc: desc || op, client: client || '-', emission: '-', delivery: '-', originalQty: 0, currentSaldo: 0, route: route || null, linkStatus: 'confirmado', syncKey });
+                setTimeout(() => { loadDataFromServer(); }, 500);
+            } catch (err) {
+                console.error(err);
+                showToast("Erro", "Não foi possível vincular a OP.", "danger");
             }
         }
         // --- EXPORT TO EXCEL ---
