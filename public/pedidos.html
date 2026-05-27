@@ -3052,7 +3052,7 @@
             let releasedValue = 0;
             // Stage KPIs (Now detailed by sector)
             let kpiAguardando = { qtd: 0, peso: 0, valor: 0 };
-            let moldagemBreakdown = { 'MOLDAGEM PESADA': {qtd:0,peso:0}, 'MOLDAGEM LEVE': {qtd:0,peso:0}, 'MOLDAGEM MANUAL': {qtd:0,peso:0}, 'OUTROS': {qtd:0,peso:0} };
+            let moldagemBreakdown = { 'MOLDAGEM PESADA': {qtd:0,peso:0,valor:0}, 'MOLDAGEM LEVE': {qtd:0,peso:0,valor:0}, 'MOLDAGEM MANUAL': {qtd:0,peso:0,valor:0}, 'OUTROS': {qtd:0,peso:0,valor:0} };
             let kpiMoldagem = { qtd: 0, peso: 0, valor: 0 };
             let kpiFusao = { qtd: 0, peso: 0, valor: 0 };
             let kpiAcabamento = { qtd: 0, peso: 0, valor: 0 };
@@ -3136,8 +3136,9 @@
                     if (!alreadyCounted) {
                         const tmProc = String(item._tipo_moldagem_procedimento || '').trim().toUpperCase();
                         const bdKey = (tmProc === 'MOLDAGEM PESADA' || tmProc === 'MOLDAGEM LEVE' || tmProc === 'MOLDAGEM MANUAL') ? tmProc : 'OUTROS';
-                        moldagemBreakdown[bdKey].qtd  += qAguardando;
-                        moldagemBreakdown[bdKey].peso += uW * qAguardando;
+                        moldagemBreakdown[bdKey].qtd   += qAguardando;
+                        moldagemBreakdown[bdKey].peso  += uW * qAguardando;
+                        moldagemBreakdown[bdKey].valor += uP * qAguardando;
                     }
                 }
             });
@@ -3224,46 +3225,55 @@
                     </div>
                 `;
             };
-            const updateMoldagemSubcrowns = (breakdown, kpiAguardando) => {
+            const updateMoldagemSubcrowns = (breakdown, kpiAguardando, totalWeight) => {
                 const types = [
-                    { key: 'MOLDAGEM PESADA', barId: 'barMoldPesada', label: 'Pesada', color: '#f97316' },
-                    { key: 'MOLDAGEM LEVE',   barId: 'barMoldLeve',   label: 'Leve',   color: '#3b82f6' },
-                    { key: 'MOLDAGEM MANUAL', barId: 'barMoldManual', label: 'Manual', color: '#a855f7' },
-                    { key: 'OUTROS',          barId: 'barMoldOutros', label: 'S/ tipo',color: '#6b7280' },
+                    { key: 'MOLDAGEM PESADA', barId: 'barMoldPesada', label: 'Moldagem Pesada', icon: 'fa-industry',      desc: 'Peças aguardando moldagem no setor de moldagem pesada.' },
+                    { key: 'MOLDAGEM LEVE',   barId: 'barMoldLeve',   label: 'Moldagem Leve',   icon: 'fa-cubes',          desc: 'Peças aguardando moldagem no setor de moldagem leve.' },
+                    { key: 'MOLDAGEM MANUAL', barId: 'barMoldManual', label: 'Moldagem Manual', icon: 'fa-hand-sparkles',  desc: 'Peças aguardando moldagem no setor de moldagem manual.' },
+                    { key: 'OUTROS',          barId: 'barMoldOutros', label: 'Sem Tipo',        icon: 'fa-circle-question',desc: 'Peças sem tipo de moldagem cadastrado na ficha técnica.' },
                 ];
-                const totalPeso = kpiAguardando.peso || 0;
-                const totalQtd  = kpiAguardando.qtd  || 0;
-                // Setar largura de cada segmento proporcional ao peso (igual Processos e Qualidade)
+                const groupPeso = kpiAguardando.peso || 0;
                 types.forEach(t => {
                     const bar = document.getElementById(t.barId);
                     if (!bar) return;
-                    const w = totalPeso > 0 ? ((breakdown[t.key].peso / totalPeso) * 100) : 0;
-                    bar.style.width = w + '%';
+                    const d = breakdown[t.key];
+                    const visualPct = groupPeso > 0 ? ((d.peso / groupPeso) * 100) : 0;
+                    const totalPct  = totalWeight > 0 ? ((d.peso / totalWeight) * 100) : 0;
+                    bar.style.width = visualPct.toFixed(1) + '%';
+                    const valContent = valorVisible ? formatCurrency(d.valor) : '-----';
+                    bar.setAttribute('data-tooltip', `
+                        <div class="tooltip-header">
+                            <i class="fa-solid ${t.icon}"></i>
+                            ${t.label}
+                        </div>
+                        <div class="tooltip-row">
+                            <span class="tooltip-label">Representatividade (Total)</span>
+                            <span class="tooltip-value">${totalPct.toFixed(1)}%</span>
+                        </div>
+                        <div class="tooltip-row" style="background:rgba(251,191,36,0.1);border-radius:4px;padding:4px 0;">
+                            <span class="tooltip-label">Saldo no Setor</span>
+                            <span class="tooltip-value" style="font-weight:bold;">${formatNumber(d.qtd, 0)} pçs</span>
+                        </div>
+                        <div class="tooltip-row">
+                            <span class="tooltip-label">Peso Total</span>
+                            <span class="tooltip-value">${formatNumber(d.peso, 0)} kg</span>
+                        </div>
+                        <div class="tooltip-row" style="margin-top:5px;border-top:1px solid rgba(255,255,255,0.05);padding-top:5px;">
+                            <span class="tooltip-label">Valor total (do Saldo)</span>
+                            <span class="tooltip-value" style="color:var(--status-purple)">${valContent}</span>
+                        </div>
+                        <div class="tooltip-footer" style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.1);font-size:0.85rem;line-height:1.4;">
+                            <div style="display:flex;align-items:flex-start;gap:8px;color:rgba(255,255,255,0.7);">
+                                <i class="fa-solid fa-circle-info" style="color:var(--status-cyan);margin-top:2px;"></i>
+                                <span style="font-style:italic;">${t.desc}</span>
+                            </div>
+                        </div>
+                    `);
                 });
-                // Mostrar breakdown dos tipos no conteúdo da coroa (abaixo dos stats totais)
-                const contentEl = document.getElementById('groupAguardandoContent');
-                if (!contentEl) return;
-                const activeTypes = types.filter(t => breakdown[t.key].qtd > 0);
-                if (activeTypes.length === 0) return;
-                const existingBreakdown = contentEl.querySelector('.mold-type-breakdown');
-                if (existingBreakdown) existingBreakdown.remove();
-                const breakdownDiv = document.createElement('div');
-                breakdownDiv.className = 'mold-type-breakdown';
-                breakdownDiv.style.cssText = 'border-top:1px solid rgba(255,255,255,0.07);padding-top:8px;margin-top:4px;display:grid;gap:4px;';
-                breakdownDiv.style.gridTemplateColumns = `repeat(${activeTypes.length}, 1fr)`;
-                breakdownDiv.innerHTML = activeTypes.map(t => {
-                    const pct = totalQtd > 0 ? ((breakdown[t.key].qtd / totalQtd) * 100).toFixed(1) : '0.0';
-                    return `<div style="background:${t.color}14;border:1px solid ${t.color}44;border-radius:8px;padding:7px 8px;display:flex;flex-direction:column;gap:2px;">
-                        <span style="font-size:0.58rem;text-transform:uppercase;letter-spacing:0.06em;color:${t.color};font-weight:700;">${t.label}</span>
-                        <span style="font-family:var(--font-mono);font-size:0.92rem;font-weight:700;color:#fff;">${formatNumber(breakdown[t.key].qtd, 0)} <span style="font-size:0.6rem;color:#9ca3af;font-weight:400;">pçs</span></span>
-                        <span style="font-family:var(--font-mono);font-size:0.7rem;font-weight:700;color:${t.color};">${pct}%</span>
-                    </div>`;
-                }).join('');
-                contentEl.appendChild(breakdownDiv);
             };
             if (document.getElementById('groupAguardandoContent'))
                 document.getElementById('groupAguardandoContent').innerHTML = formatG('Aguardando Moldagem', kpiAguardando, 'stat-value-accent');
-            updateMoldagemSubcrowns(moldagemBreakdown, kpiAguardando);
+            updateMoldagemSubcrowns(moldagemBreakdown, kpiAguardando, totalWeight);
             if (document.getElementById('groupMoldadoContent')) 
                 document.getElementById('groupMoldadoContent').innerHTML = formatG('FUSÃO', kpiMoldagem, 'stat-value-blue');
             if (document.getElementById('groupFundidoContent')) 
