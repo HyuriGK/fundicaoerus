@@ -180,6 +180,19 @@
         .qty-val { font-size: 1.05rem; font-weight: 800; color: #fff; font-family: 'JetBrains Mono', monospace; }
         .qty-label { font-size: 0.58rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); }
 
+        /* DATE SEPARATOR */
+        .date-sep {
+            display: flex; align-items: center; gap: 12px;
+            margin: 20px 0 10px;
+        }
+        .date-sep:first-child { margin-top: 0; }
+        .date-sep-line { flex: 1; height: 1px; background: var(--border); }
+        .date-sep-label {
+            font-size: 0.65rem; font-weight: 800; text-transform: uppercase;
+            letter-spacing: 0.15em; color: var(--color-primary);
+            background: #09090b; padding: 0 4px; white-space: nowrap;
+        }
+
         /* EMPTY / ERROR */
         .empty-state {
             text-align: center; padding: 60px 20px; color: var(--text-muted);
@@ -410,9 +423,9 @@
     function renderAll() {
         const corridas = _corridas;
 
-        const totalItens   = corridas.reduce((s, c) => s + c.itens.length, 0);
-        const comFicha     = corridas.reduce((s, c) => s + c.itens.filter(i => i.tem_ficha).length, 0);
-        const semFicha     = totalItens - comFicha;
+        const totalItens = corridas.reduce((s, c) => s + c.itens.length, 0);
+        const comFicha   = corridas.reduce((s, c) => s + c.itens.filter(i => i.tem_ficha).length, 0);
+        const semFicha   = totalItens - comFicha;
 
         document.getElementById('kpiCorridas').textContent = corridas.length;
         document.getElementById('kpiItens').textContent    = totalItens;
@@ -434,8 +447,29 @@
             return;
         }
 
-        document.getElementById('content').innerHTML =
-            corridas.map((c) => renderCorrida(c, _corridas.indexOf(c))).filter(Boolean).join('');
+        // Agrupa por data_programada, ordem crescente (mais antigo no topo, mais recente embaixo)
+        const byDate = {};
+        for (const c of corridas) {
+            const key = c.data_programada ? String(c.data_programada).split('T')[0] : 'sem-data';
+            if (!byDate[key]) byDate[key] = [];
+            byDate[key].push(c);
+        }
+        const sortedDates = Object.keys(byDate).sort((a, b) => a.localeCompare(b));
+
+        let html = '';
+        for (const dateKey of sortedDates) {
+            const label = dateKey === 'sem-data' ? 'Sem data programada' : fmtDate(dateKey);
+            html += `<div class="date-sep"><div class="date-sep-line"></div><div class="date-sep-label">${label}</div><div class="date-sep-line"></div></div>`;
+            for (const c of byDate[dateKey]) {
+                html += renderCorrida(c, _corridas.indexOf(c));
+            }
+        }
+
+        document.getElementById('content').innerHTML = html;
+
+        // Rola para o final (data mais recente)
+        const el = document.getElementById('content');
+        el.scrollTop = el.scrollHeight;
     }
 
     function gerarPDF(idx) {
