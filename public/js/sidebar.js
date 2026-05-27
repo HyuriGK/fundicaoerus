@@ -188,6 +188,8 @@
                     '<i class="fa-solid fa-display"></i><span>Monitoramento de OPs</span></a>' +
                 '<a href="acabamento_interno.html" class="erus-nav-link' + isActive('acabamento_interno.html') + '">' +
                     '<i class="fa-solid fa-screwdriver-wrench"></i><span>Acabamento Interno</span></a>' +
+                '<a href="insumosmoldagem.html" class="erus-nav-link' + isActive('insumosmoldagem.html') + '">' +
+                    '<i class="fa-solid fa-cubes"></i><span>Insumos de Moldagem</span></a>' +
             '</div>' +
             // FATURAMENTO
             '<div class="erus-nav-group-sep" onclick="erusSidebarToggleGroup(\'eg-faturamento\')">' +
