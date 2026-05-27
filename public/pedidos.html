@@ -1434,33 +1434,15 @@
                 <div class="industrial-progress-container" id="industrialProgressContainer">
                 <div class="industrial-groups-grid">
                     <!-- Group 1: Aguardando -->
-                    <div id="groupAguardandoContainer" class="industrial-group" onclick="filterByStage('aguardando')">
-                        <div id="groupAguardandoContent">
+                    <div id="groupAguardandoContainer" class="industrial-group" style="cursor:default;">
+                        <div id="groupAguardandoContent" onclick="filterByStage('aguardando')" style="cursor:pointer;">
                             <!-- Populated by JS -->
                         </div>
                         <div class="industrial-bar-mini">
-                            <div id="barAguardando" class="bar-segment segment-aguardando" style="width: 0%;"></div>
-                        </div>
-                    </div>
-                    <!-- Group 1b: Moldagem Pesada -->
-                    <div id="groupMoldPesadaContainer" class="industrial-group" style="display:none;border-color:rgba(249,115,22,0.3);" onclick="filterByStage('aguardando')">
-                        <div id="groupMoldPesadaContent"></div>
-                        <div class="industrial-bar-mini">
-                            <div id="barMoldPesada" style="height:100%;background:#f97316;border-radius:10px;width:0%;transition:width 0.6s ease;"></div>
-                        </div>
-                    </div>
-                    <!-- Group 1c: Moldagem Leve -->
-                    <div id="groupMoldLeveContainer" class="industrial-group" style="display:none;border-color:rgba(59,130,246,0.3);" onclick="filterByStage('aguardando')">
-                        <div id="groupMoldLeveContent"></div>
-                        <div class="industrial-bar-mini">
-                            <div id="barMoldLeve" style="height:100%;background:#3b82f6;border-radius:10px;width:0%;transition:width 0.6s ease;"></div>
-                        </div>
-                    </div>
-                    <!-- Group 1d: Moldagem Manual -->
-                    <div id="groupMoldManualContainer" class="industrial-group" style="display:none;border-color:rgba(168,85,247,0.3);" onclick="filterByStage('aguardando')">
-                        <div id="groupMoldManualContent"></div>
-                        <div class="industrial-bar-mini">
-                            <div id="barMoldManual" style="height:100%;background:#a855f7;border-radius:10px;width:0%;transition:width 0.6s ease;"></div>
+                            <div id="barMoldPesada" class="bar-segment" style="background:#f97316;width:0%;" data-tooltip="Moldagem Pesada" onclick="filterByStage('aguardando')"></div>
+                            <div id="barMoldLeve"   class="bar-segment" style="background:#3b82f6;width:0%;" data-tooltip="Moldagem Leve"   onclick="filterByStage('aguardando')"></div>
+                            <div id="barMoldManual" class="bar-segment" style="background:#a855f7;width:0%;" data-tooltip="Moldagem Manual" onclick="filterByStage('aguardando')"></div>
+                            <div id="barMoldOutros" class="bar-segment" style="background:#6b7280;width:0%;" data-tooltip="S/ tipo cadastrado" onclick="filterByStage('aguardando')"></div>
                         </div>
                     </div>
                     <!-- Group 2: Moldado -->
@@ -3070,7 +3052,7 @@
             let releasedValue = 0;
             // Stage KPIs (Now detailed by sector)
             let kpiAguardando = { qtd: 0, peso: 0, valor: 0 };
-            let moldagemBreakdown = { 'MOLDAGEM PESADA': 0, 'MOLDAGEM LEVE': 0, 'MOLDAGEM MANUAL': 0, 'OUTROS': 0 };
+            let moldagemBreakdown = { 'MOLDAGEM PESADA': {qtd:0,peso:0}, 'MOLDAGEM LEVE': {qtd:0,peso:0}, 'MOLDAGEM MANUAL': {qtd:0,peso:0}, 'OUTROS': {qtd:0,peso:0} };
             let kpiMoldagem = { qtd: 0, peso: 0, valor: 0 };
             let kpiFusao = { qtd: 0, peso: 0, valor: 0 };
             let kpiAcabamento = { qtd: 0, peso: 0, valor: 0 };
@@ -3153,10 +3135,9 @@
                     addKpi(kpiAguardando, qAguardando, item.OP_PCS);
                     if (!alreadyCounted) {
                         const tmProc = String(item._tipo_moldagem_procedimento || '').trim().toUpperCase();
-                        if (tmProc === 'MOLDAGEM PESADA') moldagemBreakdown['MOLDAGEM PESADA'] += qAguardando;
-                        else if (tmProc === 'MOLDAGEM LEVE') moldagemBreakdown['MOLDAGEM LEVE'] += qAguardando;
-                        else if (tmProc === 'MOLDAGEM MANUAL') moldagemBreakdown['MOLDAGEM MANUAL'] += qAguardando;
-                        else moldagemBreakdown['OUTROS'] += qAguardando;
+                        const bdKey = (tmProc === 'MOLDAGEM PESADA' || tmProc === 'MOLDAGEM LEVE' || tmProc === 'MOLDAGEM MANUAL') ? tmProc : 'OUTROS';
+                        moldagemBreakdown[bdKey].qtd  += qAguardando;
+                        moldagemBreakdown[bdKey].peso += uW * qAguardando;
                     }
                 }
             });
@@ -3243,41 +3224,46 @@
                     </div>
                 `;
             };
-            const updateMoldagemSubcrowns = (breakdown, totalQtd) => {
+            const updateMoldagemSubcrowns = (breakdown, kpiAguardando) => {
                 const types = [
-                    { key: 'MOLDAGEM PESADA', containerId: 'groupMoldPesadaContainer', contentId: 'groupMoldPesadaContent', barId: 'barMoldPesada', label: 'Moldagem Pesada', color: '#f97316' },
-                    { key: 'MOLDAGEM LEVE',   containerId: 'groupMoldLeveContainer',   contentId: 'groupMoldLeveContent',   barId: 'barMoldLeve',   label: 'Moldagem Leve',   color: '#3b82f6' },
-                    { key: 'MOLDAGEM MANUAL', containerId: 'groupMoldManualContainer', contentId: 'groupMoldManualContent', barId: 'barMoldManual', label: 'Moldagem Manual', color: '#a855f7' },
+                    { key: 'MOLDAGEM PESADA', barId: 'barMoldPesada', label: 'Pesada', color: '#f97316' },
+                    { key: 'MOLDAGEM LEVE',   barId: 'barMoldLeve',   label: 'Leve',   color: '#3b82f6' },
+                    { key: 'MOLDAGEM MANUAL', barId: 'barMoldManual', label: 'Manual', color: '#a855f7' },
+                    { key: 'OUTROS',          barId: 'barMoldOutros', label: 'S/ tipo',color: '#6b7280' },
                 ];
+                const totalPeso = kpiAguardando.peso || 0;
+                const totalQtd  = kpiAguardando.qtd  || 0;
+                // Setar largura de cada segmento proporcional ao peso (igual Processos e Qualidade)
                 types.forEach(t => {
-                    const container = document.getElementById(t.containerId);
-                    const content   = document.getElementById(t.contentId);
-                    const bar       = document.getElementById(t.barId);
-                    if (!container) return;
-                    const qty = breakdown[t.key] || 0;
-                    if (qty <= 0) { container.style.display = 'none'; return; }
-                    const pct = totalQtd > 0 ? ((qty / totalQtd) * 100).toFixed(1) : '0.0';
-                    container.style.display = 'flex';
-                    content.innerHTML = `
-                        <div class="group-header">
-                            <span class="group-name" style="color:${t.color};font-size:0.78rem;">${t.label}</span>
-                            <span class="group-badge-pct" style="background:rgba(0,0,0,0.2);color:${t.color};border-color:${t.color}33;font-size:0.65rem;">${pct}%</span>
-                        </div>
-                        <div style="flex-grow:1;display:flex;align-items:center;">
-                            <div class="group-stats-grid">
-                                <div class="group-stat-item group-stat-full" style="border-top:none;padding-top:0;margin-top:0;">
-                                    <span class="stat-label-mini">Quantidade</span>
-                                    <span class="stat-value-mini" style="color:${t.color};">${formatNumber(qty, 0)} pçs</span>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                    if (bar) bar.style.width = pct + '%';
+                    const bar = document.getElementById(t.barId);
+                    if (!bar) return;
+                    const w = totalPeso > 0 ? ((breakdown[t.key].peso / totalPeso) * 100) : 0;
+                    bar.style.width = w + '%';
                 });
+                // Mostrar breakdown dos tipos no conteúdo da coroa (abaixo dos stats totais)
+                const contentEl = document.getElementById('groupAguardandoContent');
+                if (!contentEl) return;
+                const activeTypes = types.filter(t => breakdown[t.key].qtd > 0);
+                if (activeTypes.length === 0) return;
+                const existingBreakdown = contentEl.querySelector('.mold-type-breakdown');
+                if (existingBreakdown) existingBreakdown.remove();
+                const breakdownDiv = document.createElement('div');
+                breakdownDiv.className = 'mold-type-breakdown';
+                breakdownDiv.style.cssText = 'border-top:1px solid rgba(255,255,255,0.07);padding-top:8px;margin-top:4px;display:grid;gap:4px;';
+                breakdownDiv.style.gridTemplateColumns = `repeat(${activeTypes.length}, 1fr)`;
+                breakdownDiv.innerHTML = activeTypes.map(t => {
+                    const pct = totalQtd > 0 ? ((breakdown[t.key].qtd / totalQtd) * 100).toFixed(1) : '0.0';
+                    return `<div style="background:${t.color}14;border:1px solid ${t.color}44;border-radius:8px;padding:7px 8px;display:flex;flex-direction:column;gap:2px;">
+                        <span style="font-size:0.58rem;text-transform:uppercase;letter-spacing:0.06em;color:${t.color};font-weight:700;">${t.label}</span>
+                        <span style="font-family:var(--font-mono);font-size:0.92rem;font-weight:700;color:#fff;">${formatNumber(breakdown[t.key].qtd, 0)} <span style="font-size:0.6rem;color:#9ca3af;font-weight:400;">pçs</span></span>
+                        <span style="font-family:var(--font-mono);font-size:0.7rem;font-weight:700;color:${t.color};">${pct}%</span>
+                    </div>`;
+                }).join('');
+                contentEl.appendChild(breakdownDiv);
             };
             if (document.getElementById('groupAguardandoContent'))
                 document.getElementById('groupAguardandoContent').innerHTML = formatG('Aguardando Moldagem', kpiAguardando, 'stat-value-accent');
-            updateMoldagemSubcrowns(moldagemBreakdown, kpiAguardando.qtd);
+            updateMoldagemSubcrowns(moldagemBreakdown, kpiAguardando);
             if (document.getElementById('groupMoldadoContent')) 
                 document.getElementById('groupMoldadoContent').innerHTML = formatG('FUSÃO', kpiMoldagem, 'stat-value-blue');
             if (document.getElementById('groupFundidoContent')) 
@@ -3285,7 +3271,6 @@
             // 3. Update all segments. 
             // Denominator 1 (groupWeight) = for Visual Width (fill the bar)
             // Denominator 2 (totalWeight) = for Tooltip Label (representativity vs Total)
-            updateStageCard('kpiAguardando', kpiAguardando, kpiAguardando.peso, totalWeight);
             updateStageCard('kpiMoldagem', kpiMoldagem, kpiMoldagem.peso, totalWeight);
             updateStageCard('kpiFusao', kpiFusao, fundidoGroup.peso, totalWeight);
             updateStageCard('kpiAcabamento', kpiAcabamento, fundidoGroup.peso, totalWeight);
