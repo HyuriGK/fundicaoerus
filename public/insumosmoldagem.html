@@ -442,32 +442,35 @@
         const c = _corridas[idx];
         if (!c) return;
 
-        function buildLuvasRows(str) {
-            if (!str) return '';
+        // Parse luvas string → [{nome, qtde}]
+        function parseLuvasPDF(str) {
+            if (!str) return [];
             return str.split('\n').map(l => l.trim()).filter(Boolean).map(l => {
                 const p = l.split(' - ');
                 const nome = p[0] ? p[0].replace(/^LUVA:\s*/i,'').trim() : '';
-                const qtde = p[1] ? p[1].replace(/^QTDE:\s*/i,'').trim() : '';
-                if (!nome) return '';
-                return `<tr><td>${nome}</td><td>${qtde}</td></tr>`;
-            }).join('');
+                const qtde = p[1] ? parseInt(p[1].replace(/^QTDE:\s*/i,'').trim()) || 0 : 0;
+                return nome ? { nome, qtde } : null;
+            }).filter(Boolean);
         }
 
+        // ── SEÇÃO 1: Detalhe por item ─────────────────────────────────
         const itensHTML = c.itens.map((item, i) => {
-            const luvasRows = buildLuvasRows(item.detalhes_luvas);
-            const semFicha  = !item.tem_ficha;
+            const luvas   = parseLuvasPDF(item.detalhes_luvas);
+            const semFicha = !item.tem_ficha;
+            const qtdePec  = item.quantidade_programada || 0;
+
+            const luvasRows = luvas.map(lv =>
+                `<tr><td>${lv.nome}</td><td style="text-align:center">${lv.qtde}</td><td style="text-align:center">${lv.qtde * qtdePec}</td></tr>`
+            ).join('');
 
             const luvasTable = luvasRows ? `
                 <div class="insumo-block">
-                    <div class="insumo-title">LUVAS</div>
-                    <table><thead><tr><th>Luva</th><th>Qtde</th></tr></thead>
+                    <table><thead><tr><th>Luva</th><th style="text-align:center">Qtde/peça</th><th style="text-align:center">Total (×${qtdePec})</th></tr></thead>
                     <tbody>${luvasRows}</tbody></table>
                 </div>` : '';
 
-            const semFichaMsg = semFicha
-                ? `<div class="sem-ficha">⚠ Sem ficha técnica cadastrada</div>` : '';
-            const semInsumos = !semFicha && !luvasRows
-                ? `<div class="sem-ficha">— Sem luvas cadastradas</div>` : '';
+            const semFichaMsg = semFicha ? `<div class="sem-ficha">⚠ Sem ficha técnica cadastrada</div>` : '';
+            const semInsumos  = !semFicha && !luvasRows ? `<div class="sem-ficha">— Sem luvas cadastradas</div>` : '';
 
             return `
             <div class="item">
@@ -475,11 +478,37 @@
                     <span class="item-seq">${item.sequencia || i + 1}</span>
                     <span class="item-nome">${item.nome_pro || '—'}</span>
                     <span class="item-cod">${item.produto_pcp || ''}</span>
-                    <span class="item-qty">Qtde: <strong>${item.quantidade_programada || 0}</strong></span>
+                    <span class="item-qty">Qtde programada: <strong>${qtdePec}</strong></span>
                 </div>
                 ${semFichaMsg}${semInsumos}${luvasTable}
             </div>`;
         }).join('');
+
+        // ── SEÇÃO 2: Resumo almoxarifado — agrupa e soma todas as luvas ──
+        const luvaTotals = {};
+        for (const item of c.itens) {
+            const luvas  = parseLuvasPDF(item.detalhes_luvas);
+            const qtdePec = item.quantidade_programada || 0;
+            for (const lv of luvas) {
+                luvaTotals[lv.nome] = (luvaTotals[lv.nome] || 0) + lv.qtde * qtdePec;
+            }
+        }
+        const resumoRows = Object.entries(luvaTotals)
+            .sort((a, b) => a[0].localeCompare(b[0]))
+            .map(([nome, total]) => `<tr><td>${nome}</td><td style="text-align:center;font-weight:700;font-size:12px">${total}</td></tr>`)
+            .join('');
+
+        const resumoHTML = resumoRows ? `
+        <div class="resumo-box">
+            <div class="resumo-title">
+                <span>▣ RESUMO PARA ALMOXARIFADO</span>
+                <span style="font-size:9px;font-weight:400;color:#555">Total de luvas a separar para esta corrida</span>
+            </div>
+            <table>
+                <thead><tr><th>Luva</th><th style="text-align:center">Quantidade total</th></tr></thead>
+                <tbody>${resumoRows}</tbody>
+            </table>
+        </div>` : '';
 
         const dataFmt = fmtDate(c.data_programada);
         const html = `<!DOCTYPE html><html lang="pt-BR"><head>
@@ -490,7 +519,6 @@
     body { font-family: Arial, sans-serif; font-size: 11px; color: #111; background: #fff; padding: 20px; }
     .cracha { max-width: 780px; margin: 0 auto; }
 
-    /* CABEÇALHO */
     .header { display: flex; align-items: center; justify-content: space-between; border-bottom: 3px solid #111; padding-bottom: 10px; margin-bottom: 14px; }
     .header-left { display: flex; flex-direction: column; gap: 2px; }
     .empresa { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #555; }
@@ -500,8 +528,9 @@
     .meta-row strong { color: #111; }
     .badge { display: inline-block; background: #111; color: #fff; padding: 2px 8px; border-radius: 3px; font-size: 9px; font-weight: 700; letter-spacing: 0.08em; }
 
-    /* ITENS */
-    .item { border: 1px solid #ddd; border-radius: 4px; margin-bottom: 10px; overflow: hidden; }
+    .section-label { font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.15em; color: #888; margin: 18px 0 8px; border-bottom: 1px solid #e5e5e5; padding-bottom: 4px; }
+
+    .item { border: 1px solid #ddd; border-radius: 4px; margin-bottom: 8px; overflow: hidden; }
     .item-header { display: flex; align-items: baseline; gap: 8px; background: #f4f4f4; padding: 7px 10px; border-bottom: 1px solid #ddd; }
     .item-seq { font-size: 9px; font-weight: 700; color: #888; min-width: 16px; }
     .item-nome { font-size: 11px; font-weight: 700; flex: 1; }
@@ -510,20 +539,26 @@
 
     .sem-ficha { padding: 6px 10px; color: #b91c1c; font-size: 10px; font-weight: 600; background: #fef2f2; }
 
-    .insumo-block { padding: 8px 10px; }
-    .insumo-block + .insumo-block { border-top: 1px solid #eee; }
-    .insumo-title { font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.12em; color: #555; margin-bottom: 5px; }
+    .insumo-block { padding: 6px 10px; }
 
     table { width: 100%; border-collapse: collapse; }
     th { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #555; border-bottom: 1px solid #ddd; padding: 3px 6px; text-align: left; background: #fafafa; }
     td { font-size: 10px; padding: 4px 6px; border-bottom: 1px solid #f0f0f0; }
     tr:last-child td { border-bottom: none; }
 
+    /* RESUMO ALMOXARIFADO */
+    .resumo-box { border: 2px solid #111; border-radius: 6px; overflow: hidden; margin-top: 20px; }
+    .resumo-title { background: #111; color: #fff; padding: 8px 12px; font-size: 11px; font-weight: 800; letter-spacing: 0.05em; display: flex; justify-content: space-between; align-items: center; }
+    .resumo-box table th { background: #f0f0f0; font-size: 10px; padding: 5px 10px; }
+    .resumo-box table td { font-size: 11px; padding: 6px 10px; }
+    .resumo-box tr:nth-child(even) td { background: #fafafa; }
+
     .footer { margin-top: 16px; padding-top: 8px; border-top: 1px solid #ddd; font-size: 9px; color: #999; display: flex; justify-content: space-between; }
 
     @media print {
         body { padding: 10mm; }
         .item { break-inside: avoid; }
+        .resumo-box { break-inside: avoid; }
     }
 </style>
 </head><body>
@@ -535,14 +570,17 @@
         </div>
         <div class="header-right">
             <div><span class="badge">Forno ${c.forno_cor || '?'}</span></div>
-            <div class="meta-row"><strong>Data:</strong> ${dataFmt}</div>
+            <div class="meta-row"><strong>Data programada:</strong> ${dataFmt}</div>
             ${c.material_mat ? `<div class="meta-row"><strong>Material:</strong> ${c.material_mat}</div>` : ''}
             ${c.peso_cor ? `<div class="meta-row"><strong>Peso corrida:</strong> ${c.peso_cor} kg</div>` : ''}
             <div class="meta-row"><strong>Itens:</strong> ${c.itens.length}</div>
         </div>
     </div>
 
+    <div class="section-label">Detalhe por item</div>
     ${itensHTML}
+
+    ${resumoHTML}
 
     <div class="footer">
         <span>Gerado em ${new Date().toLocaleString('pt-BR')}</span>
