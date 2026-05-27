@@ -1438,6 +1438,7 @@
                         <div id="groupAguardandoContent">
                             <!-- Populated by JS -->
                         </div>
+                        <div id="groupMoldagemSubcrowns" style="display:none;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:2px;"></div>
                         <div class="industrial-bar-mini">
                             <div id="barAguardando" class="bar-segment segment-aguardando" style="width: 0%;"></div>
                         </div>
@@ -3192,7 +3193,7 @@
                 peso: kpiFusao.peso + kpiAcabamento.peso + kpiTT_Usinagem.peso + kpiTT_Qualidade.peso + kpiUsinagem.peso + kpiQualidade.peso + kpiExpedicao.peso,
                 valor: kpiFusao.valor + kpiAcabamento.valor + kpiTT_Usinagem.valor + kpiTT_Qualidade.valor + kpiUsinagem.valor + kpiQualidade.valor + kpiExpedicao.valor
             };
-            const formatG = (name, kpi, colorClass, extraContent = '') => {
+            const formatG = (name, kpi, colorClass) => {
                 const valStr = valorVisible ? formatCurrency(kpi.valor) : '-----';
                 const pctValue = totalValue > 0 ? ((kpi.valor / totalValue) * 100).toFixed(1) : '0.0';
                 const pctWeight = totalWeight > 0 ? ((kpi.peso / totalWeight) * 100).toFixed(1) : '0.0';
@@ -3220,37 +3221,35 @@
                             </div>
                         </div>
                     </div>
-                    ${extraContent}
                 `;
             };
-            const buildMoldagemBreakdownHtml = (breakdown, totalQtd) => {
-                if (totalQtd <= 0) return '';
+            const updateMoldagemSubcrowns = (breakdown, totalQtd) => {
+                const el = document.getElementById('groupMoldagemSubcrowns');
+                if (!el) return;
                 const types = [
-                    { key: 'MOLDAGEM PESADA', label: 'Pesada',  color: '#f97316', bg: 'rgba(249,115,22,0.1)', border: 'rgba(249,115,22,0.25)' },
-                    { key: 'MOLDAGEM LEVE',   label: 'Leve',    color: '#3b82f6', bg: 'rgba(59,130,246,0.1)',  border: 'rgba(59,130,246,0.25)'  },
-                    { key: 'MOLDAGEM MANUAL', label: 'Manual',  color: '#a855f7', bg: 'rgba(168,85,247,0.1)', border: 'rgba(168,85,247,0.25)'  },
-                    { key: 'OUTROS',          label: 'S/ tipo', color: '#6b7280', bg: 'rgba(107,114,128,0.1)',border: 'rgba(107,114,128,0.25)' }
+                    { key: 'MOLDAGEM PESADA', label: 'M. Pesada', color: '#f97316', bg: 'rgba(249,115,22,0.08)', border: 'rgba(249,115,22,0.3)' },
+                    { key: 'MOLDAGEM LEVE',   label: 'M. Leve',   color: '#3b82f6', bg: 'rgba(59,130,246,0.08)',  border: 'rgba(59,130,246,0.3)'  },
+                    { key: 'MOLDAGEM MANUAL', label: 'M. Manual', color: '#a855f7', bg: 'rgba(168,85,247,0.08)', border: 'rgba(168,85,247,0.3)'  },
+                    { key: 'OUTROS',          label: 'S/ tipo',   color: '#6b7280', bg: 'rgba(107,114,128,0.08)',border: 'rgba(107,114,128,0.3)' }
                 ];
-                const cards = types.map(t => {
-                    const qty = breakdown[t.key] || 0;
-                    if (qty <= 0) return '';
-                    const pct = ((qty / totalQtd) * 100).toFixed(1);
+                const active = types.filter(t => (breakdown[t.key] || 0) > 0);
+                if (active.length === 0) { el.style.display = 'none'; return; }
+                el.style.display = 'grid';
+                el.style.gridTemplateColumns = `repeat(${active.length}, 1fr)`;
+                el.innerHTML = active.map(t => {
+                    const qty = breakdown[t.key];
+                    const pct = totalQtd > 0 ? ((qty / totalQtd) * 100).toFixed(1) : '0.0';
                     return `
-                        <div style="flex:1;min-width:0;background:${t.bg};border:1px solid ${t.border};border-radius:10px;padding:8px 10px;display:flex;flex-direction:column;gap:3px;">
-                            <span style="font-size:0.58rem;text-transform:uppercase;letter-spacing:0.06em;color:${t.color};font-weight:700;">${t.label}</span>
-                            <span style="font-family:var(--font-mono);font-size:1rem;font-weight:700;color:#fff;letter-spacing:-0.02em;">${formatNumber(qty, 0)}<span style="font-size:0.65rem;color:#9ca3af;font-weight:400;margin-left:2px;">pçs</span></span>
-                            <span style="font-family:var(--font-mono);font-size:0.72rem;font-weight:700;color:${t.color};">${pct}%</span>
+                        <div style="background:${t.bg};border:1px solid ${t.border};border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:4px;box-shadow:0 2px 8px rgba(0,0,0,0.3);">
+                            <span style="font-size:0.6rem;text-transform:uppercase;letter-spacing:0.07em;color:${t.color};font-weight:700;">${t.label}</span>
+                            <span style="font-family:var(--font-mono);font-size:1.05rem;font-weight:700;color:#fff;letter-spacing:-0.02em;">${formatNumber(qty, 0)} <span style="font-size:0.62rem;color:#9ca3af;font-weight:400;">pçs</span></span>
+                            <span style="font-family:var(--font-mono);font-size:0.78rem;font-weight:700;color:${t.color};">${pct}%</span>
                         </div>`;
                 }).join('');
-                return `
-                    <div style="margin-top:8px;border-top:1px solid rgba(255,255,255,0.08);padding-top:8px;">
-                        <span style="font-size:0.58rem;text-transform:uppercase;letter-spacing:0.05em;color:#9ca3af;display:block;margin-bottom:6px;">Tipo de Moldagem a Produzir</span>
-                        <div style="display:flex;gap:6px;">${cards}</div>
-                    </div>
-                `;
             };
-            if (document.getElementById('groupAguardandoContent')) 
-                document.getElementById('groupAguardandoContent').innerHTML = formatG('Aguardando Moldagem', kpiAguardando, 'stat-value-accent', buildMoldagemBreakdownHtml(moldagemBreakdown, kpiAguardando.qtd));
+            if (document.getElementById('groupAguardandoContent'))
+                document.getElementById('groupAguardandoContent').innerHTML = formatG('Aguardando Moldagem', kpiAguardando, 'stat-value-accent');
+            updateMoldagemSubcrowns(moldagemBreakdown, kpiAguardando.qtd);
             if (document.getElementById('groupMoldadoContent')) 
                 document.getElementById('groupMoldadoContent').innerHTML = formatG('FUSÃO', kpiMoldagem, 'stat-value-blue');
             if (document.getElementById('groupFundidoContent')) 
