@@ -1438,9 +1438,29 @@
                         <div id="groupAguardandoContent">
                             <!-- Populated by JS -->
                         </div>
-                        <div id="groupMoldagemSubcrowns" style="display:none;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:2px;"></div>
                         <div class="industrial-bar-mini">
                             <div id="barAguardando" class="bar-segment segment-aguardando" style="width: 0%;"></div>
+                        </div>
+                    </div>
+                    <!-- Group 1b: Moldagem Pesada -->
+                    <div id="groupMoldPesadaContainer" class="industrial-group" style="display:none;border-color:rgba(249,115,22,0.3);" onclick="filterByStage('aguardando')">
+                        <div id="groupMoldPesadaContent"></div>
+                        <div class="industrial-bar-mini">
+                            <div id="barMoldPesada" style="height:100%;background:#f97316;border-radius:10px;width:0%;transition:width 0.6s ease;"></div>
+                        </div>
+                    </div>
+                    <!-- Group 1c: Moldagem Leve -->
+                    <div id="groupMoldLeveContainer" class="industrial-group" style="display:none;border-color:rgba(59,130,246,0.3);" onclick="filterByStage('aguardando')">
+                        <div id="groupMoldLeveContent"></div>
+                        <div class="industrial-bar-mini">
+                            <div id="barMoldLeve" style="height:100%;background:#3b82f6;border-radius:10px;width:0%;transition:width 0.6s ease;"></div>
+                        </div>
+                    </div>
+                    <!-- Group 1d: Moldagem Manual -->
+                    <div id="groupMoldManualContainer" class="industrial-group" style="display:none;border-color:rgba(168,85,247,0.3);" onclick="filterByStage('aguardando')">
+                        <div id="groupMoldManualContent"></div>
+                        <div class="industrial-bar-mini">
+                            <div id="barMoldManual" style="height:100%;background:#a855f7;border-radius:10px;width:0%;transition:width 0.6s ease;"></div>
                         </div>
                     </div>
                     <!-- Group 2: Moldado -->
@@ -3224,28 +3244,36 @@
                 `;
             };
             const updateMoldagemSubcrowns = (breakdown, totalQtd) => {
-                const el = document.getElementById('groupMoldagemSubcrowns');
-                if (!el) return;
                 const types = [
-                    { key: 'MOLDAGEM PESADA', label: 'M. Pesada', color: '#f97316', bg: 'rgba(249,115,22,0.08)', border: 'rgba(249,115,22,0.3)' },
-                    { key: 'MOLDAGEM LEVE',   label: 'M. Leve',   color: '#3b82f6', bg: 'rgba(59,130,246,0.08)',  border: 'rgba(59,130,246,0.3)'  },
-                    { key: 'MOLDAGEM MANUAL', label: 'M. Manual', color: '#a855f7', bg: 'rgba(168,85,247,0.08)', border: 'rgba(168,85,247,0.3)'  },
-                    { key: 'OUTROS',          label: 'S/ tipo',   color: '#6b7280', bg: 'rgba(107,114,128,0.08)',border: 'rgba(107,114,128,0.3)' }
+                    { key: 'MOLDAGEM PESADA', containerId: 'groupMoldPesadaContainer', contentId: 'groupMoldPesadaContent', barId: 'barMoldPesada', label: 'Moldagem Pesada', color: '#f97316' },
+                    { key: 'MOLDAGEM LEVE',   containerId: 'groupMoldLeveContainer',   contentId: 'groupMoldLeveContent',   barId: 'barMoldLeve',   label: 'Moldagem Leve',   color: '#3b82f6' },
+                    { key: 'MOLDAGEM MANUAL', containerId: 'groupMoldManualContainer', contentId: 'groupMoldManualContent', barId: 'barMoldManual', label: 'Moldagem Manual', color: '#a855f7' },
                 ];
-                const active = types.filter(t => (breakdown[t.key] || 0) > 0);
-                if (active.length === 0) { el.style.display = 'none'; return; }
-                el.style.display = 'grid';
-                el.style.gridTemplateColumns = `repeat(${active.length}, 1fr)`;
-                el.innerHTML = active.map(t => {
-                    const qty = breakdown[t.key];
+                types.forEach(t => {
+                    const container = document.getElementById(t.containerId);
+                    const content   = document.getElementById(t.contentId);
+                    const bar       = document.getElementById(t.barId);
+                    if (!container) return;
+                    const qty = breakdown[t.key] || 0;
+                    if (qty <= 0) { container.style.display = 'none'; return; }
                     const pct = totalQtd > 0 ? ((qty / totalQtd) * 100).toFixed(1) : '0.0';
-                    return `
-                        <div style="background:${t.bg};border:1px solid ${t.border};border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:4px;box-shadow:0 2px 8px rgba(0,0,0,0.3);">
-                            <span style="font-size:0.6rem;text-transform:uppercase;letter-spacing:0.07em;color:${t.color};font-weight:700;">${t.label}</span>
-                            <span style="font-family:var(--font-mono);font-size:1.05rem;font-weight:700;color:#fff;letter-spacing:-0.02em;">${formatNumber(qty, 0)} <span style="font-size:0.62rem;color:#9ca3af;font-weight:400;">pçs</span></span>
-                            <span style="font-family:var(--font-mono);font-size:0.78rem;font-weight:700;color:${t.color};">${pct}%</span>
-                        </div>`;
-                }).join('');
+                    container.style.display = 'flex';
+                    content.innerHTML = `
+                        <div class="group-header">
+                            <span class="group-name" style="color:${t.color};font-size:0.78rem;">${t.label}</span>
+                            <span class="group-badge-pct" style="background:rgba(0,0,0,0.2);color:${t.color};border-color:${t.color}33;font-size:0.65rem;">${pct}%</span>
+                        </div>
+                        <div style="flex-grow:1;display:flex;align-items:center;">
+                            <div class="group-stats-grid">
+                                <div class="group-stat-item group-stat-full" style="border-top:none;padding-top:0;margin-top:0;">
+                                    <span class="stat-label-mini">Quantidade</span>
+                                    <span class="stat-value-mini" style="color:${t.color};">${formatNumber(qty, 0)} pçs</span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    if (bar) bar.style.width = pct + '%';
+                });
             };
             if (document.getElementById('groupAguardandoContent'))
                 document.getElementById('groupAguardandoContent').innerHTML = formatG('Aguardando Moldagem', kpiAguardando, 'stat-value-accent');
