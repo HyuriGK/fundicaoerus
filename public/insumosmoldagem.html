@@ -212,15 +212,6 @@
                 <label>Data fim</label>
                 <input type="date" id="dataFim" class="filter-input">
             </div>
-            <div class="filter-group">
-                <label>Forno</label>
-                <select id="filtroForno" class="filter-input" style="min-width:100px;">
-                    <option value="">Todos</option>
-                    <option value="1">Forno 1</option>
-                    <option value="2">Forno 2</option>
-                    <option value="3">Forno 3</option>
-                </select>
-            </div>
             <button class="btn-buscar" onclick="buscar()">
                 <i class="fa-solid fa-magnifying-glass"></i> Buscar
             </button>
@@ -270,8 +261,9 @@
 
     function fmtDate(iso) {
         if (!iso) return '-';
-        const d = new Date(iso);
-        return d.toLocaleDateString('pt-BR');
+        const s = String(iso).split('T')[0];
+        const [y, m, d] = s.split('-');
+        return `${d}/${m}/${y}`;
     }
 
     function parseMachos(str) {
@@ -351,8 +343,6 @@
     }
 
     function renderCorrida(corrida, idx) {
-        const fornoFiltro = document.getElementById('filtroForno').value;
-        if (fornoFiltro && (corrida.forno_cor || '').trim() !== fornoFiltro) return '';
 
         const itens = corrida.itens || [];
         const semFicha = itens.filter(i => !i.tem_ficha).length;
@@ -365,7 +355,7 @@
             <div class="corrida-header" onclick="toggleCorrida(${idx})">
                 <div class="corrida-num">#${corrida.corrida_cor}</div>
                 <div class="corrida-meta">
-                    <span class="corrida-chip"><i class="fa-regular fa-calendar"></i> ${fmtDate(corrida.data_cor)}</span>
+                    <span class="corrida-chip"><i class="fa-regular fa-calendar"></i> ${fmtDate(corrida.data_programada)}</span>
                     <span class="corrida-chip forno"><i class="fa-solid fa-fire-flame-curved"></i> Forno ${corrida.forno_cor || '?'}</span>
                     ${corrida.material_mat ? `<span class="corrida-chip material"><i class="fa-solid fa-flask"></i> ${corrida.material_mat}</span>` : ''}
                     <span class="corrida-chip nitens"><i class="fa-solid fa-list"></i> ${itens.length} ${itens.length === 1 ? 'item' : 'itens'}</span>
@@ -418,10 +408,7 @@
     }
 
     function renderAll() {
-        const fornoFiltro = document.getElementById('filtroForno').value;
-        const corridas = fornoFiltro
-            ? _corridas.filter(c => (c.forno_cor || '').trim() === fornoFiltro)
-            : _corridas;
+        const corridas = _corridas;
 
         const totalItens   = corridas.reduce((s, c) => s + c.itens.length, 0);
         const comFicha     = corridas.reduce((s, c) => s + c.itens.filter(i => i.tem_ficha).length, 0);
@@ -494,7 +481,7 @@
             </div>`;
         }).join('');
 
-        const dataFmt = fmtDate(c.data_cor);
+        const dataFmt = fmtDate(c.data_programada);
         const html = `<!DOCTYPE html><html lang="pt-BR"><head>
 <meta charset="UTF-8">
 <title>Corrida ${c.corrida_cor} — Insumos de Moldagem</title>
@@ -569,11 +556,6 @@
         win.document.write(html);
         win.document.close();
     }
-
-    // Forno filter change re-renders without new fetch
-    document.getElementById('filtroForno').addEventListener('change', () => {
-        if (_corridas.length) renderAll();
-    });
 
     // Enter key triggers search
     document.querySelectorAll('.filter-input').forEach(el => {

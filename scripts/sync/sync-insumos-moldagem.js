@@ -23,7 +23,7 @@ async function sync() {
                 id SERIAL PRIMARY KEY,
                 codigo_cor INTEGER NOT NULL,
                 corrida_cor VARCHAR(50),
-                data_cor DATE,
+                data_programada_cor DATE,
                 forno_cor VARCHAR(50),
                 peso_cor NUMERIC(15,2),
                 material_mat VARCHAR(100),
@@ -39,6 +39,8 @@ async function sync() {
                 UNIQUE(codigo_cor, sequencia_item)
             )
         `);
+        await pgClient.query(`ALTER TABLE corridas_programadas_sync DROP COLUMN IF EXISTS data_cor`);
+        await pgClient.query(`ALTER TABLE corridas_programadas_sync ADD COLUMN IF NOT EXISTS data_programada_cor DATE`);
         console.log('✅ Tabela corridas_programadas_sync verificada/criada');
 
         await pgClient.query(`DELETE FROM corridas_programadas_sync`);
@@ -57,7 +59,7 @@ async function sync() {
                 SELECT
                     c.CODIGO_COR,
                     c.CORRIDA_COR,
-                    CAST(c.DATA_COR AS DATE) AS DATA_COR,
+                    CAST(c.DATA_PROGRAMADA_COR AS DATE) AS DATA_PROGRAMADA_COR,
                     c.FORNO_COR,
                     c.PESO_COR,
                     m.MATERIAL_MAT,
@@ -98,7 +100,6 @@ async function sync() {
             return String(v).split('T')[0];
         };
 
-        // Batch insert (500 rows per query)
         const BATCH = 500;
         let inserted = 0;
 
@@ -110,7 +111,7 @@ async function sync() {
                 values.push(
                     toInt(row.CODIGO_COR),
                     toStr(row.CORRIDA_COR),
-                    toDate(row.DATA_COR),
+                    toDate(row.DATA_PROGRAMADA_COR),
                     toStr(row.FORNO_COR),
                     toNum(row.PESO_COR),
                     toStr(row.MATERIAL_MAT),
@@ -128,7 +129,7 @@ async function sync() {
 
             await pgClient.query(`
                 INSERT INTO corridas_programadas_sync (
-                    codigo_cor, corrida_cor, data_cor, forno_cor, peso_cor, material_mat,
+                    codigo_cor, corrida_cor, data_programada_cor, forno_cor, peso_cor, material_mat,
                     sequencia_item, produto_pcp, pro_empresa_pcp, nome_pro,
                     quantidade_programada, quantidade_pcp, peso_pcp, situacao_apontamento
                 ) VALUES ${placeholders.join(',')}
