@@ -39,7 +39,7 @@ async function sync() {
                 UNIQUE(codigo_cor, sequencia_item)
             )
         `);
-        await pgClient.query(`ALTER TABLE corridas_programadas_sync DROP COLUMN IF EXISTS data_cor`);
+        await pgClient.query(`ALTER TABLE corridas_programadas_sync ADD COLUMN IF NOT EXISTS data_cor DATE`);
         await pgClient.query(`ALTER TABLE corridas_programadas_sync ADD COLUMN IF NOT EXISTS data_programada_cor DATE`);
         console.log('✅ Tabela corridas_programadas_sync verificada/criada');
 
@@ -59,6 +59,7 @@ async function sync() {
                 SELECT
                     c.CODIGO_COR,
                     c.CORRIDA_COR,
+                    CAST(c.DATA_COR AS DATE) AS DATA_COR,
                     CAST(c.DATA_PROGRAMADA_COR AS DATE) AS DATA_PROGRAMADA_COR,
                     c.FORNO_COR,
                     c.PESO_COR,
@@ -107,10 +108,11 @@ async function sync() {
             const chunk = rows.slice(i, i + BATCH);
             const values = [];
             const placeholders = chunk.map((row, idx) => {
-                const base = idx * 14;
+                const base = idx * 15;
                 values.push(
                     toInt(row.CODIGO_COR),
                     toStr(row.CORRIDA_COR),
+                    toDate(row.DATA_COR),
                     toDate(row.DATA_PROGRAMADA_COR),
                     toStr(row.FORNO_COR),
                     toNum(row.PESO_COR),
@@ -124,12 +126,12 @@ async function sync() {
                     toNum(row.PESO_PCP),
                     toStr(row.SITUACAO_APONTAMENTO_CRPG)
                 );
-                return `($${base+1},$${base+2},$${base+3},$${base+4},$${base+5},$${base+6},$${base+7},$${base+8},$${base+9},$${base+10},$${base+11},$${base+12},$${base+13},$${base+14})`;
+                return `($${base+1},$${base+2},$${base+3},$${base+4},$${base+5},$${base+6},$${base+7},$${base+8},$${base+9},$${base+10},$${base+11},$${base+12},$${base+13},$${base+14},$${base+15})`;
             });
 
             await pgClient.query(`
                 INSERT INTO corridas_programadas_sync (
-                    codigo_cor, corrida_cor, data_programada_cor, forno_cor, peso_cor, material_mat,
+                    codigo_cor, corrida_cor, data_cor, data_programada_cor, forno_cor, peso_cor, material_mat,
                     sequencia_item, produto_pcp, pro_empresa_pcp, nome_pro,
                     quantidade_programada, quantidade_pcp, peso_pcp, situacao_apontamento
                 ) VALUES ${placeholders.join(',')}

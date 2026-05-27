@@ -18,6 +18,7 @@ router.get('/', async (req, res) => {
             SELECT
                 c.codigo_cor,
                 c.corrida_cor,
+                c.data_cor,
                 c.data_programada_cor,
                 c.forno_cor,
                 c.peso_cor,
@@ -39,8 +40,8 @@ router.get('/', async (req, res) => {
                 ft.qtde_figuras
             FROM corridas_programadas_sync c
             LEFT JOIN ficha_tecnica ft ON ft.pro_codigo_fic = c.produto_pcp::text
-            WHERE c.data_programada_cor >= $1::date
-              AND c.data_programada_cor <= $2::date
+            WHERE c.data_cor >= $1::date
+              AND c.data_cor <= $2::date
             ORDER BY c.codigo_cor DESC, c.sequencia_item
         `, params);
 
@@ -50,9 +51,10 @@ router.get('/', async (req, res) => {
             const key = row.codigo_cor;
             if (!corridaMap[key]) {
                 corridaMap[key] = {
-                    codigo_cor:        row.codigo_cor,
-                    corrida_cor:       row.corrida_cor,
-                    data_programada:   row.data_programada_cor,
+                    codigo_cor:       row.codigo_cor,
+                    corrida_cor:      row.corrida_cor,
+                    data_cor:         row.data_cor,
+                    data_programada:  row.data_programada_cor,
                     forno_cor:    (row.forno_cor || '').trim(),
                     peso_cor:     row.peso_cor,
                     material_mat: row.material_mat,
