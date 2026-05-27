@@ -279,6 +279,13 @@
         return `${d}/${m}/${y}`;
     }
 
+    // Retorna a melhor data da corrida: DATA_PROGRAMADA_COR se válida, senão DATA_COR
+    function dataCorrida(c) {
+        const prog = c.data_programada ? String(c.data_programada).split('T')[0] : null;
+        if (prog && prog !== '2026-12-31') return prog;
+        return c.data_cor ? String(c.data_cor).split('T')[0] : null;
+    }
+
     function parseMachos(str) {
         if (!str) return [];
         return str.split('\n')
@@ -368,8 +375,7 @@
             <div class="corrida-header" onclick="toggleCorrida(${idx})">
                 <div class="corrida-num">#${corrida.corrida_cor}</div>
                 <div class="corrida-meta">
-                    <span class="corrida-chip"><i class="fa-regular fa-calendar"></i> ${fmtDate(corrida.data_cor)}</span>
-                    ${corrida.data_programada && !String(corrida.data_programada).includes('2026-12-31') ? `<span class="corrida-chip" title="Data programada pelo PCP"><i class="fa-solid fa-calendar-check"></i> Prog: ${fmtDate(corrida.data_programada)}</span>` : ''}
+                    <span class="corrida-chip"><i class="fa-regular fa-calendar"></i> ${fmtDate(dataCorrida(corrida))}</span>
                     <span class="corrida-chip forno"><i class="fa-solid fa-fire-flame-curved"></i> Forno ${corrida.forno_cor || '?'}</span>
                     ${corrida.material_mat ? `<span class="corrida-chip material"><i class="fa-solid fa-flask"></i> ${corrida.material_mat}</span>` : ''}
                     <span class="corrida-chip nitens"><i class="fa-solid fa-list"></i> ${itens.length} ${itens.length === 1 ? 'item' : 'itens'}</span>
@@ -448,10 +454,10 @@
             return;
         }
 
-        // Agrupa por data_cor (cadastro), ordem crescente
+        // Agrupa pela melhor data disponível (programada ou cadastro)
         const byDate = {};
         for (const c of corridas) {
-            const key = c.data_cor ? String(c.data_cor).split('T')[0] : 'sem-data';
+            const key = dataCorrida(c) || 'sem-data';
             if (!byDate[key]) byDate[key] = [];
             byDate[key].push(c);
         }
@@ -549,8 +555,7 @@
             </table>
         </div>` : '';
 
-        const dataFmt = fmtDate(c.data_cor);
-        const dataProg = c.data_programada && !String(c.data_programada).includes('2026-12-31') ? fmtDate(c.data_programada) : null;
+        const dataFmt = fmtDate(dataCorrida(c));
         const html = `<!DOCTYPE html><html lang="pt-BR"><head>
 <meta charset="UTF-8">
 <title>Corrida ${c.corrida_cor} — Insumos de Moldagem</title>
@@ -659,10 +664,9 @@
                 <span class="meta-val"><span class="badge-forno">Forno ${c.forno_cor || '?'}</span></span>
             </div>
             <div class="meta-item">
-                <span class="meta-lbl">Data de cadastro</span>
+                <span class="meta-lbl">Data programada</span>
                 <span class="meta-val">${dataFmt}</span>
             </div>
-            ${dataProg ? `<div class="meta-item"><span class="meta-lbl">Data programada PCP</span><span class="meta-val">${dataProg}</span></div>` : '<div></div>'}
             ${c.peso_cor ? `<div class="meta-item"><span class="meta-lbl">Peso corrida</span><span class="meta-val">${c.peso_cor} kg</span></div>` : '<div></div>'}
             <div class="meta-item">
                 <span class="meta-lbl">Itens</span>
