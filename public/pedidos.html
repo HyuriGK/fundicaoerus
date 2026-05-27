@@ -1439,10 +1439,10 @@
                             <!-- Populated by JS -->
                         </div>
                         <div class="industrial-bar-mini">
-                            <div id="barMoldPesada" class="bar-segment" style="background:#f97316;width:0%;" data-tooltip="Moldagem Pesada" onclick="filterByStage('aguardando')"></div>
-                            <div id="barMoldLeve"   class="bar-segment" style="background:#3b82f6;width:0%;" data-tooltip="Moldagem Leve"   onclick="filterByStage('aguardando')"></div>
-                            <div id="barMoldManual" class="bar-segment" style="background:#a855f7;width:0%;" data-tooltip="Moldagem Manual" onclick="filterByStage('aguardando')"></div>
-                            <div id="barMoldOutros" class="bar-segment" style="background:#6b7280;width:0%;" data-tooltip="S/ tipo cadastrado" onclick="filterByStage('aguardando')"></div>
+                            <div id="barMoldPesada" class="bar-segment" style="background:#f97316;width:0%;" data-tooltip="Moldagem Pesada" onclick="filterByMoldagemTipo('MOLDAGEM PESADA')"></div>
+                            <div id="barMoldLeve"   class="bar-segment" style="background:#3b82f6;width:0%;" data-tooltip="Moldagem Leve"   onclick="filterByMoldagemTipo('MOLDAGEM LEVE')"></div>
+                            <div id="barMoldManual" class="bar-segment" style="background:#a855f7;width:0%;" data-tooltip="Moldagem Manual" onclick="filterByMoldagemTipo('MOLDAGEM MANUAL')"></div>
+                            <div id="barMoldOutros" class="bar-segment" style="background:#6b7280;width:0%;" data-tooltip="S/ tipo cadastrado" onclick="filterByMoldagemTipo('OUTROS')"></div>
                         </div>
                     </div>
                     <!-- Group 2: Moldado -->
@@ -2010,7 +2010,7 @@
         let customWeights = {}; // Armazena pesos customizados
         let chartPCP = null, chartPareto = null, chartPending = null, chartHistorical = null, chartConcentracao = null, chartVariacao = null;
         let activeMonthFilter = null, activeClientFilter = null; // Legacy vars, replacing with object below
-        let activeChartFilters = { month: null, client: null, stage: null, day: null }; // New PowerBI-style filters
+        let activeChartFilters = { month: null, client: null, stage: null, day: null, moldagemTipo: null }; // New PowerBI-style filters
         let chartDaily = null;
         let chartMode = 'delivery'; // Default mode for date filtering
         // Tooltip Dinâmico Logic
@@ -2050,7 +2050,14 @@
             });
         });
         function filterByStage(stage) {
-            activeChartFilters.stage = stage; // Set filter
+            activeChartFilters.stage = stage;
+            activeChartFilters.moldagemTipo = null;
+            applyColumnFilters();
+            openModal();
+        }
+        function filterByMoldagemTipo(tipo) {
+            activeChartFilters.stage = 'aguardando';
+            activeChartFilters.moldagemTipo = tipo;
             applyColumnFilters();
             openModal();
         }
@@ -2124,8 +2131,9 @@
             // Industrial Stage Header Logic
             if (activeChartFilters.stage) {
                 const stage = activeChartFilters.stage;
+                const moldTipoLabels = { 'MOLDAGEM PESADA': 'Moldagem Pesada', 'MOLDAGEM LEVE': 'Moldagem Leve', 'MOLDAGEM MANUAL': 'Moldagem Manual', 'OUTROS': 'Sem Tipo Cadastrado' };
                 const stageNames = {
-                    'aguardando': 'Aguardando Moldagem',
+                    'aguardando': activeChartFilters.moldagemTipo ? moldTipoLabels[activeChartFilters.moldagemTipo] : 'Aguardando Moldagem',
                     'moldagem': 'Fusão',
                     'fusao': 'Acabamento',
                     'acabamento': 'Tratamento Térmico (TT)',
@@ -2195,6 +2203,7 @@
             // Clear stage/day filter when closing modal to return to full dashboard view
             if (activeChartFilters.stage) {
                 activeChartFilters.stage = null;
+                activeChartFilters.moldagemTipo = null;
                 applyColumnFilters();
             }
             chartMode = null;
@@ -3714,7 +3723,17 @@
                     const { qExpedicao, qQualidade, qUsinagem, qTT, qAcabamento, qFusao, qMoldada, qAguardando, targetTotalQty } = metrics;
                     let sectorQty = 0;
                     let rawQty = 0;
-                    if (s === 'aguardando') { sectorQty = qAguardando; rawQty = targetTotalQty; }
+                    if (s === 'aguardando') {
+                        sectorQty = qAguardando; rawQty = targetTotalQty;
+                        if (activeChartFilters.moldagemTipo) {
+                            const itemTipo = String(item._tipo_moldagem_procedimento || '').trim().toUpperCase();
+                            const filtroTipo = activeChartFilters.moldagemTipo;
+                            const match = filtroTipo === 'OUTROS'
+                                ? (!itemTipo || (itemTipo !== 'MOLDAGEM PESADA' && itemTipo !== 'MOLDAGEM LEVE' && itemTipo !== 'MOLDAGEM MANUAL'))
+                                : itemTipo === filtroTipo;
+                            if (!match) sectorQty = 0;
+                        }
+                    }
                     else if (s === 'moldagem') { sectorQty = qMoldada; rawQty = metrics.rawMoldada; }
                     else if (s === 'fusao') { sectorQty = qFusao; rawQty = metrics.rawFusao; }
                     else if (s === 'acabamento') { sectorQty = qAcabamento; rawQty = metrics.rawAcabamento; }
