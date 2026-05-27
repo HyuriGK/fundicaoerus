@@ -187,7 +187,7 @@
                 '<a href="monitoramento.html" class="erus-nav-link' + isActive('monitoramento.html') + '">' +
                     '<i class="fa-solid fa-display"></i><span>Monitoramento de OPs</span></a>' +
                 '<a href="acabamento_interno.html" class="erus-nav-link' + isActive('acabamento_interno.html') + '">' +
-                    '<i class="fa-solid fa-screwdriver-wrench"></i><span>Prog. Acabamento Interno</span></a>' +
+                    '<i class="fa-solid fa-screwdriver-wrench"></i><span>Acabamento Interno</span></a>' +
             '</div>' +
             // FATURAMENTO
             '<div class="erus-nav-group-sep" onclick="erusSidebarToggleGroup(\'eg-faturamento\')">' +
