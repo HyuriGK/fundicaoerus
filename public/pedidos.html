@@ -5104,6 +5104,9 @@ function flashConcentracaoBar(barIndex) {
                                         '🖱 Clique para abrir os registros'
                                     ];
                                 }
+                                if (emissaoClientView) {
+                                    return [`Peso: ${weight.toLocaleString('pt-BR')} kg`, `Valor: ${valStr}`, '', '🖱 Clique para abrir os registros'];
+                                }
                                 return [`Peso: ${weight.toLocaleString('pt-BR')} kg`, `Valor: ${valStr}`];
                             }
                         }
@@ -5127,6 +5130,20 @@ function flashConcentracaoBar(barIndex) {
                     const viewMode = modeEl ? modeEl.value : 'month';
                     const selectedYear = parseInt(document.getElementById('yearPillSelect')?.value) || new Date().getFullYear();
                     const isMonthlyView = (currentDeliveryView === 'mensal') || (activePillMonth === null);
+
+                    // Visão mensal por cliente → abre registros do mês clicado
+                    if (emissaoClientView) {
+                        const mlbls = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+                        const monthNum = index + 1;
+                        try {
+                            const res = await fetch(`/api/emissoes/list?ano=${selectedYear}&mes=${monthNum}`);
+                            if (!res.ok) return;
+                            const recs = await res.json();
+                            const clientRecs = recs.filter(r => (r.NOME_CLIENTE || '').trim().toUpperCase() === emissaoClientView);
+                            await showHistoricalDetails(clientRecs, `Emissão ${emissaoClientView} — ${mlbls[index]}/${selectedYear}`);
+                        } catch (err) { console.error(err); }
+                        return;
+                    }
 
                     if (viewMode === 'month') {
                         if (isMonthlyView) {
