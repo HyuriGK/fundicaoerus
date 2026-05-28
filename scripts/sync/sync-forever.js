@@ -104,19 +104,19 @@ const CYCLE_LOG     = path.join(ROOT_DIR, 'sync-ciclos.txt');
 const W        = 66; // inner content width (ASCII-safe)
 
 const SYNC_BATS = [
-    { name: 'CUSTOS',      file: 'sync/sincronizar_acustos.bat',       icon: '[$$]', pageId: 'custos.html' },
-    { name: 'BALANCO',     file: 'sync/sincronizar_balanco.bat',        icon: '[BL]', pageId: 'balanco.html' },
-    { name: 'DEVOLUCOES',  file: 'sync/sincronizar_adevolucoes.bat',   icon: '[<<]', pageId: 'devolucoes.html' },
-    { name: 'EMISSOES',    file: 'sync/sincronizar_aemissoes.bat',     icon: '[>>]', pageId: 'pedidos.html' },
-    { name: 'FATURAMENTO', file: 'sync/sincronizar_afaturamento.bat',  icon: '[NF]', pageId: 'faturamentos.html' },
-    { name: 'PEDIDOS',     file: 'sync/sincronizar_apedidos.bat',      icon: '[PD]', pageId: 'pedidos.html' },
-    { name: 'PRODUCAO',    file: 'sync/sincronizar_aproducao.bat',     icon: '[PR]', pageId: 'pedidos.html' },
-    { name: 'REFUGOS',     file: 'sync/sincronizar_arefugo.bat',       icon: '[RF]', pageId: 'refugos.html' },
-    { name: 'SNAPSHOTS',   file: 'sync/sincronizar_asnapshots.bat',    icon: '[SS]', pageId: 'pedidos.html' },
+    { name: 'CUSTOS',      file: 'sync\sincronizar_acustos.bat',       icon: '[$$]', pageId: 'custos.html' },
+    { name: 'BALANCO',     file: 'sync\sincronizar_balanco.bat',        icon: '[BL]', pageId: 'balanco.html' },
+    { name: 'DEVOLUCOES',  file: 'sync\sincronizar_adevolucoes.bat',   icon: '[<<]', pageId: 'devolucoes.html' },
+    { name: 'EMISSOES',    file: 'sync\sincronizar_aemissoes.bat',     icon: '[>>]', pageId: 'pedidos.html' },
+    { name: 'FATURAMENTO', file: 'sync\sincronizar_afaturamento.bat',  icon: '[NF]', pageId: 'faturamentos.html' },
+    { name: 'PEDIDOS',     file: 'sync\sincronizar_apedidos.bat',      icon: '[PD]', pageId: 'pedidos.html' },
+    { name: 'PRODUCAO',    file: 'sync\sincronizar_aproducao.bat',     icon: '[PR]', pageId: 'pedidos.html' },
+    { name: 'REFUGOS',     file: 'sync\sincronizar_arefugo.bat',       icon: '[RF]', pageId: 'refugos.html' },
+    { name: 'SNAPSHOTS',   file: 'sync\sincronizar_asnapshots.bat',    icon: '[SS]', pageId: 'pedidos.html' },
 ];
 
-const MOLDAGEM_BAT  = { name: 'MOLDAGEM', file: 'sync/sincronizar_fichatecmoldagem.bat', icon: '[ML]', pageId: 'fichatecmoldagem.html' };
-const FUSAO_BAT     = { name: 'FUSAO FT',  file: 'sync/sincronizar_fichatecfusao.bat',   icon: '[FU]', pageId: 'fichatecfusao.html' };
+const MOLDAGEM_BAT  = { name: 'MOLDAGEM', file: 'sync\sincronizar_fichatecmoldagem.bat', icon: '[ML]', pageId: 'fichatecmoldagem.html' };
+const FUSAO_BAT     = { name: 'FUSAO FT',  file: 'sync\sincronizar_fichatecfusao.bat',   icon: '[FU]', pageId: 'fichatecfusao.html' };
 const MOLDAGEM_WAIT = 30 * 60 * 1000; // 30 minutos
 let moldagemNextAt  = null;
 let fusaoNextAt     = null;
