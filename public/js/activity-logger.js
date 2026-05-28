@@ -826,20 +826,28 @@
         const pctText = document.getElementById('sync-float-pct');
         const statusText = document.getElementById('sync-float-status');
 
+        const page = window.location.pathname.split('/').pop() || 'index.html';
+
         const updateInterval = setInterval(() => {
             const elapsed = Date.now() - syncStartedAt;
-            const pct = Math.min((elapsed / syncEstimatedMs) * 100, 98);
-            if (fill) fill.style.width = pct + '%';
-            if (pctText) pctText.textContent = Math.round(pct) + '%';
+            const timePct = Math.min((elapsed / syncEstimatedMs) * 100, 30);
+            if (fill && !fill.dataset.realProgress) {
+                fill.style.width = timePct + '%';
+                if (pctText) pctText.textContent = Math.round(timePct) + '%';
+            }
         }, 1000);
 
-        const page = window.location.pathname.split('/').pop() || 'index.html';
         const checkInterval = setInterval(async () => {
             try {
                 const resp = await fetch('/api/page-locks');
                 const result = await resp.json();
                 if (result.success && Array.isArray(result.data)) {
                     const lock = result.data.find(l => l.page_id === page);
+                    if (lock && lock.is_locked && lock.sync_progress > 0) {
+                        const realPct = Math.min(95, lock.sync_progress);
+                        if (fill) { fill.style.width = realPct + '%'; fill.dataset.realProgress = '1'; }
+                        if (pctText) pctText.textContent = realPct + '%';
+                    }
                     if (!lock || !lock.is_locked || lock.lock_reason !== 'sync') {
                         // Finalizado!
                         clearInterval(updateInterval);
