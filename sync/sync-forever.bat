@@ -1,5 +1,5 @@
 @echo off
-cd /d %~dp0
+cd /d "%~dp0.."
 title SGP ERUS - Sincronizacao em Tempo Real
 node scripts\sync\sync-forever.js
 echo.
