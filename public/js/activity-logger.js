@@ -1187,14 +1187,14 @@
             const toast = document.createElement('div');
             toast.id = 'last-sync-toast';
             toast.style.cssText = `
-                position: fixed; top: 16px; right: 16px; z-index: 99998;
+                position: fixed; right: 20px; z-index: 99998;
                 background: rgba(5,46,22,0.95); backdrop-filter: blur(12px);
                 border: 1px solid rgba(74,222,128,0.35); border-radius: 10px;
                 padding: 0 16px; display: flex; align-items: center; gap: 10px;
                 font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
                 box-shadow: 0 4px 20px rgba(0,0,0,0.4), 0 0 12px rgba(74,222,128,0.1);
                 max-height: 0; overflow: hidden; opacity: 0;
-                transition: max-height 0.4s cubic-bezier(0.34,1.56,0.64,1), opacity 0.3s ease, padding 0.4s ease;
+                transition: max-height 0.4s cubic-bezier(0.34,1.56,0.64,1), opacity 0.3s ease, bottom 0.3s ease;
                 pointer-events: none;
             `;
             toast.innerHTML = `
@@ -1206,16 +1206,20 @@
             `;
             document.body.appendChild(toast);
             setTimeout(() => {
+                const syncIndicator = document.getElementById('sync-floating-indicator');
+                const bottomBase = 20;
+                const bottomPos = syncIndicator
+                    ? bottomBase + syncIndicator.offsetHeight + 10
+                    : bottomBase;
+                toast.style.bottom = bottomPos + 'px';
                 requestAnimationFrame(() => {
                     toast.style.maxHeight = '80px';
                     toast.style.opacity = '1';
-                    toast.style.padding = '0 16px';
                 });
                 setTimeout(() => {
-                    toast.style.transition = 'max-height 0.3s ease, opacity 0.3s ease, padding 0.3s ease';
+                    toast.style.transition = 'max-height 0.3s ease, opacity 0.3s ease';
                     toast.style.maxHeight = '0';
                     toast.style.opacity = '0';
-                    toast.style.padding = '0 16px';
                     setTimeout(() => toast.remove(), 350);
                 }, 5000);
             }, 2000);
