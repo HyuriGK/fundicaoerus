@@ -4930,6 +4930,7 @@ function flashConcentracaoBar(barIndex) {
                     }
                     // Pareto Logic
                     const totalWeightAll = data.reduce((acc, row) => acc + row.totalPeso, 0);
+                    const totalValueAll = data.reduce((acc, row) => acc + (row.totalValor || 0), 0);
                     const sorted = [...data].sort((a, b) => b.totalPeso - a.totalPeso);
                     const labels = sorted.map(s => s.name);
                     const weightData = sorted.map(s => s.totalPeso);
@@ -4972,7 +4973,9 @@ function flashConcentracaoBar(barIndex) {
                                     backgroundColor: chartColorAmber,
                                     borderRadius: 4,
                                     yAxisID: 'y',
-                                    extraData: valueData
+                                    extraData: valueData,
+                                    extraTotalPeso: totalWeightAll,
+                                    extraTotalValor: totalValueAll
                                 }
                             ]
                         },
@@ -5029,6 +5032,19 @@ function flashConcentracaoBar(barIndex) {
                                 const weight = context.parsed.y;
                                 const val = context.dataset.extraData ? context.dataset.extraData[context.dataIndex] : 0;
                                 const valStr = valorVisible ? val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-----';
+                                if (isPareto) {
+                                    const tPeso = context.dataset.extraTotalPeso || 0;
+                                    const tValor = context.dataset.extraTotalValor || 0;
+                                    const pctPeso = tPeso > 0 ? (weight / tPeso * 100).toFixed(1) : '0.0';
+                                    const pctValor = (tValor > 0 && valorVisible) ? (val / tValor * 100).toFixed(1) : null;
+                                    const valorLine = valorVisible
+                                        ? `Valor: ${valStr} (${pctValor}%)`
+                                        : 'Valor: -----';
+                                    return [
+                                        `Peso: ${weight.toLocaleString('pt-BR')} kg (${pctPeso}%)`,
+                                        valorLine
+                                    ];
+                                }
                                 return [`Peso: ${weight.toLocaleString('pt-BR')} kg`, `Valor: ${valStr}`];
                             }
                         }
@@ -5082,15 +5098,20 @@ function flashConcentracaoBar(barIndex) {
                             await updateHistoricalChart();
                         }
                     } else {
-                        // Pareto Click → filtrar por cliente
+                        // Pareto Click → abrir Registros filtrado pelo cliente
                         const clientName = chartHistorical.data.labels[index];
-                        const cacheKey = `${selectedYear}-${activePillMonth !== null ? activePillMonth + 1 : 'Todos'}`;
-                        const cached = emissionClientCache[cacheKey] || [];
-                        const clientRow = cached.find(r => r.name === clientName);
-                        const clickedId = clientRow ? clientRow.ID_CLIENTE_CORE : null;
-                        activeChartFilters.client = (activeChartFilters.client == clickedId) ? null : clickedId;
-                        chartMode = 'emission_total';
-                        applyColumnFilters();
+                        const mlbls = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+                        const mes = activePillMonth !== null ? activePillMonth + 1 : 'Todos';
+                        try {
+                            const res = await fetch(`/api/emissoes/list?ano=${selectedYear}&mes=${mes}`);
+                            if (!res.ok) return;
+                            const allRecs = await res.json();
+                            const clientRecs = allRecs.filter(r =>
+                                (r.NOME_CLIENTE || '').trim().toUpperCase() === clientName
+                            );
+                            const periodoStr = mes !== 'Todos' ? `${mlbls[mes - 1]}/${selectedYear}` : String(selectedYear);
+                            await showHistoricalDetails(clientRecs, `Emissão ${clientName} — ${periodoStr}`);
+                        } catch (err) { console.error('Erro ao buscar registros do cliente:', err); }
                     }
                 }
             };
