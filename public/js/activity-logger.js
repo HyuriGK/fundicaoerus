@@ -1187,7 +1187,7 @@
             const toast = document.createElement('div');
             toast.id = 'last-sync-toast';
             toast.style.cssText = `
-                position: fixed; right: 20px; z-index: 99998;
+                position: fixed; right: 24px; width: 280px; z-index: 99998;
                 background: rgba(5,46,22,0.95); backdrop-filter: blur(12px);
                 border: 1px solid rgba(74,222,128,0.35); border-radius: 10px;
                 padding: 0 16px; display: flex; align-items: center; gap: 10px;
