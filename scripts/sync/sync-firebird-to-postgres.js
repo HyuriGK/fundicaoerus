@@ -206,8 +206,7 @@ async function sincronizarDetalhado(fbDb) {
         nf.GERA_FINANCEIRO_NOT,
         nfp.ITEM_NPR,
         nfp.PEDIDO_NPR,
-        (SELECT FIRST 1 npe.PEDIDO_NPE FROM NOTA_FISCAL_PEDIDO npe 
-         WHERE npe.NOT_ID_NPE = nf.ID_NOT) as PEDIDO_LINK,
+        npp.PPR_PEDIDO_NPP as PEDIDO_LINK,
         nfp.PRODUTO_NPR,
         nfp.NOME_PRODUTO_NPR,
         nfp.QUANTIDADE_NPR,
@@ -215,10 +214,12 @@ async function sincronizarDetalhado(fbDb) {
         nfp.TOTAL_NPR,
         p.PESO_LIQUIDO_PRO as PESO_UNITARIO
         FROM NOTA_FISCAL nf
-        INNER JOIN NOTA_FISCAL_PRODUTO nfp 
-            ON nf.EMPRESA_NOT = nfp.EMPRESA_NPR 
+        INNER JOIN NOTA_FISCAL_PRODUTO nfp
+            ON nf.EMPRESA_NOT = nfp.EMPRESA_NPR
             AND nf.SERIE_NOT = nfp.SERIE_NPR
             AND nf.CODIGO_NOT = nfp.CODIGO_NPR
+        LEFT JOIN NOTA_FISCAL_PEDIDO_PRODUTO npp
+            ON npp.NPR_ID_NPP = nfp.ID_NPR
         LEFT JOIN PRODUTO p
             ON nfp.PRODUTO_NPR = p.CODIGO_PRO
         WHERE nf.EMISSAO_NOT >= ?
