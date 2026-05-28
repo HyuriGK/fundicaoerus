@@ -153,7 +153,7 @@ router.get('/last-sync', async (req, res) => {
         'Faturamento':  'faturamentos.html',
         'Pedidos':      'pedidos.html',
         'Industrial':   'pedidos.html',
-        'Produção':     'pedidos.html',
+        'Produção':     'apontamentos_produtivos.html',
         'Emissões':     'pedidos.html',
         'Refugos':      'refugos.html',
         'Custos':       'custos.html',
