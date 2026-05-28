@@ -517,7 +517,20 @@
         .concentracao-suggestion-item:last-child { border-bottom: none; }
         .concentracao-suggestion-item:hover { background: rgba(251,191,36,0.08); color: #fff; }
 
-        /* --- EMISSÃO CHART SEARCH --- */
+        /* --- EMISSÃO CHART SEARCH & SCROLL --- */
+        #emissaoScrollWrapper {
+            overflow-x: auto; overflow-y: hidden;
+            flex: 1; min-height: 0;
+            display: none;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255,255,255,0.15) transparent;
+        }
+        #emissaoScrollWrapper::-webkit-scrollbar { height: 5px; }
+        #emissaoScrollWrapper::-webkit-scrollbar-track { background: transparent; }
+        #emissaoScrollWrapper::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
+        #emissaoScrollWrapper::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.28); }
+        #emissaoCanvasInner { position: relative; height: 100%; min-height: 220px; }
+        #emissaoCanvasInner canvas { position: absolute; inset: 0; width: 100% !important; height: 100% !important; }
         #emissaoSearchWrapper {
             display: none; padding: 0 10px 8px;
         }
@@ -1609,8 +1622,15 @@
                                onfocus="onEmissaoSearch(this.value)"
                                onblur="setTimeout(()=>{ const s=document.getElementById('emissaoSuggestions'); if(s) s.style.display='none'; },160)">
                     </div>
-                    <div class="chart-canvas-wrapper" style="position:relative;">
-                        <canvas id="chartHistorical"></canvas>
+                    <div style="position:relative; flex:1; min-height:0; display:flex; flex-direction:column;">
+                        <div id="emissaoMonthWrapper" class="chart-canvas-wrapper" style="position:relative; flex:1; min-height:0;">
+                            <canvas id="chartHistorical"></canvas>
+                        </div>
+                        <div id="emissaoScrollWrapper">
+                            <div id="emissaoCanvasInner">
+                                <canvas id="chartEmissaoClient"></canvas>
+                            </div>
+                        </div>
                         <div id="historicalBlurOverlay" style="display:none; position:absolute; inset:0; backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); background:rgba(9,9,11,0.55); border-radius:8px; z-index:10; align-items:center; justify-content:center; flex-direction:column; gap:10px; text-align:center; padding:20px;">
                             <i class="fa-solid fa-eye-slash" style="font-size:1.6rem; color:#a1a1aa;"></i>
                             <span id="historicalOverlayTitle" style="color:#f4f4f5; font-size:0.85rem; font-weight:600; max-width:420px; line-height:1.5; text-align:center;">A visualização neste gráfico não está disponível para o filtro do período aplicado.</span>
@@ -4443,6 +4463,7 @@
         let emissaoAllLabels = [];
         let concentracaoAllIds = [];
         let concentracaoBarPx = 80;
+        let emissaoBarPx = 80;
 
         function updateConcentracaoChart(list) {
             const clientWeight = {};
@@ -4686,7 +4707,25 @@ function flashConcentracaoBar(barIndex) {
             if (input) input.value = name;
             const suggestions = document.getElementById('emissaoSuggestions');
             if (suggestions) suggestions.style.display = 'none';
-            setTimeout(() => flashEmissaoBar(barIndex), 80);
+
+            const wrapper = document.getElementById('emissaoScrollWrapper');
+            if (!wrapper || emissaoAllLabels.length === 0) return;
+
+            const barCenter = barIndex * emissaoBarPx + emissaoBarPx / 2;
+            const targetScroll = Math.max(0, barCenter - wrapper.clientWidth / 2);
+            const startScroll = wrapper.scrollLeft;
+            const distance = targetScroll - startScroll;
+            const duration = Math.min(800, Math.max(300, Math.abs(distance) / 2));
+            const startTime = performance.now();
+            function easeInOutCubic(t) { return t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2,3)/2; }
+            function animateScroll(now) {
+                const elapsed = now - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                wrapper.scrollLeft = startScroll + distance * easeInOutCubic(progress);
+                if (progress < 1) requestAnimationFrame(animateScroll);
+            }
+            requestAnimationFrame(animateScroll);
+            setTimeout(() => flashEmissaoBar(barIndex), duration + 80);
         }
 
         function flashEmissaoBar(barIndex) {
@@ -4758,11 +4797,18 @@ function flashConcentracaoBar(barIndex) {
                     selectedMonth = String(activePillMonth + 1);
                 }
                 const titleEl = modeEl.closest('.chart-panel').querySelector('.chart-title-flex');
-                const ctx = document.getElementById('chartHistorical').getContext('2d');
                 const monthLabels = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-                const emissaoWrapper = document.getElementById('emissaoSearchWrapper');
-                if (emissaoWrapper) emissaoWrapper.style.display = viewMode === 'client' ? 'block' : 'none';
-                if (viewMode !== 'client') { emissaoAllLabels = []; const si = document.getElementById('emissaoSearch'); if (si) si.value = ''; const sg = document.getElementById('emissaoSuggestions'); if (sg) sg.style.display = 'none'; }
+                const isClientMode = viewMode === 'client' && !(histOverlay && histOverlay.style.display === 'flex');
+                const emissaoMonthWrap = document.getElementById('emissaoMonthWrapper');
+                const emissaoScrollWrap = document.getElementById('emissaoScrollWrapper');
+                if (emissaoMonthWrap) emissaoMonthWrap.style.display = isClientMode ? 'none' : '';
+                if (emissaoScrollWrap) emissaoScrollWrap.style.display = isClientMode ? 'block' : 'none';
+                const emissaoSearchDiv = document.getElementById('emissaoSearchWrapper');
+                if (emissaoSearchDiv) emissaoSearchDiv.style.display = isClientMode ? 'block' : 'none';
+                if (!isClientMode) { emissaoAllLabels = []; const si = document.getElementById('emissaoSearch'); if (si) si.value = ''; const sg = document.getElementById('emissaoSuggestions'); if (sg) sg.style.display = 'none'; }
+                const ctx = isClientMode
+                    ? document.getElementById('chartEmissaoClient').getContext('2d')
+                    : document.getElementById('chartHistorical').getContext('2d');
                 if (viewMode === 'month') {
                     // MODO: POR MÃÂŠS ou DIA (DENTRO DO MÃÂŠS)
                     if (selectedMonth === 'Todos') {
@@ -4884,7 +4930,7 @@ function flashConcentracaoBar(barIndex) {
                     }
                     // Pareto Logic
                     const totalWeightAll = data.reduce((acc, row) => acc + row.totalPeso, 0);
-                    const sorted = [...data].sort((a, b) => b.totalPeso - a.totalPeso).slice(0, 15); // Top 15
+                    const sorted = [...data].sort((a, b) => b.totalPeso - a.totalPeso);
                     const labels = sorted.map(s => s.name);
                     const weightData = sorted.map(s => s.totalPeso);
                     const valueData = sorted.map(s => s.totalValor);
@@ -4894,6 +4940,14 @@ function flashConcentracaoBar(barIndex) {
                         return totalWeightAll > 0 ? (cumulative / totalWeightAll) * 100 : 0;
                     });
                     emissaoAllLabels = labels;
+                    // Canvas width for scroll
+                    const scrollWrapEl = document.getElementById('emissaoScrollWrapper');
+                    const canvasInnerEl = document.getElementById('emissaoCanvasInner');
+                    const wrapW = scrollWrapEl ? scrollWrapEl.clientWidth : 800;
+                    const barPx = Math.max(1, Math.floor(wrapW / 10));
+                    emissaoBarPx = barPx;
+                    const canvasW = Math.max(wrapW, labels.length * barPx);
+                    if (canvasInnerEl) canvasInnerEl.style.width = canvasW + 'px';
                     if (chartHistorical) chartHistorical.destroy();
                     chartHistorical = new Chart(ctx, {
                         type: 'bar',
