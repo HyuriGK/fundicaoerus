@@ -558,6 +558,28 @@
             color: #000;
             border-color: var(--color-primary);
         }
+        /* ABC Chart — search bar */
+        #abcSearchWrapper { padding: 6px 10px 6px; flex-shrink: 0; }
+        #abcSearch {
+            width: 100%; background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.08); color: #f4f4f5;
+            border-radius: 7px; padding: 5px 12px; font-size: 0.74rem; outline: none;
+            transition: border-color 0.2s; box-sizing: border-box;
+        }
+        #abcSearch:focus { border-color: rgba(251,191,36,0.4); }
+        #abcSuggestions {
+            display: none; position: fixed;
+            z-index: 9999; background: #1c1c20; border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 7px; overflow-y: auto; max-height: 190px;
+            box-shadow: 0 8px 28px rgba(0,0,0,0.5);
+        }
+        .abc-suggestion-item {
+            padding: 7px 12px; cursor: pointer; font-size: 0.74rem; color: #d4d4d8;
+            border-bottom: 1px solid rgba(255,255,255,0.04); transition: background 0.1s;
+        }
+        .abc-suggestion-item:last-child { border-bottom: none; }
+        .abc-suggestion-item:hover { background: rgba(251,191,36,0.08); color: #fff; }
+
         /* BotÁµes de Ação padronizados (Design Apontamentos) */
         .btn-action-standard {
             background: #27272a;
@@ -889,6 +911,7 @@
     </style>
 </head>
 <body>
+    <div id="abcSuggestions"></div>
     <!-- Client Filter Modal (Z-Index fix handled in CSS) -->
     <div id="clientModal" class="modal-overlay">
         <div class="modal">
@@ -1121,6 +1144,13 @@
                         </div>
                     </div>
                 </div>
+                <div id="abcSearchWrapper">
+                    <input id="abcSearch" type="text" autocomplete="off"
+                           placeholder="Pesquisar cliente..."
+                           oninput="onAbcSearch(this.value)"
+                           onfocus="onAbcSearch(this.value)"
+                           onblur="setTimeout(()=>{ const s=document.getElementById('abcSuggestions'); if(s) s.style.display='none'; },160)">
+                </div>
                 <div id="abcChartWrapper" style="flex: 1; min-height: 0; width: 100%; overflow-y: scroll;"><canvas id="abcChart"></canvas>
                 </div>
             </div>
@@ -1168,6 +1198,8 @@
         let onlyServices = false;
         let showABC = false;
         let abcType = 'peso';
+        let abcAllLabels = [];
+        let abcBarHeightPx = 28;
         // --- DASHBOARD SELECTOR LOGIC ---
         function renderDashboardMonthButtons() {
             const container = document.getElementById('dashboardMonthButtons');
@@ -2415,6 +2447,10 @@ async function loadRecordsData() {
             // Todos os clientes com altura dinâmica
             const topClients = clientList;
             const chartHeight = Math.max(400, topClients.length * 28);
+            abcAllLabels = topClients.map(c => c.name);
+            abcBarHeightPx = chartHeight / (topClients.length || 1);
+            const abcSearchEl = document.getElementById('abcSearch');
+            if (abcSearchEl) abcSearchEl.value = '';
             const abcCanvas = document.getElementById('abcChart');
             const wrapperWidth = document.getElementById('abcChartWrapper').clientWidth || 800;
             abcCanvas.style.height = chartHeight + 'px';
@@ -2463,6 +2499,76 @@ async function loadRecordsData() {
                 }
             });
         }
+        // --- ABC CLIENT SEARCH ---
+        function onAbcSearch(value) {
+            const input = document.getElementById('abcSearch');
+            const suggestions = document.getElementById('abcSuggestions');
+            if (!suggestions || !input) return;
+            const q = value.trim().toUpperCase();
+            if (!q) { suggestions.style.display = 'none'; return; }
+            const matches = abcAllLabels
+                .map((name, index) => ({ name, index }))
+                .filter(item => item.name.toUpperCase().includes(q))
+                .slice(0, 12);
+            if (matches.length === 0) { suggestions.style.display = 'none'; return; }
+            const rect = input.getBoundingClientRect();
+            suggestions.style.top  = (rect.bottom + 3) + 'px';
+            suggestions.style.left = rect.left + 'px';
+            suggestions.style.width = rect.width + 'px';
+            suggestions.innerHTML = matches.map(item =>
+                `<div class="abc-suggestion-item"
+                      data-idx="${item.index}"
+                      data-name="${item.name.replace(/"/g, '&quot;')}"
+                      onmousedown="selectAbcClient(+this.dataset.idx, this.dataset.name)">${item.name}</div>`
+            ).join('');
+            suggestions.style.display = 'block';
+        }
+        function selectAbcClient(barIndex, name) {
+            const input = document.getElementById('abcSearch');
+            if (input) input.value = name;
+            const suggestions = document.getElementById('abcSuggestions');
+            if (suggestions) suggestions.style.display = 'none';
+            const wrapper = document.getElementById('abcChartWrapper');
+            if (!wrapper || abcAllLabels.length === 0) return;
+            const barCenter = (barIndex + 0.5) * abcBarHeightPx;
+            const targetScroll = Math.max(0, barCenter - wrapper.clientHeight / 2);
+            const startScroll = wrapper.scrollTop;
+            const distance = targetScroll - startScroll;
+            const duration = Math.min(800, Math.max(300, Math.abs(distance) / 2));
+            const startTime = performance.now();
+            function easeInOutCubic(t) { return t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2,3)/2; }
+            function animateScroll(now) {
+                const elapsed = now - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                wrapper.scrollTop = startScroll + distance * easeInOutCubic(progress);
+                if (progress < 1) requestAnimationFrame(animateScroll);
+            }
+            requestAnimationFrame(animateScroll);
+            setTimeout(() => flashAbcBar(barIndex), duration + 80);
+        }
+        function flashAbcBar(barIndex) {
+            if (!abcChart) return;
+            const ds = abcChart.data.datasets[0];
+            if (!ds || !Array.isArray(ds.backgroundColor)) return;
+            const original = [...ds.backgroundColor];
+            let tick = 0;
+            const flashes = 6;
+            function step() {
+                if (tick >= flashes) {
+                    ds.backgroundColor = original;
+                    abcChart.update('none');
+                    return;
+                }
+                const colors = [...original];
+                colors[barIndex] = tick % 2 === 0 ? '#ffffff' : original[barIndex];
+                ds.backgroundColor = colors;
+                abcChart.update('none');
+                tick++;
+                setTimeout(step, 280);
+            }
+            step();
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
             renderDashboardMonthButtons();
             syncPeriodInputs();
