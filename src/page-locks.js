@@ -146,6 +146,20 @@ router.post('/sync-unlock', async (req, res) => {
     }
 });
 
+// GET: Retorna última sincronização concluída por página
+router.get('/last-sync', async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT DISTINCT ON (page_id) page_id, finished_at
+            FROM sync_history
+            ORDER BY page_id, finished_at DESC
+        `);
+        res.json({ success: true, data: result.rows });
+    } catch (error) {
+        res.status(500).json({ success: false, data: [] });
+    }
+});
+
 // POST: Atualiza progresso real da sincronização (chamado pelo sync-forever)
 router.post('/sync-progress', async (req, res) => {
     const { page_id, progress } = req.body;

@@ -1170,9 +1170,53 @@
         enforceRoleAccess();
     }
 
+    // --- TOAST ÚLTIMA SINCRONIZAÇÃO ---
+    async function showLastSyncToast() {
+        const page = window.location.pathname.split('/').pop() || 'index.html';
+        try {
+            const resp = await fetch('/api/page-locks/last-sync');
+            const result = await resp.json();
+            if (!result.success) return;
+            const entry = (result.data || []).find(d => d.page_id === page);
+            if (!entry || !entry.finished_at) return;
+
+            const date = new Date(entry.finished_at);
+            const dateFmt = date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            const timeFmt = date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+            const toast = document.createElement('div');
+            toast.id = 'last-sync-toast';
+            toast.style.cssText = `
+                position: fixed; top: -80px; left: 16px; z-index: 99998;
+                background: rgba(15,15,20,0.92); backdrop-filter: blur(12px);
+                border: 1px solid rgba(99,102,241,0.25); border-radius: 10px;
+                padding: 10px 16px; display: flex; align-items: center; gap: 10px;
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+                transition: top 0.4s cubic-bezier(0.34,1.56,0.64,1);
+                pointer-events: none;
+            `;
+            toast.innerHTML = `
+                <i class="fa-solid fa-rotate" style="color:#6366f1;font-size:0.8rem;"></i>
+                <div>
+                    <div style="font-size:0.68rem;font-weight:600;color:#71717a;letter-spacing:0.05em;text-transform:uppercase;">Última sincronização</div>
+                    <div style="font-size:0.82rem;font-weight:700;color:#e4e4e7;">${dateFmt} às ${timeFmt}</div>
+                </div>
+            `;
+            document.body.appendChild(toast);
+            requestAnimationFrame(() => { toast.style.top = '16px'; });
+            setTimeout(() => {
+                toast.style.transition = 'top 0.3s ease, opacity 0.3s ease';
+                toast.style.opacity = '0'; toast.style.top = '-80px';
+                setTimeout(() => toast.remove(), 350);
+            }, 5000);
+        } catch(e) {}
+    }
+
     // 1. Log Page Visit on Load + verificar bloqueio
     window.addEventListener('load', () => {
         checkPageLock(); // Verificar se a página está bloqueada
+        showLastSyncToast();
         logActivity('PAGE_VISIT', {
             title: document.title,
             url: window.location.href
