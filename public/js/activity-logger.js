@@ -1187,29 +1187,38 @@
             const toast = document.createElement('div');
             toast.id = 'last-sync-toast';
             toast.style.cssText = `
-                position: fixed; top: -80px; right: 16px; z-index: 99998;
+                position: fixed; top: 16px; right: 16px; z-index: 99998;
                 background: rgba(5,46,22,0.95); backdrop-filter: blur(12px);
                 border: 1px solid rgba(74,222,128,0.35); border-radius: 10px;
-                padding: 10px 16px; display: flex; align-items: center; gap: 10px;
+                padding: 0 16px; display: flex; align-items: center; gap: 10px;
                 font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
                 box-shadow: 0 4px 20px rgba(0,0,0,0.4), 0 0 12px rgba(74,222,128,0.1);
-                transition: top 0.4s cubic-bezier(0.34,1.56,0.64,1);
+                max-height: 0; overflow: hidden; opacity: 0;
+                transition: max-height 0.4s cubic-bezier(0.34,1.56,0.64,1), opacity 0.3s ease, padding 0.4s ease;
                 pointer-events: none;
             `;
             toast.innerHTML = `
-                <i class="fa-solid fa-rotate" style="color:#4ade80;font-size:0.8rem;"></i>
-                <div>
+                <i class="fa-solid fa-rotate" style="color:#4ade80;font-size:0.8rem;flex-shrink:0;"></i>
+                <div style="padding: 10px 0;">
                     <div style="font-size:0.68rem;font-weight:600;color:#86efac;letter-spacing:0.05em;text-transform:uppercase;">Última sincronização</div>
                     <div style="font-size:0.82rem;font-weight:700;color:#dcfce7;">${dateFmt} às ${timeFmt}</div>
                 </div>
             `;
             document.body.appendChild(toast);
-            requestAnimationFrame(() => { toast.style.top = '16px'; });
             setTimeout(() => {
-                toast.style.transition = 'top 0.3s ease, opacity 0.3s ease';
-                toast.style.opacity = '0'; toast.style.top = '-80px';
-                setTimeout(() => toast.remove(), 350);
-            }, 5000);
+                requestAnimationFrame(() => {
+                    toast.style.maxHeight = '80px';
+                    toast.style.opacity = '1';
+                    toast.style.padding = '0 16px';
+                });
+                setTimeout(() => {
+                    toast.style.transition = 'max-height 0.3s ease, opacity 0.3s ease, padding 0.3s ease';
+                    toast.style.maxHeight = '0';
+                    toast.style.opacity = '0';
+                    toast.style.padding = '0 16px';
+                    setTimeout(() => toast.remove(), 350);
+                }, 5000);
+            }, 3000);
         } catch(e) {}
     }
 
