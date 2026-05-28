@@ -4461,6 +4461,7 @@
         }
         let concentracaoAllLabels = [];
         let emissaoAllLabels = [];
+        let emissaoClientView = null; // null = pareto, string = cliente em visão mensal
         let concentracaoAllIds = [];
         let concentracaoBarPx = 80;
         let emissaoBarPx = 80;
@@ -4703,29 +4704,79 @@ function flashConcentracaoBar(barIndex) {
         }
 
         function selectEmissaoClient(barIndex, name) {
-            const input = document.getElementById('emissaoSearch');
-            if (input) input.value = name;
             const suggestions = document.getElementById('emissaoSuggestions');
             if (suggestions) suggestions.style.display = 'none';
+            showClientMonthlyEmissao(name);
+        }
 
-            const wrapper = document.getElementById('emissaoScrollWrapper');
-            if (!wrapper || emissaoAllLabels.length === 0) return;
+        async function showClientMonthlyEmissao(clientName) {
+            emissaoClientView = clientName;
+            const input = document.getElementById('emissaoSearch');
+            if (input) input.value = clientName;
 
-            const barCenter = barIndex * emissaoBarPx + emissaoBarPx / 2;
-            const targetScroll = Math.max(0, barCenter - wrapper.clientWidth / 2);
-            const startScroll = wrapper.scrollLeft;
-            const distance = targetScroll - startScroll;
-            const duration = Math.min(800, Math.max(300, Math.abs(distance) / 2));
-            const startTime = performance.now();
-            function easeInOutCubic(t) { return t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2,3)/2; }
-            function animateScroll(now) {
-                const elapsed = now - startTime;
-                const progress = Math.min(elapsed / duration, 1);
-                wrapper.scrollLeft = startScroll + distance * easeInOutCubic(progress);
-                if (progress < 1) requestAnimationFrame(animateScroll);
-            }
-            requestAnimationFrame(animateScroll);
-            setTimeout(() => flashEmissaoBar(barIndex), duration + 80);
+            const yearEl = document.getElementById('yearFilterHistorical');
+            const selectedYear = yearEl ? (parseInt(yearEl.value) || new Date().getFullYear()) : new Date().getFullYear();
+
+            // Esconder scroll wrapper do pareto, mostrar month wrapper (reaproveitamos o canvas mensal)
+            const emissaoScrollWrap = document.getElementById('emissaoScrollWrapper');
+            const emissaoMonthWrap = document.getElementById('emissaoMonthWrapper');
+            if (emissaoScrollWrap) emissaoScrollWrap.style.display = 'none';
+            if (emissaoMonthWrap) emissaoMonthWrap.style.display = '';
+
+            // Título com botão voltar
+            const modeEl = document.getElementById('modeFilterHistorical');
+            const titleEl = modeEl ? modeEl.closest('.chart-panel').querySelector('.chart-title-flex') : null;
+            if (titleEl) titleEl.innerHTML = `<button onclick="resetEmissaoPareto()" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:#a1a1aa;border-radius:5px;padding:2px 8px;font-size:0.7rem;cursor:pointer;margin-right:8px;">← Pareto</button>${clientName} — ${selectedYear}`;
+
+            try {
+                const res = await fetch(`/api/emissoes/list?ano=${selectedYear}&mes=Todos`);
+                if (!res.ok) return;
+                const allRecs = await res.json();
+
+                const monthLabels = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+                const monthlyPeso = Array(12).fill(0);
+                const monthlyValor = Array(12).fill(0);
+
+                allRecs.forEach(r => {
+                    if ((r.NOME_CLIENTE || '').trim().toUpperCase() !== clientName) return;
+                    const d = toLocalDate(r.DATA_EMISSAO_PEDIDO);
+                    const mIdx = d.getMonth();
+                    const qOriginal = parseFloat(r.QUANTIDADE_PPR) || 0;
+                    const prodCode = String(r.PRODUTO_PPR || '').trim();
+                    let wUn = customWeights[prodCode]
+                        ? customWeights[prodCode]
+                        : (qOriginal > 0 ? (parseFloat(r.PESO_LIQUIDO_NPR) || 0) / qOriginal : 0);
+                    const itemWeight = wUn * qOriginal;
+                    let vUn = parseFloat(r.VALOR_PPR || 0);
+                    if (r.PRECO_KG && parseFloat(r.PRECO_KG) > 0 && customWeights[prodCode]) vUn = parseFloat(r.PRECO_KG) * wUn;
+                    monthlyPeso[mIdx] += itemWeight;
+                    monthlyValor[mIdx] += vUn * qOriginal;
+                });
+
+                const ctx = document.getElementById('chartHistorical').getContext('2d');
+                if (chartHistorical) chartHistorical.destroy();
+                chartHistorical = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: monthLabels,
+                        datasets: [{
+                            label: 'Peso (kg)',
+                            data: monthlyPeso,
+                            backgroundColor: chartColorAmber,
+                            borderRadius: 4,
+                            extraData: monthlyValor
+                        }]
+                    },
+                    options: getHistoricalOptions('kg', false)
+                });
+            } catch (err) { console.error('Erro ao carregar visão mensal do cliente:', err); }
+        }
+
+        async function resetEmissaoPareto() {
+            emissaoClientView = null;
+            const input = document.getElementById('emissaoSearch');
+            if (input) input.value = '';
+            await updateHistoricalChart();
         }
 
         function flashEmissaoBar(barIndex) {
@@ -4801,9 +4852,15 @@ function flashConcentracaoBar(barIndex) {
                 const isClientMode = viewMode === 'client' && !(histOverlay && histOverlay.style.display === 'flex');
                 const emissaoMonthWrap = document.getElementById('emissaoMonthWrapper');
                 const emissaoScrollWrap = document.getElementById('emissaoScrollWrapper');
+                if (!isClientMode) { emissaoClientView = null; }
+                const emissaoSearchDiv = document.getElementById('emissaoSearchWrapper');
+                // Se está em visão mensal de cliente, deixa showClientMonthlyEmissao controlar
+                if (isClientMode && emissaoClientView) {
+                    if (emissaoSearchDiv) emissaoSearchDiv.style.display = 'block';
+                    return;
+                }
                 if (emissaoMonthWrap) emissaoMonthWrap.style.display = isClientMode ? 'none' : '';
                 if (emissaoScrollWrap) emissaoScrollWrap.style.display = isClientMode ? 'block' : 'none';
-                const emissaoSearchDiv = document.getElementById('emissaoSearchWrapper');
                 if (emissaoSearchDiv) emissaoSearchDiv.style.display = isClientMode ? 'block' : 'none';
                 if (!isClientMode) { emissaoAllLabels = []; const si = document.getElementById('emissaoSearch'); if (si) si.value = ''; const sg = document.getElementById('emissaoSuggestions'); if (sg) sg.style.display = 'none'; }
                 const ctx = isClientMode
