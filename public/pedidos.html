@@ -4461,7 +4461,8 @@
         }
         let concentracaoAllLabels = [];
         let emissaoAllLabels = [];
-        let emissaoClientView = null; // null = pareto, string = cliente em visão mensal
+        let emissaoClientView = null;       // null = pareto, string = cliente em visão mensal
+        let emissaoClientYearRecords = []; // cache dos registros anuais do cliente ativo
         let concentracaoAllIds = [];
         let concentracaoBarPx = 80;
         let emissaoBarPx = 80;
@@ -4733,11 +4734,15 @@ function flashConcentracaoBar(barIndex) {
                 if (!res.ok) return;
                 const allRecs = await res.json();
 
+                // Filtrar pelo cliente e cachear para uso no click
+                const clientRecs = allRecs.filter(r => (r.NOME_CLIENTE || '').trim().toUpperCase() === clientName);
+                emissaoClientYearRecords = clientRecs;
+
                 const monthLabels = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
                 const monthlyPeso = Array(12).fill(0);
                 const monthlyValor = Array(12).fill(0);
 
-                allRecs.forEach(r => {
+                clientRecs.forEach(r => {
                     if ((r.NOME_CLIENTE || '').trim().toUpperCase() !== clientName) return;
                     const d = toLocalDate(r.DATA_EMISSAO_PEDIDO);
                     const mIdx = d.getMonth();
@@ -4774,6 +4779,7 @@ function flashConcentracaoBar(barIndex) {
 
         async function resetEmissaoPareto() {
             emissaoClientView = null;
+            emissaoClientYearRecords = [];
             const input = document.getElementById('emissaoSearch');
             if (input) input.value = '';
             await updateHistoricalChart();
@@ -5131,17 +5137,14 @@ function flashConcentracaoBar(barIndex) {
                     const selectedYear = parseInt(document.getElementById('yearPillSelect')?.value) || new Date().getFullYear();
                     const isMonthlyView = (currentDeliveryView === 'mensal') || (activePillMonth === null);
 
-                    // Visão mensal por cliente → abre registros do mês clicado
+                    // Visão mensal por cliente → abre registros do mês clicado (usa cache do ano)
                     if (emissaoClientView) {
                         const mlbls = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-                        const monthNum = index + 1;
-                        try {
-                            const res = await fetch(`/api/emissoes/list?ano=${selectedYear}&mes=${monthNum}`);
-                            if (!res.ok) return;
-                            const recs = await res.json();
-                            const clientRecs = recs.filter(r => (r.NOME_CLIENTE || '').trim().toUpperCase() === emissaoClientView);
-                            await showHistoricalDetails(clientRecs, `Emissão ${emissaoClientView} — ${mlbls[index]}/${selectedYear}`);
-                        } catch (err) { console.error(err); }
+                        const monthRecs = emissaoClientYearRecords.filter(r => {
+                            const d = toLocalDate(r.DATA_EMISSAO_PEDIDO);
+                            return d.getMonth() === index;
+                        });
+                        await showHistoricalDetails(monthRecs, `Emissão ${emissaoClientView} — ${mlbls[index]}/${selectedYear}`);
                         return;
                     }
 
