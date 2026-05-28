@@ -164,7 +164,12 @@ function getItemSectorMetrics(item) {
 function getCorrectedWeight(item, weightsMap = {}) {
     const commercialBalance = getCommercialBalance(item);
     const metrics = getItemSectorMetrics(item);
-    const originalTarget = metrics.originalTarget;
+
+    // Em modo emission_total, usa QUANTIDADE_PPR como denominador (igual ao gráfico de emissão)
+    const isEmissionTotal = typeof window !== 'undefined' && typeof chartMode !== 'undefined' && chartMode === 'emission_total';
+    const originalTarget = isEmissionTotal
+        ? (Number(item.QUANTIDADE_PPR) || 0)
+        : metrics.originalTarget;
 
     let unitWeight = 0;
     const prodCode = String(item.PRODUTO_PPR || '').trim();
@@ -172,11 +177,11 @@ function getCorrectedWeight(item, weightsMap = {}) {
     // 1. Priority: Fixed PESO_UNIT if present in the data item
     if (item.PESO_UNIT !== undefined && item.PESO_UNIT !== null && item.PESO_UNIT !== '' && Number(item.PESO_UNIT) > 0) {
         unitWeight = Number(item.PESO_UNIT);
-    } 
+    }
     // 2. Secondary: Custom Weights Map (Manual overwrites)
     else if (weightsMap[prodCode]) {
         unitWeight = weightsMap[prodCode];
-    } 
+    }
     // 3. Fallback: Calculated from Net Weight / Original Target
     else {
         unitWeight = originalTarget > 0 ? (Number(item.PESO_LIQUIDO_NPR) || 0) / originalTarget : 0;
