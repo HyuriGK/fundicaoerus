@@ -1187,20 +1187,20 @@
             const toast = document.createElement('div');
             toast.id = 'last-sync-toast';
             toast.style.cssText = `
-                position: fixed; top: -80px; left: 16px; z-index: 99998;
-                background: rgba(15,15,20,0.92); backdrop-filter: blur(12px);
-                border: 1px solid rgba(99,102,241,0.25); border-radius: 10px;
+                position: fixed; top: -80px; right: 16px; z-index: 99998;
+                background: rgba(5,46,22,0.95); backdrop-filter: blur(12px);
+                border: 1px solid rgba(74,222,128,0.35); border-radius: 10px;
                 padding: 10px 16px; display: flex; align-items: center; gap: 10px;
                 font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-                box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+                box-shadow: 0 4px 20px rgba(0,0,0,0.4), 0 0 12px rgba(74,222,128,0.1);
                 transition: top 0.4s cubic-bezier(0.34,1.56,0.64,1);
                 pointer-events: none;
             `;
             toast.innerHTML = `
-                <i class="fa-solid fa-rotate" style="color:#6366f1;font-size:0.8rem;"></i>
+                <i class="fa-solid fa-rotate" style="color:#4ade80;font-size:0.8rem;"></i>
                 <div>
-                    <div style="font-size:0.68rem;font-weight:600;color:#71717a;letter-spacing:0.05em;text-transform:uppercase;">Última sincronização</div>
-                    <div style="font-size:0.82rem;font-weight:700;color:#e4e4e7;">${dateFmt} às ${timeFmt}</div>
+                    <div style="font-size:0.68rem;font-weight:600;color:#86efac;letter-spacing:0.05em;text-transform:uppercase;">Última sincronização</div>
+                    <div style="font-size:0.82rem;font-weight:700;color:#dcfce7;">${dateFmt} às ${timeFmt}</div>
                 </div>
             `;
             document.body.appendChild(toast);
