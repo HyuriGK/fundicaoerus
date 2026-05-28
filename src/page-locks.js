@@ -148,14 +148,48 @@ router.post('/sync-unlock', async (req, res) => {
 
 // GET: Retorna última sincronização concluída por página
 router.get('/last-sync', async (req, res) => {
+    // Mapeamento screen_name (sync_status) → page_id
+    const screenToPage = {
+        'Faturamento':  'faturamentos.html',
+        'Pedidos':      'pedidos.html',
+        'Industrial':   'pedidos.html',
+        'Produção':     'pedidos.html',
+        'Emissões':     'pedidos.html',
+        'Refugos':      'refugos.html',
+        'Custos':       'custos.html',
+        'Devoluções':   'devolucoes.html',
+        'Assertividade':'comparativo.html',
+        'Balanco':      'balanco.html',
+    };
     try {
-        const result = await pool.query(`
+        await pool.query(`CREATE TABLE IF NOT EXISTS sync_history (
+            id SERIAL PRIMARY KEY, page_id VARCHAR(255),
+            started_at TIMESTAMPTZ, finished_at TIMESTAMPTZ,
+            duration_ms INT, created_at TIMESTAMPTZ DEFAULT NOW()
+        )`);
+
+        // Fonte primária: sync_history (populada pelo lock/unlock)
+        const histResult = await pool.query(`
             SELECT DISTINCT ON (page_id) page_id, finished_at
-            FROM sync_history
-            ORDER BY page_id, finished_at DESC
+            FROM sync_history ORDER BY page_id, finished_at DESC
         `);
-        res.json({ success: true, data: result.rows });
+        const byPage = {};
+        histResult.rows.forEach(r => { byPage[r.page_id] = r.finished_at; });
+
+        // Fallback: sync_status (populada diretamente pelos scripts)
+        const ssResult = await pool.query(`SELECT screen_name, last_sync_at FROM sync_status`);
+        ssResult.rows.forEach(r => {
+            const page = screenToPage[r.screen_name];
+            if (page && !byPage[page]) byPage[page] = r.last_sync_at;
+            // Se já existe mas sync_status é mais recente, usa o mais recente
+            if (page && byPage[page] && new Date(r.last_sync_at) > new Date(byPage[page]))
+                byPage[page] = r.last_sync_at;
+        });
+
+        const data = Object.entries(byPage).map(([page_id, finished_at]) => ({ page_id, finished_at }));
+        res.json({ success: true, data });
     } catch (error) {
+        console.error('Erro last-sync:', error);
         res.status(500).json({ success: false, data: [] });
     }
 });
