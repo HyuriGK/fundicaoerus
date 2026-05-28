@@ -837,48 +837,44 @@
             }
         }, 1000);
 
+        function finalizeSyncIndicator() {
+            clearInterval(updateInterval);
+            clearInterval(checkInterval);
+            clearTimeout(safetyTimeout);
+            if (fill) { fill.style.width = '100%'; fill.style.background = '#10b981'; }
+            if (pctText) { pctText.textContent = '100%'; pctText.style.color = '#10b981'; }
+            if (statusText) statusText.innerHTML = '<i class="fa-solid fa-circle-check" style="color: #10b981;"></i> <span style="color: #10b981;">Sincronização Finalizada</span>';
+            setTimeout(() => {
+                if (indicator.parentNode) {
+                    indicator.style.transition = 'all 0.5s ease-out';
+                    indicator.style.transform = 'translateX(120%)';
+                    indicator.style.opacity = '0';
+                    setTimeout(() => indicator.remove(), 500);
+                }
+            }, 3000);
+        }
+
         const checkInterval = setInterval(async () => {
             try {
                 const resp = await fetch('/api/page-locks');
                 const result = await resp.json();
                 if (result.success && Array.isArray(result.data)) {
                     const lock = result.data.find(l => l.page_id === page);
-                    if (lock && lock.is_locked && lock.sync_progress > 0) {
-                        const realPct = Math.min(95, lock.sync_progress);
-                        if (fill) { fill.style.width = realPct + '%'; fill.dataset.realProgress = '1'; }
-                        if (pctText) pctText.textContent = realPct + '%';
-                    }
-                    if (!lock || !lock.is_locked || lock.lock_reason !== 'sync') {
-                        // Finalizado!
-                        clearInterval(updateInterval);
-                        clearInterval(checkInterval);
-                        if (fill) {
-                            fill.style.width = '100%';
-                            fill.style.background = '#10b981';
+                    if (lock && lock.is_locked && lock.lock_reason === 'sync') {
+                        if (lock.sync_progress > 0) {
+                            const realPct = Math.min(95, lock.sync_progress);
+                            if (fill) { fill.style.width = realPct + '%'; fill.dataset.realProgress = '1'; }
+                            if (pctText) pctText.textContent = realPct + '%';
                         }
-                        if (pctText) {
-                            pctText.textContent = '100%';
-                            pctText.style.color = '#10b981';
-                        }
-                        if (statusText) {
-                            statusText.innerHTML = '<i class="fa-solid fa-circle-check" style="color: #10b981;"></i> <span style="color: #10b981;">Sincronização Finalizada</span>';
-                        }
-                        
-                        // Notificar com um toast (se existir a função global showToast ou similar)
-                        // Como activity-logger é injetado, ele pode não ter acesso direto a funções de pedidos.html
-                        // Mas podemos tentar emitir um evento ou apenas deixar o popup ali por 10s
-                        setTimeout(() => {
-                             if (indicator.parentNode) {
-                                 indicator.style.transition = 'all 0.5s ease-out';
-                                 indicator.style.transform = 'translateX(120%)';
-                                 indicator.style.opacity = '0';
-                                 setTimeout(() => indicator.remove(), 500);
-                             }
-                        }, 8000);
+                    } else {
+                        finalizeSyncIndicator();
                     }
                 }
             } catch (e) {}
-        }, 5000);
+        }, 2000);
+
+        // Timeout de segurança: se o unlock nunca chegar, força limpeza após 3× o tempo estimado
+        const safetyTimeout = setTimeout(() => finalizeSyncIndicator(), Math.max(syncEstimatedMs * 3, 180000));
     }
 
     // --- ROLE ENFORCEMENT ---
@@ -1236,12 +1232,30 @@
         });
     });
 
-    // 1b. Polling de sync lock a cada 10s (detecta bloqueio enquanto usuário está na página)
-    setInterval(() => {
-        if (!document.getElementById('sync-overlay') && !document.getElementById('maintenance-overlay')) {
-            checkPageLock();
+    // 1b. Polling de sync lock a cada 8s (detecta bloqueio e limpeza do indicador)
+    setInterval(async () => {
+        const hasOverlay = document.getElementById('sync-overlay') || document.getElementById('maintenance-overlay');
+        if (!hasOverlay) checkPageLock();
+
+        // Safety: se o indicador está visível mas o lock sumiu, remove diretamente
+        const floatingIndicator = document.getElementById('sync-floating-indicator');
+        if (floatingIndicator) {
+            try {
+                const pg = window.location.pathname.split('/').pop() || 'index.html';
+                const resp = await fetch('/api/page-locks');
+                const result = await resp.json();
+                if (result.success && Array.isArray(result.data)) {
+                    const lock = result.data.find(l => l.page_id === pg);
+                    if (!lock || !lock.is_locked || lock.lock_reason !== 'sync') {
+                        floatingIndicator.style.transition = 'all 0.5s ease-out';
+                        floatingIndicator.style.transform = 'translateX(120%)';
+                        floatingIndicator.style.opacity = '0';
+                        setTimeout(() => { if (floatingIndicator.parentNode) floatingIndicator.remove(); }, 500);
+                    }
+                }
+            } catch (e) {}
         }
-    }, 10000);
+    }, 8000);
 
     // 2. Log Modal Openings
     document.addEventListener('DOMContentLoaded', () => {
