@@ -1,11 +1,13 @@
 @echo off
 setlocal
-cd /d %~dp0
+cd /d "%~dp0.."
 
 echo ======================================================
 echo   Sync Balanco Financeiro - Pagamentos e Recebimentos
 echo ======================================================
 echo.
+
+node scripts/sync/sync-page-lock.js lock balanco.html
 
 echo [1/3] Sincronizando PAGAR_PAGAMENTO (Firebird -> Postgres)...
 node scripts/sync-balanco-pagamentos.js
@@ -17,6 +19,8 @@ node scripts/sync-balanco-recebimentos.js
 echo.
 echo [3/3] Sincronizando DESPESA (Firebird -> Postgres)...
 node scripts/sync-balanco-despesas.js
+
+node scripts/sync/sync-page-lock.js unlock balanco.html
 
 echo.
 echo ======================================================
