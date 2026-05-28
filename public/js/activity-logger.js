@@ -830,7 +830,7 @@
 
         const updateInterval = setInterval(() => {
             const elapsed = Date.now() - syncStartedAt;
-            const timePct = Math.min((elapsed / syncEstimatedMs) * 100, 30);
+            const timePct = Math.min((elapsed / syncEstimatedMs) * 100, 95);
             if (fill && !fill.dataset.realProgress) {
                 fill.style.width = timePct + '%';
                 if (pctText) pctText.textContent = Math.round(timePct) + '%';

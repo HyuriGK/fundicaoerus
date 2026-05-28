@@ -59,9 +59,9 @@ router.post('/sync-lock', async (req, res) => {
     try {
         // Calcular estimativa baseada na média das últimas 3 sincronizações
         const historyResult = await pool.query(
-            `SELECT duration_ms FROM sync_history 
-             WHERE page_id = $1 
-             ORDER BY created_at DESC LIMIT 3`,
+            `SELECT duration_ms FROM sync_history
+             WHERE page_id = $1
+             ORDER BY created_at DESC LIMIT 10`,
             [page_id]
         );
 
