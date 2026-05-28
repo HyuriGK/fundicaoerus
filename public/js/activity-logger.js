@@ -1218,7 +1218,7 @@
                     toast.style.padding = '0 16px';
                     setTimeout(() => toast.remove(), 350);
                 }, 5000);
-            }, 3000);
+            }, 2000);
         } catch(e) {}
     }
 
