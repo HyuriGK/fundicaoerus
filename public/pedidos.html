@@ -4710,6 +4710,76 @@ function flashConcentracaoBar(barIndex) {
             showClientMonthlyEmissao(name);
         }
 
+        function _calcEmissaoWeight(r) {
+            const qOriginal = parseFloat(r.QUANTIDADE_PPR) || 0;
+            const prodCode = String(r.PRODUTO_PPR || '').trim();
+            const wUn = customWeights[prodCode]
+                ? customWeights[prodCode]
+                : (qOriginal > 0 ? (parseFloat(r.PESO_LIQUIDO_NPR) || 0) / qOriginal : 0);
+            let vUn = parseFloat(r.VALOR_PPR || 0);
+            if (r.PRECO_KG && parseFloat(r.PRECO_KG) > 0 && customWeights[prodCode]) vUn = parseFloat(r.PRECO_KG) * wUn;
+            return { peso: wUn * qOriginal, valor: vUn * qOriginal };
+        }
+
+        function renderClientChart() {
+            if (!emissaoClientView) return;
+            const yearEl = document.getElementById('yearFilterHistorical');
+            const selectedYear = yearEl ? (parseInt(yearEl.value) || new Date().getFullYear()) : new Date().getFullYear();
+            const monthLabels = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+
+            const emissaoScrollWrap = document.getElementById('emissaoScrollWrapper');
+            const emissaoMonthWrap = document.getElementById('emissaoMonthWrapper');
+            const histOverlay = document.getElementById('historicalBlurOverlay');
+            if (emissaoScrollWrap) emissaoScrollWrap.style.display = 'none';
+            if (emissaoMonthWrap) emissaoMonthWrap.style.display = '';
+            if (histOverlay) histOverlay.style.display = 'none';
+
+            const modeEl = document.getElementById('modeFilterHistorical');
+            const titleEl = modeEl ? modeEl.closest('.chart-panel').querySelector('.chart-title-flex') : null;
+            const btnBack = `<button onclick="resetEmissaoPareto()" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:#a1a1aa;border-radius:5px;padding:2px 8px;font-size:0.7rem;cursor:pointer;margin-right:8px;">← Pareto</button>`;
+
+            const showDaily = currentDeliveryView === 'diaria' && activePillMonth !== null;
+            const ctx = document.getElementById('chartHistorical').getContext('2d');
+
+            if (showDaily) {
+                const mIdx = activePillMonth;
+                const lastDay = new Date(selectedYear, mIdx + 1, 0).getDate();
+                const labels = Array.from({ length: lastDay }, (_, i) => `Dia ${String(i + 1).padStart(2, '0')}`);
+                const pesoArr = Array(lastDay).fill(0);
+                const valorArr = Array(lastDay).fill(0);
+                emissaoClientYearRecords.forEach(r => {
+                    const d = toLocalDate(r.DATA_EMISSAO_PEDIDO);
+                    if (d.getMonth() !== mIdx) return;
+                    const { peso, valor } = _calcEmissaoWeight(r);
+                    pesoArr[d.getDate() - 1] += peso;
+                    valorArr[d.getDate() - 1] += valor;
+                });
+                if (titleEl) titleEl.innerHTML = `${btnBack}${emissaoClientView} — ${monthLabels[mIdx]}/${selectedYear}`;
+                if (chartHistorical) chartHistorical.destroy();
+                chartHistorical = new Chart(ctx, {
+                    type: 'bar',
+                    data: { labels, datasets: [{ label: 'Peso (kg)', data: pesoArr, backgroundColor: chartColorAmber, borderRadius: 4, extraData: valorArr }] },
+                    options: getHistoricalOptions('kg', false)
+                });
+            } else {
+                const monthlyPeso = Array(12).fill(0);
+                const monthlyValor = Array(12).fill(0);
+                emissaoClientYearRecords.forEach(r => {
+                    const d = toLocalDate(r.DATA_EMISSAO_PEDIDO);
+                    const { peso, valor } = _calcEmissaoWeight(r);
+                    monthlyPeso[d.getMonth()] += peso;
+                    monthlyValor[d.getMonth()] += valor;
+                });
+                if (titleEl) titleEl.innerHTML = `${btnBack}${emissaoClientView} — ${selectedYear}`;
+                if (chartHistorical) chartHistorical.destroy();
+                chartHistorical = new Chart(ctx, {
+                    type: 'bar',
+                    data: { labels: monthLabels, datasets: [{ label: 'Peso (kg)', data: monthlyPeso, backgroundColor: chartColorAmber, borderRadius: 4, extraData: monthlyValor }] },
+                    options: getHistoricalOptions('kg', false)
+                });
+            }
+        }
+
         async function showClientMonthlyEmissao(clientName) {
             emissaoClientView = clientName;
             const input = document.getElementById('emissaoSearch');
@@ -4718,63 +4788,13 @@ function flashConcentracaoBar(barIndex) {
             const yearEl = document.getElementById('yearFilterHistorical');
             const selectedYear = yearEl ? (parseInt(yearEl.value) || new Date().getFullYear()) : new Date().getFullYear();
 
-            // Esconder scroll wrapper do pareto, mostrar month wrapper (reaproveitamos o canvas mensal)
-            const emissaoScrollWrap = document.getElementById('emissaoScrollWrapper');
-            const emissaoMonthWrap = document.getElementById('emissaoMonthWrapper');
-            if (emissaoScrollWrap) emissaoScrollWrap.style.display = 'none';
-            if (emissaoMonthWrap) emissaoMonthWrap.style.display = '';
-
-            // Título com botão voltar
-            const modeEl = document.getElementById('modeFilterHistorical');
-            const titleEl = modeEl ? modeEl.closest('.chart-panel').querySelector('.chart-title-flex') : null;
-            if (titleEl) titleEl.innerHTML = `<button onclick="resetEmissaoPareto()" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:#a1a1aa;border-radius:5px;padding:2px 8px;font-size:0.7rem;cursor:pointer;margin-right:8px;">← Pareto</button>${clientName} — ${selectedYear}`;
-
             try {
                 const res = await fetch(`/api/emissoes/list?ano=${selectedYear}&mes=Todos`);
                 if (!res.ok) return;
                 const allRecs = await res.json();
-
-                // Filtrar pelo cliente e cachear para uso no click
-                const clientRecs = allRecs.filter(r => (r.NOME_CLIENTE || '').trim().toUpperCase() === clientName);
-                emissaoClientYearRecords = clientRecs;
-
-                const monthLabels = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-                const monthlyPeso = Array(12).fill(0);
-                const monthlyValor = Array(12).fill(0);
-
-                clientRecs.forEach(r => {
-                    if ((r.NOME_CLIENTE || '').trim().toUpperCase() !== clientName) return;
-                    const d = toLocalDate(r.DATA_EMISSAO_PEDIDO);
-                    const mIdx = d.getMonth();
-                    const qOriginal = parseFloat(r.QUANTIDADE_PPR) || 0;
-                    const prodCode = String(r.PRODUTO_PPR || '').trim();
-                    let wUn = customWeights[prodCode]
-                        ? customWeights[prodCode]
-                        : (qOriginal > 0 ? (parseFloat(r.PESO_LIQUIDO_NPR) || 0) / qOriginal : 0);
-                    const itemWeight = wUn * qOriginal;
-                    let vUn = parseFloat(r.VALOR_PPR || 0);
-                    if (r.PRECO_KG && parseFloat(r.PRECO_KG) > 0 && customWeights[prodCode]) vUn = parseFloat(r.PRECO_KG) * wUn;
-                    monthlyPeso[mIdx] += itemWeight;
-                    monthlyValor[mIdx] += vUn * qOriginal;
-                });
-
-                const ctx = document.getElementById('chartHistorical').getContext('2d');
-                if (chartHistorical) chartHistorical.destroy();
-                chartHistorical = new Chart(ctx, {
-                    type: 'bar',
-                    data: {
-                        labels: monthLabels,
-                        datasets: [{
-                            label: 'Peso (kg)',
-                            data: monthlyPeso,
-                            backgroundColor: chartColorAmber,
-                            borderRadius: 4,
-                            extraData: monthlyValor
-                        }]
-                    },
-                    options: getHistoricalOptions('kg', false)
-                });
-            } catch (err) { console.error('Erro ao carregar visão mensal do cliente:', err); }
+                emissaoClientYearRecords = allRecs.filter(r => (r.NOME_CLIENTE || '').trim().toUpperCase() === clientName);
+                renderClientChart();
+            } catch (err) { console.error('Erro ao carregar visão do cliente:', err); }
         }
 
         async function resetEmissaoPareto() {
@@ -4833,13 +4853,19 @@ function flashConcentracaoBar(barIndex) {
                     if (histOverlay) histOverlay.style.display = 'none';
                     selectedMonth = (viewMode === 'client' && activePillMonth !== null) ? String(activePillMonth + 1) : 'Todos';
                 } else if (currentDeliveryView === 'diaria' && viewMode === 'client') {
-                    // diária + por cliente → overlay
-                    const t = document.getElementById('historicalOverlayTitle');
-                    const s = document.getElementById('historicalOverlaySubtitle');
-                    if (t) t.textContent = 'A visualização diária não está disponível no modo "Por Cliente".';
-                    if (s) s.textContent = 'Selecione "Emissão Mensal" para usar a visualização por cliente.';
-                    if (histOverlay) histOverlay.style.display = 'flex';
-                    selectedMonth = 'Todos';
+                    if (emissaoClientView && activePillMonth !== null) {
+                        // diária + cliente específico + mês selecionado → permite visão diária
+                        if (histOverlay) histOverlay.style.display = 'none';
+                        selectedMonth = String(activePillMonth + 1);
+                    } else {
+                        // diária + sem cliente específico → overlay
+                        const t = document.getElementById('historicalOverlayTitle');
+                        const s = document.getElementById('historicalOverlaySubtitle');
+                        if (t) t.textContent = 'A visualização diária não está disponível no modo "Por Cliente".';
+                        if (s) s.textContent = 'Selecione "Emissão Mensal" para usar a visualização por cliente.';
+                        if (histOverlay) histOverlay.style.display = 'flex';
+                        selectedMonth = 'Todos';
+                    }
                 } else if (currentDeliveryView === 'diaria' && activePillMonth === null) {
                     // diária + ANO → overlay, renderiza mensal atrás
                     const t = document.getElementById('historicalOverlayTitle');
@@ -4860,9 +4886,10 @@ function flashConcentracaoBar(barIndex) {
                 const emissaoScrollWrap = document.getElementById('emissaoScrollWrapper');
                 if (!isClientMode) { emissaoClientView = null; }
                 const emissaoSearchDiv = document.getElementById('emissaoSearchWrapper');
-                // Se está em visão mensal de cliente, deixa showClientMonthlyEmissao controlar
+                // Se está em visão de cliente (mensal ou diária), renderClientChart controla
                 if (isClientMode && emissaoClientView) {
                     if (emissaoSearchDiv) emissaoSearchDiv.style.display = 'block';
+                    renderClientChart();
                     return;
                 }
                 if (emissaoMonthWrap) emissaoMonthWrap.style.display = isClientMode ? 'none' : '';
@@ -5137,14 +5164,25 @@ function flashConcentracaoBar(barIndex) {
                     const selectedYear = parseInt(document.getElementById('yearPillSelect')?.value) || new Date().getFullYear();
                     const isMonthlyView = (currentDeliveryView === 'mensal') || (activePillMonth === null);
 
-                    // Visão mensal por cliente → abre registros do mês clicado (usa cache do ano)
+                    // Visão por cliente → abre registros do período clicado (usa cache do ano)
                     if (emissaoClientView) {
                         const mlbls = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-                        const monthRecs = emissaoClientYearRecords.filter(r => {
-                            const d = toLocalDate(r.DATA_EMISSAO_PEDIDO);
-                            return d.getMonth() === index;
-                        });
-                        await showHistoricalDetails(monthRecs, `Emissão ${emissaoClientView} — ${mlbls[index]}/${selectedYear}`);
+                        const isDailyClientView = currentDeliveryView === 'diaria' && activePillMonth !== null;
+                        if (isDailyClientView) {
+                            const dayNum = index + 1;
+                            const dayRecs = emissaoClientYearRecords.filter(r => {
+                                const d = toLocalDate(r.DATA_EMISSAO_PEDIDO);
+                                return d.getMonth() === activePillMonth && d.getDate() === dayNum;
+                            });
+                            const periodoStr = `${String(dayNum).padStart(2,'0')}/${String(activePillMonth+1).padStart(2,'0')}/${selectedYear}`;
+                            await showHistoricalDetails(dayRecs, `Emissão ${emissaoClientView} — ${periodoStr}`);
+                        } else {
+                            const monthRecs = emissaoClientYearRecords.filter(r => {
+                                const d = toLocalDate(r.DATA_EMISSAO_PEDIDO);
+                                return d.getMonth() === index;
+                            });
+                            await showHistoricalDetails(monthRecs, `Emissão ${emissaoClientView} — ${mlbls[index]}/${selectedYear}`);
+                        }
                         return;
                     }
 
