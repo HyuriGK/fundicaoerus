@@ -517,6 +517,30 @@
         .concentracao-suggestion-item:last-child { border-bottom: none; }
         .concentracao-suggestion-item:hover { background: rgba(251,191,36,0.08); color: #fff; }
 
+        /* --- EMISSÃO CHART SEARCH --- */
+        #emissaoSearchWrapper {
+            display: none; padding: 0 10px 8px;
+        }
+        #emissaoSearch {
+            width: 100%; background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.08); color: #f4f4f5;
+            border-radius: 7px; padding: 5px 12px; font-size: 0.74rem; outline: none;
+            transition: border-color 0.2s;
+        }
+        #emissaoSearch:focus { border-color: rgba(251,191,36,0.4); }
+        #emissaoSuggestions {
+            display: none; position: fixed;
+            z-index: 9999; background: #1c1c20; border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 7px; overflow-y: auto; max-height: 190px;
+            box-shadow: 0 8px 28px rgba(0,0,0,0.5);
+        }
+        .emissao-suggestion-item {
+            padding: 7px 12px; cursor: pointer; font-size: 0.74rem; color: #d4d4d8;
+            border-bottom: 1px solid rgba(255,255,255,0.04); transition: background 0.1s;
+        }
+        .emissao-suggestion-item:last-child { border-bottom: none; }
+        .emissao-suggestion-item:hover { background: rgba(251,191,36,0.08); color: #fff; }
+
         /* --- TABLE & MODAL --- */
         .modal-overlay {
             display: none;
@@ -1389,6 +1413,7 @@
     <!-- Container para Toasts -->
     <div id="toast-container" class="toast-container"></div>
     <div id="concentracaoSuggestions"></div>
+    <div id="emissaoSuggestions"></div>
 
     <div class="app-layout">
         <!-- HIDDEN SIDE MENU TRIGGER -->
@@ -1576,6 +1601,13 @@
                             <select id="monthFilterHistorical" onchange="updateHistoricalChart().then(() => updatePendingChart(allData))" style="display:none;"></select>
                             <select id="yearFilterHistorical" onchange="syncEmissionYear(this.value); updateHistoricalChart().then(() => updatePendingChart(allData))" style="display:none;"></select>
                         </div>
+                    </div>
+                    <div id="emissaoSearchWrapper">
+                        <input id="emissaoSearch" type="text" autocomplete="off"
+                               placeholder="Pesquisar cliente..."
+                               oninput="onEmissaoSearch(this.value)"
+                               onfocus="onEmissaoSearch(this.value)"
+                               onblur="setTimeout(()=>{ const s=document.getElementById('emissaoSuggestions'); if(s) s.style.display='none'; },160)">
                     </div>
                     <div class="chart-canvas-wrapper" style="position:relative;">
                         <canvas id="chartHistorical"></canvas>
@@ -4408,6 +4440,7 @@
             });
         }
         let concentracaoAllLabels = [];
+        let emissaoAllLabels = [];
         let concentracaoAllIds = [];
         let concentracaoBarPx = 80;
 
@@ -4624,6 +4657,63 @@ function flashConcentracaoBar(barIndex) {
             step();
         }
 
+        function onEmissaoSearch(value) {
+            const input = document.getElementById('emissaoSearch');
+            const suggestions = document.getElementById('emissaoSuggestions');
+            if (!suggestions || !input) return;
+            const q = value.trim().toUpperCase();
+            if (!q) { suggestions.style.display = 'none'; return; }
+            const matches = emissaoAllLabels
+                .map((name, index) => ({ name, index }))
+                .filter(item => item.name.includes(q))
+                .slice(0, 12);
+            if (matches.length === 0) { suggestions.style.display = 'none'; return; }
+            const rect = input.getBoundingClientRect();
+            suggestions.style.top  = (rect.bottom + 3) + 'px';
+            suggestions.style.left = rect.left + 'px';
+            suggestions.style.width = rect.width + 'px';
+            suggestions.innerHTML = matches.map(item =>
+                `<div class="emissao-suggestion-item"
+                      data-idx="${item.index}"
+                      data-name="${item.name.replace(/"/g, '&quot;')}"
+                      onmousedown="selectEmissaoClient(+this.dataset.idx, this.dataset.name)">${item.name}</div>`
+            ).join('');
+            suggestions.style.display = 'block';
+        }
+
+        function selectEmissaoClient(barIndex, name) {
+            const input = document.getElementById('emissaoSearch');
+            if (input) input.value = name;
+            const suggestions = document.getElementById('emissaoSuggestions');
+            if (suggestions) suggestions.style.display = 'none';
+            setTimeout(() => flashEmissaoBar(barIndex), 80);
+        }
+
+        function flashEmissaoBar(barIndex) {
+            if (!chartHistorical) return;
+            const ds = chartHistorical.data.datasets.find(d => d.type === 'bar' || d.yAxisID === 'y');
+            if (!ds || !Array.isArray(ds.backgroundColor)) return;
+            const original = typeof ds.backgroundColor === 'string'
+                ? chartHistorical.data.labels.map(() => ds.backgroundColor)
+                : [...ds.backgroundColor];
+            let tick = 0;
+            const flashes = 6;
+            function step() {
+                if (tick >= flashes) {
+                    ds.backgroundColor = original;
+                    chartHistorical.update('none');
+                    return;
+                }
+                const colors = [...original];
+                colors[barIndex] = tick % 2 === 0 ? '#ffffff' : chartColorAmber;
+                ds.backgroundColor = colors;
+                chartHistorical.update('none');
+                tick++;
+                setTimeout(step, 280);
+            }
+            step();
+        }
+
         let emissionDataCache = null;
         let emissionClientCache = {}; // Cache by "year-month"
         let selectedHistoricalDay = null;
@@ -4670,6 +4760,9 @@ function flashConcentracaoBar(barIndex) {
                 const titleEl = modeEl.closest('.chart-panel').querySelector('.chart-title-flex');
                 const ctx = document.getElementById('chartHistorical').getContext('2d');
                 const monthLabels = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+                const emissaoWrapper = document.getElementById('emissaoSearchWrapper');
+                if (emissaoWrapper) emissaoWrapper.style.display = viewMode === 'client' ? '' : 'none';
+                if (viewMode !== 'client') { emissaoAllLabels = []; const si = document.getElementById('emissaoSearch'); if (si) si.value = ''; const sg = document.getElementById('emissaoSuggestions'); if (sg) sg.style.display = 'none'; }
                 if (viewMode === 'month') {
                     // MODO: POR MÃÂŠS ou DIA (DENTRO DO MÃÂŠS)
                     if (selectedMonth === 'Todos') {
@@ -4800,6 +4893,7 @@ function flashConcentracaoBar(barIndex) {
                         cumulative += s.totalPeso;
                         return totalWeightAll > 0 ? (cumulative / totalWeightAll) * 100 : 0;
                     });
+                    emissaoAllLabels = labels;
                     if (chartHistorical) chartHistorical.destroy();
                     chartHistorical = new Chart(ctx, {
                         type: 'bar',
