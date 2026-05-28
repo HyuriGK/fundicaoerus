@@ -7,6 +7,20 @@ const { spawn } = require('child_process');
 const path      = require('path');
 const readline  = require('readline');
 const fs        = require('fs');
+const https     = require('https');
+
+function updateSyncProgress(pageId, progress) {
+    if (!pageId) return;
+    const data = JSON.stringify({ page_id: pageId, progress });
+    const req = https.request({
+        hostname: 'fundicaoerus.vercel.app', port: 443,
+        path: '/api/page-locks/sync-progress', method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) }
+    });
+    req.on('error', () => {});
+    req.write(data);
+    req.end();
+}
 
 require('dotenv').config({ path: path.join(__dirname, '../../.env.local'), override: true });
 
@@ -90,19 +104,19 @@ const CYCLE_LOG     = path.join(ROOT_DIR, 'sync-ciclos.txt');
 const W        = 66; // inner content width (ASCII-safe)
 
 const SYNC_BATS = [
-    { name: 'CUSTOS',      file: 'sincronizar_acustos.bat',        icon: '[$$]' },
-    { name: 'BALANCO',     file: 'sincronizar_balanco.bat',         icon: '[BL]' },
-    { name: 'DEVOLUCOES',  file: 'sincronizar_adevolucoes.bat',    icon: '[<<]' },
-    { name: 'EMISSOES',    file: 'sincronizar_aemissoes.bat',      icon: '[>>]' },
-    { name: 'FATURAMENTO', file: 'sincronizar_afaturamento.bat',   icon: '[NF]' },
-    { name: 'PEDIDOS',     file: 'sincronizar_apedidos.bat',       icon: '[PD]' },
-    { name: 'PRODUCAO',    file: 'sincronizar_aproducao.bat',      icon: '[PR]' },
-    { name: 'REFUGOS',     file: 'sincronizar_arefugo.bat',        icon: '[RF]' },
-    { name: 'SNAPSHOTS',   file: 'sincronizar_asnapshots.bat',     icon: '[SS]' },
+    { name: 'CUSTOS',      file: 'sync/sincronizar_acustos.bat',       icon: '[$$]', pageId: 'custos.html' },
+    { name: 'BALANCO',     file: 'sync/sincronizar_balanco.bat',        icon: '[BL]', pageId: 'balanco.html' },
+    { name: 'DEVOLUCOES',  file: 'sync/sincronizar_adevolucoes.bat',   icon: '[<<]', pageId: 'devolucoes.html' },
+    { name: 'EMISSOES',    file: 'sync/sincronizar_aemissoes.bat',     icon: '[>>]', pageId: 'pedidos.html' },
+    { name: 'FATURAMENTO', file: 'sync/sincronizar_afaturamento.bat',  icon: '[NF]', pageId: 'faturamentos.html' },
+    { name: 'PEDIDOS',     file: 'sync/sincronizar_apedidos.bat',      icon: '[PD]', pageId: 'pedidos.html' },
+    { name: 'PRODUCAO',    file: 'sync/sincronizar_aproducao.bat',     icon: '[PR]', pageId: 'pedidos.html' },
+    { name: 'REFUGOS',     file: 'sync/sincronizar_arefugo.bat',       icon: '[RF]', pageId: 'refugos.html' },
+    { name: 'SNAPSHOTS',   file: 'sync/sincronizar_asnapshots.bat',    icon: '[SS]', pageId: 'pedidos.html' },
 ];
 
-const MOLDAGEM_BAT  = { name: 'MOLDAGEM', file: 'sincronizar_fichatecmoldagem.bat', icon: '[ML]' };
-const FUSAO_BAT     = { name: 'FUSAO FT',  file: 'sincronizar_fichatecfusao.bat',    icon: '[FU]' };
+const MOLDAGEM_BAT  = { name: 'MOLDAGEM', file: 'sync/sincronizar_fichatecmoldagem.bat', icon: '[ML]', pageId: 'fichatecmoldagem.html' };
+const FUSAO_BAT     = { name: 'FUSAO FT',  file: 'sync/sincronizar_fichatecfusao.bat',   icon: '[FU]', pageId: 'fichatecfusao.html' };
 const MOLDAGEM_WAIT = 30 * 60 * 1000; // 30 minutos
 let moldagemNextAt  = null;
 let fusaoNextAt     = null;
@@ -316,7 +330,10 @@ function runBat(bat) {
                 const l = line.trim();
                 if (l.includes('@PROG:')) {
                     const parts = l.split(':');
-                    if (parts.length >= 3) currentProg[parts[1]] = parseInt(parts[2]) || 0;
+                    if (parts.length >= 3) {
+                        currentProg[parts[1]] = parseInt(parts[2]) || 0;
+                        updateSyncProgress(bat.pageId, currentProg[parts[1]]);
+                    }
                 } else if (l.includes('Falha definitiva')) {
                     // Só conta erro após esgotar todas as tentativas do firebird-helper
                     logEvent(bat.name, l, true);

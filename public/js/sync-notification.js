@@ -73,11 +73,15 @@
                 if (lock) {
                     wasLocked = true;
                     show();
-                    const started = lock.sync_started_at ? new Date(lock.sync_started_at).getTime() : Date.now();
-                    const estimated = lock.sync_estimated_ms || 120000;
-                    const elapsed = Date.now() - started;
-                    const pct = Math.min(95, Math.round((elapsed / estimated) * 100));
-                    setProgress(pct);
+                    const realPct = lock.sync_progress != null ? lock.sync_progress : 0;
+                    if (realPct > 0) {
+                        setProgress(Math.min(95, realPct));
+                    } else {
+                        const started = lock.sync_started_at ? new Date(lock.sync_started_at).getTime() : Date.now();
+                        const estimated = lock.sync_estimated_ms || 120000;
+                        const elapsed = Date.now() - started;
+                        setProgress(Math.min(30, Math.round((elapsed / estimated) * 100)));
+                    }
                 } else if (wasLocked) {
                     wasLocked = false;
                     setProgress(100);

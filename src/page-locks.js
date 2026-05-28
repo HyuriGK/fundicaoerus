@@ -73,12 +73,13 @@ router.post('/sync-lock', async (req, res) => {
 
         const now = new Date();
 
+        await pool.query(`ALTER TABLE page_locks ADD COLUMN IF NOT EXISTS sync_progress INT DEFAULT 0`);
         await pool.query(`
-            INSERT INTO page_locks (page_id, is_locked, lock_reason, sync_started_at, sync_estimated_ms)
-            VALUES ($1, true, 'sync', $2, $3)
-            ON CONFLICT (page_id) 
-            DO UPDATE SET is_locked = true, lock_reason = 'sync', 
-                          sync_started_at = $2, sync_estimated_ms = $3, 
+            INSERT INTO page_locks (page_id, is_locked, lock_reason, sync_started_at, sync_estimated_ms, sync_progress)
+            VALUES ($1, true, 'sync', $2, $3, 0)
+            ON CONFLICT (page_id)
+            DO UPDATE SET is_locked = true, lock_reason = 'sync',
+                          sync_started_at = $2, sync_estimated_ms = $3, sync_progress = 0,
                           updated_at = CURRENT_TIMESTAMP
         `, [page_id, now, estimatedMs]);
 
@@ -142,6 +143,23 @@ router.post('/sync-unlock', async (req, res) => {
     } catch (error) {
         console.error('Erro ao remover sync lock:', error);
         res.status(500).json({ success: false, message: 'Erro ao desbloquear página.' });
+    }
+});
+
+// POST: Atualiza progresso real da sincronização (chamado pelo sync-forever)
+router.post('/sync-progress', async (req, res) => {
+    const { page_id, progress } = req.body;
+    if (!page_id || progress === undefined) {
+        return res.status(400).json({ success: false });
+    }
+    try {
+        await pool.query(
+            `UPDATE page_locks SET sync_progress = $2 WHERE page_id = $1 AND is_locked = true`,
+            [page_id, Math.min(100, Math.max(0, parseInt(progress) || 0))]
+        );
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ success: false });
     }
 });
 
