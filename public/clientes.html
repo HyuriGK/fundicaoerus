@@ -23,7 +23,9 @@
                 radial-gradient(circle at 15% 50%, rgba(234,88,12,0.04), transparent 25%),
                 radial-gradient(circle at 85% 30%, rgba(63,63,70,0.05), transparent 25%);
             overflow-x: hidden;
-            padding-bottom: 40px;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
         }
         /* Side menu */
         .side-menu-trigger { position:fixed; left:0; top:0; bottom:0; width:45px; z-index:2000; background:transparent; }
@@ -40,11 +42,10 @@
         .side-menu-header { margin-bottom:40px; }
         .side-menu-actions { display:flex; flex-direction:column; gap:15px; flex:1; }
         /* Layout */
-        .dashboard-content { padding:24px 32px 40px 32px; display:flex; flex-direction:column; gap:20px; }
-        /* Page title */
-        .page-title-row { display:flex; align-items:center; justify-content:space-between; }
-        .page-title { font-family:var(--font-display,var(--font-main)); font-size:1.5rem; font-weight:800; color:#fff; letter-spacing:-0.02em; }
-        .page-subtitle { font-size:0.73rem; color:var(--text-muted); margin-top:3px; }
+        .dashboard-content { padding:20px 32px 0 32px; display:flex; flex-direction:column; gap:16px; flex:1; overflow:hidden; }
+        .charts-view-active .dashboard-content { overflow: hidden; }
+        /* Period subtitle strip */
+        .period-strip { display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
         /* Toolbar */
         .toolbar-row {
             background:var(--bg-card); border:1px solid var(--border-subtle);
@@ -80,9 +81,10 @@
         .search-input::placeholder { color:var(--text-dim,#52525b); }
         /* Charts */
         .charts-row { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+        #chartsSection { flex:1; min-height:0; padding-bottom:20px; }
         .chart-panel {
             background:rgba(255,255,255,0.02); border-radius:12px; padding:20px;
-            height:290px; display:flex; flex-direction:column;
+            display:flex; flex-direction:column; height:100%;
             box-shadow:0 20px 40px -10px rgba(0,0,0,0.8);
             border-bottom:2px solid rgba(255,255,255,0.08);
         }
@@ -95,7 +97,7 @@
             background:rgba(0,0,0,0.25);
         }
         .table-title-text { font-size:0.88rem; font-weight:700; color:#fff; }
-        .table-scroll { overflow-x:auto; }
+        .table-scroll { overflow:auto; flex:1; }
         table { width:100%; border-collapse:collapse; font-family:var(--font-mono); font-size:0.74rem; min-width:1000px; }
         th {
             background:#111114; color:var(--text-muted); padding:9px 11px;
@@ -221,25 +223,22 @@
 <div class="side-menu-trigger"></div>
 <nav class="side-menu">
     <div class="side-menu-header">
-        <div class="side-menu-subtitle">ANÁLISE</div>
-        <div class="side-menu-title">Clientes</div>
+        <span class="side-menu-subtitle">MENU DASHBOARD</span>
+        <div class="side-menu-title">Opções</div>
     </div>
     <div class="side-menu-actions">
         <a href="index.html" class="side-btn btn-back-side">
-            <i class="fa-solid fa-arrow-left"></i> Voltar
+            <i class="fa-solid fa-arrow-right-from-bracket"></i> Voltar
         </a>
     </div>
 </nav>
 
 <div class="dashboard-content">
 
-    <!-- Title -->
-    <div class="page-title-row">
-        <div>
-            <div class="page-title"><i class="fa-solid fa-users" style="color:var(--color-primary);margin-right:10px;font-size:1.15rem;vertical-align:middle;"></i>Análise de Clientes</div>
-            <div class="page-subtitle" id="periodLabel">Carregando dados...</div>
-        </div>
-        <div id="loadingBadge" style="font-size:0.73rem;color:var(--text-muted);display:flex;align-items:center;gap:6px;">
+    <!-- Period strip -->
+    <div class="period-strip">
+        <div class="page-subtitle" id="periodLabel" style="font-size:0.72rem;color:var(--text-muted);">Carregando dados...</div>
+        <div id="loadingBadge" style="font-size:0.72rem;color:var(--text-muted);display:flex;align-items:center;gap:6px;">
             <i class="fa-solid fa-circle-notch fa-spin"></i> Buscando faturamento...
         </div>
     </div>
@@ -296,7 +295,8 @@
     </div>
 
     <!-- Charts (view=charts) -->
-    <div class="charts-row" id="chartsSection" style="display:none;">
+    <div id="chartsSection" style="display:none; flex:1; min-height:0; padding-bottom:20px;">
+    <div class="charts-row" style="height:100%;">
         <div class="chart-panel">
             <div class="chart-label">Top 10 — Faturamento (R$)</div>
             <canvas id="chartFat" style="flex:1;min-height:0;"></canvas>
@@ -305,10 +305,10 @@
             <div class="chart-label">Top 10 — Peso Total (kg)</div>
             <canvas id="chartPeso" style="flex:1;min-height:0;"></canvas>
         </div>
-    </div>
+    </div></div>
 
     <!-- Table (view=ranking) -->
-    <div class="table-container" id="rankingSection">
+    <div class="table-container" id="rankingSection" style="flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden;margin-bottom:20px;">
         <div class="table-header-bar">
             <div class="table-title-text"><i class="fa-solid fa-ranking-star" style="color:var(--color-primary);margin-right:8px;"></i>Ranking de Clientes</div>
             <div style="font-size:0.7rem;color:var(--text-muted);" id="tableCount">—</div>
@@ -355,6 +355,23 @@ const MONTHS = ['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 window.onload = async function() {
+    // Pré-selecionar ano e mês vigentes
+    const now = new Date();
+    const curYear  = String(now.getFullYear());
+    const curMonth = now.getMonth() + 1; // 1-12
+    activeMonth = curMonth;
+
+    const yearSel = document.getElementById('yearSelect');
+    for (const opt of yearSel.options) {
+        opt.selected = opt.value === curYear;
+    }
+    // Se o ano atual não estiver na lista, adiciona
+    if (!yearSel.querySelector(`option[value="${curYear}"]`)) {
+        const opt = document.createElement('option');
+        opt.value = curYear; opt.textContent = curYear; opt.selected = true;
+        yearSel.appendChild(opt);
+    }
+
     buildMonthBtns();
     await Promise.all([loadRatings(), loadData()]);
     document.getElementById('loadingBadge').style.display = 'none';
@@ -362,8 +379,11 @@ window.onload = async function() {
 
 function buildMonthBtns() {
     const c = document.getElementById('monthBtns');
-    let h = `<button class="month-btn all-btn active" onclick="setMonth('all')">TODOS</button>`;
-    MONTHS.forEach((m, i) => { h += `<button class="month-btn" onclick="setMonth(${i+1})">${m}</button>`; });
+    let h = `<button class="month-btn all-btn${activeMonth === 'all' ? ' active' : ''}" onclick="setMonth('all')">TODOS</button>`;
+    MONTHS.forEach((m, i) => {
+        const isActive = activeMonth === (i + 1);
+        h += `<button class="month-btn${isActive ? ' active' : ''}" onclick="setMonth(${i+1})">${m}</button>`;
+    });
     c.innerHTML = h;
 }
 
@@ -383,8 +403,8 @@ function setView(v) {
     currentView = v;
     document.getElementById('btnRanking').classList.toggle('active', v === 'ranking');
     document.getElementById('btnCharts').classList.toggle('active', v === 'charts');
-    document.getElementById('rankingSection').style.display = v === 'ranking' ? '' : 'none';
-    document.getElementById('chartsSection').style.display = v === 'charts' ? 'grid' : 'none';
+    document.getElementById('rankingSection').style.display = v === 'ranking' ? 'flex' : 'none';
+    document.getElementById('chartsSection').style.display = v === 'charts' ? 'flex' : 'none';
     if (v === 'charts') renderCharts();
 }
 
