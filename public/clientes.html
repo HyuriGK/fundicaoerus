@@ -89,8 +89,40 @@
             border-bottom:2px solid rgba(255,255,255,0.15);
             overflow:hidden !important;
         }
-        .chart-canvas-wrap { position:relative; flex:1; min-height:0; width:100%; }
-        .chart-canvas-wrap canvas { position:absolute; inset:0; width:100% !important; height:100% !important; }
+        /* Chart search */
+        #chartSearchWrapper { padding:0 0 8px; position:relative; flex-shrink:0; }
+        #chartSearch {
+            width:100%; background:rgba(255,255,255,0.04);
+            border:1px solid rgba(255,255,255,0.08); color:#f4f4f5;
+            border-radius:7px; padding:5px 12px; font-size:0.74rem; outline:none;
+            transition:border-color 0.2s; font-family:var(--font-main);
+        }
+        #chartSearch:focus { border-color:rgba(251,191,36,0.4); }
+        #chartSuggestions {
+            display:none; position:fixed;
+            z-index:9999; background:#1c1c20; border:1px solid rgba(255,255,255,0.1);
+            border-radius:7px; overflow-y:auto; max-height:190px;
+            box-shadow:0 8px 28px rgba(0,0,0,0.5);
+        }
+        .chart-suggestion-item {
+            padding:7px 12px; cursor:pointer; font-size:0.74rem; color:#d4d4d8;
+            border-bottom:1px solid rgba(255,255,255,0.04); transition:background 0.1s;
+        }
+        .chart-suggestion-item:last-child { border-bottom:none; }
+        .chart-suggestion-item:hover { background:rgba(251,191,36,0.08); color:#fff; }
+        /* Chart scroll wrapper */
+        #chartScrollWrapper {
+            overflow-x:auto; overflow-y:hidden;
+            flex:1; min-height:0;
+            scrollbar-width:thin;
+            scrollbar-color:rgba(255,255,255,0.15) transparent;
+        }
+        #chartScrollWrapper::-webkit-scrollbar { height:5px; }
+        #chartScrollWrapper::-webkit-scrollbar-track { background:transparent; }
+        #chartScrollWrapper::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.15); border-radius:3px; }
+        #chartScrollWrapper::-webkit-scrollbar-thumb:hover { background:rgba(255,255,255,0.28); }
+        #chartCanvasInner { position:relative; height:100%; min-height:220px; }
+        #chartCanvasInner canvas { position:absolute; inset:0; width:100% !important; height:100% !important; }
         .chart-label { font-size:0.7rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:10px; flex-shrink:0; }
         /* Table */
         .table-container { background:var(--bg-card); border:1px solid var(--border-subtle); border-radius:var(--radius-md); overflow:hidden; }
@@ -295,12 +327,24 @@
         </div>
     </div>
 
+    <!-- Chart suggestions (fixed, outside chartsSection) -->
+    <div id="chartSuggestions"></div>
+
     <!-- Charts (view=charts) -->
     <div id="chartsSection" style="display:none;">
         <div class="chart-panel">
-            <div class="chart-label" id="activeChartLabel">Top 10 — Faturamento (R$)</div>
-            <div class="chart-canvas-wrap">
-                <canvas id="chartActive"></canvas>
+            <div class="chart-label" id="activeChartLabel">Pareto — Faturamento (R$)</div>
+            <div id="chartSearchWrapper">
+                <input id="chartSearch" type="text" autocomplete="off"
+                       placeholder="Pesquisar cliente..."
+                       oninput="onChartSearch(this.value)"
+                       onfocus="onChartSearch(this.value)"
+                       onblur="setTimeout(()=>{ const s=document.getElementById('chartSuggestions'); if(s) s.style.display='none'; },160)">
+            </div>
+            <div id="chartScrollWrapper">
+                <div id="chartCanvasInner">
+                    <canvas id="chartActive"></canvas>
+                </div>
             </div>
         </div>
     </div>
@@ -349,6 +393,8 @@ let sortState = { col: 'fat', dir: 'desc' };
 let currentView = 'ranking';
 let charts = { active: null };
 let activeChartType = 'fat';
+let chartAllLabels = [];
+let chartBarPx = 40;
 let activeMonth = 'all';
 
 const MONTHS = ['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'];
@@ -750,12 +796,12 @@ function renderExpandContent(clientName, idx) {
 // ─── CHARTS ───────────────────────────────────────────────────────────────────
 function renderCharts() {
     const show = valorVisible;
-    const type = activeChartType; // 'fat' | 'peso' | 'preco'
+    const type = activeChartType;
 
     const cfg = {
-        fat:   { label: 'Pareto — Faturamento (R$)',    color: '#fbbf24', colorDim: 'rgba(251,191,36,0.4)' },
-        peso:  { label: 'Pareto — Peso Total (kg)',     color: '#a855f7', colorDim: 'rgba(168,85,247,0.4)' },
-        preco: { label: 'Pareto — Preço Médio (R$/kg)', color: '#10b981', colorDim: 'rgba(16,185,129,0.4)'  }
+        fat:   { label: 'Pareto — Faturamento (R$)',    color: '#fbbf24', colorDim: 'rgba(251,191,36,0.5)' },
+        peso:  { label: 'Pareto — Peso Total (kg)',     color: '#a855f7', colorDim: 'rgba(168,85,247,0.5)' },
+        preco: { label: 'Pareto — Preço Médio (R$/kg)', color: '#10b981', colorDim: 'rgba(16,185,129,0.5)'  }
     };
     const { label, color, colorDim } = cfg[type] || cfg.fat;
     document.getElementById('activeChartLabel').textContent = label;
@@ -774,28 +820,37 @@ function renderCharts() {
         return show ? 'R$ ' + fmtNum(v) : '-----';
     };
 
+    // TODOS os clientes (sem slice), para Pareto completo com scroll
     const sorted = [...clientList]
         .filter(c => type !== 'preco' || c.peso > 0)
-        .sort((a, b) => getValue(b) - getValue(a))
-        .slice(0, 15);
+        .sort((a, b) => getValue(b) - getValue(a));
+
+    chartAllLabels = sorted.map(c => c.name.toUpperCase());
 
     const values = sorted.map(getValue);
     const total  = values.reduce((a, b) => a + b, 0);
-
-    // Cumulative %
     let cumSum = 0;
     const cumPct = values.map(v => { cumSum += v; return total > 0 ? +(cumSum / total * 100).toFixed(1) : 0; });
 
+    // Calcular largura do canvas para scroll horizontal
+    const scrollWrapper = document.getElementById('chartScrollWrapper');
+    const canvasInner   = document.getElementById('chartCanvasInner');
+    const wrapperW = scrollWrapper ? scrollWrapper.clientWidth : 800;
+    chartBarPx = Math.max(30, Math.floor(wrapperW / 12));
+    const canvasW = Math.max(wrapperW, sorted.length * chartBarPx);
+    if (canvasInner) canvasInner.style.width = canvasW + 'px';
+
+    const bgColors = sorted.map((_, i) => i === 0 ? color : colorDim);
+
     if (charts.active) charts.active.destroy();
-    charts.active = new Chart(document.getElementById('chartActive'), {
-        type: 'bar',
+    charts.active = new Chart(document.getElementById('chartActive').getContext('2d'), {
         data: {
             labels: sorted.map(c => c.name.split(' ')[0]),
             datasets: [
                 {
                     type: 'bar',
                     data: values,
-                    backgroundColor: sorted.map((_, i) => i === 0 ? color : colorDim),
+                    backgroundColor: bgColors,
                     borderRadius: 4,
                     order: 2,
                     yAxisID: 'y'
@@ -803,11 +858,11 @@ function renderCharts() {
                 {
                     type: 'line',
                     data: cumPct,
-                    borderColor: 'rgba(255,255,255,0.55)',
+                    borderColor: 'rgba(255,255,255,0.5)',
                     backgroundColor: 'transparent',
-                    pointBackgroundColor: 'rgba(255,255,255,0.8)',
-                    pointRadius: 3,
-                    pointHoverRadius: 5,
+                    pointBackgroundColor: 'rgba(255,255,255,0.75)',
+                    pointRadius: 2,
+                    pointHoverRadius: 4,
                     borderWidth: 1.5,
                     tension: 0.3,
                     order: 1,
@@ -831,7 +886,7 @@ function renderCharts() {
                 }
             },
             scales: {
-                x: { grid: { display: false }, ticks: { color: '#71717a', font: { size: 10 } } },
+                x: { grid: { display: false }, ticks: { color: '#71717a', font: { size: 10 }, maxRotation: 45 } },
                 y: {
                     position: 'left',
                     grid: { color: 'rgba(255,255,255,0.04)' },
@@ -846,6 +901,75 @@ function renderCharts() {
             }
         }
     });
+}
+
+// ─── CHART SEARCH ─────────────────────────────────────────────────────────────
+function onChartSearch(value) {
+    const input = document.getElementById('chartSearch');
+    const suggestions = document.getElementById('chartSuggestions');
+    if (!suggestions || !input) return;
+    const q = value.trim().toUpperCase();
+    if (!q) { suggestions.style.display = 'none'; return; }
+    const matches = chartAllLabels
+        .map((name, index) => ({ name, index }))
+        .filter(item => item.name.includes(q))
+        .slice(0, 12);
+    if (!matches.length) { suggestions.style.display = 'none'; return; }
+    const rect = input.getBoundingClientRect();
+    suggestions.style.top   = (rect.bottom + 3) + 'px';
+    suggestions.style.left  = rect.left + 'px';
+    suggestions.style.width = rect.width + 'px';
+    suggestions.innerHTML = matches.map(item =>
+        `<div class="chart-suggestion-item"
+              data-idx="${item.index}"
+              data-name="${item.name.replace(/"/g, '&quot;')}"
+              onmousedown="selectChartClient(+this.dataset.idx, this.dataset.name)">${item.name}</div>`
+    ).join('');
+    suggestions.style.display = 'block';
+}
+
+function selectChartClient(barIndex, name) {
+    const input = document.getElementById('chartSearch');
+    if (input) input.value = name;
+    const suggestions = document.getElementById('chartSuggestions');
+    if (suggestions) suggestions.style.display = 'none';
+
+    const wrapper = document.getElementById('chartScrollWrapper');
+    if (!wrapper || !chartAllLabels.length) return;
+
+    const barCenter = barIndex * chartBarPx + chartBarPx / 2;
+    const targetScroll = Math.max(0, barCenter - wrapper.clientWidth / 2);
+    const startScroll = wrapper.scrollLeft;
+    const distance = targetScroll - startScroll;
+    const duration = Math.min(800, Math.max(300, Math.abs(distance) / 2));
+    const startTime = performance.now();
+    function ease(t) { return t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2,3)/2; }
+    function animateScroll(now) {
+        const progress = Math.min((now - startTime) / duration, 1);
+        wrapper.scrollLeft = startScroll + distance * ease(progress);
+        if (progress < 1) requestAnimationFrame(animateScroll);
+    }
+    requestAnimationFrame(animateScroll);
+    setTimeout(() => flashChartBar(barIndex), duration + 80);
+}
+
+function flashChartBar(barIndex) {
+    if (!charts.active) return;
+    const ds = charts.active.data.datasets[0];
+    if (!ds || !Array.isArray(ds.backgroundColor)) return;
+    const original = [...ds.backgroundColor];
+    let tick = 0;
+    const flashes = 6;
+    function step() {
+        if (tick >= flashes) { ds.backgroundColor = original; charts.active.update('none'); return; }
+        ds.backgroundColor = ds.backgroundColor.map((c, i) => i === barIndex
+            ? (tick % 2 === 0 ? '#ffffff' : original[barIndex])
+            : c);
+        charts.active.update('none');
+        tick++;
+        setTimeout(step, 120);
+    }
+    step();
 }
 
 // ─── ABC MODAL ────────────────────────────────────────────────────────────────
