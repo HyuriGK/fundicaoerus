@@ -27,14 +27,13 @@
             padding-bottom: 40px;
         }
         /* Layout */
-        .dashboard-content { padding:20px 32px 0 32px; display:flex; flex-direction:column; gap:10px; }
+        .dashboard-content { padding:24px 32px 0 32px; display:flex; flex-direction:column; gap:0; }
         /* Toolbar */
         .toolbar-row {
-            background:var(--bg-card); border:none;
-            border-radius:var(--radius-md); padding:12px 16px;
-            display:flex; gap:10px; align-items:center; flex-wrap:wrap;
+            padding:10px 0; display:flex; gap:10px; align-items:center; flex-wrap:wrap;
+            margin:5px 0; flex-shrink:0;
         }
-        #rankingSection { margin-top:2px; }
+        #rankingSection { margin-top:0; }
         .toolbar-sep { width:1px; height:22px; background:var(--border-subtle); flex-shrink:0; }
         .year-select {
             background:#18181b; border:1px solid var(--border-subtle); color:#fff;
@@ -55,12 +54,13 @@
         .month-btn.active { background:var(--color-primary); color:#000; border-color:var(--color-primary); font-weight:800; }
         .month-select {
             background:#18181b; border:1px solid var(--border-subtle); color:#fff;
-            padding:0 10px; border-radius:6px; font-family:var(--font-mono); font-size:0.78rem;
+            padding:0 6px; border-radius:6px; font-family:var(--font-mono); font-size:0.78rem;
             font-weight:700; height:30px; cursor:pointer; outline:none;
-            appearance:none; -webkit-appearance:none; min-width:110px;
+            appearance:none; -webkit-appearance:none; width:68px;
+            text-align:center; text-align-last:center;
         }
         .month-select:hover { border-color:rgba(251,191,36,0.3); }
-        .month-select option { background:#18181b; }
+        .month-select option { background:#18181b; text-align:center; }
         .search-input {
             background:rgba(0,0,0,0.3); border:1px solid var(--border-subtle); color:#fff;
             padding:0 14px; height:30px; border-radius:6px; font-family:var(--font-main);
@@ -68,15 +68,16 @@
         }
         .search-input:focus { outline:none; border-color:var(--color-primary); }
         .search-input::placeholder { color:var(--text-dim,#52525b); }
+        .kpi-row { margin-bottom:0 !important; flex-shrink:0; }
         /* Charts */
-        #chartsSection { min-height:400px; }
+        #chartsSection { min-height:400px; flex-direction:column; gap:12px; }
+        .chart-type-bar { display:flex; gap:8px; flex-shrink:0; }
         .chart-panel {
             background:rgba(255,255,255,0.02); border-radius:12px; padding:20px;
-            display:flex; flex-direction:column; overflow:hidden;
+            display:flex; flex-direction:column; overflow:hidden; flex:1;
             box-shadow:0 20px 40px -10px rgba(0,0,0,0.8);
             border-bottom:2px solid rgba(255,255,255,0.08);
         }
-        #chartsSection .chart-panel { height:100%; }
         #chartsSection canvas { flex:1; min-height:0; width:100% !important; }
         .chart-label { font-size:0.7rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:10px; flex-shrink:0; }
         /* Table */
@@ -255,7 +256,7 @@
             <option value="2026">2026</option>
         </select>
         <select id="monthSelect" class="month-select" onchange="setMonth(this.value === 'all' ? 'all' : parseInt(this.value))">
-            <option value="all">ANO TODO</option>
+            <option value="all">ANO</option>
             <option value="1">JAN</option>
             <option value="2">FEV</option>
             <option value="3">MAR</option>
@@ -278,14 +279,14 @@
     </div>
 
     <!-- Charts (view=charts) -->
-    <div id="chartsSection" style="display:none; grid-template-columns:1fr 1fr; gap:20px;">
-        <div class="chart-panel">
-            <div class="chart-label">Top 10 — Faturamento (R$)</div>
-            <canvas id="chartFat"></canvas>
+    <div id="chartsSection" style="display:none;">
+        <div class="chart-type-bar">
+            <button class="month-btn active" id="btnChartFat" onclick="setChartType('fat')">FATURAMENTO (R$)</button>
+            <button class="month-btn" id="btnChartPeso" onclick="setChartType('peso')">PESO (kg)</button>
         </div>
         <div class="chart-panel">
-            <div class="chart-label">Top 10 — Peso Total (kg)</div>
-            <canvas id="chartPeso"></canvas>
+            <div class="chart-label" id="activeChartLabel">Top 10 — Faturamento (R$)</div>
+            <canvas id="chartActive"></canvas>
         </div>
     </div>
 
@@ -331,7 +332,8 @@ let valorVisible = false;
 let currentAbcClient = null;
 let sortState = { col: 'fat', dir: 'desc' };
 let currentView = 'ranking';
-let charts = { fat: null, peso: null };
+let charts = { active: null };
+let activeChartType = 'fat';
 let activeMonth = 'all';
 
 const MONTHS = ['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'];
@@ -403,7 +405,7 @@ function setView(v) {
     document.getElementById('rankingSection').style.display = v === 'ranking' ? '' : 'none';
     const cs = document.getElementById('chartsSection');
     if (v === 'charts') {
-        cs.style.display = 'grid';
+        cs.style.display = 'flex';
         fitChartsHeight();
         renderCharts();
         document.body.style.overflow = 'hidden';
@@ -415,6 +417,13 @@ function setView(v) {
     }
 }
 
+function setChartType(type) {
+    activeChartType = type;
+    document.getElementById('btnChartFat').classList.toggle('active', type === 'fat');
+    document.getElementById('btnChartPeso').classList.toggle('active', type === 'peso');
+    renderCharts();
+}
+
 function fitChartsHeight() {
     const cs = document.getElementById('chartsSection');
     const top = cs.getBoundingClientRect().top;
@@ -422,10 +431,7 @@ function fitChartsHeight() {
 }
 
 window.addEventListener('resize', () => {
-    if (currentView === 'charts') {
-        fitChartsHeight();
-        renderCharts();
-    }
+    if (currentView === 'charts') { fitChartsHeight(); renderCharts(); }
 });
 
 // ─── DATA ─────────────────────────────────────────────────────────────────────
@@ -727,9 +733,16 @@ function renderExpandContent(clientName, idx) {
 
 // ─── CHARTS ───────────────────────────────────────────────────────────────────
 function renderCharts() {
-    const show     = valorVisible;
-    const top10Fat  = [...clientList].sort((a, b) => b.fat  - a.fat ).slice(0, 10);
-    const top10Peso = [...clientList].sort((a, b) => b.peso - a.peso).slice(0, 10);
+    const show = valorVisible;
+    const isFat = activeChartType === 'fat';
+
+    document.getElementById('activeChartLabel').textContent = isFat
+        ? 'Top 10 — Faturamento (R$)'
+        : 'Top 10 — Peso Total (kg)';
+
+    const top10 = isFat
+        ? [...clientList].sort((a, b) => b.fat  - a.fat ).slice(0, 10)
+        : [...clientList].sort((a, b) => b.peso - a.peso).slice(0, 10);
 
     const baseOpts = {
         responsive: true, maintainAspectRatio: false,
@@ -740,35 +753,29 @@ function renderCharts() {
         }
     };
 
-    if (charts.fat) charts.fat.destroy();
-    charts.fat = new Chart(document.getElementById('chartFat'), {
+    if (charts.active) charts.active.destroy();
+    charts.active = new Chart(document.getElementById('chartActive'), {
         type: 'bar',
         data: {
-            labels: top10Fat.map(c => c.name.split(' ')[0]),
-            datasets: [{ data: top10Fat.map(c => c.fat), backgroundColor: top10Fat.map((_, i) => i === 0 ? '#fbbf24' : 'rgba(251,191,36,0.35)'), borderRadius: 5 }]
+            labels: top10.map(c => c.name.split(' ')[0]),
+            datasets: [{
+                data: top10.map(c => isFat ? c.fat : c.peso),
+                backgroundColor: top10.map((_, i) => i === 0
+                    ? (isFat ? '#fbbf24' : '#a855f7')
+                    : (isFat ? 'rgba(251,191,36,0.35)' : 'rgba(168,85,247,0.35)')),
+                borderRadius: 5
+            }]
         },
         options: { ...baseOpts,
             plugins: { ...baseOpts.plugins, tooltip: { callbacks: {
-                title: ctx => top10Fat[ctx[0].dataIndex].name,
-                label: ctx => show ? fmtMoney(ctx.raw) : 'R$ -----'
+                title: ctx => top10[ctx[0].dataIndex].name,
+                label: ctx => isFat
+                    ? (show ? fmtMoney(ctx.raw) : 'R$ -----')
+                    : fmtNum(ctx.raw) + ' kg'
             }}},
-            scales: { ...baseOpts.scales, y: { ...baseOpts.scales.y, ticks: { ...baseOpts.scales.y.ticks, callback: v => show ? 'R$' + fmtNum(v) : '-----' }}}
-        }
-    });
-
-    if (charts.peso) charts.peso.destroy();
-    charts.peso = new Chart(document.getElementById('chartPeso'), {
-        type: 'bar',
-        data: {
-            labels: top10Peso.map(c => c.name.split(' ')[0]),
-            datasets: [{ data: top10Peso.map(c => c.peso), backgroundColor: top10Peso.map((_, i) => i === 0 ? '#a855f7' : 'rgba(168,85,247,0.35)'), borderRadius: 5 }]
-        },
-        options: { ...baseOpts,
-            plugins: { ...baseOpts.plugins, tooltip: { callbacks: {
-                title: ctx => top10Peso[ctx[0].dataIndex].name,
-                label: ctx => fmtNum(ctx.raw) + ' kg'
-            }}},
-            scales: { ...baseOpts.scales, y: { ...baseOpts.scales.y, ticks: { ...baseOpts.scales.y.ticks, callback: v => fmtNum(v) + 'kg' }}}
+            scales: { ...baseOpts.scales, y: { ...baseOpts.scales.y, ticks: { ...baseOpts.scales.y.ticks,
+                callback: v => isFat ? (show ? 'R$ ' + fmtNum(v) : '-----') : fmtNum(v) + ' kg'
+            }}}
         }
     });
 }
