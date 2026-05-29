@@ -6317,7 +6317,7 @@
                         <td>${u.id}</td>
 
 
-                        <td style="font-weight:600">${u.username}</td>
+                        <td style="font-weight:600">${u.username}${u.can_view_monetary ? ' <span title="Pode ver informações monetárias" style="color:#10b981; font-size:0.85em;">$</span>' : ''}</td>
 
 
                         <td>${u.name}</td>
@@ -6342,6 +6342,9 @@
 
 
                             <button class="btn-action edit" onclick="openUserLogs('${u.username}', '${u.name}')" title="Ver Logs de Atividade" style="color: #6366f1; border-color: rgba(99, 102, 241, 0.3); background: rgba(99, 102, 241, 0.1);"><i class="fa-solid fa-clock-rotate-left"></i></button>
+
+
+                            <button class="btn-action edit" onclick="toggleMonetaryPerm('${u.username}', ${u.can_view_monetary ? 'true' : 'false'})" title="${u.can_view_monetary ? 'Revogar permissão monetária' : 'Conceder permissão monetária'}" style="color:${u.can_view_monetary ? '#10b981' : '#6b7280'}; border-color:${u.can_view_monetary ? 'rgba(16,185,129,0.3)' : 'rgba(107,114,128,0.3)'}; background:${u.can_view_monetary ? 'rgba(16,185,129,0.1)' : 'rgba(107,114,128,0.08)'};">$</button>
 
 
                             <button class="btn-action edit" onclick="editUserRole('${u.username}', '${u.role}')" title="Editar Permissão"><i class="fa-solid fa-pen"></i></button>
@@ -6487,6 +6490,33 @@
 
                 }
 
+
+                async function toggleMonetaryPerm(username, currentValue) {
+                    const newValue = !currentValue;
+                    const label = newValue ? 'conceder' : 'revogar';
+                    if (!await classicConfirm(`Deseja ${label} permissão monetária para ${username}?`)) return;
+                    try {
+                        const response = await fetch(`/api/admin/users/${username}/monetary`, {
+                            method: 'PUT',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'x-role': localStorage.getItem('erus_role'),
+                                'x-user': localStorage.getItem('erus_user')
+                            },
+                            body: JSON.stringify({ can_view_monetary: newValue })
+                        });
+                        const data = await response.json();
+                        if (data.success) {
+                            showToast("Sucesso", data.message, "success");
+                            loadAdminUsers();
+                        } else {
+                            showToast("Erro", data.message || "Falha ao atualizar permissão", "danger");
+                        }
+                    } catch (error) {
+                        console.error(error);
+                        showToast("Erro", "Erro ao conectar com servidor", "danger");
+                    }
+                }
 
                 async function deleteUser(username) {
 

@@ -44,7 +44,8 @@ router.post('/', async (req, res) => {
             return res.status(200).json({
                 success: true,
                 role: userData.role,
-                name: userData.name
+                name: userData.name,
+                can_view_monetary: userData.can_view_monetary || false
             });
         } else {
             return res.status(401).json({ success: false, message: "Usuário ou senha incorretos." });

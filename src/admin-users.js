@@ -22,8 +22,9 @@ const checkDevRole = async (req, res, next) => {
 router.get('/', checkDevRole, async (req, res) => {
     try {
         const result = await pool.query(`
-            SELECT 
+            SELECT
                 u.id, u.username, u.name, u.role, u.last_login, u.created_at, u.approved,
+                u.can_view_monetary,
                 la.last_activity_at,
                 la.last_activity_page
             FROM users u
@@ -127,6 +128,26 @@ router.put('/:username/block', checkDevRole, async (req, res) => {
     } catch (error) {
         console.error('Erro ao bloquear usuário:', error);
         res.status(500).json({ success: false, message: 'Erro ao bloquear usuário.' });
+    }
+});
+
+// TOGGLE PERMISSÃO MONETÁRIA
+router.put('/:username/monetary', checkDevRole, async (req, res) => {
+    const { username } = req.params;
+    const { can_view_monetary } = req.body;
+
+    if (typeof can_view_monetary !== 'boolean') {
+        return res.status(400).json({ success: false, message: 'can_view_monetary deve ser boolean.' });
+    }
+
+    try {
+        await pool.query('UPDATE users SET can_view_monetary = $1 WHERE username = $2', [can_view_monetary, username]);
+        const adminUser = req.headers['x-user'] || 'Admin';
+        logActivity(adminUser, 'UPDATE_MONETARY_PERM', 'users', { affected_user: username, can_view_monetary });
+        res.json({ success: true, message: `Permissão monetária ${can_view_monetary ? 'habilitada' : 'desabilitada'} para ${username}.` });
+    } catch (error) {
+        console.error('Erro ao atualizar permissão monetária:', error);
+        res.status(500).json({ success: false, message: 'Erro ao atualizar permissão.' });
     }
 });
 
