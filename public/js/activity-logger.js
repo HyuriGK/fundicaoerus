@@ -43,13 +43,8 @@
                 const lock = result.data.find(l => l.page_id === page);
                 if (lock && lock.is_locked) {
                     if (lock.lock_reason === 'sync') {
-                        if (role === 'desenvolvedor' || role === 'admin') {
-                            // Desenvolvedores/Admins: Não bloqueia, apenas mostra indicador flutuante
-                            showFloatingSyncIndicator(lock);
-                        } else {
-                            // Usuários normais: Bloqueia com overlay total
-                            showSyncOverlay(lock);
-                        }
+                        // Todos os usuários: apenas indicador flutuante, sem bloquear tela
+                        showFloatingSyncIndicator(lock);
                     } else if (role !== 'desenvolvedor' && role !== 'admin') {
                         // Bloqueio manual — apenas não-devs
                         if (lock.lock_reason === 'development') {
