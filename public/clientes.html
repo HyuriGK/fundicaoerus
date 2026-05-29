@@ -80,13 +80,13 @@
         .search-input::placeholder { color:var(--text-dim,#52525b); }
         .kpi-row { margin-bottom:0 !important; flex-shrink:0; padding-bottom:0 !important; }
         /* Charts */
-        #chartsSection { min-height:400px; flex-direction:column; gap:12px; }
-        .chart-type-bar { display:flex; gap:8px; flex-shrink:0; }
+        #chartsSection { flex:1; min-height:0; margin:0 !important; }
         .chart-panel {
-            background:rgba(255,255,255,0.02); border-radius:12px; padding:20px;
-            display:flex; flex-direction:column; overflow:hidden; flex:1;
-            box-shadow:0 20px 40px -10px rgba(0,0,0,0.8);
-            border-bottom:2px solid rgba(255,255,255,0.08);
+            background:rgba(255,255,255,0.02); border:none; border-radius:12px; padding:24px;
+            display:flex; flex-direction:column; min-height:0;
+            box-shadow:0 20px 40px -10px rgba(0,0,0,1);
+            border-bottom:2px solid rgba(255,255,255,0.15);
+            overflow:hidden !important;
         }
         #chartsSection canvas { flex:1; min-height:0; width:100% !important; }
         .chart-label { font-size:0.7rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:10px; flex-shrink:0; }
@@ -230,24 +230,24 @@
             <div class="kpi-value" id="kpiFat">R$ -----</div>
             <div class="kpi-subtext" id="kpiPrecoKg">— kg · R$--/kg</div>
         </div>
-        <div class="kpi-card purple">
+        <div class="kpi-card">
             <div class="kpi-title">Peso Total Faturado</div>
-            <div class="kpi-value" id="kpiPeso" style="color:var(--status-purple)">0 kg</div>
+            <div class="kpi-value" id="kpiPeso">0 kg</div>
             <div class="kpi-subtext" id="kpiNFs">0 notas fiscais</div>
         </div>
-        <div class="kpi-card success">
+        <div class="kpi-card">
             <div class="kpi-title">Clientes Ativos</div>
-            <div class="kpi-value success" id="kpiAtivos">0</div>
+            <div class="kpi-value" id="kpiAtivos">0</div>
             <div class="kpi-subtext">Compraram nos últimos 45 dias</div>
         </div>
-        <div class="kpi-card warning">
+        <div class="kpi-card">
             <div class="kpi-title">Em Alerta</div>
-            <div class="kpi-value warning" id="kpiAlerta">0</div>
+            <div class="kpi-value" id="kpiAlerta">0</div>
             <div class="kpi-subtext">Entre 45 e 90 dias sem comprar</div>
         </div>
-        <div class="kpi-card danger">
+        <div class="kpi-card">
             <div class="kpi-title">Inativos</div>
-            <div class="kpi-value danger" id="kpiInativos">0</div>
+            <div class="kpi-value" id="kpiInativos">0</div>
             <div class="kpi-subtext">Mais de 90 dias sem comprar</div>
         </div>
         <div class="kpi-card">
@@ -439,7 +439,7 @@ function selectChartView(type) {
 function fitChartsHeight() {
     const cs = document.getElementById('chartsSection');
     const top = cs.getBoundingClientRect().top;
-    cs.style.height = (window.innerHeight - top - 16) + 'px';
+    cs.style.height = (window.innerHeight - top - 20) + 'px';
 }
 
 window.addEventListener('resize', () => {
@@ -748,65 +748,98 @@ function renderCharts() {
     const show = valorVisible;
     const type = activeChartType; // 'fat' | 'peso' | 'preco'
 
-    const labels = {
-        fat:   'Top 10 — Faturamento (R$)',
-        peso:  'Top 10 — Peso Total (kg)',
-        preco: 'Top 10 — Preço Médio (R$/kg)'
+    const cfg = {
+        fat:   { label: 'Pareto — Faturamento (R$)',    color: '#fbbf24', colorDim: 'rgba(251,191,36,0.4)' },
+        peso:  { label: 'Pareto — Peso Total (kg)',     color: '#a855f7', colorDim: 'rgba(168,85,247,0.4)' },
+        preco: { label: 'Pareto — Preço Médio (R$/kg)', color: '#10b981', colorDim: 'rgba(16,185,129,0.4)'  }
     };
-    const colors = {
-        fat:   { top: '#fbbf24', rest: 'rgba(251,191,36,0.35)' },
-        peso:  { top: '#a855f7', rest: 'rgba(168,85,247,0.35)' },
-        preco: { top: '#10b981', rest: 'rgba(16,185,129,0.35)' }
-    };
-
-    document.getElementById('activeChartLabel').textContent = labels[type] || labels.fat;
-
-    const sorted = [...clientList].sort((a, b) => {
-        if (type === 'fat')   return b.fat   - a.fat;
-        if (type === 'peso')  return b.peso  - a.peso;
-        return (b.peso > 0 ? b.fat / b.peso : 0) - (a.peso > 0 ? a.fat / a.peso : 0);
-    }).filter(c => type !== 'preco' || c.peso > 0).slice(0, 10);
+    const { label, color, colorDim } = cfg[type] || cfg.fat;
+    document.getElementById('activeChartLabel').textContent = label;
 
     const getValue = c => {
-        if (type === 'fat')   return c.fat;
-        if (type === 'peso')  return c.peso;
+        if (type === 'fat')  return c.fat;
+        if (type === 'peso') return c.peso;
         return c.peso > 0 ? c.fat / c.peso : 0;
     };
-    const fmtTick = v => {
-        if (type === 'peso')  return fmtNum(v) + ' kg';
-        return show ? 'R$ ' + fmtNum(v) : '-----';
-    };
-    const fmtTooltip = v => {
-        if (type === 'peso')  return fmtNum(v) + ' kg';
+    const fmtVal = v => {
+        if (type === 'peso') return fmtNum(v) + ' kg';
         return show ? fmtMoney(v) + (type === 'preco' ? '/kg' : '') : 'R$ -----';
     };
-
-    const c = colors[type] || colors.fat;
-    const baseOpts = {
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: {
-            y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#71717a', font: { size: 10 }, callback: fmtTick } },
-            x: { grid: { display: false }, ticks: { color: '#71717a', font: { size: 10 } } }
-        }
+    const fmtAxis = v => {
+        if (type === 'peso') return fmtNum(v) + ' kg';
+        return show ? 'R$ ' + fmtNum(v) : '-----';
     };
+
+    const sorted = [...clientList]
+        .filter(c => type !== 'preco' || c.peso > 0)
+        .sort((a, b) => getValue(b) - getValue(a))
+        .slice(0, 15);
+
+    const values = sorted.map(getValue);
+    const total  = values.reduce((a, b) => a + b, 0);
+
+    // Cumulative %
+    let cumSum = 0;
+    const cumPct = values.map(v => { cumSum += v; return total > 0 ? +(cumSum / total * 100).toFixed(1) : 0; });
 
     if (charts.active) charts.active.destroy();
     charts.active = new Chart(document.getElementById('chartActive'), {
         type: 'bar',
         data: {
-            labels: sorted.map(cl => cl.name.split(' ')[0]),
-            datasets: [{
-                data: sorted.map(getValue),
-                backgroundColor: sorted.map((_, i) => i === 0 ? c.top : c.rest),
-                borderRadius: 5
-            }]
+            labels: sorted.map(c => c.name.split(' ')[0]),
+            datasets: [
+                {
+                    type: 'bar',
+                    data: values,
+                    backgroundColor: sorted.map((_, i) => i === 0 ? color : colorDim),
+                    borderRadius: 4,
+                    order: 2,
+                    yAxisID: 'y'
+                },
+                {
+                    type: 'line',
+                    data: cumPct,
+                    borderColor: 'rgba(255,255,255,0.55)',
+                    backgroundColor: 'transparent',
+                    pointBackgroundColor: 'rgba(255,255,255,0.8)',
+                    pointRadius: 3,
+                    pointHoverRadius: 5,
+                    borderWidth: 1.5,
+                    tension: 0.3,
+                    order: 1,
+                    yAxisID: 'y1'
+                }
+            ]
         },
-        options: { ...baseOpts,
-            plugins: { ...baseOpts.plugins, tooltip: { callbacks: {
-                title: ctx => sorted[ctx[0].dataIndex].name,
-                label: ctx => fmtTooltip(ctx.raw)
-            }}}
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        title: ctx => sorted[ctx[0].dataIndex]?.name || '',
+                        label: ctx => ctx.datasetIndex === 0
+                            ? fmtVal(ctx.raw)
+                            : 'Acumulado: ' + ctx.raw + '%'
+                    }
+                }
+            },
+            scales: {
+                x: { grid: { display: false }, ticks: { color: '#71717a', font: { size: 10 } } },
+                y: {
+                    position: 'left',
+                    grid: { color: 'rgba(255,255,255,0.04)' },
+                    ticks: { color: '#71717a', font: { size: 10 }, callback: fmtAxis }
+                },
+                y1: {
+                    position: 'right',
+                    min: 0, max: 100,
+                    grid: { display: false },
+                    ticks: { color: '#52525b', font: { size: 10 }, callback: v => v + '%' }
+                }
+            }
         }
     });
 }
