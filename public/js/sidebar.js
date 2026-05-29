@@ -171,6 +171,8 @@
             '<div id="eg-comercial" class="erus-nav-group-wrapper collapsed">' +
                 '<a href="pedidos.html" data-stip="Carteira" class="erus-nav-link' + isActive('pedidos.html') + '">' +
                     '<i class="fa-solid fa-briefcase"></i><span>Carteira</span></a>' +
+                '<a href="clientes.html" data-stip="Clientes" class="erus-nav-link' + isActive('clientes.html') + '">' +
+                    '<i class="fa-solid fa-users"></i><span>Clientes</span></a>' +
             '</div>' +
             // PPCP
             '<div class="erus-nav-group-sep" data-stip="PPCP" onclick="erusSidebarToggleGroup(\'eg-producao\')">' +
