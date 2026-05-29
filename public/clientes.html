@@ -305,6 +305,7 @@
 let allData = [];
 let clientList = [];
 let clientRatings = {};
+let fatPesoOverrides = new Map();
 let valorVisible = false;
 let currentAbcClient = null;
 let sortState = { col: 'fat', dir: 'desc' };
@@ -313,6 +314,30 @@ let charts = { fat: null, peso: null };
 let activeMonth = 'all';
 
 const MONTHS = ['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'];
+
+// ─── SERVICE CLIENT LOGIC (igual faturamentos.html) ──────────────────────────
+const _serviceClients = ['IMEPEL INDUSTRIA MECANICA LTDA','STEELROOL INDUSTRIA METALURGICA','SPILROD FUNDICAO DE FERRO E ACO LTDA'];
+const _serviceCodes   = ['257', '432'];
+function isServiceClient(item) {
+    if (!item) return false;
+    const name = (item.clienteNome || '').trim().toUpperCase();
+    const code = String(item.clienteCodigo || '').trim();
+    if (_serviceCodes.includes(code)) return true;
+    return _serviceClients.some(sc => { const s = sc.toUpperCase(); return name === s || name.includes(s); });
+}
+function itemKey(item) {
+    const cod = item.codigoItem ? String(item.codigoItem).trim() : '';
+    const ped = item.pedido     ? String(item.pedido).trim()     : '';
+    const dat = item.data       ? String(item.data).split('T')[0] : '';
+    return `${item.notaFiscal}-${cod}-${ped}-${dat}-${item.quantidade || 0}`;
+}
+function getFatPesoState(item) {
+    const key = itemKey(item);
+    if (fatPesoOverrides.has(key)) return fatPesoOverrides.get(key);
+    const isService = isServiceClient(item);
+    const isIgnored = item.gera_financeiro === 'N' || (item.excluido_manualmente === true && !isService);
+    return !isIgnored;
+}
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 window.onload = async function() {
@@ -334,7 +359,7 @@ window.onload = async function() {
     }
 
     buildMonthBtns();
-    await Promise.all([loadRatings(), loadData()]);
+    await Promise.all([loadRatings(), loadPreferences(), loadData()]);
 };
 
 function buildMonthBtns() {
@@ -399,6 +424,13 @@ async function loadRatings() {
     } catch(e) {}
 }
 
+async function loadPreferences() {
+    try {
+        const res = await (await fetch('/api/preferences/fat_peso_overrides')).json();
+        if (res.success) fatPesoOverrides = new Map(Object.entries(res.data || {}));
+    } catch(e) {}
+}
+
 async function loadData() {
     try {
         const url = '/api/faturamento-postgres/detalhado?limit=100000&startDate=2024-01-01&endDate=2026-12-31';
@@ -406,13 +438,11 @@ async function loadData() {
         if (!json.success) return;
 
         allData = json.data.map(item => {
-            // _exclPeso: exclui só gera_financeiro=N e excluido_manualmente (igual faturamentos.html para peso)
-            item._exclPeso = item.gera_financeiro === 'N' || item.excluido_manualmente === true;
-            // _exclFat: filtro mais estrito também exclui sem pedido e modelos (para valor/faturamento)
-            if (item._exclPeso) { item._exclFat = true; return item; }
+            // _exclFat: filtro para faturamento (valor) — exclui sem pedido e modelos além de gera_financeiro/excluido
+            if (item.gera_financeiro === 'N' || item.excluido_manualmente === true) { item._exclFat = true; return item; }
             const semPedido = !item.pedido || String(item.pedido).trim() === '';
-            const cod = String(item.codigoItem || '').trim();
-            const desc = String(item.descricao || '').trim().toUpperCase();
+            const cod  = String(item.codigoItem || '').trim();
+            const desc = String(item.descricao  || '').trim().toUpperCase();
             item._exclFat = semPedido || (cod.endsWith('1') && desc.startsWith('MODELO'));
             return item;
         });
@@ -434,8 +464,9 @@ function applyFilters() {
         return true;
     };
 
-    const rows     = allData.filter(item => !item._exclFat  && inPeriod(item));
-    const rowsPeso = allData.filter(item => !item._exclPeso && inPeriod(item));
+    // Peso: usa getFatPesoState idêntico ao faturamentos.html (inclui serviços, respeita overrides)
+    const rows     = allData.filter(item => !item._exclFat && inPeriod(item));
+    const rowsPeso = allData.filter(item => getFatPesoState(item) && inPeriod(item));
 
     processClients(rows, rowsPeso);
     updateKPIs();
