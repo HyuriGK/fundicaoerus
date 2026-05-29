@@ -24,16 +24,10 @@
                 radial-gradient(circle at 15% 50%, rgba(234,88,12,0.04), transparent 25%),
                 radial-gradient(circle at 85% 30%, rgba(63,63,70,0.05), transparent 25%);
             overflow-x: hidden;
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
+            padding-bottom: 40px;
         }
-        /* sidebar.js handles the side menu — no custom side-menu CSS needed */
         /* Layout */
-        .dashboard-content { padding:20px 32px 0 32px; display:flex; flex-direction:column; gap:16px; flex:1; overflow:hidden; }
-        .charts-view-active .dashboard-content { overflow: hidden; }
-        /* Period subtitle strip */
-        .period-strip { display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
+        .dashboard-content { padding:20px 32px 0 32px; display:flex; flex-direction:column; gap:16px; }
         /* Toolbar */
         .toolbar-row {
             background:var(--bg-card); border:1px solid var(--border-subtle);
@@ -67,10 +61,11 @@
         }
         .search-input:focus { outline:none; border-color:var(--color-primary); }
         .search-input::placeholder { color:var(--text-dim,#52525b); }
-        /* Charts — grid definido inline no #chartsSection */
+        /* Charts */
+        #chartsSection { height:calc(100vh - 240px); min-height:400px; }
         .chart-panel {
             background:rgba(255,255,255,0.02); border-radius:12px; padding:20px;
-            display:flex; flex-direction:column; min-height:0;
+            display:flex; flex-direction:column;
             box-shadow:0 20px 40px -10px rgba(0,0,0,0.8);
             border-bottom:2px solid rgba(255,255,255,0.08);
         }
@@ -83,7 +78,7 @@
             background:rgba(0,0,0,0.25);
         }
         .table-title-text { font-size:0.88rem; font-weight:700; color:#fff; }
-        .table-scroll { overflow:auto; flex:1; }
+        .table-scroll { overflow-x:auto; max-height:calc(100vh - 380px); min-height:300px; overflow-y:auto; }
         table { width:100%; border-collapse:collapse; font-family:var(--font-mono); font-size:0.74rem; min-width:1000px; }
         th {
             background:#111114; color:var(--text-muted); padding:9px 11px;
@@ -208,14 +203,6 @@
 
 <div class="dashboard-content">
 
-    <!-- Period strip -->
-    <div class="period-strip">
-        <div class="page-subtitle" id="periodLabel" style="font-size:0.72rem;color:var(--text-muted);">Carregando dados...</div>
-        <div id="loadingBadge" style="font-size:0.72rem;color:var(--text-muted);display:flex;align-items:center;gap:6px;">
-            <i class="fa-solid fa-circle-notch fa-spin"></i> Buscando faturamento...
-        </div>
-    </div>
-
     <!-- KPIs -->
     <div class="kpi-row">
         <div class="kpi-card" onclick="toggleValorVisibility()" style="cursor:pointer;">
@@ -281,7 +268,7 @@
     </div>
 
     <!-- Table (view=ranking) -->
-    <div class="table-container" id="rankingSection" style="flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden;margin-bottom:20px;">
+    <div class="table-container" id="rankingSection" style="margin-bottom:20px;">
         <div class="table-header-bar">
             <div class="table-title-text"><i class="fa-solid fa-ranking-star" style="color:var(--color-primary);margin-right:8px;"></i>Ranking de Clientes</div>
             <div style="font-size:0.7rem;color:var(--text-muted);" id="tableCount">—</div>
@@ -347,7 +334,6 @@ window.onload = async function() {
 
     buildMonthBtns();
     await Promise.all([loadRatings(), loadData()]);
-    document.getElementById('loadingBadge').style.display = 'none';
 };
 
 function buildMonthBtns() {
@@ -396,13 +382,14 @@ async function loadData() {
         if (!json.success) return;
 
         allData = json.data.map(item => {
-            // Same exclusion logic as faturamentos.html
-            if (item.gera_financeiro === 'N') { item._excluido = true; return item; }
-            if (item.excluido_manualmente === true) { item._excluido = true; return item; }
+            // _exclPeso: exclui só gera_financeiro=N e excluido_manualmente (igual faturamentos.html para peso)
+            item._exclPeso = item.gera_financeiro === 'N' || item.excluido_manualmente === true;
+            // _exclFat: filtro mais estrito também exclui sem pedido e modelos (para valor/faturamento)
+            if (item._exclPeso) { item._exclFat = true; return item; }
             const semPedido = !item.pedido || String(item.pedido).trim() === '';
             const cod = String(item.codigoItem || '').trim();
             const desc = String(item.descricao || '').trim().toUpperCase();
-            if (semPedido || (cod.endsWith('1') && desc.startsWith('MODELO'))) item._excluido = true;
+            item._exclFat = semPedido || (cod.endsWith('1') && desc.startsWith('MODELO'));
             return item;
         });
 
@@ -415,34 +402,38 @@ function calcTotal(item) { return (item.valorUnitario || 0) * (item.quantidade |
 function applyFilters() {
     const yr = document.getElementById('yearSelect').value;
 
-    const rows = allData.filter(item => {
-        if (item._excluido) return false;
+    const inPeriod = item => {
         if (!item.data) return false;
         const d = item.data.substring(0, 10);
         if (yr !== 'all' && !d.startsWith(yr)) return false;
         if (activeMonth !== 'all' && parseInt(d.split('-')[1], 10) !== activeMonth) return false;
         return true;
-    });
+    };
 
-    const yrLabel = yr === 'all' ? 'Todos os anos' : yr;
-    const mLabel = activeMonth === 'all' ? 'todos os meses' : MONTHS[activeMonth - 1];
-    document.getElementById('periodLabel').textContent = `${yrLabel} · ${mLabel} · ${rows.length.toLocaleString('pt-BR')} registros`;
+    const rows     = allData.filter(item => !item._exclFat  && inPeriod(item));
+    const rowsPeso = allData.filter(item => !item._exclPeso && inPeriod(item));
 
-    processClients(rows);
+    processClients(rows, rowsPeso);
     updateKPIs();
     renderTable();
     if (currentView === 'charts') renderCharts();
 }
 
-function processClients(rows) {
+function processClients(rows, rowsPeso) {
     const today = new Date();
     const map = {};
+
+    // Acumular peso usando filtro frouxo (igual faturamentos.html)
+    rowsPeso.forEach(item => {
+        const name = (item.clienteNome || 'DESCONHECIDO').trim();
+        if (!map[name]) map[name] = { name, peso: 0, fat: 0, orders: new Set(), dates: [], lastDate: new Date(0) };
+        map[name].peso += (item.pesoTotal || 0);
+    });
 
     rows.forEach(item => {
         const name = (item.clienteNome || 'DESCONHECIDO').trim();
         if (!map[name]) map[name] = { name, peso: 0, fat: 0, orders: new Set(), dates: [], lastDate: new Date(0) };
         const c = map[name];
-        c.peso += (item.pesoTotal || 0);
         c.fat  += calcTotal(item);
         if (item.pedido) c.orders.add(String(item.pedido).trim());
         if (item.data) {
@@ -520,7 +511,7 @@ function updateKPIs() {
     const ativos     = clientList.filter(c => c.days <= 45).length;
     const alerta     = clientList.filter(c => c.days > 45 && c.days <= 90).length;
     const inativos   = clientList.filter(c => c.days > 90).length;
-    const nfs        = allData.filter(i => !i._excluido).length;
+    const nfs        = allData.filter(i => !i._exclFat).length;
 
     document.getElementById('kpiPeso').textContent     = fmtNum(totalPeso) + ' kg';
     document.getElementById('kpiAtivos').textContent   = ativos;
@@ -621,7 +612,7 @@ function renderExpandContent(clientName, idx) {
     const show = valorVisible;
 
     const rows = allData.filter(item => {
-        if (item._excluido) return false;
+        if (item._exclFat) return false;
         if ((item.clienteNome || '').trim() !== clientName) return false;
         if (!item.data) return false;
         if (yr !== 'all' && !item.data.startsWith(yr)) return false;
