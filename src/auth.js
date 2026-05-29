@@ -35,8 +35,8 @@ router.post('/', async (req, res) => {
             }
 
             // Sucesso!
-            // 3. Atualiza o timestamp de último login (Fire & Forget)
-            pool.query('UPDATE users SET last_login = NOW() WHERE username = $1', [user])
+            // 3. Atualiza o timestamp de último login e reseta force_logout (Fire & Forget)
+            pool.query('UPDATE users SET last_login = NOW(), force_logout = FALSE WHERE username = $1', [user])
                 .then(() => logActivity(user, 'LOGIN', 'users', { name: userData.name, role: userData.role }))
                 .catch(err => console.error('Erro ao atualizar last_login ou logar atividade:', err));
 
@@ -54,6 +54,19 @@ router.post('/', async (req, res) => {
     } catch (error) {
         console.error('Erro no login:', error);
         return res.status(500).json({ success: false, message: "Erro interno do servidor." });
+    }
+});
+
+// Rota: GET /api/auth/check?username=xxx — polling de sessão forçada
+router.get('/check', async (req, res) => {
+    const { username } = req.query;
+    if (!username) return res.json({ force_logout: false });
+    try {
+        const result = await pool.query('SELECT force_logout FROM users WHERE username = $1', [username]);
+        if (!result.rows.length) return res.json({ force_logout: true }); // usuário deletado
+        return res.json({ force_logout: result.rows[0].force_logout || false });
+    } catch {
+        return res.json({ force_logout: false });
     }
 });
 

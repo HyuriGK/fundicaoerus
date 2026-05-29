@@ -131,6 +131,20 @@ router.put('/:username/block', checkDevRole, async (req, res) => {
     }
 });
 
+// KICK (FORÇAR LOGOUT)
+router.put('/:username/kick', checkDevRole, async (req, res) => {
+    const { username } = req.params;
+    try {
+        await pool.query('UPDATE users SET force_logout = TRUE WHERE username = $1', [username]);
+        const adminUser = req.headers['x-user'] || 'Admin';
+        logActivity(adminUser, 'KICK_USER', 'users', { affected_user: username });
+        res.json({ success: true, message: `Usuário ${username} será desconectado.` });
+    } catch (error) {
+        console.error('Erro ao kickar usuário:', error);
+        res.status(500).json({ success: false, message: 'Erro ao desconectar usuário.' });
+    }
+});
+
 // TOGGLE PERMISSÃO MONETÁRIA
 router.put('/:username/monetary', checkDevRole, async (req, res) => {
     const { username } = req.params;
