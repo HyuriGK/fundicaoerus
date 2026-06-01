@@ -11,7 +11,7 @@ function requireDev(req, res, next) {
 }
 
 function getUser(req) {
-    return String(req.headers['x-user'] || req.query.user || req.body.user || 'Desconhecido').trim() || 'Desconhecido';
+    return String(req.headers['x-user'] || req.query.user || (req.body && req.body.user) || 'Desconhecido').trim() || 'Desconhecido';
 }
 
 async function ensureTable(client) {

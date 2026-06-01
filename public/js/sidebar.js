@@ -262,6 +262,17 @@
                 '<a href="devolucoes.html" data-stip="Devoluções" class="erus-nav-link' + isActive('devolucoes.html') + '">' +
                     '<i class="fa-solid fa-rotate-left"></i><span>Devoluções</span></a>' +
             '</div>' +
+            // ORGANIZACAO (somente desenvolvedor)
+            '<div id="erus-sep-organizacao" class="erus-nav-group-sep" data-stip="Organizacao" onclick="erusSidebarToggleGroup(\'eg-organizacao\')" style="display:none;">' +
+                '<i class="fas fa-list-check" style="font-size:0.8rem;color:#52525b;margin-right:8px;flex-shrink:0;"></i>' +
+                '<span class="erus-nav-group-label">Organizacao</span>' +
+                '<div class="erus-nav-group-line"></div>' +
+                '<i class="fa-solid fa-plus" id="icon-eg-organizacao"></i>' +
+            '</div>' +
+            '<div id="eg-organizacao" class="erus-nav-group-wrapper collapsed" style="display:none;">' +
+                '<a href="planner.html" data-stip="Planner" class="erus-nav-link' + isActive('planner.html') + '">' +
+                    '<i class="fa-solid fa-list-check"></i><span>Planner</span></a>' +
+            '</div>' +
             // FINANCEIRO (somente desenvolvedor)
             '<div id="erus-sep-financeiro" class="erus-nav-group-sep" data-stip="Financeiro" onclick="erusSidebarToggleGroup(\'eg-financeiro\')" style="display:none;">' +
                 '<i class="fas fa-balance-scale" style="font-size:0.8rem;color:#52525b;margin-right:8px;flex-shrink:0;"></i>' +
@@ -463,6 +474,10 @@
 
         // FINANCEIRO — apenas desenvolvedor
         if (role === 'desenvolvedor') {
+            var sepOrg = document.getElementById('erus-sep-organizacao');
+            var grpOrg = document.getElementById('eg-organizacao');
+            if (sepOrg) sepOrg.style.display = 'flex';
+            if (grpOrg) grpOrg.style.display = 'block';
             var sepFin = document.getElementById('erus-sep-financeiro');
             var grpFin = document.getElementById('eg-financeiro');
             if (sepFin) sepFin.style.display = 'flex';
@@ -615,7 +630,7 @@
         // (page-locks may have moved links between groups, so we must wait for both)
         Promise.all([pageLocksPromise, permissionsPromise]).then(function() {
             // Groups controlled by other logic — skip them
-            var skipGroups = { 'eg-desenvolvimento': true, 'eg-financeiro': true };
+            var skipGroups = { 'eg-desenvolvimento': true, 'eg-financeiro': true, 'eg-organizacao': true };
             document.querySelectorAll('#erus-sidebar .erus-nav-group-wrapper').forEach(function(wrapper) {
                 if (skipGroups[wrapper.id]) return;
                 var links = wrapper.querySelectorAll('.erus-nav-link');
