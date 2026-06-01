@@ -477,15 +477,7 @@
             var sepOrg = document.getElementById('erus-sep-organizacao');
             var grpOrg = document.getElementById('eg-organizacao');
             if (sepOrg) sepOrg.style.display = 'flex';
-            if (grpOrg) {
-                grpOrg.style.display = 'block';
-                grpOrg.classList.remove('collapsed');
-            }
-            var orgIcon = document.getElementById('icon-eg-organizacao');
-            if (orgIcon) {
-                orgIcon.classList.remove('fa-plus');
-                orgIcon.classList.add('fa-minus');
-            }
+            if (grpOrg) grpOrg.style.display = 'block';
             var sepFin = document.getElementById('erus-sep-financeiro');
             var grpFin = document.getElementById('eg-financeiro');
             if (sepFin) sepFin.style.display = 'flex';
