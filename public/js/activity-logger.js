@@ -1197,8 +1197,7 @@
                 <div style="padding: 10px 0; flex:1; min-width:0;">
                     <div style="font-size:0.68rem;font-weight:600;color:#86efac;letter-spacing:0.05em;text-transform:uppercase;">Última sincronização</div>
                     <div style="font-size:0.82rem;font-weight:700;color:#dcfce7;">${dateFmt} às ${timeFmt}</div>
-                    <div class="last-sync-toast-countdown" style="font-size:0.68rem;color:#bbf7d0;margin-top:4px;">Some em ${Math.ceil(exposureMs / 1000)}s</div>
-                    <div style="height:3px;background:rgba(187,247,208,0.16);border-radius:999px;overflow:hidden;margin-top:6px;">
+                    <div style="height:3px;background:rgba(187,247,208,0.16);border-radius:999px;overflow:hidden;margin-top:7px;">
                         <div class="last-sync-toast-progress" style="height:100%;width:0%;background:linear-gradient(90deg,#22c55e,#86efac);border-radius:999px;transition:width ${exposureMs}ms linear;"></div>
                     </div>
                 </div>
@@ -1217,15 +1216,7 @@
                     const progress = toast.querySelector('.last-sync-toast-progress');
                     if (progress) requestAnimationFrame(() => { progress.style.width = '100%'; });
                 });
-                const countdown = toast.querySelector('.last-sync-toast-countdown');
-                const startedAt = Date.now();
-                const countdownTimer = setInterval(() => {
-                    const remainingMs = Math.max(0, exposureMs - (Date.now() - startedAt));
-                    if (countdown) countdown.textContent = `Some em ${Math.ceil(remainingMs / 1000)}s`;
-                    if (remainingMs <= 0) clearInterval(countdownTimer);
-                }, 250);
                 setTimeout(() => {
-                    clearInterval(countdownTimer);
                     toast.style.transition = 'max-height 0.3s ease, opacity 0.3s ease';
                     toast.style.maxHeight = '0';
                     toast.style.opacity = '0';
