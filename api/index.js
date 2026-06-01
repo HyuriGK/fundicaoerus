@@ -111,6 +111,7 @@ app.use('/api/insumos-moldagem', require('../src/insumos-moldagem')); // NOVO: F
 app.use('/api/fichatecnicafusao', require('../src/fichatecnicafusao')); // Ficha Técnica de Fusão
 app.use('/api/communications', require('../src/communications')); // NOVO: Sistema de Comunicação
 app.use('/api/chamados', require('../src/chamados')); // Chamados TI
+app.use('/api/planner', require('../src/planner')); // Planner Kanban
 app.use('/api/cron/email-pedidos', require('../src/cron-email-pedidos')); // Cron: Email diário de pedidos
 
 // Rota temporária de diagnóstico do Firebird

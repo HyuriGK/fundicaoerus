@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <script src="js/loader.js"></script>
+    <script src="js/sidebar.js?v=20260601b"></script>
+    <link rel="stylesheet" href="css/dashboard-design-system.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Planner | Fundição Erus</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;700&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <script src="js/activity-logger.js?v=20260601c"></script>
+    <style>
+        :root {
+            --primary: #f97316;
+            --primary-soft: rgba(249, 115, 22, 0.12);
+            --bg: #09090b;
+            --panel: rgba(18, 18, 22, 0.86);
+            --panel-2: rgba(24, 24, 27, 0.78);
+            --border: rgba(255,255,255,0.08);
+            --text: #f4f4f5;
+            --muted: #a1a1aa;
+            --dim: #71717a;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --info: #38bdf8;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background:
+                radial-gradient(circle at 18% 12%, rgba(249,115,22,0.09), transparent 26%),
+                radial-gradient(circle at 90% 8%, rgba(16,185,129,0.06), transparent 28%),
+                var(--bg);
+            color: var(--text);
+            font-family: Inter, sans-serif;
+            user-select: none;
+        }
+        input, textarea { user-select: text; }
+        .app-shell { padding: 28px; min-height: 100vh; }
+        .page-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; margin-bottom: 18px; }
+        .eyebrow { color: var(--primary); font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.18em; }
+        h1 { margin: 5px 0 4px; font-family: Outfit, Inter, sans-serif; font-size: 2rem; letter-spacing: 0; }
+        .subtitle { color: var(--muted); font-size: 0.9rem; }
+        .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+        .search, .select, .input, .textarea {
+            background: rgba(255,255,255,0.04);
+            color: var(--text);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            height: 40px;
+            padding: 0 12px;
+            outline: none;
+            font: inherit;
+        }
+        .search { width: 260px; }
+        .textarea { height: 110px; padding: 12px; resize: vertical; }
+        .select option { background: #18181b; }
+        .btn {
+            height: 40px;
+            border: 0;
+            border-radius: 8px;
+            padding: 0 14px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--primary);
+            color: #111;
+            font-weight: 800;
+            cursor: pointer;
+            font-family: Inter, sans-serif;
+        }
+        .btn.secondary { background: rgba(255,255,255,0.06); color: var(--text); border: 1px solid var(--border); }
+        .metrics { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; margin-bottom: 16px; }
+        .metric { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+        .metric span { color: var(--muted); font-size: 0.7rem; text-transform: uppercase; font-weight: 800; letter-spacing: 0.1em; }
+        .metric strong { display: block; margin-top: 7px; font-size: 1.35rem; font-family: Outfit, Inter, sans-serif; }
+        .board { display: grid; grid-template-columns: repeat(3, minmax(260px, 1fr)); gap: 14px; min-height: calc(100vh - 220px); }
+        .column { background: rgba(15,15,18,0.74); border: 1px solid var(--border); border-radius: 8px; display: flex; flex-direction: column; min-height: 460px; overflow: hidden; }
+        .column-head { padding: 14px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }
+        .column-title { display: flex; align-items: center; gap: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.74rem; }
+        .count { color: var(--muted); font-size: 0.78rem; font-family: "JetBrains Mono", monospace; }
+        .dropzone { padding: 12px; display: flex; flex-direction: column; gap: 10px; flex: 1; }
+        .dropzone.drag-over { background: rgba(249,115,22,0.06); }
+        .task {
+            background: var(--panel-2);
+            border: 1px solid var(--border);
+            border-left: 3px solid var(--primary);
+            border-radius: 8px;
+            padding: 12px;
+            cursor: grab;
+            box-shadow: 0 10px 24px rgba(0,0,0,0.18);
+        }
+        .task.dragging { opacity: 0.55; cursor: grabbing; }
+        .task-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+        .task-title { font-weight: 800; line-height: 1.35; }
+        .task-desc { color: var(--muted); font-size: 0.82rem; line-height: 1.45; margin-top: 7px; white-space: pre-wrap; }
+        .task-meta { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+        .pill { font-size: 0.68rem; font-weight: 800; border-radius: 999px; padding: 4px 8px; background: rgba(255,255,255,0.06); color: var(--muted); }
+        .pill.alta { color: #fecaca; background: rgba(239,68,68,0.12); }
+        .pill.media { color: #fde68a; background: rgba(245,158,11,0.12); }
+        .pill.baixa { color: #bbf7d0; background: rgba(16,185,129,0.12); }
+        .task-actions { display: flex; gap: 6px; }
+        .icon-btn { width: 28px; height: 28px; border-radius: 7px; border: 1px solid var(--border); background: rgba(255,255,255,0.04); color: var(--muted); cursor: pointer; }
+        .empty { border: 1px dashed rgba(255,255,255,0.12); border-radius: 8px; padding: 18px; text-align: center; color: var(--dim); font-size: 0.84rem; }
+        .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.72); display: none; align-items: center; justify-content: center; z-index: 1000; padding: 18px; }
+        .modal.open { display: flex; }
+        .modal-card { width: min(620px, 100%); background: #111114; border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 24px 80px rgba(0,0,0,0.6); }
+        .modal-head, .modal-foot { padding: 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }
+        .modal-foot { border-top: 1px solid var(--border); border-bottom: 0; justify-content: flex-end; gap: 10px; }
+        .modal-body { padding: 16px; display: grid; gap: 12px; }
+        .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+        label { display: grid; gap: 6px; color: var(--muted); font-size: 0.75rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; }
+        .toast { position: fixed; right: 24px; bottom: 24px; background: #18181b; border: 1px solid var(--border); color: var(--text); padding: 12px 14px; border-radius: 8px; z-index: 1200; box-shadow: 0 12px 40px rgba(0,0,0,0.4); }
+        @media (max-width: 980px) {
+            .page-head { flex-direction: column; }
+            .toolbar { justify-content: flex-start; }
+            .metrics, .board { grid-template-columns: 1fr; }
+            .search { width: 100%; }
+            .app-shell { padding: 18px; }
+        }
+    </style>
+</head>
+<body>
+    <main class="app-shell">
+        <section class="page-head">
+            <div>
+                <div class="eyebrow">Organização</div>
+                <h1>Planner</h1>
+                <div class="subtitle">Quadro Kanban pessoal para organizar prioridades, prazos e execução.</div>
+            </div>
+            <div class="toolbar">
+                <input id="searchInput" class="search" placeholder="Buscar tarefas..." oninput="renderBoard()">
+                <select id="priorityFilter" class="select" onchange="renderBoard()">
+                    <option value="">Todas prioridades</option>
+                    <option value="alta">Alta</option>
+                    <option value="media">Média</option>
+                    <option value="baixa">Baixa</option>
+                </select>
+                <button class="btn" onclick="openTaskModal()"><i class="fa-solid fa-plus"></i> Nova tarefa</button>
+            </div>
+        </section>
+
+        <section class="metrics">
+            <div class="metric"><span>Total</span><strong id="metricTotal">0</strong></div>
+            <div class="metric"><span>Em andamento</span><strong id="metricDoing">0</strong></div>
+            <div class="metric"><span>Concluídas</span><strong id="metricDone">0</strong></div>
+            <div class="metric"><span>Vencidas</span><strong id="metricOverdue">0</strong></div>
+        </section>
+
+        <section class="board" id="board">
+            <div class="column" data-status="todo">
+                <div class="column-head"><div class="column-title"><i class="fa-regular fa-circle"></i> A fazer</div><div class="count" id="count-todo">0</div></div>
+                <div class="dropzone" id="zone-todo" data-status="todo"></div>
+            </div>
+            <div class="column" data-status="doing">
+                <div class="column-head"><div class="column-title"><i class="fa-solid fa-spinner"></i> Fazendo</div><div class="count" id="count-doing">0</div></div>
+                <div class="dropzone" id="zone-doing" data-status="doing"></div>
+            </div>
+            <div class="column" data-status="done">
+                <div class="column-head"><div class="column-title"><i class="fa-solid fa-check"></i> Concluído</div><div class="count" id="count-done">0</div></div>
+                <div class="dropzone" id="zone-done" data-status="done"></div>
+            </div>
+        </section>
+    </main>
+
+    <div id="taskModal" class="modal">
+        <div class="modal-card">
+            <div class="modal-head">
+                <strong id="modalTitle">Nova tarefa</strong>
+                <button class="icon-btn" onclick="closeTaskModal()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">
+                <label>Título <input id="taskTitle" class="input" maxlength="255"></label>
+                <label>Descrição <textarea id="taskDescription" class="textarea"></textarea></label>
+                <div class="grid-3">
+                    <label>Status
+                        <select id="taskStatus" class="select">
+                            <option value="todo">A fazer</option>
+                            <option value="doing">Fazendo</option>
+                            <option value="done">Concluído</option>
+                        </select>
+                    </label>
+                    <label>Prioridade
+                        <select id="taskPriority" class="select">
+                            <option value="media">Média</option>
+                            <option value="alta">Alta</option>
+                            <option value="baixa">Baixa</option>
+                        </select>
+                    </label>
+                    <label>Prazo <input id="taskDue" class="input" type="date"></label>
+                </div>
+                <label>Etiquetas <input id="taskTags" class="input" placeholder="Ex: compras, urgente, reunião"></label>
+            </div>
+            <div class="modal-foot">
+                <button class="btn secondary" onclick="closeTaskModal()">Cancelar</button>
+                <button class="btn" onclick="saveTask()"><i class="fa-solid fa-floppy-disk"></i> Salvar</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const role = (localStorage.getItem('erus_role') || '').toLowerCase();
+        if (role !== 'desenvolvedor') window.location.href = 'index.html';
+
+        const user = localStorage.getItem('erus_user') || localStorage.getItem('erus_username') || 'Desconhecido';
+        const headers = () => ({ 'Content-Type': 'application/json', 'x-role': role, 'x-user': user });
+        const statusLabels = { todo: 'A fazer', doing: 'Fazendo', done: 'Concluído' };
+        let tasks = [];
+        let editingId = null;
+
+        function toast(msg) {
+            const el = document.createElement('div');
+            el.className = 'toast';
+            el.textContent = msg;
+            document.body.appendChild(el);
+            setTimeout(() => el.remove(), 2600);
+        }
+
+        async function api(path, options = {}) {
+            const res = await fetch('/api/planner' + path, { ...options, headers: { ...headers(), ...(options.headers || {}) } });
+            const data = await res.json();
+            if (!res.ok || !data.success) throw new Error(data.error || 'Erro no Planner');
+            return data.data;
+        }
+
+        async function loadTasks() {
+            try {
+                tasks = await api('/tasks');
+                renderBoard();
+            } catch (e) {
+                toast(e.message);
+            }
+        }
+
+        function filteredTasks() {
+            const q = document.getElementById('searchInput').value.trim().toLowerCase();
+            const p = document.getElementById('priorityFilter').value;
+            return tasks.filter(t => {
+                const hay = [t.title, t.description, ...(t.tags || [])].join(' ').toLowerCase();
+                return (!q || hay.includes(q)) && (!p || t.priority === p);
+            });
+        }
+
+        function renderBoard() {
+            const visible = filteredTasks();
+            ['todo','doing','done'].forEach(status => {
+                const zone = document.getElementById('zone-' + status);
+                const list = visible.filter(t => t.status === status).sort((a,b) => (a.position || 0) - (b.position || 0));
+                document.getElementById('count-' + status).textContent = list.length;
+                zone.innerHTML = list.length ? list.map(taskHtml).join('') : '<div class="empty">Sem tarefas aqui.</div>';
+            });
+            bindDrag();
+            updateMetrics();
+        }
+
+        function taskHtml(t) {
+            const due = t.due_date ? `<span class="pill"><i class="fa-regular fa-calendar"></i> ${formatDate(t.due_date)}</span>` : '';
+            const tags = (t.tags || []).map(tag => `<span class="pill">#${escapeHtml(tag)}</span>`).join('');
+            return `
+                <article class="task" draggable="true" data-id="${t.id}">
+                    <div class="task-top">
+                        <div class="task-title">${escapeHtml(t.title)}</div>
+                        <div class="task-actions">
+                            <button class="icon-btn" onclick="openTaskModal(${t.id})"><i class="fa-solid fa-pen"></i></button>
+                            <button class="icon-btn" onclick="deleteTask(${t.id})"><i class="fa-solid fa-trash"></i></button>
+                        </div>
+                    </div>
+                    ${t.description ? `<div class="task-desc">${escapeHtml(t.description)}</div>` : ''}
+                    <div class="task-meta">
+                        <span class="pill ${t.priority}">${priorityLabel(t.priority)}</span>
+                        <span class="pill">${statusLabels[t.status]}</span>
+                        ${due}${tags}
+                    </div>
+                </article>
+            `;
+        }
+
+        function updateMetrics() {
+            const today = new Date().toISOString().slice(0, 10);
+            document.getElementById('metricTotal').textContent = tasks.length;
+            document.getElementById('metricDoing').textContent = tasks.filter(t => t.status === 'doing').length;
+            document.getElementById('metricDone').textContent = tasks.filter(t => t.status === 'done').length;
+            document.getElementById('metricOverdue').textContent = tasks.filter(t => t.status !== 'done' && t.due_date && t.due_date < today).length;
+        }
+
+        function bindDrag() {
+            document.querySelectorAll('.task').forEach(card => {
+                card.addEventListener('dragstart', e => {
+                    card.classList.add('dragging');
+                    e.dataTransfer.setData('text/plain', card.dataset.id);
+                });
+                card.addEventListener('dragend', () => card.classList.remove('dragging'));
+            });
+            document.querySelectorAll('.dropzone').forEach(zone => {
+                zone.ondragover = e => { e.preventDefault(); zone.classList.add('drag-over'); };
+                zone.ondragleave = () => zone.classList.remove('drag-over');
+                zone.ondrop = async e => {
+                    e.preventDefault();
+                    zone.classList.remove('drag-over');
+                    const id = Number(e.dataTransfer.getData('text/plain'));
+                    const task = tasks.find(t => t.id === id);
+                    if (!task) return;
+                    task.status = zone.dataset.status;
+                    task.position = tasks.filter(t => t.status === task.status).length;
+                    renderBoard();
+                    await api(`/tasks/${id}/move`, { method: 'PATCH', body: JSON.stringify({ status: task.status, position: task.position }) });
+                    await persistOrder();
+                };
+            });
+        }
+
+        async function persistOrder() {
+            const columns = {};
+            ['todo','doing','done'].forEach(status => {
+                columns[status] = tasks.filter(t => t.status === status).sort((a,b) => (a.position || 0) - (b.position || 0)).map(t => t.id);
+            });
+            await api('/tasks/reorder', { method: 'POST', body: JSON.stringify({ columns }) });
+        }
+
+        function openTaskModal(id = null) {
+            editingId = id;
+            const task = id ? tasks.find(t => t.id === id) : null;
+            document.getElementById('modalTitle').textContent = task ? 'Editar tarefa' : 'Nova tarefa';
+            document.getElementById('taskTitle').value = task?.title || '';
+            document.getElementById('taskDescription').value = task?.description || '';
+            document.getElementById('taskStatus').value = task?.status || 'todo';
+            document.getElementById('taskPriority').value = task?.priority || 'media';
+            document.getElementById('taskDue').value = task?.due_date || '';
+            document.getElementById('taskTags').value = (task?.tags || []).join(', ');
+            document.getElementById('taskModal').classList.add('open');
+            setTimeout(() => document.getElementById('taskTitle').focus(), 50);
+        }
+
+        function closeTaskModal() {
+            document.getElementById('taskModal').classList.remove('open');
+            editingId = null;
+        }
+
+        async function saveTask() {
+            const payload = {
+                user,
+                title: document.getElementById('taskTitle').value,
+                description: document.getElementById('taskDescription').value,
+                status: document.getElementById('taskStatus').value,
+                priority: document.getElementById('taskPriority').value,
+                due_date: document.getElementById('taskDue').value || null,
+                tags: document.getElementById('taskTags').value.split(',').map(t => t.trim()).filter(Boolean)
+            };
+            try {
+                const saved = editingId
+                    ? await api(`/tasks/${editingId}`, { method: 'PUT', body: JSON.stringify(payload) })
+                    : await api('/tasks', { method: 'POST', body: JSON.stringify(payload) });
+                const idx = tasks.findIndex(t => t.id === saved.id);
+                if (idx >= 0) tasks[idx] = saved; else tasks.push(saved);
+                closeTaskModal();
+                renderBoard();
+                toast('Tarefa salva.');
+            } catch (e) {
+                toast(e.message);
+            }
+        }
+
+        async function deleteTask(id) {
+            if (!confirm('Excluir esta tarefa?')) return;
+            try {
+                await api(`/tasks/${id}`, { method: 'DELETE' });
+                tasks = tasks.filter(t => t.id !== id);
+                renderBoard();
+                toast('Tarefa excluída.');
+            } catch (e) {
+                toast(e.message);
+            }
+        }
+
+        function escapeHtml(value) {
+            return String(value || '').replace(/[&<>"']/g, ch => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[ch]));
+        }
+        function priorityLabel(p) { return ({ alta: 'Alta', media: 'Média', baixa: 'Baixa' })[p] || 'Média'; }
+        function formatDate(d) { const [y,m,day] = d.split('-'); return `${day}/${m}/${y}`; }
+
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') closeTaskModal();
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n') {
+                e.preventDefault();
+                openTaskModal();
+            }
+        });
+        document.getElementById('taskModal').addEventListener('click', e => {
+            if (e.target.id === 'taskModal') closeTaskModal();
+        });
+        document.addEventListener('DOMContentLoaded', loadTasks);
+    </script>
+    <script src="js/notifications.js"></script>
+    <script src="session-guard.js"></script>
+</body>
+</html>
