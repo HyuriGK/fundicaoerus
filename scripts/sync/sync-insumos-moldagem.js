@@ -81,7 +81,7 @@ async function sync() {
                 LEFT JOIN PRODUTO pr
                     ON pr.CODIGO_PRO  = p.PRODUTO_PCP
                    AND pr.EMPRESA_PRO = p.PRO_EMPRESA_PCP
-                WHERE c.SITUACAO_COR = 'A'
+                WHERE c.DATA_PROGRAMADA_COR >= DATEADD(-120 DAY TO CURRENT_DATE)
                 ORDER BY c.CODIGO_COR DESC, cp.SEQUENCIA_VAZADA_CRPG
             `, (err, result) => {
                 if (err) reject(err);
