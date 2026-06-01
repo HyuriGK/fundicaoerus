@@ -766,6 +766,14 @@
             .sync-float-progress {
                 transition: width 1s linear;
             }
+            @media print {
+                #sync-floating-indicator,
+                #sync-overlay,
+                #last-sync-toast {
+                    display: none !important;
+                    visibility: hidden !important;
+                }
+            }
         `;
         document.head.appendChild(style);
 
