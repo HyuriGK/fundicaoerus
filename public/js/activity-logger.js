@@ -1164,12 +1164,16 @@
     // --- TOAST ÚLTIMA SINCRONIZAÇÃO ---
     async function showLastSyncToast() {
         const page = window.location.pathname.split('/').pop() || 'index.html';
+        const showDelayMs = 2000;
+        const exposureMs = 5000;
+        const fadeMs = 350;
         try {
             const resp = await fetch('/api/page-locks/last-sync');
             const result = await resp.json();
             if (!result.success) return;
             const entry = (result.data || []).find(d => d.page_id === page);
             if (!entry || !entry.finished_at) return;
+            if (document.getElementById('last-sync-toast')) return;
 
             const date = new Date(entry.finished_at);
             const dateFmt = date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -1181,7 +1185,7 @@
                 position: fixed; right: 24px; width: 280px; z-index: 99998;
                 background: rgba(5,46,22,0.95); backdrop-filter: blur(12px);
                 border: 1px solid rgba(74,222,128,0.35); border-radius: 10px;
-                padding: 0 16px; display: flex; align-items: center; gap: 10px;
+                padding: 0 16px; display: flex; align-items: flex-start; gap: 10px;
                 font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
                 box-shadow: 0 4px 20px rgba(0,0,0,0.4), 0 0 12px rgba(74,222,128,0.1);
                 max-height: 0; overflow: hidden; opacity: 0;
@@ -1189,10 +1193,14 @@
                 pointer-events: none;
             `;
             toast.innerHTML = `
-                <i class="fa-solid fa-rotate" style="color:#4ade80;font-size:0.8rem;flex-shrink:0;"></i>
-                <div style="padding: 10px 0;">
+                <i class="fa-solid fa-rotate" style="color:#4ade80;font-size:0.8rem;flex-shrink:0;margin-top:14px;"></i>
+                <div style="padding: 10px 0; flex:1; min-width:0;">
                     <div style="font-size:0.68rem;font-weight:600;color:#86efac;letter-spacing:0.05em;text-transform:uppercase;">Última sincronização</div>
                     <div style="font-size:0.82rem;font-weight:700;color:#dcfce7;">${dateFmt} às ${timeFmt}</div>
+                    <div class="last-sync-toast-countdown" style="font-size:0.68rem;color:#bbf7d0;margin-top:4px;">Some em ${Math.ceil(exposureMs / 1000)}s</div>
+                    <div style="height:3px;background:rgba(187,247,208,0.16);border-radius:999px;overflow:hidden;margin-top:6px;">
+                        <div class="last-sync-toast-progress" style="height:100%;width:0%;background:linear-gradient(90deg,#22c55e,#86efac);border-radius:999px;transition:width ${exposureMs}ms linear;"></div>
+                    </div>
                 </div>
             `;
             document.body.appendChild(toast);
@@ -1204,16 +1212,26 @@
                     : bottomBase;
                 toast.style.bottom = bottomPos + 'px';
                 requestAnimationFrame(() => {
-                    toast.style.maxHeight = '80px';
+                    toast.style.maxHeight = '110px';
                     toast.style.opacity = '1';
+                    const progress = toast.querySelector('.last-sync-toast-progress');
+                    if (progress) requestAnimationFrame(() => { progress.style.width = '100%'; });
                 });
+                const countdown = toast.querySelector('.last-sync-toast-countdown');
+                const startedAt = Date.now();
+                const countdownTimer = setInterval(() => {
+                    const remainingMs = Math.max(0, exposureMs - (Date.now() - startedAt));
+                    if (countdown) countdown.textContent = `Some em ${Math.ceil(remainingMs / 1000)}s`;
+                    if (remainingMs <= 0) clearInterval(countdownTimer);
+                }, 250);
                 setTimeout(() => {
+                    clearInterval(countdownTimer);
                     toast.style.transition = 'max-height 0.3s ease, opacity 0.3s ease';
                     toast.style.maxHeight = '0';
                     toast.style.opacity = '0';
-                    setTimeout(() => toast.remove(), 350);
-                }, 5000);
-            }, 2000);
+                    setTimeout(() => toast.remove(), fadeMs);
+                }, exposureMs);
+            }, showDelayMs);
         } catch(e) {}
     }
 
