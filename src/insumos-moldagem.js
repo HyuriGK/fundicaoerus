@@ -40,8 +40,13 @@ router.get('/', async (req, res) => {
                 ft.qtde_figuras
             FROM corridas_programadas_sync c
             LEFT JOIN ficha_tecnica ft ON ft.pro_codigo_fic = c.produto_pcp::text
-            WHERE c.data_cor >= $1::date
-              AND c.data_cor <= $2::date
+            WHERE (
+                CASE
+                    WHEN c.data_programada_cor IS NOT NULL AND c.data_programada_cor <> '2026-12-31'::date
+                    THEN c.data_programada_cor
+                    ELSE c.data_cor
+                END
+            ) BETWEEN $1::date AND $2::date
             ORDER BY c.codigo_cor DESC, c.sequencia_item
         `, params);
 
