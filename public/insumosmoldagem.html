@@ -548,21 +548,21 @@
             .map(([nome, total]) => `<tr><td>${nome}</td><td class="qty-total">${total}</td></tr>`)
             .join('');
 
-        const totalLuvas = Object.values(luvaTotals).reduce((s, n) => s + n, 0);
-        const itensSemFicha = c.itens.filter(item => !item.tem_ficha).length;
-        const itensComLuvas = c.itens.filter(item => parseLuvasPDF(item.detalhes_luvas).length).length;
-
         const resumoHTML = resumoRows ? `
         <div class="resumo-box">
             <div class="resumo-title">
-                <span>Resumo para almoxarifado</span>
-                <span>Total de luvas a separar</span>
+                <div>
+                    <span class="section-eyebrow">Separação</span>
+                    <strong>Resumo para almoxarifado</strong>
+                </div>
+                <span>Total por corrida</span>
             </div>
             <table>
                 <thead><tr><th>Luva</th><th style="text-align:center">Quantidade total</th></tr></thead>
                 <tbody>${resumoRows}</tbody>
             </table>
-        </div>` : '';
+        </div>` : `
+        <div class="resumo-empty">Nenhuma luva cadastrada para esta corrida.</div>`;
 
         const dataFmt = fmtDate(dataCorrida(c));
         const html = `<!DOCTYPE html><html lang="pt-BR"><head>
@@ -572,112 +572,94 @@
     * { margin:0; padding:0; box-sizing:border-box; }
     :root {
         --ink:#111827;
-        --muted:#6b7280;
+        --muted:#64748b;
         --line:#e5e7eb;
         --soft:#f8fafc;
+        --panel:#ffffff;
         --accent:#d97706;
+        --accent-soft:#fff7ed;
     }
-    @page { size: A4; margin: 11mm 12mm; }
+    @page { size: A4; margin: 14mm; }
     html, body { height: 100%; }
     body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 12px; color: var(--ink); background: #fff; }
     .cracha { width: 100%; min-height: 100%; display: flex; flex-direction: column; }
-
-    /* HEADER */
     .header {
-        display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 18px;
-        align-items: stretch; padding: 0 0 14px; margin-bottom: 12px;
-        border-bottom: 2px solid var(--ink);
+        display: flex; justify-content: space-between; gap: 18px; align-items: flex-start;
+        padding-bottom: 13px; margin-bottom: 16px; border-bottom: 2px solid var(--ink);
     }
-    .header-left { min-width: 0; }
-    .empresa { font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.16em; color: var(--muted); margin-bottom: 7px; }
-    .corrida-num { font-size: 32px; font-weight: 900; letter-spacing: -0.03em; line-height: 1; color: var(--ink); }
-    .corrida-sub { font-size: 11px; color: var(--muted); margin-top: 6px; font-weight: 600; }
-    .header-right { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-content: stretch; }
-    .meta-item {
-        display: flex; flex-direction: column; justify-content: center; gap: 3px;
-        border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; background: var(--soft);
-        min-height: 48px;
+    .brand { font-size: 9px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.18em; color: var(--accent); margin-bottom: 8px; }
+    .corrida-num { font-size: 34px; font-weight: 900; letter-spacing: -0.03em; line-height: 1; color: var(--ink); }
+    .corrida-sub { font-size: 11px; color: var(--muted); margin-top: 7px; font-weight: 600; }
+    .meta-line { display: flex; justify-content: flex-end; gap: 7px; flex-wrap: wrap; max-width: 330px; padding-top: 19px; }
+    .meta-line span {
+        border: 1px solid var(--line); border-radius: 999px; padding: 5px 9px;
+        color: #334155; background: var(--soft); font-size: 9.5px; font-weight: 800; white-space: nowrap;
     }
-    .meta-item.highlight { background: var(--ink); border-color: var(--ink); color: #fff; }
-    .meta-lbl { font-size: 7.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.11em; color: var(--muted); }
-    .meta-item.highlight .meta-lbl { color: #d1d5db; }
-    .meta-val { font-size: 12px; font-weight: 800; color: var(--ink); line-height: 1.2; }
-    .meta-item.highlight .meta-val { color: #fff; }
-
-    .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
-    .kpi-box {
-        border: 1px solid var(--line); border-left: 4px solid var(--accent);
-        border-radius: 6px; padding: 8px 10px; background: #fff;
-    }
-    .kpi-box .lbl { display: block; font-size: 7.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 3px; }
-    .kpi-box .val { display: block; font-size: 16px; font-weight: 900; color: var(--ink); line-height: 1; }
-
-    /* SECTION LABEL */
     .section-label {
         font-size: 8px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.18em;
-        color: var(--muted); margin: 14px 0 8px; display: flex; align-items: center; gap: 8px;
+        color: var(--muted); margin: 15px 0 8px; display: flex; align-items: center; gap: 8px;
     }
     .section-label::after { content:''; flex:1; height:1px; background:var(--line); }
-
-    /* ITENS GRID */
-    .itens-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
-
-    /* ITEM CARD */
+    .itens-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     .item {
-        border: 1px solid var(--line); border-radius: 7px; overflow: hidden;
-        display: flex; flex-direction: column; background: #fff;
+        border: 1px solid var(--line); border-radius: 8px; overflow: hidden;
+        display: flex; flex-direction: column; background: var(--panel);
     }
     .item-header {
-        background: #f3f4f6; color: var(--ink);
-        padding: 8px 10px; display: flex; align-items: center; gap: 8px;
+        background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%); color: var(--ink);
+        padding: 8px 10px; display: flex; align-items: flex-start; gap: 8px;
         border-bottom: 1px solid var(--line);
     }
     .item-seq {
         font-size: 8px; font-weight: 900; color: var(--accent);
-        border: 1px solid #f59e0b; border-radius: 4px; background: #fffbeb;
-        padding: 1px 5px; white-space: nowrap; flex-shrink: 0;
+        border: 1px solid #fed7aa; border-radius: 4px; background: var(--accent-soft);
+        padding: 2px 5px; white-space: nowrap; flex-shrink: 0;
     }
     .item-nome { font-size: 10.5px; font-weight: 800; flex: 1; line-height: 1.25; color: var(--ink); min-width: 0; }
     .item-cod { font-size: 8px; color: var(--muted); font-family: monospace; flex-shrink: 0; }
-
     .item-meta {
         display: flex; align-items: center; justify-content: flex-end;
         padding: 5px 10px; background: #fff; border-bottom: 1px solid #f1f5f9;
         font-size: 9.5px; color: var(--muted);
     }
     .item-meta strong { color: var(--ink); font-size: 12px; margin-left: 4px; }
-
     .item-body { padding: 7px 10px; flex: 1; }
-
     .sem-ficha {
-        color: #b91c1c; font-size: 9.5px; font-weight: 700; padding: 6px 8px;
-        border: 1px dashed #fecaca; background: #fef2f2; border-radius: 5px;
+        color: #991b1b; font-size: 9.5px; font-weight: 800; padding: 7px 8px;
+        border: 1px solid #fecaca; background: #fff1f2; border-radius: 6px;
     }
-
     table { width: 100%; border-collapse: collapse; }
-    thead tr { border-bottom: 1.5px solid var(--line); }
+    thead tr { border-bottom: 1px solid var(--line); }
     th { font-size: 7.5px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); padding: 4px 6px; text-align: left; }
     td { font-size: 10.5px; padding: 4px 6px; border-bottom: 1px solid #f1f5f9; color: var(--ink); }
     td.num { text-align: center; font-weight: 800; }
-    td.total { text-align: center; font-weight: 900; color: var(--ink); background: #fffbeb; }
+    td.total { text-align: center; font-weight: 900; color: var(--ink); background: var(--accent-soft); }
     tr:last-child td { border-bottom: none; }
-
-    /* RESUMO ALMOXARIFADO */
-    .resumo-box { border: 1.5px solid var(--ink); border-radius: 7px; overflow: hidden; margin: 0 0 16px; }
+    .resumo-box {
+        border: 1px solid var(--ink); border-radius: 9px; overflow: hidden;
+        margin: 0 0 16px; box-shadow: 0 1px 0 rgba(15,23,42,0.08);
+    }
     .resumo-title {
-        background: var(--ink); color: #fff; padding: 9px 12px;
-        font-size: 11px; font-weight: 900; letter-spacing: 0.05em; text-transform: uppercase;
+        background: var(--ink); color: #fff; padding: 10px 13px;
         display: flex; justify-content: space-between; align-items: center;
     }
-    .resumo-title span:last-child { font-size: 8px; font-weight: 700; color: #d1d5db; letter-spacing: 0.08em; }
+    .resumo-title strong { display: block; font-size: 12px; font-weight: 900; letter-spacing: 0.04em; text-transform: uppercase; }
+    .section-eyebrow { display: block; font-size: 7px; font-weight: 900; color: #fbbf24; letter-spacing: 0.16em; text-transform: uppercase; margin-bottom: 2px; }
+    .resumo-title > span { font-size: 8px; font-weight: 800; color: #d1d5db; letter-spacing: 0.08em; text-transform: uppercase; }
     .resumo-box table { margin: 0; }
-    .resumo-box th { font-size: 8px; padding: 6px 12px; background: #f3f4f6; color: var(--muted); }
-    .resumo-box td { font-size: 12px; padding: 7px 12px; }
-    .resumo-box td.qty-total { text-align: center; font-size: 15px; font-weight: 900; color: var(--ink); }
+    .resumo-box th { font-size: 8px; padding: 7px 13px; background: #f8fafc; color: var(--muted); }
+    .resumo-box td { font-size: 12px; padding: 8px 13px; }
+    .resumo-box td.qty-total { text-align: center; font-size: 15px; font-weight: 900; color: var(--ink); background: var(--accent-soft); }
     .resumo-box tr:nth-child(even) td { background: #f8fafc; }
-
-    .footer { margin-top: auto; padding-top: 8px; border-top: 1px solid var(--line); font-size: 8.5px; color: #9ca3af; display: flex; justify-content: space-between; }
-
+    .resumo-box tr:nth-child(even) td.qty-total { background: #ffedd5; }
+    .resumo-empty {
+        border: 1px dashed #cbd5e1; border-radius: 8px; padding: 12px;
+        color: var(--muted); background: #f8fafc; font-size: 10.5px; font-weight: 700; margin-bottom: 16px;
+    }
+    .footer {
+        margin-top: auto; padding-top: 9px; border-top: 1px solid var(--line);
+        font-size: 8.5px; color: #94a3b8; display: flex; justify-content: space-between;
+    }
     @media print {
         .item { break-inside: avoid; }
         .resumo-box { break-inside: avoid; }
@@ -687,33 +669,17 @@
 </head><body>
 <div class="cracha">
     <div class="header">
-        <div class="header-left">
-            <div class="empresa">Fundição Erus</div>
+        <div>
+            <div class="brand">Fundição Erus</div>
             <div class="corrida-num">Corrida #${c.corrida_cor}</div>
             <div class="corrida-sub">${c.material_mat || ''}</div>
         </div>
-        <div class="header-right">
-            <div class="meta-item highlight">
-                <span class="meta-lbl">Forno</span>
-                <span class="meta-val">Forno ${c.forno_cor || '?'}</span>
-            </div>
-            <div class="meta-item">
-                <span class="meta-lbl">Data programada</span>
-                <span class="meta-val">${dataFmt}</span>
-            </div>
-            ${c.peso_cor ? `<div class="meta-item"><span class="meta-lbl">Peso corrida</span><span class="meta-val">${c.peso_cor} kg</span></div>` : '<div></div>'}
-            <div class="meta-item">
-                <span class="meta-lbl">Itens</span>
-                <span class="meta-val">${c.itens.length}</span>
-            </div>
+        <div class="meta-line">
+            <span>Data: ${dataFmt}</span>
+            ${c.forno_cor ? `<span>Forno: ${c.forno_cor}</span>` : ''}
+            ${c.peso_cor ? `<span>Peso: ${c.peso_cor} kg</span>` : ''}
+            <span>${c.itens.length} ${c.itens.length === 1 ? 'item' : 'itens'}</span>
         </div>
-    </div>
-
-    <div class="kpi-row">
-        <div class="kpi-box"><span class="lbl">Total de luvas</span><span class="val">${totalLuvas}</span></div>
-        <div class="kpi-box"><span class="lbl">Itens com luvas</span><span class="val">${itensComLuvas}</span></div>
-        <div class="kpi-box"><span class="lbl">Sem ficha</span><span class="val">${itensSemFicha}</span></div>
-        <div class="kpi-box"><span class="lbl">Itens da corrida</span><span class="val">${c.itens.length}</span></div>
     </div>
 
     ${resumoHTML}
