@@ -810,7 +810,7 @@
 
             <div id="sync-float-status" style="font-size: 0.7rem; color: #71717a; display: flex; align-items: center; gap: 4px;">
                 <i class="fa-solid fa-cloud-arrow-down" style="font-size: 10px;"></i>
-                <span>Sincronizando com Firebird...</span>
+                <span>Sincronizando com SIGE...</span>
             </div>
         `;
 
