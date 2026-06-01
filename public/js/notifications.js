@@ -419,21 +419,21 @@
             document.body.appendChild(modal);
         }
         modal.innerHTML = `
-            <div style="background:#09090b;border:1px solid rgba(251,191,36,0.2);border-radius:24px;width:95%;max-width:500px;overflow:hidden;box-shadow:0 40px 80px rgba(0,0,0,0.9);animation:commSlideUp 0.5s cubic-bezier(0.16,1,0.3,1);">
-                <div style="background:linear-gradient(to right,rgba(251,191,36,0.1),transparent);padding:28px 30px;border-bottom:1px solid rgba(255,255,255,0.05);display:flex;align-items:center;gap:18px;">
-                    <div style="width:52px;height:52px;background:linear-gradient(135deg,#fbbf24,#d97706);border-radius:14px;display:flex;align-items:center;justify-content:center;color:#000;font-size:1.5rem;box-shadow:0 8px 20px rgba(251,191,36,0.3);flex-shrink:0;">
+            <div style="background:#09090b;border:1px solid rgba(251,191,36,0.2);border-radius:28px;width:95%;max-width:880px;overflow:hidden;box-shadow:0 40px 80px rgba(0,0,0,0.9);animation:commSlideUp 0.5s cubic-bezier(0.16,1,0.3,1);">
+                <div style="background:linear-gradient(to right,rgba(251,191,36,0.1),transparent);padding:38px 44px;border-bottom:1px solid rgba(255,255,255,0.05);display:flex;align-items:center;gap:24px;">
+                    <div style="width:74px;height:74px;background:linear-gradient(135deg,#fbbf24,#d97706);border-radius:18px;display:flex;align-items:center;justify-content:center;color:#000;font-size:2.1rem;box-shadow:0 8px 20px rgba(251,191,36,0.3);flex-shrink:0;">
                         <i class="fa-solid fa-bell"></i>
                     </div>
                     <div>
-                        <div style="font-size:1.15rem;font-weight:800;color:#fff;margin-bottom:4px;">${msg.subject || 'Novo Comunicado'}</div>
-                        <div style="font-size:0.78rem;color:#71717a;">De: <span style="color:#fbbf24;font-weight:700;">${msg.sender_name || 'Admin'}</span></div>
+                        <div style="font-size:1.65rem;font-weight:800;color:#fff;margin-bottom:6px;">${msg.subject || 'Novo Comunicado'}</div>
+                        <div style="font-size:1rem;color:#71717a;">De: <span style="color:#fbbf24;font-weight:700;">${msg.sender_name || 'Admin'}</span></div>
                     </div>
                 </div>
-                <div style="padding:28px 30px;">
-                    <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:14px;padding:22px;color:#a1a1aa;line-height:1.75;font-size:0.95rem;max-height:260px;overflow-y:auto;white-space:pre-wrap;margin-bottom:24px;">${msg.message}</div>
-                    <div style="display:grid;grid-template-columns:1fr 1.4fr;gap:12px;">
-                        <button id="read-later-comm" style="background:rgba(255,255,255,0.04);color:#71717a;border:1px solid rgba(255,255,255,0.08);padding:13px;border-radius:12px;font-weight:600;cursor:pointer;transition:0.2s;font-size:0.85rem;">Ler mais tarde</button>
-                        <button id="mark-read-comm" style="background:linear-gradient(135deg,#fbbf24,#d97706);color:#000;border:none;padding:13px;border-radius:12px;font-weight:800;cursor:pointer;font-size:0.85rem;box-shadow:0 4px 14px rgba(251,191,36,0.25);">Entendido ✓</button>
+                <div style="padding:38px 44px;">
+                    <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:18px;padding:32px;color:#a1a1aa;line-height:1.8;font-size:1.18rem;max-height:460px;overflow-y:auto;white-space:pre-wrap;margin-bottom:32px;">${msg.message}</div>
+                    <div style="display:grid;grid-template-columns:1fr 1.4fr;gap:18px;">
+                        <button id="read-later-comm" style="background:rgba(255,255,255,0.04);color:#71717a;border:1px solid rgba(255,255,255,0.08);padding:18px;border-radius:14px;font-weight:600;cursor:pointer;transition:0.2s;font-size:1.05rem;">Ler mais tarde</button>
+                        <button id="mark-read-comm" style="background:linear-gradient(135deg,#fbbf24,#d97706);color:#000;border:none;padding:18px;border-radius:14px;font-weight:800;cursor:pointer;font-size:1.05rem;box-shadow:0 4px 14px rgba(251,191,36,0.25);">Entendido ✓</button>
                     </div>
                 </div>
             </div>
