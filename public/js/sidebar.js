@@ -406,6 +406,20 @@
         document.body.classList.add('erus-sidebar-collapsed');
         applyPaddingLeft();
 
+        var sidebarEl = document.getElementById('erus-sidebar');
+        if (sidebarEl) {
+            ['selectstart', 'dragstart'].forEach(function(eventName) {
+                sidebarEl.addEventListener(eventName, function(e) {
+                    e.preventDefault();
+                    return false;
+                });
+            });
+            sidebarEl.addEventListener('mouseup', function() {
+                var sel = window.getSelection && window.getSelection();
+                if (sel && sel.removeAllRanges) sel.removeAllRanges();
+            });
+        }
+
         // Brand click = toggle collapse
         var brandEl = document.getElementById('erus-brand');
         if (brandEl) {
