@@ -13,12 +13,14 @@ async function ensureParadasTable() {
             inicio TIME,
             fim TIME,
             setor TEXT NOT NULL,
+            maquina TEXT,
             motivo TEXT NOT NULL,
             usuario TEXT,
             criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     `);
+    await pool.query(`ALTER TABLE producao_paradas_ap ADD COLUMN IF NOT EXISTS maquina TEXT`);
     paradasTableReady = true;
 }
 
@@ -477,6 +479,7 @@ router.get('/paradas', async (req, res) => {
                 TO_CHAR(inicio, 'HH24:MI') AS inicio,
                 TO_CHAR(fim, 'HH24:MI') AS fim,
                 setor,
+                maquina,
                 motivo,
                 usuario
             FROM producao_paradas_ap
@@ -494,7 +497,7 @@ router.get('/paradas', async (req, res) => {
 router.post('/paradas', async (req, res) => {
     try {
         await ensureParadasTable();
-        const { id, data, inicio, fim, setor, motivo, usuario } = req.body;
+        const { id, data, inicio, fim, setor, maquina, motivo, usuario } = req.body;
 
         if (!data || !setor || !motivo) {
             return res.status(400).json({ success: false, error: 'data, setor e motivo são obrigatórios' });
@@ -507,20 +510,21 @@ router.post('/paradas', async (req, res) => {
                     inicio = NULLIF($2, '')::time,
                     fim = NULLIF($3, '')::time,
                     setor = $4,
-                    motivo = $5,
-                    usuario = $6,
+                    maquina = $5,
+                    motivo = $6,
+                    usuario = $7,
                     atualizado_em = CURRENT_TIMESTAMP
-                WHERE id = $7
+                WHERE id = $8
                 RETURNING id
-            `, [data, inicio || '', fim || '', setor, motivo, usuario || null, id]);
+            `, [data, inicio || '', fim || '', setor, maquina || null, motivo, usuario || null, id]);
             return res.json({ success: true, id: result.rows[0]?.id || id });
         }
 
         const result = await pool.query(`
-            INSERT INTO producao_paradas_ap (data, inicio, fim, setor, motivo, usuario)
-            VALUES ($1, NULLIF($2, '')::time, NULLIF($3, '')::time, $4, $5, $6)
+            INSERT INTO producao_paradas_ap (data, inicio, fim, setor, maquina, motivo, usuario)
+            VALUES ($1, NULLIF($2, '')::time, NULLIF($3, '')::time, $4, $5, $6, $7)
             RETURNING id
-        `, [data, inicio || '', fim || '', setor, motivo, usuario || null]);
+        `, [data, inicio || '', fim || '', setor, maquina || null, motivo, usuario || null]);
 
         res.json({ success: true, id: result.rows[0].id });
     } catch (error) {

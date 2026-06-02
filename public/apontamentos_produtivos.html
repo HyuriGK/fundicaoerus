@@ -1194,7 +1194,7 @@
                 </div>
                 <div>
                     <label style="font-size:0.75rem;color:#a1a1aa;display:block;margin-bottom:4px;">SETOR AFETADO</label>
-                    <select id="parada-setor" style="width:100%;box-sizing:border-box;background:#18181b;border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#fff;padding:8px 12px;font-size:0.85rem;">
+                    <select id="parada-setor" onchange="onParadaSetorChange()" style="width:100%;box-sizing:border-box;background:#18181b;border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#fff;padding:8px 12px;font-size:0.85rem;">
                         <option value="Moldagem Geral">Moldagem Geral (Leve + Manual + Pesada)</option>
                         <option value="Moldagem Leve">Moldagem Leve</option>
                         <option value="Moldagem Manual">Moldagem Manual</option>
@@ -1205,6 +1205,16 @@
                         <option value="Qualidade">Qualidade</option>
                         <option value="Expedição">Expedição</option>
                         <option value="Geral">Geral (Toda a Fábrica)</option>
+                    </select>
+                </div>
+                <div id="parada-maquina-wrap" style="display:none;">
+                    <label style="font-size:0.75rem;color:#a1a1aa;display:block;margin-bottom:4px;">MÁQUINA / EQUIPAMENTO</label>
+                    <select id="parada-maquina" style="width:100%;box-sizing:border-box;background:#18181b;border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#fff;padding:8px 12px;font-size:0.85rem;">
+                        <option value="">Selecione o equipamento...</option>
+                        <option value="Ponte Rolante">Ponte Rolante</option>
+                        <option value="Forno 1t">Forno 1t</option>
+                        <option value="Forno 2,5t">Forno 2,5t</option>
+                        <option value="Forno 4t">Forno 4t</option>
                     </select>
                 </div>
                 <div>
@@ -3233,6 +3243,14 @@
                 .filter(item => paradaVisivelNoDetalhe(item.p.setor, chartSetor));
         }
 
+        function onParadaSetorChange() {
+            const setor = document.getElementById('parada-setor').value;
+            const wrap = document.getElementById('parada-maquina-wrap');
+            const show = setor === 'Fusão';
+            wrap.style.display = show ? '' : 'none';
+            if (!show) document.getElementById('parada-maquina').value = '';
+        }
+
         function openParadaModal(dateStr, editIdx = null) {
             const modal = document.getElementById('parada-modal');
             const today = dateStr || (currentMonthFilter !== 0
@@ -3245,13 +3263,16 @@
             document.getElementById('parada-fim').value = '';
             document.getElementById('parada-motivo').value = '';
             document.getElementById('parada-setor').value = 'Moldagem Leve';
+            document.getElementById('parada-maquina').value = '';
             if (editIdx !== null && paradasRegistradas[today]?.[editIdx]) {
                 const p = paradasRegistradas[today][editIdx];
                 document.getElementById('parada-inicio').value = p.inicio || '';
                 document.getElementById('parada-fim').value = p.fim || '';
                 document.getElementById('parada-motivo').value = p.motivo || '';
                 document.getElementById('parada-setor').value = p.setor || 'Moldagem Leve';
+                document.getElementById('parada-maquina').value = p.maquina || '';
             }
+            onParadaSetorChange();
             modal.style.display = 'flex';
         }
 
@@ -3267,6 +3288,7 @@
             const inicio = document.getElementById('parada-inicio').value;
             const fim = document.getElementById('parada-fim').value;
             const setor = document.getElementById('parada-setor').value;
+            const maquina = setor === 'Fusão' ? document.getElementById('parada-maquina').value : '';
             const motivo = document.getElementById('parada-motivo').value.trim();
             if (!motivo) { alert('Informe o motivo da parada.'); return; }
 
@@ -3277,6 +3299,7 @@
                 inicio,
                 fim,
                 setor,
+                maquina,
                 motivo,
                 usuario: localStorage.getItem('erus_user') || localStorage.getItem('erus_username') || ''
             };
@@ -3323,6 +3346,7 @@
                         </div>
                     </div>
                     ${field('SETOR', p.setor)}
+                    ${p.maquina ? field('MÁQUINA', p.maquina) : ''}
                     ${field('PERÍODO', p.inicio && p.fim ? `${p.inicio} até ${p.fim}` : (p.inicio || p.fim || '—'))}
                     ${field('MOTIVO', p.motivo)}
                 </div>`).join('');
