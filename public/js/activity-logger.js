@@ -1247,7 +1247,7 @@
                 const syncIndicator = document.getElementById('sync-floating-indicator');
                 const bottomBase = 20;
                 const bottomPos = syncIndicator
-                    ? bottomBase + Math.max(syncIndicator.offsetHeight, SYNC_FLOAT_VISIBLE_HEIGHT) + 4
+                    ? bottomBase + Math.max(syncIndicator.offsetHeight, SYNC_FLOAT_VISIBLE_HEIGHT) + 2
                     : bottomBase;
                 toast.style.bottom = bottomPos + 'px';
                 requestAnimationFrame(() => {
