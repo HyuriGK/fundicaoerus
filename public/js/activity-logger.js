@@ -3,6 +3,10 @@
     // Evitar execução duplicada se o script for incluído mais de uma vez
     if (window.__activityLoggerLoaded) return;
     window.__activityLoggerLoaded = true;
+    const SYNC_TOAST_SHOW_DELAY_MS = 2000;
+    const SYNC_TOAST_EXPOSURE_MS = 5000;
+    const SYNC_TOAST_FADE_MS = 350;
+    let dismissedFloatingSyncKey = null;
     // Helper to get current user
     function getUserName() {
         return localStorage.getItem('erus_user') || localStorage.getItem('erus_username') || 'Visitante';
@@ -745,6 +749,10 @@
         // Evitar duplicado
         if (document.getElementById('sync-floating-indicator')) return;
 
+        const page = window.location.pathname.split('/').pop() || 'index.html';
+        const syncKey = `${page}:${lockData && lockData.sync_started_at ? lockData.sync_started_at : 'sync'}`;
+        if (dismissedFloatingSyncKey === syncKey) return;
+
         const syncStartedAt = lockData && lockData.sync_started_at ? new Date(lockData.sync_started_at).getTime() : Date.now();
         const syncEstimatedMs = lockData && lockData.sync_estimated_ms ? lockData.sync_estimated_ms : 120000;
 
@@ -829,7 +837,9 @@
         const pctText = document.getElementById('sync-float-pct');
         const statusText = document.getElementById('sync-float-status');
 
-        const page = window.location.pathname.split('/').pop() || 'index.html';
+        let checkInterval;
+        let safetyTimeout;
+        let autoHideTimer;
 
         const updateInterval = setInterval(() => {
             const elapsed = Date.now() - syncStartedAt;
@@ -844,6 +854,7 @@
             clearInterval(updateInterval);
             clearInterval(checkInterval);
             clearTimeout(safetyTimeout);
+            clearTimeout(autoHideTimer);
             if (fill) { fill.style.width = '100%'; fill.style.background = '#10b981'; }
             if (pctText) { pctText.textContent = '100%'; pctText.style.color = '#10b981'; }
             if (statusText) statusText.innerHTML = '<i class="fa-solid fa-circle-check" style="color: #10b981;"></i> <span style="color: #10b981;">Sincronização Finalizada</span>';
@@ -854,10 +865,23 @@
                     indicator.style.opacity = '0';
                     setTimeout(() => indicator.remove(), 500);
                 }
-            }, 3000);
+            }, SYNC_TOAST_EXPOSURE_MS);
         }
 
-        const checkInterval = setInterval(async () => {
+        autoHideTimer = setTimeout(() => {
+            clearInterval(updateInterval);
+            clearInterval(checkInterval);
+            clearTimeout(safetyTimeout);
+            dismissedFloatingSyncKey = syncKey;
+            if (indicator.parentNode) {
+                indicator.style.transition = 'all 0.5s ease-out';
+                indicator.style.transform = 'translateX(120%)';
+                indicator.style.opacity = '0';
+                setTimeout(() => { if (indicator.parentNode) indicator.remove(); }, 500);
+            }
+        }, SYNC_TOAST_SHOW_DELAY_MS + SYNC_TOAST_EXPOSURE_MS);
+
+        checkInterval = setInterval(async () => {
             try {
                 const resp = await fetch('/api/page-locks');
                 const result = await resp.json();
@@ -877,7 +901,7 @@
         }, 2000);
 
         // Timeout de segurança: se o unlock nunca chegar, força limpeza após 3× o tempo estimado
-        const safetyTimeout = setTimeout(() => finalizeSyncIndicator(), Math.max(syncEstimatedMs * 3, 180000));
+        safetyTimeout = setTimeout(() => finalizeSyncIndicator(), Math.max(syncEstimatedMs * 3, 180000));
     }
 
     // --- ROLE ENFORCEMENT ---
@@ -1172,9 +1196,6 @@
     // --- TOAST ÚLTIMA SINCRONIZAÇÃO ---
     async function showLastSyncToast() {
         const page = window.location.pathname.split('/').pop() || 'index.html';
-        const showDelayMs = 2000;
-        const exposureMs = 5000;
-        const fadeMs = 350;
         try {
             const resp = await fetch('/api/page-locks/last-sync');
             const result = await resp.json();
@@ -1206,7 +1227,7 @@
                     <div style="font-size:0.68rem;font-weight:600;color:#86efac;letter-spacing:0.05em;text-transform:uppercase;">Última sincronização</div>
                     <div style="font-size:0.82rem;font-weight:700;color:#dcfce7;">${dateFmt} às ${timeFmt}</div>
                     <div style="height:3px;background:rgba(187,247,208,0.16);border-radius:999px;overflow:hidden;margin-top:7px;">
-                        <div class="last-sync-toast-progress" style="height:100%;width:0%;background:linear-gradient(90deg,#22c55e,#86efac);border-radius:999px;transition:width ${exposureMs}ms linear;"></div>
+                        <div class="last-sync-toast-progress" style="height:100%;width:0%;background:linear-gradient(90deg,#22c55e,#86efac);border-radius:999px;transition:width ${SYNC_TOAST_EXPOSURE_MS}ms linear;"></div>
                     </div>
                 </div>
             `;
@@ -1228,9 +1249,9 @@
                     toast.style.transition = 'max-height 0.3s ease, opacity 0.3s ease';
                     toast.style.maxHeight = '0';
                     toast.style.opacity = '0';
-                    setTimeout(() => toast.remove(), fadeMs);
-                }, exposureMs);
-            }, showDelayMs);
+                    setTimeout(() => toast.remove(), SYNC_TOAST_FADE_MS);
+                }, SYNC_TOAST_EXPOSURE_MS);
+            }, SYNC_TOAST_SHOW_DELAY_MS);
         } catch(e) {}
     }
 
