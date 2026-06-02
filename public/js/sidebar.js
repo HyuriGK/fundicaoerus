@@ -500,9 +500,9 @@
 
         // Role-based sidebar filter for restricted roles
         var restrictedPageMap = {
-            'moldagem': ['fichatecnica.html', 'apontamentos_produtivos.html'],
-            'fusão': ['fichatecnica.html'],
-            'fusao': ['fichatecnica.html'],
+            'moldagem': ['fichatecmoldagem.html', 'apontamentos_produtivos.html'],
+            'fusão': ['fichatecfusao.html'],
+            'fusao': ['fichatecfusao.html'],
             'acabamento': ['fichatecacabamento.html', 'fichatecnica.html']
         };
         if (restrictedPageMap[role]) {
@@ -590,7 +590,13 @@
                 var devSep = document.getElementById('erus-sep-desenvolvimento');
                 if (!devGroup || !devSep) return;
                 var hasLocked = false;
+                var blocked = {};
                 result.data.forEach(function(l) {
+                    if (l.is_locked) blocked[l.page_id] = true;
+                    if (restrictedPageMap[role] && l.is_locked) {
+                        var blockedLink = document.querySelector('#erus-sidebar .erus-nav-link[href="' + l.page_id + '"]');
+                        if (blockedLink) blockedLink.classList.add('erus-role-hidden');
+                    }
                     if (!l.is_locked || l.lock_reason !== 'development') return;
                     var link = document.querySelector('#erus-sidebar .erus-nav-link[href="' + l.page_id + '"]');
                     if (!link) return;
@@ -601,6 +607,13 @@
                     devGroup.appendChild(link);
                     hasLocked = true;
                 });
+                if (restrictedPageMap[role]) {
+                    var currentPage = window.location.pathname.split('/').pop() || 'index.html';
+                    if (blocked[currentPage]) {
+                        var fallback = restrictedPageMap[role].find(function(page) { return !blocked[page]; }) || 'index.html';
+                        window.location.href = fallback;
+                    }
+                }
                 if (hasLocked && !restrictedPageMap[role]) devSep.style.display = 'flex';
             })
             .catch(function() {});

@@ -917,7 +917,7 @@
     }
 
     // --- ROLE ENFORCEMENT ---
-    function enforceRoleAccess() {
+    async function enforceRoleAccess() {
         if (window.location.pathname.includes('login.html')) return;
 
         const page = window.location.pathname.split('/').pop() || 'index.html';
@@ -934,8 +934,26 @@
         if (rolePermissions[role]) {
             const allowedPages = rolePermissions[role];
             const alwaysAllowed = ['index.html', 'solicitarchamados.html'];
+            let blocked = {};
+            try {
+                const response = await fetch('/api/page-locks');
+                const result = await response.json();
+                if (result.success && Array.isArray(result.data)) {
+                    result.data.forEach(lock => {
+                        if (lock.is_locked) blocked[lock.page_id] = true;
+                    });
+                }
+            } catch (e) {}
+
+            if (blocked[page] && !alwaysAllowed.includes(page)) {
+                const fallback = allowedPages.find(allowedPage => !blocked[allowedPage]) || 'index.html';
+                window.location.replace(fallback);
+                return true;
+            }
+
             if (!alwaysAllowed.includes(page) && !allowedPages.includes(page)) {
-                window.location.replace(allowedPages[0]);
+                const fallback = allowedPages.find(allowedPage => !blocked[allowedPage]) || 'index.html';
+                window.location.replace(fallback);
                 return true;
             }
         }
