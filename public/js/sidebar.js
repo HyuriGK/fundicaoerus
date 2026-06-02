@@ -539,7 +539,6 @@
                 var parentGroup = allowedLink.closest('.erus-nav-group-wrapper');
                 if (parentGroup) {
                     parentGroup.classList.remove('erus-role-hidden');
-                    parentGroup.classList.remove('collapsed');
                     var prevSep = parentGroup.previousElementSibling;
                     while (prevSep && !prevSep.classList.contains('erus-nav-group-sep')) {
                         prevSep = prevSep.previousElementSibling;
