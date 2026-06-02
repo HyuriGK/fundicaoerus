@@ -1433,6 +1433,24 @@
         const PRIMARY_SECTORS = ['ACABAMENTO', 'EXPEDICAO', 'FUSAO', 'MOLDAGEM GERAL'];
         const GENERAL_MOLDING_KEY = 'MOLDAGEM GERAL';
         const TOTAL_MOLDAGEM_SECTOR_KEY = 'TOTAL MOLDAGEM';
+        const MOLDAGEM_ROLE_SECTORS = ['MOLDAGEM GERAL', 'MOLDAGEM LEVE', 'MOLDAGEM MANUAL', 'MOLDAGEM PESADA'];
+
+        function getCurrentRole() {
+            return (localStorage.getItem('erus_role') || '').trim().toLowerCase();
+        }
+
+        function isMoldagemRole() {
+            return getCurrentRole() === 'moldagem';
+        }
+
+        function normalizeSectorName(value) {
+            return String(value || '').trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        }
+
+        function isMoldagemRoleAllowedSector(value) {
+            const sector = normalizeSectorName(value);
+            return sector === 'MOLDAGEM GERAL' || MOLDAGEM_GERAL_TYPES.includes(sector);
+        }
 
         // Setores permitidos no relatório
         const ALLOWED_REPORT_SECTORS = [
@@ -2052,10 +2070,12 @@
             // User requested SPECIFIC order. Let's trust user knows these sectors exist.
             // I will add them exactly as requested. 
 
-            if (!orderedSectors.includes(currentSectorFilter)) {
+            const visibleSectors = isMoldagemRole() ? MOLDAGEM_ROLE_SECTORS : orderedSectors;
+
+            if (!visibleSectors.includes(currentSectorFilter)) {
                 currentSectorFilter = 'MOLDAGEM GERAL';
             }
-            renderSectorButtons(orderedSectors);
+            renderSectorButtons(visibleSectors);
 
             // Years
             const years = [...new Set(allData.map(d => d.data.substring(0, 4)))].sort().reverse();
@@ -2135,7 +2155,7 @@
 
                 let matchSector = false;
                 if (currentSectorFilter === 'TODOS') {
-                    matchSector = true;
+                    matchSector = isMoldagemRole() ? isMoldagemRoleAllowedSector(item.setor) : true;
                 } else if (currentSectorFilter === 'MOLDAGEM GERAL') {
                     matchSector = MOLDAGEM_GERAL_TYPES.includes(item.setor);
                 } else {
