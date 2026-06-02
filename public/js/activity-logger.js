@@ -6,6 +6,7 @@
     const SYNC_TOAST_SHOW_DELAY_MS = 2000;
     const SYNC_TOAST_EXPOSURE_MS = 5000;
     const SYNC_TOAST_FADE_MS = 350;
+    const SYNC_FLOAT_VISIBLE_HEIGHT = 140;
     let dismissedFloatingSyncKey = null;
     // Helper to get current user
     function getUserName() {
@@ -890,7 +891,7 @@
         showTimer = setTimeout(() => {
             requestAnimationFrame(() => {
                 indicator.classList.add('sync-float-visible');
-                indicator.style.maxHeight = '140px';
+                indicator.style.maxHeight = SYNC_FLOAT_VISIBLE_HEIGHT + 'px';
                 indicator.style.opacity = '1';
                 if (toastFill) requestAnimationFrame(() => { toastFill.style.width = '100%'; });
                 autoHideTimer = setTimeout(() => hideIndicator(true), SYNC_TOAST_EXPOSURE_MS);
@@ -1246,7 +1247,7 @@
                 const syncIndicator = document.getElementById('sync-floating-indicator');
                 const bottomBase = 20;
                 const bottomPos = syncIndicator
-                    ? bottomBase + syncIndicator.offsetHeight + 10
+                    ? bottomBase + Math.max(syncIndicator.offsetHeight, SYNC_FLOAT_VISIBLE_HEIGHT) + 10
                     : bottomBase;
                 toast.style.bottom = bottomPos + 'px';
                 requestAnimationFrame(() => {
