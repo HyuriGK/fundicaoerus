@@ -774,6 +774,9 @@
             .sync-float-progress {
                 transition: width 1s linear;
             }
+            .sync-float-toast-progress {
+                transition: width ${SYNC_TOAST_EXPOSURE_MS}ms linear;
+            }
             @media print {
                 #sync-floating-indicator,
                 #sync-overlay,
@@ -828,12 +831,17 @@
                 <i class="fa-solid fa-cloud-arrow-down" style="font-size: 10px;"></i>
                 <span>Sincronizando com SIGE...</span>
             </div>
+
+            <div style="height:3px;background:rgba(147,197,253,0.12);border-radius:999px;overflow:hidden;">
+                <div id="sync-float-toast-fill" class="sync-float-toast-progress" style="height:100%;width:0%;background:linear-gradient(90deg,#3b82f6,#93c5fd);border-radius:999px;"></div>
+            </div>
         `;
 
         document.body.appendChild(indicator);
 
         // 3. Loops de Atualização
         const fill = document.getElementById('sync-float-fill');
+        const toastFill = document.getElementById('sync-float-toast-fill');
         const pctText = document.getElementById('sync-float-pct');
         const statusText = document.getElementById('sync-float-status');
 
@@ -844,11 +852,15 @@
         const updateInterval = setInterval(() => {
             const elapsed = Date.now() - syncStartedAt;
             const timePct = Math.min((elapsed / syncEstimatedMs) * 100, 95);
-            if (fill && !fill.dataset.realProgress) {
+            if (fill) {
                 fill.style.width = timePct + '%';
                 if (pctText) pctText.textContent = Math.round(timePct) + '%';
             }
         }, 1000);
+
+        requestAnimationFrame(() => {
+            if (toastFill) requestAnimationFrame(() => { toastFill.style.width = '100%'; });
+        });
 
         function finalizeSyncIndicator() {
             clearInterval(updateInterval);
@@ -879,7 +891,7 @@
                 indicator.style.opacity = '0';
                 setTimeout(() => { if (indicator.parentNode) indicator.remove(); }, 500);
             }
-        }, SYNC_TOAST_SHOW_DELAY_MS + SYNC_TOAST_EXPOSURE_MS);
+        }, SYNC_TOAST_EXPOSURE_MS);
 
         checkInterval = setInterval(async () => {
             try {
@@ -887,13 +899,7 @@
                 const result = await resp.json();
                 if (result.success && Array.isArray(result.data)) {
                     const lock = result.data.find(l => l.page_id === page);
-                    if (lock && lock.is_locked && lock.lock_reason === 'sync') {
-                        if (lock.sync_progress > 0) {
-                            const realPct = Math.min(95, lock.sync_progress);
-                            if (fill) { fill.style.width = realPct + '%'; fill.dataset.realProgress = '1'; }
-                            if (pctText) pctText.textContent = realPct + '%';
-                        }
-                    } else {
+                    if (!lock || !lock.is_locked || lock.lock_reason !== 'sync') {
                         finalizeSyncIndicator();
                     }
                 }
