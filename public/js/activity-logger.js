@@ -888,18 +888,18 @@
         const role = (localStorage.getItem('erus_role') || 'Visitante').toLowerCase();
 
         const rolePermissions = {
-            'moldagem': 'fichatecmoldagem.html',
-            'fusão': 'fichatecfusao.html',
-            'fusao': 'fichatecfusao.html',
-            'acabamento': 'fichatecacabamento.html',
-            'acabamento_externo': 'fichatecacabamento.html'
+            'moldagem': ['fichatecmoldagem.html', 'apontamentos_produtivos.html'],
+            'fusão': ['fichatecfusao.html'],
+            'fusao': ['fichatecfusao.html'],
+            'acabamento': ['fichatecacabamento.html'],
+            'acabamento_externo': ['fichatecacabamento.html']
         };
 
         if (rolePermissions[role]) {
-            const allowedPage = rolePermissions[role];
+            const allowedPages = rolePermissions[role];
             const alwaysAllowed = ['index.html', 'solicitarchamados.html'];
-            if (!alwaysAllowed.includes(page) && page !== allowedPage) {
-                window.location.replace(allowedPage);
+            if (!alwaysAllowed.includes(page) && !allowedPages.includes(page)) {
+                window.location.replace(allowedPages[0]);
                 return true;
             }
         }

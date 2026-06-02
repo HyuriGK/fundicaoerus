@@ -509,13 +509,13 @@
 
         // Role-based sidebar filter for restricted roles
         var restrictedPageMap = {
-            'moldagem': 'fichatecmoldagem.html',
-            'fusão': 'fichatecfusao.html',
-            'fusao': 'fichatecfusao.html',
-            'acabamento': 'fichatecacabamento.html'
+            'moldagem': ['fichatecmoldagem.html', 'apontamentos_produtivos.html'],
+            'fusão': ['fichatecfusao.html'],
+            'fusao': ['fichatecfusao.html'],
+            'acabamento': ['fichatecacabamento.html']
         };
         if (restrictedPageMap[role]) {
-            var allowedPage = restrictedPageMap[role];
+            var allowedPages = restrictedPageMap[role];
             // Hide all groups — except eg-chamados which is visible to everyone
             document.querySelectorAll('#erus-sidebar .erus-nav-group-sep, #erus-sidebar .erus-nav-group-wrapper').forEach(function(el) {
                 if (el.id === 'eg-chamados') return;
@@ -531,9 +531,10 @@
                 }
                 if (chamadosSep) chamadosSep.classList.remove('erus-role-hidden');
             }
-            // Show only the group containing the allowed page
-            var allowedLink = document.querySelector('#erus-sidebar .erus-nav-link[href="' + allowedPage + '"]');
-            if (allowedLink) {
+            // Show only the groups containing the allowed pages
+            allowedPages.forEach(function(allowedPage) {
+                var allowedLink = document.querySelector('#erus-sidebar .erus-nav-link[href="' + allowedPage + '"]');
+                if (!allowedLink) return;
                 var parentGroup = allowedLink.closest('.erus-nav-group-wrapper');
                 if (parentGroup) {
                     parentGroup.classList.remove('erus-role-hidden');
@@ -545,10 +546,10 @@
                     if (prevSep) prevSep.classList.remove('erus-role-hidden');
                     // Hide other links in the same group
                     parentGroup.querySelectorAll('.erus-nav-link').forEach(function(link) {
-                        if (link.getAttribute('href') !== allowedPage) link.classList.add('erus-role-hidden');
+                        if (allowedPages.indexOf(link.getAttribute('href')) === -1) link.classList.add('erus-role-hidden');
                     });
                 }
-            }
+            });
         }
 
         // Ficha de Moldagem only visible to role 'moldagem'
