@@ -192,6 +192,8 @@
                     '<i class="fa-solid fa-file-contract"></i><span>Ficha Técnica</span></a>' +
                 '<a href="fichatecmoldagem.html" data-stip="Ficha de Moldagem" class="erus-nav-link' + isActive('fichatecmoldagem.html') + '">' +
                     '<i class="fa-solid fa-layer-group"></i><span>Ficha de Moldagem</span></a>' +
+                '<a href="fichatecfusao.html" data-stip="Ficha de Fusao" class="erus-nav-link' + isActive('fichatecfusao.html') + '">' +
+                    '<i class="fa-solid fa-fire-burner"></i><span>Ficha de Fusao</span></a>' +
                 '<a href="fichatecacabamento.html" data-stip="Ficha de Acabamento" class="erus-nav-link' + isActive('fichatecacabamento.html') + '">' +
                     '<i class="fa-solid fa-hammer"></i><span>Ficha de Acabamento</span></a>' +
                 '<a href="monitoramento.html" data-stip="Monitoramento de OPs" class="erus-nav-link' + isActive('monitoramento.html') + '">' +
@@ -296,6 +298,21 @@
                     '<i class="fa-solid fa-headset"></i><span>Solicitar Chamado</span></a>' +
                 '<a href="chamados.html" id="erus-link-chamados-ti" data-stip="Painel TI" class="erus-nav-link' + isActive('chamados.html') + '" style="display:none;">' +
                     '<i class="fa-solid fa-ticket"></i><span>Painel TI</span></a>' +
+            '</div>' +
+            // COMUNICACAO
+            '<div class="erus-nav-group-sep" data-stip="Comunicacao" onclick="erusSidebarToggleGroup(\'eg-comunicacao\')">' +
+                '<i class="fas fa-comments" style="font-size:0.8rem;color:#52525b;margin-right:8px;flex-shrink:0;"></i>' +
+                '<span class="erus-nav-group-label">Comunicacao</span>' +
+                '<div class="erus-nav-group-line"></div>' +
+                '<i class="fa-solid fa-plus" id="icon-eg-comunicacao"></i>' +
+            '</div>' +
+            '<div id="eg-comunicacao" class="erus-nav-group-wrapper collapsed">' +
+                '<a href="comunicacao.html" data-stip="Comunicacao" class="erus-nav-link' + isActive('comunicacao.html') + '">' +
+                    '<i class="fa-solid fa-bullhorn"></i><span>Comunicacao</span></a>' +
+                '<a href="reuniao.html" data-stip="Reunioes" class="erus-nav-link' + isActive('reuniao.html') + '">' +
+                    '<i class="fa-solid fa-people-group"></i><span>Reunioes</span></a>' +
+                '<a href="relatorio.html" data-stip="Relatorios" class="erus-nav-link' + isActive('relatorio.html') + '">' +
+                    '<i class="fa-solid fa-file-lines"></i><span>Relatorios</span></a>' +
             '</div>' +
             // EM DESENVOLVIMENTO
             '<div id="erus-sep-desenvolvimento" class="erus-nav-group-sep" data-stip="Em desenvolvimento" onclick="erusSidebarToggleGroup(\'eg-desenvolvimento\')" style="display:none;">' +
