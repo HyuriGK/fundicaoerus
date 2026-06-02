@@ -189,9 +189,7 @@
                     '<i class="fa-solid fa-industry"></i><span>Produção Apontada</span></a>' +
                 '<a href="ordemdeproducao.html" data-stip="Ordens de Produção" class="erus-nav-link' + isActive('ordemdeproducao.html') + '">' +
                     '<i class="fa-solid fa-file-lines"></i><span>Ordens de Produção</span></a>' +
-                '<a href="fichatecnica.html" data-stip="Ficha Técnica" class="erus-nav-link' + isActive('fichatecnica.html') + '">' +
-                    '<i class="fa-solid fa-file-contract"></i><span>Ficha Técnica</span></a>' +
-                // Ficha de Moldagem e Ficha de Fusão acessíveis via Ficha Técnica; não listadas na sidebar
+                // Ficha Técnica movida para a categoria Engenharia. Ficha de Moldagem e Ficha de Fusão acessíveis via Ficha Técnica; não listadas na sidebar
                 '<a href="fichatecacabamento.html" data-stip="Ficha de Acabamento" class="erus-nav-link' + isActive('fichatecacabamento.html') + '">' +
                     '<i class="fa-solid fa-hammer"></i><span>Ficha de Acabamento</span></a>' +
                 '<a href="monitoramento.html" data-stip="Monitoramento de OPs" class="erus-nav-link' + isActive('monitoramento.html') + '">' +
@@ -200,6 +198,17 @@
                     '<i class="fa-solid fa-screwdriver-wrench"></i><span>Acabamento Interno</span></a>' +
                 '<a href="insumosmoldagem.html" data-stip="Insumos de Moldagem" class="erus-nav-link' + isActive('insumosmoldagem.html') + '">' +
                     '<i class="fa-solid fa-cubes"></i><span>Insumos de Moldagem</span></a>' +
+            '</div>' +
+            // ENGENHARIA
+            '<div class="erus-nav-group-sep" data-stip="Engenharia" onclick="erusSidebarToggleGroup(\'eg-engenharia\')">' +
+                '<i class="fas fa-compass-drafting" style="font-size:0.8rem;color:#52525b;margin-right:8px;flex-shrink:0;"></i>' +
+                '<span class="erus-nav-group-label">Engenharia</span>' +
+                '<div class="erus-nav-group-line"></div>' +
+                '<i class="fa-solid fa-plus" id="icon-eg-engenharia"></i>' +
+            '</div>' +
+            '<div id="eg-engenharia" class="erus-nav-group-wrapper collapsed">' +
+                '<a href="fichatecnica.html" data-stip="Ficha Técnica" class="erus-nav-link' + isActive('fichatecnica.html') + '">' +
+                    '<i class="fa-solid fa-file-contract"></i><span>Ficha Técnica</span></a>' +
             '</div>' +
             // FATURAMENTO
             '<div class="erus-nav-group-sep" data-stip="Faturamento" onclick="erusSidebarToggleGroup(\'eg-faturamento\')">' +
@@ -494,7 +503,7 @@
             'moldagem': ['fichatecnica.html', 'apontamentos_produtivos.html'],
             'fusão': ['fichatecnica.html'],
             'fusao': ['fichatecnica.html'],
-            'acabamento': ['fichatecacabamento.html']
+            'acabamento': ['fichatecacabamento.html', 'fichatecnica.html']
         };
         if (restrictedPageMap[role]) {
             var allowedPages = restrictedPageMap[role];
