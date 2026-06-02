@@ -624,8 +624,8 @@
         // After BOTH fetches complete, hide groups whose links are all blocked
         // (page-locks may have moved links between groups, so we must wait for both)
         Promise.all([pageLocksPromise, permissionsPromise]).then(function() {
-            // Groups controlled by other logic — skip them
-            var skipGroups = { 'eg-desenvolvimento': true, 'eg-financeiro': true };
+            // Apenas o grupo dinâmico "Em desenvolvimento" é controlado por page-locks; os demais seguem o painel
+            var skipGroups = { 'eg-desenvolvimento': true };
             document.querySelectorAll('#erus-sidebar .erus-nav-group-wrapper').forEach(function(wrapper) {
                 if (skipGroups[wrapper.id]) return;
                 var links = wrapper.querySelectorAll('.erus-nav-link');
