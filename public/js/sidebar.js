@@ -191,8 +191,7 @@
                     '<i class="fa-solid fa-file-lines"></i><span>Ordens de Produção</span></a>' +
                 '<a href="fichatecnica.html" data-stip="Ficha Técnica" class="erus-nav-link' + isActive('fichatecnica.html') + '">' +
                     '<i class="fa-solid fa-file-contract"></i><span>Ficha Técnica</span></a>' +
-                '<a href="fichatecmoldagem.html" data-stip="Ficha de Moldagem" class="erus-nav-link' + isActive('fichatecmoldagem.html') + '">' +
-                    '<i class="fa-solid fa-layer-group"></i><span>Ficha de Moldagem</span></a>' +
+                // Ficha de Moldagem e Ficha de Fusão acessíveis via Ficha Técnica; não listadas na sidebar
                 '<a href="fichatecacabamento.html" data-stip="Ficha de Acabamento" class="erus-nav-link' + isActive('fichatecacabamento.html') + '">' +
                     '<i class="fa-solid fa-hammer"></i><span>Ficha de Acabamento</span></a>' +
                 '<a href="monitoramento.html" data-stip="Monitoramento de OPs" class="erus-nav-link' + isActive('monitoramento.html') + '">' +
@@ -492,9 +491,9 @@
 
         // Role-based sidebar filter for restricted roles
         var restrictedPageMap = {
-            'moldagem': ['fichatecmoldagem.html', 'apontamentos_produtivos.html'],
-            'fusão': ['fichatecfusao.html'],
-            'fusao': ['fichatecfusao.html'],
+            'moldagem': ['fichatecnica.html', 'apontamentos_produtivos.html'],
+            'fusão': ['fichatecnica.html'],
+            'fusao': ['fichatecnica.html'],
             'acabamento': ['fichatecacabamento.html']
         };
         if (restrictedPageMap[role]) {
