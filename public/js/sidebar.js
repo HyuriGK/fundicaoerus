@@ -193,8 +193,6 @@
                     '<i class="fa-solid fa-file-contract"></i><span>Ficha Técnica</span></a>' +
                 '<a href="fichatecmoldagem.html" data-stip="Ficha de Moldagem" class="erus-nav-link' + isActive('fichatecmoldagem.html') + '">' +
                     '<i class="fa-solid fa-layer-group"></i><span>Ficha de Moldagem</span></a>' +
-                '<a href="fichatecfusao.html" data-stip="Ficha de Fusao" class="erus-nav-link' + isActive('fichatecfusao.html') + '">' +
-                    '<i class="fa-solid fa-fire-burner"></i><span>Ficha de Fusao</span></a>' +
                 '<a href="fichatecacabamento.html" data-stip="Ficha de Acabamento" class="erus-nav-link' + isActive('fichatecacabamento.html') + '">' +
                     '<i class="fa-solid fa-hammer"></i><span>Ficha de Acabamento</span></a>' +
                 '<a href="monitoramento.html" data-stip="Monitoramento de OPs" class="erus-nav-link' + isActive('monitoramento.html') + '">' +
