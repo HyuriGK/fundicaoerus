@@ -3,6 +3,25 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../lib/db');
 
+let paradasTableReady = false;
+async function ensureParadasTable() {
+    if (paradasTableReady) return;
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS producao_paradas_ap (
+            id SERIAL PRIMARY KEY,
+            data DATE NOT NULL,
+            inicio TIME,
+            fim TIME,
+            setor TEXT NOT NULL,
+            motivo TEXT NOT NULL,
+            usuario TEXT,
+            criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+    paradasTableReady = true;
+}
+
 // GET /api/producao-postgres
 // Returns filtered productio records from the synced table
 router.get('/', async (req, res) => {
@@ -431,6 +450,92 @@ router.get('/figuras', async (req, res) => {
         res.json({ success: true, figuras: map });
     } catch (error) {
         console.error('❌ Error fetching figuras:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+router.get('/paradas', async (req, res) => {
+    try {
+        await ensureParadasTable();
+        const { startDate, endDate } = req.query;
+        const params = [];
+        let where = 'WHERE 1=1';
+
+        if (startDate) {
+            params.push(startDate);
+            where += ` AND data >= $${params.length}`;
+        }
+        if (endDate) {
+            params.push(endDate);
+            where += ` AND data <= $${params.length}`;
+        }
+
+        const result = await pool.query(`
+            SELECT
+                id,
+                TO_CHAR(data, 'YYYY-MM-DD') AS data,
+                TO_CHAR(inicio, 'HH24:MI') AS inicio,
+                TO_CHAR(fim, 'HH24:MI') AS fim,
+                setor,
+                motivo,
+                usuario
+            FROM producao_paradas_ap
+            ${where}
+            ORDER BY data DESC, inicio NULLS LAST, id DESC
+        `, params);
+
+        res.json({ success: true, data: result.rows });
+    } catch (error) {
+        console.error('Erro ao buscar paradas:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+router.post('/paradas', async (req, res) => {
+    try {
+        await ensureParadasTable();
+        const { id, data, inicio, fim, setor, motivo, usuario } = req.body;
+
+        if (!data || !setor || !motivo) {
+            return res.status(400).json({ success: false, error: 'data, setor e motivo são obrigatórios' });
+        }
+
+        if (id) {
+            const result = await pool.query(`
+                UPDATE producao_paradas_ap
+                SET data = $1,
+                    inicio = NULLIF($2, '')::time,
+                    fim = NULLIF($3, '')::time,
+                    setor = $4,
+                    motivo = $5,
+                    usuario = $6,
+                    atualizado_em = CURRENT_TIMESTAMP
+                WHERE id = $7
+                RETURNING id
+            `, [data, inicio || '', fim || '', setor, motivo, usuario || null, id]);
+            return res.json({ success: true, id: result.rows[0]?.id || id });
+        }
+
+        const result = await pool.query(`
+            INSERT INTO producao_paradas_ap (data, inicio, fim, setor, motivo, usuario)
+            VALUES ($1, NULLIF($2, '')::time, NULLIF($3, '')::time, $4, $5, $6)
+            RETURNING id
+        `, [data, inicio || '', fim || '', setor, motivo, usuario || null]);
+
+        res.json({ success: true, id: result.rows[0].id });
+    } catch (error) {
+        console.error('Erro ao salvar parada:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+router.delete('/paradas/:id', async (req, res) => {
+    try {
+        await ensureParadasTable();
+        await pool.query('DELETE FROM producao_paradas_ap WHERE id = $1', [req.params.id]);
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Erro ao remover parada:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 });

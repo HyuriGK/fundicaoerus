@@ -3164,6 +3164,75 @@
         let _paradaEditDate = null;
         let _paradaEditIdx = null;
 
+        function normalizeParadasRows(rows) {
+            const grouped = {};
+            (rows || []).forEach(p => {
+                if (!p.data) return;
+                if (!grouped[p.data]) grouped[p.data] = [];
+                grouped[p.data].push({
+                    id: p.id,
+                    data: p.data,
+                    inicio: p.inicio || '',
+                    fim: p.fim || '',
+                    setor: p.setor,
+                    motivo: p.motivo,
+                    usuario: p.usuario || ''
+                });
+            });
+            return grouped;
+        }
+
+        async function loadParadas() {
+            try {
+                const localSnapshot = JSON.parse(localStorage.getItem('paradas_ap') || '{}');
+                const res = await fetch('/api/producao-postgres/paradas');
+                const json = await res.json();
+                if (!json.success) throw new Error(json.error || 'Falha ao carregar paradas');
+                paradasRegistradas = normalizeParadasRows(json.data);
+                for (const [data, list] of Object.entries(localSnapshot)) {
+                    const entries = Array.isArray(list) ? list : [list];
+                    for (const localParada of entries) {
+                        if (!localParada || localParada.id) continue;
+                        const duplicate = (paradasRegistradas[data] || []).some(p =>
+                            p.setor === localParada.setor &&
+                            p.inicio === (localParada.inicio || '') &&
+                            p.fim === (localParada.fim || '') &&
+                            p.motivo === localParada.motivo
+                        );
+                        if (duplicate) continue;
+                        const migrated = {
+                            data,
+                            inicio: localParada.inicio || '',
+                            fim: localParada.fim || '',
+                            setor: localParada.setor,
+                            motivo: localParada.motivo,
+                            usuario: localParada.usuario || localStorage.getItem('erus_user') || localStorage.getItem('erus_username') || ''
+                        };
+                        const saveRes = await fetch('/api/producao-postgres/paradas', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(migrated)
+                        });
+                        const saved = await saveRes.json();
+                        if (saved.success) {
+                            migrated.id = saved.id;
+                            if (!paradasRegistradas[data]) paradasRegistradas[data] = [];
+                            paradasRegistradas[data].push(migrated);
+                        }
+                    }
+                }
+                saveParadas();
+                if (chartInstance) {
+                    updateKPIs();
+                    renderChart();
+                }
+            } catch (error) {
+                console.error('Erro ao carregar paradas:', error);
+            }
+        }
+
+        loadParadas();
+
         function saveParadas() {
             localStorage.setItem('paradas_ap', JSON.stringify(paradasRegistradas));
         }
@@ -3221,7 +3290,7 @@
             _paradaEditIdx = null;
         }
 
-        function salvarParada() {
+        async function salvarParada() {
             const data = document.getElementById('parada-data').value;
             if (!data) { alert('Informe a data da parada.'); return; }
             const inicio = document.getElementById('parada-inicio').value;
@@ -3229,11 +3298,37 @@
             const setor = document.getElementById('parada-setor').value;
             const motivo = document.getElementById('parada-motivo').value.trim();
             if (!motivo) { alert('Informe o motivo da parada.'); return; }
+
+            const existing = _paradaEditIdx !== null && _paradaEditDate === data ? paradasRegistradas[data]?.[_paradaEditIdx] : null;
+            const parada = {
+                id: existing?.id,
+                data,
+                inicio,
+                fim,
+                setor,
+                motivo,
+                usuario: localStorage.getItem('erus_user') || localStorage.getItem('erus_username') || ''
+            };
+
+            try {
+                const res = await fetch('/api/producao-postgres/paradas', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(parada)
+                });
+                const json = await res.json();
+                if (!json.success) throw new Error(json.error || 'Falha ao salvar parada');
+                parada.id = json.id;
+            } catch (error) {
+                console.error('Erro ao salvar parada no servidor:', error);
+                showToast('Aviso', 'Parada salva localmente. O servidor não confirmou o registro.', 'warning');
+            }
+
             if (!paradasRegistradas[data]) paradasRegistradas[data] = [];
             if (_paradaEditIdx !== null && _paradaEditDate === data) {
-                paradasRegistradas[data][_paradaEditIdx] = { data, inicio, fim, setor, motivo };
+                paradasRegistradas[data][_paradaEditIdx] = parada;
             } else {
-                paradasRegistradas[data].push({ data, inicio, fim, setor, motivo });
+                paradasRegistradas[data].push(parada);
             }
             saveParadas();
             closeParadaModal();
@@ -3268,8 +3363,20 @@
             document.getElementById('parada-detalhe-modal').style.display = 'flex';
         }
 
-        function removerParada(dateStr, idx) {
+        async function removerParada(dateStr, idx) {
             if (!confirm('Remover esta parada?')) return;
+            const parada = paradasRegistradas[dateStr]?.[idx];
+            if (parada?.id) {
+                try {
+                    const res = await fetch(`/api/producao-postgres/paradas/${parada.id}`, { method: 'DELETE' });
+                    const json = await res.json();
+                    if (!json.success) throw new Error(json.error || 'Falha ao remover parada');
+                } catch (error) {
+                    console.error('Erro ao remover parada no servidor:', error);
+                    showToast('Erro', 'Não foi possível remover a parada no servidor.', 'danger');
+                    return;
+                }
+            }
             paradasRegistradas[dateStr].splice(idx, 1);
             if (paradasRegistradas[dateStr].length === 0) delete paradasRegistradas[dateStr];
             saveParadas();
