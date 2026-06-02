@@ -274,14 +274,14 @@
                 '<a href="planner.html" data-stip="Planner" class="erus-nav-link' + isActive('planner.html') + '">' +
                     '<i class="fa-solid fa-list-check"></i><span>Planner</span></a>' +
             '</div>' +
-            // FINANCEIRO (somente desenvolvedor)
-            '<div id="erus-sep-financeiro" class="erus-nav-group-sep" data-stip="Financeiro" onclick="erusSidebarToggleGroup(\'eg-financeiro\')" style="display:none;">' +
+            // FINANCEIRO (controlada por permissões de role)
+            '<div id="erus-sep-financeiro" class="erus-nav-group-sep" data-stip="Financeiro" onclick="erusSidebarToggleGroup(\'eg-financeiro\')">' +
                 '<i class="fas fa-balance-scale" style="font-size:0.8rem;color:#52525b;margin-right:8px;flex-shrink:0;"></i>' +
                 '<span class="erus-nav-group-label">Financeiro</span>' +
                 '<div class="erus-nav-group-line"></div>' +
                 '<i class="fa-solid fa-plus" id="icon-eg-financeiro"></i>' +
             '</div>' +
-            '<div id="eg-financeiro" class="erus-nav-group-wrapper collapsed" style="display:none;">' +
+            '<div id="eg-financeiro" class="erus-nav-group-wrapper collapsed">' +
                 '<a href="balanco.html" data-stip="Balanço" class="erus-nav-link' + isActive('balanco.html') + '">' +
                     '<i class="fa-solid fa-scale-balanced"></i><span>Balanço</span></a>' +
             '</div>' +
@@ -295,7 +295,7 @@
             '<div id="eg-chamados" class="erus-nav-group-wrapper collapsed">' +
                 '<a href="solicitarchamados.html" data-stip="Solicitar Chamado" class="erus-nav-link' + isActive('solicitarchamados.html') + '">' +
                     '<i class="fa-solid fa-headset"></i><span>Solicitar Chamado</span></a>' +
-                '<a href="chamados.html" id="erus-link-chamados-ti" data-stip="Painel TI" class="erus-nav-link' + isActive('chamados.html') + '" style="display:none;">' +
+                '<a href="chamados.html" id="erus-link-chamados-ti" data-stip="Painel TI" class="erus-nav-link' + isActive('chamados.html') + '">' +
                     '<i class="fa-solid fa-ticket"></i><span>Painel TI</span></a>' +
             '</div>' +
             // COMUNICACAO
@@ -488,19 +488,7 @@
             if (chipClassic) chipClassic.style.display = 'flex';
         }
 
-        // FINANCEIRO — apenas desenvolvedor (Organizacao segue permissões de role)
-        if (role === 'desenvolvedor') {
-            var sepFin = document.getElementById('erus-sep-financeiro');
-            var grpFin = document.getElementById('eg-financeiro');
-            if (sepFin) sepFin.style.display = 'flex';
-            if (grpFin) grpFin.style.display = 'block';
-        }
-
-        // CHAMADOS TI — Painel TI só para desenvolvedor
-        if (role === 'desenvolvedor') {
-            var linkChamadosTI = document.getElementById('erus-link-chamados-ti');
-            if (linkChamadosTI) linkChamadosTI.style.display = 'flex';
-        }
+        // Financeiro, Organizacao e Painel TI seguem as permissões de role (painel admin)
 
         // Role-based sidebar filter for restricted roles
         var restrictedPageMap = {
@@ -544,12 +532,6 @@
                     });
                 }
             });
-        }
-
-        // Ficha de Moldagem only visible to role 'moldagem'
-        if (role !== 'moldagem') {
-            var moldLink = document.querySelector('#erus-sidebar .erus-nav-link[href="fichatecmoldagem.html"]');
-            if (moldLink) moldLink.style.display = 'none';
         }
 
         erusSidebarUpdateThemeUI();
@@ -615,8 +597,9 @@
             })
             .catch(function() {});
 
+        // Roles restritos mantêm a whitelist mas também respeitam os bloqueios do painel (esconder + redirect)
         var permissionsPromise = Promise.resolve();
-        if (role !== 'desenvolvedor' && !restrictedPageMap[role]) {
+        if (role !== 'desenvolvedor') {
             var blocked = {};
             permissionsPromise = fetch('/api/permissions')
                 .then(function(r) { return r.json(); })
