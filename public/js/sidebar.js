@@ -93,7 +93,7 @@
         'body.erus-sidebar-collapsed #erus-sidebar .erus-nav-link.active::before { display:none; }',
         // Collapsed group sep — icon only, centered, with subtle panel
         'body.erus-sidebar-collapsed #erus-sidebar .erus-nav-group-sep {',
-        '  display:flex !important; align-items:center !important; justify-content:center !important;',
+        '  display:flex; align-items:center !important; justify-content:center !important;',
         '  padding:0 !important; margin:8px auto 2px !important;',
         '  width:44px !important; height:32px !important; border-radius:8px !important; cursor:pointer;',
         '  background:rgba(255,255,255,0.04) !important; border:1px solid rgba(255,255,255,0.06) !important;',
