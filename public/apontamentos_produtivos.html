@@ -1160,6 +1160,12 @@
                         <button class="chart-view-btn" id="btn-view-paradas" onclick="setChartViewMode('paradas')"><i class="fa-solid fa-circle-stop" style="margin-right:5px;font-size:0.6rem;opacity:0.8;"></i>Paradas</button>
                     </div>
                 </div>
+                <div id="parada-maquina-filter-wrap" style="display:none;margin:6px 0 10px;">
+                    <label style="font-size:0.7rem;color:#a1a1aa;margin-right:8px;letter-spacing:.05em;"><i class="fa-solid fa-gear" style="margin-right:5px;opacity:0.7;"></i>EQUIPAMENTO</label>
+                    <select id="parada-maquina-filter" style="background:#18181b;border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#fff;padding:7px 12px;font-size:0.8rem;min-width:220px;">
+                        <option value="TODOS">TODOS OS EQUIPAMENTOS</option>
+                    </select>
+                </div>
                 <div class="chart-canvas-wrapper">
                     <canvas id="dailyProductionChart"></canvas>
                 </div>
@@ -1231,13 +1237,13 @@
 
     <!-- MODAL DETALHE PARADA -->
     <div id="parada-detalhe-modal" class="modal-overlay" style="display:none;">
-        <div class="modal-card" style="max-width:440px;width:94%;background:#111114;border:1px solid rgba(239,68,68,0.3);border-radius:14px;padding:28px 30px;">
-            <div class="modal-header" style="margin-bottom:18px;">
-                <h2 class="modal-title" style="font-size:1.1rem;color:#ef4444;"><i class="fa-solid fa-circle-stop" style="margin-right:10px;"></i>Parada Registrada</h2>
+        <div class="modal-card" style="max-width:1300px;width:94%;max-height:90vh;display:flex;flex-direction:column;background:#111114;border:1px solid rgba(239,68,68,0.3);border-radius:14px;padding:32px 36px;">
+            <div class="modal-header" style="margin-bottom:22px;">
+                <h2 class="modal-title" style="font-size:1.4rem;color:#ef4444;"><i class="fa-solid fa-circle-stop" style="margin-right:10px;"></i>Parada Registrada</h2>
                 <span class="modal-close" onclick="document.getElementById('parada-detalhe-modal').style.display='none'">&times;</span>
             </div>
-            <div id="parada-detalhe-content" style="display:flex;flex-direction:column;gap:12px;"></div>
-            <div style="display:flex;gap:10px;margin-top:20px;">
+            <div id="parada-detalhe-content" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px;overflow-y:auto;flex:1;padding-right:4px;"></div>
+            <div style="display:flex;gap:10px;margin-top:24px;">
                 <button id="parada-detalhe-editar" style="flex:1;padding:9px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.4);border-radius:8px;color:#ef4444;font-weight:600;font-size:0.82rem;cursor:pointer;">+ ADICIONAR PARADA</button>
                 <button id="parada-detalhe-remover" style="display:none;"></button>
                 <button onclick="document.getElementById('parada-detalhe-modal').style.display='none'" style="flex:1;padding:9px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#a1a1aa;font-weight:600;font-size:0.82rem;cursor:pointer;">FECHAR</button>
@@ -2203,6 +2209,7 @@
         }
 
         function updateKPIs() {
+            updateMaquinaFilterUI();
             const totalWeight = filteredData.reduce((sum, item) => sum + item.pesoTotal, 0);
             const totalQty = filteredData.reduce((sum, item) => sum + item.quantidade, 0);
 
@@ -2237,7 +2244,7 @@
                     const matchMonth = currentMonthFilter === 0 || d.getMonth() + 1 === currentMonthFilter;
                     if (!matchYear || !matchMonth) return;
                     list.forEach(p => {
-                        if (paradaAfetaSetor(p.setor, currentSectorFilter)) {
+                        if (paradaAfetaSetor(p.setor, currentSectorFilter) && paradaPassaMaquina(p)) {
                             const h = calcParadaHours(p);
                             totalHoras += h;
                             if (h > 0) diasComParada.add(date);
@@ -2421,6 +2428,7 @@
             document.getElementById('btn-view-peso').classList.toggle('active', mode === 'peso');
             document.getElementById('btn-view-caixas').classList.toggle('active', mode === 'caixas');
             document.getElementById('btn-view-paradas').classList.toggle('active', mode === 'paradas');
+            updateMaquinaFilterUI();
             updateKPIs();
             renderChart();
         }
@@ -2434,6 +2442,7 @@
         }
 
         function renderChart() {
+            updateMaquinaFilterUI();
             let labels = [];
             let dataDaily = [];
 
@@ -2488,7 +2497,7 @@
                     Object.entries(paradasRegistradas).forEach(([date, list]) => {
                         const d = new Date(date + 'T12:00:00');
                         if (d.getFullYear() === y && d.getMonth() === i) {
-                            list.forEach(p => { if (paradaAfetaSetor(p.setor, currentSectorFilter)) total += calcParadaHours(p); });
+                            list.forEach(p => { if (paradaAfetaSetor(p.setor, currentSectorFilter) && paradaPassaMaquina(p)) total += calcParadaHours(p); });
                         }
                     });
                     return total;
@@ -2496,7 +2505,7 @@
                     ds = `${currentYearFilter}-${String(currentMonthFilter).padStart(2,'0')}-${String(l).padStart(2,'0')}`;
                     const list = paradasRegistradas[ds];
                     if (!list) return 0;
-                    return list.reduce((acc, p) => paradaAfetaSetor(p.setor, currentSectorFilter) ? acc + calcParadaHours(p) : acc, 0);
+                    return list.reduce((acc, p) => (paradaAfetaSetor(p.setor, currentSectorFilter) && paradaPassaMaquina(p)) ? acc + calcParadaHours(p) : acc, 0);
                 }
             });
 
@@ -2575,9 +2584,9 @@
                                         if (h === 0) return '  Sem paradas';
                                         const day = labels[ctx2.dataIndex];
                                         const ds2 = `${currentYearFilter}-${String(currentMonthFilter).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-                                        const list = (paradasRegistradas[ds2] || []).filter(p => paradaAfetaSetor(p.setor, currentSectorFilter));
+                                        const list = (paradasRegistradas[ds2] || []).filter(p => paradaAfetaSetor(p.setor, currentSectorFilter) && paradaPassaMaquina(p));
                                         const lines = [`  Total: ${h.toLocaleString('pt-BR', {minimumFractionDigits:1,maximumFractionDigits:1})}h`];
-                                        list.forEach(p => lines.push(`  • ${p.setor}: ${p.inicio||'?'}-${p.fim||'?'} (${calcParadaHours(p).toFixed(1)}h)`));
+                                        list.forEach(p => lines.push(`  • ${p.maquina ? p.maquina : p.setor}: ${p.inicio||'?'}-${p.fim||'?'} (${calcParadaHours(p).toFixed(1)}h)`));
                                         return lines;
                                     },
                                     footer: (items) => {
@@ -3167,6 +3176,50 @@
         let _paradaEditDate = null;
         let _paradaEditIdx = null;
 
+        // Equipamentos/máquinas por setor (chave = setor normalizado do gráfico)
+        const SECTOR_MAQUINAS = {
+            'FUSAO': ['Ponte Rolante', 'Forno 1t', 'Forno 2,5t', 'Forno 4t']
+        };
+        let currentMaquinaFilter = 'TODOS';
+
+        function getMaquinasForSector(chartSetor) {
+            if (!chartSetor || chartSetor === 'TODOS') {
+                const all = [];
+                Object.values(SECTOR_MAQUINAS).forEach(list => list.forEach(m => { if (!all.includes(m)) all.push(m); }));
+                return all;
+            }
+            return SECTOR_MAQUINAS[chartSetor] || [];
+        }
+
+        function updateMaquinaFilterUI() {
+            const wrap = document.getElementById('parada-maquina-filter-wrap');
+            const select = document.getElementById('parada-maquina-filter');
+            if (!wrap || !select) return;
+            const maquinas = getMaquinasForSector(currentSectorFilter);
+            const show = chartViewMode === 'paradas' && maquinas.length > 0;
+            wrap.style.display = show ? '' : 'none';
+            if (!show) { currentMaquinaFilter = 'TODOS'; return; }
+            if (currentMaquinaFilter !== 'TODOS' && !maquinas.includes(currentMaquinaFilter)) currentMaquinaFilter = 'TODOS';
+            select.innerHTML = '<option value="TODOS">TODOS OS EQUIPAMENTOS</option>';
+            maquinas.forEach(m => {
+                const opt = document.createElement('option');
+                opt.value = m; opt.textContent = m;
+                select.appendChild(opt);
+            });
+            select.value = currentMaquinaFilter;
+            select.onchange = (e) => {
+                currentMaquinaFilter = e.target.value;
+                updateKPIs();
+                renderChart();
+            };
+        }
+
+        function paradaPassaMaquina(p) {
+            if (chartViewMode !== 'paradas') return true;
+            if (!currentMaquinaFilter || currentMaquinaFilter === 'TODOS') return true;
+            return (p.maquina || '') === currentMaquinaFilter;
+        }
+
         function normalizeParadasRows(rows) {
             const grouped = {};
             (rows || []).forEach(p => {
@@ -3178,6 +3231,7 @@
                     inicio: p.inicio || '',
                     fim: p.fim || '',
                     setor: p.setor,
+                    maquina: p.maquina || '',
                     motivo: p.motivo,
                     usuario: p.usuario || ''
                 });
@@ -3224,7 +3278,7 @@
         function isParadaAtiva(dateStr, chartSetor) {
             const list = paradasRegistradas[dateStr];
             if (!list || list.length === 0) return false;
-            return list.some(p => paradaAfetaSetor(p.setor, chartSetor));
+            return list.some(p => paradaAfetaSetor(p.setor, chartSetor) && paradaPassaMaquina(p));
         }
 
         function paradaVisivelNoDetalhe(paradaSetor, chartSetor) {
@@ -3240,7 +3294,7 @@
             const list = paradasRegistradas[dateStr] || [];
             return list
                 .map((p, idx) => ({ p, idx }))
-                .filter(item => paradaVisivelNoDetalhe(item.p.setor, chartSetor));
+                .filter(item => paradaVisivelNoDetalhe(item.p.setor, chartSetor) && paradaPassaMaquina(item.p));
         }
 
         function onParadaSetorChange() {
