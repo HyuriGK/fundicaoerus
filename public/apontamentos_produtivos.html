@@ -3217,6 +3217,22 @@
             return list.some(p => paradaAfetaSetor(p.setor, chartSetor));
         }
 
+        function paradaVisivelNoDetalhe(paradaSetor, chartSetor) {
+            const parada = normalizeSectorName(paradaSetor);
+            const setor = normalizeSectorName(chartSetor);
+            if (!setor) return false;
+            if (setor === 'TODOS') return true;
+            if (setor === 'MOLDAGEM GERAL') return parada === 'MOLDAGEM GERAL' || MOLDAGEM_GERAL_TYPES.includes(parada);
+            return parada === setor;
+        }
+
+        function getParadasDetalhe(dateStr, chartSetor) {
+            const list = paradasRegistradas[dateStr] || [];
+            return list
+                .map((p, idx) => ({ p, idx }))
+                .filter(item => paradaVisivelNoDetalhe(item.p.setor, chartSetor));
+        }
+
         function openParadaModal(dateStr, editIdx = null) {
             const modal = document.getElementById('parada-modal');
             const today = dateStr || (currentMonthFilter !== 0
@@ -3290,20 +3306,20 @@
             renderChart();
         }
 
-        function openParadaDetalheModal(dateStr) {
-            const list = paradasRegistradas[dateStr];
+        function openParadaDetalheModal(dateStr, chartSetor = currentSectorFilter) {
+            const list = getParadasDetalhe(dateStr, chartSetor);
             if (!list || list.length === 0) return;
             const [y, m, d] = dateStr.split('-');
             const content = document.getElementById('parada-detalhe-content');
             const field = (label, value) =>
                 `<div style="display:flex;gap:8px;"><span style="font-size:0.72rem;color:#a1a1aa;min-width:70px;padding-top:1px;">${label}</span><span style="font-size:0.85rem;color:#f4f4f5;">${value || '—'}</span></div>`;
-            content.innerHTML = list.map((p, i) => `
+            content.innerHTML = list.map(({ p, idx }, i) => `
                 <div style="background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.2);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:6px;">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
                         <span style="font-size:0.72rem;color:#ef4444;font-weight:700;letter-spacing:.05em;">PARADA ${i+1}</span>
                         <div style="display:flex;gap:8px;">
-                            <button onclick="openParadaModal('${dateStr}',${i});document.getElementById('parada-detalhe-modal').style.display='none';" style="padding:3px 10px;background:rgba(251,191,36,0.12);border:1px solid rgba(251,191,36,0.3);border-radius:6px;color:#fbbf24;font-size:0.72rem;cursor:pointer;">EDITAR</button>
-                            <button onclick="removerParada('${dateStr}',${i})" style="padding:3px 10px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:6px;color:#ef4444;font-size:0.72rem;cursor:pointer;">REMOVER</button>
+                            <button onclick="openParadaModal('${dateStr}',${idx});document.getElementById('parada-detalhe-modal').style.display='none';" style="padding:3px 10px;background:rgba(251,191,36,0.12);border:1px solid rgba(251,191,36,0.3);border-radius:6px;color:#fbbf24;font-size:0.72rem;cursor:pointer;">EDITAR</button>
+                            <button onclick="removerParada('${dateStr}',${idx})" style="padding:3px 10px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:6px;color:#ef4444;font-size:0.72rem;cursor:pointer;">REMOVER</button>
                         </div>
                     </div>
                     ${field('SETOR', p.setor)}
