@@ -759,17 +759,12 @@
         // 1. Injetar estilos
         const style = document.createElement('style');
         style.textContent = `
-            @keyframes sync-float-slidein {
-                from { transform: translateX(120%); opacity: 0; }
-                to { transform: translateX(0); opacity: 1; }
-            }
             @keyframes sync-float-pulse {
                 0%, 100% { box-shadow: 0 8px 32px rgba(59, 130, 246, 0.2); }
                 50% { box-shadow: 0 8px 48px rgba(59, 130, 246, 0.4); }
             }
             #sync-floating-indicator.sync-float-visible {
-                animation: sync-float-slidein 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards,
-                           sync-float-pulse 3s ease-in-out 0.6s infinite;
+                animation: sync-float-pulse 3s ease-in-out infinite;
             }
             .sync-float-progress {
                 transition: width 1s linear;
@@ -809,8 +804,10 @@
             flex-direction: column;
             gap: 12px;
             user-select: none;
+            max-height: 0;
+            overflow: hidden;
             opacity: 0;
-            transform: translateX(120%);
+            transition: max-height 0.4s cubic-bezier(0.34,1.56,0.64,1), opacity 0.3s ease, bottom 0.3s ease;
         `;
 
         const elapsedMs = Date.now() - syncStartedAt;
@@ -871,10 +868,10 @@
             if (indicator.parentNode) {
                 indicator.classList.remove('sync-float-visible');
                 indicator.style.animation = 'none';
-                indicator.style.transition = 'transform 0.5s ease-out, opacity 0.5s ease-out';
-                indicator.style.transform = 'translateX(120%)';
+                indicator.style.transition = 'max-height 0.3s ease, opacity 0.3s ease';
+                indicator.style.maxHeight = '0';
                 indicator.style.opacity = '0';
-                setTimeout(() => { if (indicator.parentNode) indicator.remove(); }, 500);
+                setTimeout(() => { if (indicator.parentNode) indicator.remove(); }, SYNC_TOAST_FADE_MS);
             }
         }
 
@@ -891,9 +888,13 @@
         }
 
         showTimer = setTimeout(() => {
-            indicator.classList.add('sync-float-visible');
-            if (toastFill) requestAnimationFrame(() => { toastFill.style.width = '100%'; });
-            autoHideTimer = setTimeout(() => hideIndicator(true), SYNC_TOAST_EXPOSURE_MS);
+            requestAnimationFrame(() => {
+                indicator.classList.add('sync-float-visible');
+                indicator.style.maxHeight = '140px';
+                indicator.style.opacity = '1';
+                if (toastFill) requestAnimationFrame(() => { toastFill.style.width = '100%'; });
+                autoHideTimer = setTimeout(() => hideIndicator(true), SYNC_TOAST_EXPOSURE_MS);
+            });
         }, SYNC_TOAST_SHOW_DELAY_MS);
 
         checkInterval = setInterval(async () => {
