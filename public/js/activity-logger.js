@@ -6,7 +6,7 @@
     const SYNC_TOAST_SHOW_DELAY_MS = 2000;
     const SYNC_TOAST_EXPOSURE_MS = 5000;
     const SYNC_TOAST_FADE_MS = 350;
-    const SYNC_FLOAT_VISIBLE_HEIGHT = 140;
+    const SYNC_FLOAT_VISIBLE_HEIGHT = 110;
     let dismissedFloatingSyncKey = null;
     // Helper to get current user
     function getUserName() {
