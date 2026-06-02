@@ -767,9 +767,9 @@
                 0%, 100% { box-shadow: 0 8px 32px rgba(59, 130, 246, 0.2); }
                 50% { box-shadow: 0 8px 48px rgba(59, 130, 246, 0.4); }
             }
-            #sync-floating-indicator {
+            #sync-floating-indicator.sync-float-visible {
                 animation: sync-float-slidein 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards,
-                           sync-float-pulse 3s ease-in-out infinite;
+                           sync-float-pulse 3s ease-in-out 0.6s infinite;
             }
             .sync-float-progress {
                 transition: width 1s linear;
@@ -809,6 +809,8 @@
             flex-direction: column;
             gap: 12px;
             user-select: none;
+            opacity: 0;
+            transform: translateX(120%);
         `;
 
         const elapsedMs = Date.now() - syncStartedAt;
@@ -847,6 +849,7 @@
 
         let checkInterval;
         let safetyTimeout;
+        let showTimer;
         let autoHideTimer;
 
         const updateInterval = setInterval(() => {
@@ -858,40 +861,40 @@
             }
         }, 1000);
 
-        requestAnimationFrame(() => {
-            if (toastFill) requestAnimationFrame(() => { toastFill.style.width = '100%'; });
-        });
+        function hideIndicator(markDismissed) {
+            clearInterval(updateInterval);
+            clearInterval(checkInterval);
+            clearTimeout(safetyTimeout);
+            clearTimeout(showTimer);
+            clearTimeout(autoHideTimer);
+            if (markDismissed) dismissedFloatingSyncKey = syncKey;
+            if (indicator.parentNode) {
+                indicator.classList.remove('sync-float-visible');
+                indicator.style.animation = 'none';
+                indicator.style.transition = 'transform 0.5s ease-out, opacity 0.5s ease-out';
+                indicator.style.transform = 'translateX(120%)';
+                indicator.style.opacity = '0';
+                setTimeout(() => { if (indicator.parentNode) indicator.remove(); }, 500);
+            }
+        }
 
         function finalizeSyncIndicator() {
             clearInterval(updateInterval);
             clearInterval(checkInterval);
             clearTimeout(safetyTimeout);
+            clearTimeout(showTimer);
             clearTimeout(autoHideTimer);
             if (fill) { fill.style.width = '100%'; fill.style.background = '#10b981'; }
             if (pctText) { pctText.textContent = '100%'; pctText.style.color = '#10b981'; }
             if (statusText) statusText.innerHTML = '<i class="fa-solid fa-circle-check" style="color: #10b981;"></i> <span style="color: #10b981;">Sincronização Finalizada</span>';
-            setTimeout(() => {
-                if (indicator.parentNode) {
-                    indicator.style.transition = 'all 0.5s ease-out';
-                    indicator.style.transform = 'translateX(120%)';
-                    indicator.style.opacity = '0';
-                    setTimeout(() => indicator.remove(), 500);
-                }
-            }, SYNC_TOAST_EXPOSURE_MS);
+            autoHideTimer = setTimeout(() => hideIndicator(false), SYNC_TOAST_EXPOSURE_MS);
         }
 
-        autoHideTimer = setTimeout(() => {
-            clearInterval(updateInterval);
-            clearInterval(checkInterval);
-            clearTimeout(safetyTimeout);
-            dismissedFloatingSyncKey = syncKey;
-            if (indicator.parentNode) {
-                indicator.style.transition = 'all 0.5s ease-out';
-                indicator.style.transform = 'translateX(120%)';
-                indicator.style.opacity = '0';
-                setTimeout(() => { if (indicator.parentNode) indicator.remove(); }, 500);
-            }
-        }, SYNC_TOAST_EXPOSURE_MS);
+        showTimer = setTimeout(() => {
+            indicator.classList.add('sync-float-visible');
+            if (toastFill) requestAnimationFrame(() => { toastFill.style.width = '100%'; });
+            autoHideTimer = setTimeout(() => hideIndicator(true), SYNC_TOAST_EXPOSURE_MS);
+        }, SYNC_TOAST_SHOW_DELAY_MS);
 
         checkInterval = setInterval(async () => {
             try {
