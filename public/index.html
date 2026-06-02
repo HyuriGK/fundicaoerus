@@ -5897,7 +5897,7 @@
                         _permData = {};
                         rows.forEach(r => {
                             if (!_permData[r.role]) _permData[r.role] = {};
-                            _permData[r.role][r.page_key] = r.allowed;
+                            _permData[r.role][r.page_key] = !(r.allowed === false || r.allowed === 'false' || r.allowed === 'f' || r.allowed === 0);
                         });
                         renderPermissionsMatrix();
                     } catch(e) { console.error('Erro ao carregar permissões', e); }
@@ -5924,18 +5924,11 @@
 
                     // Body rows
                     let bodyHtml = '';
+                    const colSpan = 2 + _PERM_ROLES.length;
                     _PERM_PAGES.forEach(group => {
                         const catBg = 'background:rgba(249,115,22,0.06); border-top:1px solid rgba(249,115,22,0.15);';
-                        // Category separator row — one checkbox per role column
-                        bodyHtml += `<tr>`;
-                        bodyHtml += `<td style="padding:8px 12px 4px; color:#f97316; font-size:0.65rem; font-weight:800; text-transform:uppercase; letter-spacing:0.12em; ${catBg}">${group.cat}</td>`;
-                        // Dev column — always on
-                        bodyHtml += `<td style="text-align:center; padding:6px 4px; ${catBg}"><input type="checkbox" checked disabled style="accent-color:#fbbf24; opacity:0.5; width:14px; height:14px; cursor:not-allowed;"></td>`;
-                        _PERM_ROLES.forEach(r => {
-                            const catAllowed = group.pages.every(p => isAllowed(r.key, p.key));
-                            bodyHtml += `<td style="text-align:center; padding:6px 4px; ${catBg}"><input type="checkbox" ${catAllowed ? 'checked' : ''} onchange="toggleCategoryPermission('${group.cat}','${r.key}',this.checked)" style="accent-color:#f97316; width:14px; height:14px; cursor:pointer;" title="Ativar/desativar categoria para ${r.label}"></td>`;
-                        });
-                        bodyHtml += `</tr>`;
+                        // Category separator row — apenas rótulo (sem toggle em massa, para não afetar outras telas)
+                        bodyHtml += `<tr><td colspan="${colSpan}" style="padding:8px 12px 4px; color:#f97316; font-size:0.65rem; font-weight:800; text-transform:uppercase; letter-spacing:0.12em; ${catBg}">${group.cat}</td></tr>`;
                         group.pages.forEach(page => {
                             bodyHtml += `<tr style="border-bottom:1px solid rgba(255,255,255,0.04);">`;
                             bodyHtml += `<td style="padding:7px 12px; color:#d4d4d8; font-size:0.78rem;">${page.label} <span style="color:#52525b; font-size:0.68rem;">(${page.key})</span></td>`;
@@ -5982,22 +5975,6 @@
                     renderPermissionsMatrix();
                 }
 
-                async function toggleCategoryPermission(catName, role, allowed) {
-                    const group = _PERM_PAGES.find(g => g.cat === catName);
-                    if (!group) return;
-                    const promises = [];
-                    group.pages.forEach(page => {
-                        if (!_permData[role]) _permData[role] = {};
-                        _permData[role][page.key] = allowed;
-                        promises.push(fetch('/api/permissions', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json', 'x-role': localStorage.getItem('erus_role') },
-                            body: JSON.stringify({ role, page_key: page.key, allowed })
-                        }));
-                    });
-                    await Promise.all(promises);
-                    renderPermissionsMatrix();
-                }
                 // ── END PERMISSIONS MATRIX ────────────────────────────────────────
 
                 async function openAdminModal() {
