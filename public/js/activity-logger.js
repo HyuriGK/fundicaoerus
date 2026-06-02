@@ -46,12 +46,13 @@
 
             if (result.success && Array.isArray(result.data)) {
                 const lock = result.data.find(l => l.page_id === page);
-                if (lock && lock.is_locked) {
-                    if (lock.lock_reason === 'sync') {
-                        // Todos os usuários: apenas indicador flutuante, sem bloquear tela
+                if (lock) {
+                    // Sincronização: apenas indicador flutuante (toast), nunca bloqueia o acesso
+                    if (lock.is_syncing) {
                         showFloatingSyncIndicator(lock);
-                    } else if (role !== 'desenvolvedor' && role !== 'admin') {
-                        // Bloqueio manual — apenas não-devs
+                    }
+                    // Bloqueio manual (independente do sync) — apenas não-devs
+                    if (lock.is_locked && role !== 'desenvolvedor' && role !== 'admin') {
                         if (lock.lock_reason === 'development') {
                             showDevelopmentOverlay();
                         } else {
@@ -727,7 +728,7 @@
                 const result = await resp.json();
                 if (result.success && Array.isArray(result.data)) {
                     const lock = result.data.find(l => l.page_id === page);
-                    if (!lock || !lock.is_locked || lock.lock_reason !== 'sync') {
+                    if (!lock || !lock.is_syncing) {
                         // Sync terminou! Mostrar 100% e recarregar
                         clearInterval(progressInterval);
                         clearInterval(syncCheckInterval);
@@ -904,7 +905,7 @@
                 const result = await resp.json();
                 if (result.success && Array.isArray(result.data)) {
                     const lock = result.data.find(l => l.page_id === page);
-                    if (!lock || !lock.is_locked || lock.lock_reason !== 'sync') {
+                    if (!lock || !lock.is_syncing) {
                         finalizeSyncIndicator();
                     }
                 }
@@ -1290,7 +1291,7 @@
                 const result = await resp.json();
                 if (result.success && Array.isArray(result.data)) {
                     const lock = result.data.find(l => l.page_id === pg);
-                    if (!lock || !lock.is_locked || lock.lock_reason !== 'sync') {
+                    if (!lock || !lock.is_syncing) {
                         floatingIndicator.style.transition = 'all 0.5s ease-out';
                         floatingIndicator.style.transform = 'translateX(120%)';
                         floatingIndicator.style.opacity = '0';

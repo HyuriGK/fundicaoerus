@@ -69,7 +69,7 @@
         fetch('/api/page-locks')
             .then(r => r.json())
             .then(data => {
-                const lock = (data.data || []).find(l => l.page_id === PAGE_ID && l.is_locked);
+                const lock = (data.data || []).find(l => l.page_id === PAGE_ID && l.is_syncing);
                 if (lock) {
                     wasLocked = true;
                     show();

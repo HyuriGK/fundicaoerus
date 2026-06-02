@@ -5655,19 +5655,53 @@
 
             <!-- PERMISSÕES VIEW -->
                 <div id="adminPermissionsView" class="admin-view-transition" style="display:none; flex-direction:column; height:100%;">
-                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; flex-wrap:wrap; gap:8px; flex-shrink:0;">
-                        <span style="color:#a1a1aa; font-size:0.78rem;">Marque quais telas cada role pode acessar. <strong style="color:#f97316;">Desenvolvedor</strong> sempre tem acesso total.</span>
-                        <div style="display:flex; gap:8px; align-items:center;">
-                            <button onclick="permissionsSelectAll(true)" style="background:rgba(16,185,129,0.12); border:1px solid rgba(16,185,129,0.3); color:#10b981; border-radius:6px; padding:5px 12px; cursor:pointer; font-size:0.75rem;">Liberar Tudo</button>
-                            <button onclick="permissionsSelectAll(false)" style="background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.2); color:#ef4444; border-radius:6px; padding:5px 12px; cursor:pointer; font-size:0.75rem;">Bloquear Tudo</button>
+                    <style>
+                        #adminPermissionsView { padding: 4px 2px; }
+                        .perm-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:14px 18px; margin-bottom:14px; background:#0e0e12; border:1px solid rgba(255,255,255,0.06); border-radius:12px; flex-shrink:0; }
+                        .perm-toolbar-info { color:#a1a1aa; font-size:0.8rem; line-height:1.4; }
+                        .perm-toolbar-info strong { color:#f97316; }
+                        .perm-toolbar-actions { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+                        .perm-btn { display:inline-flex; align-items:center; gap:6px; border-radius:8px; padding:7px 13px; cursor:pointer; font-size:0.74rem; font-weight:600; border:1px solid transparent; transition:filter .15s, background .15s; }
+                        .perm-btn:hover { filter:brightness(1.15); }
+                        .perm-btn-ghost { background:rgba(255,255,255,0.04); border-color:rgba(255,255,255,0.1); color:#a1a1aa; }
+                        .perm-btn-allow { background:rgba(16,185,129,0.12); border-color:rgba(16,185,129,0.3); color:#10b981; }
+                        .perm-btn-block { background:rgba(239,68,68,0.1); border-color:rgba(239,68,68,0.25); color:#ef4444; }
+                        .perm-accordion { overflow-y:auto; flex:1; min-height:0; padding:2px 6px 8px 2px; display:flex; flex-direction:column; gap:10px; }
+                        .perm-cat { border:1px solid rgba(255,255,255,0.07); border-radius:12px; overflow:hidden; background:#0d0d11; transition:border-color .15s; }
+                        .perm-cat.open { border-color:rgba(249,115,22,0.3); }
+                        .perm-cat-header { width:100%; display:flex; align-items:center; gap:12px; padding:14px 18px; background:transparent; border:none; cursor:pointer; text-align:left; color:#fafafa; }
+                        .perm-cat-header:hover { background:rgba(249,115,22,0.05); }
+                        .perm-cat.open .perm-cat-header { background:rgba(249,115,22,0.07); border-bottom:1px solid rgba(255,255,255,0.06); }
+                        .perm-cat-chevron { color:#f97316; font-size:0.78rem; width:13px; flex-shrink:0; transition:transform .2s ease; }
+                        .perm-cat.open .perm-cat-chevron { transform:rotate(90deg); }
+                        .perm-cat-name { font-size:0.82rem; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; }
+                        .perm-cat-badge { font-size:0.62rem; font-weight:700; color:#a1a1aa; background:rgba(255,255,255,0.06); border-radius:999px; padding:2px 9px; }
+                        .perm-cat-summary { margin-left:auto; font-size:0.72rem; font-weight:600; color:#71717a; white-space:nowrap; }
+                        .perm-cat-body { padding:6px 14px 14px; overflow-x:auto; }
+                        .perm-table { width:100%; border-collapse:collapse; font-size:0.76rem; }
+                        .perm-table th { padding:10px 6px 8px; position:sticky; top:0; }
+                        .perm-th-tela { text-align:left; color:#71717a; font-size:0.66rem; font-weight:700; text-transform:uppercase; letter-spacing:0.07em; min-width:200px; }
+                        .perm-th-role { text-align:center; color:#a1a1aa; font-size:0.6rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; min-width:64px; }
+                        .perm-th-dev { color:#fbbf24; }
+                        .perm-table td { padding:9px 6px; }
+                        .perm-table tbody tr + tr td { border-top:1px solid rgba(255,255,255,0.045); }
+                        .perm-table tbody tr:hover td { background:rgba(255,255,255,0.02); }
+                        .perm-td-tela { color:#e4e4e7; font-size:0.78rem; }
+                        .perm-key { display:block; color:#52525b; font-size:0.66rem; margin-top:1px; }
+                        .perm-td-cb { text-align:center; }
+                        .perm-cb { width:15px; height:15px; accent-color:#f97316; cursor:pointer; }
+                        .perm-cb-dev { accent-color:#fbbf24; opacity:0.45; cursor:not-allowed; }
+                    </style>
+                    <div class="perm-toolbar">
+                        <span class="perm-toolbar-info">Marque quais telas cada role pode acessar. <strong>Desenvolvedor</strong> sempre tem acesso total.</span>
+                        <div class="perm-toolbar-actions">
+                            <button onclick="permExpandAll(true)" class="perm-btn perm-btn-ghost"><i class="fa-solid fa-angles-down"></i> Expandir</button>
+                            <button onclick="permExpandAll(false)" class="perm-btn perm-btn-ghost"><i class="fa-solid fa-angles-up"></i> Recolher</button>
+                            <button onclick="permissionsSelectAll(true)" class="perm-btn perm-btn-allow"><i class="fa-solid fa-check"></i> Liberar Tudo</button>
+                            <button onclick="permissionsSelectAll(false)" class="perm-btn perm-btn-block"><i class="fa-solid fa-ban"></i> Bloquear Tudo</button>
                         </div>
                     </div>
-                    <div style="overflow:auto; flex:1; min-height:0;">
-                        <table id="permissionsTable" style="width:100%; border-collapse:collapse; font-size:0.78rem; min-width:900px;">
-                            <thead id="permissionsTableHead"></thead>
-                            <tbody id="permissionsTableBody"></tbody>
-                        </table>
-                    </div>
+                    <div id="permissionsAccordion" class="perm-accordion"></div>
                 </div>
 
             <!-- SCRIPT DA SIDEBAR -->
@@ -5913,45 +5947,83 @@
                     return true; // default: allowed
                 }
 
+                let _permOpenCats = new Set();
+
+                function _catSummary(group) {
+                    const total = group.pages.length * _PERM_ROLES.length;
+                    let allowed = 0;
+                    group.pages.forEach(p => _PERM_ROLES.forEach(r => { if (isAllowed(r.key, p.key)) allowed++; }));
+                    return allowed + '/' + total + ' liberados';
+                }
+
                 function renderPermissionsMatrix() {
-                    const thead = document.getElementById('permissionsTableHead');
-                    const tbody = document.getElementById('permissionsTableBody');
-                    if (!thead || !tbody) return;
-
-                    // Header row
-                    let headHtml = '<tr><th style="text-align:left; padding:8px 12px; background:#0c0c0f; color:#71717a; font-weight:700; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.08em; position:sticky; top:0; z-index:2; min-width:180px;">Tela</th>';
-                    headHtml += '<th style="padding:8px 6px; background:#0c0c0f; color:#fbbf24; font-weight:700; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.06em; text-align:center; position:sticky; top:0; z-index:2; min-width:70px;">Dev</th>';
-                    _PERM_ROLES.forEach(r => {
-                        headHtml += `<th style="padding:8px 6px; background:#0c0c0f; color:#a1a1aa; font-weight:700; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.06em; text-align:center; position:sticky; top:0; z-index:2; min-width:70px;">${r.label}</th>`;
+                    const container = document.getElementById('permissionsAccordion');
+                    if (!container) return;
+                    let html = '';
+                    _PERM_PAGES.forEach((group, gi) => {
+                        const bodyId = 'perm-cat-' + gi;
+                        const open = _permOpenCats.has(bodyId);
+                        const rolesHead = _PERM_ROLES.map(r => `<th class="perm-th-role">${r.label}</th>`).join('');
+                        const rows = group.pages.map(page => {
+                            const roleCbs = _PERM_ROLES.map(r =>
+                                `<td class="perm-td-cb"><input type="checkbox" ${isAllowed(r.key, page.key) ? 'checked' : ''} onchange="togglePermission('${r.key}','${page.key}',this.checked)" class="perm-cb"></td>`
+                            ).join('');
+                            return `<tr>
+                                <td class="perm-td-tela">${page.label}<span class="perm-key">${page.key}</span></td>
+                                <td class="perm-td-cb"><input type="checkbox" checked disabled class="perm-cb perm-cb-dev"></td>
+                                ${roleCbs}
+                            </tr>`;
+                        }).join('');
+                        html += `<div class="perm-cat${open ? ' open' : ''}">
+                            <button type="button" class="perm-cat-header" onclick="togglePermCategory('${bodyId}')">
+                                <i class="fa-solid fa-chevron-right perm-cat-chevron"></i>
+                                <span class="perm-cat-name">${group.cat}</span>
+                                <span class="perm-cat-badge">${group.pages.length} tela${group.pages.length > 1 ? 's' : ''}</span>
+                                <span class="perm-cat-summary" id="${bodyId}-sum">${_catSummary(group)}</span>
+                            </button>
+                            <div class="perm-cat-body" id="${bodyId}" style="display:${open ? 'block' : 'none'};">
+                                <table class="perm-table">
+                                    <thead><tr>
+                                        <th class="perm-th-tela">Tela</th>
+                                        <th class="perm-th-role perm-th-dev">Dev</th>
+                                        ${rolesHead}
+                                    </tr></thead>
+                                    <tbody>${rows}</tbody>
+                                </table>
+                            </div>
+                        </div>`;
                     });
-                    headHtml += '</tr>';
-                    thead.innerHTML = headHtml;
+                    container.innerHTML = html;
+                }
 
-                    // Body rows
-                    let bodyHtml = '';
-                    const colSpan = 2 + _PERM_ROLES.length;
-                    _PERM_PAGES.forEach(group => {
-                        const catBg = 'background:rgba(249,115,22,0.06); border-top:1px solid rgba(249,115,22,0.15);';
-                        // Category separator row — apenas rótulo (sem toggle em massa, para não afetar outras telas)
-                        bodyHtml += `<tr><td colspan="${colSpan}" style="padding:8px 12px 4px; color:#f97316; font-size:0.65rem; font-weight:800; text-transform:uppercase; letter-spacing:0.12em; ${catBg}">${group.cat}</td></tr>`;
-                        group.pages.forEach(page => {
-                            bodyHtml += `<tr style="border-bottom:1px solid rgba(255,255,255,0.04);">`;
-                            bodyHtml += `<td style="padding:7px 12px; color:#d4d4d8; font-size:0.78rem;">${page.label} <span style="color:#52525b; font-size:0.68rem;">(${page.key})</span></td>`;
-                            // Desenvolvedor — always on, not editable
-                            bodyHtml += `<td style="text-align:center; padding:7px 4px;"><input type="checkbox" checked disabled style="accent-color:#fbbf24; opacity:0.5; width:15px; height:15px; cursor:not-allowed;"></td>`;
-                            _PERM_ROLES.forEach(r => {
-                                const checked = isAllowed(r.key, page.key) ? 'checked' : '';
-                                bodyHtml += `<td style="text-align:center; padding:7px 4px;"><input type="checkbox" ${checked} onchange="togglePermission('${r.key}','${page.key}',this.checked)" style="accent-color:#f97316; width:15px; height:15px; cursor:pointer;"></td>`;
-                            });
-                            bodyHtml += `</tr>`;
-                        });
+                function togglePermCategory(bodyId) {
+                    const body = document.getElementById(bodyId);
+                    if (!body) return;
+                    const cat = body.closest('.perm-cat');
+                    const open = body.style.display === 'none';
+                    body.style.display = open ? 'block' : 'none';
+                    if (cat) cat.classList.toggle('open', open);
+                    if (open) _permOpenCats.add(bodyId); else _permOpenCats.delete(bodyId);
+                }
+
+                function permExpandAll(open) {
+                    document.querySelectorAll('#permissionsAccordion .perm-cat').forEach(cat => {
+                        const body = cat.querySelector('.perm-cat-body');
+                        if (!body) return;
+                        body.style.display = open ? 'block' : 'none';
+                        cat.classList.toggle('open', open);
+                        if (open) _permOpenCats.add(body.id); else _permOpenCats.delete(body.id);
                     });
-                    tbody.innerHTML = bodyHtml;
                 }
 
                 async function togglePermission(role, pageKey, allowed) {
                     if (!_permData[role]) _permData[role] = {};
                     _permData[role][pageKey] = allowed;
+                    const gi = _PERM_PAGES.findIndex(g => g.pages.some(p => p.key === pageKey));
+                    if (gi >= 0) {
+                        const sum = document.getElementById('perm-cat-' + gi + '-sum');
+                        if (sum) sum.textContent = _catSummary(_PERM_PAGES[gi]);
+                    }
                     try {
                         await fetch('/api/permissions', {
                             method: 'POST',

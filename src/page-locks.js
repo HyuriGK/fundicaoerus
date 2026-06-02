@@ -2,6 +2,16 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../lib/db');
 
+let _pageLocksMigrated = false;
+async function ensureSyncColumns() {
+    if (_pageLocksMigrated) return;
+    await pool.query(`ALTER TABLE page_locks ADD COLUMN IF NOT EXISTS is_syncing BOOLEAN DEFAULT false`);
+    await pool.query(`ALTER TABLE page_locks ADD COLUMN IF NOT EXISTS sync_progress INT DEFAULT 0`);
+    // Locks antigos de sincronização usavam is_locked; agora sync é separado e não bloqueia
+    await pool.query(`UPDATE page_locks SET is_locked = false, lock_reason = NULL, is_syncing = true WHERE lock_reason = 'sync'`);
+    _pageLocksMigrated = true;
+}
+
 // Middleware de verificação de Desenvolvedor
 const checkDev = (req, res, next) => {
     const role = req.headers['x-role'] || '';
@@ -15,6 +25,7 @@ const checkDev = (req, res, next) => {
 // GET: Lista todos os bloqueios ativos
 router.get('/', async (req, res) => {
     try {
+        await ensureSyncColumns();
         const result = await pool.query('SELECT * FROM page_locks');
         res.json({ success: true, data: result.rows });
     } catch (error) {
@@ -74,11 +85,14 @@ router.post('/sync-lock', async (req, res) => {
         const now = new Date();
 
         await pool.query(`ALTER TABLE page_locks ADD COLUMN IF NOT EXISTS sync_progress INT DEFAULT 0`);
+        await pool.query(`ALTER TABLE page_locks ADD COLUMN IF NOT EXISTS is_syncing BOOLEAN DEFAULT false`);
+        // Sincronização usa is_syncing (não is_locked) — não bloqueia acesso, apenas dispara o toast.
+        // is_locked/lock_reason ficam reservados para bloqueio manual.
         await pool.query(`
-            INSERT INTO page_locks (page_id, is_locked, lock_reason, sync_started_at, sync_estimated_ms, sync_progress)
-            VALUES ($1, true, 'sync', $2, $3, 0)
+            INSERT INTO page_locks (page_id, is_locked, is_syncing, sync_started_at, sync_estimated_ms, sync_progress)
+            VALUES ($1, false, true, $2, $3, 0)
             ON CONFLICT (page_id)
-            DO UPDATE SET is_locked = true, lock_reason = 'sync',
+            DO UPDATE SET is_syncing = true,
                           sync_started_at = $2, sync_estimated_ms = $3, sync_progress = 0,
                           updated_at = CURRENT_TIMESTAMP
         `, [page_id, now, estimatedMs]);
@@ -125,10 +139,10 @@ router.post('/sync-unlock', async (req, res) => {
             );
         }
 
-        // Desbloquear a página
+        // Encerrar sincronização (não mexe em is_locked/lock_reason — bloqueio manual é independente)
         await pool.query(`
-            UPDATE page_locks 
-            SET is_locked = false, lock_reason = NULL, 
+            UPDATE page_locks
+            SET is_syncing = false,
                 sync_started_at = NULL, sync_estimated_ms = NULL,
                 updated_at = CURRENT_TIMESTAMP
             WHERE page_id = $1
@@ -202,7 +216,7 @@ router.post('/sync-progress', async (req, res) => {
     }
     try {
         await pool.query(
-            `UPDATE page_locks SET sync_progress = $2 WHERE page_id = $1 AND is_locked = true`,
+            `UPDATE page_locks SET sync_progress = $2 WHERE page_id = $1 AND is_syncing = true`,
             [page_id, Math.min(100, Math.max(0, parseInt(progress) || 0))]
         );
         res.json({ success: true });
