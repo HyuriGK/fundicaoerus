@@ -91,6 +91,7 @@
         '}',
         'body.erus-sidebar-collapsed #erus-sidebar .erus-nav-link.active i { opacity:1; color:#fbbf24; }',
         'body.erus-sidebar-collapsed #erus-sidebar .erus-nav-link.active::before { display:none; }',
+        'body.erus-sidebar-collapsed #erus-sidebar .erus-nav-group-wrapper { max-height:0 !important; display:none !important; }',
         // Collapsed group sep — icon only, centered, with subtle panel
         'body.erus-sidebar-collapsed #erus-sidebar .erus-nav-group-sep {',
         '  display:flex; align-items:center !important; justify-content:center !important;',
