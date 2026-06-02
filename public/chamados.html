@@ -458,15 +458,24 @@
 </div>
 
 <script>
-    // Acesso restrito a desenvolvedor
+    // Acesso controlado pelo painel de permissões (default liberado; bloqueia só se bloqueado)
     const role = (localStorage.getItem('erus_role') || '').toLowerCase();
     if (role !== 'desenvolvedor') {
-        document.querySelector('.page-wrapper').innerHTML = `
-            <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;gap:16px;color:#a1a1aa">
-                <i class="fa-solid fa-lock" style="font-size:3rem;opacity:0.3"></i>
-                <p style="margin:0;font-size:1rem">Acesso restrito ao setor de TI.</p>
-                <a href="index.html" style="color:#fbbf24;font-size:0.85rem;text-decoration:none">← Voltar ao início</a>
-            </div>`;
+        fetch('/api/permissions')
+            .then(r => r.json())
+            .then(rows => {
+                const blocked = (rows || []).some(r2 => r2.role === role && r2.page_key === 'chamados.html'
+                    && (r2.allowed === false || r2.allowed === 'false' || r2.allowed === 'f'));
+                if (blocked) {
+                    document.querySelector('.page-wrapper').innerHTML = `
+                        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;gap:16px;color:#a1a1aa">
+                            <i class="fa-solid fa-lock" style="font-size:3rem;opacity:0.3"></i>
+                            <p style="margin:0;font-size:1rem">Acesso restrito.</p>
+                            <a href="index.html" style="color:#fbbf24;font-size:0.85rem;text-decoration:none">← Voltar ao início</a>
+                        </div>`;
+                }
+            })
+            .catch(() => {});
     }
 
     const urgLabels = { baixa:'Baixa', media:'Média', alta:'Alta', critica:'Crítica' };

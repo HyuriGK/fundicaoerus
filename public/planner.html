@@ -197,7 +197,17 @@
 
     <script>
         const role = (localStorage.getItem('erus_role') || '').toLowerCase();
-        if (role !== 'desenvolvedor') window.location.href = 'index.html';
+        // Acesso controlado pelo painel de permissões (default liberado; redireciona só se bloqueado)
+        if (role !== 'desenvolvedor') {
+            fetch('/api/permissions')
+                .then(r => r.json())
+                .then(rows => {
+                    const blocked = (rows || []).some(r2 => r2.role === role && r2.page_key === 'planner.html'
+                        && (r2.allowed === false || r2.allowed === 'false' || r2.allowed === 'f'));
+                    if (blocked) window.location.href = 'index.html';
+                })
+                .catch(() => {});
+        }
 
         const user = localStorage.getItem('erus_user') || localStorage.getItem('erus_username') || 'Desconhecido';
         const headers = () => ({ 'Content-Type': 'application/json', 'x-role': role, 'x-user': user });
