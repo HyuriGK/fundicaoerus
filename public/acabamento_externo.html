@@ -857,6 +857,7 @@
                 <div class="toolbar-actions" style="display: flex; gap: 8px; margin-left: auto; align-items: center;">
                     <button id="btnViewDiaria" class="month-btn active" onclick="setView('diaria')">EVOLUÇÃO DIÁRIA</button>
                     <button id="btnViewMensal" class="month-btn" onclick="setView('mensal')">EVOLUÇÃO MENSAL</button>
+                    <button id="btnViewPontualidade" class="month-btn" onclick="setView('pontualidade')">PONTUALIDADE</button>
                     <button class="month-btn active" id="novoEnvioButtonToolbar" onclick="abrirModalPorId('novoEnvioModal')">NOVO ENVIO</button>
                     <button class="month-btn" onclick="abrirModalPorId('registrosModal')">REGISTROS</button>
                 </div>
@@ -1549,6 +1550,8 @@
             });
             if (currentView === 'mensal') {
                 renderMonthlyChart(cD);
+            } else if (currentView === 'pontualidade') {
+                renderPontualidadeChart(filtrados);
             } else {
                 renderDailyChart();
             }
@@ -1562,6 +1565,7 @@
             currentView = v;
             document.getElementById('btnViewDiaria').classList.toggle('active', v === 'diaria');
             document.getElementById('btnViewMensal').classList.toggle('active', v === 'mensal');
+            document.getElementById('btnViewPontualidade').classList.toggle('active', v === 'pontualidade');
             if (v === 'diaria') setDailyChartBlur(selectedMonthIndex === -1);
             else setDailyChartBlur(false);
             updateDashboardAndCharts();
@@ -1732,6 +1736,142 @@
                         y:  { beginAtZero: true, grid: { color: _gc() }, ticks: { color: _tc() } },
                         y1: { beginAtZero: true, position: 'right', grid: { display: false }, ticks: { color: '#10b981' } },
                         x:  { grid: { display: true, color: _gc() }, ticks: { color: _tc() } }
+                    }
+                }
+            });
+        }
+        function renderPontualidadeChart(filtrados) {
+            const titleEl = document.getElementById('mainChartTitle');
+            const periodo = selectedMonthIndex === -1 ? selectedYear : `${MONTHS_SHORT[selectedMonthIndex]}/${selectedYear}`;
+            if (titleEl) titleEl.textContent = `Pontualidade por Terceiro — ${periodo}`;
+            // 1. Reduz registros para cargas únicas (cada carga tem um terceiro e uma previsão)
+            const cargasTerceiro = {};
+            filtrados.forEach(r => { if (!(r.carga in cargasTerceiro)) cargasTerceiro[r.carga] = r.terceiro || '—'; });
+            const dayDiff = (a, b) => Math.round((new Date(a + 'T00:00:00') - new Date(b + 'T00:00:00')) / 86400000);
+            // 2. Agrupa avaliação por terceiro (só cargas com data acordada E data de entrega)
+            const stats = {};
+            let gTotal = 0, gOnTime = 0, gDaysLate = 0;
+            Object.keys(cargasTerceiro).forEach(carga => {
+                const prev = previsoes[carga];
+                if (!prev || !prev.acordada || !prev.entrega) return;
+                const atraso = dayDiff(prev.entrega, prev.acordada); // >0 = atrasou, <=0 = no prazo
+                const terc = cargasTerceiro[carga];
+                if (!stats[terc]) stats[terc] = { total: 0, onTime: 0, late: 0, daysLate: 0, worst: 0 };
+                const s = stats[terc];
+                s.total++; gTotal++;
+                if (atraso > 0) { s.late++; s.daysLate += atraso; if (atraso > s.worst) s.worst = atraso; gDaysLate += atraso; }
+                else { s.onTime++; gOnTime++; }
+            });
+            // 3. KPIs gerais do período
+            const gRate = gTotal ? (gOnTime / gTotal * 100) : 0;
+            const gAvg = gTotal ? (gDaysLate / gTotal) : 0;
+            const rateCls = gRate >= 90 ? 'success' : (gRate >= 70 ? 'warning' : 'danger');
+            const statsPanel = document.getElementById('statsPanel');
+            if (statsPanel) {
+                statsPanel.innerHTML = `
+                <div class="kpi-card info">
+                    <div class="kpi-title">Cargas Avaliadas</div>
+                    <div class="kpi-value">${gTotal}</div>
+                    <div class="kpi-subtext">Com data acordada e entrega</div>
+                </div>
+                <div class="kpi-card ${rateCls}">
+                    <div class="kpi-title">Índice de Pontualidade</div>
+                    <div class="kpi-value ${rateCls}">${gRate.toFixed(1)}%</div>
+                    <div class="kpi-subtext">${gOnTime} no prazo / ${gTotal - gOnTime} atrasadas</div>
+                </div>
+                <div class="kpi-card danger">
+                    <div class="kpi-title">Dias de Atraso (Acum.)</div>
+                    <div class="kpi-value danger">${gDaysLate}</div>
+                    <div class="kpi-subtext">Soma dos dias atrasados</div>
+                </div>
+                <div class="kpi-card warning">
+                    <div class="kpi-title">Atraso Médio por Carga</div>
+                    <div class="kpi-value warning">${gAvg.toFixed(1)} d</div>
+                    <div class="kpi-subtext">Penaliza frequência e magnitude</div>
+                </div>`;
+            }
+            // 4. Ordena terceiros: melhor pontualidade primeiro, desempate por menor atraso médio
+            const terceiros = Object.keys(stats).sort((a, b) => {
+                const ra = stats[a].onTime / stats[a].total, rb = stats[b].onTime / stats[b].total;
+                if (rb !== ra) return rb - ra;
+                return (stats[a].daysLate / stats[a].total) - (stats[b].daysLate / stats[b].total);
+            });
+            const labels = terceiros;
+            const rates = terceiros.map(t => stats[t].onTime / stats[t].total * 100);
+            const avgDelays = terceiros.map(t => stats[t].daysLate / stats[t].total);
+            const barColors = rates.map(r => r >= 90 ? 'rgba(16,185,129,0.8)' : (r >= 70 ? 'rgba(245,158,11,0.8)' : 'rgba(239,68,68,0.8)'));
+            const barBorders = rates.map(r => r >= 90 ? '#10b981' : (r >= 70 ? '#f59e0b' : '#ef4444'));
+            const ctx = document.getElementById('mainChart').getContext('2d');
+            if (mainChartInstance) mainChartInstance.destroy();
+            mainChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            label: 'No prazo (%)',
+                            data: rates,
+                            backgroundColor: barColors,
+                            borderColor: barBorders,
+                            borderWidth: 1,
+                            borderRadius: 4,
+                            order: 2,
+                            yAxisID: 'y',
+                            datalabels: {
+                                anchor: 'end', align: 'end', offset: 2,
+                                color: _tc(),
+                                font: { size: 11, weight: 'bold' },
+                                formatter: (v) => `${v.toFixed(0)}%`
+                            }
+                        },
+                        {
+                            type: 'line',
+                            label: 'Atraso médio (dias)',
+                            data: avgDelays,
+                            borderColor: '#f97316',
+                            backgroundColor: 'rgba(249,115,22,0.12)',
+                            borderWidth: 2,
+                            fill: false,
+                            tension: 0.3,
+                            pointRadius: 4,
+                            pointBackgroundColor: '#f97316',
+                            order: 1,
+                            yAxisID: 'y1',
+                            datalabels: { display: false }
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: true, labels: { color: _tc(), font: { size: 11, weight: 'bold' }, usePointStyle: true } },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            callbacks: {
+                                title: items => items[0].label,
+                                label: () => '',
+                                afterBody: items => {
+                                    const t = items[0].label;
+                                    const s = stats[t];
+                                    return [
+                                        `Avaliadas: ${s.total}`,
+                                        `No prazo: ${s.onTime}  (${(s.onTime / s.total * 100).toFixed(0)}%)`,
+                                        `Atrasadas: ${s.late}`,
+                                        `Dias de atraso (total): ${s.daysLate}`,
+                                        `Atraso médio/carga: ${(s.daysLate / s.total).toFixed(1)} d`,
+                                        `Pior atraso: ${s.worst} d`
+                                    ];
+                                }
+                            }
+                        }
+                    },
+                    interaction: { mode: 'index', intersect: false },
+                    scales: {
+                        y:  { beginAtZero: true, max: 100, position: 'left', grid: { color: _gc() }, ticks: { color: _tc(), callback: v => v + '%' }, title: { display: true, text: 'No prazo (%)', color: _tc() } },
+                        y1: { beginAtZero: true, position: 'right', grid: { display: false }, ticks: { color: '#f97316' }, title: { display: true, text: 'Atraso médio (dias)', color: '#f97316' } },
+                        x:  { grid: { display: false }, ticks: { color: _tc(), font: { size: 10, weight: 'bold' } } }
                     }
                 }
             });
