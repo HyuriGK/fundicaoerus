@@ -2,14 +2,6 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../lib/db');
 
-function requireDev(req, res, next) {
-    const role = String(req.headers['x-role'] || '').toLowerCase();
-    if (role !== 'desenvolvedor') {
-        return res.status(403).json({ success: false, error: 'Acesso restrito a desenvolvedor.' });
-    }
-    next();
-}
-
 function getUser(req) {
     return String(req.headers['x-user'] || req.query.user || (req.body && req.body.user) || 'Desconhecido').trim() || 'Desconhecido';
 }
@@ -33,8 +25,6 @@ async function ensureTable(client) {
     `);
     await client.query('CREATE INDEX IF NOT EXISTS idx_planner_tasks_owner ON planner_tasks(owner_username)');
 }
-
-router.use(requireDev);
 
 router.get('/tasks', async (req, res) => {
     const client = await pool.connect();
