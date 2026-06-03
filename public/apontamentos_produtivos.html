@@ -1145,7 +1145,7 @@
                     <select id="sector-chart-select" class="month-btn" style="cursor:pointer;"></select>
                     <button onclick="generateCompleteReport()" class="month-btn">PDF</button>
                     <button onclick="openRecordsModal()" class="month-btn">REGISTROS</button>
-                    <button onclick="openParadaModal(null)" class="month-btn btn-danger">REGISTRAR PARADA</button>
+                    <button id="btn-registrar-parada" onclick="openParadaModal(null)" class="month-btn btn-danger">REGISTRAR PARADA</button>
                 </div>
             </div>
 
@@ -1452,6 +1452,16 @@
 
         function getCurrentRole() {
             return (localStorage.getItem('erus_role') || '').trim().toLowerCase();
+        }
+
+        const PARADA_ALLOWED_ROLES = ['desenvolvedor', 'ppcp', 'moldagem', 'fusao', 'fusão', 'acabamento'];
+        function canRegisterParada() {
+            return PARADA_ALLOWED_ROLES.includes(getCurrentRole());
+        }
+        function applyParadaPermissions() {
+            const allowed = canRegisterParada();
+            const btn = document.getElementById('btn-registrar-parada');
+            if (btn) btn.style.display = allowed ? '' : 'none';
         }
 
         function isMoldagemRole() {
@@ -1885,6 +1895,7 @@
             currentLigaFilter = 'TODAS';
 
             setupEventListeners();
+            applyParadaPermissions();
             await fetchData();
             updateClock();
             setInterval(updateClock, 1000);
@@ -3284,6 +3295,7 @@
         }
 
         function openParadaModal(dateStr, editIdx = null) {
+            if (!canRegisterParada()) { showToast('Acesso Negado', 'Você não tem permissão para registrar paradas.', 'danger'); return; }
             const modal = document.getElementById('parada-modal');
             const today = dateStr || (currentMonthFilter !== 0
                 ? `${currentYearFilter}-${String(currentMonthFilter).padStart(2,'0')}-${String(new Date().getDate()).padStart(2,'0')}`
@@ -3315,6 +3327,7 @@
         }
 
         async function salvarParada() {
+            if (!canRegisterParada()) { showToast('Acesso Negado', 'Você não tem permissão para registrar paradas.', 'danger'); return; }
             const data = document.getElementById('parada-data').value;
             if (!data) { alert('Informe a data da parada.'); return; }
             const inicio = document.getElementById('parada-inicio').value;
@@ -3368,21 +3381,24 @@
             const content = document.getElementById('parada-detalhe-content');
             const field = (label, value) =>
                 `<div style="display:flex;gap:8px;"><span style="font-size:0.72rem;color:#a1a1aa;min-width:70px;padding-top:1px;">${label}</span><span style="font-size:0.85rem;color:#f4f4f5;">${value || '—'}</span></div>`;
+            const podeEditar = canRegisterParada();
             content.innerHTML = list.map(({ p, idx }, i) => `
                 <div style="background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.2);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:6px;">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
                         <span style="font-size:0.72rem;color:#ef4444;font-weight:700;letter-spacing:.05em;">PARADA ${i+1}</span>
-                        <div style="display:flex;gap:8px;">
+                        ${podeEditar ? `<div style="display:flex;gap:8px;">
                             <button onclick="openParadaModal('${dateStr}',${idx});document.getElementById('parada-detalhe-modal').style.display='none';" style="padding:3px 10px;background:rgba(251,191,36,0.12);border:1px solid rgba(251,191,36,0.3);border-radius:6px;color:#fbbf24;font-size:0.72rem;cursor:pointer;">EDITAR</button>
                             <button onclick="removerParada('${dateStr}',${idx})" style="padding:3px 10px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:6px;color:#ef4444;font-size:0.72rem;cursor:pointer;">REMOVER</button>
-                        </div>
+                        </div>` : ''}
                     </div>
                     ${field('SETOR', p.setor)}
                     ${p.maquina ? field('MÁQUINA', p.maquina) : ''}
                     ${field('PERÍODO', p.inicio && p.fim ? `${p.inicio} até ${p.fim}` : (p.inicio || p.fim || '—'))}
                     ${field('MOTIVO', p.motivo)}
                 </div>`).join('');
-            document.getElementById('parada-detalhe-editar').onclick = () => {
+            const btnAdicionar = document.getElementById('parada-detalhe-editar');
+            btnAdicionar.style.display = podeEditar ? '' : 'none';
+            btnAdicionar.onclick = () => {
                 document.getElementById('parada-detalhe-modal').style.display = 'none';
                 openParadaModal(dateStr);
             };
@@ -3391,6 +3407,7 @@
         }
 
         async function removerParada(dateStr, idx) {
+            if (!canRegisterParada()) { showToast('Acesso Negado', 'Você não tem permissão para alterar paradas.', 'danger'); return; }
             if (!confirm('Remover esta parada?')) return;
             const parada = paradasRegistradas[dateStr]?.[idx];
             if (parada?.id) {
