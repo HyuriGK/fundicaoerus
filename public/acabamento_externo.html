@@ -1750,6 +1750,9 @@
             const dayDiff = (a, b) => Math.round((new Date(a + 'T00:00:00') - new Date(b + 'T00:00:00')) / 86400000);
             // 2. Agrupa avaliação por terceiro (só cargas com data acordada E data de entrega)
             const stats = {};
+            // Semeia todos os fornecedores cadastrados para que apareçam mesmo sem registros
+            Array.from(document.getElementById('inputTerceiro')?.options || [])
+                .forEach(o => { stats[o.value] = { total: 0, onTime: 0, late: 0, daysLate: 0, worst: 0 }; });
             let gTotal = 0, gOnTime = 0, gDaysLate = 0;
             Object.keys(cargasTerceiro).forEach(carga => {
                 const prev = previsoes[carga];
@@ -1792,15 +1795,18 @@
             }
             // 4. Ordena terceiros: melhor pontualidade primeiro, desempate por menor atraso médio
             const terceiros = Object.keys(stats).sort((a, b) => {
-                const ra = stats[a].onTime / stats[a].total, rb = stats[b].onTime / stats[b].total;
+                const sa = stats[a], sb = stats[b];
+                if ((sa.total === 0) !== (sb.total === 0)) return sa.total === 0 ? 1 : -1; // sem dados ao fim
+                if (sa.total === 0) return a.localeCompare(b);
+                const ra = sa.onTime / sa.total, rb = sb.onTime / sb.total;
                 if (rb !== ra) return rb - ra;
-                return (stats[a].daysLate / stats[a].total) - (stats[b].daysLate / stats[b].total);
+                return (sa.daysLate / sa.total) - (sb.daysLate / sb.total);
             });
             const labels = terceiros;
-            const rates = terceiros.map(t => stats[t].onTime / stats[t].total * 100);
-            const avgDelays = terceiros.map(t => stats[t].daysLate / stats[t].total);
-            const barColors = rates.map(r => r >= 90 ? 'rgba(16,185,129,0.8)' : (r >= 70 ? 'rgba(245,158,11,0.8)' : 'rgba(239,68,68,0.8)'));
-            const barBorders = rates.map(r => r >= 90 ? '#10b981' : (r >= 70 ? '#f59e0b' : '#ef4444'));
+            const rates = terceiros.map(t => stats[t].total ? stats[t].onTime / stats[t].total * 100 : 0);
+            const avgDelays = terceiros.map(t => stats[t].total ? stats[t].daysLate / stats[t].total : 0);
+            const barColors = terceiros.map((t, i) => stats[t].total === 0 ? 'rgba(113,113,122,0.3)' : (rates[i] >= 90 ? 'rgba(16,185,129,0.8)' : (rates[i] >= 70 ? 'rgba(245,158,11,0.8)' : 'rgba(239,68,68,0.8)')));
+            const barBorders = terceiros.map((t, i) => stats[t].total === 0 ? '#71717a' : (rates[i] >= 90 ? '#10b981' : (rates[i] >= 70 ? '#f59e0b' : '#ef4444')));
             const ctx = document.getElementById('mainChart').getContext('2d');
             if (mainChartInstance) mainChartInstance.destroy();
             mainChartInstance = new Chart(ctx, {
@@ -1821,7 +1827,7 @@
                                 anchor: 'end', align: 'end', offset: 2,
                                 color: _tc(),
                                 font: { size: 11, weight: 'bold' },
-                                formatter: (v) => `${v.toFixed(0)}%`
+                                formatter: (v, c) => stats[terceiros[c.dataIndex]].total === 0 ? 's/ dados' : `${v.toFixed(0)}%`
                             }
                         },
                         {
@@ -1855,6 +1861,7 @@
                                 afterBody: items => {
                                     const t = items[0].label;
                                     const s = stats[t];
+                                    if (!s.total) return ['Sem cargas avaliadas no período'];
                                     return [
                                         `Avaliadas: ${s.total}`,
                                         `No prazo: ${s.onTime}  (${(s.onTime / s.total * 100).toFixed(0)}%)`,
