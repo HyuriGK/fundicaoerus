@@ -30,7 +30,8 @@
             background-color: var(--bg-body);
             color: var(--text-main);
             background-image: radial-gradient(circle at 50% 0%, rgba(251, 191, 36, 0.03), transparent 70%);
-            min-height: 100vh;
+            height: 100vh;
+            overflow: hidden;
             padding: 28px 36px;
         }
 
@@ -81,6 +82,15 @@
         }
 
         .card h2 { margin-top: 0; font-size: 1.2rem; margin-bottom: 20px; }
+        .card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+        .card-head h2 { margin: 0; }
+        .btn-history {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: rgba(255,255,255,0.05); border: 1px solid var(--border-subtle);
+            color: var(--text-main); padding: 9px 16px; border-radius: 10px;
+            font-family: inherit; font-size: 0.88rem; font-weight: 600; cursor: pointer; transition: 0.25s;
+        }
+        .btn-history:hover { background: rgba(251,191,36,0.1); border-color: var(--border-highlight, rgba(251,191,36,0.25)); color: var(--color-primary); }
 
         .compose-grid {
             display: grid;
@@ -229,6 +239,7 @@
             display: none;
         }
         .modal-overlay.open { display: flex; }
+        #msgModal { z-index: 10003; }
         .msg-modal-inner {
             width: 100%; height: 100%;
             background: var(--bg-body);
@@ -248,7 +259,14 @@
             cursor: pointer; font-size: 1.1rem;
         }
         .modal-close:hover { color: #fff; background: rgba(255,255,255,0.08); }
-        .msg-modal-body { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 32px 40px; width: 100%; }
+        .msg-modal-body {
+            flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 32px 40px; width: 100%;
+            scrollbar-width: thin; scrollbar-color: #3f3f46 rgba(0,0,0,0.35);
+        }
+        .msg-modal-body::-webkit-scrollbar { width: 10px; }
+        .msg-modal-body::-webkit-scrollbar-track { background: rgba(0,0,0,0.35); border-radius: 8px; }
+        .msg-modal-body::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 8px; border: 2px solid rgba(0,0,0,0.35); }
+        .msg-modal-body::-webkit-scrollbar-thumb:hover { background: #52525b; }
         .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; margin-bottom: 28px; }
         .info-item { background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 12px; padding: 16px 18px; }
         .info-item .k { font-size: 0.72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); margin-bottom: 6px; }
@@ -270,13 +288,13 @@
 <body>
 
     <div class="container">
-        <header class="page-head">
-            <h1><i class="fa-solid fa-bullhorn" style="color: var(--color-primary); margin-right: 15px;"></i>Comunicação</h1>
-            <a href="index.html" class="back-btn"><i class="fa-solid fa-arrow-left"></i> Voltar</a>
-        </header>
-
         <div class="card">
-            <h2>Nova Mensagem</h2>
+            <div class="card-head">
+                <h2><i class="fa-solid fa-bullhorn" style="color: var(--color-primary); margin-right: 10px;"></i>Nova Mensagem</h2>
+                <button type="button" class="btn-history" onclick="openHistory()">
+                    <i class="fa-solid fa-clock-rotate-left"></i> Histórico de Envios
+                </button>
+            </div>
             <form id="commForm">
                 <div class="compose-grid">
                     <!-- COLUNA ESQUERDA: destinatários -->
@@ -329,9 +347,16 @@
             </form>
         </div>
 
-        <div class="card">
-            <h2>Histórico de Envios</h2>
-            <div style="overflow-x: auto;">
+    </div>
+
+    <!-- MODAL HISTÓRICO (full-screen) -->
+    <div class="modal-overlay" id="historyModal">
+        <div class="msg-modal-inner">
+            <div class="msg-modal-top">
+                <h2><i class="fa-solid fa-clock-rotate-left" style="color:var(--color-primary);margin-right:12px;"></i>Histórico de Envios</h2>
+                <button class="modal-close" onclick="closeHistory()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="msg-modal-body">
                 <table class="history-table">
                     <thead>
                         <tr>
@@ -349,7 +374,7 @@
         </div>
     </div>
 
-    <!-- MODAL FULL-SCREEN -->
+    <!-- MODAL DETALHES (full-screen) -->
     <div class="modal-overlay" id="msgModal">
         <div class="msg-modal-inner">
             <div class="msg-modal-top">
@@ -496,7 +521,18 @@
 
         function closeMsgModal() { document.getElementById('msgModal').classList.remove('open'); }
         document.getElementById('msgModal').addEventListener('click', (e) => { if (e.target.id === 'msgModal') closeMsgModal(); });
-        document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMsgModal(); });
+
+        // ---- Modal Histórico ----
+        function openHistory() { loadHistory(); document.getElementById('historyModal').classList.add('open'); }
+        function closeHistory() { document.getElementById('historyModal').classList.remove('open'); }
+        document.getElementById('historyModal').addEventListener('click', (e) => { if (e.target.id === 'historyModal') closeHistory(); });
+
+        // ESC fecha o modal de cima primeiro
+        document.addEventListener('keydown', (e) => {
+            if (e.key !== 'Escape') return;
+            if (document.getElementById('msgModal').classList.contains('open')) { closeMsgModal(); return; }
+            if (document.getElementById('historyModal').classList.contains('open')) closeHistory();
+        });
 
         // ---- Enviar ----
         document.getElementById('commForm').addEventListener('submit', async (e) => {
