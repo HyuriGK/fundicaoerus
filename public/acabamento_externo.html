@@ -1943,7 +1943,8 @@
                 showToast("Você não tem permissão para excluir", "Apenas administradores podem excluir registros", "danger");
                 return;
             }
-            if (!id || !await classicConfirm('Excluir este registro permanentemente?')) return;
+            if (!id) return;
+            if (!await confirmDialog('Tem certeza que deseja remover este item da carga? Esta ação não pode ser desfeita.', { title: 'Remover Item', okText: 'Remover' })) return;
             showSpinner();
             try {
                 const response = await apiRequest('delete', 'POST', { id: id });
@@ -2105,6 +2106,68 @@
             document.querySelectorAll('.filter-input-table').forEach(i => i.oninput = applyColumnFilters);
             document.getElementById('inputData').valueAsDate = new Date();
         });
+    </script>
+
+    <!-- ===== Modal de confirmação estilizado ===== -->
+    <style>
+        #erusConfirm { display:none; position:fixed; inset:0; z-index:100000; background:rgba(0,0,0,0.65); backdrop-filter:blur(5px); align-items:center; justify-content:center; }
+        #erusConfirm.open { display:flex; }
+        #erusConfirm .ec-card {
+            max-width:440px; width:92%; box-sizing:border-box; background:#111114;
+            border:1px solid rgba(239,68,68,0.3); border-radius:16px; padding:28px 30px;
+            box-shadow:0 25px 60px rgba(0,0,0,0.6); animation:ecPop .2s ease-out;
+        }
+        @keyframes ecPop { from { opacity:0; transform:translateY(10px) scale(.97); } to { opacity:1; transform:none; } }
+        #erusConfirm .ec-head { display:flex; align-items:center; gap:14px; margin-bottom:14px; }
+        #erusConfirm .ec-icon { width:46px; height:46px; border-radius:12px; background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.3); display:flex; align-items:center; justify-content:center; color:#ef4444; font-size:1.2rem; flex-shrink:0; }
+        #erusConfirm .ec-title { font-size:1.15rem; font-weight:800; color:#fafafa; margin:0; }
+        #erusConfirm .ec-msg { color:#a1a1aa; font-size:0.92rem; line-height:1.55; margin:0 0 24px; }
+        #erusConfirm .ec-actions { display:flex; gap:12px; }
+        #erusConfirm button { flex:1; padding:12px; border-radius:9px; font-weight:700; font-size:0.88rem; cursor:pointer; font-family:inherit; }
+        #erusConfirm .ec-cancel { background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.12); color:#e4e4e7; }
+        #erusConfirm .ec-ok { background:#ef4444; border:none; color:#fff; }
+    </style>
+    <div id="erusConfirm">
+        <div class="ec-card">
+            <div class="ec-head">
+                <div class="ec-icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
+                <h2 class="ec-title" id="ecTitle">Confirmar</h2>
+            </div>
+            <p class="ec-msg" id="ecMsg"></p>
+            <div class="ec-actions">
+                <button class="ec-cancel" id="ecCancel">Cancelar</button>
+                <button class="ec-ok" id="ecOk">Remover</button>
+            </div>
+        </div>
+    </div>
+    <script>
+        function confirmDialog(message, opts) {
+            opts = opts || {};
+            return new Promise(function (resolve) {
+                var modal = document.getElementById('erusConfirm');
+                document.getElementById('ecTitle').textContent = opts.title || 'Confirmar';
+                document.getElementById('ecMsg').textContent = message;
+                var okBtn = document.getElementById('ecOk');
+                var cancelBtn = document.getElementById('ecCancel');
+                okBtn.textContent = opts.okText || 'Confirmar';
+                modal.classList.add('open');
+                function onKey(e) {
+                    if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); done(false); }
+                    else if (e.key === 'Enter') { e.preventDefault(); done(true); }
+                }
+                function done(v) {
+                    modal.classList.remove('open');
+                    okBtn.onclick = null; cancelBtn.onclick = null; modal.onclick = null;
+                    document.removeEventListener('keydown', onKey, true);
+                    resolve(v);
+                }
+                okBtn.onclick = function () { done(true); };
+                cancelBtn.onclick = function () { done(false); };
+                modal.onclick = function (e) { if (e.target === modal) done(false); };
+                document.addEventListener('keydown', onKey, true);
+                okBtn.focus();
+            });
+        }
     </script>
     <script src="js/notifications.js"></script>
     <script src="session-guard.js"></script>
