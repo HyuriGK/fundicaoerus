@@ -3465,6 +3465,19 @@
             }
         }
 
+        // Duração da parada a partir de início/fim (HH:MM) -> "Xh Ymin"
+        function paradaDuracao(inicio, fim) {
+            if (!inicio || !fim) return '—';
+            const toMin = (t) => { const [h, m] = String(t).split(':').map(Number); return (h || 0) * 60 + (m || 0); };
+            let diff = toMin(fim) - toMin(inicio);
+            if (diff < 0) diff += 1440; // virou o dia
+            const h = Math.floor(diff / 60);
+            const m = diff % 60;
+            if (h && m) return `${h}h ${m}min`;
+            if (h) return `${h}h`;
+            return `${m}min`;
+        }
+
         function openParadaDetalheModal(dateStr, chartSetor = currentSectorFilter) {
             const list = getParadasDetalhe(dateStr, chartSetor);
             if (!list || list.length === 0) return;
@@ -3477,11 +3490,11 @@
             const trunc = (s, n) => { const v = String(s == null ? '' : s); return v.length > n ? v.slice(0, n) + '…' : (v || '—'); };
             content.innerHTML = `
                 <table class="paradas-table">
-                    <thead><tr><th class="col-num">#</th><th>Setor</th><th>Máquina</th><th>Período</th><th>Motivo</th></tr></thead>
+                    <thead><tr><th class="col-num">#</th><th>Setor</th><th>Máquina</th><th>Período</th><th>Duração</th><th>Motivo</th></tr></thead>
                     <tbody>
                         ${list.map(({ p, idx }, i) => {
                             const periodo = p.inicio && p.fim ? `${p.inicio} até ${p.fim}` : (p.inicio || p.fim || '—');
-                            return `<tr onclick="openParadaSingle('${dateStr}',${idx})"><td class="col-num">${i + 1}</td><td>${p.setor || '—'}</td><td>${p.maquina || '—'}</td><td>${periodo}</td><td class="col-motivo" title="${escAttr(p.motivo)}">${trunc(p.motivo, 80)}</td></tr>`;
+                            return `<tr onclick="openParadaSingle('${dateStr}',${idx})"><td class="col-num">${i + 1}</td><td>${p.setor || '—'}</td><td>${p.maquina || '—'}</td><td>${periodo}</td><td style="color:#fbbf24;font-weight:700;white-space:nowrap;">${paradaDuracao(p.inicio, p.fim)}</td><td class="col-motivo" title="${escAttr(p.motivo)}">${trunc(p.motivo, 80)}</td></tr>`;
                         }).join('')}
                     </tbody>
                 </table>`;
@@ -3543,6 +3556,7 @@
                 ${fieldRow('Setor', p.setor)}
                 ${p.maquina ? fieldRow('Máquina', p.maquina) : ''}
                 ${fieldRow('Período', periodo)}
+                ${fieldRow('Duração', paradaDuracao(p.inicio, p.fim))}
                 ${p.usuario ? fieldRow('Registrado por', p.usuario) : ''}
                 <div style="display:flex;flex-direction:column;gap:7px;flex:1;min-height:140px;">
                     <span style="font-size:0.74rem;color:#a1a1aa;text-transform:uppercase;letter-spacing:.04em;">Motivo</span>
