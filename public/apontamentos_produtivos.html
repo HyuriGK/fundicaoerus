@@ -1253,6 +1253,10 @@
                             <option value="Forno 4t">Forno 4t</option>
                         </select>
                     </div>
+                    <div id="parada-usuario-wrap" style="display:none;grid-column:1 / -1;">
+                        <label style="font-size:0.78rem;color:#fbbf24;display:block;margin-bottom:6px;letter-spacing:.04em;">REGISTRADO POR <span style="color:#71717a;font-weight:400;text-transform:none;">(somente desenvolvedor)</span></label>
+                        <input type="text" id="parada-usuario" placeholder="Nome de quem registrou..." style="width:100%;box-sizing:border-box;background:#18181b;border:1px solid rgba(251,191,36,0.3);border-radius:9px;color:#fff;padding:11px 14px;font-size:0.92rem;">
+                    </div>
                 </div>
                 <div style="flex:1;display:flex;flex-direction:column;min-height:160px;">
                     <label style="font-size:0.78rem;color:#a1a1aa;display:block;margin-bottom:6px;letter-spacing:.04em;">MOTIVO</label>
@@ -3371,6 +3375,8 @@
             document.getElementById('parada-motivo').value = '';
             document.getElementById('parada-setor').value = 'Moldagem Leve';
             document.getElementById('parada-maquina').value = '';
+            const currentUser = localStorage.getItem('erus_user') || localStorage.getItem('erus_username') || '';
+            let usuarioVal = currentUser;
             if (editIdx !== null && paradasRegistradas[today]?.[editIdx]) {
                 const p = paradasRegistradas[today][editIdx];
                 document.getElementById('parada-inicio').value = p.inicio || '';
@@ -3378,7 +3384,12 @@
                 document.getElementById('parada-motivo').value = p.motivo || '';
                 document.getElementById('parada-setor').value = p.setor || 'Moldagem Leve';
                 document.getElementById('parada-maquina').value = p.maquina || '';
+                usuarioVal = p.usuario || '';
             }
+            // Campo "Registrado por" — editável apenas para desenvolvedor
+            const isDevParada = getCurrentRole() === 'desenvolvedor';
+            document.getElementById('parada-usuario-wrap').style.display = isDevParada ? '' : 'none';
+            document.getElementById('parada-usuario').value = usuarioVal;
             onParadaSetorChange();
             modal.style.display = 'flex';
         }
@@ -3401,6 +3412,17 @@
             if (!motivo) { alert('Informe o motivo da parada.'); return; }
 
             const existing = _paradaEditIdx !== null && _paradaEditDate === data ? paradasRegistradas[data]?.[_paradaEditIdx] : null;
+            const currentUser = localStorage.getItem('erus_user') || localStorage.getItem('erus_username') || '';
+            let usuario;
+            if (getCurrentRole() === 'desenvolvedor') {
+                // Desenvolvedor pode definir/alterar quem registrou
+                usuario = (document.getElementById('parada-usuario')?.value || '').trim() || existing?.usuario || currentUser;
+            } else if (existing) {
+                // Edição por não-dev: preserva quem registrou originalmente
+                usuario = existing.usuario || currentUser;
+            } else {
+                usuario = currentUser;
+            }
             const parada = {
                 id: existing?.id,
                 data,
@@ -3409,7 +3431,7 @@
                 setor,
                 maquina,
                 motivo,
-                usuario: localStorage.getItem('erus_user') || localStorage.getItem('erus_username') || ''
+                usuario
             };
 
             try {
