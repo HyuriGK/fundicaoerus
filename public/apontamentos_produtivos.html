@@ -3496,8 +3496,16 @@
 
         async function removerParada(dateStr, idx) {
             if (!canRegisterParada()) { showToast('Acesso Negado', 'Você não tem permissão para alterar paradas.', 'danger'); return; }
-            if (!confirm('Remover esta parada?')) return;
             const parada = paradasRegistradas[dateStr]?.[idx];
+            if (!parada) return;
+            // Só quem registrou (ou desenvolvedor) pode remover
+            const _reg = (parada.usuario || '').trim().toLowerCase();
+            const _me = (localStorage.getItem('erus_user') || localStorage.getItem('erus_username') || '').trim().toLowerCase();
+            if (getCurrentRole() !== 'desenvolvedor' && _reg && _reg !== _me) {
+                showToast('Não permitido', 'Você não pode remover este registro porque não foi você que registrou.', 'danger');
+                return;
+            }
+            if (!confirm('Remover esta parada?')) return;
             if (parada?.id) {
                 try {
                     const res = await fetch(`/api/producao-postgres/paradas/${parada.id}`, { method: 'DELETE' });
@@ -3542,10 +3550,16 @@
                 </div>`;
             const actions = document.getElementById('parada-single-actions');
             if (podeEditar) {
+                const me = (localStorage.getItem('erus_user') || localStorage.getItem('erus_username') || '').trim().toLowerCase();
+                const reg = (p.usuario || '').trim().toLowerCase();
+                const canRemove = getCurrentRole() === 'desenvolvedor' || !reg || reg === me;
+                const btnRemover = canRemove
+                    ? `<button onclick="removerParada('${dateStr}',${idx})" style="flex:1;padding:13px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.35);border-radius:9px;color:#ef4444;font-weight:700;font-size:0.86rem;cursor:pointer;"><i class="fa-solid fa-trash" style="margin-right:6px;"></i>REMOVER</button>`
+                    : `<button title="Você não pode remover este registro porque não foi você que registrou" onclick="removerParada('${dateStr}',${idx})" style="flex:1;padding:13px;background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.2);border-radius:9px;color:#ef4444;font-weight:700;font-size:0.86rem;cursor:not-allowed;opacity:0.5;"><i class="fa-solid fa-trash" style="margin-right:6px;"></i>REMOVER</button>`;
                 actions.style.display = 'flex';
                 actions.innerHTML = `
                     <button onclick="openParadaModal('${dateStr}',${idx})" style="flex:1;padding:13px;background:rgba(251,191,36,0.14);border:1px solid rgba(251,191,36,0.35);border-radius:9px;color:#fbbf24;font-weight:700;font-size:0.86rem;cursor:pointer;"><i class="fa-solid fa-pen" style="margin-right:6px;"></i>EDITAR</button>
-                    <button onclick="removerParada('${dateStr}',${idx})" style="flex:1;padding:13px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.35);border-radius:9px;color:#ef4444;font-weight:700;font-size:0.86rem;cursor:pointer;"><i class="fa-solid fa-trash" style="margin-right:6px;"></i>REMOVER</button>`;
+                    ${btnRemover}`;
             } else {
                 actions.style.display = 'none';
                 actions.innerHTML = '';
