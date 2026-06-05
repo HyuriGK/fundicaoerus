@@ -139,6 +139,16 @@
         // Modals
         '#erus-logout-modal, #erus-pref-modal { display:none; position:fixed; inset:0; z-index:9999; align-items:center; justify-content:center; background:rgba(0,0,0,0.6); backdrop-filter:blur(4px); }',
         '#erus-logout-modal.open, #erus-pref-modal.open { display:flex; }',
+        '#erus-logout-modal.open { animation:erusFadeIn .22s ease; }',
+        '#erus-logout-modal > div { animation:erusLogoutPop .32s cubic-bezier(.16,1,.3,1); }',
+        '@keyframes erusFadeIn { from { opacity:0; } to { opacity:1; } }',
+        '@keyframes erusLogoutPop { from { opacity:0; transform:translateY(14px) scale(.93); } to { opacity:1; transform:none; } }',
+        // Logout exit transition overlay
+        '#erus-logout-overlay { position:fixed; inset:0; z-index:99999; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:20px; background:#09090b; opacity:0; transition:opacity .45s ease; }',
+        '#erus-logout-overlay.show { opacity:1; }',
+        '#erus-logout-overlay .erus-lo-spinner { width:48px; height:48px; border-radius:50%; border:3px solid rgba(239,68,68,0.22); border-top-color:#ef4444; animation:erusSpin .7s linear infinite; }',
+        '#erus-logout-overlay .erus-lo-text { color:#a1a1aa; font-size:0.95rem; font-weight:600; letter-spacing:.3px; animation:erusFadeIn .5s ease; }',
+        '@keyframes erusSpin { to { transform:rotate(360deg); } }',
         // Hide old side-menu elements when erus-sidebar is active
         '.side-menu, .side-menu-trigger { display:none !important; }',
         // Collapsed sidebar tooltip element (JS-driven, fixed to viewport)
@@ -693,10 +703,17 @@
     };
 
     window.erusSidebarDoLogout = function() {
+        var modal = document.getElementById('erus-logout-modal');
+        if (modal) modal.classList.remove('open');
+        var ov = document.createElement('div');
+        ov.id = 'erus-logout-overlay';
+        ov.innerHTML = '<div class="erus-lo-spinner"></div><div class="erus-lo-text">Encerrando sessão...</div>';
+        document.body.appendChild(ov);
+        requestAnimationFrame(function() { ov.classList.add('show'); });
         localStorage.removeItem('erus_token');
         localStorage.removeItem('erus_role');
         localStorage.removeItem('erus_user');
-        window.location.href = 'login.html';
+        setTimeout(function() { window.location.href = 'login.html'; }, 800);
     };
 
     window.erusSidebarOpenPrefs = function() {
