@@ -65,6 +65,8 @@ JWT-based (`jsonwebtoken`). `src/auth.js` handles login/token. Protected routes 
 
 Deployed on **Vercel** (see `vercel.json`). The Express app is exported as a module (`module.exports = app`) and also boots a local server when run directly.
 
+**IMPORTANTE:** O sistema está hospedado no Vercel. Alterações no código **só entram em vigor em produção após o deploy**. Editar/salvar arquivos localmente não atualiza o sistema em produção — é necessário fazer o deploy para o Vercel (push para o repositório conectado ou `vercel --prod`) para que as atualizações tenham efeito.
+
 ## TOKEN OPTIMIZATION RULES (STRICT)
 
 - Respostas mínimas: só código ou resposta direta. Zero prosa, zero explicações salvo pedido explícito.
