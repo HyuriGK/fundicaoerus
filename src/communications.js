@@ -48,7 +48,7 @@ router.post('/', getUserId, async (req, res) => {
     if (req.userRole !== 'desenvolvedor' && req.userRole !== 'admin') {
         return res.status(403).json({ success: false, message: 'Acesso negado.' });
     }
-    const { recipient_ids, message, subject, expiry_days } = req.body; 
+    const { recipient_ids, message, subject, expiry_days, expiry_hours, expiry_minutes } = req.body;
 
     if (!message) {
         return res.status(400).json({ success: false, message: 'Mensagem vazia.' });
@@ -56,9 +56,12 @@ router.post('/', getUserId, async (req, res) => {
 
     try {
         let valid_until = null;
-        if (expiry_days && parseInt(expiry_days) > 0) {
-            valid_until = new Date();
-            valid_until.setDate(valid_until.getDate() + parseInt(expiry_days));
+        const d = parseInt(expiry_days) || 0;
+        const h = parseInt(expiry_hours) || 0;
+        const m = parseInt(expiry_minutes) || 0;
+        const totalMs = (((d * 24 + h) * 60) + m) * 60 * 1000;
+        if (totalMs > 0) {
+            valid_until = new Date(Date.now() + totalMs);
         }
 
         // Se for para todos (recipient_ids vazio ou nulo)
@@ -80,10 +83,10 @@ router.post('/', getUserId, async (req, res) => {
             res.json({ success: true, message: 'Mensagens enviadas com sucesso.' });
         }
         
-        logActivity(req.headers['x-user'], 'SEND_MESSAGE', 'communications', { 
-            recipients: recipient_ids ? recipient_ids.length : 'ALL',
+        logActivity(req.headers['x-user'], 'SEND_MESSAGE', 'communications', {
+            recipients: recipient_ids && recipient_ids.length ? recipient_ids.length : 'ALL',
             msg_length: message.length,
-            expiry_days: expiry_days || 'NONE'
+            valid_until: valid_until ? valid_until.toISOString() : 'NONE'
         });
 
     } catch (error) {
