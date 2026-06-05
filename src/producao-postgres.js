@@ -366,6 +366,8 @@ router.post('/meta', async (req, res) => {
                 atualizado_em = CURRENT_TIMESTAMP
         `, [mes_ano, meta]);
 
+        logActivity(req.headers['x-user'] || 'Desconhecido', 'UPDATE_META', 'producao_metas', { mes_ano, meta });
+
         res.json({ success: true });
 
     } catch (error) {
@@ -402,6 +404,7 @@ router.post('/funcionarios', async (req, res) => {
             ? Object.entries(funcionarios)
             : [[setor, quantidade]];
 
+        const alterados = {};
         for (const [s, q] of entries) {
             if (!s || q === undefined) continue;
             await pool.query(`
@@ -410,7 +413,9 @@ router.post('/funcionarios', async (req, res) => {
                 ON CONFLICT (mes_ano, setor)
                 DO UPDATE SET quantidade = EXCLUDED.quantidade, atualizado_em = CURRENT_TIMESTAMP
             `, [mes_ano, s, parseInt(q)]);
+            alterados[s] = parseInt(q);
         }
+        logActivity(req.headers['x-user'] || 'Desconhecido', 'UPDATE_FUNCIONARIOS', 'producao_funcionarios', { mes_ano, funcionarios: alterados });
         res.json({ success: true });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
@@ -418,7 +423,7 @@ router.post('/funcionarios', async (req, res) => {
 });
 
 router.post('/peso', async (req, res) => {
-    const { codigo_peca, peso } = req.body;
+    const { codigo_peca, peso, peso_anterior } = req.body;
 
     if (!codigo_peca || peso === undefined) {
         return res.status(400).json({ success: false, error: 'Código da peça e peso são obrigatórios' });
@@ -426,7 +431,9 @@ router.post('/peso', async (req, res) => {
 
     try {
         const prev = await pool.query('SELECT peso FROM pesos_customizados WHERE codigo = $1', [String(codigo_peca)]);
-        const pesoAnterior = prev.rows.length ? Number(prev.rows[0].peso) : null;
+        const pesoAnterior = (peso_anterior !== undefined && peso_anterior !== null && peso_anterior !== '' && !isNaN(Number(peso_anterior)))
+            ? Number(peso_anterior)
+            : (prev.rows.length ? Number(prev.rows[0].peso) : null);
 
         await pool.query(`
             INSERT INTO pesos_customizados (codigo, peso)
@@ -516,6 +523,12 @@ router.post('/paradas', async (req, res) => {
         const actor = req.headers['x-user'] || usuario || 'Desconhecido';
 
         if (id) {
+            // Captura o estado anterior para auditoria (antes/depois)
+            const beforeRes = await pool.query(
+                "SELECT TO_CHAR(data,'YYYY-MM-DD') AS data, TO_CHAR(inicio,'HH24:MI') AS inicio, TO_CHAR(fim,'HH24:MI') AS fim, setor, maquina, motivo, usuario FROM producao_paradas_ap WHERE id = $1",
+                [id]
+            );
+            const ant = beforeRes.rows[0] || {};
             const result = await pool.query(`
                 UPDATE producao_paradas_ap
                 SET data = $1,
@@ -529,7 +542,11 @@ router.post('/paradas', async (req, res) => {
                 WHERE id = $8
                 RETURNING id
             `, [data, inicio || '', fim || '', setor, maquina || null, motivo, usuario || null, id]);
-            logActivity(actor, 'UPDATE_PARADA', 'producao_paradas_ap', { id, data, setor, maquina: maquina || null, inicio, fim, registrado_por: usuario || null });
+            logActivity(actor, 'UPDATE_PARADA', 'producao_paradas_ap', {
+                id,
+                antes: { data: ant.data, setor: ant.setor, maquina: ant.maquina || null, inicio: ant.inicio, fim: ant.fim, motivo: ant.motivo, registrado_por: ant.usuario || null },
+                depois: { data, setor, maquina: maquina || null, inicio, fim, motivo, registrado_por: usuario || null }
+            });
             return res.json({ success: true, id: result.rows[0]?.id || id });
         }
 

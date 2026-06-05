@@ -20,16 +20,18 @@ router.get('/list', async (req, res) => {
 
 // POST /save - Salva ou atualiza um peso
 router.post('/save', async (req, res) => {
-    const { codigo, peso } = req.body;
+    const { codigo, peso, peso_anterior } = req.body;
 
     if (!codigo || peso === undefined) {
         return res.status(400).json({ error: 'Código e Peso são obrigatórios' });
     }
 
     try {
-        // Captura o valor anterior para auditoria
+        // Valor anterior para auditoria: usa o informado pelo cliente (peso exibido) ou cai pro custom salvo
         const prev = await pool.query('SELECT peso FROM pesos_customizados WHERE codigo = $1', [String(codigo)]);
-        const pesoAnterior = prev.rows.length ? Number(prev.rows[0].peso) : null;
+        const pesoAnterior = (peso_anterior !== undefined && peso_anterior !== null && peso_anterior !== '' && !isNaN(Number(peso_anterior)))
+            ? Number(peso_anterior)
+            : (prev.rows.length ? Number(prev.rows[0].peso) : null);
 
         await pool.query(`
             INSERT INTO pesos_customizados (codigo, peso)

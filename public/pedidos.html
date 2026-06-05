@@ -28,7 +28,7 @@
             });
         }
     </script>
-    <script src="js/activity-logger.js?v=20260601c"></script>
+    <script src="js/activity-logger.js?v=20260605d"></script>
     <script src="js/shared-utils.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script
@@ -3073,10 +3073,12 @@
             // Lock input
             input.disabled = true;
             try {
+                const _prevRaw = (input.defaultValue || '').replace(',', '.');
+                const _pesoAnterior = _prevRaw !== '' && !isNaN(parseFloat(_prevRaw)) ? parseFloat(_prevRaw) : null;
                 const res = await fetch('/api/weights/save', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'x-user': localStorage.getItem('erus_user') || 'Desconhecido' },
-                    body: JSON.stringify({ codigo: prodCode, peso: newWeight })
+                    body: JSON.stringify({ codigo: prodCode, peso: newWeight, peso_anterior: _pesoAnterior })
                 });
                 if (!res.ok) throw new Error('Falha ao salvar');
                 // Atualiza local
@@ -5465,6 +5467,11 @@ function flashConcentracaoBar(barIndex) {
         // ── SELECT GRÁFICOS ───────────────────────────────────────────────────────
         function selectChartFromDropdown(n) {
             showChartRow(n);
+            try {
+                const sel = document.getElementById('chartSelectDropdown');
+                const nome = (sel && sel.options[sel.selectedIndex]) ? sel.options[sel.selectedIndex].text : ('Gráfico ' + n);
+                if (window.erusAudit) window.erusAudit('SELECT_CHART', { grafico: nome });
+            } catch (e) { /* audit não deve quebrar a UI */ }
         }
 
         function activeChartRowN() {
@@ -5813,6 +5820,7 @@ function flashConcentracaoBar(barIndex) {
             if (!isOpen) {
                 container.style.display = 'flex';
                 if (btn) btn.classList.add('active');
+                if (window.erusAudit) window.erusAudit('POSICAO_INDUSTRIAL', {});
                 blurTargets.forEach(el => {
                     el.classList.add('industrial-bg-blur');
                     el._industrialClose = () => toggleIndustrialPosition();

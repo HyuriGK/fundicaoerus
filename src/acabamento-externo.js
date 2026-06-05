@@ -60,17 +60,30 @@ router.post('/', async (req, res) => {
 
             const result = await client.query(query, values);
             const user = req.headers['x-user'] || 'Sistema';
-            logActivity(user, 'ADD_REGISTRO', 'acabamento_externo', { carga: data.carga, codigo: data.codigo, id: result.rows[0].id });
+            // Detecta se é a primeira peça da carga (nova carga) ou item adicionado a uma carga existente
+            const cnt = await client.query('SELECT COUNT(*)::int AS n FROM acabamento_externo_registros WHERE carga = $1', [data.carga]);
+            const isNovaCarga = (cnt.rows[0].n <= 1);
+            logActivity(user, isNovaCarga ? 'NOVA_CARGA' : 'ADD_ITEM_CARGA', 'acabamento_externo', {
+                carga: data.carga, codigo: data.codigo, descricao: data.descricao, quant: data.quant, terceiro: data.terceiro, id: result.rows[0].id
+            });
             return res.status(200).json({ success: true, id: result.rows[0].id });
         }
 
         // 2. TOGGLE RECEBIDO (Marcar/Desmarcar)
         if (action === 'toggle-recebido') {
+            let codigoItem = null, descItem = null;
+            try {
+                const r = await client.query('SELECT codigo, descricao FROM acabamento_externo_registros WHERE id = $1', [data.id]);
+                codigoItem = r.rows[0]?.codigo; descItem = r.rows[0]?.descricao;
+            } catch (e) { /* segue sem detalhes do item */ }
             if (data.checked) {
                 await client.query('INSERT INTO acabamento_externo_recebidos (registro_id, carga) VALUES ($1, $2) ON CONFLICT DO NOTHING', [data.id, data.carga]);
             } else {
                 await client.query('DELETE FROM acabamento_externo_recebidos WHERE registro_id = $1 AND carga = $2', [data.id, data.carga]);
             }
+            logActivity(req.headers['x-user'] || 'Sistema', data.checked ? 'RECEBER_ITEM' : 'DESMARCAR_ITEM', 'acabamento_externo', {
+                carga: data.carga, id: data.id, codigo: codigoItem, descricao: descItem
+            });
             return res.status(200).json({ success: true });
         }
 
@@ -96,6 +109,10 @@ router.post('/', async (req, res) => {
                 return res.status(400).json({ error: 'ID inválido' });
             }
 
+            // Captura dados do item antes de remover (auditoria)
+            const infoRes = await client.query('SELECT carga, codigo, descricao FROM acabamento_externo_registros WHERE id = $1', [registroId]);
+            const info = infoRes.rows[0] || {};
+
             await client.query('BEGIN');
 
             // Remove dependências primeiro
@@ -111,7 +128,7 @@ router.post('/', async (req, res) => {
             }
 
             const user = req.headers['x-user'] || 'Sistema';
-            logActivity(user, 'DELETE_REGISTRO', 'acabamento_externo', { id: registroId, data: data });
+            logActivity(user, 'REMOVE_ITEM_CARGA', 'acabamento_externo', { id: registroId, carga: info.carga, codigo: info.codigo, descricao: info.descricao });
 
             return res.status(200).json({ success: true });
         }
@@ -135,6 +152,7 @@ router.post('/', async (req, res) => {
         // 6. LIMPAR TUDO
         if (action === 'clear-all') {
             await client.query('TRUNCATE acabamento_externo_recebidos, acabamento_externo_registros RESTART IDENTITY');
+            logActivity(req.headers['x-user'] || 'Sistema', 'LIMPAR_TUDO', 'acabamento_externo', { escopo: 'registros e recebidos' });
             return res.status(200).json({ success: true });
         }
 
@@ -185,6 +203,9 @@ router.post('/', async (req, res) => {
             await client.query("SELECT setval('acabamento_externo_registros_id_seq', (SELECT MAX(id) FROM acabamento_externo_registros))");
 
             await client.query('COMMIT');
+            logActivity(req.headers['x-user'] || 'Sistema', 'IMPORTAR_BACKUP', 'acabamento_externo', {
+                registros: (data.registros || []).length, itens: (data.itens || []).length
+            });
             return res.status(200).json({ success: true });
         }
 

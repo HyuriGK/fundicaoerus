@@ -34,6 +34,9 @@
         }
     }
 
+    // Exposto globalmente para auditoria de ações do usuário em qualquer tela
+    window.erusAudit = logActivity;
+
     // --- SISTEMA DE BLOQUEIO DE PÁGINAS (ENFORCEMENT) ---
     async function checkPageLock() {
         const page = window.location.pathname.split('/').pop() || 'index.html';
