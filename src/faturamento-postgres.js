@@ -3,6 +3,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../lib/db');
+const { logActivity } = require('./lib/logger');
 
 // --- INIT PREFERENCES TABLE ---
 (async () => {
@@ -410,6 +411,9 @@ router.post('/toggle-exclusion', async (req, res) => {
         }
 
         await client.query('COMMIT');
+        logActivity(req.headers['x-user'] || 'Desconhecido', excluded ? 'EXCLUIR_ITEM_FAT' : 'INCLUIR_ITEM_FAT', 'faturamento_firebird', {
+            cliente: req.body.cliente_nome || null, nota_fiscal, codigo_item, pedido: req.body.pedido || null, quantidade: req.body.quantidade
+        });
         return res.json({ success: true });
     } catch (error) {
         await client.query('ROLLBACK');

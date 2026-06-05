@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../lib/db');
+const { logActivity } = require('./lib/logger');
 
 function getUser(req) {
     return String(req.headers['x-user'] || req.query.user || (req.body && req.body.user) || 'Desconhecido').trim() || 'Desconhecido';
@@ -71,6 +72,7 @@ router.post('/tasks', async (req, res) => {
                        position, created_at, updated_at, completed_at`,
             [user, String(title).trim(), description, status, priority, due_date || null, tags, posResult.rows[0].next_position]
         );
+        logActivity(user, 'ADD_TAREFA', 'planner_tasks', { id: result.rows[0].id, titulo: String(title).trim(), prioridade: priority });
         res.json({ success: true, data: result.rows[0] });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
@@ -122,6 +124,8 @@ router.patch('/tasks/:id/move', async (req, res) => {
              WHERE id=$3 AND owner_username=$4`,
             [status, position, req.params.id, user]
         );
+        const STATUS_LABEL = { todo: 'A Fazer', doing: 'Fazendo', done: 'Concluído' };
+        logActivity(user, status === 'done' ? 'CONCLUIR_TAREFA' : 'MOVER_TAREFA', 'planner_tasks', { id: req.params.id, status: STATUS_LABEL[status] || status });
         res.json({ success: true });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
@@ -160,7 +164,9 @@ router.delete('/tasks/:id', async (req, res) => {
     try {
         await ensureTable(client);
         const user = getUser(req);
+        const prev = await client.query('SELECT title FROM planner_tasks WHERE id=$1 AND owner_username=$2', [req.params.id, user]);
         await client.query('DELETE FROM planner_tasks WHERE id=$1 AND owner_username=$2', [req.params.id, user]);
+        logActivity(user, 'DELETE_TAREFA', 'planner_tasks', { id: req.params.id, titulo: prev.rows[0]?.title || null });
         res.json({ success: true });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });

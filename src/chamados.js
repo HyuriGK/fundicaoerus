@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../lib/db');
+const { logActivity } = require('./lib/logger');
 
 async function ensureTable(client) {
     await client.query(`
@@ -61,6 +62,7 @@ router.post('/', async (req, res) => {
             'INSERT INTO ti_chamados (titulo, descricao, urgencia, usuario, anexo_base64, anexo_nome) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
             [titulo, descricao || '', urgencia || 'media', usuario, anexo_base64 || null, anexo_nome || null]
         );
+        logActivity(usuario || req.headers['x-user'] || 'Sistema', 'ABRIR_CHAMADO', 'ti_chamados', { id: r.rows[0].id, titulo, urgencia: urgencia || 'media' });
         res.json(r.rows[0]);
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -81,6 +83,7 @@ router.patch('/:id', async (req, res) => {
             [status, resolucao || null, resolvido_em, id]
         );
         if (r.rows.length === 0) return res.status(404).json({ error: 'Chamado não encontrado' });
+        logActivity(req.headers['x-user'] || 'Sistema', 'ATUALIZAR_CHAMADO', 'ti_chamados', { id, status, titulo: r.rows[0].titulo });
         res.json(r.rows[0]);
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -94,6 +97,7 @@ router.delete('/:id', async (req, res) => {
     const client = await pool.connect();
     try {
         await client.query('DELETE FROM ti_chamados WHERE id=$1', [req.params.id]);
+        logActivity(req.headers['x-user'] || 'Sistema', 'DELETE_CHAMADO', 'ti_chamados', { id: req.params.id });
         res.json({ ok: true });
     } catch (e) {
         res.status(500).json({ error: e.message });

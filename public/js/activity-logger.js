@@ -56,6 +56,7 @@
                     }
                     // Bloqueio manual (independente do sync) — apenas não-devs
                     if (lock.is_locked && role !== 'desenvolvedor' && role !== 'admin') {
+                        logActivity('ACESSO_BLOQUEADO', { motivo: lock.lock_reason || 'manutenção' });
                         if (lock.lock_reason === 'development') {
                             showDevelopmentOverlay();
                         } else {
@@ -992,8 +993,26 @@
 
         // Se o tempo de inatividade passou do limite — redireciona direto sem overlay
         if (agora - parseInt(ultimaAtividade) > SESSION_TIMEOUT) {
+            logSessionTimeout(agora - parseInt(ultimaAtividade));
             redirecionarLogin();
         }
+    }
+
+    // Registra o timeout de sessão na auditoria (sendBeacon sobrevive ao redirect/limpeza do storage)
+    function logSessionTimeout(inativoMs) {
+        try {
+            const payload = JSON.stringify({
+                user_name: getUserName(),
+                action: 'SESSION_TIMEOUT',
+                table_name: window.location.pathname.split('/').pop() || 'index.html',
+                details: { inativo_min: Math.round((inativoMs || 0) / 60000) }
+            });
+            if (navigator.sendBeacon) {
+                navigator.sendBeacon('/api/audit-logger/log', new Blob([payload], { type: 'application/json' }));
+            } else {
+                fetch('/api/audit-logger/log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload, keepalive: true });
+            }
+        } catch (e) { /* não bloqueia o logout */ }
     }
 
     function atualizarAtividade() {

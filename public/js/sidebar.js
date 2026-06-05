@@ -738,10 +738,15 @@
     };
 
     window.erusSidebarSetTheme = function(theme) {
+        var anterior = localStorage.getItem('erus_theme') || 'dark';
         localStorage.setItem('erus_theme', theme);
         if (typeof ErusTheme !== 'undefined') ErusTheme.apply(theme);
         else document.documentElement.setAttribute('data-theme', theme);
         erusSidebarUpdateThemeUI();
+        if (theme !== anterior && window.erusAudit) {
+            var nomes = { dark: 'Escuro', light: 'Claro', classic: 'Clássico' };
+            window.erusAudit('TROCAR_TEMA', { de: nomes[anterior] || anterior, para: nomes[theme] || theme });
+        }
     };
 
     window.erusSidebarUpdateThemeUI = function() {

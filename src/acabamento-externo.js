@@ -146,6 +146,9 @@ router.post('/', async (req, res) => {
                     [data.carga, data.value || null]
                 );
             }
+            logActivity(req.headers['x-user'] || 'Sistema', 'UPDATE_PREVISAO_ENTREGA', 'acabamento_externo', {
+                carga: data.carga, campo: data.field === 'data_entrega' ? 'Data de Entrega' : 'Previsão de Entrega', valor: data.value || null
+            });
             return res.status(200).json({ success: true });
         }
 
