@@ -598,7 +598,8 @@
                         if (blockedLink) blockedLink.classList.add('erus-role-hidden');
                     }
                     if (!l.is_locked || l.lock_reason !== 'development') return;
-                    var link = document.querySelector('#erus-sidebar .erus-nav-link[href="' + l.page_id + '"]');
+                    var link = document.querySelector('#erus-sidebar .erus-nav-link[href="' + l.page_id + '"]') ||
+                               document.querySelector('#erus-sidebar .erus-nav-link[data-page-key="' + l.page_id + '"]');
                     if (!link || link.querySelector('.erus-dev-tag')) return;
                     var tag = document.createElement('span');
                     tag.className = 'erus-dev-tag';
