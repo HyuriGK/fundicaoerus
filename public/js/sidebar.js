@@ -53,6 +53,8 @@
         '#erus-sidebar .erus-nav-link.active::before { content:""; position:absolute; left:0; top:50%; transform:translateY(-50%); width:3px; height:18px; border-radius:0 3px 3px 0; background:#fbbf24; box-shadow:0 0 8px rgba(251,191,36,0.4); }',
         '#erus-sidebar .erus-nav-link i { width:22px; margin-right:10px; text-align:center; font-size:0.85rem; transition:all 0.2s; opacity:0.7; flex-shrink:0; }',
         '#erus-sidebar .erus-nav-link:hover i, #erus-sidebar .erus-nav-link.active i { opacity:1; }',
+        // DEV tag (telas em desenvolvimento)
+        '#erus-sidebar .erus-dev-tag { margin-left:8px; padding:1px 6px; font-size:0.56rem; font-weight:800; letter-spacing:0.06em; line-height:1.5; border-radius:5px; background:rgba(139,92,246,0.16); color:#a78bfa; border:1px solid rgba(139,92,246,0.45); text-transform:uppercase; flex-shrink:0; }',
         // Group separator
         '#erus-sidebar .erus-nav-group-sep { margin:16px 0 6px; padding:4px 12px; display:flex; align-items:center; cursor:pointer; border-radius:6px; transition:background 0.2s; overflow:hidden; }',
         '#erus-sidebar .erus-nav-group-label { font-size:0.6rem; text-transform:uppercase; letter-spacing:0.15em; color:#52525b; font-weight:800; white-space:nowrap; }',
@@ -331,14 +333,6 @@
                 '<a href="relatorio.html" data-stip="Relatorios" class="erus-nav-link' + isActive('relatorio.html') + '">' +
                     '<i class="fa-solid fa-file-lines"></i><span>Relatorios</span></a>' +
             '</div>' +
-            // EM DESENVOLVIMENTO
-            '<div id="erus-sep-desenvolvimento" class="erus-nav-group-sep" data-stip="Em desenvolvimento" onclick="erusSidebarToggleGroup(\'eg-desenvolvimento\')" style="display:none;">' +
-                '<i class="fas fa-screwdriver-wrench" style="font-size:0.8rem;color:#ef4444;margin-right:8px;flex-shrink:0;"></i>' +
-                '<span class="erus-nav-group-label" style="color:#ef4444;">Em desenvolvimento</span>' +
-                '<div class="erus-nav-group-line"></div>' +
-                '<i class="fa-solid fa-plus" id="icon-eg-desenvolvimento"></i>' +
-            '</div>' +
-            '<div id="eg-desenvolvimento" class="erus-nav-group-wrapper collapsed"></div>' +
         '</ul>' +
         '<div class="erus-sidebar-footer">' +
             '<a href="#" id="erus-admin-btn" data-stip="Sistema Admin" class="erus-nav-link" onclick="erusSidebarOpenAdmin()" style="display:none;">' +
@@ -596,10 +590,6 @@
             .then(function(r) { return r.json(); })
             .then(function(result) {
                 if (!result.success) return;
-                var devGroup = document.getElementById('eg-desenvolvimento');
-                var devSep = document.getElementById('erus-sep-desenvolvimento');
-                if (!devGroup || !devSep) return;
-                var hasLocked = false;
                 var blocked = {};
                 result.data.forEach(function(l) {
                     if (l.is_locked) blocked[l.page_id] = true;
@@ -609,13 +599,11 @@
                     }
                     if (!l.is_locked || l.lock_reason !== 'development') return;
                     var link = document.querySelector('#erus-sidebar .erus-nav-link[href="' + l.page_id + '"]');
-                    if (!link) return;
-                    if (!link.dataset.originalGroup) {
-                        var parent = link.closest('.erus-nav-group-wrapper');
-                        if (parent) link.dataset.originalGroup = parent.id;
-                    }
-                    devGroup.appendChild(link);
-                    hasLocked = true;
+                    if (!link || link.querySelector('.erus-dev-tag')) return;
+                    var tag = document.createElement('span');
+                    tag.className = 'erus-dev-tag';
+                    tag.textContent = 'DEV';
+                    link.appendChild(tag);
                 });
                 if (restrictedPageMap[role]) {
                     var currentPage = window.location.pathname.split('/').pop() || 'index.html';
@@ -624,7 +612,6 @@
                         window.location.href = fallback;
                     }
                 }
-                if (hasLocked && !restrictedPageMap[role]) devSep.style.display = 'flex';
             })
             .catch(function() {});
 
@@ -655,10 +642,7 @@
         // After BOTH fetches complete, hide groups whose links are all blocked
         // (page-locks may have moved links between groups, so we must wait for both)
         Promise.all([pageLocksPromise, permissionsPromise]).then(function() {
-            // Apenas o grupo dinâmico "Em desenvolvimento" é controlado por page-locks; os demais seguem o painel
-            var skipGroups = { 'eg-desenvolvimento': true };
             document.querySelectorAll('#erus-sidebar .erus-nav-group-wrapper').forEach(function(wrapper) {
-                if (skipGroups[wrapper.id]) return;
                 var links = wrapper.querySelectorAll('.erus-nav-link');
                 // Hide if empty (links moved away by page-locks) OR all links are blocked
                 var allHidden = links.length === 0 || Array.from(links).every(function(l) {
