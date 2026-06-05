@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../lib/db');
+const { logActivity } = require('./lib/logger');
 
 let _pageLocksMigrated = false;
 async function ensureSyncColumns() {
@@ -51,6 +52,10 @@ router.post('/toggle', checkDev, async (req, res) => {
             ON CONFLICT (page_id)
             DO UPDATE SET is_locked = EXCLUDED.is_locked, lock_reason = EXCLUDED.lock_reason, updated_at = CURRENT_TIMESTAMP
         `, [page_id, is_locked, reason]);
+
+        logActivity(req.headers['x-user'] || 'Desconhecido', is_locked ? 'LOCK_PAGE' : 'UNLOCK_PAGE', 'page_locks', {
+            page_id, lock_reason: reason
+        });
 
         res.json({ success: true, message: `Página ${page_id} ${is_locked ? 'bloqueada' : 'desbloqueada'} com sucesso.` });
     } catch (error) {

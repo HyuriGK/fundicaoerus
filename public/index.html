@@ -5349,16 +5349,16 @@
                                 <tr>
 
 
-                                    <th style="width: 180px;">Data/Hora</th>
+                                    <th style="width: 170px;">Data/Hora</th>
 
 
-                                    <th style="width: 120px;">Usuário</th>
+                                    <th style="width: 130px;">Usuário</th>
 
 
-                                    <th style="width: 120px;">Ação</th>
+                                    <th style="width: 170px;">Ação</th>
 
 
-                                    <th style="width: 150px;">Tabela</th>
+                                    <th>Detalhes</th>
 
 
                                 </tr>
@@ -6944,6 +6944,56 @@
                 }
 
 
+                function formatLogAction(log) {
+                    const MAP = {
+                        LOGIN:              { label: 'Login',              icon: 'fa-right-to-bracket', color: '#10b981' },
+                        UPDATE_PESO:        { label: 'Alterou peso',       icon: 'fa-weight-hanging',   color: '#f59e0b' },
+                        ADD_PARADA:         { label: 'Registrou parada',   icon: 'fa-circle-stop',      color: '#ef4444' },
+                        UPDATE_PARADA:      { label: 'Editou parada',      icon: 'fa-pen',              color: '#fbbf24' },
+                        DELETE_PARADA:      { label: 'Removeu parada',     icon: 'fa-trash',            color: '#ef4444' },
+                        LOCK_PAGE:          { label: 'Bloqueou página',    icon: 'fa-lock',             color: '#ef4444' },
+                        UNLOCK_PAGE:        { label: 'Liberou página',     icon: 'fa-lock-open',        color: '#10b981' },
+                        SEND_MESSAGE:       { label: 'Enviou mensagem',    icon: 'fa-bullhorn',         color: '#3b82f6' },
+                        UPDATE_ROLE:        { label: 'Alterou cargo',      icon: 'fa-user-gear',        color: '#a855f7' },
+                        APPROVE_USER:       { label: 'Aprovou usuário',    icon: 'fa-user-check',       color: '#10b981' },
+                        BAN_USER:           { label: 'Baniu usuário',      icon: 'fa-user-slash',       color: '#ef4444' },
+                        BLOCK_USER:         { label: 'Bloqueou usuário',   icon: 'fa-user-lock',        color: '#ef4444' },
+                        KICK_USER:          { label: 'Expulsou usuário',   icon: 'fa-user-xmark',       color: '#ef4444' },
+                        ADD_REGISTRO:       { label: 'Adicionou registro', icon: 'fa-plus',             color: '#10b981' },
+                        DELETE_REGISTRO:    { label: 'Removeu registro',   icon: 'fa-trash',            color: '#ef4444' }
+                    };
+                    const meta = MAP[log.action] || { label: log.action, icon: 'fa-circle-info', color: '#a1a1aa' };
+                    let d = log.details;
+                    if (typeof d === 'string') { try { d = JSON.parse(d); } catch { d = null; } }
+                    let details = log.table_name || '-';
+                    if (d) {
+                        const fmtDate = (s) => s ? new Date(String(s).slice(0,10) + 'T00:00:00').toLocaleDateString('pt-BR') : '?';
+                        switch (log.action) {
+                            case 'UPDATE_PESO':
+                                details = `Código ${d.codigo}: ${d.peso_anterior ?? '—'} → <strong style="color:#fafafa;">${d.peso_novo}</strong> kg`; break;
+                            case 'ADD_PARADA':
+                            case 'UPDATE_PARADA':
+                                details = `${d.setor || '?'}${d.maquina ? ' / ' + d.maquina : ''} — ${fmtDate(d.data)} (${d.inicio || '?'}–${d.fim || '?'})${d.registrado_por ? ' · reg.: ' + d.registrado_por : ''}`; break;
+                            case 'DELETE_PARADA':
+                                details = `${d.setor || '?'} — ${fmtDate(d.data)}${d.registrado_por ? ' · reg.: ' + d.registrado_por : ''}`; break;
+                            case 'LOCK_PAGE':
+                            case 'UNLOCK_PAGE':
+                                details = `Página <strong style="color:#fafafa;">${d.page_id}</strong>${d.lock_reason ? ' (' + d.lock_reason + ')' : ''}`; break;
+                            case 'SEND_MESSAGE':
+                                details = `${d.recipients === 'ALL' ? 'Todos' : (d.recipients + ' destinatário(s)')}`; break;
+                            case 'UPDATE_ROLE':
+                                details = `${d.affected_user} → ${d.new_role}`; break;
+                            case 'APPROVE_USER': case 'BAN_USER': case 'BLOCK_USER': case 'KICK_USER':
+                                details = `${d.affected_user || ''}`; break;
+                            case 'LOGIN':
+                                details = `${d.name || ''}${d.role ? ' (' + d.role + ')' : ''}`; break;
+                            default:
+                                details = Object.entries(d).map(([k, v]) => `${k}: ${v}`).join(', ');
+                        }
+                    }
+                    return { ...meta, details };
+                }
+
                 function renderAdminLogs(logs) {
 
 
@@ -6970,6 +7020,7 @@
 
                             const date = new Date(log.created_at).toLocaleString('pt-BR');
 
+                            const info = formatLogAction(log);
 
                             return `
 
@@ -6983,10 +7034,10 @@
                             <td style="font-weight: 500; color: var(--color-primary);">${log.user_name}</td>
 
 
-                            <td>${log.action}</td>
+                            <td><span style="display:inline-flex;align-items:center;gap:6px;font-weight:600;color:${info.color};"><i class="fa-solid ${info.icon}"></i>${info.label}</span></td>
 
 
-                            <td>${log.table_name || '-'}</td>
+                            <td style="color:#a1a1aa;">${info.details}</td>
 
 
                         </tr>
@@ -7213,7 +7264,10 @@
                                 'Content-Type': 'application/json',
 
 
-                                'x-role': localStorage.getItem('erus_role')
+                                'x-role': localStorage.getItem('erus_role'),
+
+
+                                'x-user': localStorage.getItem('erus_user') || 'Desconhecido'
 
 
                             },

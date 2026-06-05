@@ -2,6 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../lib/db');
+const { logActivity } = require('./lib/logger');
 
 let paradasTableReady = false;
 async function ensureParadasTable() {
@@ -424,12 +425,21 @@ router.post('/peso', async (req, res) => {
     }
 
     try {
+        const prev = await pool.query('SELECT peso FROM pesos_customizados WHERE codigo = $1', [String(codigo_peca)]);
+        const pesoAnterior = prev.rows.length ? Number(prev.rows[0].peso) : null;
+
         await pool.query(`
             INSERT INTO pesos_customizados (codigo, peso)
             VALUES ($1, $2)
             ON CONFLICT (codigo)
             DO UPDATE SET peso = EXCLUDED.peso
         `, [String(codigo_peca), parseFloat(peso)]);
+
+        logActivity(req.headers['x-user'] || 'Desconhecido', 'UPDATE_PESO', 'pesos_customizados', {
+            codigo: String(codigo_peca),
+            peso_anterior: pesoAnterior,
+            peso_novo: parseFloat(peso)
+        });
 
         res.json({ success: true, message: 'Peso salvo com sucesso' });
     } catch (error) {
@@ -503,6 +513,8 @@ router.post('/paradas', async (req, res) => {
             return res.status(400).json({ success: false, error: 'data, setor e motivo são obrigatórios' });
         }
 
+        const actor = req.headers['x-user'] || usuario || 'Desconhecido';
+
         if (id) {
             const result = await pool.query(`
                 UPDATE producao_paradas_ap
@@ -517,6 +529,7 @@ router.post('/paradas', async (req, res) => {
                 WHERE id = $8
                 RETURNING id
             `, [data, inicio || '', fim || '', setor, maquina || null, motivo, usuario || null, id]);
+            logActivity(actor, 'UPDATE_PARADA', 'producao_paradas_ap', { id, data, setor, maquina: maquina || null, inicio, fim, registrado_por: usuario || null });
             return res.json({ success: true, id: result.rows[0]?.id || id });
         }
 
@@ -525,6 +538,8 @@ router.post('/paradas', async (req, res) => {
             VALUES ($1, NULLIF($2, '')::time, NULLIF($3, '')::time, $4, $5, $6, $7)
             RETURNING id
         `, [data, inicio || '', fim || '', setor, maquina || null, motivo, usuario || null]);
+
+        logActivity(actor, 'ADD_PARADA', 'producao_paradas_ap', { id: result.rows[0].id, data, setor, maquina: maquina || null, inicio, fim, registrado_por: usuario || null });
 
         res.json({ success: true, id: result.rows[0].id });
     } catch (error) {
@@ -536,7 +551,13 @@ router.post('/paradas', async (req, res) => {
 router.delete('/paradas/:id', async (req, res) => {
     try {
         await ensureParadasTable();
+        // Captura a parada antes de remover (para auditoria)
+        const prev = await pool.query('SELECT data, setor, maquina, inicio, fim, motivo, usuario FROM producao_paradas_ap WHERE id = $1', [req.params.id]);
         await pool.query('DELETE FROM producao_paradas_ap WHERE id = $1', [req.params.id]);
+        const p = prev.rows[0] || {};
+        logActivity(req.headers['x-user'] || 'Desconhecido', 'DELETE_PARADA', 'producao_paradas_ap', {
+            id: req.params.id, data: p.data, setor: p.setor, maquina: p.maquina, registrado_por: p.usuario || null
+        });
         res.json({ success: true });
     } catch (error) {
         console.error('Erro ao remover parada:', error);

@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../lib/db'); // Use shared pool configuration
+const { logActivity } = require('./lib/logger');
 
 // GET /list - Retorna todos os pesos customizados
 router.get('/list', async (req, res) => {
@@ -26,12 +27,22 @@ router.post('/save', async (req, res) => {
     }
 
     try {
+        // Captura o valor anterior para auditoria
+        const prev = await pool.query('SELECT peso FROM pesos_customizados WHERE codigo = $1', [String(codigo)]);
+        const pesoAnterior = prev.rows.length ? Number(prev.rows[0].peso) : null;
+
         await pool.query(`
-            INSERT INTO pesos_customizados (codigo, peso) 
+            INSERT INTO pesos_customizados (codigo, peso)
             VALUES ($1, $2)
-            ON CONFLICT (codigo) 
+            ON CONFLICT (codigo)
             DO UPDATE SET peso = EXCLUDED.peso
         `, [String(codigo), Number(peso)]);
+
+        logActivity(req.headers['x-user'] || 'Desconhecido', 'UPDATE_PESO', 'pesos_customizados', {
+            codigo: String(codigo),
+            peso_anterior: pesoAnterior,
+            peso_novo: Number(peso)
+        });
 
         res.json({ success: true, message: 'Peso salvo com sucesso' });
     } catch (err) {
