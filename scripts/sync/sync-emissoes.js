@@ -10,8 +10,32 @@ function cleanConnectionString(str) {
 
 const pgPool = new Pool({
     connectionString: cleanConnectionString(process.env.DATABASE_URL),
-    ssl: { rejectUnauthorized: false }
+    ssl: { rejectUnauthorized: false },
+    connectionTimeoutMillis: 15000,
+    // Aborta queries presas (ex.: lock segurado por sessão antiga) em vez de travar o ciclo
+    statement_timeout: 120000,
+    // Libera automaticamente sessões mortas no meio de uma transação (evita lock persistente entre execuções)
+    idle_in_transaction_session_timeout: 60000
 });
+
+// Timeout por query do Firebird — impede que uma query sem retorno congele a sincronização
+const FB_QUERY_TIMEOUT_MS = 180000;
+function fbQuery(db, sql, label) {
+    return new Promise((resolve, reject) => {
+        let done = false;
+        const t = setTimeout(() => {
+            if (done) return;
+            done = true;
+            reject(new Error(`Timeout (${FB_QUERY_TIMEOUT_MS / 1000}s) na query Firebird: ${label}`));
+        }, FB_QUERY_TIMEOUT_MS);
+        db.query(sql, (err, res) => {
+            if (done) return;
+            done = true;
+            clearTimeout(t);
+            if (err) reject(err); else resolve(res);
+        });
+    });
+}
 
 async function syncEmissoes() {
     console.log('🚀 Iniciando sincronização de EMISSÕES (Histórico 2025/2026)...');
@@ -22,7 +46,20 @@ async function syncEmissoes() {
 
     try {
         pgClient = await pgPool.connect();
-        
+
+        // Encerra sessões zumbis (mortas no meio de uma transação) que possam estar
+        // segurando lock em firebird_sync_emissoes e travando o CREATE TABLE/INSERT.
+        try {
+            const killed = await pgClient.query(`
+                SELECT pg_terminate_backend(pid) FROM pg_stat_activity
+                WHERE datname = current_database()
+                  AND state = 'idle in transaction'
+                  AND pid <> pg_backend_pid()
+                  AND state_change < now() - interval '2 minutes'
+            `);
+            if (killed.rowCount > 0) console.log(`🧟 ${killed.rowCount} sessão(ões) ociosa(s) em transação encerrada(s).`);
+        } catch (e) { console.warn('⚠️ Não foi possível verificar sessões ociosas:', e.message); }
+
         await pgClient.query(`
             CREATE TABLE IF NOT EXISTS firebird_sync_emissoes (
                 sync_key TEXT PRIMARY KEY,
@@ -31,12 +68,15 @@ async function syncEmissoes() {
             );
         `);
 
-        db = await new Promise((resolve, reject) => {
-            Firebird.attach(FIREBIRD_OPTIONS, (err, d) => {
-                if (err) reject(err);
-                else resolve(d);
-            });
-        });
+        db = await Promise.race([
+            new Promise((resolve, reject) => {
+                Firebird.attach(FIREBIRD_OPTIONS, (err, d) => {
+                    if (err) reject(err);
+                    else resolve(d);
+                });
+            }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout (30s) ao conectar no Firebird')), 30000))
+        ]);
         console.log('✅ Conectado ao Firebird');
 
         const query = `
@@ -78,12 +118,7 @@ async function syncEmissoes() {
             AND UPPER(D.STATUS_DESC_PED) <> 'CANCELADO'
         `;
 
-        const results = await new Promise((resolve, reject) => {
-            db.query(query, (err, res) => {
-                if (err) reject(err);
-                else resolve(res);
-            });
-        });
+        const results = await fbQuery(db, query, 'emissoes-principal');
 
         console.log(`📊 ${results.length} registros de emissão encontrados.`);
 
@@ -97,12 +132,7 @@ async function syncEmissoes() {
                 WHERE PP.PPR_ANO_PCPR IN (2025, 2026)
                   AND PR.STATUS_PCP NOT IN ('C', 'E')
             `;
-            const links = await new Promise((resolve, reject) => {
-                db.query(linksQuery, (err, res) => {
-                    if (err) reject(err);
-                    else resolve(res);
-                });
-            });
+            const links = await fbQuery(db, linksQuery, 'vinculos-pedido-op');
 
             const linksMap = {};
             links.forEach(l => {
@@ -154,12 +184,7 @@ async function syncEmissoes() {
                       AND PRODUTO_PCP IN (${prodList})
                     ORDER BY DATA_PCP DESC
                 `;
-                const openOps = await new Promise((resolve, reject) => {
-                    db.query(openOpsQuery, (err, res) => {
-                        if (err) reject(err);
-                        else resolve(res);
-                    });
-                });
+                const openOps = await fbQuery(db, openOpsQuery, 'ops-abertas');
 
                 openOps.forEach(op => {
                     const pCode = String(op.PRODUTO_PCP).trim();
@@ -199,12 +224,7 @@ async function syncEmissoes() {
                           AND DATA_PCS >= '2025-01-01' AND DATA_PCS <= '2026-12-31'
                         GROUP BY 1, 2
                     `;
-                    const pointingRows = await new Promise((resolve, reject) => {
-                        db.query(pointingQuery, (err, res) => {
-                            if (err) reject(err);
-                            else resolve(res);
-                        });
-                    });
+                    const pointingRows = await fbQuery(db, pointingQuery, 'apontamentos');
 
                     pointingRows.forEach(row => {
                         if (!pointingsMap[row.CODIGO_PCS]) pointingsMap[row.CODIGO_PCS] = {};
