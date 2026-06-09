@@ -936,9 +936,12 @@
         };
 
         if (rolePermissions[role]) {
-            const allowedPages = rolePermissions[role];
+            const stripAccents = s => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '');
+            const roleNorm = stripAccents(role);
+            const allowedPages = rolePermissions[role].slice();
             const alwaysAllowed = ['index.html', 'solicitarchamados.html'];
-            let blocked = {};
+            let blocked = {};      // page-locks (manutenção/dev)
+            let permBlocked = {};  // bloqueado no painel admin
             try {
                 const response = await fetch('/api/page-locks');
                 const result = await response.json();
@@ -948,16 +951,29 @@
                     });
                 }
             } catch (e) {}
+            // Painel admin aditivo: telas liberadas explicitamente para o role tornam-se acessíveis
+            try {
+                const presp = await fetch('/api/permissions', { cache: 'no-store' });
+                const prows = await presp.json();
+                if (Array.isArray(prows)) {
+                    prows.forEach(r => {
+                        if (stripAccents((r.role || '').toLowerCase()) !== roleNorm) return;
+                        const isBlocked = (r.allowed === false || r.allowed === 'false' || r.allowed === 'f' || r.allowed === 0);
+                        if (isBlocked) permBlocked[r.page_key] = true;
+                        else if (allowedPages.indexOf(r.page_key) === -1) allowedPages.push(r.page_key);
+                    });
+                }
+            } catch (e) {}
+
+            const pickFallback = () => allowedPages.find(p => !blocked[p] && !permBlocked[p]) || 'index.html';
 
             if (blocked[page] && !alwaysAllowed.includes(page)) {
-                const fallback = allowedPages.find(allowedPage => !blocked[allowedPage]) || 'index.html';
-                window.location.replace(fallback);
+                window.location.replace(pickFallback());
                 return true;
             }
 
-            if (!alwaysAllowed.includes(page) && !allowedPages.includes(page)) {
-                const fallback = allowedPages.find(allowedPage => !blocked[allowedPage]) || 'index.html';
-                window.location.replace(fallback);
+            if (!alwaysAllowed.includes(page) && (!allowedPages.includes(page) || permBlocked[page])) {
+                window.location.replace(pickFallback());
                 return true;
             }
         }
