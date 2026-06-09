@@ -221,6 +221,8 @@
             '<div id="eg-engenharia" class="erus-nav-group-wrapper collapsed">' +
                 '<a href="fichatecnica.html" data-stip="Ficha Técnica" class="erus-nav-link' + isActive('fichatecnica.html') + '">' +
                     '<i class="fa-solid fa-file-contract"></i><span>Ficha Técnica</span></a>' +
+                '<a href="fichatecfusao.html" data-stip="Ficha de Fusão" class="erus-nav-link erus-role-hidden' + isActive('fichatecfusao.html') + '">' +
+                    '<i class="fa-solid fa-fire"></i><span>Ficha de Fusão</span></a>' +
             '</div>' +
             // FATURAMENTO
             '<div class="erus-nav-group-sep" data-stip="Faturamento" onclick="erusSidebarToggleGroup(\'eg-faturamento\')">' +
@@ -530,6 +532,7 @@
             allowedPages.forEach(function(allowedPage) {
                 var allowedLink = document.querySelector('#erus-sidebar .erus-nav-link[href="' + allowedPage + '"]');
                 if (!allowedLink) return;
+                allowedLink.classList.remove('erus-role-hidden');
                 var parentGroup = allowedLink.closest('.erus-nav-group-wrapper');
                 if (parentGroup) {
                     parentGroup.classList.remove('erus-role-hidden');
