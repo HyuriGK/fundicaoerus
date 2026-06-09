@@ -325,6 +325,17 @@ function runBat(bat) {
 
         const child = spawn('cmd.exe', ['/c', path.join(ROOT_DIR, bat.file)], { stdio: ['ignore','pipe','pipe'] });
 
+        // Watchdog: se um modulo travar (rede/query sem retorno), encerra e segue o ciclo
+        let timedOut = false;
+        const MAX_MS = 8 * 60 * 1000; // 8 minutos por modulo
+        const watchdog = setTimeout(() => {
+            timedOut = true;
+            logEvent(bat.name, `Timeout - modulo encerrado por exceder ${MAX_MS / 60000} min`, true);
+            // Mata a arvore (cmd.exe -> node) para nao deixar processo orfao segurando conexoes
+            try { spawn('taskkill', ['/pid', String(child.pid), '/t', '/f']); }
+            catch (e) { try { child.kill(); } catch (_) {} }
+        }, MAX_MS);
+
         child.stdout.on('data', data => {
             data.toString().split('\n').forEach(line => {
                 const l = line.trim();
@@ -365,7 +376,10 @@ function runBat(bat) {
         });
 
         child.on('close', code => {
-            if (code !== 0 && scriptState[bat.name] !== 'DONE') {
+            clearTimeout(watchdog);
+            if (timedOut) {
+                scriptState[bat.name] = 'ERROR';
+            } else if (code !== 0 && scriptState[bat.name] !== 'DONE') {
                 scriptState[bat.name] = 'ERROR';
                 logEvent(bat.name, `Falha - codigo de saida ${code}`, true);
             } else {

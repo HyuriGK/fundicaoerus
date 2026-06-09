@@ -41,11 +41,20 @@ const req = https.request(options, (res) => {
         } catch (e) {
             console.error('[ERRO] Resposta inválida:', body);
         }
+        process.exit(0);
     });
+});
+
+// Timeout: lock/unlock é best-effort; não pode travar a sincronização se o Vercel não responder
+req.setTimeout(15000, () => {
+    console.error('[ERRO] Timeout ao conectar ao servidor de page-lock.');
+    req.destroy();
+    process.exit(0);
 });
 
 req.on('error', (e) => {
     console.error(`[ERRO] Não foi possível conectar ao servidor: ${e.message}`);
+    process.exit(0);
 });
 
 req.write(data);
