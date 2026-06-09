@@ -1,3 +1,4 @@
+require('dotenv').config({ path: require('path').join(__dirname, '..', '..', '.env.local') });
 const { Firebird, options: FIREBIRD_OPTIONS } = require('../../lib/firebird-helper');
 const { Pool } = require('pg');
 
@@ -368,7 +369,10 @@ async function syncEmissoes() {
         `);
 
     } catch (err) {
-        console.error('❌ ERRO NA SINCRONIZAÇÃO DE EMISSÕES:', err.message);
+        console.error('❌ ERRO NA SINCRONIZAÇÃO DE EMISSÕES:', (err && err.message) || '(sem mensagem)');
+        if (err && err.code) console.error('   código:', err.code, '| rotina:', err.routine || '-');
+        if (err && Array.isArray(err.errors)) err.errors.forEach((e, i) => console.error(`   causa[${i}]:`, e && (e.message || e)));
+        if (err && err.stack) console.error(err.stack);
     } finally {
         if (db) db.detach();
         if (pgClient) pgClient.release();
