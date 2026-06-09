@@ -327,6 +327,9 @@ function runBat(bat) {
 
         // Watchdog: se um modulo travar (rede/query sem retorno), encerra e segue o ciclo
         let timedOut = false;
+        // hadFatal: como o .bat sempre sai com codigo 0 (por causa do unlock final), o exit code
+        // nao indica falha do modulo. Detectamos falha real pelos marcadores fatais no output.
+        let hadFatal = false;
         const MAX_MS = 8 * 60 * 1000; // 8 minutos por modulo
         const watchdog = setTimeout(() => {
             timedOut = true;
@@ -347,11 +350,13 @@ function runBat(bat) {
                     }
                 } else if (l.includes('Falha definitiva')) {
                     // Só conta erro após esgotar todas as tentativas do firebird-helper
+                    hadFatal = true;
                     logEvent(bat.name, l, true);
                 } else if (l.includes('Login falhou') || l.includes('tentativa')) {
                     // Tentativa intermediária — só exibe no log, não conta como erro
                     logEvent(bat.name, l, false);
                 } else if (l.includes('\u274C') || (l.toLowerCase().includes('error:') && !l.toLowerCase().includes('warning'))) {
+                    hadFatal = true;
                     logEvent(bat.name, l, true);
                 }
             });
@@ -365,23 +370,18 @@ function runBat(bat) {
                 logEvent(bat.name, err, false);
                 return;
             }
-            // Só marca erro definitivo após esgotar tentativas
-            if (err.includes('Falha definitiva') || err.includes('Cannot find module') || err.includes('Finalizado com falha')) {
-                logEvent(bat.name, err, true);
-                scriptState[bat.name] = 'ERROR';
-            } else {
-                logEvent(bat.name, err, true);
-                scriptState[bat.name] = 'ERROR';
-            }
+            // Qualquer stderr restante (já filtrados warnings e tentativas) é falha real
+            hadFatal = true;
+            logEvent(bat.name, err, true);
         });
 
         child.on('close', code => {
             clearTimeout(watchdog);
             if (timedOut) {
                 scriptState[bat.name] = 'ERROR';
-            } else if (code !== 0 && scriptState[bat.name] !== 'DONE') {
+            } else if (hadFatal || code !== 0) {
                 scriptState[bat.name] = 'ERROR';
-                logEvent(bat.name, `Falha - codigo de saida ${code}`, true);
+                if (code !== 0) logEvent(bat.name, `Falha - codigo de saida ${code}`, true);
             } else {
                 scriptState[bat.name] = 'DONE';
                 currentProg[bat.name] = 100;
