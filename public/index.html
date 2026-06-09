@@ -6163,15 +6163,45 @@
                 async function enforceSidebarPermissions() {
                     const role = (localStorage.getItem('erus_role') || '').toLowerCase();
                     if (role === 'desenvolvedor') return;
+                    const stripAccents = s => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '');
+                    const roleNorm = stripAccents(role);
+                    const whitelistByRole = {
+                        'moldagem': ['fichatecmoldagem.html', 'apontamentos_produtivos.html'],
+                        'fusao': ['fichatecfusao.html'],
+                        'acabamento': ['fichatecacabamento.html', 'fichatecnica.html']
+                    };
+                    const whitelist = whitelistByRole[roleNorm] || null;
                     try {
                         const res = await fetch('/api/permissions', { cache: 'no-store' });
                         const rows = await res.json();
                         const blocked = {};
+                        const allowedExtra = {};
                         rows.forEach(function(r) {
-                            if (r.role === role && (r.allowed === false || r.allowed === 'false' || r.allowed === 'f')) {
-                                blocked[r.page_key] = true;
-                            }
+                            if (stripAccents((r.role || '').toLowerCase()) !== roleNorm) return;
+                            const isBlocked = (r.allowed === false || r.allowed === 'false' || r.allowed === 'f' || r.allowed === 0);
+                            if (isBlocked) blocked[r.page_key] = true;
+                            else allowedExtra[r.page_key] = true;
                         });
+                        // Painel aditivo: roles restritos exibem telas liberadas explicitamente no painel
+                        if (whitelist) {
+                            Object.keys(allowedExtra).forEach(function(pageKey) {
+                                if (blocked[pageKey]) return;
+                                let link = document.querySelector('#sidebar .nav-link[href="' + pageKey + '"]');
+                                if (!link) link = document.querySelector('#sidebar .nav-link[data-page-key="' + pageKey + '"]');
+                                if (!link) return;
+                                link.style.display = 'flex';
+                                const grp = link.closest('.nav-group-wrapper');
+                                if (!grp) return;
+                                grp.style.display = 'block';
+                                let sep = grp.previousElementSibling;
+                                while (sep && !sep.classList.contains('nav-group-separator')) sep = sep.previousElementSibling;
+                                if (sep) sep.style.display = 'flex';
+                                grp.querySelectorAll('.nav-link').forEach(function(l) {
+                                    const h = l.getAttribute('href');
+                                    if (!allowedExtra[h] && whitelist.indexOf(h) === -1) l.style.display = 'none';
+                                });
+                            });
+                        }
                         Object.keys(blocked).forEach(function(pageKey) {
                             var link = document.querySelector('#sidebar .nav-link[href="' + pageKey + '"]');
                             if (!link) link = document.querySelector('#sidebar .nav-link[data-page-key="' + pageKey + '"]');
@@ -9156,13 +9186,15 @@
 
                         const currentRole = (localStorage.getItem('erus_role') || '').toLowerCase();
                         const isMoldagemRole = currentRole === 'moldagem';
+                        const isFusaoRole = currentRole === 'fusao' || currentRole === 'fusão';
+                        const restrictedSector = isMoldagemRole ? 'MOLDAGEM GERAL' : (isFusaoRole ? 'FUSAO' : null);
 
                         TARGET_SECTORS.forEach(sector => {
 
 
                             const weight = totals[sector];
-                            const isNonMoldagem = isMoldagemRole && sector !== 'MOLDAGEM GERAL';
-                            const blurStyle = isNonMoldagem ? 'filter:blur(4px); pointer-events:none; user-select:none;' : '';
+                            const isHiddenSector = restrictedSector && sector !== restrictedSector;
+                            const blurStyle = isHiddenSector ? 'filter:blur(4px); pointer-events:none; user-select:none;' : '';
 
                             // Render main sector
 
@@ -9224,7 +9256,7 @@
                                     finalHtml += `
 
 
-                                        <div style="display: grid; grid-template-columns: 1fr 120px 40px; align-items: center; gap: 15px; font-size: 0.75rem; padding: 4px 12px 4px 35px; opacity: 0.8;">
+                                        <div style="display: grid; grid-template-columns: 1fr 120px 40px; align-items: center; gap: 15px; font-size: 0.75rem; padding: 4px 12px 4px 35px; opacity: 0.8; ${restrictedSector && restrictedSector !== 'MOLDAGEM GERAL' ? 'filter:blur(4px); pointer-events:none; user-select:none;' : ''}">
 
 
                                             <div style="display: flex; align-items: center; gap: 8px;">
@@ -9268,11 +9300,12 @@
 
                         container.innerHTML = finalHtml;
 
-                        // Atualiza KPI de produção moldagem (role moldagem)
+                        // Atualiza KPI de produção do setor (role moldagem/fusão)
                         const kpiMoldVal = document.getElementById('kpi-moldagem-producao-val');
                         if (kpiMoldVal) {
-                            const moldKg = totals['MOLDAGEM GERAL'] || 0;
-                            kpiMoldVal.textContent = (moldKg / 1000).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' Ton';
+                            const kpiSectorKey = isFusaoRole ? 'FUSAO' : 'MOLDAGEM GERAL';
+                            const setorKg = totals[kpiSectorKey] || 0;
+                            kpiMoldVal.textContent = (setorKg / 1000).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' Ton';
                         }
 
                     } catch (error) {
@@ -9775,15 +9808,22 @@
 
                     if (restrictedRoles[role]) {
 
-                        if (role === 'moldagem') {
-                            // KPIs: hide peso em carteira e faturamento mês, mostrar produção moldagem
+                        if (role === 'moldagem' || role === 'fusao' || role === 'fusão') {
+                            const isFusao = (role === 'fusao' || role === 'fusão');
+                            // KPIs: hide peso em carteira e faturamento mês, mostrar produção do setor
                             ['live-carteira-peso', 'live-faturamento', 'card-clientes-concentracao'].forEach(id => {
                                 const el = document.getElementById(id); if (el) el.style.display = 'none';
                             });
 
-                            // Mostrar KPI produção moldagem
+                            // Mostrar KPI produção do setor (moldagem/fusão)
                             const kpiMold = document.getElementById('kpi-moldagem-producao');
                             if (kpiMold) kpiMold.style.display = '';
+                            if (isFusao && kpiMold) {
+                                const _t = kpiMold.querySelector('.mb-card-title');
+                                if (_t) _t.textContent = 'Produção Total Fusão (MÊS)';
+                                const _sub = kpiMold.querySelector('.live-label');
+                                if (_sub) _sub.textContent = 'Peso fusão no mês';
+                            }
 
                             // Reequilibrar kpi-strip: remover cards hidden do flex para os visíveis ocuparem 100%
                             const strip = document.getElementById('kpi-strip');
