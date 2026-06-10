@@ -788,22 +788,79 @@
             }
         }
 
-        // Gera o PDF reaproveitando EXATAMENTE o layout/CSS da ficha individual:
-        // clona o template real .sheet-container, popula com populateData, empilha na própria
-        // página (mesmos estilos/CSS de impressão) e imprime 1 ficha por folha.
+        // Mede a ficha (zoom p/ caber em 1 folha A4) NO MESMO contexto do #sheetContent.
+        // Retorna o zoom (<= 1) e deixa imagem/observações com height:auto (estado de impressão),
+        // para o clone capturar exatamente esse estado.
+        const PRINT_W_PX_FT = 718, PRINT_H_PX_FT = 1030;
+        function computeFichaZoom(content, sheet) {
+            const img = content.querySelector('.image-container-large');
+            const notes = content.querySelector('.notes-area');
+            content.style.zoom = '1';
+            if (img) { img.style.flex = '1'; img.style.height = 'auto'; img.style.minHeight = '380px'; }
+            if (notes) { notes.style.flex = '1'; notes.style.height = 'auto'; notes.style.minHeight = '380px'; notes.style.overflow = 'hidden'; }
+            let W = PRINT_W_PX_FT;
+            content.style.width = W + 'px'; content.style.maxWidth = W + 'px';
+            void content.offsetHeight;
+            let H = sheet.getBoundingClientRect().height;
+            content.style.width = ''; content.style.maxWidth = '';
+            if (H <= PRINT_H_PX_FT) return 1;
+            let safety = 0;
+            while (H * PRINT_W_PX_FT / W > PRINT_H_PX_FT && safety < 20) {
+                W = Math.ceil(W * 1.08);
+                content.style.width = W + 'px'; content.style.maxWidth = W + 'px';
+                void content.offsetHeight;
+                H = sheet.getBoundingClientRect().height; safety++;
+            }
+            content.style.width = ''; content.style.maxWidth = '';
+            return Math.min(1, PRINT_W_PX_FT / W);
+        }
+
+        // Gera o PDF reaproveitando EXATAMENTE o layout/CSS da ficha individual.
+        // Cada ficha é medida num clone OCULTO do #sheetContent (mesmo contexto da busca por código),
+        // o zoom é "assado" no clone de impressão e NÃO é remedido fora da tela — assim sai sempre
+        // com o mesmo tamanho da ficha gerada por código, automaticamente.
         function abrirPdfFichas(fichas) {
-            const tpl = document.querySelector('#sheetContent .sheet-container');
             const container = document.getElementById('multiSheetContainer');
+            const sheetContent = document.getElementById('sheetContent');
             container.innerHTML = '';
 
-            fichas.forEach(d => {
-                const clone = tpl.cloneNode(true);
-                const wrap = document.createElement('div');
-                wrap.className = 'print-sheet';
-                wrap.appendChild(clone);
-                container.appendChild(wrap);
-                populateData(d, clone);
-            });
+            const build = () => {
+                // medidor: clone do #sheetContent, irmão dele, mesmo contexto de layout, invisível
+                const measurer = sheetContent.cloneNode(true);
+                measurer.removeAttribute('id');
+                measurer.style.display = 'block';
+                measurer.style.visibility = 'hidden';
+                measurer.style.position = 'static';
+                measurer.style.zoom = '1';
+                sheetContent.parentNode.insertBefore(measurer, sheetContent.nextSibling);
+                const mSheet = measurer.querySelector('.sheet-container');
+
+                fichas.forEach(d => {
+                    populateData(d, measurer);
+                    const z = computeFichaZoom(measurer, mSheet); // deixa img/notes em height:auto
+                    const clone = mSheet.cloneNode(true);         // captura conteúdo + estado de impressão
+                    const wrap = document.createElement('div');
+                    wrap.className = 'print-sheet';
+                    wrap.style.zoom = z;                          // zoom pré-calculado (não remedir!)
+                    wrap.appendChild(clone);
+                    container.appendChild(wrap);
+                });
+                measurer.remove();
+
+                // espera as imagens dos clones carregarem e imprime
+                const imgs = Array.from(container.querySelectorAll('img')).filter(i => i.getAttribute('src'));
+                const waitImages = new Promise(resolve => {
+                    let pending = imgs.filter(i => !i.complete).length;
+                    if (!pending) return resolve();
+                    imgs.forEach(i => {
+                        if (i.complete) return;
+                        const done = () => { if (--pending <= 0) resolve(); };
+                        i.addEventListener('load', done);
+                        i.addEventListener('error', done);
+                    });
+                });
+                waitImages.then(() => requestAnimationFrame(go));
+            };
 
             const go = () => {
                 document.body.classList.add('printing-multi');
@@ -816,25 +873,9 @@
                 window.print();
             };
 
-            // Espera imagens E fontes carregarem antes de medir/escalar — sem isso, na 1ª vez
-            // o texto é medido com fonte fallback (mais alta), gerando fichas menores. Isso
-            // replica automaticamente o "truque" de imprimir uma ficha por código antes.
-            const imgs = Array.from(container.querySelectorAll('img')).filter(i => i.getAttribute('src'));
-            const waitImages = new Promise(resolve => {
-                let pending = imgs.filter(i => !i.complete).length;
-                if (!pending) return resolve();
-                imgs.forEach(i => {
-                    if (i.complete) return;
-                    const done = () => { if (--pending <= 0) resolve(); };
-                    i.addEventListener('load', done);
-                    i.addEventListener('error', done);
-                });
-            });
+            // fontes prontas antes de medir (métricas corretas), depois constrói/imprime
             const waitFonts = (document.fonts && document.fonts.ready) ? document.fonts.ready : Promise.resolve();
-            Promise.all([waitImages, waitFonts]).then(() => {
-                // dois frames garantem que o layout (com as fontes aplicadas) foi recalculado
-                requestAnimationFrame(() => requestAnimationFrame(go));
-            });
+            waitFonts.then(build);
         }
 
         window.onload = () => {
@@ -884,13 +925,9 @@
                 if (notes) { notes.style.flex = '1'; notes.style.height = ''; notes.style.overflow = 'auto'; notes.style.minHeight = '380px'; }
             }
             function applyScale() {
-                if (document.body.classList.contains('printing-multi')) {
-                    document.querySelectorAll('#multiSheetContainer .print-sheet').forEach(function (ps) {
-                        const sheet = ps.querySelector('.sheet-container');
-                        if (sheet) scaleEl(ps, sheet, ps.querySelector('.image-container-large'), ps.querySelector('.notes-area'));
-                    });
-                    return;
-                }
+                // Corrida: os clones já vêm pré-escalados (zoom medido no contexto do #sheetContent),
+                // não remedir aqui (a medição fora da tela dava tamanho diferente).
+                if (document.body.classList.contains('printing-multi')) return;
                 const content = document.getElementById('sheetContent');
                 const sheet = document.querySelector('#sheetContent .sheet-container');
                 const wrapper = document.querySelector('.page-wrapper');
@@ -899,12 +936,7 @@
                 scaleEl(content, sheet, document.getElementById('imageContainer'), document.getElementById('notesObservationsPanel'));
             }
             function resetScale() {
-                if (document.body.classList.contains('printing-multi')) {
-                    document.querySelectorAll('#multiSheetContainer .print-sheet').forEach(function (ps) {
-                        resetEl(ps, ps.querySelector('.image-container-large'), ps.querySelector('.notes-area'));
-                    });
-                    return;
-                }
+                if (document.body.classList.contains('printing-multi')) return;
                 const content = document.getElementById('sheetContent');
                 const wrapper = document.querySelector('.page-wrapper');
                 resetEl(content, document.getElementById('imageContainer'), document.getElementById('notesObservationsPanel'));
