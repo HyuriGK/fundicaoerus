@@ -842,6 +842,7 @@
             // centraliza corretamente e a ficha preenche LARGURA e ALTURA sem cortar.
             function fitSheet(sheet) {
                 const TARGET = PRINT_H_PX / PRINT_W_PX; // proporção da folha A4
+                const SAFE = 0.96; // margem de segurança p/ nunca encostar/cortar nas bordas
                 const MAX_W = 1500;
                 const setW = w => { sheet.style.setProperty('width', w + 'px', 'important'); sheet.style.setProperty('max-width', w + 'px', 'important'); };
                 const measure = () => { void sheet.offsetHeight; return sheet.getBoundingClientRect().height; };
@@ -854,8 +855,12 @@
                 while (H / W > TARGET && W < MAX_W && safety < 80) {
                     W = Math.ceil(W * 1.03); setW(W); H = measure(); safety++;
                 }
-                // zoom <= 1: nunca amplia além da página; min() garante que não vaza em nenhuma dimensão
-                sheet.style.zoom = Math.min(PRINT_W_PX / W, PRINT_H_PX / H);
+                // usa a extensão REAL do conteúdo (evita corte se algo transbordar a largura definida)
+                void sheet.offsetHeight;
+                const realW = Math.max(W, sheet.scrollWidth);
+                const realH = Math.max(H, sheet.scrollHeight);
+                // zoom <= 1: nunca amplia; min() + SAFE garante que cabe inteiro, centralizado
+                sheet.style.zoom = Math.min(PRINT_W_PX / realW, PRINT_H_PX / realH) * SAFE;
             }
             function clearSheet(sheet) {
                 sheet.style.zoom = '';
