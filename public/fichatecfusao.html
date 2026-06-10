@@ -758,6 +758,11 @@
         async function gerarPDFSelecionadas() {
             const codigos = Array.from(document.querySelectorAll('.corrida-cb:checked')).map(c => c.value);
             if (!codigos.length) return;
+            const printWin = window.open('', '_blank');
+            if (!printWin) {
+                alert('Permita pop-ups para gerar o PDF das fichas da corrida.');
+                return;
+            }
             const btn = document.getElementById('btnGerarPdfCorrida');
             const original = btn.innerHTML;
             btn.disabled = true;
@@ -780,7 +785,7 @@
                     return;
                 }
                 if (faltando.length) alert('Sem ficha técnica de fusão (ignoradas): ' + faltando.join(', '));
-                await abrirPdfFichasCorrida(fichas);
+                await abrirPdfFichasCorrida(fichas, printWin);
             } finally {
                 btn.innerHTML = original;
                 btn.disabled = false;
@@ -838,7 +843,7 @@
             await nextPaintCorrida();
         }
 
-        async function abrirPdfFichasCorrida(fichas) {
+        async function abrirPdfFichasCorrida(fichas, printWin) {
             const container = document.getElementById('multiSheetContainer');
             const sc = document.getElementById('sheetContent');
             container.innerHTML = '';
@@ -846,12 +851,8 @@
             const restoreDisplay = sc.style.display;
             const restoreVisibility = sc.style.visibility;
             const restoreAnimation = sc.style.animation;
-            document.getElementById('initialStatus').style.display = 'none';
-            document.getElementById('loader').style.display = 'none';
-            document.getElementById('pdf-btn-wrapper').style.display = 'flex';
-            document.getElementById('searchInput').value = fichas[0].pro_codigo || '';
 
-            sc.style.visibility = 'visible';
+            sc.style.visibility = 'hidden';
             sc.style.display = 'block';
             sc.style.animation = 'none';
 
@@ -862,36 +863,79 @@
                 populateData(d, sc);
                 await waitFichaLayoutCorrida(sc);
                 const scSheet = sc.querySelector('.sheet-container');
+                const z = computeFichaZoom(sc, scSheet);
                 const clone = scSheet.cloneNode(true);
                 const wrap = document.createElement('div');
                 wrap.className = 'print-sheet';
+                wrap.style.zoom = z;
                 wrap.appendChild(clone);
                 pages.push(wrap);
             }
 
-            sc.innerHTML = '';
-            pages.forEach(p => sc.appendChild(p));
-            populateData(fichas[0], sc);
-            sc.style.animation = '';
+            sc.innerHTML = template;
+            sc.style.display = restoreDisplay;
+            sc.style.visibility = restoreVisibility;
+            sc.style.animation = restoreAnimation;
             sc.style.zoom = '';
             sc.style.width = '';
             sc.style.maxWidth = '';
 
-            await waitImagesReadyCorrida(sc);
-            await nextPaintCorrida();
+            const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
+                .map(el => el.outerHTML)
+                .join('\n');
+            const extraPrintCss = `
+                <style>
+                    body { background:#fff !important; color:#000 !important; }
+                    .print-sheet { width:100%; max-width:100%; margin:0; page-break-after:always; break-after:page; }
+                    .print-sheet:last-child { page-break-after:auto; break-after:auto; }
+                    @media print {
+                        @page { size:A4 portrait; margin:1cm; }
+                        html, body { margin:0 !important; padding:0 !important; background:#fff !important; color:#000 !important; }
+                        .container { max-width:100% !important; width:100% !important; padding:0 !important; margin:0 !important; display:block !important; }
+                        #sheetContent { display:block !important; width:100% !important; max-width:100% !important; margin:0 !important; }
+                        .print-sheet { display:block !important; width:100% !important; max-width:100% !important; margin:0 !important; page-break-after:always; break-after:page; }
+                        .print-sheet:last-child { page-break-after:auto; break-after:auto; }
+                        .sheet-container { border:1px solid #000 !important; box-shadow:none !important; background:#fff !important; border-radius:0 !important; page-break-inside:avoid !important; }
+                        .info-block, .notes-area { background:#fdfdfd !important; border:1px solid #ccc !important; }
+                        .info-label { color:#444 !important; }
+                        .info-value, .notes-text, .item-main-info h2, .item-code, td, th { color:#000 !important; }
+                        .section-divider { background:#000 !important; }
+                        .section-divider span { background:#fff !important; color:#000 !important; }
+                        .image-container-large { border:1px solid #ccc !important; background:#fff !important; min-height:380px !important; }
+                        .image-container-large i { display:none !important; }
+                        .sheet-title-container { border-bottom:2px solid #000 !important; }
+                        .sheet-title-container h1 { color:#000 !important; }
+                        table th, table td { border:1px solid #ccc !important; }
+                        table thead { background:#eee !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+                        .print-footer { color:#555 !important; }
+                    }
+                </style>`;
 
-            document.body.classList.add('printing-multi');
-            const cleanup = () => {
-                document.body.classList.remove('printing-multi');
-                sc.innerHTML = template;
-                populateData(fichas[0], sc);
-                sc.style.display = restoreDisplay || 'block';
-                sc.style.visibility = restoreVisibility || 'visible';
-                sc.style.animation = restoreAnimation;
-                window.removeEventListener('afterprint', cleanup);
-            };
-            window.addEventListener('afterprint', cleanup);
-            window.print();
+            printWin.document.open();
+            printWin.document.write(`<!DOCTYPE html>
+                <html lang="pt-BR">
+                <head>
+                    <meta charset="UTF-8">
+                    <base href="${location.href}">
+                    <title>Ficha Técnica de Fusão - Corrida</title>
+                    ${styles}
+                    ${extraPrintCss}
+                </head>
+                <body>
+                    <div class="container">
+                        <div id="sheetContent">${pages.map(p => p.outerHTML).join('')}</div>
+                    </div>
+                    <script>
+                        window.onload = function() {
+                            setTimeout(function() {
+                                window.focus();
+                                window.print();
+                            }, 350);
+                        };
+                    <\/script>
+                </body>
+                </html>`);
+            printWin.document.close();
         }
 
         // Gera o PDF reaproveitando EXATAMENTE o layout/CSS da ficha individual.
