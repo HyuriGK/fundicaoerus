@@ -823,12 +823,12 @@
             const container = document.getElementById('multiSheetContainer');
             const sc = document.getElementById('sheetContent');
             container.innerHTML = '';
+            const prevDisplay = sc.style.display;
+            const prevVis = sc.style.visibility;
+            const snapshot = sc.innerHTML; // preserva a ficha atualmente exibida
 
-            const build = () => {
-                const prevDisplay = sc.style.display;
-                const snapshot = sc.innerHTML; // preserva a ficha atualmente exibida
-
-                sc.style.display = 'block'; // medição no MESMO contexto da busca por código
+            // Mede cada ficha no #sheetContent já "aquecido" (fontes aplicadas) e assa o zoom no clone.
+            const buildAndPrint = () => {
                 fichas.forEach(d => {
                     populateData(d, sc);
                     const scSheet = sc.querySelector('.sheet-container');
@@ -841,12 +841,12 @@
                     container.appendChild(wrap);
                 });
 
-                // restaura o #sheetContent exatamente como estava (síncrono -> sem flash visível)
+                // restaura o #sheetContent exatamente como estava
                 sc.innerHTML = snapshot;
                 sc.style.display = prevDisplay;
+                sc.style.visibility = prevVis;
                 sc.style.zoom = ''; sc.style.width = ''; sc.style.maxWidth = '';
 
-                // espera as imagens dos clones carregarem e imprime
                 const imgs = Array.from(container.querySelectorAll('img')).filter(i => i.getAttribute('src'));
                 const waitImages = new Promise(resolve => {
                     let pending = imgs.filter(i => !i.complete).length;
@@ -872,9 +872,14 @@
                 window.print();
             };
 
-            // fontes prontas antes de medir (métricas corretas), depois constrói/imprime
+            // AQUECIMENTO (automatiza o "truque" manual): exibe + popula o #sheetContent e espera as
+            // FONTES serem APLICADAS (fonts.ready + 2 frames). Sem isso, a 1ª medição usa fonte fallback
+            // (mais alta) -> altura maior -> zoom menor -> fichas menores. visibility:hidden evita flash.
+            sc.style.visibility = 'hidden';
+            sc.style.display = 'block';
+            populateData(fichas[0], sc);
             const waitFonts = (document.fonts && document.fonts.ready) ? document.fonts.ready : Promise.resolve();
-            waitFonts.then(build);
+            waitFonts.then(() => requestAnimationFrame(() => requestAnimationFrame(buildAndPrint)));
         }
 
         window.onload = () => {
