@@ -837,32 +837,28 @@
         (function () {
             const PRINT_W_PX = 718;
             const PRINT_H_PX = 1030;
-            // Escolhe a largura de layout cuja proporção bate com a da folha A4 e escala
-            // (transform) para preencher LARGURA e ALTURA. Centralização: flex do wrapper.
+            // Alarga o layout até a proporção bater com a da folha, depois usa ZOOM (<= 1) para
+            // reduzir a largura cheia (718px) — zoom redimensiona a caixa, então o flex do wrapper
+            // centraliza corretamente e a ficha preenche LARGURA e ALTURA sem cortar.
             function fitSheet(sheet) {
-                const TARGET = PRINT_H_PX / PRINT_W_PX; // proporção da folha
-                const MIN_W = 400, MAX_W = 1400;
+                const TARGET = PRINT_H_PX / PRINT_W_PX; // proporção da folha A4
+                const MAX_W = 1500;
                 const setW = w => { sheet.style.setProperty('width', w + 'px', 'important'); sheet.style.setProperty('max-width', w + 'px', 'important'); };
                 const measure = () => { void sheet.offsetHeight; return sheet.getBoundingClientRect().height; };
-                sheet.style.transform = 'none';
-                sheet.style.transformOrigin = 'center center';
+                sheet.style.zoom = '1';
                 let W = PRINT_W_PX;
                 setW(W);
                 let H = measure();
                 let safety = 0;
-                if (H / W > TARGET) {
-                    // alto demais: alarga até a proporção bater (ao reduzir, preenche a largura)
-                    while (H / W > TARGET && W < MAX_W && safety < 60) { W = Math.ceil(W * 1.04); setW(W); H = measure(); safety++; }
-                } else {
-                    // baixo demais: estreita até a proporção bater (ao ampliar, preenche a altura)
-                    while (H / W < TARGET && W > MIN_W && safety < 60) { W = Math.floor(W / 1.04); setW(W); H = measure(); safety++; }
+                // conteúdo mais alto que a proporção da folha -> alarga p/ preencher a largura ao reduzir
+                while (H / W > TARGET && W < MAX_W && safety < 80) {
+                    W = Math.ceil(W * 1.03); setW(W); H = measure(); safety++;
                 }
-                // rendered = W * (PRINT_W_PX / W) = PRINT_W_PX (largura cheia); altura <= PRINT_H_PX
-                sheet.style.transform = 'scale(' + (PRINT_W_PX / W) + ')';
+                // zoom <= 1: nunca amplia além da página; min() garante que não vaza em nenhuma dimensão
+                sheet.style.zoom = Math.min(PRINT_W_PX / W, PRINT_H_PX / H);
             }
             function clearSheet(sheet) {
-                sheet.style.transform = '';
-                sheet.style.transformOrigin = '';
+                sheet.style.zoom = '';
                 sheet.style.removeProperty('width');
                 sheet.style.removeProperty('max-width');
             }
