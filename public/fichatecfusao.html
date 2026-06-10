@@ -781,7 +781,7 @@
                     return;
                 }
                 if (faltando.length) alert('Sem ficha técnica de fusão (ignoradas): ' + faltando.join(', '));
-                abrirPdfFichas(fichas);
+                await abrirPdfFichasCorrida(fichas);
             } finally {
                 btn.innerHTML = original;
                 btn.disabled = false;
@@ -813,6 +813,79 @@
             }
             content.style.width = ''; content.style.maxWidth = '';
             return Math.min(1, PRINT_W_PX_FT / W);
+        }
+
+        function nextPaintCorrida() {
+            return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        }
+
+        function waitImagesReadyCorrida(root) {
+            const imgs = Array.from(root.querySelectorAll('img')).filter(i => i.getAttribute('src'));
+            return new Promise(resolve => {
+                let pending = imgs.filter(i => !i.complete).length;
+                if (!pending) return resolve();
+                imgs.forEach(i => {
+                    if (i.complete) return;
+                    const done = () => { if (--pending <= 0) resolve(); };
+                    i.addEventListener('load', done, { once: true });
+                    i.addEventListener('error', done, { once: true });
+                });
+            });
+        }
+
+        async function waitFichaLayoutCorrida(root) {
+            if (document.fonts && document.fonts.ready) await document.fonts.ready;
+            await waitImagesReadyCorrida(root);
+            await nextPaintCorrida();
+        }
+
+        async function abrirPdfFichasCorrida(fichas) {
+            const container = document.getElementById('multiSheetContainer');
+            const sc = document.getElementById('sheetContent');
+            container.innerHTML = '';
+            const prevDisplay = sc.style.display;
+            const prevVis = sc.style.visibility;
+            const prevAnimation = sc.style.animation;
+            const snapshot = sc.innerHTML;
+
+            try {
+                sc.style.visibility = 'hidden';
+                sc.style.display = 'block';
+                sc.style.animation = 'none';
+
+                for (const d of fichas) {
+                    populateData(d, sc);
+                    await waitFichaLayoutCorrida(sc);
+                    const scSheet = sc.querySelector('.sheet-container');
+                    const z = computeFichaZoom(sc, scSheet);
+                    const clone = scSheet.cloneNode(true);
+                    const wrap = document.createElement('div');
+                    wrap.className = 'print-sheet';
+                    wrap.style.zoom = z;
+                    wrap.appendChild(clone);
+                    container.appendChild(wrap);
+                }
+            } finally {
+                sc.innerHTML = snapshot;
+                sc.style.display = prevDisplay;
+                sc.style.visibility = prevVis;
+                sc.style.animation = prevAnimation;
+                sc.style.zoom = '';
+                sc.style.width = '';
+                sc.style.maxWidth = '';
+            }
+
+            await waitImagesReadyCorrida(container);
+            await nextPaintCorrida();
+
+            document.body.classList.add('printing-multi');
+            const cleanup = () => {
+                document.body.classList.remove('printing-multi');
+                container.innerHTML = '';
+                window.removeEventListener('afterprint', cleanup);
+            };
+            window.addEventListener('afterprint', cleanup);
+            window.print();
         }
 
         // Gera o PDF reaproveitando EXATAMENTE o layout/CSS da ficha individual.
