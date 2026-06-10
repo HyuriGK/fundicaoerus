@@ -76,6 +76,25 @@
         .btn-search { background: var(--color-primary); border: none; color: #000; width: 44px; height: 44px; border-radius: 10px; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; justify-content: center; font-size: 1rem; }
         .btn-search:hover { transform: scale(1.05); }
 
+        /* CORRIDA PANEL */
+        .corrida-info-bar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-bottom:14px; }
+        .corrida-chip { font-size:0.72rem; font-weight:600; padding:5px 11px; border-radius:7px; border:1px solid var(--border-subtle); color:var(--text-muted); background:rgba(255,255,255,0.03); display:inline-flex; align-items:center; gap:6px; }
+        .corrida-chip i { font-size:0.65rem; opacity:0.8; }
+        .corrida-chip.num { border-color:rgba(var(--color-primary-rgb),0.3); color:var(--color-primary); background:rgba(var(--color-primary-rgb),0.06); font-family:'JetBrains Mono',monospace; font-weight:700; font-size:0.85rem; }
+        .corrida-actions { display:flex; gap:10px; margin-bottom:14px; flex-wrap:wrap; }
+        .btn-corrida { padding:9px 16px; border-radius:8px; font-size:0.78rem; font-weight:700; cursor:pointer; border:1px solid var(--border-subtle); background:rgba(255,255,255,0.04); color:var(--text-main); display:inline-flex; align-items:center; gap:8px; font-family:'Inter',sans-serif; transition:all 0.2s; }
+        .btn-corrida:hover { border-color:var(--color-primary); color:var(--color-primary); }
+        .btn-corrida.primary { background:var(--color-primary); color:#000; border-color:var(--color-primary); }
+        .btn-corrida.primary:hover { background:var(--color-primary-hover); color:#000; }
+        .btn-corrida.primary:disabled { opacity:0.4; cursor:not-allowed; background:var(--color-primary); color:#000; }
+        .corrida-table { width:100%; border-collapse:collapse; font-size:0.82rem; background:var(--bg-card); border:1px solid var(--border-subtle); border-radius:12px; overflow:hidden; }
+        .corrida-table thead th { background:#18181b; padding:11px 14px; text-align:left; font-size:0.65rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-muted); border-bottom:1px solid var(--border-subtle); }
+        .corrida-table tbody td { padding:11px 14px; border-bottom:1px solid var(--border-subtle); }
+        .corrida-table tbody tr:last-child td { border-bottom:none; }
+        .corrida-table tbody tr:hover { background:rgba(255,255,255,0.02); }
+        .corrida-table input[type=checkbox] { width:16px; height:16px; accent-color:var(--color-primary); cursor:pointer; }
+        .corrida-cod { font-family:'JetBrains Mono', monospace; color:var(--color-primary); font-weight:600; }
+
         /* SHEET */
         #sheetContent { display: none; animation: fadeIn 0.4s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
@@ -165,7 +184,33 @@
                     onkeypress="if(event.key==='Enter') searchSheet()">
                 <button class="btn-search" onclick="searchSheet()"><i class="fa-solid fa-magnifying-glass"></i></button>
             </div>
+            <div class="search-container" style="margin-top:10px;" data-no-print="true">
+                <input type="text" id="corridaInput" placeholder="Pesquisar corrida (programação da fusão)..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+                    onkeypress="if(event.key==='Enter') searchCorrida()">
+                <button class="btn-search" onclick="searchCorrida()" title="Buscar corrida"><i class="fa-solid fa-fire-flame-curved"></i></button>
+            </div>
         </section>
+
+        <!-- PAINEL DA CORRIDA -->
+        <div id="corridaPanel" data-no-print="true" style="display:none; margin-bottom:30px;">
+            <div class="corrida-info-bar" id="corridaInfoBar"></div>
+            <div class="corrida-actions">
+                <button class="btn-corrida" onclick="toggleSelectAllCorrida()"><i class="fa-solid fa-check-double"></i> <span id="selAllLabel">Selecionar todos</span></button>
+                <button class="btn-corrida primary" id="btnGerarPdfCorrida" onclick="gerarPDFSelecionadas()" disabled><i class="fa-solid fa-file-pdf"></i> Gerar PDF (<span id="selCount">0</span>)</button>
+            </div>
+            <table class="corrida-table">
+                <thead>
+                    <tr>
+                        <th style="width:42px; text-align:center;"><input type="checkbox" id="selAllCheckbox" onchange="toggleSelectAllCorrida(this.checked)"></th>
+                        <th style="width:60px;">SEQ</th>
+                        <th style="width:140px;">CÓDIGO</th>
+                        <th>PRODUTO</th>
+                        <th style="width:110px; text-align:right;">QTD PROG.</th>
+                    </tr>
+                </thead>
+                <tbody id="corridaProductsBody"></tbody>
+            </table>
+        </div>
 
         <div id="loader" class="loader" style="display:none;">
             <div class="spinner"></div>
@@ -605,6 +650,254 @@
             const url = URLS[tipo];
             if (!url) return;
             window.location.href = codigo ? `${url}?codigo=${encodeURIComponent(codigo)}` : url;
+        }
+
+        // ===== PESQUISA POR CORRIDA =====
+        let _corridaItens = [];
+
+        function fmtDateCorrida(iso) {
+            if (!iso) return '-';
+            const s = String(iso).split('T')[0];
+            if (s === '2026-12-31') return '-';
+            const [y, m, d] = s.split('-');
+            return `${d}/${m}/${y}`;
+        }
+
+        async function searchCorrida() {
+            const num = document.getElementById('corridaInput').value.trim();
+            if (!num) return;
+            const panel = document.getElementById('corridaPanel');
+            const body = document.getElementById('corridaProductsBody');
+            document.getElementById('initialStatus').style.display = 'none';
+            document.getElementById('sheetContent').style.display = 'none';
+            document.getElementById('pdf-btn-wrapper').style.display = 'none';
+            panel.style.display = 'block';
+            document.getElementById('corridaInfoBar').innerHTML = '';
+            document.getElementById('selAllCheckbox').checked = false;
+            body.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:40px;"><div class="spinner"></div> Buscando corrida...</td></tr>';
+            try {
+                const resp = await fetch(`/api/insumos-moldagem/corrida/${encodeURIComponent(num)}`);
+                const data = await resp.json();
+                if (!data.success) throw new Error(data.error || 'Erro na consulta');
+                _corridaItens = data.itens || [];
+                renderCorridaPanel(data.corrida, _corridaItens);
+            } catch (err) {
+                _corridaItens = [];
+                document.getElementById('corridaInfoBar').innerHTML = '';
+                body.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:40px; color:#ef4444;">${err.message}</td></tr>`;
+                updateSelCount();
+            }
+        }
+
+        function renderCorridaPanel(corrida, itens) {
+            const bar = document.getElementById('corridaInfoBar');
+            bar.innerHTML = `
+                <span class="corrida-chip num"><i class="fa-solid fa-fire-flame-curved"></i> #${corrida.corrida_cor}</span>
+                <span class="corrida-chip"><i class="fa-regular fa-calendar"></i> ${fmtDateCorrida(corrida.data_programada) !== '-' ? fmtDateCorrida(corrida.data_programada) : fmtDateCorrida(corrida.data_cor)}</span>
+                <span class="corrida-chip"><i class="fa-solid fa-industry"></i> Forno ${corrida.forno_cor || '?'}</span>
+                ${corrida.material_mat ? `<span class="corrida-chip"><i class="fa-solid fa-flask"></i> ${corrida.material_mat}</span>` : ''}
+                <span class="corrida-chip"><i class="fa-solid fa-list"></i> ${itens.length} ${itens.length === 1 ? 'item' : 'itens'}</span>`;
+
+            const body = document.getElementById('corridaProductsBody');
+            if (!itens.length) {
+                body.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:40px;">Nenhum produto nesta corrida.</td></tr>';
+                updateSelCount();
+                return;
+            }
+            body.innerHTML = itens.map((it, i) => `
+                <tr onclick="if(event.target.tagName!=='INPUT'){const c=this.querySelector('input');c.checked=!c.checked;updateSelCount();}">
+                    <td style="text-align:center;"><input type="checkbox" class="corrida-cb" value="${it.produto_pcp}" onchange="updateSelCount()"></td>
+                    <td style="color:var(--text-muted); font-family:'JetBrains Mono',monospace;">${it.sequencia || i + 1}</td>
+                    <td class="corrida-cod">${it.produto_pcp}</td>
+                    <td>${it.nome_pro || '—'}</td>
+                    <td style="text-align:right; font-weight:700;">${it.quantidade_programada || 0}</td>
+                </tr>`).join('');
+            updateSelCount();
+        }
+
+        function toggleSelectAllCorrida(forceState) {
+            const checkboxes = document.querySelectorAll('.corrida-cb');
+            if (!checkboxes.length) return;
+            let target;
+            if (typeof forceState === 'boolean') {
+                target = forceState;
+            } else {
+                target = !Array.from(checkboxes).every(c => c.checked);
+                document.getElementById('selAllCheckbox').checked = target;
+            }
+            checkboxes.forEach(c => c.checked = target);
+            updateSelCount();
+        }
+
+        function updateSelCount() {
+            const checkboxes = Array.from(document.querySelectorAll('.corrida-cb'));
+            const sel = checkboxes.filter(c => c.checked).length;
+            document.getElementById('selCount').innerText = sel;
+            document.getElementById('btnGerarPdfCorrida').disabled = sel === 0;
+            const all = document.getElementById('selAllCheckbox');
+            all.checked = checkboxes.length > 0 && sel === checkboxes.length;
+            document.getElementById('selAllLabel').innerText = all.checked ? 'Desmarcar todos' : 'Selecionar todos';
+        }
+
+        async function gerarPDFSelecionadas() {
+            const codigos = Array.from(document.querySelectorAll('.corrida-cb:checked')).map(c => c.value);
+            if (!codigos.length) return;
+            const btn = document.getElementById('btnGerarPdfCorrida');
+            const original = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<div class="spinner" style="width:14px;height:14px;border-width:2px;margin:0;"></div> Gerando...';
+            try {
+                const fichas = [];
+                for (const codigo of codigos) {
+                    try {
+                        const resp = await fetch(`/api/fichatecnicafusao/${encodeURIComponent(codigo)}`);
+                        const d = await resp.json();
+                        if (resp.ok) fichas.push(d);
+                        else fichas.push({ pro_codigo: codigo, _erro: d.error || 'Ficha não encontrada' });
+                    } catch {
+                        fichas.push({ pro_codigo: codigo, _erro: 'Falha ao buscar ficha' });
+                    }
+                }
+                abrirPdfFichas(fichas);
+            } finally {
+                btn.innerHTML = original;
+                btn.disabled = false;
+            }
+        }
+
+        function abrirPdfFichas(fichas) {
+            const fmtKg = v => v ? parseFloat(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kg' : '-';
+            const fmtPct = v => v != null && v !== '' ? parseFloat(v).toLocaleString('pt-BR', { maximumFractionDigits: 2 }) + '%' : '-';
+            const fmtNum = v => v != null && v !== '' ? parseFloat(v).toLocaleString('pt-BR', { maximumFractionDigits: 3 }) : '-';
+            const fmtMec = v => (v != null && v !== '' && parseFloat(v) !== 0) ? parseFloat(v).toLocaleString('pt-BR', { maximumFractionDigits: 3 }) : '-';
+            const nomeElemento = {
+                C:'Carbono', SI:'Silício', MN:'Manganês', P:'Fósforo', S:'Enxofre', CR:'Cromo', NI:'Níquel',
+                MO:'Molibdênio', AL:'Alumínio', V:'Vanádio', CU:'Cobre', MG:'Magnésio', W:'Tungstênio', B:'Boro',
+                CO:'Cobalto', TI:'Titânio', NB:'Nióbio', PB:'Chumbo', SN:'Estanho', ZN:'Zinco', AS:'Arsênio',
+                BI:'Bismuto', CA:'Cálcio', CE:'Cério', ZR:'Zircônio', LA:'Lantânio', FE:'Ferro'
+            };
+
+            function buildSheet(d) {
+                if (d._erro) {
+                    return `<div class="ficha-page"><div class="ficha-title">FICHA TÉCNICA DE FUSÃO</div>
+                        <div class="erro-box"><strong>${d.pro_codigo}</strong> — ${d._erro}</div></div>`;
+                }
+                let composicao = d.composicao_quimica || d.composicao || [];
+                if (typeof composicao === 'string') { try { composicao = JSON.parse(composicao); } catch { composicao = []; } }
+                const compRows = (composicao && composicao.length)
+                    ? composicao.map(el => {
+                        const f = v => parseFloat(v).toLocaleString('pt-BR', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+                        return `<tr><td class="el"><strong>${el.elemento}</strong> <span class="el-nome">— ${nomeElemento[el.elemento] || el.elemento}</span></td><td class="c">${f(el.min)}</td><td class="c">${f(el.max)}</td></tr>`;
+                    }).join('')
+                    : '';
+                const compTable = compRows
+                    ? `<table class="tbl"><thead><tr><th>Elemento</th><th class="c">Mín (%)</th><th class="c">Máx (%)</th></tr></thead><tbody>${compRows}</tbody></table>`
+                    : `<div class="vazio">Nenhuma composição química cadastrada.</div>`;
+
+                const isBruto = String(d.fornecimento || '').trim().toUpperCase() === 'BRUTO';
+                const foto = d.foto_base64
+                    ? `<img src="data:image/jpeg;base64,${d.foto_base64}" class="ficha-foto">`
+                    : `<div class="ficha-foto vazio-foto">Sem imagem técnica</div>`;
+                const notas = d.obs_vazamento || d.notas || 'Nenhuma observação cadastrada.';
+
+                const block = (label, val, accent) => `<div class="ib${accent ? ' accent' : ''}"><span class="ib-l">${label}</span><span class="ib-v">${val}</span></div>`;
+
+                return `<div class="ficha-page">
+                    <div class="ficha-title">FICHA TÉCNICA DE FUSÃO</div>
+                    <div class="ficha-head">
+                        <div class="ficha-code"># ${d.pro_codigo || '-'}</div>
+                        <h2>${d.nome_pro || '-'}</h2>
+                    </div>
+                    <div class="grid g4">
+                        ${block('Cód. Cliente', d.cli_codigo || '-')}
+                        ${block('Cliente', d.cliente_nome || '-')}
+                        ${block('Cód. Material', d.mat_id || '-')}
+                        ${block('Material', d.material || '-')}
+                    </div>
+                    <div class="divider">Pesos do Produto</div>
+                    <div class="grid g5">
+                        ${block('Peso Usinado', isBruto ? 'BRUTO' : fmtKg(d.peso_liquido))}
+                        ${block('Peso Bruto', fmtKg(d.peso_bruto))}
+                        ${block('Peso da Penca', fmtKg(d.peso_penca))}
+                        ${block('Peso Unit. C/ Aliment.', fmtKg(d.peso_com_alimentacao))}
+                        ${block('Rendimento Metálico', fmtPct(d.rendimento_metalico), true)}
+                    </div>
+                    <div class="divider">Parâmetros de Fusão</div>
+                    <div class="grid g3">
+                        ${block('Temp. Mín. Vazamento (°C)', fmtNum(d.temperatura_vazamento_min))}
+                        ${block('Temp. Máx. Vazamento (°C)', fmtNum(d.temperatura_vazamento))}
+                        ${block('Relação Metal / Molde', fmtNum(d.relacao_metal_molde))}
+                        ${block('Temp. Mín. Forno (°C)', fmtNum(d.temperatura_forno_min))}
+                        ${block('Temp. Máx. Forno (°C)', fmtNum(d.temperatura_forno))}
+                        ${block('Relação Molde / Metal', fmtNum(d.relacao_molde_metal))}
+                    </div>
+                    <div class="two-col">
+                        <div><div class="divider">Composição Química (%)</div>${compTable}</div>
+                        <div><div class="divider">Propriedades Mecânicas</div>
+                            <div class="grid g2">
+                                ${block('Contração (%)', fmtMec(d.contracao_mat))}
+                                ${block('Lim. Resistência (MPa)', fmtMec(d.limite_resistencia_mat))}
+                                ${block('Lim. Escoamento (MPa)', fmtMec(d.limite_escoamento_mat))}
+                                ${block('Alongamento (%)', fmtMec(d.alongamento_mat))}
+                                ${block('Estricção (%)', fmtMec(d.estriccao_mat))}
+                                ${block('Redução de Área (%)', fmtMec(d.reducao_area_mat))}
+                                ${block('Dureza Mín. (HB)', fmtMec(d.hb_mat))}
+                                ${block('Dureza Máx. (HB)', fmtMec(d.hb_max_mat))}
+                                ${block('Impacto Charpy (J)', fmtMec(d.impacto_teste_charpy_mat))}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="two-col">
+                        <div><div class="divider">Imagem de Referência</div>${foto}</div>
+                        <div><div class="divider">Observações de Vazamento</div><div class="ficha-notas">${notas}</div></div>
+                    </div>
+                    <div class="ficha-footer"><span>Fundição Erus • Processos de Qualidade Assegurada</span><span>${new Date().toLocaleString('pt-BR')} | ID: ${d.pro_codigo || '-'}</span></div>
+                </div>`;
+            }
+
+            const sheets = fichas.map(buildSheet).join('');
+            const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Fichas Técnicas de Fusão</title>
+<style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:'Segoe UI', Arial, sans-serif; color:#111; background:#fff; }
+    @page { size:A4 portrait; margin:1cm; }
+    .ficha-page { padding:0 6mm; page-break-after:always; }
+    .ficha-page:last-child { page-break-after:auto; }
+    .ficha-title { text-align:center; font-size:1.7rem; font-weight:900; letter-spacing:0.04em; text-transform:uppercase; border-bottom:2px solid #ea580c; padding-bottom:10px; margin-bottom:16px; }
+    .ficha-head { margin-bottom:14px; }
+    .ficha-code { font-family:monospace; font-size:0.95rem; color:#666; }
+    .ficha-head h2 { font-size:1.5rem; font-weight:800; color:#ea580c; line-height:1.1; }
+    .divider { font-size:0.62rem; font-weight:900; text-transform:uppercase; letter-spacing:0.12em; color:#ea580c; border-bottom:1px solid #ddd; padding:14px 0 5px; margin-bottom:10px; }
+    .two-col > div > .divider:first-child { margin-top:0; }
+    .grid { display:grid; gap:8px; margin-bottom:6px; }
+    .g2 { grid-template-columns:repeat(2,1fr); }
+    .g3 { grid-template-columns:repeat(3,1fr); }
+    .g4 { grid-template-columns:1fr 2fr 1fr 1fr; }
+    .g5 { grid-template-columns:repeat(5,1fr); }
+    .ib { padding:8px 10px; border:1px solid #ddd; border-radius:6px; background:#fafafa; overflow:hidden; }
+    .ib.accent { background:#fff7ed; border-color:#fed7aa; }
+    .ib-l { display:block; font-size:0.55rem; text-transform:uppercase; font-weight:800; color:#888; letter-spacing:0.08em; margin-bottom:3px; }
+    .ib-v { display:block; font-size:0.85rem; font-weight:700; color:#111; }
+    .ib.accent .ib-v { color:#ea580c; }
+    .two-col { display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-top:4px; }
+    .tbl { width:100%; border-collapse:collapse; font-size:0.72rem; }
+    .tbl th { background:#fff1e6; padding:7px 8px; text-align:left; border:1px solid #f3d4bd; font-size:0.62rem; text-transform:uppercase; }
+    .tbl td { padding:6px 8px; border:1px solid #eee; }
+    .tbl td.c, .tbl th.c { text-align:center; }
+    .tbl .el strong { color:#ea580c; }
+    .tbl .el-nome { color:#999; font-size:0.68rem; }
+    .vazio { font-size:0.75rem; color:#999; padding:10px 0; }
+    .ficha-foto { width:100%; height:300px; object-fit:contain; border:1px solid #ddd; border-radius:8px; background:#fafafa; }
+    .vazio-foto { display:flex; align-items:center; justify-content:center; color:#aaa; font-size:0.8rem; }
+    .ficha-notas { border:1px solid #fed7aa; background:#fff7ed; border-radius:8px; padding:14px; font-size:0.82rem; white-space:pre-wrap; line-height:1.5; min-height:120px; }
+    .ficha-footer { margin-top:20px; border-top:1px solid #eee; padding-top:10px; display:flex; justify-content:space-between; font-size:0.62rem; color:#888; }
+    .erro-box { border:1px solid #fecaca; background:#fff1f2; color:#991b1b; border-radius:8px; padding:16px; font-size:0.85rem; }
+    @media print { .ficha-page { break-inside:auto; } .ib, .tbl, .ficha-foto, .ficha-notas { -webkit-print-color-adjust:exact; print-color-adjust:exact; } }
+</style></head><body>${sheets}<script>window.onload=()=>{setTimeout(()=>window.print(),250);}<\/script></body></html>`;
+
+            const win = window.open('', '_blank');
+            win.document.write(html);
+            win.document.close();
         }
 
         window.onload = () => {

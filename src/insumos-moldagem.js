@@ -89,4 +89,65 @@ router.get('/', async (req, res) => {
     }
 });
 
+// GET /api/insumos-moldagem/corrida/:numero — produtos amarrados a uma corrida (programação da fusão)
+router.get('/corrida/:numero', async (req, res) => {
+    try {
+        const numero = String(req.params.numero || '').trim();
+        if (!numero) return res.status(400).json({ success: false, error: 'Número da corrida não informado' });
+
+        const result = await pool.query(`
+            SELECT
+                c.codigo_cor,
+                c.corrida_cor,
+                c.data_cor,
+                c.data_programada_cor,
+                c.forno_cor,
+                c.peso_cor,
+                c.material_mat,
+                c.sequencia_item,
+                c.produto_pcp,
+                c.nome_pro,
+                c.quantidade_programada,
+                c.quantidade_pcp,
+                c.peso_pcp
+            FROM corridas_programadas_sync c
+            WHERE TRIM(c.corrida_cor) = $1
+            ORDER BY c.codigo_cor DESC, c.sequencia_item
+        `, [numero]);
+
+        if (!result.rows.length) {
+            return res.status(404).json({ success: false, error: `Nenhuma corrida ${numero} encontrada` });
+        }
+
+        const first = result.rows[0];
+        const itens = result.rows
+            .filter(r => r.produto_pcp)
+            .map(r => ({
+                sequencia:             r.sequencia_item,
+                produto_pcp:           r.produto_pcp,
+                nome_pro:              r.nome_pro,
+                quantidade_programada: r.quantidade_programada,
+                peso_pcp:              r.peso_pcp,
+            }));
+
+        res.json({
+            success: true,
+            corrida: {
+                codigo_cor:      first.codigo_cor,
+                corrida_cor:     first.corrida_cor,
+                data_cor:        first.data_cor,
+                data_programada: first.data_programada_cor,
+                forno_cor:       (first.forno_cor || '').trim(),
+                peso_cor:        first.peso_cor,
+                material_mat:    first.material_mat,
+            },
+            itens
+        });
+
+    } catch (err) {
+        console.error('[insumos-moldagem/corrida]', err.message);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 module.exports = router;
