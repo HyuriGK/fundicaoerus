@@ -839,37 +839,52 @@
         (function () {
             const PRINT_W_PX = 718;
             const PRINT_H_PX = 1030;
-            function scaleSheetEl(ps, sheet) {
+            // width via !important para vencer as regras de impressão (#sheetContent/.print-sheet width:100%)
+            function setW(ps, W) {
+                ps.style.setProperty('width', W + 'px', 'important');
+                ps.style.setProperty('max-width', W + 'px', 'important');
+            }
+            function clearW(ps) {
+                ps.style.removeProperty('width');
+                ps.style.removeProperty('max-width');
+                ps.style.zoom = '';
+            }
+            // Ajusta a ficha para preencher a folha A4: alarga se estourar a altura,
+            // estreita (zoom > 1) se sobrar espaço — sempre 1 ficha por página, sem vazar.
+            function fitToPage(ps, sheet) {
+                const TARGET = PRINT_H_PX / PRINT_W_PX;
+                const MIN_W = 430, MAX_W = 1500;
                 ps.style.zoom = '1';
                 let W = PRINT_W_PX;
-                ps.style.width = W + 'px';
-                ps.style.maxWidth = W + 'px';
+                setW(ps, W);
                 void ps.offsetHeight;
                 let H = sheet.getBoundingClientRect().height;
-                if (H <= PRINT_H_PX) { ps.style.width = ''; ps.style.maxWidth = ''; ps.style.zoom = '1'; return; }
                 let safety = 0;
-                while (H * PRINT_W_PX / W > PRINT_H_PX && safety < 20) {
-                    W = Math.ceil(W * 1.08);
-                    ps.style.width = W + 'px';
-                    ps.style.maxWidth = W + 'px';
-                    void ps.offsetHeight;
-                    H = sheet.getBoundingClientRect().height;
-                    safety++;
+                if (H / W > TARGET) {
+                    while (H / W > TARGET && W < MAX_W && safety < 40) {
+                        W = Math.ceil(W * 1.05);
+                        setW(ps, W); void ps.offsetHeight;
+                        H = sheet.getBoundingClientRect().height; safety++;
+                    }
+                } else {
+                    while (W > MIN_W && safety < 80) {
+                        const nW = Math.floor(W / 1.04);
+                        setW(ps, nW); void ps.offsetHeight;
+                        const nH = sheet.getBoundingClientRect().height;
+                        if (nH / nW > TARGET) { setW(ps, W); break; }
+                        W = nW; H = nH; safety++;
+                    }
                 }
-                ps.style.width = '';
-                ps.style.maxWidth = '';
-                ps.style.zoom = Math.min(1, PRINT_W_PX / W);
+                ps.style.zoom = PRINT_W_PX / W;
             }
             function scaleMultiSheets() {
                 document.querySelectorAll('#multiSheetContainer .print-sheet').forEach(function (ps) {
                     const sheet = ps.querySelector('.sheet-container');
-                    if (sheet) scaleSheetEl(ps, sheet);
+                    if (sheet) fitToPage(ps, sheet);
                 });
             }
             function resetMultiSheets() {
-                document.querySelectorAll('#multiSheetContainer .print-sheet').forEach(function (ps) {
-                    ps.style.zoom = ''; ps.style.width = ''; ps.style.maxWidth = '';
-                });
+                document.querySelectorAll('#multiSheetContainer .print-sheet').forEach(clearW);
             }
             function applyScale() {
                 if (document.body.classList.contains('printing-multi')) { scaleMultiSheets(); return; }
@@ -880,29 +895,9 @@
                 const notesPanel = document.getElementById('notesObservationsPanel');
                 if (!content || !sheet) return;
                 if (wrapper) wrapper.style.marginLeft = '0';
-                content.style.zoom = '1';
                 if (imageContainer) { imageContainer.style.flex = '1'; imageContainer.style.height = 'auto'; imageContainer.style.minHeight = '380px'; }
                 if (notesPanel) { notesPanel.style.flex = '1'; notesPanel.style.height = 'auto'; notesPanel.style.minHeight = '380px'; notesPanel.style.overflow = 'hidden'; }
-                let W = PRINT_W_PX;
-                content.style.width = W + 'px';
-                content.style.maxWidth = W + 'px';
-                void content.offsetHeight;
-                let H = sheet.getBoundingClientRect().height;
-                content.style.width = '';
-                content.style.maxWidth = '';
-                if (H <= PRINT_H_PX) { content.style.zoom = '1'; return; }
-                let safety = 0;
-                while (H * PRINT_W_PX / W > PRINT_H_PX && safety < 20) {
-                    W = Math.ceil(W * 1.08);
-                    content.style.width = W + 'px';
-                    content.style.maxWidth = W + 'px';
-                    void content.offsetHeight;
-                    H = sheet.getBoundingClientRect().height;
-                    safety++;
-                }
-                content.style.width = '';
-                content.style.maxWidth = '';
-                content.style.zoom = Math.min(1, PRINT_W_PX / W);
+                fitToPage(content, sheet);
             }
             function resetScale() {
                 if (document.body.classList.contains('printing-multi')) { resetMultiSheets(); return; }
@@ -910,7 +905,7 @@
                 const wrapper = document.querySelector('.page-wrapper');
                 const imageContainer = document.getElementById('imageContainer');
                 const notesPanel = document.getElementById('notesObservationsPanel');
-                if (content) { content.style.zoom = ''; content.style.width = ''; content.style.maxWidth = ''; }
+                if (content) clearW(content);
                 if (wrapper) wrapper.style.marginLeft = '';
                 if (imageContainer) { imageContainer.style.flex = '1'; imageContainer.style.height = ''; imageContainer.style.minHeight = '380px'; }
                 if (notesPanel) { notesPanel.style.flex = '1'; notesPanel.style.height = ''; notesPanel.style.overflow = 'auto'; notesPanel.style.minHeight = '380px'; }
