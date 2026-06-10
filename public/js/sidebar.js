@@ -201,9 +201,6 @@
                     '<i class="fa-solid fa-industry"></i><span>Produção Apontada</span></a>' +
                 '<a href="ordemdeproducao.html" data-stip="Ordens de Produção" class="erus-nav-link' + isActive('ordemdeproducao.html') + '">' +
                     '<i class="fa-solid fa-file-lines"></i><span>Ordens de Produção</span></a>' +
-                // Ficha Técnica movida para a categoria Engenharia. Ficha de Moldagem e Ficha de Fusão acessíveis via Ficha Técnica; não listadas na sidebar
-                '<a href="fichatecacabamento.html" data-stip="Ficha de Acabamento" class="erus-nav-link' + isActive('fichatecacabamento.html') + '">' +
-                    '<i class="fa-solid fa-hammer"></i><span>Ficha de Acabamento</span></a>' +
                 '<a href="monitoramento.html" data-stip="Monitoramento de OPs" class="erus-nav-link' + isActive('monitoramento.html') + '">' +
                     '<i class="fa-solid fa-display"></i><span>Monitoramento de OPs</span></a>' +
                 '<a href="acabamento_interno.html" data-stip="Acabamento Interno" class="erus-nav-link' + isActive('acabamento_interno.html') + '">' +
@@ -221,8 +218,12 @@
             '<div id="eg-engenharia" class="erus-nav-group-wrapper collapsed">' +
                 '<a href="fichatecnica.html" data-stip="Ficha Técnica" class="erus-nav-link' + isActive('fichatecnica.html') + '">' +
                     '<i class="fa-solid fa-file-contract"></i><span>Ficha Técnica</span></a>' +
-                '<a href="fichatecfusao.html" data-stip="Ficha de Fusão" class="erus-nav-link erus-role-hidden' + isActive('fichatecfusao.html') + '">' +
+                '<a href="fichatecmoldagem.html" data-stip="Ficha de Moldagem" class="erus-nav-link' + isActive('fichatecmoldagem.html') + '">' +
+                    '<i class="fa-solid fa-cubes-stacked"></i><span>Ficha de Moldagem</span></a>' +
+                '<a href="fichatecfusao.html" data-stip="Ficha de Fusão" class="erus-nav-link' + isActive('fichatecfusao.html') + '">' +
                     '<i class="fa-solid fa-fire"></i><span>Ficha de Fusão</span></a>' +
+                '<a href="fichatecacabamento.html" data-stip="Ficha de Acabamento" class="erus-nav-link' + isActive('fichatecacabamento.html') + '">' +
+                    '<i class="fa-solid fa-hammer"></i><span>Ficha de Acabamento</span></a>' +
             '</div>' +
             // FATURAMENTO
             '<div class="erus-nav-group-sep" data-stip="Faturamento" onclick="erusSidebarToggleGroup(\'eg-faturamento\')">' +
