@@ -144,12 +144,9 @@
         .spinner { width: 40px; height: 40px; border: 3px solid rgba(var(--color-primary-rgb), 0.1); border-left-color: var(--color-primary); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 20px; }
         @keyframes spin { to { transform: rotate(360deg); } }
 
-        /* PRINT */
+        /* PRINT — Programação da Fusão: somente a capa, em paisagem (folha inteira deitada) */
         @media print {
-            @page { margin: 1cm; }
-            @page pg-retrato { size: A4 portrait; margin: 1cm; }
-            @page pg-paisagem { size: A4 landscape; margin: 10mm; }
-            body { page: pg-retrato; }
+            @page { size: A4 landscape; margin: 10mm; }
             html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; color: #000 !important; }
             .ambient-bg, .side-menu, .side-menu-trigger, #erus-sidebar, #erus-sidebar-backdrop, #erus-logout-modal, #erus-pref-modal, #sync-floating-indicator, #sync-overlay, #last-sync-toast, .modal-overlay, .loader, .status-empty, .search-wrapper, header, .tipo-switcher, [data-no-print] { display: none !important; visibility: hidden !important; height: 0 !important; overflow: hidden !important; margin: 0 !important; padding: 0 !important; }
             body { padding-left: 0 !important; margin-left: 0 !important; }
@@ -174,17 +171,13 @@
             table thead { background: #eee !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             .print-footer { color: #555 !important; }
 
-            /* Impressão de múltiplas fichas (corrida): cada ficha é uma "página" igual à individual */
+            /* Impressão da capa da corrida (programação) — única página, em paisagem */
             #multiSheetContainer { display: none !important; }
-            body.printing-multi #sheetContent { display: none !important; }
-            body.printing-multi #multiSheetContainer { display: block !important; position: static !important; left: auto !important; top: auto !important; width: 100% !important; }
-            body.printing-multi #multiSheetContainer .print-sheet { display: block !important; width: 100% !important; max-width: 100% !important; margin: 0 !important; page-break-after: always; break-after: page; }
-            body.printing-multi #multiSheetContainer .print-sheet:last-child { page-break-after: auto; break-after: auto; }
-
-            /* Capa da corrida em paisagem; fichas seguem em retrato (pg-retrato via body) */
-            body.printing-multi #multiSheetContainer .print-cover { page: pg-paisagem; display: block !important; width: 100% !important; page-break-after: always; break-after: page; }
+            body.printing-cover #sheetContent { display: none !important; }
+            body.printing-cover #multiSheetContainer { display: block !important; position: static !important; left: auto !important; top: auto !important; width: 100% !important; }
+            body.printing-cover #multiSheetContainer .print-cover { display: block !important; width: 100% !important; }
             .print-cover .cover-table thead th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-            .print-cover .cover-table tfoot td, .print-cover .cover-apont { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .print-cover .cover-table tfoot td { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         }
     </style>
 </head>
@@ -782,37 +775,29 @@
             document.getElementById('selAllLabel').innerText = all.checked ? 'Desmarcar todos' : 'Selecionar todos';
         }
 
-        async function gerarPDFSelecionadas() {
+        // Programação da Fusão: gera SOMENTE a capa (folha deitada), sem fichas individuais.
+        function gerarPDFSelecionadas() {
             const codigos = Array.from(document.querySelectorAll('.corrida-cb:checked')).map(c => c.value);
             if (!codigos.length) return;
-            const btn = document.getElementById('btnGerarPdfCorrida');
-            const original = btn.innerHTML;
-            btn.disabled = true;
-            btn.innerHTML = '<div class="spinner" style="width:14px;height:14px;border-width:2px;margin:0;"></div> Gerando...';
-            try {
-                const fichas = [];
-                const faltando = [];
-                for (const codigo of codigos) {
-                    try {
-                        const resp = await fetch(`/api/fichatecnicafusao/${encodeURIComponent(codigo)}`);
-                        const d = await resp.json();
-                        if (resp.ok) fichas.push(d);
-                        else faltando.push(codigo);
-                    } catch {
-                        faltando.push(codigo);
-                    }
-                }
-                if (!fichas.length) {
-                    alert('Nenhuma das peças selecionadas possui ficha técnica de fusão cadastrada.');
-                    return;
-                }
-                if (faltando.length) alert('Sem ficha técnica de fusão (ignoradas): ' + faltando.join(', '));
-                const selItens = _corridaItens.filter(it => codigos.includes(String(it.produto_pcp)));
-                abrirPdfFichas(fichas, selItens);
-            } finally {
-                btn.innerHTML = original;
-                btn.disabled = false;
-            }
+            const selItens = _corridaItens.filter(it => codigos.includes(String(it.produto_pcp)));
+            const container = document.getElementById('multiSheetContainer');
+            container.innerHTML = '';
+            const cover = buildCorridaCover(_corridaInfo, selItens);
+            if (!cover) return;
+            container.appendChild(cover);
+
+            const cleanup = () => {
+                document.body.classList.remove('printing-cover');
+                container.innerHTML = '';
+                window.removeEventListener('afterprint', cleanup);
+            };
+            window.addEventListener('afterprint', cleanup);
+
+            const waitFonts = (document.fonts && document.fonts.ready) ? document.fonts.ready : Promise.resolve();
+            waitFonts.then(() => {
+                document.body.classList.add('printing-cover');
+                requestAnimationFrame(() => window.print());
+            });
         }
 
         // Mede a ficha (zoom p/ caber em 1 folha A4) NO MESMO contexto do #sheetContent.
@@ -1025,8 +1010,8 @@
                 if (notes) { notes.style.flex = '1'; notes.style.height = ''; notes.style.overflow = 'auto'; notes.style.minHeight = '380px'; }
             }
             function applyScale() {
-                // Corrida: os clones já vêm pré-escalados (zoom medido no contexto do #sheetContent),
-                // não remedir aqui (a medição fora da tela dava tamanho diferente).
+                // Capa da programação é impressa em paisagem sem reescala — não mexer.
+                if (document.body.classList.contains('printing-cover')) return;
                 if (document.body.classList.contains('printing-multi')) return;
                 const content = document.getElementById('sheetContent');
                 const sheet = document.querySelector('#sheetContent .sheet-container');
@@ -1036,6 +1021,7 @@
                 scaleEl(content, sheet, document.getElementById('imageContainer'), document.getElementById('notesObservationsPanel'));
             }
             function resetScale() {
+                if (document.body.classList.contains('printing-cover')) return;
                 if (document.body.classList.contains('printing-multi')) return;
                 const content = document.getElementById('sheetContent');
                 const wrapper = document.querySelector('.page-wrapper');
