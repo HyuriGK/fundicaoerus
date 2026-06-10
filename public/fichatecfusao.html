@@ -114,6 +114,11 @@
         .image-container-large { margin-top: 30px; width: 100%; height: 380px; background: rgba(255,255,255,0.015); border: 1px dashed var(--border-subtle); border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--text-muted); position: relative; overflow: hidden; }
         .image-container-large i { font-size: 4rem; opacity: 0.15; margin-bottom: 15px; }
 
+        /* MULTI-FICHA (impressão por corrida) — fica fora da tela, mensurável p/ escala */
+        #multiSheetContainer { position: absolute; left: -100000px; top: 0; width: 760px; }
+        #multiSheetContainer .print-sheet { width: 760px; margin: 0 auto; }
+        #multiSheetContainer .print-sheet .sheet-container { margin-bottom: 0; }
+
         /* LOADER */
         .loader, .status-empty { text-align: center; padding: 60px; color: var(--text-muted); }
         .spinner { width: 40px; height: 40px; border: 3px solid rgba(var(--color-primary-rgb), 0.1); border-left-color: var(--color-primary); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 20px; }
@@ -145,6 +150,14 @@
             table th, table td { border: 1px solid #ccc !important; }
             table thead { background: #eee !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             .print-footer { color: #555 !important; }
+
+            /* Impressão de múltiplas fichas (corrida): 1 ficha por página, idêntica à individual */
+            #multiSheetContainer { display: none !important; }
+            body.printing-multi #sheetContent { display: none !important; }
+            body.printing-multi #multiSheetContainer { display: block !important; position: static !important; left: auto !important; top: auto !important; width: 100% !important; }
+            body.printing-multi #multiSheetContainer .print-sheet { width: 100% !important; margin: 0 !important; page-break-after: always; break-after: page; }
+            body.printing-multi #multiSheetContainer .print-sheet:last-child { page-break-after: auto; break-after: auto; }
+            body.printing-multi #multiSheetContainer .print-sheet .sheet-container { page-break-inside: avoid; break-inside: avoid; }
         }
     </style>
 </head>
@@ -406,6 +419,9 @@
                 </div>
             </div>
         </div>
+
+        <!-- Container para impressão de múltiplas fichas (corrida) -->
+        <div id="multiSheetContainer"></div>
     </div>
 
     <!-- MODAL REGISTROS -->
@@ -774,75 +790,38 @@
         }
 
         // Gera o PDF reaproveitando EXATAMENTE o layout/CSS da ficha individual:
-        // clona o template real .sheet-container, popula com populateData e empilha 1 por página.
+        // clona o template real .sheet-container, popula com populateData, empilha na própria
+        // página (mesmos estilos/CSS de impressão) e imprime 1 ficha por folha.
         function abrirPdfFichas(fichas) {
             const tpl = document.querySelector('#sheetContent .sheet-container');
+            const container = document.getElementById('multiSheetContainer');
+            container.innerHTML = '';
 
-            const sheets = fichas.map(d => {
+            fichas.forEach(d => {
                 const clone = tpl.cloneNode(true);
-                populateData(d, clone);
                 const wrap = document.createElement('div');
                 wrap.className = 'print-sheet';
                 wrap.appendChild(clone);
-                return wrap.outerHTML;
-            }).join('');
+                container.appendChild(wrap);
+                populateData(d, clone);
+            });
 
-            // Reaproveita os mesmos estilos/fontes da página (design idêntico ao da ficha por código)
-            const styleTag = document.querySelector('head style') ? document.querySelector('head style').outerHTML : '';
-            const links = Array.from(document.querySelectorAll('head link[rel="stylesheet"]')).map(l => l.outerHTML).join('\n');
-
-            const extraCss = `<style>
-                body { background: var(--bg-main); padding: 24px 0; }
-                .print-sheet { width: 760px; max-width: 95%; margin: 0 auto 28px; }
-                @media print {
-                    @page { size: A4 portrait; margin: 1cm; }
-                    html, body { background:#fff !important; padding:0 !important; margin:0 !important; }
-                    .print-sheet { width: auto !important; max-width: none !important; margin: 0 !important; page-break-after: always; break-after: page; }
-                    .print-sheet:last-child { page-break-after: auto; break-after: auto; }
-                    .print-sheet .sheet-container { page-break-inside: avoid; break-inside: avoid; }
-                }
-            </style>`;
-
-            const scaleScript = `<script>
-                (function () {
-                    var PRINT_W_PX = 718, PRINT_H_PX = 1030;
-                    function scaleOne(ps) {
-                        var sheet = ps.querySelector('.sheet-container');
-                        if (!sheet) return;
-                        ps.style.zoom = 1;
-                        ps.style.width = PRINT_W_PX + 'px'; ps.style.maxWidth = PRINT_W_PX + 'px';
-                        void ps.offsetHeight;
-                        var W = PRINT_W_PX, H = sheet.getBoundingClientRect().height, safety = 0;
-                        while (H * PRINT_W_PX / W > PRINT_H_PX && safety < 20) {
-                            W = Math.ceil(W * 1.08);
-                            ps.style.width = W + 'px'; ps.style.maxWidth = W + 'px';
-                            void ps.offsetHeight;
-                            H = sheet.getBoundingClientRect().height; safety++;
-                        }
-                        ps.style.width = ''; ps.style.maxWidth = '';
-                        ps.style.zoom = Math.min(1, PRINT_W_PX / W);
-                    }
-                    function fit() { document.querySelectorAll('.print-sheet').forEach(scaleOne); }
-                    function ready() {
-                        var imgs = Array.prototype.slice.call(document.images);
-                        var pending = imgs.filter(function (i) { return !i.complete; }).length;
-                        function go() { fit(); setTimeout(function () { window.print(); }, 250); }
-                        if (!pending) return go();
-                        imgs.forEach(function (i) { if (!i.complete) { i.addEventListener('load', done); i.addEventListener('error', done); } });
-                        function done() { if (--pending <= 0) go(); }
-                    }
-                    window.addEventListener('load', ready);
-                    window.addEventListener('beforeprint', fit);
-                })();
-            <\/script>`;
-
-            const html = '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">' +
-                '<title>Fichas Técnicas de Fusão</title>' + links + styleTag + extraCss +
-                '</head><body>' + sheets + scaleScript + '</body></html>';
-
-            const win = window.open('', '_blank');
-            win.document.write(html);
-            win.document.close();
+            const imgs = Array.from(container.querySelectorAll('img')).filter(i => i.getAttribute('src'));
+            let pending = imgs.filter(i => !i.complete).length;
+            const go = () => {
+                document.body.classList.add('printing-multi');
+                const cleanup = () => {
+                    document.body.classList.remove('printing-multi');
+                    container.querySelectorAll('.print-sheet').forEach(ps => { ps.style.zoom = ''; });
+                    container.innerHTML = '';
+                    window.removeEventListener('afterprint', cleanup);
+                };
+                window.addEventListener('afterprint', cleanup);
+                window.print();
+            };
+            if (!pending) return go();
+            imgs.forEach(i => { if (!i.complete) { i.addEventListener('load', done); i.addEventListener('error', done); } });
+            function done() { if (--pending <= 0) go(); }
         }
 
         window.onload = () => {
@@ -860,7 +839,40 @@
         (function () {
             const PRINT_W_PX = 718;
             const PRINT_H_PX = 1030;
+            function scaleSheetEl(ps, sheet) {
+                ps.style.zoom = '1';
+                let W = PRINT_W_PX;
+                ps.style.width = W + 'px';
+                ps.style.maxWidth = W + 'px';
+                void ps.offsetHeight;
+                let H = sheet.getBoundingClientRect().height;
+                if (H <= PRINT_H_PX) { ps.style.width = ''; ps.style.maxWidth = ''; ps.style.zoom = '1'; return; }
+                let safety = 0;
+                while (H * PRINT_W_PX / W > PRINT_H_PX && safety < 20) {
+                    W = Math.ceil(W * 1.08);
+                    ps.style.width = W + 'px';
+                    ps.style.maxWidth = W + 'px';
+                    void ps.offsetHeight;
+                    H = sheet.getBoundingClientRect().height;
+                    safety++;
+                }
+                ps.style.width = '';
+                ps.style.maxWidth = '';
+                ps.style.zoom = Math.min(1, PRINT_W_PX / W);
+            }
+            function scaleMultiSheets() {
+                document.querySelectorAll('#multiSheetContainer .print-sheet').forEach(function (ps) {
+                    const sheet = ps.querySelector('.sheet-container');
+                    if (sheet) scaleSheetEl(ps, sheet);
+                });
+            }
+            function resetMultiSheets() {
+                document.querySelectorAll('#multiSheetContainer .print-sheet').forEach(function (ps) {
+                    ps.style.zoom = ''; ps.style.width = ''; ps.style.maxWidth = '';
+                });
+            }
             function applyScale() {
+                if (document.body.classList.contains('printing-multi')) { scaleMultiSheets(); return; }
                 const content = document.getElementById('sheetContent');
                 const sheet = document.querySelector('.sheet-container');
                 const wrapper = document.querySelector('.page-wrapper');
@@ -893,6 +905,7 @@
                 content.style.zoom = Math.min(1, PRINT_W_PX / W);
             }
             function resetScale() {
+                if (document.body.classList.contains('printing-multi')) { resetMultiSheets(); return; }
                 const content = document.getElementById('sheetContent');
                 const wrapper = document.querySelector('.page-wrapper');
                 const imageContainer = document.getElementById('imageContainer');
