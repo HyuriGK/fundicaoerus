@@ -153,10 +153,9 @@
 
             /* Impressão de múltiplas fichas (corrida): cada ficha é uma "página" igual à individual */
             #multiSheetContainer { display: none !important; }
-            body.printing-multi #sheetContent { display: none !important; }
-            body.printing-multi #multiSheetContainer { display: block !important; position: static !important; left: auto !important; top: auto !important; width: 100% !important; }
-            body.printing-multi #multiSheetContainer .print-sheet { display: block !important; width: 100% !important; max-width: 100% !important; margin: 0 !important; page-break-after: always; break-after: page; }
-            body.printing-multi #multiSheetContainer .print-sheet:last-child { page-break-after: auto; break-after: auto; }
+            body.printing-multi #sheetContent { display: block !important; width: 100% !important; max-width: 100% !important; margin: 0 !important; }
+            body.printing-multi #sheetContent .print-sheet { display: block !important; width: 100% !important; max-width: 100% !important; margin: 0 !important; page-break-after: always; break-after: page; }
+            body.printing-multi #sheetContent .print-sheet:last-child { page-break-after: auto; break-after: auto; }
         }
     </style>
 </head>
@@ -843,6 +842,10 @@
             const container = document.getElementById('multiSheetContainer');
             const sc = document.getElementById('sheetContent');
             container.innerHTML = '';
+            const template = sc.innerHTML;
+            const restoreDisplay = sc.style.display;
+            const restoreVisibility = sc.style.visibility;
+            const restoreAnimation = sc.style.animation;
             document.getElementById('initialStatus').style.display = 'none';
             document.getElementById('loader').style.display = 'none';
             document.getElementById('pdf-btn-wrapper').style.display = 'flex';
@@ -852,35 +855,39 @@
             sc.style.display = 'block';
             sc.style.animation = 'none';
 
-            populateData(fichas[0], sc);
-            await waitFichaLayoutCorrida(sc);
+            const pages = [];
 
             for (const d of fichas) {
+                sc.innerHTML = template;
                 populateData(d, sc);
                 await waitFichaLayoutCorrida(sc);
                 const scSheet = sc.querySelector('.sheet-container');
-                const z = computeFichaZoom(sc, scSheet);
                 const clone = scSheet.cloneNode(true);
                 const wrap = document.createElement('div');
                 wrap.className = 'print-sheet';
-                wrap.style.zoom = z;
                 wrap.appendChild(clone);
-                container.appendChild(wrap);
+                pages.push(wrap);
             }
 
+            sc.innerHTML = '';
+            pages.forEach(p => sc.appendChild(p));
             populateData(fichas[0], sc);
             sc.style.animation = '';
             sc.style.zoom = '';
             sc.style.width = '';
             sc.style.maxWidth = '';
 
-            await waitImagesReadyCorrida(container);
+            await waitImagesReadyCorrida(sc);
             await nextPaintCorrida();
 
             document.body.classList.add('printing-multi');
             const cleanup = () => {
                 document.body.classList.remove('printing-multi');
-                container.innerHTML = '';
+                sc.innerHTML = template;
+                populateData(fichas[0], sc);
+                sc.style.display = restoreDisplay || 'block';
+                sc.style.visibility = restoreVisibility || 'visible';
+                sc.style.animation = restoreAnimation;
                 window.removeEventListener('afterprint', cleanup);
             };
             window.addEventListener('afterprint', cleanup);
@@ -1003,7 +1010,14 @@
             function applyScale() {
                 // Corrida: os clones já vêm pré-escalados (zoom medido no contexto do #sheetContent),
                 // não remedir aqui (a medição fora da tela dava tamanho diferente).
-                if (document.body.classList.contains('printing-multi')) return;
+                if (document.body.classList.contains('printing-multi')) {
+                    document.querySelectorAll('#sheetContent .print-sheet').forEach(page => {
+                        const sheet = page.querySelector('.sheet-container');
+                        if (!sheet) return;
+                        scaleEl(page, sheet, page.querySelector('.image-container-large'), page.querySelector('.notes-area'));
+                    });
+                    return;
+                }
                 const content = document.getElementById('sheetContent');
                 const sheet = document.querySelector('#sheetContent .sheet-container');
                 const wrapper = document.querySelector('.page-wrapper');
@@ -1012,7 +1026,12 @@
                 scaleEl(content, sheet, document.getElementById('imageContainer'), document.getElementById('notesObservationsPanel'));
             }
             function resetScale() {
-                if (document.body.classList.contains('printing-multi')) return;
+                if (document.body.classList.contains('printing-multi')) {
+                    document.querySelectorAll('#sheetContent .print-sheet').forEach(page => {
+                        resetEl(page, page.querySelector('.image-container-large'), page.querySelector('.notes-area'));
+                    });
+                    return;
+                }
                 const content = document.getElementById('sheetContent');
                 const wrapper = document.querySelector('.page-wrapper');
                 resetEl(content, document.getElementById('imageContainer'), document.getElementById('notesObservationsPanel'));
