@@ -805,8 +805,6 @@
                 populateData(d, clone);
             });
 
-            const imgs = Array.from(container.querySelectorAll('img')).filter(i => i.getAttribute('src'));
-            let pending = imgs.filter(i => !i.complete).length;
             const go = () => {
                 document.body.classList.add('printing-multi');
                 const cleanup = () => {
@@ -817,9 +815,26 @@
                 window.addEventListener('afterprint', cleanup);
                 window.print();
             };
-            if (!pending) return go();
-            imgs.forEach(i => { if (!i.complete) { i.addEventListener('load', done); i.addEventListener('error', done); } });
-            function done() { if (--pending <= 0) go(); }
+
+            // Espera imagens E fontes carregarem antes de medir/escalar — sem isso, na 1ª vez
+            // o texto é medido com fonte fallback (mais alta), gerando fichas menores. Isso
+            // replica automaticamente o "truque" de imprimir uma ficha por código antes.
+            const imgs = Array.from(container.querySelectorAll('img')).filter(i => i.getAttribute('src'));
+            const waitImages = new Promise(resolve => {
+                let pending = imgs.filter(i => !i.complete).length;
+                if (!pending) return resolve();
+                imgs.forEach(i => {
+                    if (i.complete) return;
+                    const done = () => { if (--pending <= 0) resolve(); };
+                    i.addEventListener('load', done);
+                    i.addEventListener('error', done);
+                });
+            });
+            const waitFonts = (document.fonts && document.fonts.ready) ? document.fonts.ready : Promise.resolve();
+            Promise.all([waitImages, waitFonts]).then(() => {
+                // dois frames garantem que o layout (com as fontes aplicadas) foi recalculado
+                requestAnimationFrame(() => requestAnimationFrame(go));
+            });
         }
 
         window.onload = () => {
