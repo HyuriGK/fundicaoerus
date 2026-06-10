@@ -144,12 +144,11 @@
         .spinner { width: 40px; height: 40px; border: 3px solid rgba(var(--color-primary-rgb), 0.1); border-left-color: var(--color-primary); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 20px; }
         @keyframes spin { to { transform: rotate(360deg); } }
 
-        /* PRINT — Programação da Fusão: capa em paisagem (1ª pág, padrão) + fichas em retrato.
-           Padrão paisagem evita o bug do Chrome de não trocar a orientação da PRIMEIRA página;
-           as fichas (páginas 2+) trocam para retrato via página nomeada, o que funciona. */
+        /* PRINT — Programação da Fusão: dois PDFs separados.
+           A orientação (@page size) é definida dinamicamente antes de cada impressão
+           (paisagem p/ a capa, retrato p/ as fichas) via #erus-print-orient. */
         @media print {
-            @page { size: A4 landscape; margin: 10mm; }
-            @page pg-retrato { size: A4 portrait; margin: 1cm; }
+            @page { margin: 10mm; }
             html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; color: #000 !important; }
             .ambient-bg, .side-menu, .side-menu-trigger, #erus-sidebar, #erus-sidebar-backdrop, #erus-logout-modal, #erus-pref-modal, #sync-floating-indicator, #sync-overlay, #last-sync-toast, .modal-overlay, .loader, .status-empty, .search-wrapper, header, .tipo-switcher, [data-no-print] { display: none !important; visibility: hidden !important; height: 0 !important; overflow: hidden !important; margin: 0 !important; padding: 0 !important; }
             body { padding-left: 0 !important; margin-left: 0 !important; }
@@ -174,15 +173,20 @@
             table thead { background: #eee !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             .print-footer { color: #555 !important; }
 
-            /* Capa (paisagem, 1ª página) + fichas individuais (retrato) */
             #multiSheetContainer { display: none !important; }
-            body.printing-multi #sheetContent { display: none !important; }
-            body.printing-multi #multiSheetContainer { display: block !important; position: static !important; left: auto !important; top: auto !important; width: 100% !important; }
-            body.printing-multi #multiSheetContainer .print-cover { display: block !important; width: 100% !important; page-break-after: always; break-after: page; }
-            body.printing-multi #multiSheetContainer .print-sheet { page: pg-retrato; display: block !important; width: 100% !important; max-width: 100% !important; margin: 0 !important; page-break-after: always; break-after: page; }
-            body.printing-multi #multiSheetContainer .print-sheet:last-child { page-break-after: auto; break-after: auto; }
+
+            /* PDF 1 — CAPA (paisagem, definida dinamicamente) */
+            body.printing-cover #sheetContent { display: none !important; }
+            body.printing-cover #multiSheetContainer { display: block !important; position: static !important; left: auto !important; top: auto !important; width: 100% !important; }
+            body.printing-cover #multiSheetContainer .print-cover { display: block !important; width: 100% !important; }
             .print-cover .cover-table thead th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             .print-cover .cover-table tfoot td { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+            /* PDF 2 — FICHAS (retrato, definida dinamicamente) */
+            body.printing-multi #sheetContent { display: none !important; }
+            body.printing-multi #multiSheetContainer { display: block !important; position: static !important; left: auto !important; top: auto !important; width: 100% !important; }
+            body.printing-multi #multiSheetContainer .print-sheet { display: block !important; width: 100% !important; max-width: 100% !important; margin: 0 !important; page-break-after: always; break-after: page; }
+            body.printing-multi #multiSheetContainer .print-sheet:last-child { page-break-after: auto; break-after: auto; }
         }
     </style>
 </head>
@@ -229,7 +233,8 @@
             <div class="corrida-info-bar" id="corridaInfoBar"></div>
             <div class="corrida-actions">
                 <button class="btn-corrida" onclick="toggleSelectAllCorrida()"><i class="fa-solid fa-check-double"></i> <span id="selAllLabel">Selecionar todos</span></button>
-                <button class="btn-corrida primary" id="btnGerarPdfCorrida" onclick="gerarPDFSelecionadas()" disabled><i class="fa-solid fa-file-pdf"></i> Gerar PDF (<span id="selCount">0</span>)</button>
+                <button class="btn-corrida primary" id="btnGerarCapa" onclick="gerarCapaPDF()" disabled><i class="fa-solid fa-file-pdf"></i> Gerar Capa (<span id="selCount">0</span>)</button>
+                <button class="btn-corrida" id="btnGerarFichas" onclick="gerarFichasPDF()" disabled><i class="fa-solid fa-file-lines"></i> Gerar Fichas (<span id="selCountF">0</span>)</button>
             </div>
             <table class="corrida-table">
                 <thead>
@@ -774,17 +779,53 @@
             const checkboxes = Array.from(document.querySelectorAll('.corrida-cb'));
             const sel = checkboxes.filter(c => c.checked).length;
             document.getElementById('selCount').innerText = sel;
-            document.getElementById('btnGerarPdfCorrida').disabled = sel === 0;
+            document.getElementById('selCountF').innerText = sel;
+            document.getElementById('btnGerarCapa').disabled = sel === 0;
+            document.getElementById('btnGerarFichas').disabled = sel === 0;
             const all = document.getElementById('selAllCheckbox');
             all.checked = checkboxes.length > 0 && sel === checkboxes.length;
             document.getElementById('selAllLabel').innerText = all.checked ? 'Desmarcar todos' : 'Selecionar todos';
         }
 
-        // Programação da Fusão: capa (paisagem) + ficha de fusão individual de cada item (retrato).
-        async function gerarPDFSelecionadas() {
-            const codigos = Array.from(document.querySelectorAll('.corrida-cb:checked')).map(c => c.value);
+        // Define a orientação do PDF dinamicamente (paisagem p/ capa, retrato p/ fichas).
+        function setPrintOrientation(orient) {
+            let s = document.getElementById('erus-print-orient');
+            if (!s) { s = document.createElement('style'); s.id = 'erus-print-orient'; document.head.appendChild(s); }
+            const margin = orient === 'landscape' ? '10mm' : '1cm';
+            s.textContent = `@media print { @page { size: A4 ${orient}; margin: ${margin}; } }`;
+        }
+
+        const _selecionados = () => Array.from(document.querySelectorAll('.corrida-cb:checked')).map(c => c.value);
+
+        // PDF 1 — CAPA (folha deitada / paisagem), só a programação da corrida.
+        function gerarCapaPDF() {
+            const codigos = _selecionados();
             if (!codigos.length) return;
-            const btn = document.getElementById('btnGerarPdfCorrida');
+            const selItens = _corridaItens.filter(it => codigos.includes(String(it.produto_pcp)));
+            const container = document.getElementById('multiSheetContainer');
+            container.innerHTML = '';
+            const cover = buildCorridaCover(_corridaInfo, selItens);
+            if (!cover) return;
+            container.appendChild(cover);
+            setPrintOrientation('landscape');
+            const cleanup = () => {
+                document.body.classList.remove('printing-cover');
+                container.innerHTML = '';
+                window.removeEventListener('afterprint', cleanup);
+            };
+            window.addEventListener('afterprint', cleanup);
+            const waitFonts = (document.fonts && document.fonts.ready) ? document.fonts.ready : Promise.resolve();
+            waitFonts.then(() => {
+                document.body.classList.add('printing-cover');
+                requestAnimationFrame(() => window.print());
+            });
+        }
+
+        // PDF 2 — FICHAS (em pé / retrato): ficha de fusão individual de cada item selecionado.
+        async function gerarFichasPDF() {
+            const codigos = _selecionados();
+            if (!codigos.length) return;
+            const btn = document.getElementById('btnGerarFichas');
             const original = btn.innerHTML;
             btn.disabled = true;
             btn.innerHTML = '<div class="spinner" style="width:14px;height:14px;border-width:2px;margin:0;"></div> Gerando...';
@@ -801,9 +842,13 @@
                         faltando.push(codigo);
                     }
                 }
+                if (!fichas.length) {
+                    alert('Nenhuma das peças selecionadas possui ficha técnica de fusão cadastrada.');
+                    return;
+                }
                 if (faltando.length) alert('Sem ficha técnica de fusão (ignoradas): ' + faltando.join(', '));
-                const selItens = _corridaItens.filter(it => codigos.includes(String(it.produto_pcp)));
-                abrirPdfFichas(fichas, selItens);
+                setPrintOrientation('portrait');
+                abrirPdfFichas(fichas);
             } finally {
                 btn.innerHTML = original;
                 btn.disabled = false;
@@ -912,13 +957,10 @@
             return el;
         }
 
-        function abrirPdfFichas(fichas, coverItens) {
+        function abrirPdfFichas(fichas) {
             const container = document.getElementById('multiSheetContainer');
             const sc = document.getElementById('sheetContent');
             container.innerHTML = '';
-
-            const cover = buildCorridaCover(_corridaInfo, coverItens);
-            if (cover) container.appendChild(cover);
 
             const build = () => {
                 const prevDisplay = sc.style.display;
