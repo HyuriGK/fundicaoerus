@@ -41,6 +41,7 @@ async function sync() {
         `);
         await pgClient.query(`ALTER TABLE corridas_programadas_sync ADD COLUMN IF NOT EXISTS data_cor DATE`);
         await pgClient.query(`ALTER TABLE corridas_programadas_sync ADD COLUMN IF NOT EXISTS data_programada_cor DATE`);
+        await pgClient.query(`ALTER TABLE corridas_programadas_sync ADD COLUMN IF NOT EXISTS op_codigo INTEGER`);
         console.log('✅ Tabela corridas_programadas_sync verificada/criada');
 
         await pgClient.query(`DELETE FROM corridas_programadas_sync`);
@@ -67,6 +68,7 @@ async function sync() {
                     cp.SEQUENCIA_VAZADA_CRPG,
                     cp.QUANTIDADE_PROGRAMADA_CRPG,
                     cp.SITUACAO_APONTAMENTO_CRPG,
+                    cp.PCP_CODIGO_CRPG,
                     p.PRODUTO_PCP,
                     p.PRO_EMPRESA_PCP,
                     p.QUANTIDADE_PCP,
@@ -108,7 +110,7 @@ async function sync() {
             const chunk = rows.slice(i, i + BATCH);
             const values = [];
             const placeholders = chunk.map((row, idx) => {
-                const base = idx * 15;
+                const base = idx * 16;
                 values.push(
                     toInt(row.CODIGO_COR),
                     toStr(row.CORRIDA_COR),
@@ -124,16 +126,17 @@ async function sync() {
                     toNum(row.QUANTIDADE_PROGRAMADA_CRPG),
                     toNum(row.QUANTIDADE_PCP),
                     toNum(row.PESO_PCP),
-                    toStr(row.SITUACAO_APONTAMENTO_CRPG)
+                    toStr(row.SITUACAO_APONTAMENTO_CRPG),
+                    toInt(row.PCP_CODIGO_CRPG)
                 );
-                return `($${base+1},$${base+2},$${base+3},$${base+4},$${base+5},$${base+6},$${base+7},$${base+8},$${base+9},$${base+10},$${base+11},$${base+12},$${base+13},$${base+14},$${base+15})`;
+                return `($${base+1},$${base+2},$${base+3},$${base+4},$${base+5},$${base+6},$${base+7},$${base+8},$${base+9},$${base+10},$${base+11},$${base+12},$${base+13},$${base+14},$${base+15},$${base+16})`;
             });
 
             await pgClient.query(`
                 INSERT INTO corridas_programadas_sync (
                     codigo_cor, corrida_cor, data_cor, data_programada_cor, forno_cor, peso_cor, material_mat,
                     sequencia_item, produto_pcp, pro_empresa_pcp, nome_pro,
-                    quantidade_programada, quantidade_pcp, peso_pcp, situacao_apontamento
+                    quantidade_programada, quantidade_pcp, peso_pcp, situacao_apontamento, op_codigo
                 ) VALUES ${placeholders.join(',')}
                 ON CONFLICT (codigo_cor, sequencia_item) DO NOTHING
             `, values);

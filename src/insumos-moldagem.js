@@ -97,6 +97,7 @@ router.get('/corrida/:numero', async (req, res) => {
 
         // Lê do Neon (corridas_programadas_sync) — Vercel não alcança o Firebird local.
         // Mantido atualizado pelo módulo INSUMOS do sync-forever.
+        // JOIN ficha_tecnica p/ dados da capa do PDF (tipo modelo, macho, figuras).
         const result = await pool.query(`
             SELECT
                 c.codigo_cor,
@@ -107,12 +108,17 @@ router.get('/corrida/:numero', async (req, res) => {
                 c.peso_cor,
                 c.material_mat,
                 c.sequencia_item,
+                c.op_codigo,
                 c.produto_pcp,
                 c.nome_pro,
                 c.quantidade_programada,
                 c.quantidade_pcp,
-                c.peso_pcp
+                c.peso_pcp,
+                ft.tipo_modelo_desc,
+                ft.qtde_caixas_macho,
+                ft.qtde_figuras
             FROM corridas_programadas_sync c
+            LEFT JOIN ficha_tecnica ft ON ft.pro_codigo_fic = c.produto_pcp::text
             WHERE TRIM(c.corrida_cor) = $1
             ORDER BY c.codigo_cor DESC, c.sequencia_item
         `, [numero]);
@@ -126,10 +132,14 @@ router.get('/corrida/:numero', async (req, res) => {
             .filter(r => r.produto_pcp)
             .map(r => ({
                 sequencia:             r.sequencia_item,
+                op_codigo:             r.op_codigo,
                 produto_pcp:           r.produto_pcp,
                 nome_pro:              r.nome_pro,
                 quantidade_programada: r.quantidade_programada,
                 peso_pcp:              r.peso_pcp,
+                tipo_modelo:           r.tipo_modelo_desc || '',
+                qtde_caixas_macho:     Number(r.qtde_caixas_macho) || 0,
+                qtde_figuras:          Number(r.qtde_figuras) || 0,
             }));
 
         res.json({
