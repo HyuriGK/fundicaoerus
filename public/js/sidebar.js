@@ -207,6 +207,8 @@
                     '<i class="fa-solid fa-screwdriver-wrench"></i><span>Acabamento Interno</span></a>' +
                 '<a href="insumosmoldagem.html" data-stip="Insumos de Moldagem" class="erus-nav-link' + isActive('insumosmoldagem.html') + '">' +
                     '<i class="fa-solid fa-cubes"></i><span>Insumos de Moldagem</span></a>' +
+                '<a href="programacaofusao.html" data-stip="Programação da Fusão" class="erus-nav-link' + isActive('programacaofusao.html') + '">' +
+                    '<i class="fa-solid fa-fire-flame-curved"></i><span>Programação da Fusão</span></a>' +
             '</div>' +
             // ENGENHARIA
             '<div class="erus-nav-group-sep" data-stip="Engenharia" onclick="erusSidebarToggleGroup(\'eg-engenharia\')">' +
