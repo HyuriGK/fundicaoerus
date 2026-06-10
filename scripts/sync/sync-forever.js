@@ -113,6 +113,7 @@ const SYNC_BATS = [
     { name: 'PRODUCAO',    file: path.join('sync', 'sincronizar_aproducao.bat'),     icon: '[PR]', pageId: 'pedidos.html' },
     { name: 'REFUGOS',     file: path.join('sync', 'sincronizar_arefugo.bat'),       icon: '[RF]', pageId: 'refugos.html' },
     { name: 'SNAPSHOTS',   file: path.join('sync', 'sincronizar_asnapshots.bat'),    icon: '[SS]', pageId: 'pedidos.html' },
+    { name: 'INSUMOS',     file: path.join('sync', 'sincronizar_insumos.bat'),       icon: '[IN]', pageId: 'insumosmoldagem.html' },
 ];
 
 const MOLDAGEM_BAT  = { name: 'MOLDAGEM', file: path.join('sync', 'sincronizar_fichatecmoldagem.bat'), icon: '[ML]', pageId: 'fichatecmoldagem.html' };
