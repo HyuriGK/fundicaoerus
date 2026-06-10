@@ -146,7 +146,10 @@
 
         /* PRINT */
         @media print {
-            @page { size: A4 portrait; margin: 1cm; }
+            @page { margin: 1cm; }
+            @page pg-retrato { size: A4 portrait; margin: 1cm; }
+            @page pg-paisagem { size: A4 landscape; margin: 10mm; }
+            body { page: pg-retrato; }
             html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; color: #000 !important; }
             .ambient-bg, .side-menu, .side-menu-trigger, #erus-sidebar, #erus-sidebar-backdrop, #erus-logout-modal, #erus-pref-modal, #sync-floating-indicator, #sync-overlay, #last-sync-toast, .modal-overlay, .loader, .status-empty, .search-wrapper, header, .tipo-switcher, [data-no-print] { display: none !important; visibility: hidden !important; height: 0 !important; overflow: hidden !important; margin: 0 !important; padding: 0 !important; }
             body { padding-left: 0 !important; margin-left: 0 !important; }
@@ -178,9 +181,8 @@
             body.printing-multi #multiSheetContainer .print-sheet { display: block !important; width: 100% !important; max-width: 100% !important; margin: 0 !important; page-break-after: always; break-after: page; }
             body.printing-multi #multiSheetContainer .print-sheet:last-child { page-break-after: auto; break-after: auto; }
 
-            /* Capa da corrida em paisagem (página nomeada) + fichas seguem em retrato */
-            @page corrida-capa { size: A4 landscape; margin: 10mm; }
-            body.printing-multi #multiSheetContainer .print-cover { page: corrida-capa; display: block !important; width: 100% !important; page-break-after: always; break-after: page; }
+            /* Capa da corrida em paisagem; fichas seguem em retrato (pg-retrato via body) */
+            body.printing-multi #multiSheetContainer .print-cover { page: pg-paisagem; display: block !important; width: 100% !important; page-break-after: always; break-after: page; }
             .print-cover .cover-table thead th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             .print-cover .cover-table tfoot td, .print-cover .cover-apont { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         }
@@ -857,26 +859,20 @@
             const dataProg = fmtDateCorrida(corrida.data_programada) !== '-' ? fmtDateCorrida(corrida.data_programada) : fmtDateCorrida(corrida.data_cor);
             const num = v => Number(v) || 0;
 
-            let totMacho = 0, totProg = 0, totMoldes = 0;
+            let totProg = 0, totMoldes = 0;
             const linhas = itens.map((it, i) => {
                 const prog = num(it.quantidade_programada);
                 const figuras = num(it.qtde_figuras);
                 const moldes = figuras > 0 ? Math.round(prog / figuras) : 0;
-                const macho = num(it.qtde_caixas_macho) * moldes;
-                const tipoModelo = String(it.tipo_modelo || '').replace(/^MODELO\s+/i, '') || '-';
-                totMacho += macho; totProg += prog; totMoldes += moldes;
+                totProg += prog; totMoldes += moldes;
                 return `<tr>
                     <td class="num">${it.sequencia || i + 1}</td>
                     <td class="num">${it.op_codigo || '-'}</td>
                     <td class="cod">${it.produto_pcp}</td>
                     <td class="txt">${it.nome_pro || '-'}</td>
-                    <td class="txt">${tipoModelo}</td>
-                    <td class="num">${macho}</td>
                     <td class="num">${prog.toLocaleString('pt-BR')}</td>
                     <td class="num">${figuras || '-'}</td>
                     <td class="num">${moldes}</td>
-                    <td class="cover-apont"></td>
-                    <td class="cover-apont"></td>
                 </tr>`;
             }).join('');
 
@@ -908,24 +904,18 @@
                             <th>OP</th>
                             <th>Código</th>
                             <th>Peça / modelo</th>
-                            <th>Tipo do modelo</th>
-                            <th>Quant.<br>Macho</th>
                             <th>Quant.<br>Programada</th>
                             <th>Quant.<br>Figuras</th>
                             <th>Quant.<br>Moldes</th>
-                            <th>Moldagem</th>
-                            <th>Fusão</th>
                         </tr>
                     </thead>
                     <tbody>${linhas}</tbody>
                     <tfoot>
                         <tr>
-                            <td colspan="5"></td>
-                            <td>${totMacho}</td>
+                            <td colspan="4"></td>
                             <td>${totProg.toLocaleString('pt-BR')}</td>
                             <td></td>
                             <td>${totMoldes}</td>
-                            <td colspan="2"></td>
                         </tr>
                     </tfoot>
                 </table>`;
