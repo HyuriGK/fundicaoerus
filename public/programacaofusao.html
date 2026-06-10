@@ -122,6 +122,8 @@
         /* CAPA DA CORRIDA (folha deitada) — espelha o relatório do ERP */
         .print-cover { width: 100%; background: #fff; color: #000; font-family: 'Inter', sans-serif; }
         .print-cover .cover-top { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 12px; }
+        .print-cover .cover-brand-wrap { display: flex; align-items: center; gap: 14px; }
+        .print-cover .cover-logo { height: 50px; width: auto; object-fit: contain; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         .print-cover .cover-brand { display: flex; flex-direction: column; gap: 2px; }
         .print-cover .cover-brand .cb-empresa { font-size: 1.15rem; font-weight: 900; }
         .print-cover .cover-brand .cb-rel { font-size: 0.85rem; font-weight: 700; }
@@ -808,8 +810,22 @@
             window.addEventListener('afterprint', cleanup);
             const waitFonts = (document.fonts && document.fonts.ready) ? document.fonts.ready : Promise.resolve();
             waitFonts.then(() => {
-                document.body.classList.add('printing-cover');
-                requestAnimationFrame(() => window.print());
+                // aguarda o logo (e qualquer imagem) carregar antes de imprimir
+                const imgs = Array.from(container.querySelectorAll('img'));
+                const waitImgs = new Promise(resolve => {
+                    let pending = imgs.filter(i => !i.complete).length;
+                    if (!pending) return resolve();
+                    imgs.forEach(i => {
+                        if (i.complete) return;
+                        const done = () => { if (--pending <= 0) resolve(); };
+                        i.addEventListener('load', done);
+                        i.addEventListener('error', done);
+                    });
+                });
+                waitImgs.then(() => {
+                    document.body.classList.add('printing-cover');
+                    requestAnimationFrame(() => window.print());
+                });
             });
         }
 
@@ -907,10 +923,13 @@
             el.className = 'print-cover';
             el.innerHTML = `
                 <div class="cover-top">
-                    <div class="cover-brand">
-                        <span class="cb-empresa">FUNDIÇÃO ERUS LTDA</span>
-                        <span class="cb-rel">Relatório Ficha de Apontamento : Fusão</span>
-                        <span class="cb-emissao">Emissão: ${hoje}</span>
+                    <div class="cover-brand-wrap">
+                        <img class="cover-logo" src="logo.png" alt="Fundição Erus">
+                        <div class="cover-brand">
+                            <span class="cb-empresa">FUNDIÇÃO ERUS LTDA</span>
+                            <span class="cb-rel">Relatório Ficha de Apontamento : Fusão</span>
+                            <span class="cb-emissao">Emissão: ${hoje}</span>
+                        </div>
                     </div>
                     <div class="cover-meta">
                         <div><b>Tipo Data:</b> PROGRAMAÇÃO</div>
