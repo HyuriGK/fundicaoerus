@@ -118,47 +118,6 @@
         #multiSheetContainer { position: absolute; left: -100000px; top: 0; width: 760px; }
         #multiSheetContainer .print-sheet { width: 760px; margin: 0 auto; }
         #multiSheetContainer .print-sheet .sheet-container { margin-bottom: 0; }
-        body.printing-multi { background: #fff !important; color: #000 !important; }
-        body.printing-multi .ambient-bg,
-        body.printing-multi .side-menu,
-        body.printing-multi .side-menu-trigger,
-        body.printing-multi #erus-sidebar,
-        body.printing-multi #erus-sidebar-backdrop,
-        body.printing-multi #erus-logout-modal,
-        body.printing-multi #erus-pref-modal,
-        body.printing-multi #sync-floating-indicator,
-        body.printing-multi #sync-overlay,
-        body.printing-multi #last-sync-toast,
-        body.printing-multi .modal-overlay,
-        body.printing-multi .loader,
-        body.printing-multi .status-empty,
-        body.printing-multi .search-wrapper,
-        body.printing-multi header,
-        body.printing-multi .tipo-switcher,
-        body.printing-multi [data-no-print],
-        body.printing-multi #sheetContent { display: none !important; visibility: hidden !important; height: 0 !important; overflow: hidden !important; margin: 0 !important; padding: 0 !important; }
-        body.printing-multi .page-wrapper { margin-left: 0 !important; }
-        body.printing-multi .container { max-width: 100% !important; width: 100% !important; padding: 0 !important; margin: 0 !important; display: block !important; align-items: unset !important; }
-        body.printing-multi #multiSheetContainer { display: block !important; position: static !important; left: auto !important; top: auto !important; width: 100% !important; }
-        body.printing-multi #multiSheetContainer .print-sheet { display: block !important; width: calc(100% + 28px) !important; max-width: none !important; margin: 0 0 0 -12px !important; page-break-after: always; break-after: page; transform-origin: top left; }
-        body.printing-multi #multiSheetContainer .print-sheet:last-child { page-break-after: auto; break-after: auto; }
-        body.printing-multi .sheet-container { border: 1px solid #000 !important; box-shadow: none !important; background: #fff !important; border-radius: 0 !important; page-break-inside: avoid !important; }
-        body.printing-multi .info-block,
-        body.printing-multi .notes-area { background: #fdfdfd !important; border: 1px solid #ccc !important; }
-        body.printing-multi .info-label { color: #444 !important; }
-        body.printing-multi .info-value,
-        body.printing-multi .notes-text,
-        body.printing-multi .item-main-info h2,
-        body.printing-multi .sheet-title-container h1 { color: #000 !important; }
-        body.printing-multi .section-divider { background: #000 !important; }
-        body.printing-multi .section-divider span { background: #fff !important; color: #000 !important; }
-        body.printing-multi .image-container-large { border: 1px solid #ccc !important; background: #fff !important; min-height: 380px !important; }
-        body.printing-multi .image-container-large i { display: none !important; }
-        body.printing-multi .sheet-title-container { border-bottom: 2px solid #000 !important; }
-        body.printing-multi table th,
-        body.printing-multi table td { border: 1px solid #ccc !important; }
-        body.printing-multi table thead { background: #eee !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-        body.printing-multi .print-footer { color: #555 !important; }
 
         /* LOADER */
         .loader, .status-empty { text-align: center; padding: 60px; color: var(--text-muted); }
@@ -196,7 +155,7 @@
             #multiSheetContainer { display: none !important; }
             body.printing-multi #sheetContent { display: none !important; }
             body.printing-multi #multiSheetContainer { display: block !important; position: static !important; left: auto !important; top: auto !important; width: 100% !important; }
-            body.printing-multi #multiSheetContainer .print-sheet { display: block !important; width: calc(100% + 28px) !important; max-width: none !important; margin: 0 0 0 -12px !important; page-break-after: always; break-after: page; transform-origin: top left; }
+            body.printing-multi #multiSheetContainer .print-sheet { display: block !important; width: 100% !important; max-width: 100% !important; margin: 0 !important; page-break-after: always; break-after: page; }
             body.printing-multi #multiSheetContainer .print-sheet:last-child { page-break-after: auto; break-after: auto; }
         }
     </style>
@@ -523,7 +482,6 @@
                 document.getElementById('loader').style.display = 'none';
                 document.getElementById('sheetContent').style.display = 'block';
                 document.getElementById('pdf-btn-wrapper').style.display = 'flex';
-                return data;
             } catch (err) {
                 document.getElementById('loader').style.display = 'none';
                 document.getElementById('pdf-btn-wrapper').style.display = 'none';
@@ -532,7 +490,6 @@
                 document.querySelector('#initialStatus i').style.color = '#ef4444';
                 document.querySelector('#initialStatus h3').innerText = 'Não encontrado';
                 document.querySelector('#initialStatus p').innerText = err.message;
-                return null;
             }
         }
 
@@ -824,7 +781,6 @@
                     return;
                 }
                 if (faltando.length) alert('Sem ficha técnica de fusão (ignoradas): ' + faltando.join(', '));
-                await carregarVisualFichaProduto(fichas[0]);
                 abrirPdfFichas(fichas);
             } finally {
                 btn.innerHTML = original;
@@ -859,136 +815,6 @@
             return Math.min(1, PRINT_W_PX_FT / W);
         }
 
-        function nextPaintCorrida() {
-            return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-        }
-
-        function waitImagesReadyCorrida(root) {
-            const imgs = Array.from(root.querySelectorAll('img')).filter(i => i.getAttribute('src'));
-            return new Promise(resolve => {
-                let pending = imgs.filter(i => !i.complete).length;
-                if (!pending) return resolve();
-                imgs.forEach(i => {
-                    if (i.complete) return;
-                    const done = () => { if (--pending <= 0) resolve(); };
-                    i.addEventListener('load', done, { once: true });
-                    i.addEventListener('error', done, { once: true });
-                });
-            });
-        }
-
-        async function waitFichaLayoutCorrida(root) {
-            if (document.fonts && document.fonts.ready) await document.fonts.ready;
-            await waitImagesReadyCorrida(root);
-            await nextPaintCorrida();
-        }
-
-        async function carregarVisualFichaProduto(ficha) {
-            const sc = document.getElementById('sheetContent');
-            document.getElementById('searchInput').value = ficha.pro_codigo || '';
-            await searchSheet();
-            sc.style.zoom = '';
-            sc.style.width = '';
-            sc.style.maxWidth = '';
-            await waitFichaLayoutCorrida(sc);
-            await new Promise(resolve => setTimeout(resolve, 400));
-        }
-
-        async function abrirPdfFichasCorrida(fichas, printWin) {
-            const container = document.getElementById('multiSheetContainer');
-            const sc = document.getElementById('sheetContent');
-            container.innerHTML = '';
-            const template = sc.innerHTML;
-            const restoreDisplay = sc.style.display;
-            const restoreVisibility = sc.style.visibility;
-            const restoreAnimation = sc.style.animation;
-
-            sc.style.visibility = 'hidden';
-            sc.style.display = 'block';
-            sc.style.animation = 'none';
-
-            const pages = [];
-
-            for (const d of fichas) {
-                sc.innerHTML = template;
-                populateData(d, sc);
-                await waitFichaLayoutCorrida(sc);
-                const scSheet = sc.querySelector('.sheet-container');
-                const z = computeFichaZoom(sc, scSheet);
-                const clone = scSheet.cloneNode(true);
-                const wrap = document.createElement('div');
-                wrap.className = 'print-sheet';
-                wrap.style.zoom = z;
-                wrap.appendChild(clone);
-                pages.push(wrap);
-            }
-
-            sc.innerHTML = template;
-            sc.style.display = restoreDisplay;
-            sc.style.visibility = restoreVisibility;
-            sc.style.animation = restoreAnimation;
-            sc.style.zoom = '';
-            sc.style.width = '';
-            sc.style.maxWidth = '';
-
-            const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
-                .map(el => el.outerHTML)
-                .join('\n');
-            const extraPrintCss = `
-                <style>
-                    body { background:#fff !important; color:#000 !important; }
-                    .print-sheet { width:100%; max-width:100%; margin:0; page-break-after:always; break-after:page; }
-                    .print-sheet:last-child { page-break-after:auto; break-after:auto; }
-                    @media print {
-                        @page { size:A4 portrait; margin:1cm; }
-                        html, body { margin:0 !important; padding:0 !important; background:#fff !important; color:#000 !important; }
-                        .container { max-width:100% !important; width:100% !important; padding:0 !important; margin:0 !important; display:block !important; }
-                        #sheetContent { display:block !important; width:100% !important; max-width:100% !important; margin:0 !important; }
-                        .print-sheet { display:block !important; width:100% !important; max-width:100% !important; margin:0 !important; page-break-after:always; break-after:page; }
-                        .print-sheet:last-child { page-break-after:auto; break-after:auto; }
-                        .sheet-container { border:1px solid #000 !important; box-shadow:none !important; background:#fff !important; border-radius:0 !important; page-break-inside:avoid !important; }
-                        .info-block, .notes-area { background:#fdfdfd !important; border:1px solid #ccc !important; }
-                        .info-label { color:#444 !important; }
-                        .info-value, .notes-text, .item-main-info h2, .item-code, td, th { color:#000 !important; }
-                        .section-divider { background:#000 !important; }
-                        .section-divider span { background:#fff !important; color:#000 !important; }
-                        .image-container-large { border:1px solid #ccc !important; background:#fff !important; min-height:380px !important; }
-                        .image-container-large i { display:none !important; }
-                        .sheet-title-container { border-bottom:2px solid #000 !important; }
-                        .sheet-title-container h1 { color:#000 !important; }
-                        table th, table td { border:1px solid #ccc !important; }
-                        table thead { background:#eee !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-                        .print-footer { color:#555 !important; }
-                    }
-                </style>`;
-
-            printWin.document.open();
-            printWin.document.write(`<!DOCTYPE html>
-                <html lang="pt-BR">
-                <head>
-                    <meta charset="UTF-8">
-                    <base href="${location.href}">
-                    <title>Ficha Técnica de Fusão - Corrida</title>
-                    ${styles}
-                    ${extraPrintCss}
-                </head>
-                <body>
-                    <div class="container">
-                        <div id="sheetContent">${pages.map(p => p.outerHTML).join('')}</div>
-                    </div>
-                    <script>
-                        window.onload = function() {
-                            setTimeout(function() {
-                                window.focus();
-                                window.print();
-                            }, 350);
-                        };
-                    <\/script>
-                </body>
-                </html>`);
-            printWin.document.close();
-        }
-
         // Gera o PDF reaproveitando EXATAMENTE o layout/CSS da ficha individual.
         // Cada ficha é medida no PRÓPRIO #sheetContent (o mesmo elemento usado na busca por código),
         // de forma SÍNCRONA (sem repintar a tela), o zoom é "assado" no clone de impressão e NÃO é
@@ -997,12 +823,12 @@
             const container = document.getElementById('multiSheetContainer');
             const sc = document.getElementById('sheetContent');
             container.innerHTML = '';
-            const prevDisplay = sc.style.display;
-            const prevVis = sc.style.visibility;
-            const snapshot = sc.innerHTML; // preserva a ficha atualmente exibida
 
-            // Mede cada ficha no #sheetContent já "aquecido" (fontes aplicadas) e assa o zoom no clone.
-            const buildAndPrint = () => {
+            const build = () => {
+                const prevDisplay = sc.style.display;
+                const snapshot = sc.innerHTML; // preserva a ficha atualmente exibida
+
+                sc.style.display = 'block'; // medição no MESMO contexto da busca por código
                 fichas.forEach(d => {
                     populateData(d, sc);
                     const scSheet = sc.querySelector('.sheet-container');
@@ -1015,12 +841,12 @@
                     container.appendChild(wrap);
                 });
 
-                // restaura o #sheetContent exatamente como estava
+                // restaura o #sheetContent exatamente como estava (síncrono -> sem flash visível)
                 sc.innerHTML = snapshot;
                 sc.style.display = prevDisplay;
-                sc.style.visibility = prevVis;
                 sc.style.zoom = ''; sc.style.width = ''; sc.style.maxWidth = '';
 
+                // espera as imagens dos clones carregarem e imprime
                 const imgs = Array.from(container.querySelectorAll('img')).filter(i => i.getAttribute('src'));
                 const waitImages = new Promise(resolve => {
                     let pending = imgs.filter(i => !i.complete).length;
@@ -1043,30 +869,12 @@
                     window.removeEventListener('afterprint', cleanup);
                 };
                 window.addEventListener('afterprint', cleanup);
-                requestAnimationFrame(() => requestAnimationFrame(() => window.print()));
+                window.print();
             };
 
-            // AQUECIMENTO (automatiza o "truque" manual): exibe + popula o #sheetContent e espera as
-            // FONTES serem APLICADAS (fonts.ready + 2 frames). Sem isso, a 1ª medição usa fonte fallback
-            // (mais alta) -> altura maior -> zoom menor -> fichas menores. visibility:hidden evita flash.
-            sc.style.visibility = 'hidden';
-            sc.style.display = 'block';
-            populateData(fichas[0], sc);
+            // fontes prontas antes de medir (métricas corretas), depois constrói/imprime
             const waitFonts = (document.fonts && document.fonts.ready) ? document.fonts.ready : Promise.resolve();
-            waitFonts.then(() => requestAnimationFrame(() => requestAnimationFrame(buildAndPrint)));
-        }
-
-        async function warmFichaVisualOnLoad() {
-            const input = document.getElementById('searchInput');
-            input.value = '284000800';
-            const data = await searchSheet();
-            if (!data) return;
-            await waitFichaLayoutCorrida(document.getElementById('sheetContent'));
-            window.dispatchEvent(new Event('beforeprint'));
-            await waitFichaLayoutCorrida(document.getElementById('sheetContent'));
-            window.dispatchEvent(new Event('afterprint'));
-            input.value = '';
-            document.getElementById('searchInput').focus();
+            waitFonts.then(build);
         }
 
         window.onload = () => {
@@ -1076,7 +884,7 @@
                 document.getElementById('searchInput').value = codigo;
                 searchSheet();
             } else {
-                warmFichaVisualOnLoad();
+                document.getElementById('searchInput').focus();
             }
         };
 
