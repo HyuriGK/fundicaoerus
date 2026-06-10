@@ -133,7 +133,9 @@
             .page-wrapper { margin-left: 0 !important; }
             .container { max-width: 100% !important; width: 100% !important; padding: 0 !important; margin: 0 !important; display: block !important; align-items: unset !important; }
             #sheetContent { display: flex !important; flex-direction: column; justify-content: center; align-items: center; height: 100vh !important; width: 100% !important; max-width: 100% !important; margin: 0 !important; overflow: hidden !important; }
-            .sheet-container { border: 1px solid #000 !important; box-shadow: none !important; background: #fff !important; border-radius: 0 !important; page-break-inside: avoid !important; transform-origin: center center !important; }
+            .ficha-fit { position: relative !important; }
+            .ficha-fit > .sheet-container { position: absolute !important; top: 0 !important; left: 0 !important; transform-origin: top left !important; }
+            .sheet-container { border: 1px solid #000 !important; box-shadow: none !important; background: #fff !important; border-radius: 0 !important; page-break-inside: avoid !important; }
             .info-block { background: #fdfdfd !important; border: 1px solid #ccc !important; }
             .info-label { color: #444 !important; }
             .info-value { color: #000 !important; }
@@ -156,6 +158,8 @@
             body.printing-multi #sheetContent { display: none !important; }
             body.printing-multi #multiSheetContainer { display: block !important; position: static !important; left: auto !important; top: auto !important; width: 100% !important; }
             body.printing-multi #multiSheetContainer .print-sheet { display: flex !important; flex-direction: column; justify-content: center; align-items: center; height: 100vh; width: 100% !important; margin: 0 !important; overflow: hidden; page-break-after: always; break-after: page; }
+            body.printing-multi #multiSheetContainer .ficha-fit { position: relative; }
+            body.printing-multi #multiSheetContainer .ficha-fit > .sheet-container { position: absolute; top: 0; left: 0; transform-origin: top left; }
             body.printing-multi #multiSheetContainer .print-sheet:last-child { page-break-after: auto; break-after: auto; }
         }
     </style>
@@ -240,6 +244,7 @@
         </div>
 
         <div id="sheetContent">
+            <div class="ficha-fit">
             <div class="sheet-container">
                 <!-- Título -->
                 <div style="text-align:center; margin-bottom:30px; border-bottom:2px solid var(--color-primary); padding-bottom:15px;" class="sheet-title-container">
@@ -416,6 +421,7 @@
                     <span>Fundição Erus • Processos de Qualidade Assegurada</span>
                     <span id="printMetadata"></span>
                 </div>
+            </div>
             </div>
         </div>
 
@@ -798,9 +804,12 @@
 
             fichas.forEach(d => {
                 const clone = tpl.cloneNode(true);
+                const fit = document.createElement('div');
+                fit.className = 'ficha-fit';
+                fit.appendChild(clone);
                 const wrap = document.createElement('div');
                 wrap.className = 'print-sheet';
-                wrap.appendChild(clone);
+                wrap.appendChild(fit);
                 container.appendChild(wrap);
                 populateData(d, clone);
             });
@@ -835,53 +844,57 @@
 
         // Auto-scale para impressão A4
         (function () {
-            const PRINT_W_PX = 718;
-            const PRINT_H_PX = 1030;
-            // Alarga o layout até a proporção bater com a da folha, depois usa ZOOM (<= 1) para
-            // reduzir a largura cheia (718px) — zoom redimensiona a caixa, então o flex do wrapper
-            // centraliza corretamente e a ficha preenche LARGURA e ALTURA sem cortar.
-            function fitSheet(sheet) {
-                const TARGET = PRINT_H_PX / PRINT_W_PX; // proporção da folha A4
-                const SAFE = 0.96; // margem de segurança p/ nunca encostar/cortar nas bordas
+            // Área útil ALVO dentro da folha (menor que a área imprimível p/ margem de segurança).
+            // A4 c/ margem 1cm = ~718x1047px; usamos um pouco menos p/ nunca cortar.
+            const USABLE_W = 690, USABLE_H = 985;
+            // Escala a ficha por TRANSFORM (origem top-left) dentro de uma .ficha-fit de tamanho fixo,
+            // centralizada pelo flex do wrapper. Determinístico: a área pintada == a .ficha-fit centrada.
+            function fitSheet(fitBox) {
+                const sheet = fitBox.querySelector('.sheet-container');
+                if (!sheet) return;
+                const TARGET = USABLE_H / USABLE_W; // proporção da área útil
                 const MAX_W = 1500;
                 const setW = w => { sheet.style.setProperty('width', w + 'px', 'important'); sheet.style.setProperty('max-width', w + 'px', 'important'); };
                 const measure = () => { void sheet.offsetHeight; return sheet.getBoundingClientRect().height; };
-                sheet.style.zoom = '1';
-                let W = PRINT_W_PX;
+                sheet.style.transform = 'none';
+                fitBox.style.width = ''; fitBox.style.height = '';
+                let W = USABLE_W;
                 setW(W);
                 let H = measure();
                 let safety = 0;
-                // conteúdo mais alto que a proporção da folha -> alarga p/ preencher a largura ao reduzir
+                // alto demais p/ a proporção -> alarga o layout (ao reduzir, preenche a largura)
                 while (H / W > TARGET && W < MAX_W && safety < 80) {
                     W = Math.ceil(W * 1.03); setW(W); H = measure(); safety++;
                 }
-                // usa a extensão REAL do conteúdo (evita corte se algo transbordar a largura definida)
-                void sheet.offsetHeight;
+                // usa a extensão REAL (evita corte se algum conteúdo transbordar a largura definida)
                 const realW = Math.max(W, sheet.scrollWidth);
                 const realH = Math.max(H, sheet.scrollHeight);
-                // zoom <= 1: nunca amplia; min() + SAFE garante que cabe inteiro, centralizado
-                sheet.style.zoom = Math.min(PRINT_W_PX / realW, PRINT_H_PX / realH) * SAFE;
+                const s = Math.min(USABLE_W / realW, USABLE_H / realH); // <= 1, nunca amplia
+                sheet.style.transform = 'scale(' + s + ')';
+                // .ficha-fit recebe o tamanho já escalado -> flex centraliza um bloco de tamanho fixo
+                fitBox.style.width = (realW * s) + 'px';
+                fitBox.style.height = (realH * s) + 'px';
             }
-            function clearSheet(sheet) {
-                sheet.style.zoom = '';
-                sheet.style.removeProperty('width');
-                sheet.style.removeProperty('max-width');
+            function clearSheet(fitBox) {
+                const sheet = fitBox.querySelector('.sheet-container');
+                if (sheet) { sheet.style.transform = ''; sheet.style.removeProperty('width'); sheet.style.removeProperty('max-width'); }
+                fitBox.style.width = ''; fitBox.style.height = '';
             }
             function applyScale() {
                 if (document.body.classList.contains('printing-multi')) {
-                    document.querySelectorAll('#multiSheetContainer .print-sheet > .sheet-container').forEach(fitSheet);
+                    document.querySelectorAll('#multiSheetContainer .print-sheet > .ficha-fit').forEach(fitSheet);
                     return;
                 }
-                const sheet = document.querySelector('#sheetContent > .sheet-container');
-                if (sheet) fitSheet(sheet);
+                const fit = document.querySelector('#sheetContent > .ficha-fit');
+                if (fit) fitSheet(fit);
             }
             function resetScale() {
                 if (document.body.classList.contains('printing-multi')) {
-                    document.querySelectorAll('#multiSheetContainer .print-sheet > .sheet-container').forEach(clearSheet);
+                    document.querySelectorAll('#multiSheetContainer .print-sheet > .ficha-fit').forEach(clearSheet);
                     return;
                 }
-                const sheet = document.querySelector('#sheetContent > .sheet-container');
-                if (sheet) clearSheet(sheet);
+                const fit = document.querySelector('#sheetContent > .ficha-fit');
+                if (fit) clearSheet(fit);
             }
             window.addEventListener('beforeprint', applyScale);
             window.addEventListener('afterprint', resetScale);
