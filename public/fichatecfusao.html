@@ -153,9 +153,10 @@
 
             /* Impressão de múltiplas fichas (corrida): cada ficha é uma "página" igual à individual */
             #multiSheetContainer { display: none !important; }
-            body.printing-multi #sheetContent { display: block !important; width: 100% !important; max-width: 100% !important; margin: 0 !important; }
-            body.printing-multi #sheetContent .print-sheet { display: block !important; width: 100% !important; max-width: 100% !important; margin: 0 !important; page-break-after: always; break-after: page; }
-            body.printing-multi #sheetContent .print-sheet:last-child { page-break-after: auto; break-after: auto; }
+            body.printing-multi #sheetContent { display: none !important; }
+            body.printing-multi #multiSheetContainer { display: block !important; position: static !important; left: auto !important; top: auto !important; width: 100% !important; }
+            body.printing-multi #multiSheetContainer .print-sheet { display: block !important; width: 100% !important; max-width: 100% !important; margin: 0 !important; page-break-after: always; break-after: page; }
+            body.printing-multi #multiSheetContainer .print-sheet:last-child { page-break-after: auto; break-after: auto; }
         }
     </style>
 </head>
@@ -758,11 +759,6 @@
         async function gerarPDFSelecionadas() {
             const codigos = Array.from(document.querySelectorAll('.corrida-cb:checked')).map(c => c.value);
             if (!codigos.length) return;
-            const printWin = window.open('', '_blank');
-            if (!printWin) {
-                alert('Permita pop-ups para gerar o PDF das fichas da corrida.');
-                return;
-            }
             const btn = document.getElementById('btnGerarPdfCorrida');
             const original = btn.innerHTML;
             btn.disabled = true;
@@ -785,7 +781,8 @@
                     return;
                 }
                 if (faltando.length) alert('Sem ficha técnica de fusão (ignoradas): ' + faltando.join(', '));
-                await abrirPdfFichasCorrida(fichas, printWin);
+                await carregarVisualFichaProduto(fichas[0]);
+                abrirPdfFichas(fichas);
             } finally {
                 btn.innerHTML = original;
                 btn.disabled = false;
@@ -841,6 +838,17 @@
             if (document.fonts && document.fonts.ready) await document.fonts.ready;
             await waitImagesReadyCorrida(root);
             await nextPaintCorrida();
+        }
+
+        async function carregarVisualFichaProduto(ficha) {
+            const sc = document.getElementById('sheetContent');
+            document.getElementById('searchInput').value = ficha.pro_codigo || '';
+            await searchSheet();
+            sc.style.zoom = '';
+            sc.style.width = '';
+            sc.style.maxWidth = '';
+            await waitFichaLayoutCorrida(sc);
+            await new Promise(resolve => setTimeout(resolve, 400));
         }
 
         async function abrirPdfFichasCorrida(fichas, printWin) {
@@ -1054,14 +1062,7 @@
             function applyScale() {
                 // Corrida: os clones já vêm pré-escalados (zoom medido no contexto do #sheetContent),
                 // não remedir aqui (a medição fora da tela dava tamanho diferente).
-                if (document.body.classList.contains('printing-multi')) {
-                    document.querySelectorAll('#sheetContent .print-sheet').forEach(page => {
-                        const sheet = page.querySelector('.sheet-container');
-                        if (!sheet) return;
-                        scaleEl(page, sheet, page.querySelector('.image-container-large'), page.querySelector('.notes-area'));
-                    });
-                    return;
-                }
+                if (document.body.classList.contains('printing-multi')) return;
                 const content = document.getElementById('sheetContent');
                 const sheet = document.querySelector('#sheetContent .sheet-container');
                 const wrapper = document.querySelector('.page-wrapper');
@@ -1070,12 +1071,7 @@
                 scaleEl(content, sheet, document.getElementById('imageContainer'), document.getElementById('notesObservationsPanel'));
             }
             function resetScale() {
-                if (document.body.classList.contains('printing-multi')) {
-                    document.querySelectorAll('#sheetContent .print-sheet').forEach(page => {
-                        resetEl(page, page.querySelector('.image-container-large'), page.querySelector('.notes-area'));
-                    });
-                    return;
-                }
+                if (document.body.classList.contains('printing-multi')) return;
                 const content = document.getElementById('sheetContent');
                 const wrapper = document.querySelector('.page-wrapper');
                 resetEl(content, document.getElementById('imageContainer'), document.getElementById('notesObservationsPanel'));
