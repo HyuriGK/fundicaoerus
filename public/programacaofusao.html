@@ -153,14 +153,14 @@
            A orientação (@page size) é definida dinamicamente antes de cada impressão
            (paisagem p/ a capa, retrato p/ as fichas) via #erus-print-orient. */
         @media print {
-            @page { margin: 10mm; }
-            html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; color: #000 !important; }
+            @page { size: A4 portrait; margin: 6mm; }
+            html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; color: #000 !important; min-height: 0 !important; height: auto !important; overflow: visible !important; }
             .ambient-bg, .side-menu, .side-menu-trigger, #erus-sidebar, #erus-sidebar-backdrop, #erus-logout-modal, #erus-pref-modal, #sync-floating-indicator, #sync-overlay, #last-sync-toast, .modal-overlay, .loader, .status-empty, .search-wrapper, header, .tipo-switcher, [data-no-print] { display: none !important; visibility: hidden !important; height: 0 !important; overflow: hidden !important; margin: 0 !important; padding: 0 !important; }
             body { padding-left: 0 !important; margin-left: 0 !important; }
-            .page-wrapper { margin-left: 0 !important; }
-            .container { max-width: 100% !important; width: 100% !important; padding: 0 !important; margin: 0 !important; display: block !important; align-items: unset !important; }
-            #sheetContent { display: block !important; width: 100% !important; max-width: 100% !important; margin: 0 !important; }
-            .sheet-container { border: 1px solid #000 !important; box-shadow: none !important; background: #fff !important; border-radius: 0 !important; page-break-inside: avoid !important; }
+            .page-wrapper { margin: 0 !important; min-height: 0 !important; height: auto !important; overflow: visible !important; }
+            .container { max-width: 100% !important; width: 100% !important; min-height: 0 !important; padding: 0 !important; margin: 0 !important; display: block !important; align-items: unset !important; overflow: visible !important; }
+            #sheetContent { display: block !important; width: 100% !important; max-width: 100% !important; margin: 0 !important; page-break-before: auto !important; break-before: auto !important; page-break-after: auto !important; break-after: auto !important; }
+            .sheet-container { border: 1px solid #000 !important; box-shadow: none !important; background: #fff !important; border-radius: 0 !important; page-break-inside: auto !important; break-inside: auto !important; page-break-before: auto !important; break-before: auto !important; }
             .info-block { background: #fdfdfd !important; border: 1px solid #ccc !important; }
             .info-label { color: #444 !important; }
             .info-value { color: #000 !important; }
@@ -788,7 +788,7 @@
         function setPrintOrientation(orient) {
             let s = document.getElementById('erus-print-orient');
             if (!s) { s = document.createElement('style'); s.id = 'erus-print-orient'; document.head.appendChild(s); }
-            const margin = orient === 'landscape' ? '10mm' : '1cm';
+            const margin = orient === 'landscape' ? '10mm' : '6mm';
             s.textContent = `@media print { @page { size: A4 ${orient}; margin: ${margin}; } }`;
         }
 
@@ -869,9 +869,7 @@
         // Mede a ficha (zoom p/ caber em 1 folha A4) NO MESMO contexto do #sheetContent.
         // Retorna o zoom (<= 1) e deixa imagem/observações com height:auto (estado de impressão),
         // para o clone capturar exatamente esse estado.
-        // 920px de altura útil: cabe em A4 (~1047px) e Carta/Letter (~980px) c/ margens de 1cm,
-        // e ainda sobrevive a margens "Padrão" do Chrome (0,5in) no Carta (~960px úteis)
-        const PRINT_W_PX_FT = 718, PRINT_H_PX_FT = 920;
+        const PRINT_W_PX_FT = 748, PRINT_H_PX_FT = 1000;
         function computeFichaZoom(content, sheet) {
             const img = content.querySelector('.image-container-large');
             const notes = content.querySelector('.notes-area');
@@ -893,7 +891,7 @@
             }
             content.style.width = ''; content.style.maxWidth = '';
             const zFinal = Math.min(1, PRINT_W_PX_FT / W);
-            computeFichaZoom.lastH = H * zFinal; // altura renderizada (pós-zoom) p/ centralização
+            computeFichaZoom.lastH = H * zFinal;
             return zFinal;
         }
 
@@ -993,9 +991,6 @@
                     const wrap = document.createElement('div');
                     wrap.className = 'print-sheet';
                     wrap.style.zoom = z;                     // zoom pré-calculado (não remedir!)
-                    // Centraliza na folha via padding-top (metade da sobra de altura da página, em px
-                    // internos ao zoom). Fluxo de bloco normal — flex fragmenta mal na impressão.
-                    wrap.style.paddingTop = Math.max(0, Math.floor((PRINT_H_PX_FT - computeFichaZoom.lastH) / 2 / z)) + 'px';
                     wrap.appendChild(clone);
                     container.appendChild(wrap);
                 });
@@ -1049,8 +1044,8 @@
 
         // Auto-scale para impressão A4 — reduz a ficha (zoom <= 1) até caber INTEIRA em 1 folha.
         (function () {
-            const PRINT_W_PX = 718;
-            const PRINT_H_PX = 920; // cabe em A4 e em Carta/Letter mesmo c/ margens padrão do Chrome (ver PRINT_H_PX_FT)
+            const PRINT_W_PX = 748;
+            const PRINT_H_PX = 1000;
             // content = o "bloco-página" (#sheetContent ou .print-sheet); sheet = a .sheet-container dentro.
             function scaleEl(content, sheet, img, notes) {
                 content.style.zoom = '1';
@@ -1093,17 +1088,7 @@
                 const wrapper = document.querySelector('.page-wrapper');
                 if (!content || !sheet) return;
                 if (wrapper) wrapper.style.marginLeft = '0';
-                const hr = scaleEl(content, sheet, document.getElementById('imageContainer'), document.getElementById('notesObservationsPanel'));
-                // Centraliza a ficha na folha: padding-top = metade da sobra de altura da página.
-                // Bloco normal (sem flex no .container) — flex fragmentava e gerava folha em branco.
-                const cont = document.querySelector('.container');
-                if (cont && hr) cont.style.setProperty('padding-top', Math.max(0, Math.floor((PRINT_H_PX - hr) / 2)) + 'px', 'important');
-                // DEBUG temporário (remover após diagnóstico): expõe as medidas no rodapé do PDF
-                const pm = document.getElementById('printMetadata');
-                if (pm) {
-                    if (!pm.dataset.base) pm.dataset.base = pm.innerText;
-                    pm.innerText = pm.dataset.base + ' | dbg: z=' + (content.style.zoom || '1') + ' h=' + Math.round(hr || 0) + ' pad=' + (cont ? cont.style.paddingTop : '?') + ' alvo=' + PRINT_H_PX;
-                }
+                scaleEl(content, sheet, document.getElementById('imageContainer'), document.getElementById('notesObservationsPanel'));
             }
             function resetScale() {
                 if (document.body.classList.contains('printing-cover')) return;
@@ -1111,10 +1096,6 @@
                 const content = document.getElementById('sheetContent');
                 const wrapper = document.querySelector('.page-wrapper');
                 resetEl(content, document.getElementById('imageContainer'), document.getElementById('notesObservationsPanel'));
-                const cont = document.querySelector('.container');
-                if (cont) cont.style.removeProperty('padding-top');
-                const pm = document.getElementById('printMetadata');
-                if (pm && pm.dataset.base) pm.innerText = pm.dataset.base;
                 if (wrapper) wrapper.style.marginLeft = '';
             }
             window.addEventListener('beforeprint', applyScale);
