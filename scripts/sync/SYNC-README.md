@@ -57,7 +57,7 @@ node scripts/sync-data.js
 
 ### **Apenas Faturamento:**
 ```bash
-node scripts/sync-faturamento-to-neon.js
+node scripts/sync/sync-firebird-to-postgres.js
 ```
 
 ### **Criar tabela de filtros:**

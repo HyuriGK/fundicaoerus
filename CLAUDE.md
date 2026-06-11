@@ -12,7 +12,7 @@ npx nodemon api/index.js
 
 # Run a sync script (example)
 node scripts/sync-data.js
-node scripts/sync-faturamento-to-neon.js
+node scripts/sync/sync-firebird-to-postgres.js
 
 # Sync all data (bat file, Windows)
 sincronizar_dados.bat
