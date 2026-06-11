@@ -21,6 +21,8 @@ router.get('/list/all', async (req, res) => {
                 cidade_codigo INTEGER,
                 cidade_nome TEXT,
                 cidade_uf TEXT,
+                cidade_latitude NUMERIC,
+                cidade_longitude NUMERIC,
                 cep TEXT,
                 logradouro TEXT,
                 numero TEXT,
@@ -35,12 +37,14 @@ router.get('/list/all', async (req, res) => {
         `);
         await pool.query('ALTER TABLE clientes_firebird_sync ADD COLUMN IF NOT EXISTS cidade_nome TEXT');
         await pool.query('ALTER TABLE clientes_firebird_sync ADD COLUMN IF NOT EXISTS cidade_uf TEXT');
+        await pool.query('ALTER TABLE clientes_firebird_sync ADD COLUMN IF NOT EXISTS cidade_latitude NUMERIC');
+        await pool.query('ALTER TABLE clientes_firebird_sync ADD COLUMN IF NOT EXISTS cidade_longitude NUMERIC');
 
         const result = await pool.query(`
         SELECT
             empresa, codigo, razao_social, fantasia, ativo, bloqueado,
             cnpj_cpf, ie_rg, contato, telefone1, telefone2, email,
-            cidade_codigo, cidade_nome, cidade_uf, cep, logradouro, numero, bairro,
+            cidade_codigo, cidade_nome, cidade_uf, cidade_latitude, cidade_longitude, cep, logradouro, numero, bairro,
             data_cadastro, data_inativacao, motivo_bloqueio, observacao, synced_at
         FROM clientes_firebird_sync
         ORDER BY razao_social NULLS LAST, codigo
@@ -62,6 +66,8 @@ router.get('/list/all', async (req, res) => {
             cidadeCodigo: row.cidade_codigo,
             cidadeNome: row.cidade_nome,
             cidadeUf: row.cidade_uf,
+            cidadeLatitude: row.cidade_latitude === null ? null : Number(row.cidade_latitude),
+            cidadeLongitude: row.cidade_longitude === null ? null : Number(row.cidade_longitude),
             cep: row.cep,
             logradouro: row.logradouro,
             numero: row.numero,
