@@ -97,6 +97,7 @@ app.use('/api/pedidos-op-links', require('../src/pedidos-op-links')); // NOVO: V
 
 app.use('/api/producao-postgres', require('../src/producao-postgres')); // NOVO: Produção Sincronizada
 app.use('/api/pedidos-firebird', require('../src/pedidos-firebird')); // NOVO: Pedidos Histórico Firebird
+app.use('/api/clientes-firebird', require('../src/clientes-firebird')); // Clientes Firebird (somente leitura)
 app.use('/api/admin/users', require('../src/admin-users')); // NOVO: Gestão de Usuários (Admin)
 app.use('/api/ai-assistant', require('../src/ai-assistant')); // NOVO: Assistente de IA
 app.use('/api/audit-logger', require('../src/audit-logger')); // NOVO: Log de Atividades
