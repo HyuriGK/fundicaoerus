@@ -869,8 +869,9 @@
         // Mede a ficha (zoom p/ caber em 1 folha A4) NO MESMO contexto do #sheetContent.
         // Retorna o zoom (<= 1) e deixa imagem/observações com height:auto (estado de impressão),
         // para o clone capturar exatamente esse estado.
-        // 960px de altura útil: cabe tanto em A4 (~1047px) quanto em Carta/Letter (~980px) c/ margens de 1cm
-        const PRINT_W_PX_FT = 718, PRINT_H_PX_FT = 960;
+        // 920px de altura útil: cabe em A4 (~1047px) e Carta/Letter (~980px) c/ margens de 1cm,
+        // e ainda sobrevive a margens "Padrão" do Chrome (0,5in) no Carta (~960px úteis)
+        const PRINT_W_PX_FT = 718, PRINT_H_PX_FT = 920;
         function computeFichaZoom(content, sheet) {
             const img = content.querySelector('.image-container-large');
             const notes = content.querySelector('.notes-area');
@@ -1049,7 +1050,7 @@
         // Auto-scale para impressão A4 — reduz a ficha (zoom <= 1) até caber INTEIRA em 1 folha.
         (function () {
             const PRINT_W_PX = 718;
-            const PRINT_H_PX = 960; // cabe em A4 e em Carta/Letter (ver PRINT_H_PX_FT)
+            const PRINT_H_PX = 920; // cabe em A4 e em Carta/Letter mesmo c/ margens padrão do Chrome (ver PRINT_H_PX_FT)
             // content = o "bloco-página" (#sheetContent ou .print-sheet); sheet = a .sheet-container dentro.
             function scaleEl(content, sheet, img, notes) {
                 content.style.zoom = '1';
@@ -1097,6 +1098,12 @@
                 // Bloco normal (sem flex no .container) — flex fragmentava e gerava folha em branco.
                 const cont = document.querySelector('.container');
                 if (cont && hr) cont.style.setProperty('padding-top', Math.max(0, Math.floor((PRINT_H_PX - hr) / 2)) + 'px', 'important');
+                // DEBUG temporário (remover após diagnóstico): expõe as medidas no rodapé do PDF
+                const pm = document.getElementById('printMetadata');
+                if (pm) {
+                    if (!pm.dataset.base) pm.dataset.base = pm.innerText;
+                    pm.innerText = pm.dataset.base + ' | dbg: z=' + (content.style.zoom || '1') + ' h=' + Math.round(hr || 0) + ' pad=' + (cont ? cont.style.paddingTop : '?') + ' alvo=' + PRINT_H_PX;
+                }
             }
             function resetScale() {
                 if (document.body.classList.contains('printing-cover')) return;
@@ -1106,6 +1113,8 @@
                 resetEl(content, document.getElementById('imageContainer'), document.getElementById('notesObservationsPanel'));
                 const cont = document.querySelector('.container');
                 if (cont) cont.style.removeProperty('padding-top');
+                const pm = document.getElementById('printMetadata');
+                if (pm && pm.dataset.base) pm.innerText = pm.dataset.base;
                 if (wrapper) wrapper.style.marginLeft = '';
             }
             window.addEventListener('beforeprint', applyScale);
