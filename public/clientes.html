@@ -243,23 +243,25 @@
         #statusModal td { padding:11px 14px; border-bottom:1px solid rgba(255,255,255,0.04); white-space:nowrap; }
         #statusModal tr:hover td { background:rgba(255,255,255,0.025); }
         #clientsRecordsModal {
-            display:none; position:fixed; inset:0;
-            background:rgba(0,0,0,0.95); z-index:6500;
+            display:none; position:fixed; top:0; right:0; bottom:0; left:80px;
+            width:calc(100vw - 80px); margin-left:0 !important;
+            background:rgba(0,0,0,0.95); z-index:2000;
+            align-items:center; justify-content:center;
             backdrop-filter:blur(5px);
         }
         #clientsRecordsModal .crm-card {
-            width:100vw; height:100vh; padding:30px 40px;
+            width:100%; height:100vh; padding:14px 18px;
             background:#09090b; display:flex; flex-direction:column;
-            overflow:hidden;
+            overflow:hidden; border:none; border-radius:0; margin:0;
         }
         #clientsRecordsModal .crm-header {
             display:flex; justify-content:space-between; align-items:center;
             border-bottom:1px solid var(--border-subtle);
-            padding-bottom:15px; margin-bottom:14px; flex-shrink:0;
+            padding-bottom:15px; margin-bottom:20px; flex-shrink:0;
         }
         #clientsRecordsModal .crm-title {
-            font-size:1.8rem; color:var(--color-primary); font-weight:700;
-            text-transform:uppercase; letter-spacing:1px; margin:0; line-height:1.2;
+            font-size:1.3rem; color:var(--color-primary); font-weight:800;
+            text-transform:uppercase; letter-spacing:0.02em; margin:0; line-height:1.2;
         }
         #clientsRecordsModal .crm-close {
             color:var(--status-danger); cursor:pointer; font-size:2rem;
@@ -267,12 +269,15 @@
         }
         #clientsRecordsModal .crm-close:hover { transform:scale(1.1); color:#ff0000; }
         #clientsRecordsModal .crm-meta {
-            font-size:0.75rem; color:var(--text-muted); margin-bottom:12px; flex-shrink:0;
+            background:transparent; border-bottom:1px solid var(--border-subtle);
+            border-radius:0; padding:4px 0 16px; margin-bottom:16px;
+            font-size:0.75rem; color:var(--text-muted); flex-shrink:0;
+            font-family:var(--font-mono); text-transform:uppercase; letter-spacing:0.04em;
         }
         #clientsRecordsModal .crm-table-wrap {
             flex:1; overflow:auto;
             background:var(--bg-card); border:1px solid var(--border-subtle);
-            border-radius:var(--radius-md);
+            border-radius:var(--radius-md); width:100%; position:relative;
         }
         #clientsRecordsModal table { width:100%; min-width:1500px; border-collapse:collapse; font-family:var(--font-mono); font-size:0.75rem; }
         #clientsRecordsModal th {
@@ -382,7 +387,7 @@
 </div>
 
 <!-- Clients Records Modal -->
-<div id="clientsRecordsModal">
+<div id="clientsRecordsModal" class="modal-overlay">
     <div class="crm-card">
         <div class="crm-header">
             <h2 class="crm-title"><i class="fa-solid fa-address-book" style="margin-right:14px;"></i>Registros de Clientes</h2>
@@ -1257,10 +1262,15 @@ async function openClientsRecordsModal() {
     const modal = document.getElementById('clientsRecordsModal');
     const count = document.getElementById('clientsRecordsCount');
     const tbody = document.getElementById('clientsRecordsBody');
+    const sidebar = document.getElementById('erus-sidebar');
+    const sidebarWidth = sidebar ? Math.round(sidebar.getBoundingClientRect().width || 80) : 0;
+    modal.style.setProperty('margin-left', '0', 'important');
+    modal.style.setProperty('left', `${sidebarWidth}px`, 'important');
+    modal.style.setProperty('width', `calc(100vw - ${sidebarWidth}px)`, 'important');
     modal.style.display = 'flex';
 
     if (!clientRecordsLoaded) {
-        count.textContent = 'Carregando clientes do Firebird...';
+        count.textContent = 'Carregando clientes sincronizados...';
         tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--text-muted);padding:28px;">Carregando clientes...</td></tr>';
         try {
             const res = await fetch('/api/clientes-firebird/list/all');
@@ -1290,7 +1300,11 @@ function renderClientsRecords() {
 
     const rows = clientRecords.filter(c => {
         const values = getClientRecordValues(c).map(v => String(v || '').toLowerCase());
-        return filters.every(f => !f.val || values[f.col].includes(f.val));
+        return filters.every(f => {
+            if (!f.val) return true;
+            if (f.col === 0) return values[f.col] === f.val;
+            return values[f.col].includes(f.val);
+        });
     });
 
     document.getElementById('clientsRecordsCount').textContent =
