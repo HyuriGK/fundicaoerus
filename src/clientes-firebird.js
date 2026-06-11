@@ -19,6 +19,8 @@ router.get('/list/all', async (req, res) => {
                 telefone2 TEXT,
                 email TEXT,
                 cidade_codigo INTEGER,
+                cidade_nome TEXT,
+                cidade_uf TEXT,
                 cep TEXT,
                 logradouro TEXT,
                 numero TEXT,
@@ -31,12 +33,14 @@ router.get('/list/all', async (req, res) => {
                 PRIMARY KEY (empresa, codigo)
             )
         `);
+        await pool.query('ALTER TABLE clientes_firebird_sync ADD COLUMN IF NOT EXISTS cidade_nome TEXT');
+        await pool.query('ALTER TABLE clientes_firebird_sync ADD COLUMN IF NOT EXISTS cidade_uf TEXT');
 
         const result = await pool.query(`
         SELECT
             empresa, codigo, razao_social, fantasia, ativo, bloqueado,
             cnpj_cpf, ie_rg, contato, telefone1, telefone2, email,
-            cidade_codigo, cep, logradouro, numero, bairro,
+            cidade_codigo, cidade_nome, cidade_uf, cep, logradouro, numero, bairro,
             data_cadastro, data_inativacao, motivo_bloqueio, observacao, synced_at
         FROM clientes_firebird_sync
         ORDER BY razao_social NULLS LAST, codigo
@@ -56,6 +60,8 @@ router.get('/list/all', async (req, res) => {
             telefone2: row.telefone2,
             email: row.email,
             cidadeCodigo: row.cidade_codigo,
+            cidadeNome: row.cidade_nome,
+            cidadeUf: row.cidade_uf,
             cep: row.cep,
             logradouro: row.logradouro,
             numero: row.numero,

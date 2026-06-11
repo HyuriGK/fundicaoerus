@@ -281,15 +281,19 @@
         }
         #clientsRecordsModal table { width:100%; min-width:1500px; border-collapse:collapse; font-family:var(--font-mono); font-size:0.75rem; }
         #clientsRecordsModal th {
-            position:sticky; top:0; background:#18181b;
+            background:#18181b;
             color:var(--text-muted); padding:10px 12px;
             border-bottom:1px solid var(--border-subtle);
             text-align:left; font-size:0.68rem; text-transform:uppercase;
-            letter-spacing:0.05em; white-space:nowrap; z-index:2;
+            letter-spacing:0.05em; white-space:nowrap;
         }
-        #clientsRecordsModal thead tr:nth-child(2) th { top:35px; padding:7px 8px; background:#111114; }
+        #clientsRecordsModal thead tr:nth-child(2) th { padding:7px 8px; background:#111114; }
         #clientsRecordsModal td { padding:10px 12px; border-bottom:1px solid rgba(255,255,255,0.04); white-space:nowrap; }
         #clientsRecordsModal tr:hover td { background:rgba(255,255,255,0.025); }
+        #clientsRecordsModal .client-copyable { cursor:pointer; transition:color 0.2s; }
+        #clientsRecordsModal .client-copyable:hover { color:var(--color-primary); text-decoration:underline; }
+        #clientsRecordsModal .client-copyable .fa-copy { font-size:0.7em; margin-left:5px; opacity:0; transition:opacity 0.2s; }
+        #clientsRecordsModal .client-copyable:hover .fa-copy { opacity:0.55; }
         .client-filter-input {
             width:100%; background:rgba(255,255,255,0.05);
             border:1px solid var(--border-subtle); border-radius:4px;
@@ -1316,17 +1320,17 @@ function renderClientsRecords() {
         const statusClass = c.bloqueado ? 'blocked' : c.ativo ? 'active' : 'inactive';
         const statusText = c.bloqueado ? 'Bloq.' : c.ativo ? 'Ativo' : 'Inativo';
         return `<tr>
-            <td style="color:var(--color-primary);font-weight:800;">${escapeHtml(values[0])}</td>
-            <td><span class="client-status-badge ${statusClass}">${statusText}</span></td>
-            <td style="font-weight:700;color:#fff;max-width:340px;overflow:hidden;text-overflow:ellipsis;" title="${escapeHtml(values[2])}">${escapeHtml(values[2])}</td>
-            <td>${escapeHtml(values[3])}</td>
-            <td>${escapeHtml(values[4])}</td>
-            <td>${escapeHtml(values[5])}</td>
-            <td>${escapeHtml(values[6])}</td>
-            <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;" title="${escapeHtml(values[7])}">${escapeHtml(values[7])}</td>
-            <td>${escapeHtml(values[8])}</td>
-            <td>${escapeHtml(values[9])}</td>
-            <td style="max-width:320px;overflow:hidden;text-overflow:ellipsis;" title="${escapeHtml(values[10])}">${escapeHtml(values[10])}</td>
+            ${clientCell(values[0], { style:'color:var(--color-primary);font-weight:800;' })}
+            ${clientCell(statusText, { html:`<span class="client-status-badge ${statusClass}">${statusText}</span>` })}
+            ${clientCell(values[2], { style:'font-weight:700;color:#fff;max-width:340px;overflow:hidden;text-overflow:ellipsis;' })}
+            ${clientCell(values[3])}
+            ${clientCell(values[4])}
+            ${clientCell(values[5])}
+            ${clientCell(values[6])}
+            ${clientCell(values[7], { style:'max-width:260px;overflow:hidden;text-overflow:ellipsis;' })}
+            ${clientCell(values[8])}
+            ${clientCell(values[9])}
+            ${clientCell(values[10], { style:'max-width:320px;overflow:hidden;text-overflow:ellipsis;' })}
         </tr>`;
     }).join('') || '<tr><td colspan="11" style="text-align:center;color:var(--text-muted);padding:28px;">Nenhum cliente encontrado.</td></tr>';
 }
@@ -1342,10 +1346,35 @@ function getClientRecordValues(c) {
         c.contato || '-',
         c.telefone1 || c.telefone2 || '-',
         c.email || '-',
-        c.cidadeCodigo || '-',
+        formatClientCity(c),
         fmtDateShort(c.dataCadastro),
         address || '-'
     ];
+}
+
+function formatClientCity(c) {
+    if (c.cidadeNome && c.cidadeUf) return `${c.cidadeNome} - ${c.cidadeUf}`;
+    if (c.cidadeNome) return c.cidadeNome;
+    return c.cidadeCodigo || '-';
+}
+
+function clientCell(value, options = {}) {
+    const text = String(value ?? '-');
+    const copyValue = String(options.copyValue ?? text);
+    const style = options.style ? ` style="${options.style}"` : '';
+    const html = options.html || escapeHtml(text);
+    return `<td class="client-copyable"${style} title="Clique para copiar: ${escapeHtml(copyValue)}" onclick="copyClientCellText(${escapeHtml(JSON.stringify(copyValue))})">${html} <i class="fa-regular fa-copy"></i></td>`;
+}
+
+function copyClientCellText(text) {
+    const value = String(text || '').trim();
+    if (!value || value === '-') return;
+    navigator.clipboard.writeText(value).then(() => {
+        toast('Copiado!', `Texto "${value}" copiado para a Área de transferência.`, 'success');
+    }).catch(err => {
+        console.error('Failed to copy: ', err);
+        toast('Erro', 'Falha ao copiar texto.', 'danger');
+    });
 }
 
 document.querySelectorAll('.client-filter-input').forEach(input => {
