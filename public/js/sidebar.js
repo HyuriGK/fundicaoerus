@@ -218,8 +218,6 @@
                 '<i class="fa-solid fa-plus" id="icon-eg-engenharia"></i>' +
             '</div>' +
             '<div id="eg-engenharia" class="erus-nav-group-wrapper collapsed">' +
-                '<a href="fichatecnica.html" data-stip="Ficha Técnica" class="erus-nav-link' + isActive('fichatecnica.html') + '">' +
-                    '<i class="fa-solid fa-file-contract"></i><span>Ficha Técnica</span></a>' +
                 '<a href="fichatecmoldagem.html" data-stip="Ficha de Moldagem" class="erus-nav-link' + isActive('fichatecmoldagem.html') + '">' +
                     '<i class="fa-solid fa-cubes-stacked"></i><span>Ficha de Moldagem</span></a>' +
                 '<a href="fichatecfusao.html" data-stip="Ficha de Fusão" class="erus-nav-link' + isActive('fichatecfusao.html') + '">' +
@@ -512,7 +510,7 @@
             'moldagem': ['fichatecmoldagem.html', 'apontamentos_produtivos.html'],
             'fusão': ['fichatecfusao.html'],
             'fusao': ['fichatecfusao.html'],
-            'acabamento': ['fichatecacabamento.html', 'fichatecnica.html']
+            'acabamento': ['fichatecacabamento.html']
         };
         if (restrictedPageMap[role]) {
             var allowedPages = restrictedPageMap[role];
