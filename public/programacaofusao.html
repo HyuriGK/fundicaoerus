@@ -153,7 +153,7 @@
            A orientação (@page size) é definida dinamicamente antes de cada impressão
            (paisagem p/ a capa, retrato p/ as fichas) via #erus-print-orient. */
         @media print {
-            @page { size: A4 portrait; margin: 6mm; }
+            @page { size: A4 portrait; margin: 4mm; }
             html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; color: #000 !important; min-height: 0 !important; height: auto !important; overflow: visible !important; }
             .ambient-bg, .side-menu, .side-menu-trigger, #erus-sidebar, #erus-sidebar-backdrop, #erus-logout-modal, #erus-pref-modal, #sync-floating-indicator, #sync-overlay, #last-sync-toast, .modal-overlay, .loader, .status-empty, .search-wrapper, header, .tipo-switcher, [data-no-print] { display: none !important; visibility: hidden !important; height: 0 !important; overflow: hidden !important; margin: 0 !important; padding: 0 !important; }
             body { padding-left: 0 !important; margin-left: 0 !important; }
@@ -190,7 +190,7 @@
             /* PDF 2 — FICHAS (retrato, definida dinamicamente) */
             body.printing-multi #sheetContent { display: none !important; }
             body.printing-multi #multiSheetContainer { display: block !important; position: static !important; left: auto !important; top: auto !important; width: 100% !important; }
-            body.printing-multi #multiSheetContainer .print-sheet { display: block !important; width: 100% !important; max-width: 100% !important; margin: 0 !important; page-break-after: always; break-after: page; }
+            body.printing-multi #multiSheetContainer .print-sheet { display: block !important; width: var(--print-sheet-width, 100%) !important; max-width: none !important; margin: 0 auto !important; zoom: var(--print-sheet-zoom, 1) !important; page-break-after: always; break-after: page; }
             body.printing-multi #multiSheetContainer .print-sheet:last-child { page-break-after: auto; break-after: auto; }
         }
     </style>
@@ -788,7 +788,7 @@
         function setPrintOrientation(orient) {
             let s = document.getElementById('erus-print-orient');
             if (!s) { s = document.createElement('style'); s.id = 'erus-print-orient'; document.head.appendChild(s); }
-            const margin = orient === 'landscape' ? '10mm' : '6mm';
+            const margin = orient === 'landscape' ? '10mm' : '4mm';
             s.textContent = `@media print { @page { size: A4 ${orient}; margin: ${margin}; } }`;
         }
 
@@ -869,7 +869,7 @@
         // Mede a ficha (zoom p/ caber em 1 folha A4) NO MESMO contexto do #sheetContent.
         // Retorna o zoom (<= 1) e deixa imagem/observações com height:auto (estado de impressão),
         // para o clone capturar exatamente esse estado.
-        const PRINT_W_PX_FT = 748, PRINT_H_PX_FT = 1000;
+        const PRINT_W_PX_FT = 764, PRINT_H_PX_FT = 1090;
         function computeFichaZoom(content, sheet) {
             const img = content.querySelector('.image-container-large');
             const notes = content.querySelector('.notes-area');
@@ -881,6 +881,7 @@
             void content.offsetHeight;
             let H = sheet.getBoundingClientRect().height;
             content.style.width = ''; content.style.maxWidth = '';
+            computeFichaZoom.lastW = W;
             if (H <= PRINT_H_PX_FT) { computeFichaZoom.lastH = H; return 1; }
             let safety = 0;
             while (H * PRINT_W_PX_FT / W > PRINT_H_PX_FT && safety < 20) {
@@ -891,6 +892,7 @@
             }
             content.style.width = ''; content.style.maxWidth = '';
             const zFinal = Math.min(1, PRINT_W_PX_FT / W);
+            computeFichaZoom.lastW = W;
             computeFichaZoom.lastH = H * zFinal;
             return zFinal;
         }
@@ -990,7 +992,8 @@
                     const clone = scSheet.cloneNode(true);   // captura conteúdo + estado de impressão
                     const wrap = document.createElement('div');
                     wrap.className = 'print-sheet';
-                    wrap.style.zoom = z;                     // zoom pré-calculado (não remedir!)
+                    wrap.style.setProperty('--print-sheet-zoom', z);
+                    wrap.style.setProperty('--print-sheet-width', Math.ceil(computeFichaZoom.lastW || PRINT_W_PX_FT) + 'px');
                     wrap.appendChild(clone);
                     container.appendChild(wrap);
                 });
@@ -1016,10 +1019,24 @@
             };
 
             const go = () => {
+                const wrapper = document.querySelector('.page-wrapper');
+                if (wrapper) {
+                    wrapper.dataset.printMarginLeft = wrapper.style.getPropertyValue('margin-left');
+                    wrapper.dataset.printMarginLeftPriority = wrapper.style.getPropertyPriority('margin-left');
+                    wrapper.style.setProperty('margin-left', '0', 'important');
+                }
                 document.body.classList.add('printing-multi');
                 const cleanup = () => {
                     document.body.classList.remove('printing-multi');
                     container.innerHTML = '';
+                    if (wrapper) {
+                        const prev = wrapper.dataset.printMarginLeft || '';
+                        const priority = wrapper.dataset.printMarginLeftPriority || '';
+                        if (prev) wrapper.style.setProperty('margin-left', prev, priority);
+                        else wrapper.style.removeProperty('margin-left');
+                        delete wrapper.dataset.printMarginLeft;
+                        delete wrapper.dataset.printMarginLeftPriority;
+                    }
                     window.removeEventListener('afterprint', cleanup);
                 };
                 window.addEventListener('afterprint', cleanup);
@@ -1044,8 +1061,8 @@
 
         // Auto-scale para impressão A4 — reduz a ficha (zoom <= 1) até caber INTEIRA em 1 folha.
         (function () {
-            const PRINT_W_PX = 748;
-            const PRINT_H_PX = 1000;
+            const PRINT_W_PX = 764;
+            const PRINT_H_PX = 1090;
             // content = o "bloco-página" (#sheetContent ou .print-sheet); sheet = a .sheet-container dentro.
             function scaleEl(content, sheet, img, notes) {
                 content.style.zoom = '1';
@@ -1087,7 +1104,11 @@
                 const sheet = document.querySelector('#sheetContent .sheet-container');
                 const wrapper = document.querySelector('.page-wrapper');
                 if (!content || !sheet) return;
-                if (wrapper) wrapper.style.marginLeft = '0';
+                if (wrapper) {
+                    wrapper.dataset.printMarginLeft = wrapper.style.getPropertyValue('margin-left');
+                    wrapper.dataset.printMarginLeftPriority = wrapper.style.getPropertyPriority('margin-left');
+                    wrapper.style.setProperty('margin-left', '0', 'important');
+                }
                 scaleEl(content, sheet, document.getElementById('imageContainer'), document.getElementById('notesObservationsPanel'));
             }
             function resetScale() {
@@ -1096,7 +1117,14 @@
                 const content = document.getElementById('sheetContent');
                 const wrapper = document.querySelector('.page-wrapper');
                 resetEl(content, document.getElementById('imageContainer'), document.getElementById('notesObservationsPanel'));
-                if (wrapper) wrapper.style.marginLeft = '';
+                if (wrapper) {
+                    const prev = wrapper.dataset.printMarginLeft || '';
+                    const priority = wrapper.dataset.printMarginLeftPriority || '';
+                    if (prev) wrapper.style.setProperty('margin-left', prev, priority);
+                    else wrapper.style.removeProperty('margin-left');
+                    delete wrapper.dataset.printMarginLeft;
+                    delete wrapper.dataset.printMarginLeftPriority;
+                }
             }
             window.addEventListener('beforeprint', applyScale);
             window.addEventListener('afterprint', resetScale);
