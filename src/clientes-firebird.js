@@ -1,79 +1,80 @@
 const express = require('express');
 const router = express.Router();
-const { attach } = require('../lib/firebird-helper');
+const pool = require('../lib/db');
 
-const clean = value => {
-    if (value === null || value === undefined) return null;
-    const text = String(value).trim();
-    return text === '' ? null : text;
-};
+router.get('/list/all', async (req, res) => {
+    try {
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS clientes_firebird_sync (
+                empresa INTEGER NOT NULL,
+                codigo INTEGER NOT NULL,
+                razao_social TEXT,
+                fantasia TEXT,
+                ativo BOOLEAN DEFAULT FALSE,
+                bloqueado BOOLEAN DEFAULT FALSE,
+                cnpj_cpf TEXT,
+                ie_rg TEXT,
+                contato TEXT,
+                telefone1 TEXT,
+                telefone2 TEXT,
+                email TEXT,
+                cidade_codigo INTEGER,
+                cep TEXT,
+                logradouro TEXT,
+                numero TEXT,
+                bairro TEXT,
+                data_cadastro DATE,
+                data_inativacao DATE,
+                motivo_bloqueio TEXT,
+                observacao TEXT,
+                synced_at TIMESTAMP DEFAULT NOW(),
+                PRIMARY KEY (empresa, codigo)
+            )
+        `);
 
-router.get('/list/all', (req, res) => {
-    const sql = `
+        const result = await pool.query(`
         SELECT
-            EMPRESA_CLI,
-            CODIGO_CLI,
-            RAZAO_SOCIAL_CLI,
-            FANTASIA_CLI,
-            ATIVO_CLI,
-            BLOQUEADO_CLI,
-            CNPJ_CPF_CLI,
-            IE_RG_CLI,
-            CONTATO_CLI,
-            FONE1_CLI,
-            FONE2_CLI,
-            EMAIL_CLI,
-            EMAIL_COMERCIAL_CLI,
-            EMAIL_NFE_CLI,
-            CIDADE_CLI,
-            CEP_CLI,
-            LOGRADOURO_CLI,
-            NUMERO_CLI,
-            BAIRRO_CLI,
-            DATA_CLI,
-            DATA_INATIVACAO_CLI,
-            MOTIVO_BLOQUEIO_CLI,
-            OBSERVACAO_IMPORTANTE_CLI
-        FROM CLIENTE
-        ORDER BY RAZAO_SOCIAL_CLI
-    `;
+            empresa, codigo, razao_social, fantasia, ativo, bloqueado,
+            cnpj_cpf, ie_rg, contato, telefone1, telefone2, email,
+            cidade_codigo, cep, logradouro, numero, bairro,
+            data_cadastro, data_inativacao, motivo_bloqueio, observacao, synced_at
+        FROM clientes_firebird_sync
+        ORDER BY razao_social NULLS LAST, codigo
+        `);
 
-    attach((err, db) => {
-        if (err) return res.status(500).json({ success: false, error: 'Erro ao conectar no Firebird', details: err.message });
+        const data = result.rows.map(row => ({
+            empresa: row.empresa,
+            codigo: row.codigo,
+            razaoSocial: row.razao_social,
+            fantasia: row.fantasia,
+            ativo: row.ativo,
+            bloqueado: row.bloqueado,
+            cnpjCpf: row.cnpj_cpf,
+            ieRg: row.ie_rg,
+            contato: row.contato,
+            telefone1: row.telefone1,
+            telefone2: row.telefone2,
+            email: row.email,
+            cidadeCodigo: row.cidade_codigo,
+            cep: row.cep,
+            logradouro: row.logradouro,
+            numero: row.numero,
+            bairro: row.bairro,
+            dataCadastro: row.data_cadastro,
+            dataInativacao: row.data_inativacao,
+            motivoBloqueio: row.motivo_bloqueio,
+            observacao: row.observacao,
+            syncedAt: row.synced_at
+        }));
 
-        db.query(sql, (queryErr, rows) => {
-            db.detach();
-            if (queryErr) {
-                return res.status(500).json({ success: false, error: 'Erro ao consultar clientes no Firebird', details: queryErr.message });
-            }
-
-            const data = (rows || []).map(row => ({
-                empresa: row.EMPRESA_CLI,
-                codigo: row.CODIGO_CLI,
-                razaoSocial: clean(row.RAZAO_SOCIAL_CLI),
-                fantasia: clean(row.FANTASIA_CLI),
-                ativo: clean(row.ATIVO_CLI) === 'S',
-                bloqueado: clean(row.BLOQUEADO_CLI) === 'S',
-                cnpjCpf: clean(row.CNPJ_CPF_CLI),
-                ieRg: clean(row.IE_RG_CLI),
-                contato: clean(row.CONTATO_CLI),
-                telefone1: clean(row.FONE1_CLI),
-                telefone2: clean(row.FONE2_CLI),
-                email: clean(row.EMAIL_COMERCIAL_CLI) || clean(row.EMAIL_CLI) || clean(row.EMAIL_NFE_CLI),
-                cidadeCodigo: row.CIDADE_CLI,
-                cep: clean(row.CEP_CLI),
-                logradouro: clean(row.LOGRADOURO_CLI),
-                numero: clean(row.NUMERO_CLI),
-                bairro: clean(row.BAIRRO_CLI),
-                dataCadastro: row.DATA_CLI,
-                dataInativacao: row.DATA_INATIVACAO_CLI,
-                motivoBloqueio: clean(row.MOTIVO_BLOQUEIO_CLI),
-                observacao: clean(row.OBSERVACAO_IMPORTANTE_CLI)
-            }));
-
-            res.json({ success: true, data, total: data.length });
+        res.json({ success: true, data, total: data.length });
+    } catch (err) {
+        res.status(500).json({
+            success: false,
+            error: 'Erro ao consultar clientes sincronizados no Postgres',
+            details: err.message
         });
-    });
+    }
 });
 
 module.exports = router;
