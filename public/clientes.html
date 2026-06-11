@@ -1163,7 +1163,32 @@ function ensureClientsMap() {
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
         maxZoom: 18, subdomains: 'abcd'
     }).addTo(clientsMap);
+    addBrazilOutline(clientsMap);
     return clientsMap;
+}
+
+let brazilOutlineLoaded = false;
+async function addBrazilOutline(map) {
+    if (brazilOutlineLoaded) return;
+    brazilOutlineLoaded = true;
+    const base = 'https://servicodados.ibge.gov.br/api/v3/malhas/paises/BR?formato=application/vnd.geo+json&qualidade=minima';
+    try {
+        const [ufs, pais] = await Promise.all([
+            fetch(base + '&intrarregiao=UF').then(r => r.json()),
+            fetch(base).then(r => r.json())
+        ]);
+        L.geoJSON(ufs, {
+            interactive: false,
+            style: { color: 'rgba(244,244,245,0.22)', weight: 0.8, fill: false }
+        }).addTo(map).bringToBack();
+        L.geoJSON(pais, {
+            interactive: false,
+            style: { color: 'rgba(255,255,255,0.55)', weight: 1.5, fill: false }
+        }).addTo(map).bringToBack();
+    } catch (e) {
+        brazilOutlineLoaded = false;
+        console.warn('Falha ao carregar contorno do Brasil (IBGE):', e);
+    }
 }
 
 async function renderCityHeatmap() {
