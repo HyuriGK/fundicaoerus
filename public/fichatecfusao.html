@@ -158,9 +158,6 @@
             body { padding-left: 0 !important; margin-left: 0 !important; }
             .page-wrapper { margin-left: 0 !important; }
             .container { max-width: 100% !important; width: 100% !important; padding: 0 !important; margin: 0 !important; display: block !important; align-items: unset !important; }
-            /* Ficha única: centraliza verticalmente na folha (margem sup. = inf.), mantendo as laterais.
-               1030px = área útil A4 retrato c/ margens de 1cm (~1047px) com folga, evita página em branco. */
-            body:not(.printing-multi) .container { min-height: 1030px !important; display: flex !important; flex-direction: column !important; justify-content: center !important; align-items: stretch !important; }
             #sheetContent { display: block !important; width: 100% !important; max-width: 100% !important; margin: 0 !important; }
             .sheet-container { border: 1px solid #000 !important; box-shadow: none !important; background: #fff !important; border-radius: 0 !important; page-break-inside: avoid !important; }
             .info-block { background: #fdfdfd !important; border: 1px solid #ccc !important; }
@@ -184,8 +181,7 @@
             #multiSheetContainer { display: none !important; }
             body.printing-multi #sheetContent { display: none !important; }
             body.printing-multi #multiSheetContainer { display: block !important; position: static !important; left: auto !important; top: auto !important; width: 100% !important; }
-            /* Cada ficha da corrida centraliza verticalmente na própria folha (altura definida via JS em px) */
-            body.printing-multi #multiSheetContainer .print-sheet { display: flex !important; flex-direction: column !important; justify-content: center !important; width: 100% !important; max-width: 100% !important; margin: 0 !important; page-break-after: always; break-after: page; }
+            body.printing-multi #multiSheetContainer .print-sheet { display: block !important; width: 100% !important; max-width: 100% !important; margin: 0 !important; page-break-after: always; break-after: page; }
             body.printing-multi #multiSheetContainer .print-sheet:last-child { page-break-after: auto; break-after: auto; }
 
             /* Capa da corrida em paisagem; fichas seguem em retrato (pg-retrato via body) */
@@ -859,7 +855,7 @@
             void content.offsetHeight;
             let H = sheet.getBoundingClientRect().height;
             content.style.width = ''; content.style.maxWidth = '';
-            if (H <= PRINT_H_PX_FT) return 1;
+            if (H <= PRINT_H_PX_FT) { computeFichaZoom.lastH = H; return 1; }
             let safety = 0;
             while (H * PRINT_W_PX_FT / W > PRINT_H_PX_FT && safety < 20) {
                 W = Math.ceil(W * 1.08);
@@ -868,7 +864,9 @@
                 H = sheet.getBoundingClientRect().height; safety++;
             }
             content.style.width = ''; content.style.maxWidth = '';
-            return Math.min(1, PRINT_W_PX_FT / W);
+            const zFinal = Math.min(1, PRINT_W_PX_FT / W);
+            computeFichaZoom.lastH = H * zFinal; // altura renderizada (pós-zoom) p/ centralização
+            return zFinal;
         }
 
         // Gera o PDF reaproveitando EXATAMENTE o layout/CSS da ficha individual.
@@ -967,9 +965,9 @@
                     const wrap = document.createElement('div');
                     wrap.className = 'print-sheet';
                     wrap.style.zoom = z;                     // zoom pré-calculado (não remedir!)
-                    // Altura mínima = página útil (em px internos ao zoom): com o flex do CSS de
-                    // impressão, centraliza a ficha verticalmente na folha; -6px evita página em branco
-                    wrap.style.minHeight = Math.floor(PRINT_H_PX_FT / z - 6) + 'px';
+                    // Centraliza na folha via padding-top (metade da sobra de altura da página, em px
+                    // internos ao zoom). Fluxo de bloco normal — flex fragmenta mal na impressão.
+                    wrap.style.paddingTop = Math.max(0, Math.floor((PRINT_H_PX_FT - computeFichaZoom.lastH) / 2 / z)) + 'px';
                     wrap.appendChild(clone);
                     container.appendChild(wrap);
                 });
@@ -1037,7 +1035,7 @@
                 let H = sheet.getBoundingClientRect().height;
                 content.style.width = '';
                 content.style.maxWidth = '';
-                if (H <= PRINT_H_PX) { content.style.zoom = '1'; return; }
+                if (H <= PRINT_H_PX) { content.style.zoom = '1'; return H; }
                 let safety = 0;
                 while (H * PRINT_W_PX / W > PRINT_H_PX && safety < 20) {
                     W = Math.ceil(W * 1.08);
@@ -1049,7 +1047,9 @@
                 }
                 content.style.width = '';
                 content.style.maxWidth = '';
-                content.style.zoom = Math.min(1, PRINT_W_PX / W);
+                const zFinal = Math.min(1, PRINT_W_PX / W);
+                content.style.zoom = zFinal;
+                return H * zFinal; // altura renderizada (pós-zoom)
             }
             function resetEl(content, img, notes) {
                 if (content) { content.style.zoom = ''; content.style.width = ''; content.style.maxWidth = ''; }
@@ -1065,13 +1065,19 @@
                 const wrapper = document.querySelector('.page-wrapper');
                 if (!content || !sheet) return;
                 if (wrapper) wrapper.style.marginLeft = '0';
-                scaleEl(content, sheet, document.getElementById('imageContainer'), document.getElementById('notesObservationsPanel'));
+                const hr = scaleEl(content, sheet, document.getElementById('imageContainer'), document.getElementById('notesObservationsPanel'));
+                // Centraliza a ficha na folha: padding-top = metade da sobra de altura da página.
+                // Bloco normal (sem flex no .container) — flex fragmentava e gerava folha em branco.
+                const cont = document.querySelector('.container');
+                if (cont && hr) cont.style.setProperty('padding-top', Math.max(0, Math.floor((PRINT_H_PX - hr) / 2)) + 'px', 'important');
             }
             function resetScale() {
                 if (document.body.classList.contains('printing-multi')) return;
                 const content = document.getElementById('sheetContent');
                 const wrapper = document.querySelector('.page-wrapper');
                 resetEl(content, document.getElementById('imageContainer'), document.getElementById('notesObservationsPanel'));
+                const cont = document.querySelector('.container');
+                if (cont) cont.style.removeProperty('padding-top');
                 if (wrapper) wrapper.style.marginLeft = '';
             }
             window.addEventListener('beforeprint', applyScale);
