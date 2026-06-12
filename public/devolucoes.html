@@ -373,6 +373,19 @@
             background: #18181b;
             color: #fff;
         }
+        /* Seletores de ano/mês: texto centralizado, sem seta */
+        #yearSelector, #monthSelect {
+            appearance: none !important;
+            -webkit-appearance: none !important;
+            -moz-appearance: none !important;
+            background-image: none !important;
+            text-align: center;
+            text-align-last: center;
+            font-family: var(--font-mono);
+            font-weight: 700;
+            width: 84px;
+            cursor: pointer;
+        }
         .table-footer {
             padding: 15px 30px;
             background: #18181b;
@@ -557,36 +570,52 @@
                     <option value="2025">2025</option>
                 </select>
             </div>
-            <div class="months-group" id="monthSelector">
-                <button class="month-btn" id="allMonthsBtn" data-month="all">Todos</button>
-                <button class="month-btn" data-month="0">Jan</button>
-                <button class="month-btn" data-month="1">Fev</button>
-                <button class="month-btn" data-month="2">Mar</button>
-                <button class="month-btn" data-month="3">Abr</button>
-                <button class="month-btn" data-month="4">Mai</button>
-                <button class="month-btn" data-month="5">Jun</button>
-                <button class="month-btn" data-month="6">Jul</button>
-                <button class="month-btn" data-month="7">Ago</button>
-                <button class="month-btn" data-month="8">Set</button>
-                <button class="month-btn" data-month="9">Out</button>
-                <button class="month-btn" data-month="10">Nov</button>
-                <button class="month-btn" data-month="11">Dez</button>
-            </div>
-            <div style="margin-left: auto; display: flex; gap: 8px;">
+            <select id="monthSelect" class="filter-input" onchange="onMonthSelectChange()"
+                style="height: 32px; padding: 0 10px;">
+                <option value="all">ANO</option>
+                <option value="0">JAN</option>
+                <option value="1">FEV</option>
+                <option value="2">MAR</option>
+                <option value="3">ABR</option>
+                <option value="4">MAI</option>
+                <option value="5">JUN</option>
+                <option value="6">JUL</option>
+                <option value="7">AGO</option>
+                <option value="8">SET</option>
+                <option value="9">OUT</option>
+                <option value="10">NOV</option>
+                <option value="11">DEZ</option>
+            </select>
+            <div style="margin-left: auto; display: flex; gap: 8px; align-items: center;">
+                <button id="btnViewDiaria" class="month-btn" onclick="setDevView('diaria')">DEVOLUÇÃO DIÁRIA</button>
+                <button id="btnViewMensal" class="month-btn active" onclick="setDevView('mensal')">DEVOLUÇÃO MENSAL</button>
+                <select id="chartSelectDropdown" class="filter-input" onchange="selectChartFromDropdown(this.value)"
+                    style="height: 32px; padding: 0 10px; cursor: pointer; text-transform: uppercase; font-size: 0.75rem; font-weight: 500;">
+                    <option value="1">GRÁFICOS DE DEVOLUÇÃO</option>
+                    <option value="2">PARETO POR CLIENTE</option>
+                </select>
                 <button class="month-btn" onclick="openModal(); this.blur()">REGISTROS</button>
             </div>
         </div>
         <div class="charts-row"
             style="display: flex; gap: 24px; flex: 1; height: auto; min-height: 0; margin-bottom: 15px;">
-            <div class="chart-panel"
+            <div class="chart-panel" id="panelEvolucao"
                 style="flex: 1; background: rgba(255,255,255,0.02); box-shadow: 0 20px 40px -10px rgba(0,0,0,0.5); border-radius: 16px; border: 1px solid var(--border-subtle); padding: 24px;">
-                <div class="chart-title">Evolução Mensal (Peso)</div>
-                <div class="chart-container" style="flex: 1; min-height: 0; position: relative;">
+                <div class="chart-title" id="leftChartTitle">Evolução Mensal (Peso)</div>
+                <div class="chart-container" id="mensalContainer" style="flex: 1; min-height: 0; position: relative;">
                     <canvas id="evolutionChart"></canvas>
                 </div>
+                <div class="chart-container" id="diariaContainer" style="flex: 1; min-height: 0; position: relative; display: none;">
+                    <canvas id="dailyChart"></canvas>
+                    <div id="dailyChartBlurOverlay" style="display:none; position:absolute; inset:0; backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); background:rgba(9,9,11,0.55); border-radius:8px; z-index:10; align-items:center; justify-content:center; flex-direction:column; gap:10px; text-align:center; padding:20px;">
+                        <i class="fa-solid fa-eye-slash" style="font-size:1.6rem; color:#a1a1aa;"></i>
+                        <span style="color:#f4f4f5; font-size:0.85rem; font-weight:600; max-width:420px; line-height:1.5; text-align:center;">A visualização neste gráfico não está disponível para o filtro do período aplicado.</span>
+                        <span style="color:#a1a1aa; font-size:0.75rem;">Selecione um mês específico para ver a devolução diária.</span>
+                    </div>
+                </div>
             </div>
-            <div class="chart-panel"
-                style="flex: 1; background: rgba(255,255,255,0.02); box-shadow: 0 20px 40px -10px rgba(0,0,0,0.5); border-radius: 16px; border: 1px solid var(--border-subtle); padding: 24px;">
+            <div class="chart-panel" id="panelPareto"
+                style="flex: 1; display: none; background: rgba(255,255,255,0.02); box-shadow: 0 20px 40px -10px rgba(0,0,0,0.5); border-radius: 16px; border: 1px solid var(--border-subtle); padding: 24px;">
                 <div class="chart-title">Pareto por Cliente (Peso)</div>
                 <div class="chart-container" style="flex: 1; min-height: 0; position: relative;">
                     <canvas id="paretoChart"></canvas>
@@ -692,9 +721,102 @@
             document.getElementById('footerWeight').textContent = formatNumber(totalWeight);
             document.getElementById('footerValue').textContent = valorVisible ? formatCurrency(totalValue) : '-----';
             document.getElementById('footerAvg').textContent = valorVisible ? (filteredData.length > 0 ? formatCurrency(totalValue / filteredData.length) : formatCurrency(0)) : '-----';
-            renderEvolutionChart(allData.filter(d => d.data_entrada && d.data_entrada.startsWith(year)));
-            renderParetoChart(filteredData);
+            const yearData = allData.filter(d => d.data_entrada && d.data_entrada.startsWith(year));
+            if (activeChart === '2') {
+                renderParetoChart(filteredData);
+            } else if (devView === 'diaria') {
+                renderDailyChart(yearData);
+            } else {
+                renderEvolutionChart(yearData);
+            }
             renderTable(filteredData); // Sincroniza a tabela do modal
+        }
+        // --- SELETOR DE VIEW (MENSAL/DIÁRIA) E GRÁFICO ---
+        let devView = 'mensal';
+        let activeChart = '1'; // 1 = evolução (mensal/diária), 2 = pareto
+        let dailyChart = null;
+        function setDevView(v) {
+            devView = v;
+            activeChart = '1';
+            document.getElementById('chartSelectDropdown').value = '1';
+            applyChartVisibility();
+            updateDashboard();
+        }
+        function selectChartFromDropdown(val) {
+            activeChart = String(val);
+            applyChartVisibility();
+            updateDashboard();
+        }
+        function applyChartVisibility() {
+            const showEvo = activeChart === '1';
+            document.getElementById('panelEvolucao').style.display = showEvo ? 'flex' : 'none';
+            document.getElementById('panelPareto').style.display = showEvo ? 'none' : 'flex';
+            document.getElementById('btnViewMensal').classList.toggle('active', showEvo && devView === 'mensal');
+            document.getElementById('btnViewDiaria').classList.toggle('active', showEvo && devView === 'diaria');
+            if (showEvo) {
+                document.getElementById('mensalContainer').style.display = devView === 'mensal' ? '' : 'none';
+                document.getElementById('diariaContainer').style.display = devView === 'diaria' ? '' : 'none';
+                document.getElementById('leftChartTitle').textContent = devView === 'mensal' ? 'Evolução Mensal (Peso)' : 'Devolução Diária (Peso)';
+            }
+        }
+        function setDailyChartBlur(active) {
+            const overlay = document.getElementById('dailyChartBlurOverlay');
+            if (overlay) overlay.style.display = active ? 'flex' : 'none';
+        }
+        function onMonthSelectChange() {
+            selectedMonth = document.getElementById('monthSelect').value;
+            updateDashboard();
+        }
+        function renderDailyChart(yearData) {
+            const overlayActive = selectedMonth === 'all';
+            setDailyChartBlur(overlayActive);
+            const ctx = document.getElementById('dailyChart').getContext('2d');
+            if (dailyChart) { dailyChart.destroy(); dailyChart = null; }
+            if (overlayActive) return;
+            const year = parseInt(document.getElementById('yearSelector').value);
+            const m = parseInt(selectedMonth);
+            const daysInMonth = new Date(year, m + 1, 0).getDate();
+            const values = new Array(daysInMonth).fill(0);
+            yearData.forEach(d => {
+                if (!d.data_entrada) return;
+                const dt = new Date(d.data_entrada);
+                if (dt.getMonth() === m) values[dt.getDate() - 1] += parseFloat(d.peso_total || 0);
+            });
+            const labels = Array.from({ length: daysInMonth }, (_, i) => String(i + 1).padStart(2, '0'));
+            dailyChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Peso Devolvido (kg)',
+                        data: values,
+                        backgroundColor: '#ea580c',
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    onClick: (evt, elements) => {
+                        if (!elements.length) return;
+                        const day = elements[0].index + 1;
+                        const rows = yearData.filter(d => {
+                            if (!d.data_entrada) return false;
+                            const dt = new Date(d.data_entrada);
+                            return dt.getMonth() === m && dt.getDate() === day;
+                        });
+                        showRecords(rows, `${String(day).padStart(2, '0')}/${String(m + 1).padStart(2, '0')}/${year}`);
+                    },
+                    onHover: (evt, elements) => {
+                        evt.native.target.style.cursor = elements.length ? 'pointer' : 'default';
+                    },
+                    scales: {
+                        y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#a1a1aa' } },
+                        x: { grid: { display: false }, ticks: { color: '#a1a1aa' } }
+                    }
+                }
+            });
         }
         function renderEvolutionChart(data) {
             const ctx = document.getElementById('evolutionChart').getContext('2d');
@@ -908,18 +1030,7 @@
             document.getElementById('startDate').value = `2025-01-01`;
             document.getElementById('endDate').value = `2026-12-31`;
             document.getElementById('yearSelector').value = yearStr;
-            // Month selectors
-            const btns = document.querySelectorAll('.month-btn');
-            btns.forEach(btn => {
-                const m = btn.getAttribute('data-month');
-                if (m == selectedMonth) btn.classList.add('active');
-                btn.onclick = () => {
-                    btns.forEach(b => b.classList.remove('active'));
-                    btn.classList.add('active');
-                    selectedMonth = btn.getAttribute('data-month');
-                    updateDashboard();
-                };
-            });
+            document.getElementById('monthSelect').value = String(selectedMonth);
             refreshData();
             setInterval(() => {
                 const now = new Date();
