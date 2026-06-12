@@ -19,6 +19,10 @@
     <script src="js/activity-logger.js?v=20260605e"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
+    <!-- Leaflet (Mapa de Calor) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
     <style>
         /* --- BLOQUEIO DE SELEÇÃO GLOBAL --- */
         * {
@@ -908,6 +912,23 @@
             color: #000;
             border-color: var(--status-info);
         }
+        /* --- MAPA DE CALOR (Leaflet) --- */
+        #fatHeatmap { position:absolute; inset:0; border-radius:8px; overflow:hidden; background:#09090b; }
+        #fatHeatmap .leaflet-container { background:#09090b; }
+        #fatHeatmap .leaflet-control-attribution { display:none; }
+        #fatHeatmap .leaflet-bar a {
+            background:#18181b; border-bottom-color:rgba(255,255,255,0.08);
+            color:#f4f4f5;
+        }
+        #fatHeatmap .leaflet-bar a:hover { background:#27272a; color:#fbbf24; }
+        #fatHeatmapStats {
+            position:absolute; left:14px; top:14px; z-index:500;
+            background:rgba(9,9,11,0.86); border:1px solid rgba(255,255,255,0.1);
+            border-radius:8px; padding:10px 12px; color:#d4d4d8;
+            font-family:'JetBrains Mono', monospace; font-size:0.72rem; line-height:1.5;
+            backdrop-filter:blur(8px); box-shadow:0 10px 25px rgba(0,0,0,0.35);
+        }
+        #fatHeatmapStats strong { color:#fbbf24; font-weight:800; }
     </style>
 </head>
 <body>
@@ -1070,6 +1091,7 @@
                 <button id="btnEvolutionView" class="month-btn active" onclick="showEvolutionView()">EVOLUÇÃO DIÁRIA</button>
                 <button id="btnAnnualView" class="month-btn" onclick="showAnnualView()">EVOLUÇÃO MENSAL</button>
                 <button id="btnAbcView" class="month-btn" onclick="showABCCharts()">CURVA ABC</button>
+                <button id="btnMapaView" class="month-btn" onclick="showMapaCalor()">MAPA DE CALOR</button>
                 <button class="month-btn" onclick="openRecordsModal()">REGISTROS</button>
             </div>
         </div>
@@ -1154,6 +1176,23 @@
                 </div>
             </div>
         </div>
+        <!-- CHARTS ROW (MAPA DE CALOR) -->
+        <div class="charts-row" id="mapaChartsRow" style="display:none; grid-template-columns: 1fr;">
+            <div class="chart-panel" style="overflow: hidden !important;">
+                <div class="chart-header-row">
+                    <div class="chart-title">Mapa de Calor — Faturamento por Cidade: <span id="mapaTypeLabel"
+                            style="color:var(--color-primary)">Peso (kg)</span></div>
+                    <div class="chart-header-kpi" style="gap: 5px;">
+                        <button class="btn-mini-chart active" id="btnMapaPeso" onclick="setMapaMetric('peso')">Peso (kg)</button>
+                        <button class="btn-mini-chart" id="btnMapaValor" onclick="setMapaMetric('valor')">Valor (R$)</button>
+                    </div>
+                </div>
+                <div style="position: relative; flex: 1; min-height: 0; width: 100%;">
+                    <div id="fatHeatmap"></div>
+                    <div id="fatHeatmapStats"></div>
+                </div>
+            </div>
+        </div>
     </main>
     <script>
         const MONTHS_SHORT = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
@@ -1199,6 +1238,12 @@
         let abcType = 'peso';
         let abcAllLabels = [];
         let abcBarHeightPx = 28;
+        // --- MAPA DE CALOR STATE ---
+        let showMapa = false;
+        let mapaMetric = 'peso'; // 'peso' | 'valor'
+        let fatMap = null, fatHeatLayer = null, fatCityLayer = null;
+        let clientGeoRecords = [], clientGeoLoaded = false;
+        let brazilOutlineLoaded = false;
         // --- DASHBOARD SELECTOR LOGIC ---
         function renderDashboardMonthButtons() {
             const container = document.getElementById('dashboardMonthButtons');
@@ -1581,6 +1626,10 @@
             // --- ABC CHART UPDATE ---
             if (showABC) {
                 renderABCChart(rangeData);
+            }
+            // --- MAPA DE CALOR UPDATE ---
+            if (showMapa) {
+                renderFatHeatmap(rangeData);
             }
         }
         function toggleDailyChartMode() {
@@ -2357,12 +2406,15 @@ async function loadRecordsData() {
         // --- ABC SEARCH & CHART LOGIC ---
         function showEvolutionView() {
             showABC = false;
+            showMapa = false;
             document.getElementById('standardChartsRow').style.display = 'grid';
             document.getElementById('annualChartsRow').style.display = 'none';
             document.getElementById('abcChartsRow').style.display = 'none';
+            document.getElementById('mapaChartsRow').style.display = 'none';
             document.getElementById('btnEvolutionView').classList.add('active');
             document.getElementById('btnAnnualView').classList.remove('active');
             document.getElementById('btnAbcView').classList.remove('active');
+            document.getElementById('btnMapaView').classList.remove('active');
             const sideBtn = document.getElementById('btnToggleCharts');
             if (sideBtn) {
                 sideBtn.classList.remove('active-side');
@@ -2377,23 +2429,29 @@ async function loadRecordsData() {
         }
         function showAnnualView() {
             showABC = false;
+            showMapa = false;
             document.getElementById('standardChartsRow').style.display = 'none';
             document.getElementById('annualChartsRow').style.display = 'grid';
             document.getElementById('abcChartsRow').style.display = 'none';
+            document.getElementById('mapaChartsRow').style.display = 'none';
             document.getElementById('btnEvolutionView').classList.remove('active');
             document.getElementById('btnAnnualView').classList.add('active');
             document.getElementById('btnAbcView').classList.remove('active');
+            document.getElementById('btnMapaView').classList.remove('active');
             const _d2 = hasActiveModalFilters() ? getModalFilteredData() : allData;
             updateDashboardfromRecords(_d2);
         }
         function showABCCharts() {
             showABC = true;
+            showMapa = false;
             document.getElementById('standardChartsRow').style.display = 'none';
             document.getElementById('annualChartsRow').style.display = 'none';
             document.getElementById('abcChartsRow').style.display = 'grid';
+            document.getElementById('mapaChartsRow').style.display = 'none';
             document.getElementById('btnEvolutionView').classList.remove('active');
             document.getElementById('btnAnnualView').classList.remove('active');
             document.getElementById('btnAbcView').classList.add('active');
+            document.getElementById('btnMapaView').classList.remove('active');
             // Update side menu button
             const sideBtn = document.getElementById('btnToggleCharts');
             if (sideBtn) {
@@ -2407,6 +2465,196 @@ async function loadRecordsData() {
         }
         function canViewAbcSensitive() {
             return localStorage.getItem('erus_can_view_monetary') === 'true';
+        }
+        // --- MAPA DE CALOR ---
+        function showMapaCalor() {
+            showABC = false;
+            showMapa = true;
+            document.getElementById('standardChartsRow').style.display = 'none';
+            document.getElementById('annualChartsRow').style.display = 'none';
+            document.getElementById('abcChartsRow').style.display = 'none';
+            document.getElementById('mapaChartsRow').style.display = 'grid';
+            document.getElementById('btnEvolutionView').classList.remove('active');
+            document.getElementById('btnAnnualView').classList.remove('active');
+            document.getElementById('btnAbcView').classList.remove('active');
+            document.getElementById('btnMapaView').classList.add('active');
+            const sideBtn = document.getElementById('btnToggleCharts');
+            if (sideBtn) {
+                sideBtn.classList.remove('active-side');
+                sideBtn.innerHTML = '<i class="fa-solid fa-chart-pie"></i> Curva ABC';
+                sideBtn.style.backgroundColor = 'rgba(255,255,255,0.03)';
+                sideBtn.style.color = 'var(--text-muted)';
+            }
+            // Reaplicar estado dos botões de métrica (setABCType limpa todos os .btn-mini-chart)
+            document.getElementById('btnMapaPeso').classList.toggle('active', mapaMetric === 'peso');
+            document.getElementById('btnMapaValor').classList.toggle('active', mapaMetric === 'valor');
+            const _d = hasActiveModalFilters() ? getModalFilteredData() : allData;
+            updateDashboardfromRecords(_d);
+        }
+        function setMapaMetric(m) {
+            mapaMetric = m;
+            document.getElementById('mapaTypeLabel').textContent = m === 'valor' ? 'Valor (R$)' : 'Peso (kg)';
+            document.getElementById('btnMapaPeso').classList.toggle('active', m === 'peso');
+            document.getElementById('btnMapaValor').classList.toggle('active', m === 'valor');
+            const _d = hasActiveModalFilters() ? getModalFilteredData() : allData;
+            updateDashboardfromRecords(_d);
+        }
+        function mapaEscapeHtml(s) {
+            return String(s == null ? '' : s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+        }
+        function ensureFatMap() {
+            if (fatMap) return fatMap;
+            fatMap = L.map('fatHeatmap', {
+                center: [-25.4, -51.5], zoom: 6,
+                zoomControl: false, attributionControl: false
+            });
+            L.control.zoom({ position: 'topright' }).addTo(fatMap);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                maxZoom: 18, subdomains: 'abcd'
+            }).addTo(fatMap);
+            addBrazilOutline(fatMap);
+            return fatMap;
+        }
+        async function addBrazilOutline(map) {
+            if (brazilOutlineLoaded) return;
+            brazilOutlineLoaded = true;
+            const base = 'https://servicodados.ibge.gov.br/api/v3/malhas/paises/BR?formato=application/vnd.geo+json&qualidade=minima';
+            try {
+                const [ufs, pais] = await Promise.all([
+                    fetch(base + '&intrarregiao=UF').then(r => r.json()),
+                    fetch(base).then(r => r.json())
+                ]);
+                L.geoJSON(ufs, {
+                    interactive: false,
+                    style: { color: 'rgba(244,244,245,0.22)', weight: 0.8, fill: false }
+                }).addTo(map).bringToBack();
+                L.geoJSON(pais, {
+                    interactive: false,
+                    style: { color: 'rgba(255,255,255,0.55)', weight: 1.5, fill: false }
+                }).addTo(map).bringToBack();
+            } catch (e) {
+                brazilOutlineLoaded = false;
+                console.warn('Falha ao carregar contorno do Brasil (IBGE):', e);
+            }
+        }
+        async function renderFatHeatmap(rangeData) {
+            const statsEl = document.getElementById('fatHeatmapStats');
+            if (typeof L === 'undefined' || typeof L.heatLayer === 'undefined') {
+                statsEl.innerHTML = '<span style="color:#ef4444;">Biblioteca de mapas não carregou. Verifique a conexão.</span>';
+                return;
+            }
+            if (!clientGeoLoaded) {
+                statsEl.innerHTML = 'Carregando cidades...';
+                try {
+                    const res = await fetch('/api/clientes-firebird/list/all');
+                    const json = await res.json();
+                    if (!json.success) throw new Error(json.error || 'Erro ao consultar clientes');
+                    clientGeoRecords = json.data || [];
+                    clientGeoLoaded = true;
+                } catch (e) {
+                    statsEl.innerHTML = `<span style="color:#ef4444;">${mapaEscapeHtml(e.message)}</span>`;
+                    return;
+                }
+                if (!showMapa) return;
+            }
+
+            const norm = s => String(s || '').toUpperCase().replace(/\s+/g, ' ').trim();
+
+            // Agregar faturamento do período por cliente
+            const byClient = new Map();
+            rangeData.forEach(item => {
+                const key = norm(item.clienteNome || 'Desconhecido');
+                if (!byClient.has(key)) byClient.set(key, { peso: 0, valor: 0 });
+                const c = byClient.get(key);
+                c.peso += (item.pesoTotal || 0);
+                c.valor += calculateCalculatedTotal(item);
+            });
+
+            // Índice nome do cliente → cidade/coordenadas
+            const geoByName = new Map();
+            clientGeoRecords.forEach(c => {
+                const g = { lat: c.cidadeLatitude, lng: c.cidadeLongitude, nome: c.cidadeNome, uf: c.cidadeUf, cod: c.cidadeCodigo };
+                const rz = norm(c.razaoSocial), ft = norm(c.fantasia);
+                if (rz && !geoByName.has(rz)) geoByName.set(rz, g);
+                if (ft && !geoByName.has(ft)) geoByName.set(ft, g);
+            });
+
+            // Agregar por cidade
+            const cities = new Map();
+            let located = 0, unlocated = 0;
+            byClient.forEach((vals, name) => {
+                if (vals.peso <= 0 && vals.valor <= 0) return;
+                const g = geoByName.get(name);
+                if (!g || g.lat == null || g.lng == null) { unlocated++; return; }
+                located++;
+                const key = `${norm(g.nome) || g.cod}|${g.uf || ''}`;
+                if (!cities.has(key)) {
+                    cities.set(key, {
+                        nome: g.nome || `Cidade ${g.cod || '?'}`, uf: g.uf || '',
+                        lat: g.lat, lng: g.lng, count: 0, peso: 0, valor: 0
+                    });
+                }
+                const city = cities.get(key);
+                city.count++;
+                city.peso += vals.peso;
+                city.valor += vals.valor;
+            });
+
+            const map = ensureFatMap();
+            if (fatHeatLayer) { map.removeLayer(fatHeatLayer); fatHeatLayer = null; }
+            if (fatCityLayer) { map.removeLayer(fatCityLayer); fatCityLayer = null; }
+
+            const list = [...cities.values()];
+            if (!list.length) {
+                statsEl.innerHTML = 'Nenhum faturamento com cidade localizada no período.';
+                requestAnimationFrame(() => map.invalidateSize());
+                return;
+            }
+
+            const metricOf = c => mapaMetric === 'valor' ? c.valor : c.peso;
+            const maxVal = Math.max(...list.map(metricOf));
+            const weightFor = c => {
+                const ratio = maxVal > 0 ? metricOf(c) / maxVal : 0;
+                return 0.25 + 0.75 * Math.sqrt(ratio);
+            };
+
+            fatHeatLayer = L.heatLayer(list.map(c => [c.lat, c.lng, weightFor(c)]), {
+                radius: 34, blur: 24, max: 1, minOpacity: 0.25,
+                gradient: { 0.25: '#1d4ed8', 0.45: '#7c3aed', 0.65: '#fbbf24', 0.85: '#f97316', 1: '#ef4444' }
+            }).addTo(map);
+
+            const showMoney = canViewAbcSensitive();
+            fatCityLayer = L.layerGroup(list.map(c => {
+                const r = 4 + 10 * Math.sqrt(maxVal > 0 ? metricOf(c) / maxVal : 0);
+                return L.circleMarker([c.lat, c.lng], {
+                    radius: r, color: '#fbbf24', weight: 1, opacity: 0.5,
+                    fillColor: '#fbbf24', fillOpacity: 0.1
+                }).bindTooltip(
+                    `<strong>${mapaEscapeHtml(c.nome)}${c.uf ? ' - ' + c.uf : ''}</strong>` +
+                    `<br>${c.count} cliente${c.count !== 1 ? 's' : ''}` +
+                    `<br>Peso: ${formatWeight(c.peso)}` +
+                    `<br>Faturamento: ${showMoney ? formatCurrency(c.valor) : 'R$ -----'}`,
+                    { direction: 'top' }
+                );
+            })).addTo(map);
+
+            const totalPeso = list.reduce((a, c) => a + c.peso, 0);
+            const totalValor = list.reduce((a, c) => a + c.valor, 0);
+            const top = [...list].sort((a, b) => metricOf(b) - metricOf(a))[0];
+            const topMetricStr = mapaMetric === 'valor'
+                ? (showMoney ? formatCurrency(top.valor) : 'R$ -----')
+                : formatWeight(top.peso);
+            statsEl.innerHTML =
+                `<strong>${located.toLocaleString('pt-BR')}</strong> clientes em <strong>${list.length.toLocaleString('pt-BR')}</strong> cidades` +
+                `<br>Peso: <strong>${formatWeight(totalPeso)}</strong>` +
+                `<br>Faturamento: <strong>${showMoney ? formatCurrency(totalValor) : 'R$ -----'}</strong>` +
+                `<br>Top: <strong>${mapaEscapeHtml(top.nome)}${top.uf ? ' - ' + top.uf : ''}</strong> (${topMetricStr})` +
+                (unlocated > 0 ? `<br><span style="color:#71717a;">${unlocated} cliente${unlocated !== 1 ? 's' : ''} sem coordenadas</span>` : '');
+
+            requestAnimationFrame(() => {
+                map.invalidateSize();
+                map.fitBounds(L.latLngBounds([-33.9, -74.1], [5.4, -34.6]), { padding: [10, 10] });
+            });
         }
         function setABCType(type) {
             abcType = type;
