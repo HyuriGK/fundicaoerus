@@ -962,6 +962,10 @@
                 <div class="toolbar-group" style="display: flex; gap: 10px;">
                     <button class="month-btn" id="btnOnlyServices" onclick="toggleOnlyServices()">SOMENTE SERVIÇOS</button>
                     <button class="month-btn active" onclick="openClientModal()">CLIENTES (FILTRAR)</button>
+                    <span id="mapaCityChip" style="display:none; align-items:center; gap:8px; background:rgba(251,191,36,0.12); border:1px solid rgba(251,191,36,0.4); color:#fbbf24; border-radius:8px; padding:5px 12px; font-size:0.72rem; font-weight:700; text-transform:uppercase;">
+                        <i class="fa-solid fa-location-dot"></i><span id="mapaCityChipLabel"></span>
+                        <i class="fa-solid fa-xmark" style="cursor:pointer;" onclick="clearMapaCityFilter()" title="Remover filtro de cidade"></i>
+                    </span>
                 </div>
                 <div class="toolbar-group" style="margin-left: auto; display: flex; align-items: center; gap: 8px;">
                     <div class="header-filters"
@@ -1243,6 +1247,7 @@
         let mapaMetric = 'peso'; // 'peso' | 'valor'
         let fatMap = null, fatHeatLayer = null, fatCityLayer = null;
         let clientGeoRecords = [], clientGeoLoaded = false;
+        let mapaCityFilter = null; // { nome, uf, clients:Set } — filtro de cidade no modal de registros
         let brazilOutlineLoaded = false;
         // --- DASHBOARD SELECTOR LOGIC ---
         function renderDashboardMonthButtons() {
@@ -1628,8 +1633,9 @@
                 renderABCChart(rangeData);
             }
             // --- MAPA DE CALOR UPDATE ---
+            // Mesmas bases do KPI "TOTAL FATURADO - INTERNO": valor e peso têm filtros próprios
             if (showMapa) {
-                renderFatHeatmap(rangeData);
+                renderFatHeatmap(rangeDataSemServicos, rangeFatPesoComServ.filter(item => !isServiceClient(item)));
             }
         }
         function toggleDailyChartMode() {
@@ -2078,7 +2084,7 @@
             document.body.style.overflow = 'hidden';
             renderTable(); // Ensure table is rendered with latest data
         }
-        function closeRecordsModal() { document.getElementById('recordsModal').style.display = 'none'; document.body.style.overflow = ''; }
+        function closeRecordsModal() { document.getElementById('recordsModal').style.display = 'none'; document.body.style.overflow = ''; if (mapaCityFilter) clearMapaCityFilter(); }
 async function loadRecordsData() {
             // Carregar histórico completo (2025 e 2026) para o seletor de anos funcionar
             const fullStart = '2025-01-01';
@@ -2216,6 +2222,10 @@ async function loadRecordsData() {
                 const isService = isServiceClient(item);
                 if (startInput && item.data < startInput) return false;
                 if (endInput && item.data > endInput) return false;
+                if (mapaCityFilter) {
+                    const n = String(item.clienteNome || '').toUpperCase().replace(/\s+/g, ' ').trim();
+                    if (!mapaCityFilter.clients.has(n)) return false;
+                }
                 if (onlyServices) return isService;
                 if (isService) return showServices;
                 const name = (item.clienteNome || 'Desconhecido').trim();
@@ -2499,6 +2509,22 @@ async function loadRecordsData() {
             const _d = hasActiveModalFilters() ? getModalFilteredData() : allData;
             updateDashboardfromRecords(_d);
         }
+        function openCityRecords(city) {
+            mapaCityFilter = { nome: city.nome, uf: city.uf, clients: city.clients };
+            const chip = document.getElementById('mapaCityChip');
+            const label = document.getElementById('mapaCityChipLabel');
+            if (chip && label) {
+                label.textContent = `${city.nome}${city.uf ? ' - ' + city.uf : ''}`;
+                chip.style.display = 'inline-flex';
+            }
+            openRecordsModal();
+        }
+        function clearMapaCityFilter() {
+            mapaCityFilter = null;
+            const chip = document.getElementById('mapaCityChip');
+            if (chip) chip.style.display = 'none';
+            renderTable();
+        }
         function mapaEscapeHtml(s) {
             return String(s == null ? '' : s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
         }
@@ -2537,7 +2563,7 @@ async function loadRecordsData() {
                 console.warn('Falha ao carregar contorno do Brasil (IBGE):', e);
             }
         }
-        async function renderFatHeatmap(rangeData) {
+        async function renderFatHeatmap(valorData, pesoData) {
             const statsEl = document.getElementById('fatHeatmapStats');
             if (typeof L === 'undefined' || typeof L.heatLayer === 'undefined') {
                 statsEl.innerHTML = '<span style="color:#ef4444;">Biblioteca de mapas não carregou. Verifique a conexão.</span>';
@@ -2560,14 +2586,17 @@ async function loadRecordsData() {
 
             const norm = s => String(s || '').toUpperCase().replace(/\s+/g, ' ').trim();
 
-            // Agregar faturamento do período por cliente
+            // Agregar faturamento do período por cliente (bases separadas, iguais ao KPI INTERNO)
             const byClient = new Map();
-            rangeData.forEach(item => {
-                const key = norm(item.clienteNome || 'Desconhecido');
-                if (!byClient.has(key)) byClient.set(key, { peso: 0, valor: 0 });
-                const c = byClient.get(key);
-                c.peso += (item.pesoTotal || 0);
-                c.valor += calculateCalculatedTotal(item);
+            const ensureClient = name => {
+                if (!byClient.has(name)) byClient.set(name, { peso: 0, valor: 0 });
+                return byClient.get(name);
+            };
+            valorData.forEach(item => {
+                ensureClient(norm(item.clienteNome || 'Desconhecido')).valor += calculateCalculatedTotal(item);
+            });
+            pesoData.forEach(item => {
+                ensureClient(norm(item.clienteNome || 'Desconhecido')).peso += (item.pesoTotal || 0);
             });
 
             // Índice nome do cliente → cidade/coordenadas
@@ -2591,13 +2620,14 @@ async function loadRecordsData() {
                 if (!cities.has(key)) {
                     cities.set(key, {
                         nome: g.nome || `Cidade ${g.cod || '?'}`, uf: g.uf || '',
-                        lat: g.lat, lng: g.lng, count: 0, peso: 0, valor: 0
+                        lat: g.lat, lng: g.lng, count: 0, peso: 0, valor: 0, clients: new Set()
                     });
                 }
                 const city = cities.get(key);
                 city.count++;
                 city.peso += vals.peso;
                 city.valor += vals.valor;
+                city.clients.add(name);
             });
 
             const map = ensureFatMap();
@@ -2633,13 +2663,15 @@ async function loadRecordsData() {
                     `<strong>${mapaEscapeHtml(c.nome)}${c.uf ? ' - ' + c.uf : ''}</strong>` +
                     `<br>${c.count} cliente${c.count !== 1 ? 's' : ''}` +
                     `<br>Peso: ${formatWeight(c.peso)}` +
-                    `<br>Faturamento: ${showMoney ? formatCurrency(c.valor) : 'R$ -----'}`,
+                    `<br>Faturamento: ${showMoney ? formatCurrency(c.valor) : 'R$ -----'}` +
+                    `<br><span style="color:#a1a1aa;">Clique para ver os registros</span>`,
                     { direction: 'top' }
-                );
+                ).on('click', () => openCityRecords(c));
             })).addTo(map);
 
-            const totalPeso = list.reduce((a, c) => a + c.peso, 0);
-            const totalValor = list.reduce((a, c) => a + c.valor, 0);
+            // Totais do período (todos os clientes, mesmo sem coordenadas) — bate com o KPI INTERNO
+            let totalPeso = 0, totalValor = 0;
+            byClient.forEach(v => { totalPeso += v.peso; totalValor += v.valor; });
             const top = [...list].sort((a, b) => metricOf(b) - metricOf(a))[0];
             const topMetricStr = mapaMetric === 'valor'
                 ? (showMoney ? formatCurrency(top.valor) : 'R$ -----')
