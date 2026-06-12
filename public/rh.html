@@ -426,6 +426,84 @@
             background: var(--status-danger);
             color: #fff;
         }
+        /* Filtros de setor/cargo em branco */
+        #setorFilter, #cargoFilter { color: #f4f4f5 !important; }
+        /* --- MODAL DE VISUALIZAÇÃO --- */
+        .view-profile-header {
+            display: flex;
+            align-items: center;
+            gap: 18px;
+            padding: 20px;
+            border: 1px solid rgba(251, 191, 36, 0.15);
+            border-radius: 12px;
+            background: linear-gradient(135deg, rgba(251, 191, 36, 0.06), rgba(0, 0, 0, 0.2));
+            margin-bottom: 18px;
+        }
+        .view-avatar {
+            width: 64px; height: 64px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dim));
+            color: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.4rem;
+            font-weight: 800;
+            flex-shrink: 0;
+            box-shadow: var(--shadow-glow);
+        }
+        .view-profile-name { font-size: 1.25rem; font-weight: 800; color: #fff; letter-spacing: -0.02em; }
+        .view-profile-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+        .view-chip {
+            display: inline-flex; align-items: center; gap: 6px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-muted);
+            border-radius: 6px;
+            padding: 4px 10px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            font-family: var(--font-mono);
+        }
+        .view-chip i { color: var(--color-primary); font-size: 0.7rem; }
+        .view-cards-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            margin-bottom: 18px;
+        }
+        .view-status-card {
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 10px;
+            padding: 14px;
+            background: rgba(0, 0, 0, 0.25);
+        }
+        .view-status-card .vsc-label {
+            font-size: 0.62rem; font-weight: 800; color: var(--text-muted);
+            text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px;
+            display: flex; align-items: center; gap: 6px;
+        }
+        .view-status-card .vsc-label i { color: var(--color-primary); }
+        .view-status-card .vsc-value { font-size: 0.8rem; }
+        .view-status-card .vsc-sub { font-size: 0.68rem; color: var(--text-muted); margin-top: 6px; font-family: var(--font-mono); }
+        .view-detail-table { width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: 0.74rem; min-width: 0; }
+        .view-detail-table th {
+            position: static;
+            background: rgba(0, 0, 0, 0.3);
+            font-size: 0.62rem;
+        }
+        .view-detail-table td { white-space: normal; }
+        .view-empty { padding: 14px; text-align: center; color: var(--text-muted); font-size: 0.76rem; }
+        .view-obs-box {
+            margin-top: 8px;
+            padding: 8px 10px;
+            border-left: 3px solid rgba(251, 191, 36, 0.4);
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 0 6px 6px 0;
+            font-size: 0.74rem;
+            color: #d4d4d8;
+            white-space: pre-wrap;
+        }
     </style>
 </head>
 <body>
@@ -612,6 +690,21 @@
             <div class="modal-footer">
                 <button class="btn-footer cancel" onclick="closeFuncModal()">Cancelar</button>
                 <button class="btn-footer save" id="btnSaveFunc" onclick="saveFunc()"><i class="fa-solid fa-floppy-disk" style="margin-right:7px;"></i>Salvar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL VISUALIZAÇÃO DETALHADA -->
+    <div id="viewModal" class="modal-overlay">
+        <div class="modal-card fullscreen">
+            <div class="modal-header">
+                <div class="modal-title"><i class="fa-solid fa-address-card"></i><span>Ficha do Funcionário</span></div>
+                <span class="modal-close" onclick="closeViewModal()" title="Fechar (ESC)">&times;</span>
+            </div>
+            <div class="modal-body" id="viewModalBody"></div>
+            <div class="modal-footer">
+                <button class="btn-footer cancel" onclick="closeViewModal()">Fechar</button>
+                <button class="btn-footer save" id="btnViewEdit"><i class="fa-solid fa-pen" style="margin-right:7px;"></i>Editar</button>
             </div>
         </div>
     </div>
@@ -824,6 +917,7 @@
                     <td class="text-center">${epiStatus(f)}</td>
                     <td class="text-center">${feriasStatus(f)}</td>
                     <td class="text-center">
+                        <button class="row-action-btn" onclick="openViewModal(${f.id})" title="Visualizar"><i class="fa-solid fa-eye"></i></button>
                         <button class="row-action-btn" onclick="openFuncModal(${f.id})" title="Editar"><i class="fa-solid fa-pen"></i></button>
                         <button class="row-action-btn danger" onclick="openDeleteModal(${f.id})" title="Excluir"><i class="fa-solid fa-trash-can"></i></button>
                     </td>
@@ -931,6 +1025,167 @@
             }).filter(obj => Object.values(obj).some(v => v));
         }
 
+        // ─── MODAL VISUALIZAÇÃO ──────────────────────────────────────────────
+        function tempoDeCasa(admStr) {
+            const adm = parseISO(admStr);
+            if (!adm) return '—';
+            const t = today0();
+            let months = (t.getFullYear() - adm.getFullYear()) * 12 + (t.getMonth() - adm.getMonth());
+            if (t.getDate() < adm.getDate()) months--;
+            if (months < 0) months = 0;
+            const anos = Math.floor(months / 12), meses = months % 12;
+            if (anos === 0 && meses === 0) return 'Menos de 1 mês';
+            const p = [];
+            if (anos > 0) p.push(`${anos} ano${anos !== 1 ? 's' : ''}`);
+            if (meses > 0) p.push(`${meses} ${meses !== 1 ? 'meses' : 'mês'}`);
+            return p.join(' e ');
+        }
+        function initials(nome) {
+            const parts = String(nome || '').trim().split(/\s+/).filter(Boolean);
+            if (!parts.length) return '?';
+            return ((parts[0][0] || '') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
+        }
+        function avalViewCard(f, dias) {
+            const adm = parseISO(f.data_admissao);
+            const aval = (f.avaliacoes || {})[`d${dias}`] || {};
+            let body = '<span style="color:var(--text-muted);">Sem data de admissão</span>';
+            let sub = '';
+            if (adm) {
+                const due = addDays(adm, dias);
+                if (aval.realizada) {
+                    body = '<span class="badge-success">REALIZADA</span>';
+                } else if (today0() > due) {
+                    body = '<span class="badge-danger">ATRASADA</span>';
+                } else {
+                    body = '<span class="badge-warning">PENDENTE</span>';
+                }
+                sub = `Prevista: ${due.toLocaleDateString('pt-BR')}`;
+            }
+            const obs = aval.obs ? `<div class="view-obs-box">${escapeHtml(aval.obs)}</div>` : '';
+            return `
+                <div class="view-status-card">
+                    <div class="vsc-label"><i class="fa-solid fa-clipboard-check"></i> Avaliação ${dias} dias</div>
+                    <div class="vsc-value">${body}</div>
+                    ${sub ? `<div class="vsc-sub">${sub}</div>` : ''}
+                    ${obs}
+                </div>`;
+        }
+        function openViewModal(id) {
+            const f = funcionarios.find(x => x.id === id);
+            if (!f) return;
+            const t = today0();
+            const info = feriasInfo(f);
+
+            // Exames
+            const exames = (f.exames || []);
+            const examesRows = exames.map(e => {
+                const d = parseISO(e.data);
+                let st = '<span style="color:var(--text-muted);">Sem data</span>';
+                if (d) {
+                    if (d < t) st = '<span class="badge-danger">ATRASADO</span>';
+                    else if (diffDays(t, d) <= 30) st = '<span class="badge-warning">PRÓXIMO</span>';
+                    else st = '<span class="badge-info">AGENDADO</span>';
+                }
+                return `<tr><td>${escapeHtml(e.tipo || '—')}</td><td class="text-center">${fmtBR(e.data)}</td><td class="text-center">${st}</td></tr>`;
+            }).join('');
+
+            // Cursos
+            const cursos = (f.cursos || []);
+            const cursoBadge = s => s === 'concluido'
+                ? '<span class="badge-success">CONCLUÍDO</span>'
+                : s === 'andamento'
+                    ? '<span class="badge-info">EM ANDAMENTO</span>'
+                    : '<span class="badge-warning">PENDENTE</span>';
+            const cursosRows = cursos.map(c => `<tr><td>${escapeHtml(c.nome || '—')}</td><td class="text-center">${cursoBadge(c.status)}</td></tr>`).join('');
+
+            // EPIs
+            const epis = (f.epis || []);
+            const episRows = epis.map(e => {
+                const d = parseISO(e.proxima_coleta);
+                let st = '<span style="color:var(--text-muted);">—</span>';
+                if (d) {
+                    const dd = diffDays(t, d);
+                    st = dd < 0 ? '<span class="badge-danger">VENCIDA</span>'
+                        : dd <= 30 ? '<span class="badge-warning">VENCE EM ' + dd + 'D</span>'
+                        : '<span class="badge-success">EM DIA</span>';
+                }
+                return `<tr><td>${escapeHtml(e.nome || '—')}</td><td class="text-center">${fmtBR(e.coleta)}</td><td class="text-center">${fmtBR(e.proxima_coleta)}</td><td class="text-center">${st}</td></tr>`;
+            }).join('');
+
+            // Férias
+            let feriasBody = '<span style="color:var(--text-muted);">Sem data de admissão</span>', feriasSub = '';
+            if (info) {
+                if (info.fase === 'primeiro') {
+                    feriasBody = '<span class="badge-info">EM AQUISIÇÃO</span>';
+                    feriasSub = `Direito em ${info.aquisitivo.toLocaleDateString('pt-BR')}`;
+                } else {
+                    const dd = diffDays(t, info.limite);
+                    feriasBody = dd < 0 ? '<span class="badge-danger">VENCIDA</span>'
+                        : dd <= 90 ? `<span class="badge-warning">VENCE EM ${dd}D</span>`
+                        : '<span class="badge-success">EM DIA</span>';
+                    feriasSub = `Limite p/ gozo: ${info.limite.toLocaleDateString('pt-BR')}`;
+                }
+            }
+
+            document.getElementById('viewModalBody').innerHTML = `
+                <div class="view-profile-header">
+                    <div class="view-avatar">${escapeHtml(initials(f.nome))}</div>
+                    <div style="min-width:0;">
+                        <div class="view-profile-name">${escapeHtml(f.nome)}</div>
+                        <div class="view-profile-meta">
+                            <span class="view-chip"><i class="fa-solid fa-briefcase"></i>${escapeHtml(f.cargo || 'Sem cargo')}</span>
+                            <span class="view-chip"><i class="fa-solid fa-building"></i>${escapeHtml(f.setor || 'Sem setor')}</span>
+                            <span class="view-chip"><i class="fa-solid fa-id-card"></i>${escapeHtml(f.cpf || 'CPF não informado')}</span>
+                            <span class="view-chip"><i class="fa-solid fa-calendar-check"></i>Admissão: ${fmtBR(f.data_admissao)}</span>
+                            <span class="view-chip"><i class="fa-solid fa-clock"></i>Tempo de casa: ${tempoDeCasa(f.data_admissao)}</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="view-cards-grid">
+                    ${avalViewCard(f, 45)}
+                    ${avalViewCard(f, 90)}
+                    <div class="view-status-card">
+                        <div class="vsc-label"><i class="fa-solid fa-stethoscope"></i> Próximo Exame</div>
+                        <div class="vsc-value">${exameStatus(f)}</div>
+                        <div class="vsc-sub">${exames.length} exame${exames.length !== 1 ? 's' : ''} cadastrado${exames.length !== 1 ? 's' : ''}</div>
+                    </div>
+                    <div class="view-status-card">
+                        <div class="vsc-label"><i class="fa-solid fa-umbrella-beach"></i> Férias</div>
+                        <div class="vsc-value">${feriasBody}</div>
+                        ${feriasSub ? `<div class="vsc-sub">${feriasSub}</div>` : ''}
+                    </div>
+                </div>
+                <div class="form-section">
+                    <div class="form-section-title"><i class="fa-solid fa-stethoscope"></i> Exames Periódicos</div>
+                    ${exames.length ? `<table class="view-detail-table">
+                        <thead><tr><th>TIPO</th><th class="text-center" style="width:140px;">DATA AGENDADA</th><th class="text-center" style="width:120px;">STATUS</th></tr></thead>
+                        <tbody>${examesRows}</tbody></table>`
+                        : '<div class="view-empty">Nenhum exame cadastrado.</div>'}
+                </div>
+                <div class="form-section">
+                    <div class="form-section-title"><i class="fa-solid fa-graduation-cap"></i> Cursos Necessários</div>
+                    ${cursos.length ? `<table class="view-detail-table">
+                        <thead><tr><th>CURSO</th><th class="text-center" style="width:160px;">STATUS</th></tr></thead>
+                        <tbody>${cursosRows}</tbody></table>`
+                        : '<div class="view-empty">Nenhum curso cadastrado.</div>'}
+                </div>
+                <div class="form-section">
+                    <div class="form-section-title"><i class="fa-solid fa-helmet-safety"></i> EPIs</div>
+                    ${epis.length ? `<table class="view-detail-table">
+                        <thead><tr><th>EPI</th><th class="text-center" style="width:130px;">COLETA</th><th class="text-center" style="width:140px;">PRÓXIMA COLETA</th><th class="text-center" style="width:130px;">STATUS</th></tr></thead>
+                        <tbody>${episRows}</tbody></table>`
+                        : '<div class="view-empty">Nenhum EPI cadastrado.</div>'}
+                </div>
+            `;
+            document.getElementById('btnViewEdit').onclick = () => { closeViewModal(); openFuncModal(id); };
+            document.getElementById('viewModal').style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+        }
+        function closeViewModal() {
+            document.getElementById('viewModal').style.display = 'none';
+            document.body.style.overflow = '';
+        }
+
         // ─── SALVAR / EXCLUIR ────────────────────────────────────────────────
         async function saveFunc() {
             const nome = document.getElementById('fNome').value.trim();
@@ -999,6 +1254,7 @@
         document.addEventListener('keydown', e => {
             if (e.key !== 'Escape') return;
             if (document.getElementById('deleteModal').style.display === 'flex') { closeDeleteModal(); return; }
+            if (document.getElementById('viewModal').style.display === 'flex') { closeViewModal(); return; }
             if (document.getElementById('funcModal').style.display === 'flex') closeFuncModal();
         });
         document.addEventListener('DOMContentLoaded', loadFuncionarios);
