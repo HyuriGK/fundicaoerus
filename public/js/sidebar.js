@@ -286,6 +286,17 @@
                 '<a href="devolucoes.html" data-stip="Devoluções" class="erus-nav-link' + isActive('devolucoes.html') + '">' +
                     '<i class="fa-solid fa-rotate-left"></i><span>Devoluções</span></a>' +
             '</div>' +
+            // RH
+            '<div class="erus-nav-group-sep" data-stip="RH" onclick="erusSidebarToggleGroup(\'eg-rh\')">' +
+                '<i class="fas fa-id-card-clip" style="font-size:0.8rem;color:#52525b;margin-right:8px;flex-shrink:0;"></i>' +
+                '<span class="erus-nav-group-label">RH</span>' +
+                '<div class="erus-nav-group-line"></div>' +
+                '<i class="fa-solid fa-plus" id="icon-eg-rh"></i>' +
+            '</div>' +
+            '<div id="eg-rh" class="erus-nav-group-wrapper collapsed">' +
+                '<a href="rh.html" data-stip="Funcionários" class="erus-nav-link' + isActive('rh.html') + '">' +
+                    '<i class="fa-solid fa-user-tie"></i><span>Funcionários</span></a>' +
+            '</div>' +
             // ORGANIZACAO (controlada por permissões de role)
             '<div id="erus-sep-organizacao" class="erus-nav-group-sep" data-stip="Organizacao" onclick="erusSidebarToggleGroup(\'eg-organizacao\')">' +
                 '<i class="fas fa-list-check" style="font-size:0.8rem;color:#52525b;margin-right:8px;flex-shrink:0;"></i>' +
