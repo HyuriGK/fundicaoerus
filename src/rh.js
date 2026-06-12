@@ -21,6 +21,7 @@ async function ensureTable() {
         atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )`);
     await pool.query(`ALTER TABLE rh_colaboradores ADD COLUMN IF NOT EXISTS vinculo VARCHAR(20)`);
+    await pool.query(`ALTER TABLE rh_colaboradores ADD COLUMN IF NOT EXISTS advertencias JSONB DEFAULT '[]'::jsonb`);
     tableReady = true;
 }
 
@@ -30,7 +31,7 @@ router.get('/funcionarios', async (req, res) => {
         await ensureTable();
         const result = await pool.query(`
             SELECT id, nome, cpf, TO_CHAR(data_admissao, 'YYYY-MM-DD') as data_admissao,
-                   cargo, setor, vinculo, avaliacoes, exames, cursos, epis, ativo
+                   cargo, setor, vinculo, avaliacoes, exames, cursos, epis, advertencias, ativo
             FROM rh_colaboradores
             WHERE ativo = TRUE
             ORDER BY nome ASC
@@ -44,15 +45,15 @@ router.get('/funcionarios', async (req, res) => {
 
 // Criar funcionário
 router.post('/funcionarios', async (req, res) => {
-    const { nome, cpf, data_admissao, cargo, setor, vinculo, avaliacoes, exames, cursos, epis } = req.body;
+    const { nome, cpf, data_admissao, cargo, setor, vinculo, avaliacoes, exames, cursos, epis, advertencias } = req.body;
     if (!nome || !String(nome).trim()) {
         return res.status(400).json({ success: false, error: 'Nome é obrigatório' });
     }
     try {
         await ensureTable();
         const result = await pool.query(`
-            INSERT INTO rh_colaboradores (nome, cpf, data_admissao, cargo, setor, vinculo, avaliacoes, exames, cursos, epis)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            INSERT INTO rh_colaboradores (nome, cpf, data_admissao, cargo, setor, vinculo, avaliacoes, exames, cursos, epis, advertencias)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             RETURNING id
         `, [
             String(nome).trim(),
@@ -64,7 +65,8 @@ router.post('/funcionarios', async (req, res) => {
             JSON.stringify(avaliacoes || {}),
             JSON.stringify(exames || []),
             JSON.stringify(cursos || []),
-            JSON.stringify(epis || [])
+            JSON.stringify(epis || []),
+            JSON.stringify(advertencias || [])
         ]);
         res.json({ success: true, id: result.rows[0].id });
     } catch (error) {
@@ -76,15 +78,15 @@ router.post('/funcionarios', async (req, res) => {
 // Atualizar funcionário
 router.put('/funcionarios/:id', async (req, res) => {
     const { id } = req.params;
-    const { nome, cpf, data_admissao, cargo, setor, vinculo, avaliacoes, exames, cursos, epis } = req.body;
+    const { nome, cpf, data_admissao, cargo, setor, vinculo, avaliacoes, exames, cursos, epis, advertencias } = req.body;
     try {
         await ensureTable();
         await pool.query(`
             UPDATE rh_colaboradores SET
                 nome = $1, cpf = $2, data_admissao = $3, cargo = $4, setor = $5, vinculo = $6,
-                avaliacoes = $7, exames = $8, cursos = $9, epis = $10,
+                avaliacoes = $7, exames = $8, cursos = $9, epis = $10, advertencias = $11,
                 atualizado_em = CURRENT_TIMESTAMP
-            WHERE id = $11
+            WHERE id = $12
         `, [
             String(nome || '').trim(),
             cpf || null,
@@ -96,6 +98,7 @@ router.put('/funcionarios/:id', async (req, res) => {
             JSON.stringify(exames || []),
             JSON.stringify(cursos || []),
             JSON.stringify(epis || []),
+            JSON.stringify(advertencias || []),
             id
         ]);
         res.json({ success: true });
