@@ -238,10 +238,14 @@ async function sincronizarDetalhado(fbDb) {
 
             console.log(`📦 ${result.length} itens de nota encontrados`);
 
-            // OTIMIZAÇÃO: Removemos o DELETE global para evitar o "Nuclear Option" toda vez.
-            // Os dados antigos permanecem e os novos são atualizados via ON CONFLICT.
-            // console.log('  🗑️ Limpando registros de faturamento detalhado...');
-            
+            // TRUNCATE + reinserção total: o Neon espelha exatamente o que o Firebird retorna
+            // (itens cancelados/alterados somem). Exclusões manuais são preservadas via
+            // faturamento_firebird_preferencias e reaplicadas na inserção abaixo.
+            // Só trunca DEPOIS que o resultado do Firebird chegou — se a busca falhar, o Neon fica intacto.
+            console.log('  🗑️ Limpando tabela faturamento_firebird (truncate)...');
+            await pool.query('TRUNCATE TABLE faturamento_firebird RESTART IDENTITY');
+
+
             // BUSCAR PREFERÊNCIAS DE EXCLUSÃO (Tabela correta: faturamento_firebird_preferencias)
             const prefsResult = await pool.query('SELECT nota_fiscal, codigo_item, pedido, data_faturamento, quantidade, excluido FROM faturamento_firebird_preferencias');
             const prefsMap = new Map();
