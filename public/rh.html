@@ -516,6 +516,66 @@
             color: #d4d4d8;
             white-space: pre-wrap;
         }
+        /* --- SPLIT FICHA / CARTÃO PONTO --- */
+        .view-split { display: flex; gap: 18px; align-items: flex-start; }
+        .view-left { width: min(520px, 44%); flex-shrink: 0; }
+        .view-right { flex: 1; min-width: 0; }
+        .view-right .view-cards-grid { grid-template-columns: repeat(2, 1fr); }
+        .ponto-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+        .ponto-month-label {
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: #f4f4f5;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+        .ponto-nav-btn {
+            width: 30px; height: 30px;
+            border-radius: 7px;
+            border: 1px solid var(--border-subtle);
+            background: rgba(255, 255, 255, 0.03);
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 0.72rem;
+        }
+        .ponto-nav-btn:hover { background: rgba(255, 255, 255, 0.08); color: #fff; }
+        .ponto-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+        .ponto-dow {
+            text-align: center;
+            font-size: 0.6rem;
+            font-weight: 800;
+            color: #71717a;
+            padding: 4px 0;
+            letter-spacing: 0.05em;
+        }
+        .ponto-day {
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 7px;
+            min-height: 56px;
+            padding: 5px 7px;
+            background: rgba(0, 0, 0, 0.25);
+        }
+        .ponto-day.empty { border: none; background: transparent; }
+        .ponto-day.weekend { background: rgba(255, 255, 255, 0.015); opacity: 0.5; }
+        .ponto-day.today { border-color: rgba(255, 255, 255, 0.35); background: rgba(255, 255, 255, 0.04); }
+        .ponto-day-num { font-family: var(--font-mono); font-size: 0.7rem; font-weight: 700; color: #d4d4d8; }
+        .ponto-day.today .ponto-day-num { color: #fff; }
+        .ponto-day-mark { font-size: 0.6rem; color: #52525b; margin-top: 5px; font-family: var(--font-mono); }
+        .ponto-note {
+            margin-top: 10px;
+            font-size: 0.68rem;
+            color: #71717a;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
     </style>
 </head>
 <body>
@@ -625,12 +685,13 @@
                             <input type="date" id="fAdmissao" onchange="updateComputedPanels()">
                         </div>
                         <div class="form-field">
-                            <label>Cargo</label>
-                            <input type="text" id="fCargo" placeholder="Ex: Moldador, Operador...">
+                            <label>Setor</label>
+                            <select id="fSetor" onchange="onSetorChange()"></select>
                         </div>
                         <div class="form-field">
-                            <label>Setor</label>
-                            <input type="text" id="fSetor" placeholder="Ex: Moldagem, Fusão...">
+                            <label>Cargo</label>
+                            <select id="fCargoSelect" style="display:none;"></select>
+                            <input type="text" id="fCargo" placeholder="Ex: Analista, Comprador...">
                         </div>
                     </div>
                 </div>
@@ -740,6 +801,14 @@
         let funcionarios = [];
         let editingId = null;
         let deletingId = null;
+
+        // Setores e cargos pré-definidos
+        const SETORES = ['MOLDAGEM', 'FUSÃO', 'ADMINISTRATIVO', 'COMERCIAL', 'COMPRAS', 'RECEPÇÃO', 'ACABAMENTO'];
+        const CARGOS_POR_SETOR = {
+            'MOLDAGEM': ['Auxiliar de Moldagem', 'Supervisor de Moldagem'],
+            'FUSÃO': ['Auxiliar de Fusão', 'Supervisor de Fusão'],
+            'ACABAMENTO': ['Auxiliar de Acabamento', 'Supervisor de Acabamento']
+        };
 
         // ─── HELPERS ─────────────────────────────────────────────────────────
         function showToast(title, subtitle, type = 'info') {
@@ -938,6 +1007,37 @@
         }
 
         // ─── MODAL CADASTRO ──────────────────────────────────────────────────
+        function populateSetorSelect(current) {
+            const sel = document.getElementById('fSetor');
+            let opts = '<option value="">Selecione o setor...</option>' + SETORES.map(s => `<option>${s}</option>`).join('');
+            // Setor legado (texto livre de cadastros antigos) entra como opção extra
+            if (current && !SETORES.includes(current)) opts += `<option selected>${escapeHtml(current)}</option>`;
+            sel.innerHTML = opts;
+            if (current && SETORES.includes(current)) sel.value = current;
+        }
+        function onSetorChange(presetCargo) {
+            const setor = document.getElementById('fSetor').value;
+            const sel = document.getElementById('fCargoSelect');
+            const inp = document.getElementById('fCargo');
+            const list = CARGOS_POR_SETOR[setor];
+            if (list) {
+                const cur = presetCargo !== undefined ? presetCargo : '';
+                let opts = '<option value="">Selecione o cargo...</option>' + list.map(c => `<option>${c}</option>`).join('');
+                if (cur && !list.includes(cur)) opts += `<option selected>${escapeHtml(cur)}</option>`;
+                sel.innerHTML = opts;
+                if (cur && list.includes(cur)) sel.value = cur;
+                sel.style.display = '';
+                inp.style.display = 'none';
+            } else {
+                sel.style.display = 'none';
+                inp.style.display = '';
+                if (presetCargo !== undefined) inp.value = presetCargo;
+            }
+        }
+        function getCargoValue() {
+            const sel = document.getElementById('fCargoSelect');
+            return (sel.style.display !== 'none' ? sel.value : document.getElementById('fCargo').value).trim();
+        }
         function openFuncModal(id) {
             editingId = id || null;
             const f = id ? funcionarios.find(x => x.id === id) : null;
@@ -945,8 +1045,8 @@
             document.getElementById('fNome').value = f ? (f.nome || '') : '';
             document.getElementById('fCpf').value = f ? (f.cpf || '') : '';
             document.getElementById('fAdmissao').value = f && f.data_admissao ? f.data_admissao.split('T')[0] : '';
-            document.getElementById('fCargo').value = f ? (f.cargo || '') : '';
-            document.getElementById('fSetor').value = f ? (f.setor || '') : '';
+            populateSetorSelect(f ? (f.setor || '').trim() : '');
+            onSetorChange(f ? (f.cargo || '').trim() : '');
             const av = (f && f.avaliacoes) || {};
             document.getElementById('aval45Done').checked = !!(av.d45 && av.d45.realizada);
             document.getElementById('aval45Obs').value = (av.d45 && av.d45.obs) || '';
@@ -1082,6 +1182,44 @@
                     ${obs}
                 </div>`;
         }
+        // ─── CARTÃO PONTO (calendário) ───────────────────────────────────────
+        let pontoViewDate = new Date();
+        function changePontoMonth(delta) {
+            pontoViewDate = new Date(pontoViewDate.getFullYear(), pontoViewDate.getMonth() + delta, 1);
+            renderPontoCalendar();
+        }
+        function renderPontoCalendar() {
+            const wrap = document.getElementById('pontoCalendarWrap');
+            if (!wrap) return;
+            const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+            const y = pontoViewDate.getFullYear(), m = pontoViewDate.getMonth();
+            const daysInMonth = new Date(y, m + 1, 0).getDate();
+            const startDow = new Date(y, m, 1).getDay();
+            const t = today0();
+            let html = `
+                <div class="ponto-header">
+                    <button type="button" class="ponto-nav-btn" onclick="changePontoMonth(-1)" title="Mês anterior"><i class="fa-solid fa-chevron-left"></i></button>
+                    <span class="ponto-month-label">${MESES[m]} ${y}</span>
+                    <button type="button" class="ponto-nav-btn" onclick="changePontoMonth(1)" title="Próximo mês"><i class="fa-solid fa-chevron-right"></i></button>
+                </div>
+                <div class="ponto-grid">` +
+                ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB'].map(d => `<div class="ponto-dow">${d}</div>`).join('');
+            for (let i = 0; i < startDow; i++) html += '<div class="ponto-day empty"></div>';
+            for (let d = 1; d <= daysInMonth; d++) {
+                const date = new Date(y, m, d);
+                const dow = date.getDay();
+                const isWeekend = dow === 0 || dow === 6;
+                const isToday = date.getTime() === t.getTime();
+                html += `<div class="ponto-day${isWeekend ? ' weekend' : ''}${isToday ? ' today' : ''}">
+                    <div class="ponto-day-num">${d}</div>
+                    <div class="ponto-day-mark">${isWeekend ? '' : '—'}</div>
+                </div>`;
+            }
+            html += `</div>
+                <div class="ponto-note"><i class="fa-solid fa-circle-info"></i> Sem marcações de ponto registradas para este mês.</div>`;
+            wrap.innerHTML = html;
+        }
+
         function openViewModal(id) {
             const f = funcionarios.find(x => x.id === id);
             if (!f) return;
@@ -1153,42 +1291,54 @@
                         </div>
                     </div>
                 </div>
-                <div class="view-cards-grid">
-                    ${avalViewCard(f, 45)}
-                    ${avalViewCard(f, 90)}
-                    <div class="view-status-card">
-                        <div class="vsc-label"><i class="fa-solid fa-stethoscope"></i> Próximo Exame</div>
-                        <div class="vsc-value">${exameStatus(f)}</div>
-                        <div class="vsc-sub">${exames.length} exame${exames.length !== 1 ? 's' : ''} cadastrado${exames.length !== 1 ? 's' : ''}</div>
+                <div class="view-split">
+                    <div class="view-left">
+                        <div class="form-section" style="margin-bottom:0;">
+                            <div class="form-section-title"><i class="fa-solid fa-clock"></i> Cartão Ponto</div>
+                            <div id="pontoCalendarWrap"></div>
+                        </div>
                     </div>
-                    <div class="view-status-card">
-                        <div class="vsc-label"><i class="fa-solid fa-umbrella-beach"></i> Férias</div>
-                        <div class="vsc-value">${feriasBody}</div>
-                        ${feriasSub ? `<div class="vsc-sub">${feriasSub}</div>` : ''}
+                    <div class="view-right">
+                        <div class="view-cards-grid">
+                            ${avalViewCard(f, 45)}
+                            ${avalViewCard(f, 90)}
+                            <div class="view-status-card">
+                                <div class="vsc-label"><i class="fa-solid fa-stethoscope"></i> Próximo Exame</div>
+                                <div class="vsc-value">${exameStatus(f)}</div>
+                                <div class="vsc-sub">${exames.length} exame${exames.length !== 1 ? 's' : ''} cadastrado${exames.length !== 1 ? 's' : ''}</div>
+                            </div>
+                            <div class="view-status-card">
+                                <div class="vsc-label"><i class="fa-solid fa-umbrella-beach"></i> Férias</div>
+                                <div class="vsc-value">${feriasBody}</div>
+                                ${feriasSub ? `<div class="vsc-sub">${feriasSub}</div>` : ''}
+                            </div>
+                        </div>
+                        <div class="form-section">
+                            <div class="form-section-title"><i class="fa-solid fa-stethoscope"></i> Exames Periódicos</div>
+                            ${exames.length ? `<table class="view-detail-table">
+                                <thead><tr><th>TIPO</th><th class="text-center" style="width:140px;">DATA AGENDADA</th><th class="text-center" style="width:120px;">STATUS</th></tr></thead>
+                                <tbody>${examesRows}</tbody></table>`
+                                : '<div class="view-empty">Nenhum exame cadastrado.</div>'}
+                        </div>
+                        <div class="form-section">
+                            <div class="form-section-title"><i class="fa-solid fa-graduation-cap"></i> Cursos Necessários</div>
+                            ${cursos.length ? `<table class="view-detail-table">
+                                <thead><tr><th>CURSO</th><th class="text-center" style="width:160px;">STATUS</th></tr></thead>
+                                <tbody>${cursosRows}</tbody></table>`
+                                : '<div class="view-empty">Nenhum curso cadastrado.</div>'}
+                        </div>
+                        <div class="form-section">
+                            <div class="form-section-title"><i class="fa-solid fa-helmet-safety"></i> EPIs</div>
+                            ${epis.length ? `<table class="view-detail-table">
+                                <thead><tr><th>EPI</th><th class="text-center" style="width:130px;">COLETA</th><th class="text-center" style="width:140px;">PRÓXIMA COLETA</th><th class="text-center" style="width:130px;">STATUS</th></tr></thead>
+                                <tbody>${episRows}</tbody></table>`
+                                : '<div class="view-empty">Nenhum EPI cadastrado.</div>'}
+                        </div>
                     </div>
-                </div>
-                <div class="form-section">
-                    <div class="form-section-title"><i class="fa-solid fa-stethoscope"></i> Exames Periódicos</div>
-                    ${exames.length ? `<table class="view-detail-table">
-                        <thead><tr><th>TIPO</th><th class="text-center" style="width:140px;">DATA AGENDADA</th><th class="text-center" style="width:120px;">STATUS</th></tr></thead>
-                        <tbody>${examesRows}</tbody></table>`
-                        : '<div class="view-empty">Nenhum exame cadastrado.</div>'}
-                </div>
-                <div class="form-section">
-                    <div class="form-section-title"><i class="fa-solid fa-graduation-cap"></i> Cursos Necessários</div>
-                    ${cursos.length ? `<table class="view-detail-table">
-                        <thead><tr><th>CURSO</th><th class="text-center" style="width:160px;">STATUS</th></tr></thead>
-                        <tbody>${cursosRows}</tbody></table>`
-                        : '<div class="view-empty">Nenhum curso cadastrado.</div>'}
-                </div>
-                <div class="form-section">
-                    <div class="form-section-title"><i class="fa-solid fa-helmet-safety"></i> EPIs</div>
-                    ${epis.length ? `<table class="view-detail-table">
-                        <thead><tr><th>EPI</th><th class="text-center" style="width:130px;">COLETA</th><th class="text-center" style="width:140px;">PRÓXIMA COLETA</th><th class="text-center" style="width:130px;">STATUS</th></tr></thead>
-                        <tbody>${episRows}</tbody></table>`
-                        : '<div class="view-empty">Nenhum EPI cadastrado.</div>'}
                 </div>
             `;
+            pontoViewDate = new Date();
+            renderPontoCalendar();
             document.getElementById('btnViewEdit').onclick = () => { closeViewModal(); openFuncModal(id); };
             document.getElementById('viewModal').style.display = 'flex';
             document.body.style.overflow = 'hidden';
@@ -1206,7 +1356,7 @@
                 nome,
                 cpf: document.getElementById('fCpf').value.trim() || null,
                 data_admissao: document.getElementById('fAdmissao').value || null,
-                cargo: document.getElementById('fCargo').value.trim() || null,
+                cargo: getCargoValue() || null,
                 setor: document.getElementById('fSetor').value.trim() || null,
                 avaliacoes: {
                     d45: { realizada: document.getElementById('aval45Done').checked, obs: document.getElementById('aval45Obs').value.trim() },
