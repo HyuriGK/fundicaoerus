@@ -225,6 +225,7 @@ async function sincronizarDetalhado(fbDb) {
         WHERE nf.EMISSAO_NOT >= ?
         AND nf.TIPO_NOT = 'S'
             AND nf.STATUS_NOT = 'A'
+            AND nfp.STATUS_NPR = 'A'
         ORDER BY nf.EMISSAO_NOT DESC
     `;
 
