@@ -437,7 +437,7 @@
     '</div>';
 
     function applyPaddingLeft() {
-        var sidebarOffset = currentPage === 'index.html' ? SIDEBAR_WIDTH : SIDEBAR_WIDTH_COLLAPSED;
+        var sidebarOffset = SIDEBAR_WIDTH;
         var SKIP_IDS = ['erus-sidebar', 'erus-sidebar-backdrop', 'erus-logout-modal', 'erus-pref-modal', 'global-loader'];
         // Classes that indicate an overlay/modal/toast — should NOT be shifted
         var OVERLAY_CLASSES = ['modal-overlay', 'modal', 'toast-container', 'toast', 'overlay', 'dim-layer', 'loading-screen'];
@@ -476,8 +476,7 @@
         document.body.insertAdjacentHTML('beforeend', logoutModalHTML);
         document.body.insertAdjacentHTML('beforeend', prefsModalHTML);
 
-        if (currentPage === 'index.html') document.body.classList.remove('erus-sidebar-collapsed');
-        else document.body.classList.add('erus-sidebar-collapsed');
+        document.body.classList.remove('erus-sidebar-collapsed');
         applyPaddingLeft();
 
         var sidebarEl = document.getElementById('erus-sidebar');
