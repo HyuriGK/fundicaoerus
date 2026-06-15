@@ -2,6 +2,15 @@
     var SIDEBAR_WIDTH = '280px';
     var SIDEBAR_WIDTH_COLLAPSED = '80px';
 
+    function ensureUiComponents() {
+        if (window.ErusUI || document.getElementById('erus-ui-components-js')) return;
+        var s = document.createElement('script');
+        s.id = 'erus-ui-components-js';
+        s.src = 'js/ui-components.js';
+        document.head.appendChild(s);
+    }
+    ensureUiComponents();
+
     // Inject sidebar CSS
     var style = document.createElement('style');
     style.textContent = [
@@ -152,7 +161,8 @@
         '#erus-logout-overlay .erus-lo-text { color:#a1a1aa; font-size:0.95rem; font-weight:600; letter-spacing:.3px; animation:erusFadeIn .5s ease; }',
         '@keyframes erusSpin { to { transform:rotate(360deg); } }',
         // Hide old side-menu elements when erus-sidebar is active
-        '.side-menu, .side-menu-trigger { display:none !important; }',
+        '.side-menu, .side-menu-trigger, body.erus-shared-sidebar-active #sidebar { display:none !important; }',
+        'body.erus-shared-sidebar-active .app-layout { grid-template-columns:0 1fr !important; }',
         // Collapsed sidebar tooltip element (JS-driven, fixed to viewport)
         '#erus-stip { position:fixed; background:#1c1c1f; color:#fafafa; padding:5px 11px; border-radius:7px;',
         '  font-size:0.75rem; font-weight:500; white-space:nowrap; z-index:10000; pointer-events:none;',
@@ -454,6 +464,7 @@
 
     function init() {
         if (document.getElementById('erus-sidebar')) return;
+        document.body.classList.add('erus-shared-sidebar-active');
 
         // Inject sidebar
         document.body.insertAdjacentHTML('afterbegin', sidebarHTML);
