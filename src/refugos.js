@@ -47,6 +47,14 @@ router.get('/', async (req, res) => {
             FROM refugo_apontado_sincronizado r
             LEFT JOIN refugo_mapeamento_setores m ON r.motivo = m.motivo
             LEFT JOIN ficha_tecnica f ON r.codigo_peca = f.pro_codigo_fic
+            LEFT JOIN LATERAL (
+                SELECT (e.data->>'VALOR_PPR')::numeric AS valor_ppr
+                FROM firebird_sync_emissoes e
+                WHERE e.data->>'PRODUTO_PPR' = r.codigo_peca
+                  AND (e.data->>'VALOR_PPR')::numeric > 0
+                ORDER BY e.updated_at DESC
+                LIMIT 1
+            ) vp ON true
             ORDER BY r.data_refugo DESC
         `);
 

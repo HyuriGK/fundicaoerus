@@ -744,6 +744,13 @@
         <div class="dashboard-content">
             <!-- KPI Row -->
             <div class="kpi-row">
+                <div class="kpi-card" onclick="toggleValorRefVisibility()" style="cursor:pointer;">
+                    <div class="kpi-title">Valor Refugado</div>
+                    <div class="kpi-value" style="display:flex;align-items:center;gap:6px;">
+                        <i id="valorRefEye" class="fa-solid fa-eye-slash" style="font-size:0.8rem;opacity:0.5;"></i>
+                        <span id="kpiValorRefugo" data-real-value="R$ 0,00">R$ -----</span>
+                    </div>
+                </div>
                 <div class="kpi-card">
                     <div class="kpi-title">Refugo Total</div>
                     <div class="kpi-value" id="kpiRefugoTotal">0 kg</div>
@@ -1338,6 +1345,19 @@
             });
         }
         // --- DATA PROCESSING ---
+                var valorRefVisible = false;
+        function toggleValorRefVisibility() {
+            valorRefVisible = !valorRefVisible;
+            var el = document.getElementById('kpiValorRefugo');
+            var icon = document.getElementById('valorRefEye');
+            if (valorRefVisible) {
+                el.textContent = el.getAttribute('data-real-value') || 'R$ 0,00';
+                icon.className = 'fa-solid fa-eye';
+            } else {
+                el.textContent = 'R$ -----';
+                icon.className = 'fa-solid fa-eye-slash';
+            }
+        }
         function processData() {
             // Filter Data based on Year & Month
             const filteredData = rawData.map(r => {
@@ -1359,6 +1379,11 @@
             currentFilteredData = filteredData; // Update cache
             // KPIs
             const totalRefugo = filteredData.reduce((acc, curr) => acc + parseFloat(curr.peso_total || 0), 0);
+            const totalValorRefugo = filteredData.reduce((acc, curr) => {
+                const valorUnit = parseFloat(curr.valor_unitario || 0);
+                const qtd = parseFloat(curr.quantidade || 0);
+                return acc + (valorUnit * qtd);
+            }, 0);
             // Production Match
             let totalProd = 0;
             if (selectedYear !== 0) {
@@ -1377,6 +1402,9 @@
                 Object.values(monthlyProduction).forEach(v => totalProd += v);
             }
             document.getElementById('kpiRefugoTotal').textContent = totalRefugo.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) + ' kg';
+            var kpiValorEl = document.getElementById('kpiValorRefugo');
+            kpiValorEl.setAttribute('data-real-value', 'R$ ' + totalValorRefugo.toLocaleString('pt-BR', { minimumFractionDigits: 2 }));
+            if (valorRefVisible) kpiValorEl.textContent = 'R$ ' + totalValorRefugo.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
             document.getElementById('kpiProducaoTotal').textContent = totalProd.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) + ' kg';
             const pct = totalProd > 0 ? (totalRefugo / totalProd) * 100 : 0;
             const pctEl = document.getElementById('kpiRefugoPctMain');
