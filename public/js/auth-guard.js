@@ -15,7 +15,7 @@
         }
 
         return originalFetch.call(this, url, options).then(function(response) {
-            if (response.status === 401) {
+            if (response.status === 401 && !window.location.pathname.endsWith('login.html')) {
                 localStorage.removeItem('erus_auth');
                 localStorage.removeItem('erus_token');
                 localStorage.removeItem('erus_role');
@@ -27,8 +27,8 @@
         });
     };
 
-    // Check token exists on load
-    if (localStorage.getItem('erus_auth') && !localStorage.getItem('erus_token')) {
+    // Check token exists on load (skip on login page to avoid redirect loop)
+    if (localStorage.getItem('erus_auth') && !localStorage.getItem('erus_token') && !window.location.pathname.endsWith('login.html')) {
         localStorage.removeItem('erus_auth');
         window.location.replace('login.html');
     }
