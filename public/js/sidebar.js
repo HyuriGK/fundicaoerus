@@ -843,14 +843,14 @@
                 btn.style.color = '#d97706';
             }
         }
-        if (chipDark)    chipDark.style.borderColor    = theme === 'dark'     '#fbbf24' : 'transparent';
-        if (chipLight)   chipLight.style.borderColor   = theme === 'light'    '#d97706' : 'transparent';
-        if (chipClassic) chipClassic.style.borderColor = theme === 'classic'  '#000080' : 'transparent';
+        if (chipDark)    chipDark.style.borderColor    = theme === 'dark'     ? '#fbbf24' : 'transparent';
+        if (chipLight)   chipLight.style.borderColor   = theme === 'light'    ? '#d97706' : 'transparent';
+        if (chipClassic) chipClassic.style.borderColor = theme === 'classic'  ? '#000080' : 'transparent';
         if (chipClassic && theme === 'classic') {
-            chipClassic.style.borderTop    = '2px solid ' + (theme === 'classic'  '#000080' : '#fff');
-            chipClassic.style.borderLeft   = '2px solid ' + (theme === 'classic'  '#000080' : '#fff');
-            chipClassic.style.borderRight  = '2px solid ' + (theme === 'classic'  '#000040' : '#808080');
-            chipClassic.style.borderBottom = '2px solid ' + (theme === 'classic'  '#000040' : '#808080');
+            chipClassic.style.borderTop    = '2px solid ' + (theme === 'classic'  ? '#000080' : '#fff');
+            chipClassic.style.borderLeft   = '2px solid ' + (theme === 'classic'  ? '#000080' : '#fff');
+            chipClassic.style.borderRight  = '2px solid ' + (theme === 'classic'  ? '#000040' : '#808080');
+            chipClassic.style.borderBottom = '2px solid ' + (theme === 'classic'  ? '#000040' : '#808080');
         }
     };
 
