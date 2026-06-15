@@ -6169,9 +6169,9 @@
 
                 async function enforceSidebarPermissions() {
                     const role = (localStorage.getItem('erus_role') || '').toLowerCase();
-                    if (role === 'desenvolvedor') return;
-                    const stripAccents = s => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '');
+                    const stripAccents = s => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
                     const roleNorm = stripAccents(role);
+                    if (roleNorm === 'desenvolvedor') return;
                     const whitelistByRole = {
                         'moldagem': ['fichatecmoldagem.html', 'apontamentos_produtivos.html'],
                         'fusao': ['fichatecfusao.html'],
@@ -6204,7 +6204,7 @@
                                 while (sep && !sep.classList.contains('nav-group-separator')) sep = sep.previousElementSibling;
                                 if (sep) sep.style.display = 'flex';
                                 grp.querySelectorAll('.nav-link').forEach(function(l) {
-                                    const h = l.getAttribute('href');
+                                    const h = l.getAttribute('data-page-key') || l.getAttribute('href');
                                     if (!allowedExtra[h] && whitelist.indexOf(h) === -1) l.style.display = 'none';
                                 });
                             });
@@ -7509,8 +7509,9 @@
 
                 function applySidebarLocks(lockMap) {
 
-                    const restrictedRolesLock = ['moldagem', 'fusÃ£o', 'fusao', 'acabamento'];
-                    const currentRoleLock = (localStorage.getItem('erus_role') || '').toLowerCase();
+                    const stripAccentsLock = s => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                    const currentRoleLock = stripAccentsLock((localStorage.getItem('erus_role') || '').toLowerCase());
+                    const isPrivilegedLock = currentRoleLock === 'desenvolvedor' || currentRoleLock === 'admin';
 
                     document.querySelectorAll('.nav-link').forEach(link => {
 
@@ -7525,7 +7526,7 @@
 
                         const isLocked = lockInfo.is_locked === true;
 
-                        if (isLocked && restrictedRolesLock.includes(currentRoleLock)) link.style.display = 'none';
+                        if (isLocked && !isPrivilegedLock) link.style.display = 'none';
 
                         // Tag DEV roxa ao lado do nome para telas em desenvolvimento
                         const isDev = isLocked && lockInfo.lock_reason === 'development';
@@ -7539,6 +7540,19 @@
                             existingTag.remove();
                         }
 
+                    });
+
+                    document.querySelectorAll('#sidebar .nav-group-wrapper').forEach(function(wrapper) {
+                        const links = wrapper.querySelectorAll('.nav-link');
+                        const allHidden = links.length === 0 || Array.from(links).every(function(l) {
+                            return l.style.display === 'none';
+                        });
+                        if (allHidden) {
+                            wrapper.style.setProperty('display', 'none', 'important');
+                            let sep = wrapper.previousElementSibling;
+                            while (sep && !sep.classList.contains('nav-group-separator')) sep = sep.previousElementSibling;
+                            if (sep) sep.style.setProperty('display', 'none', 'important');
+                        }
                     });
 
                 }

@@ -503,6 +503,17 @@
 
         // Role-based visibility
         var role = (localStorage.getItem('erus_role') || '').toLowerCase();
+        var stripAccents = function(s) { return (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, ''); };
+        var roleNorm = stripAccents(role);
+        var isPrivilegedRole = roleNorm === 'desenvolvedor' || roleNorm === 'admin';
+        var getSidebarPageKey = function(link) {
+            if (!link) return '';
+            var key = link.getAttribute('data-page-key');
+            if (key) return key;
+            var href = link.getAttribute('href') || '';
+            if (!href || href === '#') return '';
+            return href.split('?')[0].split('#')[0];
+        };
         var adminBtn = document.getElementById('erus-admin-btn');
         if (adminBtn && (role === 'desenvolvedor' || role === 'admin')) {
             adminBtn.style.display = 'flex';
@@ -523,8 +534,8 @@
             'fusao': ['fichatecfusao.html'],
             'acabamento': ['fichatecacabamento.html']
         };
-        if (restrictedPageMap[role]) {
-            var allowedPages = restrictedPageMap[role];
+        if (restrictedPageMap[roleNorm]) {
+            var allowedPages = restrictedPageMap[roleNorm];
             // Hide all groups — except eg-chamados which is visible to everyone
             document.querySelectorAll('#erus-sidebar .erus-nav-group-sep, #erus-sidebar .erus-nav-group-wrapper').forEach(function(el) {
                 if (el.id === 'eg-chamados') return;
@@ -555,7 +566,7 @@
                     if (prevSep) prevSep.classList.remove('erus-role-hidden');
                     // Hide other links in the same group
                     parentGroup.querySelectorAll('.erus-nav-link').forEach(function(link) {
-                        if (allowedPages.indexOf(link.getAttribute('href')) === -1) link.classList.add('erus-role-hidden');
+                        if (allowedPages.indexOf(getSidebarPageKey(link)) === -1) link.classList.add('erus-role-hidden');
                     });
                 }
             });
@@ -608,8 +619,9 @@
                 var blocked = {};
                 result.data.forEach(function(l) {
                     if (l.is_locked) blocked[l.page_id] = true;
-                    if (restrictedPageMap[role] && l.is_locked) {
+                    if (!isPrivilegedRole && l.is_locked) {
                         var blockedLink = document.querySelector('#erus-sidebar .erus-nav-link[href="' + l.page_id + '"]');
+                        if (!blockedLink) blockedLink = document.querySelector('#erus-sidebar .erus-nav-link[data-page-key="' + l.page_id + '"]');
                         if (blockedLink) blockedLink.classList.add('erus-role-hidden');
                     }
                     if (!l.is_locked || l.lock_reason !== 'development') return;
@@ -621,12 +633,15 @@
                     tag.textContent = 'DEV';
                     link.appendChild(tag);
                 });
-                if (restrictedPageMap[role]) {
+                if (restrictedPageMap[roleNorm]) {
                     var currentPage = window.location.pathname.split('/').pop() || 'index.html';
                     if (blocked[currentPage]) {
-                        var fallback = restrictedPageMap[role].find(function(page) { return !blocked[page]; }) || 'index.html';
+                        var fallback = restrictedPageMap[roleNorm].find(function(page) { return !blocked[page]; }) || 'index.html';
                         window.location.href = fallback;
                     }
+                } else if (!isPrivilegedRole) {
+                    var lockedCurrentPage = window.location.pathname.split('/').pop() || 'index.html';
+                    if (blocked[lockedCurrentPage]) window.location.href = 'index.html';
                 }
             })
             .catch(function() {});
@@ -635,8 +650,6 @@
         // tela liberada explicitamente aparece mesmo fora da whitelist; tela bloqueada some.
         var permissionsPromise = Promise.resolve();
         if (role !== 'desenvolvedor') {
-            var stripAccents = function(s) { return (s || '').normalize('NFD').replace(/[̀-ͯ]/g, ''); };
-            var roleNorm = stripAccents(role);
             var blocked = {};
             var allowedExtra = {};
             permissionsPromise = fetch('/api/permissions')
@@ -649,8 +662,8 @@
                         else allowedExtra[r2.page_key] = true;
                     });
                     // Painel aditivo: para roles restritos, telas liberadas explicitamente aparecem
-                    if (restrictedPageMap[role]) {
-                        var wl = restrictedPageMap[role];
+                    if (restrictedPageMap[roleNorm]) {
+                        var wl = restrictedPageMap[roleNorm];
                         Object.keys(allowedExtra).forEach(function(pageKey) {
                             if (blocked[pageKey]) return;
                             var link = document.querySelector('#erus-sidebar .erus-nav-link[href="' + pageKey + '"]') ||
@@ -667,7 +680,7 @@
                             if (sep) { sep.classList.remove('erus-role-hidden'); sep.style.removeProperty('display'); }
                             // Mantém visível apenas as telas liberadas/whitelist dentro do grupo revelado
                             grp.querySelectorAll('.erus-nav-link').forEach(function(l) {
-                                var h = l.getAttribute('href');
+                                var h = getSidebarPageKey(l);
                                 if (!allowedExtra[h] && wl.indexOf(h) === -1) l.classList.add('erus-role-hidden');
                             });
                         });
