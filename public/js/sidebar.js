@@ -434,8 +434,9 @@
     '</div>';
 
     function applyPaddingLeft() {
+        var isIndex = currentPage === 'index.html';
         var isCollapsed = document.body.classList.contains('erus-sidebar-collapsed');
-        var sidebarOffset = isCollapsed ? SIDEBAR_WIDTH_COLLAPSED : SIDEBAR_WIDTH;
+        var sidebarOffset = isIndex ? SIDEBAR_WIDTH : SIDEBAR_WIDTH_COLLAPSED;
         var SKIP_IDS = ['erus-sidebar', 'erus-logout-modal', 'erus-pref-modal', 'global-loader'];
         // Classes that indicate an overlay/modal/toast — should NOT be shifted
         var OVERLAY_CLASSES = ['modal-overlay', 'modal', 'toast-container', 'toast', 'overlay', 'dim-layer', 'loading-screen'];
@@ -472,7 +473,12 @@
         document.body.insertAdjacentHTML('beforeend', logoutModalHTML);
         document.body.insertAdjacentHTML('beforeend', prefsModalHTML);
 
-        document.body.classList.add('erus-sidebar-collapsed');
+        var isIndex = currentPage === 'index.html';
+        if (isIndex) {
+            document.body.classList.remove('erus-sidebar-collapsed');
+        } else {
+            document.body.classList.add('erus-sidebar-collapsed');
+        }
         applyPaddingLeft();
 
         var sidebarEl = document.getElementById('erus-sidebar');
@@ -489,9 +495,9 @@
             });
         }
 
-        // Brand click = toggle collapse
+        // Brand click = toggle collapse (not on index.html)
         var brandEl = document.getElementById('erus-brand');
-        if (brandEl) {
+        if (brandEl && !isIndex) {
             brandEl.addEventListener('click', function(e) {
                 e.preventDefault();
                 document.body.classList.toggle('erus-sidebar-collapsed');
