@@ -55,6 +55,14 @@ router.get('/', async (req, res) => {
                 ORDER BY e.updated_at DESC
                 LIMIT 1
             ) vp ON true
+            LEFT JOIN LATERAL (
+                SELECT (e.data->>'VALOR_PPR')::numeric AS valor_ppr
+                FROM firebird_sync_emissoes e
+                WHERE e.data->>'PRODUTO_PPR' = r.codigo_peca
+                  AND (e.data->>'VALOR_PPR')::numeric > 0
+                ORDER BY e.updated_at DESC
+                LIMIT 1
+            ) vp ON true
             ORDER BY r.data_refugo DESC
         `);
 
