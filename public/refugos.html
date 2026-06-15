@@ -778,8 +778,8 @@
                 </div>
                 <div style="display: flex; gap: 8px; align-items: center;">
                     <div class="view-toggle">
-                        <button id="btnRefugoDiario" class="month-btn" onclick="switchPeriod('diario')">REFUGO DIÁRIO</button>
-                        <button id="btnRefugoMensal" class="month-btn active" onclick="switchPeriod('mensal')">REFUGO MENSAL</button>
+                        <button id="btnRefugoDiario" class="month-btn active" onclick="switchPeriod('diario')">REFUGO DIÁRIO</button>
+                        <button id="btnRefugoMensal" class="month-btn" onclick="switchPeriod('mensal')">REFUGO MENSAL</button>
                     </div>
                     <select id="chartViewSelect" class="year-select" onchange="switchView(this.value)" style="min-width: 180px; padding:4px 12px; font-size:0.8rem;">
                         <option value="apontamentos">APONTAMENTOS</option>
@@ -799,11 +799,11 @@
                         <canvas id="apontamentosChart"></canvas>
                     </div>
                     <!-- Refugo Mensal -->
-                    <div id="viewDay-month" class="chart-wrapper" style="flex:1; position:relative;">
+                    <div id="viewDay-month" class="chart-wrapper" style="flex:1; position:relative; display:none;">
                         <canvas id="barChart"></canvas>
                     </div>
                     <!-- Refugo Diário -->
-                    <div id="viewDay-day" class="chart-wrapper" style="flex:1; position:relative; display:none;">
+                    <div id="viewDay-day" class="chart-wrapper" style="flex:1; position:relative;">
                         <canvas id="dailyBarChart"></canvas>
                         <div id="dailyChartOverlay" style="display:none; position:absolute; inset:0; backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); background:rgba(9,9,11,0.55); border-radius:8px; z-index:10; align-items:center; justify-content:center; flex-direction:column; gap:10px; text-align:center; padding:20px;">
                             <i class="fa-solid fa-eye-slash" style="font-size:1.6rem; color:#a1a1aa;"></i>
@@ -1031,15 +1031,16 @@
         let customWeights = {}; // NOVO: Pesos customizados (sincronizados com pedidos.html)
         let monthlyProduction = {};
         let selectedYear = 2026;
-        let selectedMonthIndex = -1; // -1 = ano todo
-        let currentView = 'period';
+        let selectedMonthIndex = new Date().getMonth(); // 0-based
+        let currentView = 'apontamentos';
+        let currentFilteredYearData = [];
         let currentFilteredData = []; // Store for view switching
         // --- INIT ---
         document.addEventListener('DOMContentLoaded', async () => {
             checkDeveloperRole();
             populateYearSelect();
             renderMonthButtons();
-            document.getElementById('chartViewSelect').value = '';
+            document.getElementById('chartViewSelect').value = 'apontamentos';
             await fetchData();
             // Close modal on ESC
             document.addEventListener('keydown', (e) => {
@@ -1157,7 +1158,7 @@
         function selectMonth(idx) {
             selectedMonthIndex = idx;
             updateMonthButtonsUI();
-            if (currentView === 'period' && currentPeriod === 'mensal' && idx !== -1) {
+            if (currentView === 'apontamentos' && currentPeriod === 'mensal' && idx !== -1) {
                 switchPeriod('diario');
                 return;
             }
@@ -1169,17 +1170,20 @@
         }
         // --- VIEW TOGGLE ---
         let dailyBarChartInstance = null;
-        let currentPeriod = 'mensal';
+        let currentPeriod = 'diario';
         function switchPeriod(period) {
             currentPeriod = period;
-            currentView = 'period';
-            document.getElementById('chartViewSelect').value = '';
+            currentView = 'apontamentos';
+            document.getElementById('chartViewSelect').value = 'apontamentos';
             // Toggle button active state
             document.getElementById('btnRefugoDiario').classList.toggle('active', period === 'diario');
             document.getElementById('btnRefugoMensal').classList.toggle('active', period === 'mensal');
             // Auto-select ANO when switching to mensal
             if (period === 'mensal') {
                 selectedMonthIndex = -1;
+                updateMonthButtonsUI();
+            } else if (selectedMonthIndex === -1) {
+                selectedMonthIndex = new Date().getMonth();
                 updateMonthButtonsUI();
             }
             // Hide ALL views
@@ -1198,9 +1202,8 @@
         }
         function switchView(view) {
             currentView = view;
-            // Reset period buttons
-            document.getElementById('btnRefugoDiario').classList.remove('active');
-            document.getElementById('btnRefugoMensal').classList.remove('active');
+            document.getElementById('btnRefugoDiario').classList.toggle('active', view === 'apontamentos' && currentPeriod === 'diario');
+            document.getElementById('btnRefugoMensal').classList.toggle('active', view === 'apontamentos' && currentPeriod === 'mensal');
             // Hide all views
             document.getElementById('viewApontamentos').style.display = 'none';
             document.getElementById('viewDay-month').style.display = 'none';
@@ -1209,8 +1212,13 @@
             document.getElementById('viewMaterial').style.display = 'none';
             document.getElementById('viewClient').style.display = 'none';
             if (view === 'apontamentos') {
-                document.getElementById('viewApontamentos').style.display = '';
-                renderApontamentosChart(currentFilteredData);
+                if (currentPeriod === 'mensal') {
+                    document.getElementById('viewDay-month').style.display = '';
+                    renderBarChart(getDataForBarChart(currentFilteredYearData || currentFilteredData));
+                } else {
+                    document.getElementById('viewDay-day').style.display = '';
+                    renderDailyBarChart(currentFilteredData);
+                }
             } else if (view === 'reasonSector') {
                 document.getElementById('viewReasonSector').style.display = 'flex';
                 renderPieChart('sectorChart', getDataForTop5(currentFilteredData, 'setor_responsavel'), 'Setor');
@@ -1544,6 +1552,7 @@
                 if (selectedMonthIndex !== -1 && (m - 1) !== selectedMonthIndex) return false;
                 return true;
             });
+            currentFilteredYearData = yearFilteredData;
             currentFilteredData = filteredData; // Update cache
             // KPIs
             const totalRefugo = filteredData.reduce((acc, curr) => acc + parseFloat(curr.peso_total || 0), 0);
@@ -1578,8 +1587,7 @@
                 pctEl.className = `kpi-value ${pct > 10 ? 'danger' : (pct > 5 ? 'warning' : 'success')}`;
             }
             // Render Active Chart
-            if (currentView === 'apontamentos') renderApontamentosChart(filteredData);
-            else if (currentView === 'period') {
+            if (currentView === 'apontamentos') {
                 if (currentPeriod === 'mensal') renderBarChart(getDataForBarChart(yearFilteredData));
                 else renderDailyBarChart(filteredData);
             }
