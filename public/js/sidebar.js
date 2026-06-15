@@ -144,9 +144,6 @@
         '  margin-right:0; width:auto; font-size:1rem; opacity:0.55;',
         '}',
         'body.erus-sidebar-collapsed #erus-sidebar .erus-sidebar-footer .erus-nav-link:hover i { opacity:1; }',
-        // Sidebar backdrop (overlay)
-        '#erus-sidebar-backdrop { display:none; position:fixed; inset:0; z-index:199; background:rgba(0,0,0,0.35); }',
-        'body:not(.erus-sidebar-collapsed) #erus-sidebar-backdrop { display:block; }',
         // Modals
         '#erus-logout-modal, #erus-pref-modal { display:none; position:fixed; inset:0; z-index:9999; align-items:center; justify-content:center; background:rgba(0,0,0,0.6); backdrop-filter:blur(4px); }',
         '#erus-logout-modal.open, #erus-pref-modal.open { display:flex; }',
@@ -164,7 +161,7 @@
         '.side-menu, .side-menu-trigger, body.erus-shared-sidebar-active #sidebar { display:none !important; }',
         'body.erus-shared-sidebar-active .app-layout { grid-template-columns:0 1fr !important; }',
         'body.erus-shared-sidebar-active:not(.erus-sidebar-collapsed) .app-layout { margin-left:' + SIDEBAR_WIDTH + ' !important; width:calc(100% - ' + SIDEBAR_WIDTH + ') !important; }',
-        // Collapsed sidebar tooltip element (JS-driven, fixed to viewport)
+        // Tooltip for collapsed sidebar
         '#erus-stip { position:fixed; background:#1c1c1f; color:#fafafa; padding:5px 11px; border-radius:7px;',
         '  font-size:0.75rem; font-weight:500; white-space:nowrap; z-index:10000; pointer-events:none;',
         '  border:1px solid rgba(255,255,255,0.1); box-shadow:0 4px 16px rgba(0,0,0,0.55); display:none; }',
@@ -437,8 +434,9 @@
     '</div>';
 
     function applyPaddingLeft() {
-        var sidebarOffset = SIDEBAR_WIDTH;
-        var SKIP_IDS = ['erus-sidebar', 'erus-sidebar-backdrop', 'erus-logout-modal', 'erus-pref-modal', 'global-loader'];
+        var isCollapsed = document.body.classList.contains('erus-sidebar-collapsed');
+        var sidebarOffset = isCollapsed ? SIDEBAR_WIDTH_COLLAPSED : SIDEBAR_WIDTH;
+        var SKIP_IDS = ['erus-sidebar', 'erus-logout-modal', 'erus-pref-modal', 'global-loader'];
         // Classes that indicate an overlay/modal/toast — should NOT be shifted
         var OVERLAY_CLASSES = ['modal-overlay', 'modal', 'toast-container', 'toast', 'overlay', 'dim-layer', 'loading-screen'];
         var children = document.body.children;
@@ -470,13 +468,11 @@
 
         // Inject sidebar
         document.body.insertAdjacentHTML('afterbegin', sidebarHTML);
-        // Inject backdrop
-        document.body.insertAdjacentHTML('afterbegin', '<div id="erus-sidebar-backdrop"></div>');
         // Inject modals at end
         document.body.insertAdjacentHTML('beforeend', logoutModalHTML);
         document.body.insertAdjacentHTML('beforeend', prefsModalHTML);
 
-        document.body.classList.remove('erus-sidebar-collapsed');
+        document.body.classList.add('erus-sidebar-collapsed');
         applyPaddingLeft();
 
         var sidebarEl = document.getElementById('erus-sidebar');
@@ -499,18 +495,9 @@
             brandEl.addEventListener('click', function(e) {
                 e.preventDefault();
                 document.body.classList.toggle('erus-sidebar-collapsed');
+                applyPaddingLeft();
             });
         }
-
-        // Click outside sidebar to collapse
-        document.addEventListener('click', function(e) {
-            if (!document.body.classList.contains('erus-sidebar-collapsed')) {
-                var sidebar = document.getElementById('erus-sidebar');
-                if (sidebar && !sidebar.contains(e.target)) {
-                    document.body.classList.add('erus-sidebar-collapsed');
-                }
-            }
-        });
 
         // ESC closes pref/logout modals
         document.addEventListener('keydown', function(e) {
@@ -743,6 +730,7 @@
         var icon = document.getElementById('icon-' + id);
         if (isCollapsed) {
             document.body.classList.remove('erus-sidebar-collapsed');
+            applyPaddingLeft();
             if (group) {
                 group.classList.remove('collapsed');
                 if (icon) { icon.classList.remove('fa-plus'); icon.classList.add('fa-minus'); }
