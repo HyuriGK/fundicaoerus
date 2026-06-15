@@ -109,7 +109,7 @@
             '  border-right:2px solid #fff; border-bottom:2px solid #fff;',
             '}',
             '.erus-dlg-btn:focus {',
-            '  outline:1px dotted #000; outline-offset:-3px;',
+            '  outline:none; box-shadow:none;',
             '}',
         ].join('');
         document.head.appendChild(s);
