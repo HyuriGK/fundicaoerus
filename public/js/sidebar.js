@@ -163,6 +163,7 @@
         // Hide old side-menu elements when erus-sidebar is active
         '.side-menu, .side-menu-trigger, body.erus-shared-sidebar-active #sidebar { display:none !important; }',
         'body.erus-shared-sidebar-active .app-layout { grid-template-columns:0 1fr !important; }',
+        'body.erus-shared-sidebar-active:not(.erus-sidebar-collapsed) .app-layout { margin-left:' + SIDEBAR_WIDTH + ' !important; width:calc(100% - ' + SIDEBAR_WIDTH + ') !important; }',
         // Collapsed sidebar tooltip element (JS-driven, fixed to viewport)
         '#erus-stip { position:fixed; background:#1c1c1f; color:#fafafa; padding:5px 11px; border-radius:7px;',
         '  font-size:0.75rem; font-weight:500; white-space:nowrap; z-index:10000; pointer-events:none;',
@@ -436,6 +437,7 @@
     '</div>';
 
     function applyPaddingLeft() {
+        var sidebarOffset = currentPage === 'index.html' ? SIDEBAR_WIDTH : SIDEBAR_WIDTH_COLLAPSED;
         var SKIP_IDS = ['erus-sidebar', 'erus-sidebar-backdrop', 'erus-logout-modal', 'erus-pref-modal', 'global-loader'];
         // Classes that indicate an overlay/modal/toast — should NOT be shifted
         var OVERLAY_CLASSES = ['modal-overlay', 'modal', 'toast-container', 'toast', 'overlay', 'dim-layer', 'loading-screen'];
@@ -453,11 +455,11 @@
                 // Only shift fixed elements that start at left:0 (main layout, not popups)
                 var computedLeft = window.getComputedStyle(el).left;
                 if (computedLeft === '0px' || computedLeft === 'auto') {
-                    el.style.setProperty('left', SIDEBAR_WIDTH_COLLAPSED, 'important');
-                    el.style.setProperty('width', 'calc(100% - ' + SIDEBAR_WIDTH_COLLAPSED + ')', 'important');
+                    el.style.setProperty('left', sidebarOffset, 'important');
+                    el.style.setProperty('width', 'calc(100% - ' + sidebarOffset + ')', 'important');
                 }
             } else if (pos !== 'absolute') {
-                el.style.setProperty('margin-left', SIDEBAR_WIDTH_COLLAPSED, 'important');
+                el.style.setProperty('margin-left', sidebarOffset, 'important');
             }
         }
     }
@@ -531,7 +533,7 @@
             if (key) return key;
             var href = link.getAttribute('href') || '';
             if (!href || href === '#') return '';
-            return href.split('?')[0].split('#')[0];
+            return href.split('')[0].split('#')[0];
         };
         var adminBtn = document.getElementById('erus-admin-btn');
         if (adminBtn && (role === 'desenvolvedor' || role === 'admin')) {
@@ -854,14 +856,14 @@
                 btn.style.color = '#d97706';
             }
         }
-        if (chipDark)    chipDark.style.borderColor    = theme === 'dark'    ? '#fbbf24' : 'transparent';
-        if (chipLight)   chipLight.style.borderColor   = theme === 'light'   ? '#d97706' : 'transparent';
-        if (chipClassic) chipClassic.style.borderColor = theme === 'classic' ? '#000080' : 'transparent';
+        if (chipDark)    chipDark.style.borderColor    = theme === 'dark'     '#fbbf24' : 'transparent';
+        if (chipLight)   chipLight.style.borderColor   = theme === 'light'    '#d97706' : 'transparent';
+        if (chipClassic) chipClassic.style.borderColor = theme === 'classic'  '#000080' : 'transparent';
         if (chipClassic && theme === 'classic') {
-            chipClassic.style.borderTop    = '2px solid ' + (theme === 'classic' ? '#000080' : '#fff');
-            chipClassic.style.borderLeft   = '2px solid ' + (theme === 'classic' ? '#000080' : '#fff');
-            chipClassic.style.borderRight  = '2px solid ' + (theme === 'classic' ? '#000040' : '#808080');
-            chipClassic.style.borderBottom = '2px solid ' + (theme === 'classic' ? '#000040' : '#808080');
+            chipClassic.style.borderTop    = '2px solid ' + (theme === 'classic'  '#000080' : '#fff');
+            chipClassic.style.borderLeft   = '2px solid ' + (theme === 'classic'  '#000080' : '#fff');
+            chipClassic.style.borderRight  = '2px solid ' + (theme === 'classic'  '#000040' : '#808080');
+            chipClassic.style.borderBottom = '2px solid ' + (theme === 'classic'  '#000040' : '#808080');
         }
     };
 
