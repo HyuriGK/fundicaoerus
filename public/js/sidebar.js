@@ -189,26 +189,57 @@
                 '<a href="clientes.html" data-stip="Clientes" class="erus-nav-link' + isActive('clientes.html') + '">' +
                     '<i class="fa-solid fa-users"></i><span>Clientes</span></a>' +
             '</div>' +
-            // PPCP
-            '<div class="erus-nav-group-sep" data-stip="PPCP" onclick="erusSidebarToggleGroup(\'eg-producao\')">' +
+            // FATURAMENTO
+            '<div class="erus-nav-group-sep" data-stip="Faturamento" onclick="erusSidebarToggleGroup(\'eg-faturamento\')">' +
+                '<i class="fas fa-sack-dollar" style="font-size:0.8rem;color:#52525b;margin-right:8px;flex-shrink:0;"></i>' +
+                '<span class="erus-nav-group-label">Faturamento</span>' +
+                '<div class="erus-nav-group-line"></div>' +
+                '<i class="fa-solid fa-plus" id="icon-eg-faturamento"></i>' +
+            '</div>' +
+            '<div id="eg-faturamento" class="erus-nav-group-wrapper collapsed">' +
+                '<a href="faturamentos.html" data-stip="Producao Faturada" class="erus-nav-link' + isActive('faturamentos.html') + '">' +
+                    '<i class="fa-solid fa-sack-dollar"></i><span>Producao Faturada</span></a>' +
+            '</div>' +
+            // PRODUCAO
+            '<div class="erus-nav-group-sep" data-stip="Producao" onclick="erusSidebarToggleGroup(\'eg-producao\')">' +
                 '<i class="fas fa-industry" style="font-size:0.8rem;color:#52525b;margin-right:8px;flex-shrink:0;"></i>' +
-                '<span class="erus-nav-group-label">PPCP</span>' +
+                '<span class="erus-nav-group-label">Producao</span>' +
                 '<div class="erus-nav-group-line"></div>' +
                 '<i class="fa-solid fa-plus" id="icon-eg-producao"></i>' +
             '</div>' +
             '<div id="eg-producao" class="erus-nav-group-wrapper collapsed">' +
-                '<a href="apontamentos_produtivos.html" data-stip="Produção Apontada" class="erus-nav-link' + isActive('apontamentos_produtivos.html') + '">' +
-                    '<i class="fa-solid fa-industry"></i><span>Produção Apontada</span></a>' +
-                '<a href="ordemdeproducao.html" data-stip="Ordens de Produção" class="erus-nav-link' + isActive('ordemdeproducao.html') + '">' +
-                    '<i class="fa-solid fa-file-lines"></i><span>Ordens de Produção</span></a>' +
+                '<a href="apontamentos_produtivos.html" data-stip="Producao Apontada" class="erus-nav-link' + isActive('apontamentos_produtivos.html') + '">' +
+                    '<i class="fa-solid fa-industry"></i><span>Producao Apontada</span></a>' +
                 '<a href="monitoramento.html" data-stip="Monitoramento de OPs" class="erus-nav-link' + isActive('monitoramento.html') + '">' +
                     '<i class="fa-solid fa-display"></i><span>Monitoramento de OPs</span></a>' +
+                '<a href="ordemdeproducao.html" data-stip="Ordens de Producao" class="erus-nav-link' + isActive('ordemdeproducao.html') + '">' +
+                    '<i class="fa-solid fa-file-lines"></i><span>Ordens de Producao</span></a>' +
+            '</div>' +
+            // PPCP
+            '<div class="erus-nav-group-sep" data-stip="PPCP" onclick="erusSidebarToggleGroup(\'eg-ppcp\')">' +
+                '<i class="fas fa-calendar-check" style="font-size:0.8rem;color:#52525b;margin-right:8px;flex-shrink:0;"></i>' +
+                '<span class="erus-nav-group-label">PPCP</span>' +
+                '<div class="erus-nav-group-line"></div>' +
+                '<i class="fa-solid fa-plus" id="icon-eg-ppcp"></i>' +
+            '</div>' +
+            '<div id="eg-ppcp" class="erus-nav-group-wrapper collapsed">' +
                 '<a href="acabamento_interno.html" data-stip="Acabamento Interno" class="erus-nav-link' + isActive('acabamento_interno.html') + '">' +
                     '<i class="fa-solid fa-screwdriver-wrench"></i><span>Acabamento Interno</span></a>' +
                 '<a href="insumosmoldagem.html" data-stip="Insumos de Moldagem" class="erus-nav-link' + isActive('insumosmoldagem.html') + '">' +
                     '<i class="fa-solid fa-cubes"></i><span>Insumos de Moldagem</span></a>' +
-                '<a href="programacaofusao.html" data-stip="Programação da Fusão" class="erus-nav-link' + isActive('programacaofusao.html') + '">' +
-                    '<i class="fa-solid fa-fire-flame-curved"></i><span>Programação da Fusão</span></a>' +
+                '<a href="programacaofusao.html" data-stip="Programacao da Fusao" class="erus-nav-link' + isActive('programacaofusao.html') + '">' +
+                    '<i class="fa-solid fa-fire-flame-curved"></i><span>Programacao da Fusao</span></a>' +
+            '</div>' +
+            // TERCEIRIZACAO
+            '<div class="erus-nav-group-sep" data-stip="Terceirizacao" onclick="erusSidebarToggleGroup(\'eg-acabamento\')">' +
+                '<i class="fas fa-truck-moving" style="font-size:0.8rem;color:#52525b;margin-right:8px;flex-shrink:0;"></i>' +
+                '<span class="erus-nav-group-label">Terceirizacao</span>' +
+                '<div class="erus-nav-group-line"></div>' +
+                '<i class="fa-solid fa-plus" id="icon-eg-acabamento"></i>' +
+            '</div>' +
+            '<div id="eg-acabamento" class="erus-nav-group-wrapper collapsed">' +
+                '<a href="acabamento_externo.html" data-stip="Acabamento Externo" class="erus-nav-link' + isActive('acabamento_externo.html') + '">' +
+                    '<i class="fa-solid fa-truck-fast"></i><span>Acabamento Externo</span></a>' +
             '</div>' +
             // ENGENHARIA
             '<div class="erus-nav-group-sep" data-stip="Engenharia" onclick="erusSidebarToggleGroup(\'eg-engenharia\')">' +
@@ -220,32 +251,10 @@
             '<div id="eg-engenharia" class="erus-nav-group-wrapper collapsed">' +
                 '<a href="fichatecmoldagem.html" data-stip="Ficha de Moldagem" class="erus-nav-link' + isActive('fichatecmoldagem.html') + '">' +
                     '<i class="fa-solid fa-cubes-stacked"></i><span>Ficha de Moldagem</span></a>' +
-                '<a href="fichatecfusao.html" data-stip="Ficha de Fusão" class="erus-nav-link' + isActive('fichatecfusao.html') + '">' +
-                    '<i class="fa-solid fa-fire"></i><span>Ficha de Fusão</span></a>' +
+                '<a href="fichatecfusao.html" data-stip="Ficha de Fusao" class="erus-nav-link' + isActive('fichatecfusao.html') + '">' +
+                    '<i class="fa-solid fa-fire"></i><span>Ficha de Fusao</span></a>' +
                 '<a href="fichatecacabamento.html" data-stip="Ficha de Acabamento" class="erus-nav-link' + isActive('fichatecacabamento.html') + '">' +
                     '<i class="fa-solid fa-hammer"></i><span>Ficha de Acabamento</span></a>' +
-            '</div>' +
-            // FATURAMENTO
-            '<div class="erus-nav-group-sep" data-stip="Faturamento" onclick="erusSidebarToggleGroup(\'eg-faturamento\')">' +
-                '<i class="fas fa-sack-dollar" style="font-size:0.8rem;color:#52525b;margin-right:8px;flex-shrink:0;"></i>' +
-                '<span class="erus-nav-group-label">Faturamento</span>' +
-                '<div class="erus-nav-group-line"></div>' +
-                '<i class="fa-solid fa-plus" id="icon-eg-faturamento"></i>' +
-            '</div>' +
-            '<div id="eg-faturamento" class="erus-nav-group-wrapper collapsed">' +
-                '<a href="faturamentos.html" data-stip="Produção Faturada" class="erus-nav-link' + isActive('faturamentos.html') + '">' +
-                    '<i class="fa-solid fa-sack-dollar"></i><span>Produção Faturada</span></a>' +
-            '</div>' +
-            // TERCEIRIZAÇÃO
-            '<div class="erus-nav-group-sep" data-stip="Terceirização" onclick="erusSidebarToggleGroup(\'eg-acabamento\')">' +
-                '<i class="fas fa-truck-moving" style="font-size:0.8rem;color:#52525b;margin-right:8px;flex-shrink:0;"></i>' +
-                '<span class="erus-nav-group-label">Terceirização</span>' +
-                '<div class="erus-nav-group-line"></div>' +
-                '<i class="fa-solid fa-plus" id="icon-eg-acabamento"></i>' +
-            '</div>' +
-            '<div id="eg-acabamento" class="erus-nav-group-wrapper collapsed">' +
-                '<a href="acabamento_externo.html" data-stip="Acabamento Externo" class="erus-nav-link' + isActive('acabamento_externo.html') + '">' +
-                    '<i class="fa-solid fa-truck-fast"></i><span>Acabamento Externo</span></a>' +
             '</div>' +
             // CUSTOS
             '<div class="erus-nav-group-sep" data-stip="Custos" onclick="erusSidebarToggleGroup(\'eg-custos\')">' +
@@ -279,25 +288,14 @@
                 '<i class="fa-solid fa-plus" id="icon-eg-controles"></i>' +
             '</div>' +
             '<div id="eg-controles" class="erus-nav-group-wrapper collapsed">' +
-                '<a href="aderencia.html" data-stip="Aderência" class="erus-nav-link' + isActive('aderencia.html') + '">' +
-                    '<i class="fa-solid fa-check-double"></i><span>Aderência</span></a>' +
+                '<a href="aderencia.html" data-stip="Aderencia" class="erus-nav-link' + isActive('aderencia.html') + '">' +
+                    '<i class="fa-solid fa-check-double"></i><span>Aderencia</span></a>' +
                 '<a href="refugos.html" data-stip="Refugo" class="erus-nav-link' + isActive('refugos.html') + '">' +
                     '<i class="fa-solid fa-trash-can"></i><span>Refugo</span></a>' +
-                '<a href="devolucoes.html" data-stip="Devoluções" class="erus-nav-link' + isActive('devolucoes.html') + '">' +
-                    '<i class="fa-solid fa-rotate-left"></i><span>Devoluções</span></a>' +
+                '<a href="devolucoes.html" data-stip="Devolucoes" class="erus-nav-link' + isActive('devolucoes.html') + '">' +
+                    '<i class="fa-solid fa-rotate-left"></i><span>Devolucoes</span></a>' +
             '</div>' +
-            // RH
-            '<div class="erus-nav-group-sep" data-stip="RH" onclick="erusSidebarToggleGroup(\'eg-rh\')">' +
-                '<i class="fas fa-id-card-clip" style="font-size:0.8rem;color:#52525b;margin-right:8px;flex-shrink:0;"></i>' +
-                '<span class="erus-nav-group-label">RH</span>' +
-                '<div class="erus-nav-group-line"></div>' +
-                '<i class="fa-solid fa-plus" id="icon-eg-rh"></i>' +
-            '</div>' +
-            '<div id="eg-rh" class="erus-nav-group-wrapper collapsed">' +
-                '<a href="rh.html" data-stip="Funcionários" class="erus-nav-link' + isActive('rh.html') + '">' +
-                    '<i class="fa-solid fa-user-tie"></i><span>Funcionários</span></a>' +
-            '</div>' +
-            // ORGANIZACAO (controlada por permissões de role)
+            // ORGANIZACAO
             '<div id="erus-sep-organizacao" class="erus-nav-group-sep" data-stip="Organizacao" onclick="erusSidebarToggleGroup(\'eg-organizacao\')">' +
                 '<i class="fas fa-list-check" style="font-size:0.8rem;color:#52525b;margin-right:8px;flex-shrink:0;"></i>' +
                 '<span class="erus-nav-group-label">Organizacao</span>' +
@@ -308,7 +306,7 @@
                 '<a href="planner.html" data-stip="Planner" class="erus-nav-link' + isActive('planner.html') + '">' +
                     '<i class="fa-solid fa-list-check"></i><span>Planner</span></a>' +
             '</div>' +
-            // FINANCEIRO (controlada por permissões de role)
+            // FINANCEIRO
             '<div id="erus-sep-financeiro" class="erus-nav-group-sep" data-stip="Financeiro" onclick="erusSidebarToggleGroup(\'eg-financeiro\')">' +
                 '<i class="fas fa-balance-scale" style="font-size:0.8rem;color:#52525b;margin-right:8px;flex-shrink:0;"></i>' +
                 '<span class="erus-nav-group-label">Financeiro</span>' +
@@ -316,8 +314,19 @@
                 '<i class="fa-solid fa-plus" id="icon-eg-financeiro"></i>' +
             '</div>' +
             '<div id="eg-financeiro" class="erus-nav-group-wrapper collapsed">' +
-                '<a href="balanco.html" data-stip="Balanço" class="erus-nav-link' + isActive('balanco.html') + '">' +
-                    '<i class="fa-solid fa-scale-balanced"></i><span>Balanço</span></a>' +
+                '<a href="balanco.html" data-stip="Balanco" class="erus-nav-link' + isActive('balanco.html') + '">' +
+                    '<i class="fa-solid fa-scale-balanced"></i><span>Balanco</span></a>' +
+            '</div>' +
+            // RH
+            '<div class="erus-nav-group-sep" data-stip="RH" onclick="erusSidebarToggleGroup(\'eg-rh\')">' +
+                '<i class="fas fa-id-card-clip" style="font-size:0.8rem;color:#52525b;margin-right:8px;flex-shrink:0;"></i>' +
+                '<span class="erus-nav-group-label">RH</span>' +
+                '<div class="erus-nav-group-line"></div>' +
+                '<i class="fa-solid fa-plus" id="icon-eg-rh"></i>' +
+            '</div>' +
+            '<div id="eg-rh" class="erus-nav-group-wrapper collapsed">' +
+                '<a href="rh.html" data-stip="Funcionarios" class="erus-nav-link' + isActive('rh.html') + '">' +
+                    '<i class="fa-solid fa-user-tie"></i><span>Funcionarios</span></a>' +
             '</div>' +
             // CHAMADOS TI
             '<div class="erus-nav-group-sep" data-stip="Chamados TI" onclick="erusSidebarToggleGroup(\'eg-chamados\')">' +
@@ -346,8 +355,7 @@
                     '<i class="fa-solid fa-people-group"></i><span>Reunioes</span></a>' +
                 '<a href="relatorio.html" data-stip="Relatorios" class="erus-nav-link' + isActive('relatorio.html') + '">' +
                     '<i class="fa-solid fa-file-lines"></i><span>Relatorios</span></a>' +
-            '</div>' +
-        '</ul>' +
+            '</div>' +        '</ul>' +
         '<div class="erus-sidebar-footer">' +
             '<a href="#" id="erus-admin-btn" data-stip="Sistema Admin" class="erus-nav-link" onclick="erusSidebarOpenAdmin()" style="display:none;">' +
                 '<i class="fa-solid fa-users-gear"></i><span>Sistema Admin</span>' +
