@@ -772,6 +772,15 @@
                     <div id="monthButtons"></div>
                 </div>
                 <div style="display: flex; gap: 8px; align-items: center;">
+                    <select id="periodSelect" class="year-select" onchange="switchPeriod(this.value)" style="width:auto; padding:4px 10px; font-size:0.8rem;">
+                        <option value="mensal">REFUGO MENSAL</option>
+                        <option value="diario">REFUGO DIÁRIO</option>
+                    </select>
+                    <select id="chartViewSelect" class="year-select" onchange="switchView(this.value)" style="width:auto; padding:4px 10px; font-size:0.8rem;">
+                        <option value="reasonSector">POR MOTIVO/SETOR</option>
+                        <option value="material">POR MATERIAL</option>
+                        <option value="client">POR CLIENTE</option>
+                    </select>
                     <button class="month-btn" onclick="openTableModal()">REGISTROS</button>
                     <button class="month-btn" onclick="exportToExcel('dataTable', 'Refugos')">EXCEL</button>
                 </div>
@@ -779,16 +788,6 @@
             <!-- Charts Area -->
             <div class="charts-container" id="chartsArea" style="display: flex;">
                 <div class="chart-panel" style="flex:1; display:flex; flex-direction:column;">
-                    <div class="chart-header-row" style="display:flex; align-items:center; justify-content:space-between; padding: 0 10px; flex-shrink:0;">
-                        <div class="chart-title" id="chartTitleLabel">Refugo Mensal</div>
-                        <select id="chartViewSelect" class="year-select" onchange="switchView(this.value)" style="width:auto; padding:4px 10px; font-size:0.8rem;">
-                            <option value="day-month">Refugo Mensal</option>
-                            <option value="day-day">Refugo Diário</option>
-                            <option value="reasonSector">Por Motivo/Setor</option>
-                            <option value="material">Por Material</option>
-                            <option value="client">Por Cliente</option>
-                        </select>
-                    </div>
                     <!-- Refugo Mensal -->
                     <div id="viewDay-month" class="chart-wrapper" style="flex:1; position:relative;">
                         <canvas id="barChart"></canvas>
@@ -798,29 +797,29 @@
                         <canvas id="dailyBarChart"></canvas>
                         <div id="dailyChartOverlay" style="display:none; position:absolute; inset:0; backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); background:rgba(9,9,11,0.55); border-radius:8px; z-index:10; align-items:center; justify-content:center; flex-direction:column; gap:10px; text-align:center; padding:20px;">
                             <i class="fa-solid fa-eye-slash" style="font-size:1.6rem; color:#a1a1aa;"></i>
-                            <span style="color:#f4f4f5; font-size:0.85rem; font-weight:600; max-width:420px; line-height:1.5;">Selecione um mês específico para ver o refugo diário.</span>
+                            <span style="color:#f4f4f5; font-size:0.85rem; font-weight:600; max-width:420px; line-height:1.5;">SELECIONE UM MÊS ESPECÍFICO PARA VER O REFUGO DIÁRIO.</span>
                             <span style="color:#a1a1aa; font-size:0.75rem;">Use o filtro de mês acima.</span>
                         </div>
                     </div>
                     <!-- Motivo/Setor -->
                     <div id="viewReasonSector" style="flex:1; display:none; flex-direction:row; gap:10px;">
                         <div class="chart-panel" style="flex:1;">
-                            <div class="chart-title">Refugo por Motivo (Top 5)</div>
+                            <div class="chart-title">REFUGO POR MOTIVO (TOP 5)</div>
                             <div class="chart-wrapper"><canvas id="reasonChart"></canvas></div>
                         </div>
                         <div class="chart-panel" style="flex:1;">
-                            <div class="chart-title">Refugo por Setor (Top 5)</div>
+                            <div class="chart-title">REFUGO POR SETOR (TOP 5)</div>
                             <div class="chart-wrapper"><canvas id="sectorChart"></canvas></div>
                         </div>
                     </div>
                     <!-- Material -->
                     <div id="viewMaterial" style="flex:1; display:none;">
-                        <div class="chart-title">Refugo por Material (Top 5)</div>
+                        <div class="chart-title">REFUGO POR MATERIAL (TOP 5)</div>
                         <div class="chart-wrapper"><canvas id="materialChart"></canvas></div>
                     </div>
                     <!-- Cliente -->
                     <div id="viewClient" style="flex:1; display:none;">
-                        <div class="chart-title">Refugo por Cliente (Pareto)</div>
+                        <div class="chart-title">REFUGO POR CLIENTE (PARETO)</div>
                         <div class="chart-wrapper"><canvas id="paretoChart"></canvas></div>
                     </div>
                 </div>
@@ -1023,7 +1022,7 @@
         let monthlyProduction = {};
         let selectedYear = 2026;
         let selectedMonthIndex = new Date().getMonth(); // 0-based
-        let currentView = 'day-month';
+        let currentView = 'period';
         let currentFilteredData = []; // Store for view switching
         // --- INIT ---
         document.addEventListener('DOMContentLoaded', async () => {
@@ -1155,30 +1154,34 @@
         }
         // --- VIEW TOGGLE ---
         let dailyBarChartInstance = null;
-        const chartTitleMap = {
-            'day-month': 'Refugo Mensal',
-            'day-day': 'Refugo Diário',
-            'reasonSector': 'Por Motivo/Setor',
-            'material': 'Por Material',
-            'client': 'Por Cliente'
-        };
-        function switchView(view) {
-            currentView = view;
-            var titleEl = document.getElementById('chartTitleLabel');
-            if (titleEl) titleEl.textContent = chartTitleMap[view] || 'Refugo';
-            // Hide all
+        let currentPeriod = 'mensal';
+        function switchPeriod(period) {
+            currentPeriod = period;
+            currentView = 'period';
+            document.getElementById('chartViewSelect').value = '';
+            // Hide all views
             document.getElementById('viewDay-month').style.display = 'none';
             document.getElementById('viewDay-day').style.display = 'none';
             document.getElementById('viewReasonSector').style.display = 'none';
             document.getElementById('viewMaterial').style.display = 'none';
             document.getElementById('viewClient').style.display = 'none';
-            if (view === 'day-month') {
+            if (period === 'mensal') {
                 document.getElementById('viewDay-month').style.display = '';
                 renderBarChart(getDataForBarChart(currentFilteredData));
-            } else if (view === 'day-day') {
+            } else {
                 document.getElementById('viewDay-day').style.display = '';
                 renderDailyBarChart(currentFilteredData);
-            } else if (view === 'reasonSector') {
+            }
+        }
+        function switchView(view) {
+            currentView = view;
+            // Hide all views
+            document.getElementById('viewDay-month').style.display = 'none';
+            document.getElementById('viewDay-day').style.display = 'none';
+            document.getElementById('viewReasonSector').style.display = 'none';
+            document.getElementById('viewMaterial').style.display = 'none';
+            document.getElementById('viewClient').style.display = 'none';
+            if (view === 'reasonSector') {
                 document.getElementById('viewReasonSector').style.display = 'flex';
                 renderPieChart('sectorChart', getDataForTop5(currentFilteredData, 'setor_responsavel'), 'Setor');
                 renderPieChart('reasonChart', getDataForTop5(currentFilteredData, 'motivo'), 'Motivo');
@@ -1560,8 +1563,10 @@
                 pctEl.className = `kpi-value ${pct > 10 ? 'danger' : (pct > 5 ? 'warning' : 'success')}`;
             }
             // Render Active Chart
-            if (currentView === 'day-month') renderBarChart(getDataForBarChart(filteredData));
-            else if (currentView === 'day-day') renderDailyBarChart(filteredData);
+            if (currentView === 'period') {
+                if (currentPeriod === 'mensal') renderBarChart(getDataForBarChart(filteredData));
+                else renderDailyBarChart(filteredData);
+            }
             else if (currentView === 'reasonSector') {
                 renderPieChart('sectorChart', getDataForTop5(filteredData, 'setor_responsavel'), 'Setor');
                 renderPieChart('reasonChart', getDataForTop5(filteredData, 'motivo'), 'Motivo');
