@@ -293,6 +293,11 @@
             width: 100%;
             min-height: 0;
         }
+        .chart-wrapper canvas {
+            display: block;
+            width: 100% !important;
+            height: 100% !important;
+        }
         /* MODAL */
         #loading-screen {
             position: fixed;
@@ -790,11 +795,11 @@
             <div class="charts-container" id="chartsArea" style="display: flex;">
                 <div class="chart-panel" style="flex:1; display:flex; flex-direction:column; min-height: 0;">
                     <!-- APONTAMENTOS (default) -->
-                    <div id="viewApontamentos" class="chart-wrapper" style="flex:1; position:relative;">
+                    <div id="viewApontamentos" class="chart-wrapper" style="flex:1; position:relative; display:none;">
                         <canvas id="apontamentosChart"></canvas>
                     </div>
                     <!-- Refugo Mensal -->
-                    <div id="viewDay-month" class="chart-wrapper" style="flex:1; position:relative; display:none;">
+                    <div id="viewDay-month" class="chart-wrapper" style="flex:1; position:relative;">
                         <canvas id="barChart"></canvas>
                     </div>
                     <!-- Refugo Diário -->
@@ -1026,7 +1031,7 @@
         let customWeights = {}; // NOVO: Pesos customizados (sincronizados com pedidos.html)
         let monthlyProduction = {};
         let selectedYear = 2026;
-        let selectedMonthIndex = new Date().getMonth(); // 0-based
+        let selectedMonthIndex = -1; // -1 = ano todo
         let currentView = 'period';
         let currentFilteredData = []; // Store for view switching
         // --- INIT ---
@@ -1034,6 +1039,7 @@
             checkDeveloperRole();
             populateYearSelect();
             renderMonthButtons();
+            document.getElementById('chartViewSelect').value = '';
             await fetchData();
             // Close modal on ESC
             document.addEventListener('keydown', (e) => {
@@ -1151,6 +1157,10 @@
         function selectMonth(idx) {
             selectedMonthIndex = idx;
             updateMonthButtonsUI();
+            if (currentView === 'period' && currentPeriod === 'mensal' && idx !== -1) {
+                switchPeriod('diario');
+                return;
+            }
             processData();
         }
         function updateMonthButtonsUI() {
@@ -1159,7 +1169,7 @@
         }
         // --- VIEW TOGGLE ---
         let dailyBarChartInstance = null;
-        let currentPeriod = 'diario';
+        let currentPeriod = 'mensal';
         function switchPeriod(period) {
             currentPeriod = period;
             currentView = 'period';
@@ -1170,9 +1180,7 @@
             // Auto-select ANO when switching to mensal
             if (period === 'mensal') {
                 selectedMonthIndex = -1;
-                document.getElementById('monthButtons').querySelectorAll('.month-btn').forEach(function(b) { b.classList.remove('active'); });
-                var anoBtn = document.getElementById('monthButtons').querySelector('[data-month="-1"]');
-                if (anoBtn) anoBtn.classList.add('active');
+                updateMonthButtonsUI();
             }
             // Hide ALL views
             document.getElementById('viewApontamentos').style.display = 'none';
@@ -1183,11 +1191,10 @@
             document.getElementById('viewClient').style.display = 'none';
             if (period === 'mensal') {
                 document.getElementById('viewDay-month').style.display = '';
-                renderBarChart(getDataForBarChart(currentFilteredData));
             } else {
                 document.getElementById('viewDay-day').style.display = '';
-                renderDailyBarChart(currentFilteredData);
             }
+            processData();
         }
         function switchView(view) {
             currentView = view;
@@ -1209,10 +1216,10 @@
                 renderPieChart('sectorChart', getDataForTop5(currentFilteredData, 'setor_responsavel'), 'Setor');
                 renderPieChart('reasonChart', getDataForTop5(currentFilteredData, 'motivo'), 'Motivo');
             } else if (view === 'material') {
-                document.getElementById('viewMaterial').style.display = '';
+                document.getElementById('viewMaterial').style.display = 'flex';
                 renderPieChart('materialChart', getDataForTop5(currentFilteredData, 'material'), 'Material');
             } else if (view === 'client') {
-                document.getElementById('viewClient').style.display = '';
+                document.getElementById('viewClient').style.display = 'flex';
                 renderParetoChart(currentFilteredData);
             }
         }
@@ -1515,7 +1522,7 @@
         }
         function processData() {
             // Filter Data based on Year & Month
-            const filteredData = rawData.map(r => {
+            const weightedData = rawData.map(r => {
                 // Aplicar peso customizado se existir
                 const pesoUn = customWeights[r.codigo_peca] !== undefined ? customWeights[r.codigo_peca] : parseFloat(r.peso_un || 0);
                 const qtd = parseFloat(r.quantidade || 0);
@@ -1524,10 +1531,16 @@
                     peso_un: pesoUn,
                     peso_total: pesoUn * qtd
                 };
-            }).filter(r => {
+            });
+            const yearFilteredData = weightedData.filter(r => {
                 if (!r.data) return false;
-                const [y, m] = r.data.split('-').map(Number);
+                const [y] = r.data.split('-').map(Number);
                 if (selectedYear !== 0 && y !== selectedYear) return false;
+                return true;
+            });
+            const filteredData = yearFilteredData.filter(r => {
+                if (!r.data) return false;
+                const [, m] = r.data.split('-').map(Number);
                 if (selectedMonthIndex !== -1 && (m - 1) !== selectedMonthIndex) return false;
                 return true;
             });
@@ -1567,7 +1580,7 @@
             // Render Active Chart
             if (currentView === 'apontamentos') renderApontamentosChart(filteredData);
             else if (currentView === 'period') {
-                if (currentPeriod === 'mensal') renderBarChart(getDataForBarChart(filteredData));
+                if (currentPeriod === 'mensal') renderBarChart(getDataForBarChart(yearFilteredData));
                 else renderDailyBarChart(filteredData);
             }
             else if (currentView === 'reasonSector') {
@@ -1615,7 +1628,7 @@
         }
         function getDataForBarChart(data) {
             const aggregated = {};
-            if (selectedMonthIndex === -1 && selectedYear !== 0) {
+            if (selectedYear !== 0) {
                 // Group by Month (JAN, FEV...)
                 MONTHS_SHORT.forEach((m, idx) => {
                     const key = `${selectedYear}-${String(idx + 1).padStart(2, '0')}`;
@@ -1633,19 +1646,6 @@
                 Object.values(aggregated).forEach(item => {
                     if (item.prod > 0) {
                         item.pct = (item.weight / item.prod) * 100;
-                    }
-                });
-            } else if (selectedMonthIndex !== -1) {
-                // Group by Day (1, 2, 3...)
-                const daysInMonth = new Date(selectedYear, selectedMonthIndex + 1, 0).getDate();
-                for (let i = 1; i <= daysInMonth; i++) {
-                    aggregated[i] = { weight: 0, prod: 0, pct: 0 };
-                }
-                data.forEach(r => {
-                    const [y, m, d] = r.data.split('-');
-                    const day = parseInt(d);
-                    if (aggregated[day]) {
-                        aggregated[day].weight += parseFloat(r.peso_total || 0);
                     }
                 });
             } else {
@@ -1761,7 +1761,7 @@
                 borderRadius: 4,
                 yAxisID: 'y'
             }];
-            if (selectedMonthIndex === -1 && selectedYear !== 0) {
+            if (selectedYear !== 0) {
                 datasets.push({
                     label: '% Refugo',
                     data: pcts,
@@ -1793,15 +1793,12 @@
                         if (elements.length > 0) {
                             const index = elements[0].index;
                             const label = labels[index];
-                            if (selectedMonthIndex !== -1) {
-                                const day = label.toString().padStart(2, '0');
-                                const month = (selectedMonthIndex + 1).toString().padStart(2, '0');
-                                const dateStr = `${selectedYear}-${month}-${day}`;
-                                openDetailModal(dateStr, 'Data');
-                            } else if (selectedYear !== 0) {
+                            if (selectedYear !== 0) {
                                 const monthIdx = MONTHS_SHORT.indexOf(label);
                                 if (monthIdx !== -1) {
-                                    selectMonth(monthIdx);
+                                    selectedMonthIndex = monthIdx;
+                                    updateMonthButtonsUI();
+                                    switchPeriod('diario');
                                 }
                             }
                         }
@@ -1821,7 +1818,7 @@
                                     }
                                     return ` ${ctx.dataset.label}: ${val.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} kg`;
                                 },
-                                afterBody: () => ['', 'Clique na barra para ver os registros.']
+                                afterBody: () => ['', 'Clique na barra para ver o diário do mês.']
                             }
                         },
                         datalabels: {
@@ -1855,7 +1852,7 @@
                                 callback: (val) => val + '%'
                             },
                             title: { display: true, text: '% Refugo', color: '#fbbf24', font: { size: 10 } },
-                            display: (selectedMonthIndex === -1 && selectedYear !== 0)
+                            display: (selectedYear !== 0)
                         },
                         x: {
                             grid: { color: _gc() },
