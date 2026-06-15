@@ -887,6 +887,8 @@
                             <th style="text-align: center;">Qtd</th>
                             <th style="text-align: center;">Peso Un</th>
                             <th style="text-align: center;">Peso Total</th>
+                            <th style="text-align: center;">Valor Un (R$)</th>
+                            <th style="text-align: center;">Valor Total (R$)</th>
                         </tr>
                         <tr id="filter-row">
                             <th><input type="text" id="filter-data" class="filter-input-table" onkeyup="filterDetailTable()" placeholder="..."></th>
@@ -901,6 +903,8 @@
                             <th><input type="text" id="filter-qtd" class="filter-input-table" onkeyup="filterDetailTable()" placeholder="..."></th>
                             <th><input type="text" id="filter-peso-un" class="filter-input-table" onkeyup="filterDetailTable()" placeholder="..."></th>
                             <th><input type="text" id="filter-peso-total" class="filter-input-table" onkeyup="filterDetailTable()" placeholder="..."></th>
+                            <th><input type="text" id="filter-valor-un" class="filter-input-table" onkeyup="filterDetailTable()" placeholder="..."></th>
+                            <th><input type="text" id="filter-valor-total" class="filter-input-table" onkeyup="filterDetailTable()" placeholder="..."></th>
                         </tr>
                     </thead>
                     <tbody></tbody>
@@ -1377,25 +1381,21 @@
                 el.textContent = 'R$ -----';
                 showToast("Valores Ocultos", "Os valores sensíveis foram mascarados para privacidade.", "info");
             }
-            // Toggle table columns visibility
-            toggleValorColumns(valorRefVisible);
+            applyValorVisibility();
         }
-        function toggleValorColumns(show) {
-            // Toggle header cells (index 12 = Valor Un, 13 = Valor Total)
-            var headerRow = document.querySelector('#dataTable thead tr:first-child');
-            if (headerRow && headerRow.cells[12]) headerRow.cells[12].style.display = show ? '' : 'none';
-            if (headerRow && headerRow.cells[13]) headerRow.cells[13].style.display = show ? '' : 'none';
-            // Toggle filter row cells
-            var filterRow = document.getElementById('mainFilterRow');
-            if (filterRow && filterRow.cells[12]) filterRow.cells[12].style.display = show ? '' : 'none';
-            if (filterRow && filterRow.cells[13]) filterRow.cells[13].style.display = show ? '' : 'none';
-            // Toggle body cells
+        function applyValorVisibility() {
+            // Update main dataTable rows
             var rows = document.querySelectorAll('#dataTable tbody tr');
             rows.forEach(function(row) {
-                if (row.cells[12]) row.cells[12].style.display = show ? '' : 'none';
-                if (row.cells[13]) row.cells[13].style.display = show ? '' : 'none';
+                if (row.cells[12]) row.cells[12].textContent = valorRefVisible ? row.cells[12].getAttribute('data-real') || 'R$ 0,00' : '-----';
+                if (row.cells[13]) row.cells[13].textContent = valorRefVisible ? row.cells[13].getAttribute('data-real') || 'R$ 0,00' : '-----';
             });
-            // Update table totals
+            // Update detailDataTable rows
+            var dRows = document.querySelectorAll('#detailDataTable tbody tr');
+            dRows.forEach(function(row) {
+                if (row.cells[12]) row.cells[12].textContent = valorRefVisible ? row.cells[12].getAttribute('data-real') || 'R$ 0,00' : '-----';
+                if (row.cells[13]) row.cells[13].textContent = valorRefVisible ? row.cells[13].getAttribute('data-real') || 'R$ 0,00' : '-----';
+            });
             updateTableTotals();
         }
         function processData() {
@@ -1441,7 +1441,7 @@
             var kpiValorEl = document.getElementById('kpiValorRef');
             kpiValorEl.setAttribute('data-real-value', 'R$ ' + totalValorRefugo.toLocaleString('pt-BR', { minimumFractionDigits: 2 }));
             kpiValorEl.textContent = valorRefVisible ? ('R$ ' + totalValorRefugo.toLocaleString('pt-BR', { minimumFractionDigits: 2 })) : 'R$ -----';
-            toggleValorColumns(valorRefVisible);
+            applyValorVisibility();
             document.getElementById('kpiProducaoTotal').textContent = totalProd.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) + ' kg';
             const pct = totalProd > 0 ? (totalRefugo / totalProd) * 100 : 0;
             const pctEl = document.getElementById('kpiRefugoPctMain');
@@ -1486,8 +1486,8 @@
                         <td style="text-align: center;">${parseFloat(r.quantidade).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                         <td style="text-align: center; padding: 5px;">${weightCell}</td>
                         <td style="text-align: center;">${parseFloat(r.peso_total).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                        <td style="text-align: center;">R$ ${parseFloat(r.valor_unitario || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                        <td style="text-align: center;">R$ ${(parseFloat(r.valor_unitario || 0) * parseFloat(r.quantidade || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                        <td style="text-align: center;" data-real="R$ ${parseFloat(r.valor_unitario || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}">${valorRefVisible ? 'R$ ' + parseFloat(r.valor_unitario || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-----'}</td>
+                        <td style="text-align: center;" data-real="R$ ${(parseFloat(r.valor_unitario || 0) * parseFloat(r.quantidade || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}">${valorRefVisible ? 'R$ ' + (parseFloat(r.valor_unitario || 0) * parseFloat(r.quantidade || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-----'}</td>
                     </tr>
                 `;
             }).join('');
@@ -1982,8 +1982,8 @@
                             <td style="text-align: center;">${parseFloat(r.quantidade).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                             <td style="text-align: center; padding: 5px;">${weightCell}</td>
                             <td style="text-align: center;">${parseFloat(r.peso_total).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                            <td style="text-align: center;">R$ ${parseFloat(r.valor_unitario || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                            <td style="text-align: center;">R$ ${(parseFloat(r.valor_unitario || 0) * parseFloat(r.quantidade || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                            <td style="text-align: center;" data-real="R$ ${parseFloat(r.valor_unitario || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}">${valorRefVisible ? 'R$ ' + parseFloat(r.valor_unitario || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-----'}</td>
+                            <td style="text-align: center;" data-real="R$ ${(parseFloat(r.valor_unitario || 0) * parseFloat(r.quantidade || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}">${valorRefVisible ? 'R$ ' + (parseFloat(r.valor_unitario || 0) * parseFloat(r.quantidade || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-----'}</td>
                         </tr>
                     `;
                 }).join('');
