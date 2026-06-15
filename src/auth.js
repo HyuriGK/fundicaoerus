@@ -4,9 +4,18 @@ const pool = require('../lib/db'); // Importa o db convertido
 const bcrypt = require('bcryptjs');
 const { logActivity } = require('./lib/logger');
 const { generateToken } = require('../lib/middleware');
+const rateLimit = require('express-rate-limit');
+
+const loginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    message: { success: false, message: 'Muitas tentativas de login. Tente novamente em 15 minutos.' },
+    standardHeaders: true,
+    legacyHeaders: false
+});
 
 // Rota: POST /api/auth (definido no index.js)
-router.post('/', async (req, res) => {
+router.post('/', loginLimiter, async (req, res) => {
     const { user, pass } = req.body;
 
     if (!user || !pass) {

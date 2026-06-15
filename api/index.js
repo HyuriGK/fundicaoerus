@@ -65,11 +65,11 @@ app.use((req, res, next) => {
 });
 
 // JWT Authentication middleware
-var publicPaths = ['/api/auth', '/api/register', '/api', '/api/health', '/api/permissions'];
 app.use('/api', function(req, res, next) {
+    // Public paths that don't require authentication
+    var publicPaths = ['/auth', '/register', '/health', '/permissions', ''];
     var isPublic = publicPaths.some(function(p) {
-        if (p === '/api') return req.path === '' || req.path === '/';
-        return req.path === p.replace('/api', '') || req.path.startsWith(p.replace('/api', '') + '/');
+        return p === '' ? (req.path === '' || req.path === '/') : (req.path === p || req.path.startsWith(p + '/'));
     });
     if (isPublic) return next();
     authenticateToken(req, res, next);
@@ -118,7 +118,7 @@ app.use('/api/acabamento-externo', acabamentoExterno);
 app.use('/api/acabamento-interno', acabamentoInterno);
 app.use('/api/aderencia', aderencia);
 app.use('/api/amostra', amostra);
-app.use('/api/auth', loginLimiter, auth); // Ex: /api/auth/login
+app.use('/api/auth', auth); // Ex: /api/auth/login
 app.use('/api/carteira', carteira);
 app.use('/api/dureza', dureza);
 app.use('/api/faturamento', faturamento);
