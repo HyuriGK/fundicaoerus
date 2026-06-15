@@ -15,7 +15,7 @@ async function ensureSyncColumns() {
 
 // Middleware de verificação de Desenvolvedor
 const checkDev = (req, res, next) => {
-    const role = req.headers['x-role'] || '';
+    const role = req.user && req.user.role || '';
     if (role.toLowerCase() === 'desenvolvedor' || role.toLowerCase() === 'admin') {
         next();
     } else {
@@ -53,7 +53,7 @@ router.post('/toggle', checkDev, async (req, res) => {
             DO UPDATE SET is_locked = EXCLUDED.is_locked, lock_reason = EXCLUDED.lock_reason, updated_at = CURRENT_TIMESTAMP
         `, [page_id, is_locked, reason]);
 
-        logActivity(req.headers['x-user'] || 'Desconhecido', is_locked ? 'LOCK_PAGE' : 'UNLOCK_PAGE', 'page_locks', {
+        logActivity(req.user && req.user.name || 'Desconhecido', is_locked ? 'LOCK_PAGE' : 'UNLOCK_PAGE', 'page_locks', {
             page_id, lock_reason: reason
         });
 

@@ -27,7 +27,7 @@ router.post('/confirm', async (req, res) => {
         
         await pool.query(query, [sync_key, op, status, user || 'Sistema']);
 
-        logActivity(user || req.headers['x-user'] || 'Sistema', 'VINCULO_OP', 'pedidos_op_links', { sync_key, op, status });
+        logActivity(user || req.user && req.user.name || 'Sistema', 'VINCULO_OP', 'pedidos_op_links', { sync_key, op, status });
 
         res.json({ success: true, message: `Vínculo ${status} com sucesso.` });
     } catch (error) {

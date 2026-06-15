@@ -2,7 +2,10 @@
 require('dotenv').config({ path: '.env.local' });
 const express = require('express');
 const app = express();
-const cors = require('cors'); // Adicionar CORS para requisições do frontend
+const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const { authenticateToken } = require('../lib/middleware'); // Adicionar CORS para requisições do frontend
 
 // Configuração do CORS (importante para requisições do frontend)
 app.use(cors({
@@ -13,6 +16,36 @@ app.use(cors({
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
+// Security Headers
+app.use(helmet());
+
+// Rate Limiting
+const loginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 5,
+    message: { success: false, message: 'Muitas tentativas de login. Tente novamente em 15 minutos.' },
+    standardHeaders: true,
+    legacyHeaders: false
+});
+
+const registerLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    max: 3,
+    message: { success: false, message: 'Muitas tentativas de registro. Tente novamente em 1 hora.' }
+});
+
+const apiLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 100,
+    message: { success: false, message: 'Limite de requisi��es excedido.' }
+});
+
+const aiLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 10,
+    message: { success: false, message: 'Limite de requisi��es � IA excedido.' }
+});
 
 // Middleware para entender JSON
 // Aumentamos o limite para 50MB (mais que suficiente para planilhas grandes)
@@ -29,6 +62,17 @@ app.use((req, res, next) => {
         console.log('Body size:', JSON.stringify(req.body).length, 'bytes');
     }
     next();
+});
+
+// JWT Authentication middleware
+var publicPaths = ['/api/auth', '/api/register', '/api', '/api/health', '/api/permissions'];
+app.use('/api', function(req, res, next) {
+    var isPublic = publicPaths.some(function(p) {
+        if (p === '/api') return req.path === '' || req.path === '/';
+        return req.path === p.replace('/api', '') || req.path.startsWith(p.replace('/api', '') + '/');
+    });
+    if (isPublic) return next();
+    authenticateToken(req, res, next);
 });
 
 // --- IMPORTAÇÃO DOS ARQUIVOS DA PASTA SRC ---
@@ -74,7 +118,7 @@ app.use('/api/acabamento-externo', acabamentoExterno);
 app.use('/api/acabamento-interno', acabamentoInterno);
 app.use('/api/aderencia', aderencia);
 app.use('/api/amostra', amostra);
-app.use('/api/auth', auth); // Ex: /api/auth/login
+app.use('/api/auth', loginLimiter, auth); // Ex: /api/auth/login
 app.use('/api/carteira', carteira);
 app.use('/api/dureza', dureza);
 app.use('/api/faturamento', faturamento);
@@ -83,7 +127,7 @@ app.use('/api/metas', metas);
 app.use('/api/producao-apontada', producaoApontada);
 app.use('/api/refugo', refugo); // Legacy
 app.use('/api/refugos-new', require('../src/refugos')); // NEW: Data from Firebird Sync
-app.use('/api/register', register);
+app.use('/api/register', registerLimiter, register);
 app.use('/api/custos', custosRoutes);
 app.use('/api/pedidos-sync', require('../src/pedidos-sync'));
 app.use('/api/assertividade', assertividade); // NOVA: Assertividade Sincronizada
@@ -100,7 +144,7 @@ app.use('/api/producao-postgres', require('../src/producao-postgres')); // NOVO:
 app.use('/api/pedidos-firebird', require('../src/pedidos-firebird')); // NOVO: Pedidos Histórico Firebird
 app.use('/api/clientes-firebird', require('../src/clientes-firebird')); // Clientes sincronizados no Postgres
 app.use('/api/admin/users', require('../src/admin-users')); // NOVO: Gestão de Usuários (Admin)
-app.use('/api/ai-assistant', require('../src/ai-assistant')); // NOVO: Assistente de IA
+app.use('/api/ai-assistant', aiLimiter, require('../src/ai-assistant')); // NOVO: Assistente de IA
 app.use('/api/audit-logger', require('../src/audit-logger')); // NOVO: Log de Atividades
 app.use('/api/page-locks', require('../src/page-locks')); // NOVO: Bloqueio de Telas
 app.use('/api/permissions', require('../src/admin-permissions')); // Permissões por role
@@ -182,26 +226,6 @@ app.get('/api/health', async (req, res) => {
     }
 });
 
-// Rota para informações de configuração (debug)
-if (process.env.NODE_ENV !== 'production') {
-    app.get('/api/debug/env', (req, res) => {
-        const safeEnv = { ...process.env };
-
-        // Ocultar informações sensíveis
-        if (safeEnv.SMTP_PASS) safeEnv.SMTP_PASS = '***hidden***';
-        if (safeEnv.DATABASE_URL) {
-            // Mostrar apenas o início da URL do banco
-            const dbUrl = safeEnv.DATABASE_URL;
-            safeEnv.DATABASE_URL = dbUrl.substring(0, 30) + '...';
-        }
-
-        res.json({
-            node_env: process.env.NODE_ENV,
-            env_vars: Object.keys(safeEnv),
-            safe_env: safeEnv
-        });
-    });
-}
 
 // Middleware para tratamento de rotas não encontradas
 app.use('/api/*', (req, res) => {
@@ -242,7 +266,7 @@ app.use((err, req, res, next) => {
         stack: err.stack,
         path: req.path,
         method: req.method,
-        body: req.body
+        // body omitted for security
     });
 
     // Determinar o status code apropriado

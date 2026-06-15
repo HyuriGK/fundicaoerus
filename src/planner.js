@@ -4,7 +4,7 @@ const pool = require('../lib/db');
 const { logActivity } = require('./lib/logger');
 
 function getUser(req) {
-    return String(req.headers['x-user'] || req.query.user || (req.body && req.body.user) || 'Desconhecido').trim() || 'Desconhecido';
+    return String(req.user && req.user.name || req.query.user || (req.body && req.body.user) || 'Desconhecido').trim() || 'Desconhecido';
 }
 
 async function ensureTable(client) {

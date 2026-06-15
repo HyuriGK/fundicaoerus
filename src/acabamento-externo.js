@@ -59,7 +59,7 @@ router.post('/', async (req, res) => {
             ];
 
             const result = await client.query(query, values);
-            const user = req.headers['x-user'] || 'Sistema';
+            const user = req.user && req.user.name || 'Sistema';
             // Detecta se é a primeira peça da carga (nova carga) ou item adicionado a uma carga existente
             const cnt = await client.query('SELECT COUNT(*)::int AS n FROM acabamento_externo_registros WHERE carga = $1', [data.carga]);
             const isNovaCarga = (cnt.rows[0].n <= 1);
@@ -81,7 +81,7 @@ router.post('/', async (req, res) => {
             } else {
                 await client.query('DELETE FROM acabamento_externo_recebidos WHERE registro_id = $1 AND carga = $2', [data.id, data.carga]);
             }
-            logActivity(req.headers['x-user'] || 'Sistema', data.checked ? 'RECEBER_ITEM' : 'DESMARCAR_ITEM', 'acabamento_externo', {
+            logActivity(req.user && req.user.name || 'Sistema', data.checked ? 'RECEBER_ITEM' : 'DESMARCAR_ITEM', 'acabamento_externo', {
                 carga: data.carga, id: data.id, codigo: codigoItem, descricao: descItem
             });
             return res.status(200).json({ success: true });
@@ -127,7 +127,7 @@ router.post('/', async (req, res) => {
                 return res.status(404).json({ success: false, error: 'Registro não encontrado.' });
             }
 
-            const user = req.headers['x-user'] || 'Sistema';
+            const user = req.user && req.user.name || 'Sistema';
             logActivity(user, 'REMOVE_ITEM_CARGA', 'acabamento_externo', { id: registroId, carga: info.carga, codigo: info.codigo, descricao: info.descricao });
 
             return res.status(200).json({ success: true });
@@ -146,7 +146,7 @@ router.post('/', async (req, res) => {
                     [data.carga, data.value || null]
                 );
             }
-            logActivity(req.headers['x-user'] || 'Sistema', 'UPDATE_PREVISAO_ENTREGA', 'acabamento_externo', {
+            logActivity(req.user && req.user.name || 'Sistema', 'UPDATE_PREVISAO_ENTREGA', 'acabamento_externo', {
                 carga: data.carga, campo: data.field === 'data_entrega' ? 'Data de Entrega' : 'Previsão de Entrega', valor: data.value || null
             });
             return res.status(200).json({ success: true });
@@ -155,7 +155,7 @@ router.post('/', async (req, res) => {
         // 6. LIMPAR TUDO
         if (action === 'clear-all') {
             await client.query('TRUNCATE acabamento_externo_recebidos, acabamento_externo_registros RESTART IDENTITY');
-            logActivity(req.headers['x-user'] || 'Sistema', 'LIMPAR_TUDO', 'acabamento_externo', { escopo: 'registros e recebidos' });
+            logActivity(req.user && req.user.name || 'Sistema', 'LIMPAR_TUDO', 'acabamento_externo', { escopo: 'registros e recebidos' });
             return res.status(200).json({ success: true });
         }
 
@@ -206,7 +206,7 @@ router.post('/', async (req, res) => {
             await client.query("SELECT setval('acabamento_externo_registros_id_seq', (SELECT MAX(id) FROM acabamento_externo_registros))");
 
             await client.query('COMMIT');
-            logActivity(req.headers['x-user'] || 'Sistema', 'IMPORTAR_BACKUP', 'acabamento_externo', {
+            logActivity(req.user && req.user.name || 'Sistema', 'IMPORTAR_BACKUP', 'acabamento_externo', {
                 registros: (data.registros || []).length, itens: (data.itens || []).length
             });
             return res.status(200).json({ success: true });

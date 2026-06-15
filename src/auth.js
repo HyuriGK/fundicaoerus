@@ -3,6 +3,7 @@ const router = express.Router();
 const pool = require('../lib/db'); // Importa o db convertido
 const bcrypt = require('bcryptjs');
 const { logActivity } = require('./lib/logger');
+const { generateToken } = require('../lib/middleware');
 
 // Rota: POST /api/auth (definido no index.js)
 router.post('/', async (req, res) => {
@@ -41,8 +42,10 @@ router.post('/', async (req, res) => {
                 .catch(err => console.error('Erro ao atualizar last_login ou logar atividade:', err));
 
             // Retorna os dados
+const token = generateToken(userData);
             return res.status(200).json({
                 success: true,
+                token: token,
                 role: userData.role,
                 name: userData.name,
                 can_view_monetary: userData.can_view_monetary || false

@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../lib/db');
+const { requireRole } = require('../lib/middleware');
 
 async function ensureTable(client) {
     await client.query(`
@@ -27,9 +28,7 @@ router.get('/', async (req, res) => {
 });
 
 // POST — desenvolvedor only, upserts one permission
-router.post('/', async (req, res) => {
-    const xRole = (req.headers['x-role'] || '').toLowerCase();
-    if (xRole !== 'desenvolvedor') return res.status(403).json({ error: 'Forbidden' });
+router.post('/', requireRole('desenvolvedor'), async (req, res) => {
 
     const { role, page_key, allowed } = req.body;
     if (!role || !page_key || typeof allowed !== 'boolean')

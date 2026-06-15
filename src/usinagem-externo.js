@@ -54,7 +54,7 @@ router.post('/', async (req, res) => {
             ];
 
             const result = await client.query(query, values);
-            const user = req.headers['x-user'] || 'Sistema';
+            const user = req.user && req.user.name || 'Sistema';
             logActivity(user, 'ADD_REGISTRO', 'usinagem_externo', { carga: data.carga, codigo: data.codigo, id: result.rows[0].id });
             return res.status(200).json({ success: true, id: result.rows[0].id });
         }
@@ -95,7 +95,7 @@ router.post('/', async (req, res) => {
 
             if (result.rowCount === 0) return res.status(404).json({ success: false, error: 'Registro não encontrado.' });
 
-            const user = req.headers['x-user'] || 'Sistema';
+            const user = req.user && req.user.name || 'Sistema';
             logActivity(user, 'DELETE_REGISTRO', 'usinagem_externo', { id: registroId, data: data });
 
             return res.status(200).json({ success: true });

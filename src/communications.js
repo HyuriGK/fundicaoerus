@@ -5,7 +5,7 @@ const { logActivity } = require('./lib/logger');
 
 // Middleware básico para pegar o ID do usuário pelo username no header x-user
 const getUserId = async (req, res, next) => {
-    const username = req.headers['x-user'];
+    const username = req.user && req.user.name;
     if (!username) {
         return res.status(401).json({ success: false, message: 'Usuário não identificado.' });
     }
@@ -83,7 +83,7 @@ router.post('/', getUserId, async (req, res) => {
             res.json({ success: true, message: 'Mensagens enviadas com sucesso.' });
         }
         
-        logActivity(req.headers['x-user'], 'SEND_MESSAGE', 'communications', {
+        logActivity(req.user && req.user.name, 'SEND_MESSAGE', 'communications', {
             recipients: recipient_ids && recipient_ids.length ? recipient_ids.length : 'ALL',
             msg_length: message.length,
             valid_until: valid_until ? valid_until.toISOString() : 'NONE'

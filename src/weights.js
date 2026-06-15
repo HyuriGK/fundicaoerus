@@ -40,7 +40,7 @@ router.post('/save', async (req, res) => {
             DO UPDATE SET peso = EXCLUDED.peso
         `, [String(codigo), Number(peso)]);
 
-        logActivity(req.headers['x-user'] || 'Desconhecido', 'UPDATE_PESO', req.headers['x-page'] || 'pesos_customizados', {
+        logActivity(req.user && req.user.name || 'Desconhecido', 'UPDATE_PESO', req.headers['x-page'] || 'pesos_customizados', {
             codigo: String(codigo),
             peso_anterior: pesoAnterior,
             peso_novo: Number(peso)

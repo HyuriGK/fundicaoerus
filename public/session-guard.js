@@ -1,10 +1,13 @@
 (function () {
     if (!localStorage.getItem('erus_auth')) return;
-    const username = localStorage.getItem('erus_username');
-    if (!username) return;
+    var username = localStorage.getItem('erus_username');
+    var token = localStorage.getItem('erus_token');
+    if (!username || !token) return;
 
     function checkSession() {
-        fetch('/api/auth/check?username=' + encodeURIComponent(username))
+        fetch('/api/auth/check?username=' + encodeURIComponent(username), {
+            headers: { 'Authorization': 'Bearer ' + token }
+        })
             .then(function (r) { return r.json(); })
             .then(function (data) {
                 if (data.force_logout) {

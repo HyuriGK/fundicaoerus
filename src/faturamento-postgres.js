@@ -411,7 +411,7 @@ router.post('/toggle-exclusion', async (req, res) => {
         }
 
         await client.query('COMMIT');
-        logActivity(req.headers['x-user'] || 'Desconhecido', excluded ? 'EXCLUIR_ITEM_FAT' : 'INCLUIR_ITEM_FAT', 'faturamento_firebird', {
+        logActivity(req.user && req.user.name || 'Desconhecido', excluded ? 'EXCLUIR_ITEM_FAT' : 'INCLUIR_ITEM_FAT', 'faturamento_firebird', {
             cliente: req.body.cliente_nome || null, nota_fiscal, codigo_item, pedido: req.body.pedido || null, quantidade: req.body.quantidade
         });
         return res.json({ success: true });
