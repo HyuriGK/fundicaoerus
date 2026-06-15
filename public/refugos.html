@@ -1158,6 +1158,10 @@
         function selectMonth(idx) {
             selectedMonthIndex = idx;
             updateMonthButtonsUI();
+            if (currentView === 'apontamentos' && currentPeriod === 'diario' && idx === -1) {
+                switchPeriod('mensal');
+                return;
+            }
             if (currentView === 'apontamentos' && currentPeriod === 'mensal' && idx !== -1) {
                 switchPeriod('diario');
                 return;
@@ -1256,6 +1260,8 @@
                 runningTotal += v;
                 return runningTotal;
             });
+            var barMax = Math.max.apply(null, weights) * 1.05 || 100;
+            var accumMax = Math.max.apply(null, accumulatedWeights) * 1.05 || 100;
             var ctx = document.getElementById('dailyBarChart').getContext('2d');
             if (dailyBarChartInstance) dailyBarChartInstance.destroy();
             var datasets = [{
@@ -1265,20 +1271,21 @@
                 borderColor: '#ef4444',
                 borderWidth: 1,
                 borderRadius: 4,
+                order: 2,
                 yAxisID: 'y'
             }, {
-                label: 'Acumulado (kg)',
+                label: 'Acumulado',
                 data: accumulatedWeights,
                 type: 'line',
-                borderColor: '#38bdf8',
-                backgroundColor: 'rgba(56, 189, 248, 0.12)',
-                borderWidth: 2,
-                fill: false,
-                tension: 0.25,
-                pointBackgroundColor: '#38bdf8',
-                pointBorderColor: '#0f172a',
-                pointRadius: 3,
-                yAxisID: 'y'
+                borderColor: '#10b981',
+                backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                borderWidth: 3,
+                fill: true,
+                tension: 0.3,
+                pointBackgroundColor: '#10b981',
+                pointRadius: 2,
+                order: 1,
+                yAxisID: 'y1'
             }];
             dailyBarChartInstance = new Chart(ctx, {
                 type: 'bar',
@@ -1286,6 +1293,7 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    layout: { padding: { top: 0, bottom: 0, left: 0, right: 0 } },
                     interaction: { mode: 'index', intersect: false },
                     onClick: function(evt, elements) {
                         if (elements.length > 0) {
@@ -1297,13 +1305,19 @@
                         }
                     },
                     plugins: {
-                        legend: { display: true, position: 'top', labels: { color: _tc(), font: { size: 10 } } },
+                        legend: {
+                            display: true,
+                            position: 'bottom',
+                            labels: { color: _tc(), boxWidth: 12, padding: 15 }
+                        },
                         tooltip: {
+                            mode: 'index',
+                            intersect: false,
                             callbacks: {
                                 label: function(ctx) {
                                     var val = ctx.parsed.y;
-                                    if (ctx.dataset.label.includes('%')) return ' ' + ctx.dataset.label + ': ' + val.toFixed(2) + '%';
-                                    return ' ' + ctx.dataset.label + ': ' + val.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) + ' kg';
+                                    if (ctx.dataset.label === 'Acumulado') return '  Acumulado: ' + Math.round(val).toLocaleString('pt-BR') + ' kg';
+                                    return '  Refugo: ' + val.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) + ' kg';
                                 },
                                 afterBody: function() { return ['', 'Clique na barra para ver os registros.']; }
                             }
@@ -1314,14 +1328,36 @@
                             font: { weight: 'bold', size: 9 },
                             formatter: function(value, ctx) {
                                 if (value <= 0) return '';
-                                if (ctx.dataset.label === 'Acumulado (kg)') return '';
+                                if (ctx.dataset.yAxisID === 'y1') return '';
                                 return value.toLocaleString('pt-BR', { maximumFractionDigits: 0 });
                             }
                         }
                     },
                     scales: {
-                        y: { beginAtZero: true, grid: { color: _gc() }, ticks: { color: _tc(), font: { size: 10 } }, title: { display: true, text: 'Peso (kg)', color: _tc(), font: { size: 10 } } },
-                        x: { grid: { color: _gc() }, ticks: { color: _tc(), font: { size: 10 } } }
+                        x: {
+                            grid: { display: true, color: _gc() },
+                            ticks: { autoSkip: false, maxRotation: 0, minRotation: 0, color: _tc(), font: { size: 11 } }
+                        },
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            max: barMax,
+                            beginAtZero: true,
+                            title: { display: false },
+                            grid: { color: _gc() },
+                            ticks: { color: _tc(), font: { size: 12 } }
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            max: accumMax,
+                            beginAtZero: true,
+                            title: { display: false },
+                            grid: { display: false, drawOnChartArea: false },
+                            ticks: { color: _tc(), font: { size: 12 } }
+                        }
                     }
                 }
             });
@@ -1778,12 +1814,13 @@
             if (barChartInstance) barChartInstance.destroy();
             const labels = Object.keys(dataObj);
             const weights = Object.values(dataObj).map(v => v.weight);
-            const pcts = Object.values(dataObj).map(v => v.pct);
             let runningTotal = 0;
             const accumulatedWeights = weights.map(v => {
                 runningTotal += v;
                 return runningTotal;
             });
+            const barMax = Math.max(...weights) * 1.05 || 100;
+            const accumMax = Math.max(...accumulatedWeights) * 1.05 || 100;
             const datasets = [{
                 label: 'Refugo (kg)',
                 data: weights,
@@ -1791,36 +1828,22 @@
                 borderColor: '#ef4444',
                 borderWidth: 1,
                 borderRadius: 4,
+                order: 2,
                 yAxisID: 'y'
             }, {
-                label: 'Acumulado (kg)',
+                label: 'Acumulado',
                 data: accumulatedWeights,
                 type: 'line',
-                borderColor: '#38bdf8',
-                backgroundColor: 'rgba(56, 189, 248, 0.12)',
-                borderWidth: 2,
-                fill: false,
-                tension: 0.25,
-                pointBackgroundColor: '#38bdf8',
-                pointBorderColor: '#0f172a',
-                pointRadius: 3,
-                yAxisID: 'y'
+                borderColor: '#10b981',
+                backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                borderWidth: 3,
+                fill: true,
+                tension: 0.3,
+                pointBackgroundColor: '#10b981',
+                pointRadius: 2,
+                order: 1,
+                yAxisID: 'y1'
             }];
-            if (selectedYear !== 0) {
-                datasets.push({
-                    label: '% Refugo',
-                    data: pcts,
-                    type: 'line',
-                    borderColor: '#fbbf24',
-                    backgroundColor: 'rgba(251, 191, 36, 0.1)',
-                    borderDash: [5, 5],
-                    fill: false,
-                    tension: 0.1,
-                    pointBackgroundColor: '#fbbf24',
-                    pointRadius: 3,
-                    yAxisID: 'y1'
-                });
-            }
             barChartInstance = new Chart(ctx, {
                 type: 'bar',
                 data: {
@@ -1830,6 +1853,7 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    layout: { padding: { top: 0, bottom: 0, left: 0, right: 0 } },
                     interaction: {
                         mode: 'index',
                         intersect: false
@@ -1851,17 +1875,17 @@
                     plugins: {
                         legend: {
                             display: true,
-                            position: 'top',
-                            labels: { color: _tc(), font: { size: 10 } }
+                            position: 'bottom',
+                            labels: { color: _tc(), boxWidth: 12, padding: 15 }
                         },
                         tooltip: {
+                            mode: 'index',
+                            intersect: false,
                             callbacks: {
                                 label: (ctx) => {
                                     const val = ctx.parsed.y;
-                                    if (ctx.dataset.label.includes('%')) {
-                                        return ` ${ctx.dataset.label}: ${val.toFixed(2)}%`;
-                                    }
-                                    return ` ${ctx.dataset.label}: ${val.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} kg`;
+                                    if (ctx.dataset.label === 'Acumulado') return `  Acumulado: ${Math.round(val).toLocaleString('pt-BR')} kg`;
+                                    return `  Refugo: ${val.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} kg`;
                                 },
                                 afterBody: () => ['', 'Clique na barra para ver o diário do mês.']
                             }
@@ -1875,34 +1899,35 @@
                             font: { weight: 'bold', size: 9 },
                             formatter: (value, ctx) => {
                                 if (value <= 0) return '';
-                                if (ctx.dataset.label === 'Acumulado (kg)') return '';
-                                if (ctx.dataset.label.includes('%')) return value.toFixed(1) + '%';
+                                if (ctx.dataset.yAxisID === 'y1') return '';
                                 return value.toLocaleString('pt-BR', { maximumFractionDigits: 0 });
                             }
                         }
                     },
                     scales: {
+                        x: {
+                            grid: { display: true, color: _gc() },
+                            ticks: { autoSkip: false, maxRotation: 0, minRotation: 0, color: _tc(), font: { size: 11 } }
+                        },
                         y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            max: barMax,
                             beginAtZero: true,
+                            title: { display: false },
                             grid: { color: _gc() },
-                            ticks: { color: _tc(), font: { size: 10 } },
-                            title: { display: true, text: 'Peso (kg)', color: _tc(), font: { size: 10 } }
+                            ticks: { color: _tc(), font: { size: 12 } }
                         },
                         y1: {
+                            type: 'linear',
+                            display: true,
+                            max: accumMax,
                             beginAtZero: true,
                             position: 'right',
-                            grid: { display: false },
-                            ticks: {
-                                color: '#fbbf24',
-                                font: { size: 10 },
-                                callback: (val) => val + '%'
-                            },
-                            title: { display: true, text: '% Refugo', color: '#fbbf24', font: { size: 10 } },
-                            display: (selectedYear !== 0)
-                        },
-                        x: {
-                            grid: { color: _gc() },
-                            ticks: { color: _tc(), font: { size: 10 } }
+                            title: { display: false },
+                            grid: { display: false, drawOnChartArea: false },
+                            ticks: { color: _tc(), font: { size: 12 } }
                         }
                     }
                 }
