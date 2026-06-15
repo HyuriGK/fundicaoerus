@@ -777,6 +777,7 @@
                         <button id="btnRefugoMensal" class="month-btn active" onclick="switchPeriod('mensal')">REFUGO MENSAL</button>
                     </div>
                     <select id="chartViewSelect" class="year-select" onchange="switchView(this.value)" style="min-width: 180px; padding:4px 12px; font-size:0.8rem;">
+                        <option value="apontamentos">APONTAMENTOS</option>
                         <option value="reasonSector">POR MOTIVO/SETOR</option>
                         <option value="material">POR MATERIAL</option>
                         <option value="client">POR CLIENTE</option>
@@ -787,9 +788,13 @@
             </div>
             <!-- Charts Area -->
             <div class="charts-container" id="chartsArea" style="display: flex;">
-                <div class="chart-panel" style="flex:1; display:flex; flex-direction:column;">
+                <div class="chart-panel" style="flex:1; display:flex; flex-direction:column; min-height: 0;">
+                    <!-- APONTAMENTOS (default) -->
+                    <div id="viewApontamentos" class="chart-wrapper" style="flex:1; position:relative;">
+                        <canvas id="apontamentosChart"></canvas>
+                    </div>
                     <!-- Refugo Mensal -->
-                    <div id="viewDay-month" class="chart-wrapper" style="flex:1; position:relative;">
+                    <div id="viewDay-month" class="chart-wrapper" style="flex:1; position:relative; display:none;">
                         <canvas id="barChart"></canvas>
                     </div>
                     <!-- Refugo Diário -->
@@ -802,25 +807,25 @@
                         </div>
                     </div>
                     <!-- Motivo/Setor -->
-                    <div id="viewReasonSector" style="flex:1; display:none; flex-direction:row; gap:10px;">
-                        <div class="chart-panel" style="flex:1;">
+                    <div id="viewReasonSector" style="flex:1; display:none; flex-direction:row; gap:10px; min-height: 0;">
+                        <div style="flex:1; display:flex; flex-direction:column; min-height:0;">
                             <div class="chart-title">REFUGO POR MOTIVO (TOP 5)</div>
-                            <div class="chart-wrapper"><canvas id="reasonChart"></canvas></div>
+                            <div class="chart-wrapper" style="flex:1; min-height:0;"><canvas id="reasonChart"></canvas></div>
                         </div>
-                        <div class="chart-panel" style="flex:1;">
+                        <div style="flex:1; display:flex; flex-direction:column; min-height:0;">
                             <div class="chart-title">REFUGO POR SETOR (TOP 5)</div>
-                            <div class="chart-wrapper"><canvas id="sectorChart"></canvas></div>
+                            <div class="chart-wrapper" style="flex:1; min-height:0;"><canvas id="sectorChart"></canvas></div>
                         </div>
                     </div>
                     <!-- Material -->
-                    <div id="viewMaterial" style="flex:1; display:none;">
+                    <div id="viewMaterial" style="flex:1; display:none; flex-direction:column; min-height:0;">
                         <div class="chart-title">REFUGO POR MATERIAL (TOP 5)</div>
-                        <div class="chart-wrapper"><canvas id="materialChart"></canvas></div>
+                        <div class="chart-wrapper" style="flex:1; min-height:0;"><canvas id="materialChart"></canvas></div>
                     </div>
                     <!-- Cliente -->
-                    <div id="viewClient" style="flex:1; display:none;">
+                    <div id="viewClient" style="flex:1; display:none; flex-direction:column; min-height:0;">
                         <div class="chart-title">REFUGO POR CLIENTE (PARETO)</div>
-                        <div class="chart-wrapper"><canvas id="paretoChart"></canvas></div>
+                        <div class="chart-wrapper" style="flex:1; min-height:0;"><canvas id="paretoChart"></canvas></div>
                     </div>
                 </div>
             </div>
@@ -1022,7 +1027,7 @@
         let monthlyProduction = {};
         let selectedYear = 2026;
         let selectedMonthIndex = new Date().getMonth(); // 0-based
-        let currentView = 'period';
+        let currentView = 'apontamentos';
         let currentFilteredData = []; // Store for view switching
         // --- INIT ---
         document.addEventListener('DOMContentLoaded', async () => {
@@ -1186,12 +1191,16 @@
         function switchView(view) {
             currentView = view;
             // Hide all views
+            document.getElementById('viewApontamentos').style.display = 'none';
             document.getElementById('viewDay-month').style.display = 'none';
             document.getElementById('viewDay-day').style.display = 'none';
             document.getElementById('viewReasonSector').style.display = 'none';
             document.getElementById('viewMaterial').style.display = 'none';
             document.getElementById('viewClient').style.display = 'none';
-            if (view === 'reasonSector') {
+            if (view === 'apontamentos') {
+                document.getElementById('viewApontamentos').style.display = '';
+                renderApontamentosChart(currentFilteredData);
+            } else if (view === 'reasonSector') {
                 document.getElementById('viewReasonSector').style.display = 'flex';
                 renderPieChart('sectorChart', getDataForTop5(currentFilteredData, 'setor_responsavel'), 'Setor');
                 renderPieChart('reasonChart', getDataForTop5(currentFilteredData, 'motivo'), 'Motivo');
@@ -1215,21 +1224,14 @@
             // Group by day
             var aggregated = {};
             var daysInMonth = new Date(selectedYear, selectedMonthIndex + 1, 0).getDate();
-            for (var i = 1; i <= daysInMonth; i++) aggregated[i] = { weight: 0, prod: 0, pct: 0 };
+            for (var i = 1; i <= daysInMonth; i++) aggregated[i] = { weight: 0 };
             data.forEach(function(r) {
                 var parts = r.data.split('-');
                 var day = parseInt(parts[2]);
                 if (aggregated[day]) aggregated[day].weight += parseFloat(r.peso_total || 0);
             });
-            // Calculate pct from production
-            var prodKey = selectedYear + '-' + String(selectedMonthIndex + 1).padStart(2, '0');
-            var totalProd = monthlyProduction[prodKey] || 0;
-            Object.values(aggregated).forEach(function(item) {
-                if (totalProd > 0) item.pct = (item.weight / totalProd) * 100;
-            });
             var labels = Object.keys(aggregated);
             var weights = Object.values(aggregated).map(function(v) { return v.weight; });
-            var pcts = Object.values(aggregated).map(function(v) { return v.pct; });
             var ctx = document.getElementById('dailyBarChart').getContext('2d');
             if (dailyBarChartInstance) dailyBarChartInstance.destroy();
             var datasets = [{
@@ -1240,18 +1242,6 @@
                 borderWidth: 1,
                 borderRadius: 4,
                 yAxisID: 'y'
-            }, {
-                label: '% Refugo',
-                data: pcts,
-                type: 'line',
-                borderColor: '#fbbf24',
-                backgroundColor: 'rgba(251, 191, 36, 0.1)',
-                borderDash: [5, 5],
-                fill: false,
-                tension: 0.1,
-                pointBackgroundColor: '#fbbf24',
-                pointRadius: 3,
-                yAxisID: 'y1'
             }];
             dailyBarChartInstance = new Chart(ctx, {
                 type: 'bar',
@@ -1287,14 +1277,12 @@
                             font: { weight: 'bold', size: 9 },
                             formatter: function(value, ctx) {
                                 if (value <= 0) return '';
-                                if (ctx.dataset.label.includes('%')) return value.toFixed(1) + '%';
                                 return value.toLocaleString('pt-BR', { maximumFractionDigits: 0 });
                             }
                         }
                     },
                     scales: {
                         y: { beginAtZero: true, grid: { color: _gc() }, ticks: { color: _tc(), font: { size: 10 } }, title: { display: true, text: 'Peso (kg)', color: _tc(), font: { size: 10 } } },
-                        y1: { position: 'right', beginAtZero: true, grid: { drawOnChartArea: false }, ticks: { color: _tc(), font: { size: 10 }, callback: function(v) { return v.toFixed(1) + '%'; } }, title: { display: true, text: '% Refugo', color: _tc(), font: { size: 10 } } },
                         x: { grid: { color: _gc() }, ticks: { color: _tc(), font: { size: 10 } } }
                     }
                 }
@@ -1573,10 +1561,9 @@
                 pctEl.className = `kpi-value ${pct > 10 ? 'danger' : (pct > 5 ? 'warning' : 'success')}`;
             }
             // Render Active Chart
-            if (currentView === 'period') {
-                if (currentPeriod === 'mensal') renderBarChart(getDataForBarChart(filteredData));
-                else renderDailyBarChart(filteredData);
-            }
+            if (currentView === 'apontamentos') renderApontamentosChart(filteredData);
+            else if (currentPeriod === 'mensal') renderBarChart(getDataForBarChart(filteredData));
+            else if (currentPeriod === 'diario') renderDailyBarChart(filteredData);
             else if (currentView === 'reasonSector') {
                 renderPieChart('sectorChart', getDataForTop5(filteredData, 'setor_responsavel'), 'Setor');
                 renderPieChart('reasonChart', getDataForTop5(filteredData, 'motivo'), 'Motivo');
@@ -1698,7 +1685,61 @@
         Chart.defaults.plugins.tooltip.bodyFont = { size: 13, weight: '500', family: "'JetBrains Mono', monospace" };
         Chart.defaults.plugins.tooltip.displayColors = false;
         let barChartInstance = null;
+        let apontamentosChartInstance = null;
         let pieCharts = {};
+        function renderApontamentosChart(data) {
+            var ctx = document.getElementById('apontamentosChart').getContext('2d');
+            if (apontamentosChartInstance) apontamentosChartInstance.destroy();
+            // Group by date
+            var aggregated = {};
+            data.forEach(function(r) {
+                var d = r.data;
+                if (!aggregated[d]) aggregated[d] = 0;
+                aggregated[d] += parseFloat(r.peso_total || 0);
+            });
+            var sortedKeys = Object.keys(aggregated).sort();
+            var labels = sortedKeys.map(function(k) { return k.substring(5).split('-').reverse().join('/'); });
+            var values = sortedKeys.map(function(k) { return aggregated[k]; });
+            apontamentosChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Refugo (kg)',
+                        data: values,
+                        backgroundColor: 'rgba(239, 68, 68, 0.7)',
+                        borderColor: '#ef4444',
+                        borderWidth: 1,
+                        borderRadius: 3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    onClick: function(evt, elements) {
+                        if (elements.length > 0) {
+                            var idx = elements[0].index;
+                            var dateStr = sortedKeys[idx];
+                            openDetailModal(dateStr, 'Data');
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(ctx) { return ' ' + ctx.parsed.y.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) + ' kg'; },
+                                afterBody: function() { return ['', 'Clique na barra para ver os registros.']; }
+                            }
+                        },
+                        datalabels: { display: false }
+                    },
+                    scales: {
+                        y: { beginAtZero: true, grid: { color: _gc() }, ticks: { color: _tc(), font: { size: 10 } }, title: { display: true, text: 'Peso (kg)', color: _tc(), font: { size: 10 } } },
+                        x: { grid: { color: _gc() }, ticks: { color: _tc(), font: { size: 9 }, maxRotation: 45, autoSkip: true, maxTicksLimit: 30 } }
+                    }
+                }
+            });
+        }
         function renderBarChart(dataObj) {
             const ctx = document.getElementById('barChart').getContext('2d');
             if (barChartInstance) barChartInstance.destroy();
