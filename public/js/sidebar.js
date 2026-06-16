@@ -450,7 +450,8 @@
             if (!isIndex && !isCollapsed) {
                 el.style.removeProperty('margin-left');
                 el.style.removeProperty('left');
-                el.style.removeProperty('width');
+                // Keep fixed width so panels don't stretch when sidebar expands
+                el.style.setProperty('width', 'calc(100% - ' + SIDEBAR_WIDTH_COLLAPSED + ')', 'important');
                 continue;
             }
             var pos = window.getComputedStyle(el).position;
