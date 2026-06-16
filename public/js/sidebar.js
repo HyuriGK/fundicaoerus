@@ -162,7 +162,7 @@
         'body.erus-shared-sidebar-active .app-layout { grid-template-columns:0 1fr !important; }',
         'body.erus-shared-sidebar-active.erus-is-index:not(.erus-sidebar-collapsed) .app-layout { margin-left:' + SIDEBAR_WIDTH + ' !important; width:calc(100% - ' + SIDEBAR_WIDTH + ') !important; }',
         // Non-index pages: always offset content by collapsed sidebar width (overlay on expand)
-        'body.erus-shared-sidebar-active:not(.erus-is-index) .app-layout { margin-left:' + SIDEBAR_WIDTH_COLLAPSED + ' !important; }',
+        'body.erus-shared-sidebar-active:not(.erus-is-index) .app-layout { margin-left:' + SIDEBAR_WIDTH_COLLAPSED + ' !important; margin-right:' + SIDEBAR_WIDTH_COLLAPSED + ' !important; }',
         // Tooltip for collapsed sidebar
         '#erus-stip { position:fixed; background:#1c1c1f; color:#fafafa; padding:5px 11px; border-radius:7px;',
         '  font-size:0.75rem; font-weight:500; white-space:nowrap; z-index:10000; pointer-events:none;',
