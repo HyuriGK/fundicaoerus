@@ -926,58 +926,38 @@
 
         const page = window.location.pathname.split('/').pop() || 'index.html';
         const role = (localStorage.getItem('erus_role') || 'Visitante').toLowerCase();
+        const stripAccentsCurrentRole = s => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        const roleNormCurrent = stripAccentsCurrentRole(role);
+        const isPrivilegedRole = roleNormCurrent === 'desenvolvedor' || roleNormCurrent === 'admin';
+        const alwaysAllowed = ['index.html'];
 
-        const rolePermissions = {
-            'moldagem': ['fichatecmoldagem.html', 'apontamentos_produtivos.html'],
-            'fusão': ['fichatecfusao.html'],
-            'fusao': ['fichatecfusao.html'],
-            'acabamento': ['fichatecacabamento.html'],
-            'acabamento_externo': ['fichatecacabamento.html']
-        };
-
-        if (rolePermissions[role]) {
-            const stripAccents = s => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '');
-            const roleNorm = stripAccents(role);
-            const allowedPages = rolePermissions[role].slice();
-            const alwaysAllowed = ['index.html', 'solicitarchamados.html'];
-            let blocked = {};      // page-locks (manutenção/dev)
-            let permBlocked = {};  // bloqueado no painel admin
+        if (!isPrivilegedRole && !alwaysAllowed.includes(page)) {
+            let isBlocked = false;
             try {
                 const response = await fetch('/api/page-locks');
                 const result = await response.json();
                 if (result.success && Array.isArray(result.data)) {
-                    result.data.forEach(lock => {
-                        if (lock.is_locked) blocked[lock.page_id] = true;
-                    });
+                    isBlocked = result.data.some(lock => lock.page_id === page && lock.is_locked);
                 }
             } catch (e) {}
-            // Painel admin aditivo: telas liberadas explicitamente para o role tornam-se acessíveis
             try {
                 const presp = await fetch('/api/permissions', { cache: 'no-store' });
                 const prows = await presp.json();
                 if (Array.isArray(prows)) {
-                    prows.forEach(r => {
-                        if (stripAccents((r.role || '').toLowerCase()) !== roleNorm) return;
-                        const isBlocked = (r.allowed === false || r.allowed === 'false' || r.allowed === 'f' || r.allowed === 0);
-                        if (isBlocked) permBlocked[r.page_key] = true;
-                        else if (allowedPages.indexOf(r.page_key) === -1) allowedPages.push(r.page_key);
+                    isBlocked = isBlocked || prows.some(r => {
+                        if (stripAccentsCurrentRole((r.role || '').toLowerCase()) !== roleNormCurrent) return false;
+                        return r.page_key === page && (r.allowed === false || r.allowed === 'false' || r.allowed === 'f' || r.allowed === 0);
                     });
                 }
             } catch (e) {}
-
-            const pickFallback = () => allowedPages.find(p => !blocked[p] && !permBlocked[p]) || 'index.html';
-
-            if (blocked[page] && !alwaysAllowed.includes(page)) {
-                window.location.replace(pickFallback());
-                return true;
-            }
-
-            if (!alwaysAllowed.includes(page) && (!allowedPages.includes(page) || permBlocked[page])) {
-                window.location.replace(pickFallback());
+            if (isBlocked) {
+                window.location.replace('index.html');
                 return true;
             }
         }
+
         return false;
+
     }
 
     // --- GLOBAL LOGOUT ---

@@ -587,13 +587,7 @@
 
         // Financeiro, Organizacao e Painel TI seguem as permissões de role (painel admin)
 
-        // Role-based sidebar filter for restricted roles
-        var restrictedPageMap = {
-            'moldagem': ['fichatecmoldagem.html', 'apontamentos_produtivos.html'],
-            'fusão': ['fichatecfusao.html'],
-            'fusao': ['fichatecfusao.html'],
-            'acabamento': ['fichatecacabamento.html']
-        };
+        var restrictedPageMap = {};
         if (restrictedPageMap[roleNorm]) {
             var allowedPages = restrictedPageMap[roleNorm];
             // Hide all groups — except eg-chamados which is visible to everyone
@@ -706,12 +700,9 @@
             })
             .catch(function() {});
 
-        // Roles restritos mantêm a whitelist, mas o painel admin é ADITIVO:
-        // tela liberada explicitamente aparece mesmo fora da whitelist; tela bloqueada some.
         var permissionsPromise = Promise.resolve();
         if (role !== 'desenvolvedor') {
             var blocked = {};
-            var allowedExtra = {};
             permissionsPromise = fetch('/api/permissions')
                 .then(function(r) { return r.json(); })
                 .then(function(rows) {
@@ -719,32 +710,7 @@
                         if (stripAccents((r2.role || '').toLowerCase()) !== roleNorm) return;
                         var isBlocked = (r2.allowed === false || r2.allowed === 'false' || r2.allowed === 'f' || r2.allowed === 0);
                         if (isBlocked) blocked[r2.page_key] = true;
-                        else allowedExtra[r2.page_key] = true;
                     });
-                    // Painel aditivo: para roles restritos, telas liberadas explicitamente aparecem
-                    if (restrictedPageMap[roleNorm]) {
-                        var wl = restrictedPageMap[roleNorm];
-                        Object.keys(allowedExtra).forEach(function(pageKey) {
-                            if (blocked[pageKey]) return;
-                            var link = document.querySelector('#erus-sidebar .erus-nav-link[href="' + pageKey + '"]') ||
-                                       document.querySelector('#erus-sidebar .erus-nav-link[data-page-key="' + pageKey + '"]');
-                            if (!link) return;
-                            link.classList.remove('erus-role-hidden');
-                            link.style.removeProperty('display');
-                            var grp = link.closest('.erus-nav-group-wrapper');
-                            if (!grp) return;
-                            grp.classList.remove('erus-role-hidden');
-                            grp.style.removeProperty('display');
-                            var sep = grp.previousElementSibling;
-                            while (sep && !sep.classList.contains('erus-nav-group-sep')) sep = sep.previousElementSibling;
-                            if (sep) { sep.classList.remove('erus-role-hidden'); sep.style.removeProperty('display'); }
-                            // Mantém visível apenas as telas liberadas/whitelist dentro do grupo revelado
-                            grp.querySelectorAll('.erus-nav-link').forEach(function(l) {
-                                var h = getSidebarPageKey(l);
-                                if (!allowedExtra[h] && wl.indexOf(h) === -1) l.classList.add('erus-role-hidden');
-                            });
-                        });
-                    }
                     Object.keys(blocked).forEach(function(pageKey) {
                         var link = document.querySelector('#erus-sidebar .erus-nav-link[href="' + pageKey + '"]');
                         if (!link) link = document.querySelector('#erus-sidebar .erus-nav-link[data-page-key="' + pageKey + '"]');

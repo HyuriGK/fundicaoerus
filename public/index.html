@@ -6006,43 +6006,15 @@
                     const stripAccents = s => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
                     const roleNorm = stripAccents(role);
                     if (roleNorm === 'desenvolvedor') return;
-                    const whitelistByRole = {
-                        'moldagem': ['fichatecmoldagem.html', 'apontamentos_produtivos.html'],
-                        'fusao': ['fichatecfusao.html'],
-                        'acabamento': ['fichatecacabamento.html']
-                    };
-                    const whitelist = whitelistByRole[roleNorm] || null;
                     try {
                         const res = await fetch('/api/permissions', { cache: 'no-store' });
                         const rows = await res.json();
                         const blocked = {};
-                        const allowedExtra = {};
                         rows.forEach(function(r) {
                             if (stripAccents((r.role || '').toLowerCase()) !== roleNorm) return;
                             const isBlocked = (r.allowed === false || r.allowed === 'false' || r.allowed === 'f' || r.allowed === 0);
                             if (isBlocked) blocked[r.page_key] = true;
-                            else allowedExtra[r.page_key] = true;
                         });
-                        // Painel aditivo: roles restritos exibem telas liberadas explicitamente no painel
-                        if (whitelist) {
-                            Object.keys(allowedExtra).forEach(function(pageKey) {
-                                if (blocked[pageKey]) return;
-                                let link = document.querySelector('#sidebar .nav-link[href="' + pageKey + '"]');
-                                if (!link) link = document.querySelector('#sidebar .nav-link[data-page-key="' + pageKey + '"]');
-                                if (!link) return;
-                                link.style.display = 'flex';
-                                const grp = link.closest('.nav-group-wrapper');
-                                if (!grp) return;
-                                grp.style.display = 'block';
-                                let sep = grp.previousElementSibling;
-                                while (sep && !sep.classList.contains('nav-group-separator')) sep = sep.previousElementSibling;
-                                if (sep) sep.style.display = 'flex';
-                                grp.querySelectorAll('.nav-link').forEach(function(l) {
-                                    const h = l.getAttribute('data-page-key') || l.getAttribute('href');
-                                    if (!allowedExtra[h] && whitelist.indexOf(h) === -1) l.style.display = 'none';
-                                });
-                            });
-                        }
                         Object.keys(blocked).forEach(function(pageKey) {
                             var link = document.querySelector('#sidebar .nav-link[href="' + pageKey + '"]');
                             if (!link) link = document.querySelector('#sidebar .nav-link[data-page-key="' + pageKey + '"]');
@@ -9652,127 +9624,45 @@
                 }, 1000);
 
 
-                function enforceSidebarRoleFilter() {
+                async function enforceSidebarRoleFilter() {
+                    const stripAccentsRole = value => (value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                    const role = stripAccentsRole((localStorage.getItem('erus_role') || '').toLowerCase());
+                    if (role !== 'moldagem' && role !== 'fusao') return;
 
+                    const isFusao = role === 'fusao';
+                    ['live-carteira-peso', 'live-faturamento', 'card-clientes-concentracao'].forEach(id => {
+                        const el = document.getElementById(id);
+                        if (el) el.style.display = 'none';
+                    });
 
-                    const role = (localStorage.getItem('erus_role') || '').toLowerCase();
-
-
-                    const restrictedRoles = {
-
-
-                        'moldagem': ['fichatecmoldagem.html', 'apontamentos_produtivos.html'],
-
-
-                        'fusão': ['fichatecfusao.html'],
-
-
-                        'fusao': ['fichatecfusao.html'],
-
-
-                        'acabamento': ['fichatecacabamento.html']
-
-
-                    };
-
-
-                    if (restrictedRoles[role]) {
-
-                        if (role === 'moldagem' || role === 'fusao' || role === 'fusão') {
-                            const isFusao = (role === 'fusao' || role === 'fusão');
-                            // KPIs: hide peso em carteira e faturamento mês, mostrar produção do setor
-                            ['live-carteira-peso', 'live-faturamento', 'card-clientes-concentracao'].forEach(id => {
-                                const el = document.getElementById(id); if (el) el.style.display = 'none';
-                            });
-
-                            // Mostrar KPI produção do setor (moldagem/fusão)
-                            const kpiMold = document.getElementById('kpi-moldagem-producao');
-                            if (kpiMold) kpiMold.style.display = '';
-                            if (isFusao && kpiMold) {
-                                const _t = kpiMold.querySelector('.mb-card-title');
-                                if (_t) _t.textContent = 'Produção Total Fusão (MÊS)';
-                                const _sub = kpiMold.querySelector('.live-label');
-                                if (_sub) _sub.textContent = 'Peso fusão no mês';
-                            }
-
-                            // Reequilibrar kpi-strip: remover cards hidden do flex para os visíveis ocuparem 100%
-                            const strip = document.getElementById('kpi-strip');
-                            if (strip) {
-                                strip.querySelectorAll('.kpi-card').forEach(card => {
-                                    if (card.style.display === 'none') {
-                                        card.style.flex = '0 0 0';
-                                    } else {
-                                        card.style.flex = '1 1 0';
-                                    }
-                                });
-                            }
-
-                            // Gráfico Faturamento Diário â€” esconder
-                            const fatChart = document.getElementById('prodChart');
-                            if (fatChart) { const card = fatChart.closest('.mb-card'); if (card) card.style.display = 'none'; }
-
-                            // Produção por Setor Ý  esquerda, Refugo Ý  direita
-                            const cardSetor = document.getElementById('card-setor-producao');
-                            const cardRefugo = document.getElementById('card-refugo-chart');
-                            const cardFat = document.querySelector('#bento-main .mb-card.chart-card.accent-amber');
-                            // Calcular qual row o card de refugo ocupa e colocar setor na mesma row
-                            if (cardSetor) { cardSetor.style.gridColumn = '1/3'; cardSetor.style.gridRow = '2 / span 2'; cardSetor.classList.remove('wide'); }
-                            if (cardRefugo) { cardRefugo.style.gridColumn = '3/5'; cardRefugo.style.gridRow = '2 / span 2'; cardRefugo.classList.add('wide'); }
-                            if (cardFat) { cardFat.style.display = 'none'; }
-                        }
-
-                        const allowedPages = restrictedRoles[role];
-
-
-                        // Hide all nav-group-separators and their wrappers
-
-
-                        document.querySelectorAll('.nav-group-separator, .nav-group-wrapper').forEach(el => {
-
-                            if (el.id === 'group-chamados') return;
-                            const sep = el.classList.contains('nav-group-separator') && el.nextElementSibling && el.nextElementSibling.id === 'group-chamados';
-                            if (sep) return;
-
-                            el.style.display = 'none';
-
-
-                        });
-
-                        // Garantir que Chamados TI fique visível
-                        const chamadosWrapper = document.getElementById('group-chamados');
-                        if (chamadosWrapper) {
-                            chamadosWrapper.style.display = 'block';
-                            const chamadosSep = chamadosWrapper.previousElementSibling;
-                            if (chamadosSep && chamadosSep.classList.contains('nav-group-separator')) chamadosSep.style.display = 'flex';
-                        }
-
-
-                        // Find the allowed page links and their parent groups, and show them
-                        allowedPages.forEach(allowedPage => {
-                            const allowedLink = document.querySelector(`.nav-link[href="${allowedPage}"]`);
-                            if (!allowedLink) return;
-                            allowedLink.style.display = 'flex';
-                            const groupWrapper = allowedLink.closest('.nav-group-wrapper');
-                            if (!groupWrapper) return;
-                            groupWrapper.style.display = 'block';
-                            const groupId = groupWrapper.id;
-                            const separator = document.querySelector(`.nav-group-separator[onclick*="${groupId}"]`);
-                            if (separator) {
-                                separator.style.display = 'flex';
-                                const currentPage = window.location.pathname.split('/').pop() || 'index.html';
-                                if (currentPage === allowedPage) separator.classList.add('active-group');
-                            }
-                            groupWrapper.querySelectorAll('.nav-link').forEach(link => {
-                                if (!allowedPages.includes(link.getAttribute('href'))) {
-                                    link.style.display = 'none';
-                                }
-                            });
-                        });
-
-
+                    const kpiMold = document.getElementById('kpi-moldagem-producao');
+                    if (kpiMold) kpiMold.style.display = '';
+                    if (isFusao && kpiMold) {
+                        const title = kpiMold.querySelector('.mb-card-title');
+                        if (title) title.textContent = 'Produ��o Total Fus�o (M�S)';
+                        const sub = kpiMold.querySelector('.live-label');
+                        if (sub) sub.textContent = 'Peso fus�o no m�s';
                     }
 
+                    const strip = document.getElementById('kpi-strip');
+                    if (strip) {
+                        strip.querySelectorAll('.kpi-card').forEach(card => {
+                            card.style.flex = card.style.display === 'none' ? '0 0 0' : '1 1 0';
+                        });
+                    }
 
+                    const fatChart = document.getElementById('prodChart');
+                    if (fatChart) {
+                        const card = fatChart.closest('.mb-card');
+                        if (card) card.style.display = 'none';
+                    }
+
+                    const cardSetor = document.getElementById('card-setor-producao');
+                    const cardRefugo = document.getElementById('card-refugo-chart');
+                    const cardFat = document.querySelector('#bento-main .mb-card.chart-card.accent-amber');
+                    if (cardSetor) { cardSetor.style.gridColumn = '1/3'; cardSetor.style.gridRow = '2 / span 2'; cardSetor.classList.remove('wide'); }
+                    if (cardRefugo) { cardRefugo.style.gridColumn = '3/5'; cardRefugo.style.gridRow = '2 / span 2'; cardRefugo.classList.add('wide'); }
+                    if (cardFat) cardFat.style.display = 'none';
                 }
 
 
@@ -9991,24 +9881,6 @@
 
 
                     const role = (localStorage.getItem('erus_role') || '').toLowerCase();
-
-
-                    if (role !== 'desenvolvedor') {
-
-
-                        const separator = document.getElementById('nav-separator-custos');
-
-
-                        const group = document.getElementById('group-custos');
-
-
-                        if (separator) separator.style.display = 'none';
-
-
-                        if (group) group.style.display = 'none';
-
-
-                    }
 
 
                     const liveMeta = document.getElementById('live-meta');
