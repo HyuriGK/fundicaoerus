@@ -160,7 +160,7 @@
         // Hide old side-menu elements when erus-sidebar is active
         '.side-menu, .side-menu-trigger, body.erus-shared-sidebar-active #sidebar { display:none !important; }',
         'body.erus-shared-sidebar-active .app-layout { grid-template-columns:0 1fr !important; }',
-        'body.erus-shared-sidebar-active:not(.erus-sidebar-collapsed) .app-layout { margin-left:' + SIDEBAR_WIDTH + ' !important; width:calc(100% - ' + SIDEBAR_WIDTH + ') !important; }',
+        'body.erus-shared-sidebar-active.erus-is-index:not(.erus-sidebar-collapsed) .app-layout { margin-left:' + SIDEBAR_WIDTH + ' !important; width:calc(100% - ' + SIDEBAR_WIDTH + ') !important; }',
         // Tooltip for collapsed sidebar
         '#erus-stip { position:fixed; background:#1c1c1f; color:#fafafa; padding:5px 11px; border-radius:7px;',
         '  font-size:0.75rem; font-weight:500; white-space:nowrap; z-index:10000; pointer-events:none;',
@@ -447,6 +447,8 @@
             // Skip overlays/modals by class
             var isOverlay = OVERLAY_CLASSES.some(function(cls) { return el.classList.contains(cls); });
             if (isOverlay) continue;
+            // On non-index pages, sidebar overlays — don't shift content
+            if (!isIndex) continue;
             var pos = window.getComputedStyle(el).position;
             if (pos === 'fixed') {
                 // Skip tooltips and pointer-events:none elements
@@ -475,6 +477,7 @@
 
         var isIndex = currentPage === 'index.html';
         if (isIndex) {
+            document.body.classList.add('erus-is-index');
             document.body.classList.remove('erus-sidebar-collapsed');
         } else {
             document.body.classList.add('erus-sidebar-collapsed');
