@@ -161,6 +161,8 @@
         '.side-menu, .side-menu-trigger, body.erus-shared-sidebar-active #sidebar { display:none !important; }',
         'body.erus-shared-sidebar-active .app-layout { grid-template-columns:0 1fr !important; }',
         'body.erus-shared-sidebar-active.erus-is-index:not(.erus-sidebar-collapsed) .app-layout { margin-left:' + SIDEBAR_WIDTH + ' !important; width:calc(100% - ' + SIDEBAR_WIDTH + ') !important; }',
+        // Non-index pages: always offset content by collapsed sidebar width (overlay on expand)
+        'body.erus-shared-sidebar-active:not(.erus-is-index) .app-layout { margin-left:' + SIDEBAR_WIDTH_COLLAPSED + ' !important; }',
         // Tooltip for collapsed sidebar
         '#erus-stip { position:fixed; background:#1c1c1f; color:#fafafa; padding:5px 11px; border-radius:7px;',
         '  font-size:0.75rem; font-weight:500; white-space:nowrap; z-index:10000; pointer-events:none;',
@@ -435,10 +437,8 @@
 
     function applyPaddingLeft() {
         var isIndex = currentPage === 'index.html';
-        var isCollapsed = document.body.classList.contains('erus-sidebar-collapsed');
-        var sidebarOffset = isIndex ? SIDEBAR_WIDTH : SIDEBAR_WIDTH_COLLAPSED;
+        if (!isIndex) return;
         var SKIP_IDS = ['erus-sidebar', 'erus-logout-modal', 'erus-pref-modal', 'global-loader'];
-        // Classes that indicate an overlay/modal/toast — should NOT be shifted
         var OVERLAY_CLASSES = ['modal-overlay', 'modal', 'toast-container', 'toast', 'overlay', 'dim-layer', 'loading-screen'];
         var children = document.body.children;
         for (var i = 0; i < children.length; i++) {
@@ -446,24 +446,16 @@
             if (SKIP_IDS.indexOf(el.id) !== -1) continue;
             var isOverlay = OVERLAY_CLASSES.some(function(cls) { return el.classList.contains(cls); });
             if (isOverlay) continue;
-            // Non-index pages: shift only when collapsed (overlay when expanded)
-            if (!isIndex && !isCollapsed) {
-                el.style.removeProperty('margin-left');
-                el.style.removeProperty('left');
-                // Keep fixed width so panels don't stretch when sidebar expands
-                el.style.setProperty('width', 'calc(100% - ' + SIDEBAR_WIDTH_COLLAPSED + ')', 'important');
-                continue;
-            }
             var pos = window.getComputedStyle(el).position;
             if (pos === 'fixed') {
                 if (window.getComputedStyle(el).pointerEvents === 'none') continue;
                 var computedLeft = window.getComputedStyle(el).left;
                 if (computedLeft === '0px' || computedLeft === 'auto') {
-                    el.style.setProperty('left', sidebarOffset, 'important');
-                    el.style.setProperty('width', 'calc(100% - ' + sidebarOffset + ')', 'important');
+                    el.style.setProperty('left', SIDEBAR_WIDTH, 'important');
+                    el.style.setProperty('width', 'calc(100% - ' + SIDEBAR_WIDTH + ')', 'important');
                 }
             } else if (pos !== 'absolute') {
-                el.style.setProperty('margin-left', sidebarOffset, 'important');
+                el.style.setProperty('margin-left', SIDEBAR_WIDTH, 'important');
             }
         }
     }
