@@ -673,19 +673,12 @@
                 var blocked = {};
                 result.data.forEach(function(l) {
                     if (l.is_locked) blocked[l.page_id] = true;
-                    if (!isPrivilegedRole && l.is_locked) {
+                    var isDevelopment = l.is_locked && l.lock_reason === 'development';
+                    if (l.is_locked && (isDevelopment || !isPrivilegedRole)) {
                         var blockedLink = document.querySelector('#erus-sidebar .erus-nav-link[href="' + l.page_id + '"]');
                         if (!blockedLink) blockedLink = document.querySelector('#erus-sidebar .erus-nav-link[data-page-key="' + l.page_id + '"]');
                         if (blockedLink) blockedLink.classList.add('erus-role-hidden');
                     }
-                    if (!l.is_locked || l.lock_reason !== 'development') return;
-                    var link = document.querySelector('#erus-sidebar .erus-nav-link[href="' + l.page_id + '"]') ||
-                               document.querySelector('#erus-sidebar .erus-nav-link[data-page-key="' + l.page_id + '"]');
-                    if (!link || link.querySelector('.erus-dev-tag')) return;
-                    var tag = document.createElement('span');
-                    tag.className = 'erus-dev-tag';
-                    tag.textContent = 'DEV';
-                    link.appendChild(tag);
                 });
                 if (restrictedPageMap[roleNorm]) {
                     var currentPage = window.location.pathname.split('/').pop() || 'index.html';
