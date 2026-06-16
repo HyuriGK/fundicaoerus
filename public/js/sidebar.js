@@ -163,19 +163,25 @@
         'body.erus-shared-sidebar-active .app-layout { grid-template-columns:0 1fr !important; }',
         'body.erus-shared-sidebar-active .erus-sidebar-content-offset {',
         '  margin-left:var(--erus-sidebar-offset) !important;',
+        '  box-sizing:border-box !important;',
+        '}',
+        'body.erus-shared-sidebar-active .erus-sidebar-content-offset.erus-fill-layout {',
         '  width:calc(100vw - var(--erus-sidebar-offset)) !important;',
         '  max-width:calc(100vw - var(--erus-sidebar-offset)) !important;',
-        '  box-sizing:border-box !important;',
         '}',
         'body.erus-shared-sidebar-active .erus-sidebar-content-offset.erus-fixed-layout {',
         '  left:var(--erus-sidebar-offset) !important;',
         '  right:auto !important;',
         '  margin-left:0 !important;',
+        '  width:calc(100vw - var(--erus-sidebar-offset)) !important;',
+        '  max-width:calc(100vw - var(--erus-sidebar-offset)) !important;',
         '}',
         'body.erus-shared-sidebar-active .erus-sidebar-content-offset.erus-absolute-layout {',
         '  left:var(--erus-sidebar-offset) !important;',
         '  right:auto !important;',
         '  margin-left:0 !important;',
+        '  width:calc(100vw - var(--erus-sidebar-offset)) !important;',
+        '  max-width:calc(100vw - var(--erus-sidebar-offset)) !important;',
         '}',
         // Tooltip for collapsed sidebar
         '#erus-stip { position:fixed; background:#1c1c1f; color:#fafafa; padding:5px 11px; border-radius:7px;',
@@ -485,15 +491,18 @@
         var targets = getSidebarOffsetTargets();
         document.querySelectorAll('.erus-sidebar-content-offset').forEach(function(el) {
             if (targets.indexOf(el) === -1) {
-                el.classList.remove('erus-sidebar-content-offset', 'erus-fixed-layout', 'erus-absolute-layout');
+                el.classList.remove('erus-sidebar-content-offset', 'erus-fixed-layout', 'erus-absolute-layout', 'erus-fill-layout');
             }
         });
 
         targets.forEach(function(el) {
             var pos = window.getComputedStyle(el).position;
+            var isFullLayout = el.dataset.erusFullLayout === '1' || (pos !== 'fixed' && pos !== 'absolute' && el.getBoundingClientRect().width >= window.innerWidth - 2);
+            if (isFullLayout) el.dataset.erusFullLayout = '1';
             el.classList.add('erus-sidebar-content-offset');
             el.classList.toggle('erus-fixed-layout', pos === 'fixed');
             el.classList.toggle('erus-absolute-layout', pos === 'absolute');
+            el.classList.toggle('erus-fill-layout', isFullLayout && pos !== 'fixed' && pos !== 'absolute');
         });
     }
 
