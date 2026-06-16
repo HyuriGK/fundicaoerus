@@ -444,16 +444,18 @@
         for (var i = 0; i < children.length; i++) {
             var el = children[i];
             if (SKIP_IDS.indexOf(el.id) !== -1) continue;
-            // Skip overlays/modals by class
             var isOverlay = OVERLAY_CLASSES.some(function(cls) { return el.classList.contains(cls); });
             if (isOverlay) continue;
-            // On non-index pages, sidebar overlays — don't shift content
-            if (!isIndex) continue;
+            // Non-index pages: shift only when collapsed (overlay when expanded)
+            if (!isIndex && !isCollapsed) {
+                el.style.removeProperty('margin-left');
+                el.style.removeProperty('left');
+                el.style.removeProperty('width');
+                continue;
+            }
             var pos = window.getComputedStyle(el).position;
             if (pos === 'fixed') {
-                // Skip tooltips and pointer-events:none elements
                 if (window.getComputedStyle(el).pointerEvents === 'none') continue;
-                // Only shift fixed elements that start at left:0 (main layout, not popups)
                 var computedLeft = window.getComputedStyle(el).left;
                 if (computedLeft === '0px' || computedLeft === 'auto') {
                     el.style.setProperty('left', sidebarOffset, 'important');
