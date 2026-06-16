@@ -160,6 +160,7 @@
         // Hide old side-menu elements when erus-sidebar is active
         '.side-menu, .side-menu-trigger, body.erus-shared-sidebar-active #sidebar { display:none !important; }',
         'body.erus-shared-sidebar-active { --erus-sidebar-offset:' + SIDEBAR_WIDTH_COLLAPSED + '; }',
+        'body.erus-shared-sidebar-active.erus-is-index { --erus-sidebar-offset:' + SIDEBAR_WIDTH + '; }',
         'body.erus-shared-sidebar-active .app-layout { grid-template-columns:0 1fr !important; }',
         'body.erus-shared-sidebar-active .erus-sidebar-content-offset {',
         '  margin-left:var(--erus-sidebar-offset) !important;',
@@ -517,8 +518,12 @@
         document.body.insertAdjacentHTML('beforeend', prefsModalHTML);
 
         var isIndex = currentPage === 'index.html';
-        if (isIndex) document.body.classList.add('erus-is-index');
-        document.body.classList.add('erus-sidebar-collapsed');
+        if (isIndex) {
+            document.body.classList.add('erus-is-index');
+            document.body.classList.remove('erus-sidebar-collapsed');
+        } else {
+            document.body.classList.add('erus-sidebar-collapsed');
+        }
         applySidebarContentOffset();
 
         var sidebarEl = document.getElementById('erus-sidebar');
@@ -537,7 +542,7 @@
 
         // Brand click = toggle collapse
         var brandEl = document.getElementById('erus-brand');
-        if (brandEl) {
+        if (brandEl && !isIndex) {
             brandEl.addEventListener('click', function(e) {
                 e.preventDefault();
                 document.body.classList.toggle('erus-sidebar-collapsed');
