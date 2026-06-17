@@ -1586,6 +1586,7 @@
         </div>
     </div>
 
+    <script src="js/shared-utils.js"></script>
     <script>
         let allOps = [];
         let pointingSummary = {};
@@ -1610,6 +1611,11 @@
         let customWeights = {}; // Memory for manual weights set in pedidos.html
         
         function getUnitWeight(op) {
+            if (typeof getCommercialBalance === 'function' && typeof getCorrectedWeight === 'function') {
+                const balance = getCommercialBalance(op);
+                if (balance > 0) return getCorrectedWeight(op, customWeights) / balance;
+            }
+
             const prodCode = String(op.PRODUTO_PPR || '').trim();
             
             // 1. Manual Weight (set in pedidos.html via /api/weights/list)
@@ -1770,21 +1776,18 @@
         async function fetchData() {
             try {
                 // Fetch OPs from the sync endpoint (like pedidos.html)
-                const [resOps, resPointing, resWeights] = await Promise.all([
+                const [resOps, resWeights] = await Promise.all([
                     fetch('/api/pedidos-sync?carteiraOnly=true'),
-                    fetch('/api/pedidos-firebird/op-apontamentos-resumo'),
                     fetch('/api/weights/list')
                 ]);
  
-                if (!resOps.ok || !resPointing.ok) throw new Error('Falha ao buscar dados');
+                if (!resOps.ok) throw new Error('Falha ao buscar dados');
  
                 if (resWeights.ok) customWeights = await resWeights.json();
 
                 const rawOps = await resOps.json();
-                pointingSummary = await resPointing.json();
 
-                // Filter only OPs that have an OP Number and are active
-                allOps = rawOps.filter(op => op.OP_PCS && op.OP_PCS !== '-');
+                allOps = rawOps;
 
                 // Update last update timestamp
                 const now = new Date();
@@ -1951,6 +1954,79 @@
             return activeStages;
         }
 
+        function getCarteiraStages(op) {
+            if (typeof getItemSectorMetrics !== 'function') {
+                const totalQty = parseInt(op.OP_QUANTIDADE) || parseInt(op.QUANTIDADE_PPR) || 0;
+                return getOpStages(op.OP_PCS, totalQty, op.OP_EMISSAO || op.DATA_EMISSAO_PEDIDO, op.ROTEIRO_PRODUCAO);
+            }
+
+            const metrics = getItemSectorMetrics(op);
+            const route = String(op.ROTEIRO_PRODUCAO || '').toUpperCase();
+            const hasUsinagem = route.includes('USINAGEM') || route.includes('TORNEARIA');
+            const now = toLocalDate(new Date());
+            const arrivalDate = toLocalDate(op.OP_EMISSAO || op.DATA_EMISSAO_PEDIDO || new Date());
+            const hasOp = !!String(op.OP_PCS || '').trim() && String(op.OP_PCS || '').trim() !== '-';
+            if (!hasOp) {
+                const qty = getCommercialBalance(op) || metrics.totalBalance || metrics.targetTotalQty || 0;
+                const configKey = configKeyMap[orderedStages[0]];
+                const metaDate = toLocalDate(arrivalDate);
+                let daysToAdd = leadTimes[configKey] || 0;
+                while (daysToAdd > 0) {
+                    metaDate.setDate(metaDate.getDate() + 1);
+                    const day = metaDate.getDay();
+                    if (day !== 0 && day !== 6) daysToAdd--;
+                }
+                const diff = getBusinessDaysDiff(metaDate, now);
+                return qty > 0 ? [{
+                    stage: orderedStages[0],
+                    qty,
+                    statusText: diff > 0 ? `ATRASADO HÁ ${diff} D` : (diff < 0 ? `ADIANTADO HÁ ${Math.abs(diff)} D` : 'NO PRAZO'),
+                    isDelayed: diff > 0,
+                    statusColor: diff > 0 ? 'var(--status-danger)' : 'var(--status-success)',
+                    qtyExpedited: 0,
+                    daysStopped: getBusinessDaysDiff(arrivalDate, now)
+                }] : [];
+            }
+
+            const qtyExpedited = metrics.rawExpedicao || 0;
+            const stageQty = {};
+            const addStage = (stage, qty) => {
+                if (qty > 0) stageQty[stage] = (stageQty[stage] || 0) + qty;
+            };
+            addStage(orderedStages[0], metrics.qAguardando || 0);
+            addStage(orderedStages[1], metrics.qMoldada || 0);
+            addStage(orderedStages[2], metrics.qFusao || 0);
+            addStage(orderedStages[3], metrics.qAcabamento || 0);
+            addStage(hasUsinagem ? orderedStages[4] : orderedStages[5], metrics.qTT || 0);
+            addStage(orderedStages[5], metrics.qUsinagem || 0);
+            addStage(orderedStages[6], (metrics.qQualidade || 0) + (metrics.qExpedicao || 0));
+            const stageRows = orderedStages.map(stage => [stage, stageQty[stage] || 0]);
+
+            return stageRows
+                .filter(([, qty]) => qty > 0)
+                .map(([stage, qty]) => {
+                    const configKey = configKeyMap[stage];
+                    const lt = leadTimes[configKey] || 0;
+                    const metaDate = toLocalDate(arrivalDate);
+                    let daysToAdd = lt;
+                    while (daysToAdd > 0) {
+                        metaDate.setDate(metaDate.getDate() + 1);
+                        const day = metaDate.getDay();
+                        if (day !== 0 && day !== 6) daysToAdd--;
+                    }
+                    const diff = getBusinessDaysDiff(metaDate, now);
+                    return {
+                        stage,
+                        qty,
+                        statusText: diff > 0 ? `ATRASADO HÁ ${diff} D` : (diff < 0 ? `ADIANTADO HÁ ${Math.abs(diff)} D` : 'NO PRAZO'),
+                        isDelayed: diff > 0,
+                        statusColor: diff > 0 ? 'var(--status-danger)' : 'var(--status-success)',
+                        qtyExpedited,
+                        daysStopped: getBusinessDaysDiff(arrivalDate, now)
+                    };
+                });
+        }
+
         function renderBoard() {
             // Clear lists
             const weightSums = {};
@@ -1979,8 +2055,8 @@
             orderedStages.forEach(s => stageOps[s] = []);
  
             allOps.forEach(op => {
-                const totalQtyAll = parseInt(op.OP_QUANTIDADE) || parseInt(op.QUANTIDADE_PPR) || 0;
-                const statusList = getOpStages(op.OP_PCS, totalQtyAll, op.OP_EMISSAO || op.DATA_EMISSAO_PEDIDO, op.ROTEIRO_PRODUCAO);
+                const totalQtyAll = parseInt(op.OP_QUANTIDADE) || parseInt(op.QUANTIDADE_PPR) || parseInt(op.SALDO_LIBERADO_FATURAR_PPR) || 0;
+                const statusList = getCarteiraStages(op);
                 const unitWeight = getUnitWeight(op);
 
                 statusList.forEach(status => {
@@ -1995,11 +2071,13 @@
 
                     if (searchTerm) {
                         const opNum = String(op.OP_PCS || '').toLowerCase();
+                        const pedNum = String(op.CODIGO_PPR || '').toLowerCase();
                         const prodCode = String(op.PRODUTO_PPR || '').toLowerCase();
                         const prodDesc = String(op.NOME_PRODUTO_PPR || '').toLowerCase();
                         const client = String(op.NOME_CLIENTE || '').toLowerCase();
 
                         const matches = opNum.includes(searchTerm) ||
+                            pedNum.includes(searchTerm) ||
                             prodCode.includes(searchTerm) ||
                             prodDesc.includes(searchTerm) ||
                             client.includes(searchTerm);
@@ -2055,8 +2133,8 @@
                         case 'daysStopped_desc': return b.status.daysStopped - a.status.daysStopped;
                         case 'deadline_asc': return a.daysUntilDeadline - b.daysUntilDeadline;
                         case 'client_asc': return String(a.op.NOME_CLIENTE || '').localeCompare(String(b.op.NOME_CLIENTE || ''));
-                        case 'op_desc': return parseInt(b.op.OP_PCS) - parseInt(a.op.OP_PCS);
-                        case 'op_asc': return parseInt(a.op.OP_PCS) - parseInt(b.op.OP_PCS);
+                        case 'op_desc': return (parseInt(b.op.OP_PCS) || 0) - (parseInt(a.op.OP_PCS) || 0);
+                        case 'op_asc': return (parseInt(a.op.OP_PCS) || 0) - (parseInt(b.op.OP_PCS) || 0);
                         default: return 0;
                     }
                 });
@@ -2069,6 +2147,7 @@
                     const prodCode = op.PRODUTO_PPR || '';
                     const prodName = op.NOME_PRODUTO_PPR || '';
                     const clientName = (op.NOME_CLIENTE || 'N/A');
+                    const cardTitle = op.OP_PCS ? `OP ${op.OP_PCS}` : `PED ${op.CODIGO_PPR || 'SEM OP'}`;
 
                     const isPartial = qty < totalQtyAll;
                     const qtyBaseDisplay = (isPartial ? `${Math.round(qty)} DE ${totalQtyAll}` : `${totalQtyAll}`) + ' PÇS';
@@ -2084,7 +2163,7 @@
                     if (isPresentation) {
                         card.innerHTML = `
                              <div class="card-header" style="display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; border-bottom: none;">
-                                 <span class="op-number" style="font-size: 1.8rem; background: transparent; color: var(--color-primary); padding: 0; font-weight: 900;">OP ${op.OP_PCS}</span>
+                                 <span class="op-number" style="font-size: 1.8rem; background: transparent; color: var(--color-primary); padding: 0; font-weight: 900;">${cardTitle}</span>
                                  <span class="client-name" style="font-size: 1.1rem; color: #fff; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; width: 100%; opacity: 0.9;">${clientName}</span>
                              </div>
                              <div class="card-footer" style="padding-top: 5px; border-top: none; margin-top: 0; display: flex; flex-direction: column;">
@@ -2118,7 +2197,7 @@
 
                         card.innerHTML = `
                             <div class="card-header" style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
-                                <span class="op-number">OP ${op.OP_PCS}</span>
+                                <span class="op-number">${cardTitle}</span>
                                 <span class="client-name">${clientName.split(' ')[0]}</span>
                             </div>
                             <div class="product-desc">${prodCode} - ${prodName}</div>
@@ -2146,7 +2225,11 @@
                         `;
                     }
 
-                    card.onclick = () => showOPDetails(op);
+                    if (op.OP_PCS) {
+                        card.onclick = () => showOPDetails(op);
+                    } else {
+                        card.style.cursor = 'default';
+                    }
                     list.appendChild(card);
                 });
             });
