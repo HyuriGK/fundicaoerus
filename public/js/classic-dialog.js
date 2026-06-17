@@ -254,6 +254,7 @@
     };
 
     window.classicConfirm = function (msg, title) {
+        if (window.erusConfirm) return window.erusConfirm(msg, { title: title || 'Confirmar ação' });
         return new Promise(function (resolve) {
             if (!isClassic()) { resolve(_nativeConfirm(msg)); return; }
 

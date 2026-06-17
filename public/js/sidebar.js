@@ -11,6 +11,25 @@
     }
     ensureUiComponents();
 
+    function ensureConfirmDialog() {
+        if (window.erusConfirm) return Promise.resolve();
+        var existing = document.getElementById('erus-confirm-dialog-js');
+        if (existing) {
+            return new Promise(function(resolve) {
+                existing.addEventListener('load', resolve, { once: true });
+                existing.addEventListener('error', resolve, { once: true });
+            });
+        }
+        return new Promise(function(resolve) {
+            var s = document.createElement('script');
+            s.id = 'erus-confirm-dialog-js';
+            s.src = 'js/confirm-dialog.js?v=20260617';
+            s.onload = resolve;
+            s.onerror = resolve;
+            document.head.appendChild(s);
+        });
+    }
+
     // Inject sidebar CSS
     var style = document.createElement('style');
     style.textContent = [
@@ -760,8 +779,15 @@
         }
     };
 
-    window.erusSidebarOpenLogout = function() {
-        document.getElementById('erus-logout-modal').classList.add('open');
+    window.erusSidebarOpenLogout = async function() {
+        await ensureConfirmDialog();
+        if (!window.erusConfirm) {
+            erusSidebarDoLogout();
+            return;
+        }
+        if (await erusConfirm('Sua sessão no sistema será encerrada.', { title: 'Deseja realmente sair?', okText: 'Sim, sair', variant: 'danger', icon: 'fa-solid fa-right-from-bracket' })) {
+            erusSidebarDoLogout();
+        }
     };
 
     window.erusSidebarDoLogout = function() {
