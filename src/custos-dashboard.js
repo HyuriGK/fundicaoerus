@@ -112,14 +112,13 @@ router.get('/', async (req, res) => {
                 const qtdOriginal = Number(item.QUANTIDADE_PPR) || 0;
                 const saldoReal = saldoLiberado > 0 ? saldoLiberado : qtdOriginal;
 
-                // Prioridade: PESO_UNIT (campo direto) > peso customizado > PESO_LIQUIDO_NPR / qtd
+                // Prioridade: PESO_UNIT (campo direto) > PESO_LIQUIDO_NPR / qtd (ERP) > peso customizado
                 let pesoUnitario = 0;
                 if (item.PESO_UNIT !== undefined && item.PESO_UNIT !== null && item.PESO_UNIT !== '' && Number(item.PESO_UNIT) > 0) {
                     pesoUnitario = Number(item.PESO_UNIT);
-                } else if (customWeights[item.PRODUTO_PPR]) {
-                    pesoUnitario = customWeights[item.PRODUTO_PPR];
                 } else {
-                    pesoUnitario = qtdOriginal > 0 ? (Number(item.PESO_LIQUIDO_NPR) || 0) / qtdOriginal : 0;
+                    const erpUnit = qtdOriginal > 0 ? (Number(item.PESO_LIQUIDO_NPR) || 0) / qtdOriginal : 0;
+                    pesoUnitario = erpUnit > 0 ? erpUnit : (customWeights[item.PRODUTO_PPR] || 0);
                 }
 
                 carteiraPeso += (pesoUnitario * saldoReal);

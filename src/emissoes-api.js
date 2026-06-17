@@ -9,7 +9,14 @@ router.get('/monthly-summary', async (req, res) => {
             SELECT 
                 EXTRACT(YEAR FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) as ano,
                 EXTRACT(MONTH FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) as mes,
-                SUM(COALESCE(pc.peso * CAST(COALESCE(p.data->>'QUANTIDADE_PPR', '0') AS NUMERIC), CAST(COALESCE(p.data->>'PESO_LIQUIDO_NPR', '0') AS NUMERIC))) as total_peso,
+                SUM(
+                    CASE
+                        WHEN CAST(COALESCE(p.data->>'PESO_LIQUIDO_NPR', '0') AS NUMERIC) > 0
+                            THEN CAST(COALESCE(p.data->>'PESO_LIQUIDO_NPR', '0') AS NUMERIC)
+                        ELSE
+                            COALESCE(pc.peso * CAST(COALESCE(p.data->>'QUANTIDADE_PPR', '0') AS NUMERIC), 0)
+                    END
+                ) as total_peso,
                 SUM(
                     CASE
                         WHEN pc.peso IS NOT NULL AND CAST(COALESCE(p.data->>'PRECO_KG', '0') AS NUMERIC) > 0
@@ -61,7 +68,14 @@ router.get('/client-summary', async (req, res) => {
             SELECT 
                 p.data->>'NOME_CLIENTE' as cliente,
                 p.data->>'ID_CLIENTE_CORE' as id_cliente,
-                SUM(COALESCE(pc.peso * CAST(COALESCE(p.data->>'QUANTIDADE_PPR', '0') AS NUMERIC), CAST(COALESCE(p.data->>'PESO_LIQUIDO_NPR', '0') AS NUMERIC))) as total_peso,
+                SUM(
+                    CASE
+                        WHEN CAST(COALESCE(p.data->>'PESO_LIQUIDO_NPR', '0') AS NUMERIC) > 0
+                            THEN CAST(COALESCE(p.data->>'PESO_LIQUIDO_NPR', '0') AS NUMERIC)
+                        ELSE
+                            COALESCE(pc.peso * CAST(COALESCE(p.data->>'QUANTIDADE_PPR', '0') AS NUMERIC), 0)
+                    END
+                ) as total_peso,
                 SUM(
                     CASE
                         WHEN pc.peso IS NOT NULL AND CAST(COALESCE(p.data->>'PRECO_KG', '0') AS NUMERIC) > 0
@@ -127,7 +141,7 @@ router.get('/list', async (req, res) => {
         const result = await pool.query(query, params);
         const records = result.rows.map(row => {
             const data = row.data;
-            if (row.peso_customizado !== null) {
+            if (row.peso_customizado !== null && !(parseFloat(data.PESO_LIQUIDO_NPR) > 0)) {
                 // Return corrected weight in the data object
                 data.PESO_LIQUIDO_NPR = row.peso_customizado * (parseFloat(data.QUANTIDADE_PPR) || 0);
                 data.PESO_UNIT_ORIGINAL = data.PESO_UNIT; // Preserve original for debug if needed
@@ -152,11 +166,12 @@ router.get('/pending-summary', async (req, res) => {
                 EXTRACT(YEAR FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) as ano,
                 EXTRACT(MONTH FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) as mes,
                 SUM(
-                    COALESCE(pc.peso, 
-                        CASE WHEN CAST(COALESCE(p.data->>'QUANTIDADE_PPR','0') AS NUMERIC) > 0 
-                             THEN CAST(COALESCE(p.data->>'PESO_LIQUIDO_NPR','0') AS NUMERIC) / CAST(p.data->>'QUANTIDADE_PPR' AS NUMERIC)
-                             ELSE 0 END
-                    ) * (
+                    CASE
+                        WHEN CAST(COALESCE(p.data->>'PESO_LIQUIDO_NPR','0') AS NUMERIC) > 0
+                             AND CAST(COALESCE(p.data->>'QUANTIDADE_PPR','0') AS NUMERIC) > 0
+                            THEN CAST(COALESCE(p.data->>'PESO_LIQUIDO_NPR','0') AS NUMERIC) / CAST(p.data->>'QUANTIDADE_PPR' AS NUMERIC)
+                        ELSE COALESCE(pc.peso, 0)
+                    END * (
                         CAST(COALESCE(p.data->>'QUANTIDADE_PPR','0') AS NUMERIC) 
                         - COALESCE(CAST(COALESCE(p.data->>'QUANTIDADE_FATURADA_PPR','0') AS NUMERIC), 0)
                     )
@@ -218,7 +233,7 @@ router.get('/pending-list', async (req, res) => {
         const result = await pool.query(query, [ano, mes]);
         const records = result.rows.map(row => {
             const data = row.data;
-            if (row.peso_customizado !== null) {
+            if (row.peso_customizado !== null && !(parseFloat(data.PESO_LIQUIDO_NPR) > 0)) {
                 data.PESO_LIQUIDO_NPR = row.peso_customizado * (parseFloat(data.QUANTIDADE_PPR) || 0);
                 data.PESO_UNIT = row.peso_customizado;
             }
@@ -234,7 +249,7 @@ router.get('/pending-list', async (req, res) => {
 
 // GET /api/emissoes/variacao-diaria?ano=2026&mes=5
 // Entrada: peso total emitido no dia (mesma lógica do gráfico de emissão de pedidos.html)
-//   = customWeights[produto] ?? (PESO_LIQUIDO_NPR / QUANTIDADE_PPR), * QUANTIDADE_PPR
+//   = PESO_LIQUIDO_NPR do ERP; se vier zerado, usa customWeights[produto] * quantidade
 // Saída: peso_total já calculado na faturamento_firebird (mesma fonte do gráfico diário de faturamentos.html)
 router.get('/variacao-diaria', async (req, res) => {
     try {
@@ -243,15 +258,16 @@ router.get('/variacao-diaria', async (req, res) => {
             return res.status(400).json({ error: 'Ano e mês são obrigatórios.' });
         }
 
-        // Entrada: mesma lógica de pedidos.html — customWeights tem prioridade, fallback PESO_LIQUIDO_NPR/qtd * qtd
+        // Entrada: mesma logica de pedidos.html: ERP primeiro, customizado apenas como fallback
         const emissoesQuery = `
             SELECT
                 (p.data->>'DATA_EMISSAO_PEDIDO')::date AS dia,
                 SUM(
                     CASE
-                        WHEN pc.peso IS NOT NULL THEN pc.peso * CAST(COALESCE(p.data->>'QUANTIDADE_PPR','0') AS NUMERIC)
-                        WHEN CAST(COALESCE(p.data->>'QUANTIDADE_PPR','0') AS NUMERIC) > 0
+                        WHEN CAST(COALESCE(p.data->>'PESO_LIQUIDO_NPR','0') AS NUMERIC) > 0
                             THEN CAST(COALESCE(p.data->>'PESO_LIQUIDO_NPR','0') AS NUMERIC)
+                        WHEN pc.peso IS NOT NULL
+                            THEN pc.peso * CAST(COALESCE(p.data->>'QUANTIDADE_PPR','0') AS NUMERIC)
                         ELSE 0
                     END
                 ) AS peso_entrada,
@@ -340,9 +356,10 @@ router.get('/variacao-mensal', async (req, res) => {
                 EXTRACT(MONTH FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date)::int AS mes,
                 SUM(
                     CASE
-                        WHEN pc.peso IS NOT NULL THEN pc.peso * CAST(COALESCE(p.data->>'QUANTIDADE_PPR','0') AS NUMERIC)
-                        WHEN CAST(COALESCE(p.data->>'QUANTIDADE_PPR','0') AS NUMERIC) > 0
+                        WHEN CAST(COALESCE(p.data->>'PESO_LIQUIDO_NPR','0') AS NUMERIC) > 0
                             THEN CAST(COALESCE(p.data->>'PESO_LIQUIDO_NPR','0') AS NUMERIC)
+                        WHEN pc.peso IS NOT NULL
+                            THEN pc.peso * CAST(COALESCE(p.data->>'QUANTIDADE_PPR','0') AS NUMERIC)
                         ELSE 0
                     END
                 ) AS peso_entrada,
@@ -418,9 +435,10 @@ router.get('/variacao-detalhe', async (req, res) => {
                 p.data->>'NOME_CLIENTE'      AS cliente,
                 CAST(COALESCE(p.data->>'QUANTIDADE_PPR','0') AS NUMERIC) AS quantidade,
                 CASE
-                    WHEN pc.peso IS NOT NULL THEN pc.peso * CAST(COALESCE(p.data->>'QUANTIDADE_PPR','0') AS NUMERIC)
-                    WHEN CAST(COALESCE(p.data->>'QUANTIDADE_PPR','0') AS NUMERIC) > 0
+                    WHEN CAST(COALESCE(p.data->>'PESO_LIQUIDO_NPR','0') AS NUMERIC) > 0
                         THEN CAST(COALESCE(p.data->>'PESO_LIQUIDO_NPR','0') AS NUMERIC)
+                    WHEN pc.peso IS NOT NULL
+                        THEN pc.peso * CAST(COALESCE(p.data->>'QUANTIDADE_PPR','0') AS NUMERIC)
                     ELSE 0
                 END AS peso_total
             FROM firebird_sync_emissoes p

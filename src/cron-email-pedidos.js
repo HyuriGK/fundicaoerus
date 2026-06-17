@@ -51,14 +51,13 @@ function getCorrectedWeight(item, customWeights = {}) {
     let unitWeight = 0;
     if (item.PESO_UNIT !== undefined && item.PESO_UNIT !== null && item.PESO_UNIT !== '' && Number(item.PESO_UNIT) > 0) {
         unitWeight = Number(item.PESO_UNIT);
-    } else if (customWeights[cod] != null) {
-        unitWeight = parseFloat(customWeights[cod]);
     } else {
         const pesoLiqNPR = parseFloat(item.PESO_LIQUIDO_NPR) || 0;
         const pesoLiqPPR = parseFloat(item.PESO_LIQUIDO_PPR) || 0;
         const pesoBrutoPPR = parseFloat(item.PESO_BRUTO_PPR) || 0;
         const pesoRef = pesoLiqNPR || pesoBrutoPPR || pesoLiqPPR;
-        unitWeight = qtdOrig > 0 ? pesoRef / qtdOrig : 0;
+        const erpUnit = qtdOrig > 0 && pesoRef > 0 ? pesoRef / qtdOrig : 0;
+        unitWeight = erpUnit || (customWeights[cod] != null ? parseFloat(customWeights[cod]) : 0);
     }
     return unitWeight * balance;
 }

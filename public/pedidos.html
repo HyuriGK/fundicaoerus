@@ -2421,11 +2421,7 @@
             const saldoLiberado = Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0;
             const qtdOriginal = Number(item.QUANTIDADE_PPR) || 0;
             const saldoReal = saldoLiberado > 0 ? saldoLiberado : qtdOriginal;
-            let totalWeightOriginal = Number(item.PESO_LIQUIDO_NPR) || 0;
-            let unitWeight = qtdOriginal > 0 ? (totalWeightOriginal / qtdOriginal) : 0;
-            if (customWeights[item.PRODUTO_PPR]) {
-                unitWeight = customWeights[item.PRODUTO_PPR];
-            }
+            let unitWeight = getResolvedUnitWeight(item, customWeights, qtdOriginal);
             const totalWeightReal = unitWeight * saldoReal;
             const html = `
                 <div class="detail-row">
@@ -3308,13 +3304,7 @@
                 const { qExpedicao, qQualidade, qUsinagem, qTT, qAcabamento, qFusao, qMoldada, qAguardando, targetTotalQty } = metrics;
                 // Unit metrics for direct multiplication
                 let uW = 0;
-                if (item.PESO_UNIT !== undefined && item.PESO_UNIT !== null && item.PESO_UNIT !== '') {
-                    uW = Number(item.PESO_UNIT);
-                } else if (customWeights[item.PRODUTO_PPR]) {
-                    uW = customWeights[item.PRODUTO_PPR];
-                } else {
-                    uW = targetTotalQty > 0 ? ((Number(item.PESO_LIQUIDO_NPR) || 0) / targetTotalQty) : 0;
-                }
+                uW = getResolvedUnitWeight(item, customWeights, targetTotalQty);
                 let uP = parseFloat(item.VALOR_PPR || 0);
                 if (item.PRECO_KG && parseFloat(item.PRECO_KG) > 0 && customWeights[item.PRODUTO_PPR]) {
                     uP = parseFloat(item.PRECO_KG) * uW;
@@ -3735,15 +3725,7 @@
         }
         function getUnitWeightValue(item) {
             const qtdOriginal = Number(item.QUANTIDADE_PPR) || 0;
-            let unitWeight = 0;
-            if (item.PESO_UNIT !== undefined && item.PESO_UNIT !== null && item.PESO_UNIT !== '') {
-                unitWeight = Number(item.PESO_UNIT);
-            } else if (customWeights[String(item.PRODUTO_PPR || '').trim()]) {
-                unitWeight = customWeights[String(item.PRODUTO_PPR || '').trim()];
-            } else {
-                unitWeight = qtdOriginal > 0 ? (Number(item.PESO_LIQUIDO_NPR) || 0) / qtdOriginal : 0;
-            }
-            return unitWeight;
+            return getResolvedUnitWeight(item, customWeights, qtdOriginal);
         }
         function applyColumnFilters() {
             const inputs = document.querySelectorAll('.filter-input-table');
@@ -3911,12 +3893,7 @@
                     }
                     // For PESO_UNIT, we need to calculate it first
                     if (key === 'PESO_UNIT') {
-                        const qtd = Number(item.QUANTIDADE_PPR) || 0;
-                        let totalWeight = Number(item.PESO_LIQUIDO_NPR) || 0;
-                        let uW = qtd > 0 ? (totalWeight / qtd) : 0;
-                        if (totalWeight === 0 && customWeights[item.PRODUTO_PPR]) {
-                            uW = customWeights[item.PRODUTO_PPR];
-                        }
+                        const uW = getUnitWeightValue(item);
                         const valStr = formatNumber(uW); // ex: "0,00" ou "1.234,56"
                         // O usuário pediu "filtrar os registros que estão exatamente escritos"
                         // Comparar strings exatas
@@ -3969,13 +3946,7 @@
                     item._sectorRaw = rawQty;
                     // Consistent Unit Weight Calculation
                     let unitWeight = 0;
-                    if (item.PESO_UNIT !== undefined && item.PESO_UNIT !== null && item.PESO_UNIT !== '') {
-                        unitWeight = Number(item.PESO_UNIT);
-                    } else if (customWeights[item.PRODUTO_PPR]) {
-                        unitWeight = customWeights[item.PRODUTO_PPR];
-                    } else {
-                        unitWeight = targetTotalQty > 0 ? (Number(item.PESO_LIQUIDO_NPR) || 0) / targetTotalQty : 0;
-                    }
+                    unitWeight = getResolvedUnitWeight(item, customWeights, targetTotalQty);
                     item._sectorWeight = unitWeight * sectorQty;
                     // Consistent Unit Price Calculation
                     let unitPrice = parseFloat(item.VALOR_PPR || 0);
@@ -4023,9 +3994,7 @@
                             const qOrig = metrics.originalTarget;
                             let uW = 0;
                             const pCode = String(item.PRODUTO_PPR || '').trim();
-                            if (item.PESO_UNIT !== undefined && item.PESO_UNIT !== null && item.PESO_UNIT !== '') uW = Number(item.PESO_UNIT);
-                            else if (customWeights[pCode]) uW = customWeights[pCode];
-                            else uW = qOrig > 0 ? (Number(item.PESO_LIQUIDO_NPR) || 0) / qOrig : 0;
+                            uW = getResolvedUnitWeight(item, customWeights, qOrig);
                             let uP = parseFloat(item.VALOR_PPR || 0);
                             if (item.PRECO_KG && parseFloat(item.PRECO_KG) > 0 && customWeights[pCode]) uP = parseFloat(item.PRECO_KG) * uW;
                             return uP * sReal;
@@ -4326,13 +4295,7 @@
                         if (d && d.getFullYear() === selectedYear) {
                             const qOriginal = parseFloat(item.QUANTIDADE_PPR) || 0;
                             const prodCode = String(item.PRODUTO_PPR || '').trim();
-                            let wUn = 0;
-                            if (customWeights[prodCode]) {
-                                wUn = customWeights[prodCode];
-                            } else {
-                                const pLiq = parseFloat(item.PESO_LIQUIDO_NPR) || parseFloat(item.PESO_PRODUTO) || 0;
-                                wUn = qOriginal > 0 ? pLiq / qOriginal : 0;
-                            }
+                            let wUn = getResolvedUnitWeight(item, customWeights, qOriginal);
                             const realQ = getCommercialBalance(item);
                             const weight = wUn * realQ;
                             let vUnit = parseFloat(item.VALOR_PPR || 0);
@@ -4361,13 +4324,7 @@
                             if (!dailyMap[dayNum]) dailyMap[dayNum] = { peso: 0, valor: 0 };
                             const qOriginal = parseFloat(item.QUANTIDADE_PPR) || 0;
                             const prodCode = String(item.PRODUTO_PPR || '').trim();
-                            let wUn = 0;
-                            if (customWeights[prodCode]) {
-                                wUn = customWeights[prodCode];
-                            } else {
-                                const pLiq = parseFloat(item.PESO_LIQUIDO_NPR) || parseFloat(item.PESO_PRODUTO) || 0;
-                                wUn = qOriginal > 0 ? pLiq / qOriginal : 0;
-                            }
+                            let wUn = getResolvedUnitWeight(item, customWeights, qOriginal);
                             const realQ = getCommercialBalance(item);
                             const itemWeight = wUn * realQ;
                             let vUn = parseFloat(item.VALOR_PPR || 0);
@@ -4831,9 +4788,7 @@ function flashConcentracaoBar(barIndex) {
         function _calcEmissaoWeight(r) {
             const qOriginal = parseFloat(r.QUANTIDADE_PPR) || 0;
             const prodCode = String(r.PRODUTO_PPR || '').trim();
-            const wUn = customWeights[prodCode]
-                ? customWeights[prodCode]
-                : (qOriginal > 0 ? (parseFloat(r.PESO_LIQUIDO_NPR) || 0) / qOriginal : 0);
+            const wUn = getResolvedUnitWeight(r, customWeights, qOriginal);
             let vUn = parseFloat(r.VALOR_PPR || 0);
             if (r.PRECO_KG && parseFloat(r.PRECO_KG) > 0 && customWeights[prodCode]) vUn = parseFloat(r.PRECO_KG) * wUn;
             return { peso: wUn * qOriginal, valor: vUn * qOriginal };
@@ -5086,14 +5041,9 @@ function flashConcentracaoBar(barIndex) {
                             const dayNum = d.getDate();
                             if (!dailyMap[dayNum]) dailyMap[dayNum] = { peso: 0, valor: 0 };
                             // Peso Logic (Correction if available)
-                            let wUn = 0;
                             const qOriginal = parseFloat(r.QUANTIDADE_PPR) || 0;
                             const prodCode = String(r.PRODUTO_PPR || '').trim();
-                            if (customWeights[prodCode]) {
-                                wUn = customWeights[prodCode];
-                            } else {
-                                wUn = qOriginal > 0 ? (parseFloat(r.PESO_LIQUIDO_NPR) || 0) / qOriginal : 0;
-                            }
+                            let wUn = getResolvedUnitWeight(r, customWeights, qOriginal);
                             const itemWeight = wUn * qOriginal;
                             // Valor Logic
                             let vUn = parseFloat(r.VALOR_PPR || 0);
@@ -6296,13 +6246,7 @@ function flashConcentracaoBar(barIndex) {
                 let unitWeight = 0;
                 const prodCode = String(item.PRODUTO_PPR || '').trim();
                 const qtdOriginal = metrics.originalTarget;
-                if (item.PESO_UNIT !== undefined && item.PESO_UNIT !== null && item.PESO_UNIT !== '') {
-                    unitWeight = Number(item.PESO_UNIT);
-                } else if (customWeights[prodCode]) {
-                    unitWeight = customWeights[prodCode];
-                } else {
-                    unitWeight = qtdOriginal > 0 ? (Number(item.PESO_LIQUIDO_NPR) || 0) / qtdOriginal : 0;
-                }
+                unitWeight = getResolvedUnitWeight(item, customWeights, qtdOriginal);
                 const totalWeightReal = item._sectorWeight !== undefined ? item._sectorWeight : (unitWeight * saldoReal);
                 // Precise price calc following table logic
                 let unitPrice = parseFloat(item.VALOR_PPR || 0);

@@ -76,14 +76,13 @@ async function takeSnapshot() {
             const metrics = getItemSectorMetrics(item);
             const targetTotalQty = metrics.targetTotalQty;
 
-            // Cálculo de Peso Unitário (Prioriza pesos customizados)
+            // Calculo de peso unitario: ERP primeiro, customizado apenas como fallback
             let unitWeight = 0;
             if (item.PESO_UNIT && Number(item.PESO_UNIT) > 0) {
                 unitWeight = Number(item.PESO_UNIT);
-            } else if (customWeights[prodCode]) {
-                unitWeight = customWeights[prodCode];
             } else {
-                unitWeight = targetTotalQty > 0 ? (Number(item.PESO_LIQUIDO_NPR) || 0) / targetTotalQty : 0;
+                const erpUnit = targetTotalQty > 0 ? (Number(item.PESO_LIQUIDO_NPR) || 0) / targetTotalQty : 0;
+                unitWeight = erpUnit > 0 ? erpUnit : (customWeights[prodCode] || 0);
             }
 
             const op = item.OP_PCS;

@@ -161,6 +161,34 @@ function getItemSectorMetrics(item) {
 /**
  * Calculates the corrected weight based on custom weights map and industry metrics.
  */
+function getPositiveNumber(value) {
+    const num = Number(value);
+    return Number.isFinite(num) && num > 0 ? num : 0;
+}
+
+function getErpUnitWeight(item, targetQty) {
+    const qty = getPositiveNumber(targetQty);
+    const erpTotalWeight =
+        getPositiveNumber(item.PESO_LIQUIDO_NPR) ||
+        getPositiveNumber(item.PESO_PRODUTO) ||
+        getPositiveNumber(item.PESO_LIQUIDO_PPR) ||
+        getPositiveNumber(item.PESO_BRUTO_PPR);
+
+    return qty > 0 && erpTotalWeight > 0 ? erpTotalWeight / qty : 0;
+}
+
+function getResolvedUnitWeight(item, weightsMap = {}, targetQty) {
+    const fixedUnit = getPositiveNumber(item.PESO_UNIT);
+    if (fixedUnit > 0) return fixedUnit;
+
+    const prodCode = String(item.PRODUTO_PPR || '').trim();
+    const erpUnit = getErpUnitWeight(item, targetQty);
+    if (erpUnit > 0) return erpUnit;
+
+    const customUnit = getPositiveNumber(weightsMap[prodCode]);
+    return customUnit > 0 ? customUnit : 0;
+}
+
 function getCorrectedWeight(item, weightsMap = {}) {
     const commercialBalance = getCommercialBalance(item);
     const metrics = getItemSectorMetrics(item);
@@ -171,26 +199,12 @@ function getCorrectedWeight(item, weightsMap = {}) {
         ? (Number(item.QUANTIDADE_PPR) || 0)
         : metrics.originalTarget;
 
-    let unitWeight = 0;
-    const prodCode = String(item.PRODUTO_PPR || '').trim();
-
-    // 1. Priority: Fixed PESO_UNIT if present in the data item
-    if (item.PESO_UNIT !== undefined && item.PESO_UNIT !== null && item.PESO_UNIT !== '' && Number(item.PESO_UNIT) > 0) {
-        unitWeight = Number(item.PESO_UNIT);
-    }
-    // 2. Secondary: Custom Weights Map (Manual overwrites)
-    else if (weightsMap[prodCode]) {
-        unitWeight = weightsMap[prodCode];
-    }
-    // 3. Fallback: Calculated from Net Weight / Original Target
-    else {
-        unitWeight = originalTarget > 0 ? (Number(item.PESO_LIQUIDO_NPR) || 0) / originalTarget : 0;
-    }
+    const unitWeight = getResolvedUnitWeight(item, weightsMap, originalTarget);
 
     return unitWeight * commercialBalance;
 }
 
 // Export for Node environments (like analysis scripts) if needed
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { getCommercialBalance, getItemSectorMetrics, getCorrectedWeight };
+    module.exports = { getCommercialBalance, getItemSectorMetrics, getCorrectedWeight, getResolvedUnitWeight, getErpUnitWeight };
 }

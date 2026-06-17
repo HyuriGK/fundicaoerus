@@ -877,6 +877,11 @@
             background: #18181b;
             color: #f4f4f5;
         }
+        .view-select {
+            width: 220px !important;
+            padding: 0 12px !important;
+            text-transform: uppercase;
+        }
         .months-group {
             display: flex;
             gap: 5px;
@@ -1093,10 +1098,11 @@
             </div>
             <!-- Right: Navigation Buttons -->
             <div style="display: flex; gap: 10px; align-items: center; margin-left: auto;">
-                <button id="btnEvolutionView" class="month-btn active" onclick="showEvolutionView()">EVOLUÇÃO DIÁRIA</button>
-                <button id="btnAnnualView" class="month-btn" onclick="showAnnualView()">EVOLUÇÃO MENSAL</button>
-                <button id="btnAbcView" class="month-btn" onclick="showABCCharts()">CURVA ABC</button>
-                <button id="btnMapaView" class="month-btn" onclick="showMapaCalor()">MAPA DE CALOR</button>
+                <select id="dashboardViewSelect" class="year-select view-select" onchange="handleDashboardViewSelect(this.value)">
+                    <option value="faturamento">GR&Aacute;FICOS DE FATURAMENTO</option>
+                    <option value="abc">CURVA ABC</option>
+                    <option value="mapa">MAPA DE CALOR</option>
+                </select>
                 <button class="month-btn" onclick="openRecordsModal()">REGISTROS</button>
             </div>
         </div>
@@ -1239,6 +1245,7 @@
         Chart.defaults.plugins.tooltip.displayColors = false;
         let showServices = true;
         let onlyServices = false;
+        let dashboardView = 'faturamento';
         let showABC = false;
         let abcType = 'peso';
         let abcAllLabels = [];
@@ -1274,11 +1281,11 @@
             selectedDashboardMonthIndex = idx;
             updateDashboardMonthButtonsUI();
             if (idx === -1) {
-                const onDaily = document.getElementById('btnEvolutionView').classList.contains('active');
-                if (onDaily) showAnnualView();
+                if (dashboardView === 'faturamento') showAnnualView();
                 setDailyChartBlur(true);
             } else {
                 setDailyChartBlur(false);
+                if (dashboardView === 'faturamento') showEvolutionView();
             }
             syncPeriodInputs();
         }
@@ -1292,8 +1299,7 @@
             syncPeriodInputs();
             // Ano inteiro selecionado: redireciona para mensal e aplica blur no diário
             if (selectedDashboardMonthIndex === -1) {
-                const onDaily = document.getElementById('btnEvolutionView').classList.contains('active');
-                if (onDaily) showAnnualView();
+                if (dashboardView === 'faturamento') showAnnualView();
                 setDailyChartBlur(true);
             }
         }
@@ -2415,17 +2421,28 @@ async function loadRecordsData() {
             renderTable();
         }
         // --- ABC SEARCH & CHART LOGIC ---
+        function syncDashboardViewSelect(value) {
+            const sel = document.getElementById('dashboardViewSelect');
+            if (sel) sel.value = value;
+        }
+        function showFaturamentoCharts() {
+            if (selectedDashboardMonthIndex === -1) showAnnualView();
+            else showEvolutionView();
+        }
+        function handleDashboardViewSelect(value) {
+            if (value === 'abc') showABCCharts();
+            else if (value === 'mapa') showMapaCalor();
+            else showFaturamentoCharts();
+        }
         function showEvolutionView() {
+            dashboardView = 'faturamento';
+            syncDashboardViewSelect('faturamento');
             showABC = false;
             showMapa = false;
             document.getElementById('standardChartsRow').style.display = 'grid';
             document.getElementById('annualChartsRow').style.display = 'none';
             document.getElementById('abcChartsRow').style.display = 'none';
             document.getElementById('mapaChartsRow').style.display = 'none';
-            document.getElementById('btnEvolutionView').classList.add('active');
-            document.getElementById('btnAnnualView').classList.remove('active');
-            document.getElementById('btnAbcView').classList.remove('active');
-            document.getElementById('btnMapaView').classList.remove('active');
             const sideBtn = document.getElementById('btnToggleCharts');
             if (sideBtn) {
                 sideBtn.classList.remove('active-side');
@@ -2439,30 +2456,26 @@ async function loadRecordsData() {
             updateDashboardfromRecords(_d1);
         }
         function showAnnualView() {
+            dashboardView = 'faturamento';
+            syncDashboardViewSelect('faturamento');
             showABC = false;
             showMapa = false;
             document.getElementById('standardChartsRow').style.display = 'none';
             document.getElementById('annualChartsRow').style.display = 'grid';
             document.getElementById('abcChartsRow').style.display = 'none';
             document.getElementById('mapaChartsRow').style.display = 'none';
-            document.getElementById('btnEvolutionView').classList.remove('active');
-            document.getElementById('btnAnnualView').classList.add('active');
-            document.getElementById('btnAbcView').classList.remove('active');
-            document.getElementById('btnMapaView').classList.remove('active');
             const _d2 = hasActiveModalFilters() ? getModalFilteredData() : allData;
             updateDashboardfromRecords(_d2);
         }
         function showABCCharts() {
+            dashboardView = 'abc';
+            syncDashboardViewSelect('abc');
             showABC = true;
             showMapa = false;
             document.getElementById('standardChartsRow').style.display = 'none';
             document.getElementById('annualChartsRow').style.display = 'none';
             document.getElementById('abcChartsRow').style.display = 'grid';
             document.getElementById('mapaChartsRow').style.display = 'none';
-            document.getElementById('btnEvolutionView').classList.remove('active');
-            document.getElementById('btnAnnualView').classList.remove('active');
-            document.getElementById('btnAbcView').classList.add('active');
-            document.getElementById('btnMapaView').classList.remove('active');
             // Update side menu button
             const sideBtn = document.getElementById('btnToggleCharts');
             if (sideBtn) {
@@ -2479,16 +2492,14 @@ async function loadRecordsData() {
         }
         // --- MAPA DE CALOR ---
         function showMapaCalor() {
+            dashboardView = 'mapa';
+            syncDashboardViewSelect('mapa');
             showABC = false;
             showMapa = true;
             document.getElementById('standardChartsRow').style.display = 'none';
             document.getElementById('annualChartsRow').style.display = 'none';
             document.getElementById('abcChartsRow').style.display = 'none';
             document.getElementById('mapaChartsRow').style.display = 'grid';
-            document.getElementById('btnEvolutionView').classList.remove('active');
-            document.getElementById('btnAnnualView').classList.remove('active');
-            document.getElementById('btnAbcView').classList.remove('active');
-            document.getElementById('btnMapaView').classList.add('active');
             const sideBtn = document.getElementById('btnToggleCharts');
             if (sideBtn) {
                 sideBtn.classList.remove('active-side');

@@ -3,7 +3,7 @@ const router = express.Router();
 const pool = require('../lib/db');
 
 // Rota para buscar peso unitário, descrição e saldo em aberto por código (usado por acabamento_externo)
-// Prioridade peso: pesos_customizados (manual) > PESO_LIQUIDO_NPR / QUANTIDADE_PPR (Firebird calculado)
+// Prioridade peso: PESO_LIQUIDO_NPR / QUANTIDADE_PPR (ERP) > pesos_customizados (fallback manual)
 router.get('/peso-lookup', async (req, res) => {
     const { codigo } = req.query;
     if (!codigo) return res.json({ peso: null, descricao: null, saldo: 0, source: null });
@@ -56,17 +56,17 @@ router.get('/peso-lookup', async (req, res) => {
         const fbRow = fbRes.rows[0] || null;
         const descricao = fbRow ? (fbRow.descricao || null) : null;
 
-        // Peso: customizado tem prioridade
-        if (cwRes.rows.length > 0 && Number(cwRes.rows[0].peso) > 0) {
-            return res.json({ peso: Number(cwRes.rows[0].peso), descricao, saldo, source: 'custom' });
-        }
-
-        // Peso: calculado do Firebird
+        // Peso: calculado do Firebird/ERP
         if (fbRow) {
             const unitWeight = Number(fbRow.peso_liquido) / Number(fbRow.qty);
             if (unitWeight > 0) {
                 return res.json({ peso: Math.round(unitWeight * 1000) / 1000, descricao, saldo, source: 'firebird' });
             }
+        }
+
+        // Peso: customizado fica como fallback para itens sem peso liquido no ERP
+        if (cwRes.rows.length > 0 && Number(cwRes.rows[0].peso) > 0) {
+            return res.json({ peso: Number(cwRes.rows[0].peso), descricao, saldo, source: 'custom' });
         }
 
         return res.json({ peso: null, descricao, saldo, source: null });
