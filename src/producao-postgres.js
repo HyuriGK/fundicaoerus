@@ -5,6 +5,14 @@ const pool = require('../lib/db');
 const { logActivity } = require('./lib/logger');
 
 let paradasTableReady = false;
+let producaoClienteColumnReady = false;
+
+async function ensureProducaoClienteColumn() {
+    if (producaoClienteColumnReady) return;
+    await pool.query(`ALTER TABLE producao_apontada_sincronizada ADD COLUMN IF NOT EXISTS cliente VARCHAR(255)`);
+    producaoClienteColumnReady = true;
+}
+
 async function ensureParadasTable() {
     if (paradasTableReady) return;
     await pool.query(`
@@ -166,12 +174,14 @@ router.get('/', async (req, res) => {
         }
 
         const { startDate, endDate, sector, search, limit = 100000 } = req.query;
+        await ensureProducaoClienteColumn();
 
         let query = `
             SELECT
                 t.id,
                 TO_CHAR(t.data_producao, 'YYYY-MM-DD') as data,
                 t.setor,
+                COALESCE(NULLIF(t.cliente, ''), cliente_emissao.cliente, '') as cliente,
                 t.produto,
                 t.liga,
                 t.grupo_material,
@@ -186,6 +196,15 @@ router.get('/', async (req, res) => {
             FROM producao_apontada_sincronizada t
             LEFT JOIN pesos_customizados pc ON t.codigo_peca = pc.codigo
             LEFT JOIN produto_pesos_producao p ON t.codigo_peca = p.codigo_peca
+            LEFT JOIN (
+                SELECT DISTINCT ON (TRIM(e.data->>'OP_PCS'))
+                    TRIM(e.data->>'OP_PCS') as op,
+                    e.data->>'NOME_CLIENTE' as cliente
+                FROM firebird_sync_emissoes e
+                WHERE COALESCE(e.data->>'OP_PCS', '') <> ''
+                  AND COALESCE(e.data->>'NOME_CLIENTE', '') <> ''
+                ORDER BY TRIM(e.data->>'OP_PCS'), e.updated_at DESC
+            ) cliente_emissao ON cliente_emissao.op = TRIM(t.op)
             WHERE 1=1
         `;
 
@@ -211,7 +230,7 @@ router.get('/', async (req, res) => {
         }
 
         if (search) {
-            query += ` AND (LOWER(t.produto) LIKE $${paramIndex} OR LOWER(t.liga) LIKE $${paramIndex} OR LOWER(t.codigo_peca) LIKE $${paramIndex})`;
+            query += ` AND (LOWER(t.produto) LIKE $${paramIndex} OR LOWER(t.liga) LIKE $${paramIndex} OR LOWER(t.codigo_peca) LIKE $${paramIndex} OR LOWER(COALESCE(NULLIF(t.cliente, ''), cliente_emissao.cliente, '')) LIKE $${paramIndex})`;
             params.push(`%${search.toLowerCase()}%`);
             paramIndex++;
         }
@@ -227,6 +246,7 @@ router.get('/', async (req, res) => {
                 id: row.id,
                 data: row.data, // YYYY-MM-DD
                 setor: row.setor,
+                cliente: row.cliente || '',
                 produto: row.produto,
                 liga: row.liga || '',
                 grupoMaterial: row.grupo_material || '',

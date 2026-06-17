@@ -44,6 +44,7 @@ function chunkArray(myArray, chunk_size) {
                 chave_origem VARCHAR(255) UNIQUE NOT NULL,
                 data_producao TIMESTAMP NOT NULL,
                 setor VARCHAR(100),
+                cliente VARCHAR(255),
                 produto VARCHAR(255),
                 liga VARCHAR(255),
                 op VARCHAR(50),
@@ -86,6 +87,11 @@ function chunkArray(myArray, chunk_size) {
                     ALTER TABLE producao_apontada_sincronizada ADD COLUMN grupo_material VARCHAR(100);
                 EXCEPTION
                     WHEN duplicate_column THEN RAISE NOTICE 'column grupo_material already exists in producao_apontada_sincronizada.';
+                END;
+                BEGIN
+                    ALTER TABLE producao_apontada_sincronizada ADD COLUMN cliente VARCHAR(255);
+                EXCEPTION
+                    WHEN duplicate_column THEN RAISE NOTICE 'column cliente already exists in producao_apontada_sincronizada.';
                 END;
             END $$;
         `);
@@ -140,6 +146,7 @@ function chunkArray(myArray, chunk_size) {
 
                 // 3. Fetch Lookup Data
                 const lookupSET = {};
+                const lookupCLIENTE = {};
 
                 // Helper to fetch and map
                 // Helper to fetch and map (Sequential to avoid Firebird congestion)
@@ -216,7 +223,7 @@ function chunkArray(myArray, chunk_size) {
                     console.log(`ℹ️ Unique IDs - OP: ${opIds.length}`);
 
                     if (opIds.length > 0) {
-                        await fetchMap(opIds, 'PRODUCAO', 'CODIGO_PCP', 'PRODUTO_PCP', lookupPRODUCAO);
+                        await fetchMap(opIds, 'PRODUCAO', 'CODIGO_PCP', 'PRODUTO_PCP, EMPRESA_PCP', lookupPRODUCAO);
                     }
 
                     // 3.3 Fetch PRODUTO (Product Details) using Product IDs from PRODUCAO
@@ -246,6 +253,45 @@ function chunkArray(myArray, chunk_size) {
                     if (matIds.length > 0) {
                         await fetchMap(matIds, 'MATERIAL', 'ID_MAT', 'MATERIAL_MAT, GRUPO_MAT', lookupMATERIAL);
                         console.log(`ℹ️ Lookup MATERIAL size: ${Object.keys(lookupMATERIAL).length}`);
+                    }
+
+                    if (opIds.length > 0) {
+                        const chunks = chunkArray(opIds, 200);
+                        console.log(`       fetching CLIENTE por OP in ${chunks.length} chunks...`);
+
+                        for (const chunk of chunks) {
+                            const idList = chunk.join(',');
+                            const q = `
+                                SELECT
+                                    PP.PCP_CODIGO_PCPR,
+                                    PP.PCP_EMPRESA_PCPR,
+                                    C.RAZAO_SOCIAL_CLI
+                                FROM PRODUCAO_PEDIDO PP
+                                JOIN PEDIDO D
+                                  ON D.CODIGO_PED = PP.PPR_CODIGO_PCPR
+                                 AND D.ANO_PED = PP.PPR_ANO_PCPR
+                                 AND D.EMPRESA_PED = PP.PPR_EMPRESA_PCPR
+                                JOIN CLIENTE C
+                                  ON C.CODIGO_CLI = D.CLIENTE_PED
+                                 AND C.EMPRESA_CLI = D.CLI_EMPRESA_PED
+                                WHERE PP.PCP_CODIGO_PCPR IN (${idList})
+                            `;
+
+                            await new Promise((resolve, reject) => {
+                                db.query(q, (err, rows) => {
+                                    if (err) return reject(err);
+                                    rows.forEach(r => {
+                                        const op = r.PCP_CODIGO_PCPR ? String(r.PCP_CODIGO_PCPR).trim() : '';
+                                        const empresa = r.PCP_EMPRESA_PCPR ? String(r.PCP_EMPRESA_PCPR).trim() : '';
+                                        const cliente = cleanString(r.RAZAO_SOCIAL_CLI);
+                                        if (!op || !cliente) return;
+                                        if (empresa) lookupCLIENTE[`${op}-${empresa}`] = cliente;
+                                        if (!lookupCLIENTE[op]) lookupCLIENTE[op] = cliente;
+                                    });
+                                    resolve();
+                                });
+                            });
+                        }
                     }
 
                     // 3.6 Fetch ALL Materials for fallback mapping (Each Liga must have its Group)
@@ -343,6 +389,8 @@ function chunkArray(myArray, chunk_size) {
 
                             // Mapped Fields:
                             const op = pcs.CODIGO_PCS ? String(pcs.CODIGO_PCS) : null;
+                            const empresaPcp = pcs._producao && pcs._producao.EMPRESA_PCP ? String(pcs._producao.EMPRESA_PCP).trim() : '';
+                            const cliente = cleanString((op && empresaPcp ? lookupCLIENTE[`${op}-${empresaPcp}`] : null) || (op ? lookupCLIENTE[op] : null));
                             const quantidade = parseFloat(pcs.QUANTIDADE_PCS || 0);
                             const refugo = parseFloat(pcs.DQUANTIDADE_REFUGO_PCS || 0);
                             const codigoPeca = produtoCode;
@@ -354,11 +402,12 @@ function chunkArray(myArray, chunk_size) {
 
                             await pool.query(`
                                 INSERT INTO producao_apontada_sincronizada
-                                (chave_origem, data_producao, setor, produto, liga, grupo_material, peso_un, quantidade, refugo, peso_total, op, codigo_peca, atualizado_em)
-                                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, CURRENT_TIMESTAMP)
+                                (chave_origem, data_producao, setor, cliente, produto, liga, grupo_material, peso_un, quantidade, refugo, peso_total, op, codigo_peca, atualizado_em)
+                                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, CURRENT_TIMESTAMP)
                                 ON CONFLICT (chave_origem) DO UPDATE SET
                                     data_producao = EXCLUDED.data_producao,
                                     setor = EXCLUDED.setor,
+                                    cliente = EXCLUDED.cliente,
                                     produto = EXCLUDED.produto,
                                     liga = EXCLUDED.liga,
                                     grupo_material = EXCLUDED.grupo_material,
@@ -369,7 +418,7 @@ function chunkArray(myArray, chunk_size) {
                                     op = EXCLUDED.op,
                                     codigo_peca = EXCLUDED.codigo_peca,
                                     atualizado_em = CURRENT_TIMESTAMP
-                            `, [chaveOrigem, dataProd, setor, produto, liga, grupoMaterial, pesoUn, quantidade, refugo, pesoTotal, op, codigoPeca]);
+                            `, [chaveOrigem, dataProd, setor, cliente, produto, liga, grupoMaterial, pesoUn, quantidade, refugo, pesoTotal, op, codigoPeca]);
 
                             inserted++;
                         } catch (rowErr) {
