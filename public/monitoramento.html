@@ -159,16 +159,17 @@
         }
 
         body.presentation-mode .kanban-container {
-            padding: 0 6px;
-            gap: 8px;
+            padding: 0 4px;
+            gap: 6px;
             height: 100vh;
-            overflow: hidden;
+            overflow-x: auto;
+            overflow-y: hidden;
             align-items: stretch;
         }
 
         body.presentation-mode .kanban-column {
-            flex: 1 1 0;
-            min-width: 0;
+            flex: 0 0 145px;
+            min-width: 145px;
             background: rgba(10, 10, 12, 0.4);
             border: none;
             border-right: 3px solid rgba(255, 255, 255, 0.1);
@@ -1175,7 +1176,7 @@
         </div>
     </header>
 
-    <div class="kanban-container">
+    <div class="kanban-container" id="kanban-container">
         <!-- Coluna: MOLDAGEM -->
         <div class="kanban-column" id="col-moldagem">
             <div class="column-header">
@@ -1658,27 +1659,97 @@
             'EXPEDIÇÃO': [100]
         };
 
-        const orderedStages = ['MOLDAGEM', 'FUSÃO', 'ACABAMENTO', 'TRATAMENTO TÉRMICO', 'USINAGEM', 'INSP. QUALIDADE', 'EXPEDIÇÃO'];
+        const orderedStages = [
+            'MOLDAGEM PESADA',
+            'MOLDAGEM LEVE',
+            'MOLDAGEM MANUAL',
+            'SEM TIPO',
+            'FUSÃO',
+            'ACABAMENTO',
+            'TRATAMENTO TÉRMICO',
+            'AGUARDANDO USINAGEM EXTERNA',
+            'AGUARDANDO QUALIDADE',
+            'EM USINAGEM EXTERNA',
+            'AGUARDANDO EXPEDIÇÃO',
+            'AGUARDANDO FATURAMENTO'
+        ];
 
         const configKeyMap = {
-            'MOLDAGEM': 'moldagem',
+            'MOLDAGEM PESADA': 'moldagem-pesada',
+            'MOLDAGEM LEVE': 'moldagem-leve',
+            'MOLDAGEM MANUAL': 'moldagem-manual',
+            'SEM TIPO': 'sem-tipo',
             'FUSÃO': 'fusao',
             'ACABAMENTO': 'acabamento',
             'TRATAMENTO TÉRMICO': 'tratamento',
-            'USINAGEM': 'usinagem',
-            'INSP. QUALIDADE': 'qualidade',
-            'EXPEDIÇÃO': 'expedicao'
+            'AGUARDANDO USINAGEM EXTERNA': 'aguardando-usinagem',
+            'AGUARDANDO QUALIDADE': 'aguardando-qualidade',
+            'EM USINAGEM EXTERNA': 'usinagem',
+            'AGUARDANDO EXPEDIÇÃO': 'qualidade',
+            'AGUARDANDO FATURAMENTO': 'expedicao'
         };
 
         const columnIdMap = {
-            'MOLDAGEM': 'col-moldagem',
+            'MOLDAGEM PESADA': 'col-moldagem-pesada',
+            'MOLDAGEM LEVE': 'col-moldagem-leve',
+            'MOLDAGEM MANUAL': 'col-moldagem-manual',
+            'SEM TIPO': 'col-sem-tipo',
             'FUSÃO': 'col-fusao',
             'ACABAMENTO': 'col-acabamento',
             'TRATAMENTO TÉRMICO': 'col-tratamento',
-            'USINAGEM': 'col-usinagem',
-            'INSP. QUALIDADE': 'col-qualidade',
-            'EXPEDIÇÃO': 'col-expedicao'
+            'AGUARDANDO USINAGEM EXTERNA': 'col-aguardando-usinagem',
+            'AGUARDANDO QUALIDADE': 'col-aguardando-qualidade',
+            'EM USINAGEM EXTERNA': 'col-usinagem',
+            'AGUARDANDO EXPEDIÇÃO': 'col-qualidade',
+            'AGUARDANDO FATURAMENTO': 'col-expedicao'
         };
+
+        const stageLeadTimeKeyMap = {
+            'MOLDAGEM PESADA': 'moldagem',
+            'MOLDAGEM LEVE': 'moldagem',
+            'MOLDAGEM MANUAL': 'moldagem',
+            'SEM TIPO': 'moldagem',
+            'FUSÃO': 'fusao',
+            'ACABAMENTO': 'acabamento',
+            'TRATAMENTO TÉRMICO': 'tratamento',
+            'AGUARDANDO USINAGEM EXTERNA': 'usinagem',
+            'AGUARDANDO QUALIDADE': 'qualidade',
+            'EM USINAGEM EXTERNA': 'usinagem',
+            'AGUARDANDO EXPEDIÇÃO': 'qualidade',
+            'AGUARDANDO FATURAMENTO': 'expedicao'
+        };
+
+        function getMoldagemStage(op) {
+            const tipo = String(op._tipo_moldagem_procedimento || '').trim().toUpperCase();
+            if (tipo === 'MOLDAGEM PESADA') return 'MOLDAGEM PESADA';
+            if (tipo === 'MOLDAGEM LEVE') return 'MOLDAGEM LEVE';
+            if (tipo === 'MOLDAGEM MANUAL') return 'MOLDAGEM MANUAL';
+            return 'SEM TIPO';
+        }
+
+        function renderKanbanColumns() {
+            const container = document.getElementById('kanban-container');
+            if (!container) return;
+            container.innerHTML = orderedStages.map(stage => {
+                const key = configKeyMap[stage];
+                return `
+                    <div class="kanban-column" id="${columnIdMap[stage]}">
+                        <div class="column-header">
+                            <h2>${stage}</h2>
+                            <span class="column-count" id="count-${key}">0</span>
+                        </div>
+                        <div class="column-stats-bar" style="flex-direction: column; align-items: flex-start; gap: 4px;">
+                            <span class="column-weight" id="weight-${key}">0.0kg</span>
+                            <span class="column-total-value" id="value-${key}" style="display: none;">R$ 0,00</span>
+                        </div>
+                        <div class="column-search">
+                            <input type="text" id="search-${key}" placeholder="Buscar OP, Peça ou Cliente..." oninput="renderBoard()">
+                        </div>
+                        <div class="cards-list" id="list-${key}"></div>
+                    </div>
+                `;
+            }).join('');
+        }
 
         // Helper to treat strings as local dates to avoid UTC shifts
         function toLocalDate(val) {
@@ -1968,7 +2039,8 @@
             const hasOp = !!String(op.OP_PCS || '').trim() && String(op.OP_PCS || '').trim() !== '-';
             if (!hasOp) {
                 const qty = getCommercialBalance(op) || metrics.totalBalance || metrics.targetTotalQty || 0;
-                const configKey = configKeyMap[orderedStages[0]];
+                const stage = getMoldagemStage(op);
+                const configKey = stageLeadTimeKeyMap[stage];
                 const metaDate = toLocalDate(arrivalDate);
                 let daysToAdd = leadTimes[configKey] || 0;
                 while (daysToAdd > 0) {
@@ -1978,7 +2050,7 @@
                 }
                 const diff = getBusinessDaysDiff(metaDate, now);
                 return qty > 0 ? [{
-                    stage: orderedStages[0],
+                    stage,
                     qty,
                     statusText: diff > 0 ? `ATRASADO HÁ ${diff} D` : (diff < 0 ? `ADIANTADO HÁ ${Math.abs(diff)} D` : 'NO PRAZO'),
                     isDelayed: diff > 0,
@@ -1993,19 +2065,20 @@
             const addStage = (stage, qty) => {
                 if (qty > 0) stageQty[stage] = (stageQty[stage] || 0) + qty;
             };
-            addStage(orderedStages[0], metrics.qAguardando || 0);
-            addStage(orderedStages[1], metrics.qMoldada || 0);
-            addStage(orderedStages[2], metrics.qFusao || 0);
-            addStage(orderedStages[3], metrics.qAcabamento || 0);
-            addStage(hasUsinagem ? orderedStages[4] : orderedStages[5], metrics.qTT || 0);
-            addStage(orderedStages[5], metrics.qUsinagem || 0);
-            addStage(orderedStages[6], (metrics.qQualidade || 0) + (metrics.qExpedicao || 0));
+            addStage(getMoldagemStage(op), metrics.qAguardando || 0);
+            addStage('FUSÃO', metrics.qMoldada || 0);
+            addStage('ACABAMENTO', metrics.qFusao || 0);
+            addStage('TRATAMENTO TÉRMICO', metrics.qAcabamento || 0);
+            addStage(hasUsinagem ? 'AGUARDANDO USINAGEM EXTERNA' : 'AGUARDANDO QUALIDADE', metrics.qTT || 0);
+            addStage('EM USINAGEM EXTERNA', metrics.qUsinagem || 0);
+            addStage('AGUARDANDO EXPEDIÇÃO', metrics.qQualidade || 0);
+            addStage('AGUARDANDO FATURAMENTO', metrics.qExpedicao || 0);
             const stageRows = orderedStages.map(stage => [stage, stageQty[stage] || 0]);
 
             return stageRows
                 .filter(([, qty]) => qty > 0)
                 .map(([stage, qty]) => {
-                    const configKey = configKeyMap[stage];
+                    const configKey = stageLeadTimeKeyMap[stage] || configKeyMap[stage];
                     const lt = leadTimes[configKey] || 0;
                     const metaDate = toLocalDate(arrivalDate);
                     let daysToAdd = lt;
@@ -2159,7 +2232,7 @@
 
                     const isPartial = qty < totalQtyAll;
                     const qtyBaseDisplay = (isPartial ? `${Math.round(qty)} DE ${totalQtyAll}` : `${totalQtyAll}`) + ' PÇS';
-                    const expeditedQty = (stage !== 'EXPEDIÇÃO' && qtyExpedited > 0) ? Math.round(qtyExpedited) : 0;
+                    const expeditedQty = (stage !== 'AGUARDANDO FATURAMENTO' && qtyExpedited > 0) ? Math.round(qtyExpedited) : 0;
 
                     // Days Until Deadline Logic
                     const deadlineLabel = (daysUntilDeadline >= 0 ? '+' : '') + daysUntilDeadline;
@@ -2606,6 +2679,7 @@
                 if (scrollInput) scrollInput.value = monitoramentoSettings.scrollIntervalSec || 10;
             }
 
+            renderKanbanColumns();
             fetchData();
             // Refresh every 1 minute (60 seconds)
             setInterval(fetchData, 60 * 1000);
