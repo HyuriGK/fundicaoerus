@@ -2564,45 +2564,44 @@
 
             // Reset all lists scroll position
             document.querySelectorAll('.cards-list').forEach(list => {
-                list.scrollTo({ top: 0, behavior: 'smooth' });
+                list.scrollTo({ top: 0, behavior: 'auto' });
             });
         }
 
         function initAutoScroll() {
             const lists = document.querySelectorAll('.cards-list');
             lists.forEach(list => {
-                const cardCount = list.querySelectorAll('.op-card').length;
+                const cards = Array.from(list.querySelectorAll('.op-card'));
+                const cardCount = cards.length;
 
                 // Only scroll if there are MORE than 5 cards (standard TV view)
                 if (cardCount <= 5) return;
 
-                const firstCard = list.querySelector('.op-card');
+                const firstCard = cards[0];
                 if (!firstCard) return;
 
-                const cardHeight = firstCard.offsetHeight;
-                const gap = 15; // Current CSS gap
+                const listStyles = window.getComputedStyle(list);
+                const gap = parseFloat(listStyles.rowGap || listStyles.gap) || 0;
+                const cardHeight = firstCard.getBoundingClientRect().height;
                 const stepSize = cardHeight + gap;
                 const currentScroll = list.scrollTop;
                 const clientHeight = list.clientHeight;
-                const scrollHeight = list.scrollHeight;
-                const maxScroll = scrollHeight - clientHeight;
+                const visibleCards = Math.max(1, Math.floor((clientHeight + gap) / stepSize));
+                const maxStartIndex = Math.max(0, cardCount - visibleCards);
+                const currentIndex = Math.round(currentScroll / stepSize);
 
-                // If already at the bottom (or extremely close), reset to top
-                if (currentScroll >= maxScroll - 10) {
-                    list.scrollTo({ top: 0, behavior: 'smooth' });
+                if (currentIndex >= maxStartIndex) {
+                    list.scrollTo({ top: 0, behavior: 'auto' });
                     return;
                 }
 
-                // Attempt to jump by 3 cards
-                let nextScroll = currentScroll + (stepSize * 3);
+                const nextIndex = Math.min(currentIndex + 3, maxStartIndex);
+                const nextCard = cards[nextIndex];
+                const nextScroll = nextCard
+                    ? (nextCard.getBoundingClientRect().top - list.getBoundingClientRect().top + list.scrollTop)
+                    : (nextIndex * stepSize);
 
-                // If jumping 3 cards goes past the end, go exactly to maxScroll
-                // This shows the final 1 or 2 cards perfectly aligned at the bottom
-                if (nextScroll > maxScroll) {
-                    nextScroll = maxScroll;
-                }
-
-                list.scrollTo({ top: nextScroll, behavior: 'smooth' });
+                list.scrollTo({ top: nextScroll, behavior: 'auto' });
             });
         }
     </script>
