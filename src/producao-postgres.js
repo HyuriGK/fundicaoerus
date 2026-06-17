@@ -181,7 +181,7 @@ router.get('/', async (req, res) => {
                 t.id,
                 TO_CHAR(t.data_producao, 'YYYY-MM-DD') as data,
                 t.setor,
-                COALESCE(NULLIF(t.cliente, ''), cliente_emissao.cliente, '') as cliente,
+                COALESCE(NULLIF(t.cliente, ''), cliente_op.cliente, cliente_codigo.cliente, '') as cliente,
                 t.produto,
                 t.liga,
                 t.grupo_material,
@@ -197,14 +197,48 @@ router.get('/', async (req, res) => {
             LEFT JOIN pesos_customizados pc ON t.codigo_peca = pc.codigo
             LEFT JOIN produto_pesos_producao p ON t.codigo_peca = p.codigo_peca
             LEFT JOIN (
-                SELECT DISTINCT ON (TRIM(e.data->>'OP_PCS'))
-                    TRIM(e.data->>'OP_PCS') as op,
-                    e.data->>'NOME_CLIENTE' as cliente
-                FROM firebird_sync_emissoes e
-                WHERE COALESCE(e.data->>'OP_PCS', '') <> ''
-                  AND COALESCE(e.data->>'NOME_CLIENTE', '') <> ''
-                ORDER BY TRIM(e.data->>'OP_PCS'), e.updated_at DESC
-            ) cliente_emissao ON cliente_emissao.op = TRIM(t.op)
+                SELECT DISTINCT ON (op) op, cliente
+                FROM (
+                    SELECT REPLACE(p.sync_key, 'OP-', '') as op, p.data->>'NOME_CLIENTE' as cliente, p.updated_at
+                    FROM firebird_sync_pedidos p
+                    WHERE p.sync_key LIKE 'OP-%'
+                      AND COALESCE(p.data->>'NOME_CLIENTE', '') <> ''
+
+                    UNION ALL
+
+                    SELECT TRIM(e.data->>'OP_PCS') as op, e.data->>'NOME_CLIENTE' as cliente, e.updated_at
+                    FROM firebird_sync_emissoes e
+                    WHERE COALESCE(e.data->>'OP_PCS', '') <> ''
+                      AND COALESCE(e.data->>'NOME_CLIENTE', '') <> ''
+                ) origem_op
+                WHERE op <> '' AND cliente <> ''
+                ORDER BY op, updated_at DESC
+            ) cliente_op ON cliente_op.op = TRIM(t.op)
+            LEFT JOIN (
+                SELECT DISTINCT ON (codigo_peca) codigo_peca, cliente
+                FROM (
+                    SELECT
+                        codigo_peca,
+                        cliente,
+                        COUNT(*) OVER (PARTITION BY codigo_peca, cliente) as ocorrencias,
+                        MAX(updated_at) OVER (PARTITION BY codigo_peca, cliente) as ultima_atualizacao
+                    FROM (
+                        SELECT TRIM(p.data->>'PRODUTO_PPR') as codigo_peca, p.data->>'NOME_CLIENTE' as cliente, p.updated_at
+                        FROM firebird_sync_pedidos p
+                        WHERE COALESCE(p.data->>'PRODUTO_PPR', '') <> ''
+                          AND COALESCE(p.data->>'NOME_CLIENTE', '') <> ''
+
+                        UNION ALL
+
+                        SELECT TRIM(e.data->>'PRODUTO_PPR') as codigo_peca, e.data->>'NOME_CLIENTE' as cliente, e.updated_at
+                        FROM firebird_sync_emissoes e
+                        WHERE COALESCE(e.data->>'PRODUTO_PPR', '') <> ''
+                          AND COALESCE(e.data->>'NOME_CLIENTE', '') <> ''
+                    ) origem_codigo
+                    WHERE codigo_peca <> '' AND cliente <> ''
+                ) ranking_codigo
+                ORDER BY codigo_peca, ocorrencias DESC, ultima_atualizacao DESC
+            ) cliente_codigo ON cliente_codigo.codigo_peca = TRIM(t.codigo_peca)
             WHERE 1=1
         `;
 
@@ -230,7 +264,7 @@ router.get('/', async (req, res) => {
         }
 
         if (search) {
-            query += ` AND (LOWER(t.produto) LIKE $${paramIndex} OR LOWER(t.liga) LIKE $${paramIndex} OR LOWER(t.codigo_peca) LIKE $${paramIndex} OR LOWER(COALESCE(NULLIF(t.cliente, ''), cliente_emissao.cliente, '')) LIKE $${paramIndex})`;
+            query += ` AND (LOWER(t.produto) LIKE $${paramIndex} OR LOWER(t.liga) LIKE $${paramIndex} OR LOWER(t.codigo_peca) LIKE $${paramIndex} OR LOWER(COALESCE(NULLIF(t.cliente, ''), cliente_op.cliente, cliente_codigo.cliente, '')) LIKE $${paramIndex})`;
             params.push(`%${search.toLowerCase()}%`);
             paramIndex++;
         }
