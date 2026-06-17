@@ -1411,7 +1411,7 @@
                             <div class="config-section-title">
                                 <i class="fa-solid fa-clock"></i> Tempo de Processamento por Setor (Dias Úteis)
                             </div>
-                            <div class="config-grid">
+                            <div class="config-grid" id="lead-times-grid" style="grid-template-columns: repeat(3, 1fr);">
                                 <div class="config-item">
                                     <label>Moldagem</label>
                                     <div class="config-input-with-unit">
@@ -1639,9 +1639,23 @@
             fusao: 1,
             acabamento: 3,
             tratamento: 2,
-            usinagem: 5,
-            qualidade: 1,
-            expedicao: 1
+            aguardandoUsinagem: 5,
+            aguardandoQualidade: 1,
+            emUsinagem: 5,
+            aguardandoExpedicao: 1,
+            aguardandoFaturamento: 1
+        };
+
+        const leadTimeLabels = {
+            moldagem: 'Moldagem Geral',
+            fusao: 'Fusão',
+            acabamento: 'Acabamento',
+            tratamento: 'Tratamento Térmico',
+            aguardandoUsinagem: 'Aguardando Usinagem Externa',
+            aguardandoQualidade: 'Aguardando Qualidade',
+            emUsinagem: 'Em Usinagem Externa',
+            aguardandoExpedicao: 'Aguardando Expedição',
+            aguardandoFaturamento: 'Aguardando Faturamento'
         };
 
         let monitoramentoSettings = {
@@ -1723,7 +1737,11 @@
             'AGUARDANDO QUALIDADE': 'aguardando-qualidade',
             'EM USINAGEM EXTERNA': 'usinagem',
             'AGUARDANDO EXPEDIÇÃO': 'qualidade',
-            'AGUARDANDO FATURAMENTO': 'expedicao'
+            'AGUARDANDO FATURAMENTO': 'expedicao',
+            'MOLDAGEM': 'moldagem',
+            'USINAGEM': 'emUsinagem',
+            'INSP. QUALIDADE': 'aguardandoExpedicao',
+            'EXPEDIÇÃO': 'aguardandoFaturamento'
         };
 
         const columnIdMap = {
@@ -1743,11 +1761,11 @@
             'FUSÃO': 'fusao',
             'ACABAMENTO': 'acabamento',
             'TRATAMENTO TÉRMICO': 'tratamento',
-            'AGUARDANDO USINAGEM EXTERNA': 'usinagem',
-            'AGUARDANDO QUALIDADE': 'qualidade',
-            'EM USINAGEM EXTERNA': 'usinagem',
-            'AGUARDANDO EXPEDIÇÃO': 'qualidade',
-            'AGUARDANDO FATURAMENTO': 'expedicao'
+            'AGUARDANDO USINAGEM EXTERNA': 'aguardandoUsinagem',
+            'AGUARDANDO QUALIDADE': 'aguardandoQualidade',
+            'EM USINAGEM EXTERNA': 'emUsinagem',
+            'AGUARDANDO EXPEDIÇÃO': 'aguardandoExpedicao',
+            'AGUARDANDO FATURAMENTO': 'aguardandoFaturamento'
         };
 
         function getMoldagemStage(op) {
@@ -1776,6 +1794,20 @@
                     </div>
                 `;
             }).join('');
+        }
+
+        function renderLeadTimeConfig() {
+            const grid = document.getElementById('lead-times-grid');
+            if (!grid) return;
+            grid.innerHTML = Object.keys(leadTimeLabels).map(key => `
+                <div class="config-item">
+                    <label>${leadTimeLabels[key]}</label>
+                    <div class="config-input-with-unit">
+                        <input type="number" id="lt-${key}" value="${leadTimes[key] || 0}" min="0">
+                        <span class="config-input-unit">dias</span>
+                    </div>
+                </div>
+            `).join('');
         }
 
         // Helper to treat strings as local dates to avoid UTC shifts
@@ -1841,6 +1873,7 @@
         }
 
         function openConfig() {
+            renderLeadTimeConfig();
             document.getElementById('configModal').style.display = 'flex';
         }
 
@@ -2678,15 +2711,21 @@
         document.addEventListener('DOMContentLoaded', () => {
             const savedLT = localStorage.getItem('erus_monitoramento_lt');
             if (savedLT) {
-                leadTimes = JSON.parse(savedLT);
-                document.getElementById('lt-moldagem').value = leadTimes.moldagem;
-                document.getElementById('lt-fusao').value = leadTimes.fusao;
-                document.getElementById('lt-acabamento').value = leadTimes.acabamento;
-                document.getElementById('lt-tratamento').value = leadTimes.tratamento;
-                document.getElementById('lt-usinagem').value = leadTimes.usinagem;
-                document.getElementById('lt-qualidade').value = leadTimes.qualidade || 1;
-                document.getElementById('lt-expedicao').value = leadTimes.expedicao;
+                const parsedLT = JSON.parse(savedLT);
+                leadTimes = { ...leadTimes, ...parsedLT };
+                if (parsedLT.usinagem !== undefined) {
+                    if (parsedLT.aguardandoUsinagem === undefined) leadTimes.aguardandoUsinagem = parsedLT.usinagem;
+                    if (parsedLT.emUsinagem === undefined) leadTimes.emUsinagem = parsedLT.usinagem;
+                }
+                if (parsedLT.qualidade !== undefined) {
+                    if (parsedLT.aguardandoQualidade === undefined) leadTimes.aguardandoQualidade = parsedLT.qualidade;
+                    if (parsedLT.aguardandoExpedicao === undefined) leadTimes.aguardandoExpedicao = parsedLT.qualidade;
+                }
+                if (parsedLT.expedicao !== undefined && parsedLT.aguardandoFaturamento === undefined) {
+                    leadTimes.aguardandoFaturamento = parsedLT.expedicao;
+                }
             }
+            renderLeadTimeConfig();
 
             const savedSettings = localStorage.getItem('erus_monitoramento_settings');
             if (savedSettings) {
