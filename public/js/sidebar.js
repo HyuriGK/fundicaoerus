@@ -401,8 +401,6 @@
             '<div id="eg-comunicacao" class="erus-nav-group-wrapper collapsed">' +
                 '<a href="comunicacao.html" data-stip="Comunicação" class="erus-nav-link' + isActive('comunicacao.html') + '">' +
                     '<i class="fa-solid fa-bullhorn"></i><span>Comunicação</span></a>' +
-                '<a href="reuniao.html" data-stip="Reuniões" class="erus-nav-link' + isActive('reuniao.html') + '">' +
-                    '<i class="fa-solid fa-people-group"></i><span>Reuniões</span></a>' +
                 '<a href="relatorio.html" data-stip="Relatórios" class="erus-nav-link' + isActive('relatorio.html') + '">' +
                     '<i class="fa-solid fa-file-lines"></i><span>Relatórios</span></a>' +
             '</div>' +        '</ul>' +
