@@ -175,6 +175,16 @@ async function sincronizarDetalhado(fbDb) {
     await pool.query(`ALTER TABLE faturamento_firebird ADD COLUMN IF NOT EXISTS gera_financeiro CHAR(1)`);
     await pool.query(`ALTER TABLE faturamento_firebird ADD COLUMN IF NOT EXISTS vendedor_codigo VARCHAR(20)`);
     await pool.query(`ALTER TABLE faturamento_firebird ADD COLUMN IF NOT EXISTS vendedor_nome VARCHAR(255)`);
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS faturamento_vendedores_nota (
+            nota_fiscal INTEGER NOT NULL,
+            serie VARCHAR(10) NOT NULL DEFAULT '',
+            vendedor_codigo VARCHAR(20),
+            vendedor_nome VARCHAR(255),
+            atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (nota_fiscal, serie)
+        )
+    `);
 
     // Atualizar constraint se necessário
     try {
@@ -246,6 +256,30 @@ async function sincronizarDetalhado(fbDb) {
             }
 
             console.log(`📦 ${result.length} itens de nota encontrados`);
+
+            const vendedoresPorNota = new Map();
+            result.forEach(row => {
+                const notaFiscal = parseInt(row.CODIGO_NOT);
+                if (isNaN(notaFiscal)) return;
+                const serie = row.SERIE_NOT ? String(row.SERIE_NOT).trim() : '';
+                vendedoresPorNota.set(`${notaFiscal}|${serie}`, {
+                    notaFiscal,
+                    serie,
+                    vendedorCodigo: row.VENDEDOR_CODIGO ? String(row.VENDEDOR_CODIGO).trim() : null,
+                    vendedorNome: row.VENDEDOR_NOME ? String(row.VENDEDOR_NOME).trim() : null
+                });
+            });
+            for (const vendedor of vendedoresPorNota.values()) {
+                await pool.query(`
+                    INSERT INTO faturamento_vendedores_nota
+                        (nota_fiscal, serie, vendedor_codigo, vendedor_nome, atualizado_em)
+                    VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+                    ON CONFLICT (nota_fiscal, serie) DO UPDATE SET
+                        vendedor_codigo = EXCLUDED.vendedor_codigo,
+                        vendedor_nome = EXCLUDED.vendedor_nome,
+                        atualizado_em = CURRENT_TIMESTAMP
+                `, [vendedor.notaFiscal, vendedor.serie, vendedor.vendedorCodigo, vendedor.vendedorNome]);
+            }
 
             // TRUNCATE + reinserção total: o Neon espelha exatamente o que o Firebird retorna
             // (itens cancelados/alterados somem). Exclusões manuais são preservadas via

@@ -23,6 +23,16 @@ const { logActivity } = require('./lib/logger');
         `);
         await client.query(`ALTER TABLE faturamento_firebird ADD COLUMN IF NOT EXISTS vendedor_codigo VARCHAR(20)`);
         await client.query(`ALTER TABLE faturamento_firebird ADD COLUMN IF NOT EXISTS vendedor_nome VARCHAR(255)`);
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS faturamento_vendedores_nota (
+                nota_fiscal INTEGER NOT NULL,
+                serie VARCHAR(10) NOT NULL DEFAULT '',
+                vendedor_codigo VARCHAR(20),
+                vendedor_nome VARCHAR(255),
+                atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (nota_fiscal, serie)
+            )
+        `);
         console.log("✅ Tabela 'faturamento_firebird_preferencias' verificada.");
     } catch (e) {
         console.error("❌ Erro ao criar tabela faturamento_firebird_preferencias:", e);
@@ -204,8 +214,8 @@ router.get('/detalhado', async (req, res) => {
                 f.serie,
                 f.cliente_codigo,
                 f.cliente_nome,
-                f.vendedor_codigo,
-                f.vendedor_nome,
+                COALESCE(f.vendedor_codigo, v.vendedor_codigo) AS vendedor_codigo,
+                COALESCE(f.vendedor_nome, v.vendedor_nome) AS vendedor_nome,
                 f.codigo_item,
                 f.descricao,
                 f.quantidade,
@@ -228,6 +238,9 @@ router.get('/detalhado', async (req, res) => {
                 AND COALESCE(p.pedido, '') = COALESCE(TRIM(f.pedido), '')
                 AND p.data_faturamento = f.data_faturamento
                 AND p.quantidade = f.quantidade
+            LEFT JOIN faturamento_vendedores_nota v
+                ON v.nota_fiscal = f.nota_fiscal
+                AND v.serie = COALESCE(TRIM(f.serie), '')
             WHERE 1=1
         `;
 
@@ -251,6 +264,7 @@ router.get('/detalhado', async (req, res) => {
             query += ` AND (
                 LOWER(f.cliente_nome) LIKE $${paramIndex} OR 
                 LOWER(f.descricao) LIKE $${paramIndex} OR
+                LOWER(COALESCE(f.vendedor_nome, v.vendedor_nome, '')) LIKE $${paramIndex} OR
                 CAST(f.nota_fiscal AS TEXT) LIKE $${paramIndex}
             )`;
             params.push(`%${search}%`);
