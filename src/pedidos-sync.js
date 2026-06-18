@@ -3,33 +3,24 @@ const router = express.Router();
 const pool = require('../lib/db');
 
 // Rota para buscar peso unitário, descrição e saldo em aberto por código (usado por acabamento_externo)
-// Prioridade peso: PESO_LIQUIDO_NPR / QUANTIDADE_PPR (ERP) > pesos_customizados (fallback manual)
+// Prioridade peso: PRODUTO.PESO_LIQUIDO_PRO sincronizado > pesos_customizados (fallback manual)
 router.get('/peso-lookup', async (req, res) => {
     const { codigo } = req.query;
     if (!codigo) return res.json({ peso: null, descricao: null, saldo: 0, source: null });
     const cod = String(codigo).trim().toUpperCase();
     try {
-        // Roda em paralelo: peso customizado, dados do firebird e saldo em aberto
-        const [cwRes, fbRes, saldoRes] = await Promise.all([
+        const [cwRes, produtoRes, saldoRes] = await Promise.all([
             pool.query(
                 `SELECT peso FROM pesos_customizados WHERE UPPER(codigo) = $1`,
                 [cod]
             ),
             pool.query(
                 `SELECT
-                   (data->>'PESO_LIQUIDO_NPR')::numeric AS peso_liquido,
-                   GREATEST(
-                     COALESCE((data->>'OP_QUANTIDADE')::numeric, 0),
-                     COALESCE((data->>'QUANTIDADE_PPR')::numeric, 0)
-                   ) AS qty,
-                   data->>'NOME_PRODUTO_PPR' AS descricao
-                 FROM firebird_sync_emissoes
-                 WHERE UPPER(data->>'PRODUTO_PPR') = $1
-                   AND (data->>'PESO_LIQUIDO_NPR')::numeric > 0
-                   AND GREATEST(
-                     COALESCE((data->>'OP_QUANTIDADE')::numeric, 0),
-                     COALESCE((data->>'QUANTIDADE_PPR')::numeric, 0)
-                   ) > 0
+                   peso_liquido_pro AS peso,
+                   nome_pro AS descricao
+                 FROM ficha_tecnica
+                 WHERE UPPER(TRIM(pro_codigo_fic::text)) = $1
+                   AND peso_liquido_pro > 0
                  ORDER BY updated_at DESC
                  LIMIT 1`,
                 [cod]
@@ -53,15 +44,11 @@ router.get('/peso-lookup', async (req, res) => {
         ]);
 
         const saldo = Number(saldoRes.rows[0].saldo) || 0;
-        const fbRow = fbRes.rows[0] || null;
-        const descricao = fbRow ? (fbRow.descricao || null) : null;
+        const produto = produtoRes.rows[0] || null;
+        const descricao = produto ? (produto.descricao || null) : null;
 
-        // Peso: calculado do Firebird/ERP
-        if (fbRow) {
-            const unitWeight = Number(fbRow.peso_liquido) / Number(fbRow.qty);
-            if (unitWeight > 0) {
-                return res.json({ peso: Math.round(unitWeight * 1000) / 1000, descricao, saldo, source: 'firebird' });
-            }
+        if (produto && Number(produto.peso) > 0) {
+            return res.json({ peso: Number(produto.peso), descricao, saldo, source: 'produto' });
         }
 
         // Peso: customizado fica como fallback para itens sem peso liquido no ERP
