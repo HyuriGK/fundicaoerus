@@ -152,6 +152,8 @@ async function sincronizarDetalhado(fbDb) {
         data_faturamento DATE,
         cliente_codigo VARCHAR(20),
         cliente_nome VARCHAR(255),
+        vendedor_codigo VARCHAR(20),
+        vendedor_nome VARCHAR(255),
         codigo_item VARCHAR(50),
         descricao VARCHAR(255),
         quantidade DECIMAL(15, 3),
@@ -171,6 +173,8 @@ async function sincronizarDetalhado(fbDb) {
     await pool.query(`ALTER TABLE faturamento_firebird ADD COLUMN IF NOT EXISTS excluido_manualmente BOOLEAN DEFAULT FALSE`);
     await pool.query(`ALTER TABLE faturamento_firebird ADD COLUMN IF NOT EXISTS atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP`);
     await pool.query(`ALTER TABLE faturamento_firebird ADD COLUMN IF NOT EXISTS gera_financeiro CHAR(1)`);
+    await pool.query(`ALTER TABLE faturamento_firebird ADD COLUMN IF NOT EXISTS vendedor_codigo VARCHAR(20)`);
+    await pool.query(`ALTER TABLE faturamento_firebird ADD COLUMN IF NOT EXISTS vendedor_nome VARCHAR(255)`);
 
     // Atualizar constraint se necessário
     try {
@@ -202,6 +206,8 @@ async function sincronizarDetalhado(fbDb) {
         CAST(nf.EMISSAO_NOT AS DATE) as DATA_FATURAMENTO,
         nf.DESTINATARIO_NOT as COD_CLIENTE_NOT,
         nf.RAZAO_SOCIAL_NOT as CLIENTE_NOME_NOT,
+        nf.VENDEDOR_NOT as VENDEDOR_CODIGO,
+        v.NOME_VEN as VENDEDOR_NOME,
         nf.STATUS_NOT,
         nf.GERA_FINANCEIRO_NOT,
         nfp.ITEM_NPR,
@@ -222,6 +228,9 @@ async function sincronizarDetalhado(fbDb) {
             ON npp.NPR_ID_NPP = nfp.ID_NPR
         LEFT JOIN PRODUTO p
             ON nfp.PRODUTO_NPR = p.CODIGO_PRO
+        LEFT JOIN VENDEDOR v
+            ON v.EMPRESA_VEN = nf.EMPRESA_NOT
+            AND v.CODIGO_VEN = nf.VENDEDOR_NOT
         WHERE nf.EMISSAO_NOT >= ?
         AND nf.TIPO_NOT = 'S'
             AND nf.STATUS_NOT = 'A'
@@ -290,12 +299,15 @@ async function sincronizarDetalhado(fbDb) {
                         await pool.query(`
                             INSERT INTO faturamento_firebird
                             (nota_fiscal, serie, item_nota, data_faturamento, cliente_codigo, cliente_nome,
+                             vendedor_codigo, vendedor_nome,
                              codigo_item, descricao, quantidade, valor_unitario, valor_total,
                              peso_un, peso_total, status, excluido_manualmente, pedido, gera_financeiro)
-                            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+                            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
                             ON CONFLICT ON CONSTRAINT faturamento_firebird_nf_serie_item_prod_key DO UPDATE SET
                                 data_faturamento = EXCLUDED.data_faturamento,
                                 cliente_nome = EXCLUDED.cliente_nome,
+                                vendedor_codigo = EXCLUDED.vendedor_codigo,
+                                vendedor_nome = EXCLUDED.vendedor_nome,
                                 descricao = EXCLUDED.descricao,
                                 quantidade = EXCLUDED.quantidade,
                                 valor_unitario = EXCLUDED.valor_unitario,
@@ -314,6 +326,8 @@ async function sincronizarDetalhado(fbDb) {
                             dataFat,
                             row.COD_CLIENTE_NOT,
                             row.CLIENTE_NOME_NOT,
+                            row.VENDEDOR_CODIGO ? String(row.VENDEDOR_CODIGO).trim() : null,
+                            row.VENDEDOR_NOME ? String(row.VENDEDOR_NOME).trim() : null,
                             codigoItem,
                             row.NOME_PRODUTO_NPR,
                             quantidade,

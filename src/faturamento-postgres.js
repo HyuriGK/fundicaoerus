@@ -21,6 +21,8 @@ const { logActivity } = require('./lib/logger');
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
+        await client.query(`ALTER TABLE faturamento_firebird ADD COLUMN IF NOT EXISTS vendedor_codigo VARCHAR(20)`);
+        await client.query(`ALTER TABLE faturamento_firebird ADD COLUMN IF NOT EXISTS vendedor_nome VARCHAR(255)`);
         console.log("✅ Tabela 'faturamento_firebird_preferencias' verificada.");
     } catch (e) {
         console.error("❌ Erro ao criar tabela faturamento_firebird_preferencias:", e);
@@ -202,6 +204,8 @@ router.get('/detalhado', async (req, res) => {
                 f.serie,
                 f.cliente_codigo,
                 f.cliente_nome,
+                f.vendedor_codigo,
+                f.vendedor_nome,
                 f.codigo_item,
                 f.descricao,
                 f.quantidade,
@@ -272,6 +276,8 @@ router.get('/detalhado', async (req, res) => {
             serie: row.serie,
             clienteCodigo: row.cliente_codigo,
             clienteNome: row.cliente_nome,
+            vendedorCodigo: row.vendedor_codigo,
+            vendedorNome: row.vendedor_nome,
             codigoItem: row.codigo_item,
             descricao: row.descricao,
             quantidade: parseFloat(row.quantidade || 0),
