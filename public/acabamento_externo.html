@@ -864,7 +864,7 @@
                     <button id="btnViewDiaria" class="month-btn active" onclick="setView('diaria')">EVOLUÇÃO DIÁRIA</button>
                     <button id="btnViewMensal" class="month-btn" onclick="setView('mensal')">EVOLUÇÃO MENSAL</button>
                     <button id="btnViewPontualidade" class="month-btn" onclick="setView('pontualidade')">PONTUALIDADE</button>
-                    <button class="month-btn active" id="novoEnvioButtonToolbar" onclick="abrirModalPorId('novoEnvioModal')">NOVO ENVIO</button>
+                    <button class="month-btn active" id="novoEnvioButtonToolbar" style="display:none;" onclick="abrirModalPorId('novoEnvioModal')">NOVO ENVIO</button>
                     <button class="month-btn" onclick="abrirModalPorId('registrosModal')">REGISTROS</button>
                 </div>
             </div>
@@ -1077,6 +1077,13 @@
         // Check user role
         function checkUserRole() {
             return localStorage.getItem('erus_role');
+        }
+        function aplicarPermissaoNovoEnvio() {
+            const permitido = ['desenvolvedor', 'ppcp'].includes((checkUserRole() || '').trim().toLowerCase());
+            const novoEnvioBtn = document.getElementById('novoEnvioButtonToolbar');
+            const separatorNovoEnvio = document.getElementById('separatorNovoEnvio');
+            if (novoEnvioBtn) novoEnvioBtn.style.display = permitido ? 'inline-flex' : 'none';
+            if (separatorNovoEnvio) separatorNovoEnvio.style.display = permitido ? 'block' : 'none';
         }
         function showSpinner() { const s = document.getElementById('loading-screen'); if (s) { s.style.display = 'flex'; s.style.opacity = '1'; document.body.classList.add('no-scroll'); } }
         function hideSpinner() { const s = document.getElementById('loading-screen'); if (s) { s.style.opacity = '0'; document.body.classList.remove('no-scroll'); setTimeout(() => s.style.display = 'none', 500); } }
@@ -1324,22 +1331,12 @@
         }
         async function carregarDados() {
             showSpinner();
+            aplicarPermissaoNovoEnvio();
             try {
                 await carregarRegistrosERecebidos();
                 populateDateFilters();
                 renderTable();
                 updateDashboardAndCharts();
-                // Verificar permissões para mostrar/ocultar botões e separador
-                const role = checkUserRole();
-                const novoEnvioBtn = document.getElementById('novoEnvioButtonToolbar');
-                const separatorNovoEnvio = document.getElementById('separatorNovoEnvio');
-                if (!['desenvolvedor', 'ppcp'].includes((role || '').toLowerCase())) {
-                    if (novoEnvioBtn) novoEnvioBtn.style.display = 'none';
-                    if (separatorNovoEnvio) separatorNovoEnvio.style.display = 'none';
-                } else {
-                    if (novoEnvioBtn) novoEnvioBtn.style.display = 'inline-flex';
-                    if (separatorNovoEnvio) separatorNovoEnvio.style.display = 'block';
-                }
             } catch (e) { console.error(e); } finally { hideSpinner(); }
         }
         async function carregarRegistrosERecebidos() {
@@ -2111,6 +2108,7 @@
         async function confirmAndClear() { const v = await classicPrompt("Digite 'CONFIRMAR':"); if (v === 'CONFIRMAR') apiRequest('delete-all-terceiro', 'POST', { type: 'terceiro' }).then(() => carregarDados()); }
         function redirectToLink() { window.location.href = 'index.html'; }
         document.addEventListener('DOMContentLoaded', () => {
+            aplicarPermissaoNovoEnvio();
             carregarDados();
             document.querySelectorAll('.filter-input-table').forEach(i => i.oninput = applyColumnFilters);
             document.getElementById('inputData').valueAsDate = new Date();
@@ -2158,4 +2156,3 @@
     <script src="session-guard.js"></script>
 </body>
 </html>
-
