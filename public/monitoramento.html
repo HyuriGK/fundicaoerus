@@ -1504,8 +1504,8 @@
 
                     <section class="audit-card">
                         <h3><i class="fa-solid fa-triangle-exclamation"></i> Como calculamos o atraso</h3>
-                        <p>Cada setor possui um tempo permitido. Somamos esse tempo à data em que o lote entrou.</p>
-                        <div class="audit-formula">data em que deveria sair = entrada + tempo permitido<br>atraso = hoje − data em que deveria sair</div>
+                        <p>Começamos pela entrega programada pelo PCP e planejamos as etapas de trás para frente.</p>
+                        <div class="audit-formula">prazo da última etapa = entrega PCP<br>prazo da etapa anterior = prazo seguinte − tempo permitido</div>
                         <ul>
                             <li><strong>3d atraso:</strong> o lote deveria ter saído há 3 dias úteis.</li>
                             <li><strong>2d prazo:</strong> ainda existem 2 dias úteis para sair.</li>
@@ -1515,8 +1515,8 @@
 
                     <section class="audit-card">
                         <h3><i class="fa-solid fa-calendar-check"></i> Tempo permitido por setor</h3>
-                        <p>É o número de dias úteis que uma peça pode permanecer no setor antes de ser considerada atrasada.</p>
-                        <p><strong>Exemplo:</strong> entrou na Fusão na segunda e o tempo permitido é 1 dia útil. Deve sair até terça-feira.</p>
+                        <p>É o tempo reservado para cada etapa dentro do caminho até a entrega.</p>
+                        <p><strong>Exemplo:</strong> entrega na sexta e última etapa com 1 dia útil. A etapa anterior precisa terminar até quinta-feira.</p>
                         <p>Esses tempos podem ser alterados no botão <strong>Config</strong>.</p>
                     </section>
 
@@ -1987,6 +1987,36 @@
             return 'MOLDAGEM GERAL';
         }
 
+        function getMonitoringRouteStages(op) {
+            const route = String(op.ROTEIRO_PRODUCAO || '').toUpperCase();
+            const hasUsinagem = route.includes('USINAGEM') || route.includes('TORNEARIA');
+            return [
+                'MOLDAGEM GERAL',
+                'FUSÃO',
+                'ACABAMENTO',
+                'TRATAMENTO TÉRMICO',
+                hasUsinagem ? 'AGUARDANDO USINAGEM EXTERNA' : 'AGUARDANDO QUALIDADE',
+                ...(hasUsinagem ? ['EM USINAGEM EXTERNA'] : []),
+                'AGUARDANDO EXPEDIÇÃO',
+                'AGUARDANDO FATURAMENTO'
+            ];
+        }
+
+        function calculateBackwardMetaDates(stages, deliveryDate, keyMap = stageLeadTimeKeyMap) {
+            if (!deliveryDate) return null;
+            const metaDates = {};
+            let deadline = toLocalDate(deliveryDate);
+
+            for (let i = stages.length - 1; i >= 0; i--) {
+                const stage = stages[i];
+                metaDates[stage] = toLocalDate(deadline);
+                const configKey = keyMap[stage] || configKeyMap[stage];
+                deadline = subtractBusinessDays(deadline, leadTimes[configKey] || 0);
+            }
+
+            return metaDates;
+        }
+
         function renderKanbanColumns() {
             const container = document.getElementById('kanban-container');
             if (!container) return;
@@ -2405,17 +2435,25 @@
             const hasUsinagem = route.includes('USINAGEM') || route.includes('TORNEARIA');
             const now = toLocalDate(new Date());
             const emissionDate = toLocalDate(op.OP_EMISSAO || op.DATA_EMISSAO_PEDIDO || new Date());
+            const routeStages = getMonitoringRouteStages(op);
+            const backwardMetaDates = calculateBackwardMetaDates(
+                routeStages,
+                op.ENTREGA_PETR || op.DATA_ENTREGA_PPR
+            );
             const hasOp = !!String(op.OP_PCS || '').trim() && String(op.OP_PCS || '').trim() !== '-';
             if (!hasOp) {
                 const qty = getCommercialBalance(op) || metrics.totalBalance || metrics.targetTotalQty || 0;
                 const stage = getMoldagemStage(op);
                 const configKey = stageLeadTimeKeyMap[stage];
-                const metaDate = toLocalDate(emissionDate);
-                let daysToAdd = leadTimes[configKey] || 0;
-                while (daysToAdd > 0) {
-                    metaDate.setDate(metaDate.getDate() + 1);
-                    const day = metaDate.getDay();
-                    if (day !== 0 && day !== 6) daysToAdd--;
+                let metaDate = backwardMetaDates?.[stage];
+                if (!metaDate) {
+                    metaDate = toLocalDate(emissionDate);
+                    let daysToAdd = leadTimes[configKey] || 0;
+                    while (daysToAdd > 0) {
+                        metaDate.setDate(metaDate.getDate() + 1);
+                        const day = metaDate.getDay();
+                        if (day !== 0 && day !== 6) daysToAdd--;
+                    }
                 }
                 const diff = getBusinessDaysDiff(metaDate, now);
                 return qty > 0 ? [{
@@ -2449,14 +2487,17 @@
                 .filter(([, qty]) => qty > 0)
                 .map(([stage, qty]) => {
                     const arrivalDate = getStageArrivalDate(op, stage, qty, emissionDate);
-                    const configKey = stageLeadTimeKeyMap[stage] || configKeyMap[stage];
-                    const lt = leadTimes[configKey] || 0;
-                    const metaDate = toLocalDate(arrivalDate);
-                    let daysToAdd = lt;
-                    while (daysToAdd > 0) {
-                        metaDate.setDate(metaDate.getDate() + 1);
-                        const day = metaDate.getDay();
-                        if (day !== 0 && day !== 6) daysToAdd--;
+                    let metaDate = backwardMetaDates?.[stage];
+                    if (!metaDate) {
+                        const configKey = stageLeadTimeKeyMap[stage] || configKeyMap[stage];
+                        const lt = leadTimes[configKey] || 0;
+                        metaDate = toLocalDate(arrivalDate);
+                        let daysToAdd = lt;
+                        while (daysToAdd > 0) {
+                            metaDate.setDate(metaDate.getDate() + 1);
+                            const day = metaDate.getDay();
+                            if (day !== 0 && day !== 6) daysToAdd--;
+                        }
                     }
                     const diff = getBusinessDaysDiff(metaDate, now);
                     return {
@@ -2805,25 +2846,25 @@
                     });
                 }
 
-                // PROGRESSIVE DEADLINE CALCULATION (FIXED META)
-                const metaDates = {};
-                const emissaoDate = toLocalDate(opData.OP_EMISSAO || opData.DATA_EMISSAO_PEDIDO);
-                let baselineDate = toLocalDate(emissaoDate);
+                const deliveryDate = opData.ENTREGA_PETR || opData.DATA_ENTREGA_PPR;
+                let metaDates = calculateBackwardMetaDates(ordered, deliveryDate, configKeyMap);
 
-                ordered.forEach((sector) => {
-                    const configKey = configKeyMap[sector];
-                    const lt = leadTimes[configKey] || 0;
-
-                    let currentMeta = toLocalDate(baselineDate);
-                    let daysToAdd = lt;
-                    while (daysToAdd > 0) {
-                        currentMeta.setDate(currentMeta.getDate() + 1);
-                        const day = currentMeta.getDay();
-                        if (day !== 0 && day !== 6) daysToAdd--;
-                    }
-                    metaDates[sector] = toLocalDate(currentMeta);
-                    baselineDate = toLocalDate(currentMeta);
-                });
+                if (!metaDates) {
+                    metaDates = {};
+                    let baselineDate = toLocalDate(opData.OP_EMISSAO || opData.DATA_EMISSAO_PEDIDO);
+                    ordered.forEach((sector) => {
+                        const configKey = configKeyMap[sector];
+                        let currentMeta = toLocalDate(baselineDate);
+                        let daysToAdd = leadTimes[configKey] || 0;
+                        while (daysToAdd > 0) {
+                            currentMeta.setDate(currentMeta.getDate() + 1);
+                            const day = currentMeta.getDay();
+                            if (day !== 0 && day !== 6) daysToAdd--;
+                        }
+                        metaDates[sector] = toLocalDate(currentMeta);
+                        baselineDate = toLocalDate(currentMeta);
+                    });
+                }
 
                 // --- 3. Robust Flow Logic (Modal) ---
                 const maxForwardModal = {};
