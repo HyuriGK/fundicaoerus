@@ -2881,8 +2881,10 @@
                         <table style="width: 100%; border-collapse: collapse; font-size: 0.95rem;">
                             <thead>
                                 <tr style="background: rgba(255,255,255,0.05); text-align: left; color: var(--text-muted); text-transform: uppercase; font-size: 0.75rem; letter-spacing: 1px;">
-                                    <th style="padding: 15px 25px;">Etapa / Status</th>
+                                    <th style="padding: 15px 25px;">Etapa</th>
                                     <th style="padding: 15px 25px; text-align: center;">Quantidade</th>
+                                    <th style="padding: 15px 25px; text-align: center;">Quant. Apontada</th>
+                                    <th style="padding: 15px 25px; text-align: center;">Saldo</th>
                                     <th style="padding: 15px 25px; text-align: center;">Meta (Prazo)</th>
                                     <th style="padding: 15px 25px; text-align: center;">Observação</th>
                                 </tr>
@@ -2892,19 +2894,15 @@
 
                 let prevFlowQty = totalQty;
                 ordered.forEach(sector => {
-                    // How many pieces have at least PASSED this point?
                     const qtyMovedOut = Math.max(aggregated[sector] || 0, maxForwardModal[sector] || 0);
-                    // How many pieces are actually WAITING in this stage?
-                    const qtyInStage = Math.max(0, prevFlowQty - qtyMovedOut);
-                    
+                    const qtyPointed = aggregated[sector] || 0;
+                    const qtyExpected = prevFlowQty;
+                    const qtyBalance = Math.max(0, qtyExpected - qtyPointed);
                     const meta = metaDates[sector];
                     const metaMidnight = toLocalDate(meta);
-                    const today = toLocalDate(new Date());
 
-                    // 1. Linha do Realizado (se houver peças que passaram por aqui)
-                    if (qtyMovedOut > 0) {
-                        // For display, use either the actual pointing date or "today" if bypass
-                        const referenceDate = aggregated[sector] > 0 ? toLocalDate(lastPointingDate[sector]) : today;
+                    if (qtyPointed > 0) {
+                        const referenceDate = toLocalDate(lastPointingDate[sector]);
                         const timeDiff = referenceDate.getTime() - metaMidnight.getTime();
                         const daysDiff = Math.round(timeDiff / (1000 * 3600 * 24));
 
@@ -2923,53 +2921,22 @@
                                 <td style="padding: 15px 25px;">
                                     <div style="display: flex; align-items: center; gap: 12px;">
                                         <div style="width: 8px; height: 8px; border-radius: 50%; background: var(--status-success);"></div>
-                                        <span style="font-weight: 600;">${sector} (Realizado)</span>
-                                    </div>
-                                </td>
-                                <td style="padding: 15px 25px; text-align: center;">
-                                    <span style="font-weight: 700; color: var(--status-success);">
-                                        ${qtyMovedOut.toLocaleString('pt-BR')} <small style="font-size: 0.7em;">PÇS</small>
-                                    </span>
-                                </td>
-                                <td style="padding: 15px 25px; text-align: center; font-family: var(--font-mono); font-size: 0.85rem;">
-                                    ${meta.toLocaleDateString('pt-BR')}
-                                </td>
-                                <td style="padding: 15px 25px; text-align: center; font-size: 0.85rem;">
-                                    ${statusHtml}
-                                </td>
-                            </tr>
-                        `;
-                    }
-
-                    // 2. Linha do Pendente (se houver saldo nesta etapa OU se for a etapa de EXPEDIÇÃO OU se for uma etapa futura que ainda não foi alcançada)
-                    const isFutureStage = qtyMovedOut === 0;
-                    if (qtyInStage > 0.001 || sector === 'EXPEDIÇÃO' || isFutureStage) {
-                        const timeDiff = today.getTime() - metaMidnight.getTime();
-                        const daysDiff = Math.round(timeDiff / (1000 * 3600 * 24));
-
-                        let statusHtml = '';
-                        let isDelayed = false;
-                        if (daysDiff > 0) {
-                            const bizDelay = Math.abs(getBusinessDaysDiff(metaMidnight, today));
-
-                            isDelayed = true;
-                            statusHtml = `<span style="color: var(--status-danger); font-weight: 600;"><i class="fa-solid fa-triangle-exclamation"></i> Atrasado (${bizDelay} d)</span>`;
-                        } else {
-                            statusHtml = `<span style="color: var(--text-muted);">Aguardando</span>`;
-                        }
-
-                        html += `
-                            <tr class="op-detail-row is-zero" 
-                                 style="border-bottom: 1px solid var(--border-subtle); color: var(--text-muted); background: ${isDelayed ? 'rgba(239, 68, 68, 0.03)' : 'transparent'};">
-                                <td style="padding: 15px 25px;">
-                                    <div style="display: flex; align-items: center; gap: 12px;">
-                                        <div style="width: 8px; height: 8px; border-radius: 50%; background: ${isDelayed ? 'var(--status-danger)' : 'var(--border-subtle)'};"></div>
-                                        <span style="font-weight: 600;">${sector} (Pendente)</span>
+                                        <span style="font-weight: 600;">${sector}</span>
                                     </div>
                                 </td>
                                 <td style="padding: 15px 25px; text-align: center;">
                                     <span style="font-weight: 700;">
-                                        ${qtyInStage.toLocaleString('pt-BR')} <small style="font-size: 0.7em;">PÇS</small>
+                                        ${qtyExpected.toLocaleString('pt-BR')} <small style="font-size: 0.7em;">PÇS</small>
+                                    </span>
+                                </td>
+                                <td style="padding: 15px 25px; text-align: center;">
+                                    <span style="font-weight: 700; color: var(--status-success);">
+                                        ${qtyPointed.toLocaleString('pt-BR')} <small style="font-size: 0.7em;">PÇS</small>
+                                    </span>
+                                </td>
+                                <td style="padding: 15px 25px; text-align: center;">
+                                    <span style="font-weight: 700; color: ${qtyBalance > 0 ? 'var(--color-primary)' : 'var(--status-success)'};">
+                                        ${qtyBalance.toLocaleString('pt-BR')} <small style="font-size: 0.7em;">PÇS</small>
                                     </span>
                                 </td>
                                 <td style="padding: 15px 25px; text-align: center; font-family: var(--font-mono); font-size: 0.85rem;">
@@ -2982,7 +2949,6 @@
                         `;
                     }
 
-                    // For the next stage, prevFlowQty is however many pieces passed THIS stage
                     prevFlowQty = qtyMovedOut;
                 });
 
