@@ -680,6 +680,27 @@
             color: #f87171;
             transform: scale(1.12);
         }
+        .report-selector-card {
+            width: min(620px, 92vw);
+            background: #18181b;
+            border: 1px solid var(--border-highlight);
+            border-radius: 14px;
+            box-shadow: 0 28px 70px rgba(0,0,0,0.65);
+            overflow: hidden;
+        }
+        .report-selector-body {
+            padding: 28px;
+        }
+        .report-selector-body select {
+            width: 100%;
+            margin-top: 10px;
+            padding: 12px 14px;
+            border-radius: 8px;
+            border: 1px solid var(--border-subtle);
+            background: #09090b;
+            color: #fff;
+            font-weight: 700;
+        }
         .action-icon {
             cursor: pointer;
             padding: 4px;
@@ -943,6 +964,9 @@
             <div class="chart-panel" style="flex:1; min-height:0;">
                 <div class="chart-header">
                     <div class="chart-title" id="mainChartTitle">Terceirizado Diário</div>
+                    <button id="pontualidadeReportBtn" class="btn-modern btn-add" style="display:none; margin-left:auto;" onclick="abrirRelatorioPontualidade()">
+                        <i class="fa-solid fa-file-pdf"></i> RELATÓRIO
+                    </button>
                 </div>
                 <div class="chart-container-wrapper" style="position:relative;">
                     <canvas id="mainChart"></canvas>
@@ -1064,6 +1088,23 @@
             <div class="modal-footer">
                 <button class="btn-modern" onclick="cancelarQualidadeNao()">Cancelar</button>
                 <button class="btn-modern btn-add" onclick="confirmarQualidadeNao()">Salvar observação</button>
+            </div>
+        </div>
+    </div>
+    <div id="pontualidadeReportModal" class="modal-overlay" style="z-index: 10002;">
+        <div class="report-selector-card">
+            <div class="modal-header">
+                <h2 class="modal-title"><i class="fa-solid fa-file-pdf" style="color:var(--color-primary);margin-right:10px;"></i>Relatório de Pontualidade</h2>
+                <span class="modal-close" onclick="fecharModalTopo()"><i class="fa-solid fa-xmark"></i></span>
+            </div>
+            <div class="report-selector-body">
+                <p id="pontualidadeReportPeriodo" style="color:var(--text-muted);margin:0 0 18px;"></p>
+                <label style="color:#fff;font-weight:700;">Selecione o terceiro</label>
+                <select id="pontualidadeReportTerceiro"></select>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-modern" onclick="fecharModalTopo()">Cancelar</button>
+                <button class="btn-modern btn-add" onclick="gerarRelatorioPontualidadePDF()"><i class="fa-solid fa-download"></i> Gerar PDF</button>
             </div>
         </div>
     </div>
@@ -1734,9 +1775,170 @@
             document.getElementById('btnViewDiaria').classList.toggle('active', v === 'diaria');
             document.getElementById('btnViewMensal').classList.toggle('active', v === 'mensal');
             document.getElementById('btnViewPontualidade').classList.toggle('active', v === 'pontualidade');
+            document.getElementById('pontualidadeReportBtn').style.display = v === 'pontualidade' ? 'inline-flex' : 'none';
             if (v === 'diaria') setDailyChartBlur(selectedMonthIndex === -1);
             else setDailyChartBlur(false);
             updateDashboardAndCharts();
+        }
+        function getPontualidadePeriodRecords() {
+            return registros.filter(r => {
+                if (!r.data) return false;
+                const [year, month] = r.data.split('T')[0].split('-').map(Number);
+                if (year !== selectedYear) return false;
+                return selectedMonthIndex === -1 || month === selectedMonthIndex + 1;
+            });
+        }
+        function abrirRelatorioPontualidade() {
+            if (selectedMonthIndex === -1) {
+                showToast('Selecione um mês', 'O relatório de pontualidade é gerado para um mês específico.', 'danger');
+                return;
+            }
+            const periodRecords = getPontualidadePeriodRecords();
+            const terceiros = [...new Set(periodRecords.map(r => String(r.terceiro || '').trim()).filter(Boolean))]
+                .sort((a, b) => a.localeCompare(b, 'pt-BR'));
+            if (!terceiros.length) {
+                showToast('Sem dados', 'Não existem cargas no período selecionado.', 'danger');
+                return;
+            }
+            const select = document.getElementById('pontualidadeReportTerceiro');
+            select.innerHTML = terceiros.map(t => `<option value="${t.replace(/"/g, '&quot;')}">${t}</option>`).join('');
+            document.getElementById('pontualidadeReportPeriodo').textContent =
+                `Período selecionado: ${MONTHS_SHORT[selectedMonthIndex]}/${selectedYear}`;
+            abrirModalPorId('pontualidadeReportModal');
+        }
+        function getPontualidadeReportData(terceiro) {
+            const periodRecords = getPontualidadePeriodRecords().filter(r => String(r.terceiro || '').trim() === terceiro);
+            const byCarga = {};
+            periodRecords.forEach(r => {
+                if (!byCarga[r.carga]) byCarga[r.carga] = [];
+                byCarga[r.carga].push(r);
+            });
+            const dayDiff = (a, b) => Math.round((new Date(a + 'T00:00:00') - new Date(b + 'T00:00:00')) / 86400000);
+            const rows = Object.entries(byCarga).map(([carga, items]) => {
+                const prev = previsoes[carga] || {};
+                const atraso = prev.acordada && prev.entrega ? dayDiff(prev.entrega, prev.acordada) : null;
+                return {
+                    carga,
+                    dataEnvio: items[0].data,
+                    acordada: prev.acordada || '',
+                    entrega: prev.entrega || '',
+                    atraso,
+                    status: atraso === null ? 'SEM AVALIACAO' : atraso > 0 ? 'ATRASADA' : 'NO PRAZO',
+                    peso: items.reduce((sum, item) => sum + (Number(item.quant) || 0) * (Number(item.peso) || 0), 0),
+                    quantidade: items.reduce((sum, item) => sum + (Number(item.quant) || 0), 0),
+                    qualidade: prev.qualidade === true ? 'SIM' : prev.qualidade === false ? 'NAO' : 'NAO AVALIADA',
+                    qualidadeObservacao: prev.qualidadeObservacao || ''
+                };
+            }).sort((a, b) => new Date(a.dataEnvio) - new Date(b.dataEnvio));
+            const avaliadas = rows.filter(r => r.atraso !== null);
+            const noPrazo = avaliadas.filter(r => r.atraso <= 0).length;
+            const atrasadas = avaliadas.length - noPrazo;
+            const diasAtraso = avaliadas.reduce((sum, r) => sum + Math.max(0, r.atraso), 0);
+            return {
+                rows,
+                total: rows.length,
+                avaliadas: avaliadas.length,
+                noPrazo,
+                atrasadas,
+                pontualidade: avaliadas.length ? noPrazo / avaliadas.length * 100 : 0,
+                atrasoMedio: avaliadas.length ? diasAtraso / avaliadas.length : 0,
+                pesoTotal: rows.reduce((sum, r) => sum + r.peso, 0),
+                quantidadeTotal: rows.reduce((sum, r) => sum + r.quantidade, 0)
+            };
+        }
+        function gerarRelatorioPontualidadePDF() {
+            const terceiro = document.getElementById('pontualidadeReportTerceiro').value;
+            if (!terceiro) return;
+            const report = getPontualidadeReportData(terceiro);
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF('l', 'mm', 'a4');
+            const pageWidth = doc.internal.pageSize.getWidth();
+            const pageHeight = doc.internal.pageSize.getHeight();
+            const monthLabel = MONTHS_SHORT[selectedMonthIndex];
+
+            doc.setFillColor(24, 24, 27);
+            doc.rect(0, 0, pageWidth, 34, 'F');
+            doc.setTextColor(251, 191, 36);
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(21);
+            doc.text('FUNDICAO ERUS', 14, 16);
+            doc.setFontSize(12);
+            doc.setTextColor(255, 255, 255);
+            doc.text('RELATORIO DE PONTUALIDADE - ACABAMENTO EXTERNO', 14, 25);
+            doc.setFontSize(10);
+            doc.setTextColor(212, 212, 216);
+            doc.text(`TERCEIRO: ${terceiro}`, pageWidth - 14, 15, { align: 'right' });
+            doc.text(`PERIODO: ${monthLabel}/${selectedYear}`, pageWidth - 14, 23, { align: 'right' });
+
+            const cards = [
+                ['CARGAS ENVIADAS', String(report.total), [59, 130, 246]],
+                ['PONTUALIDADE', `${report.pontualidade.toFixed(1)}%`, report.pontualidade >= 90 ? [16, 185, 129] : report.pontualidade >= 70 ? [245, 158, 11] : [239, 68, 68]],
+                ['NO PRAZO', String(report.noPrazo), [16, 185, 129]],
+                ['ATRASADAS', String(report.atrasadas), [239, 68, 68]],
+                ['ATRASO MEDIO', `${report.atrasoMedio.toFixed(1)} dias`, [249, 115, 22]]
+            ];
+            const gap = 4;
+            const cardWidth = (pageWidth - 28 - gap * (cards.length - 1)) / cards.length;
+            cards.forEach((card, index) => {
+                const x = 14 + index * (cardWidth + gap);
+                doc.setFillColor(248, 250, 252);
+                doc.roundedRect(x, 41, cardWidth, 25, 2, 2, 'F');
+                doc.setDrawColor(...card[2]);
+                doc.setLineWidth(0.8);
+                doc.line(x, 41, x, 66);
+                doc.setFontSize(8);
+                doc.setTextColor(100, 116, 139);
+                doc.text(card[0], x + 5, 49);
+                doc.setFontSize(17);
+                doc.setTextColor(...card[2]);
+                doc.text(card[1], x + 5, 60);
+            });
+
+            doc.autoTable({
+                startY: 73,
+                head: [['CARGA', 'ENVIO', 'DATA ACORDADA', 'ENTREGA', 'STATUS', 'ATRASO', 'QTD', 'PESO (KG)', 'QUALIDADE']],
+                body: report.rows.map(row => [
+                    row.carga,
+                    formatDate(row.dataEnvio),
+                    row.acordada ? formatDate(row.acordada) : '-',
+                    row.entrega ? formatDate(row.entrega) : '-',
+                    row.status,
+                    row.atraso === null ? '-' : `${Math.max(0, row.atraso)} d`,
+                    row.quantidade.toLocaleString('pt-BR'),
+                    formatNumber(row.peso),
+                    row.qualidade
+                ]),
+                styles: { fontSize: 8, cellPadding: 2.5, halign: 'center', valign: 'middle' },
+                headStyles: { fillColor: [39, 39, 42], textColor: [251, 191, 36], fontStyle: 'bold' },
+                alternateRowStyles: { fillColor: [248, 250, 252] },
+                columnStyles: { 0: { fontStyle: 'bold' }, 4: { fontStyle: 'bold' } },
+                didParseCell: data => {
+                    if (data.section !== 'body') return;
+                    if (data.column.index === 4) {
+                        if (data.cell.raw === 'ATRASADA') data.cell.styles.textColor = [239, 68, 68];
+                        if (data.cell.raw === 'NO PRAZO') data.cell.styles.textColor = [16, 185, 129];
+                    }
+                    if (data.column.index === 8 && data.cell.raw === 'NAO') data.cell.styles.textColor = [239, 68, 68];
+                },
+                margin: { left: 14, right: 14, bottom: 20 },
+                didDrawPage: data => {
+                    doc.setFontSize(7);
+                    doc.setTextColor(148, 163, 184);
+                    doc.text(`Gerado em ${new Date().toLocaleString('pt-BR')} - Pagina ${data.pageNumber}`, 14, pageHeight - 8);
+                }
+            });
+
+            const finalY = doc.lastAutoTable.finalY + 8;
+            if (finalY < pageHeight - 24) {
+                doc.setFontSize(9);
+                doc.setTextColor(71, 85, 105);
+                doc.text(`Total enviado: ${report.quantidadeTotal.toLocaleString('pt-BR')} pecas | ${formatNumber(report.pesoTotal)} kg`, 14, finalY);
+                doc.text(`Cargas avaliadas: ${report.avaliadas} de ${report.total}`, pageWidth - 14, finalY, { align: 'right' });
+            }
+
+            const safeName = terceiro.replace(/[^a-zA-Z0-9_-]+/g, '_');
+            doc.save(`Pontualidade_${safeName}_${monthLabel}_${selectedYear}.pdf`);
+            fecharModalTopo();
         }
         function renderDailyChart() {
             const useMonth = selectedMonthIndex === -1 ? new Date().getMonth() : selectedMonthIndex;
