@@ -155,9 +155,9 @@ router.post('/', async (req, res) => {
         }
 
         if (action === 'save-qualidade') {
-            const qualidade = data.qualidade === true;
-            const observacao = qualidade ? null : String(data.observacao || '').trim();
-            if (!qualidade && !observacao) {
+            const qualidade = data.qualidade === null ? null : data.qualidade === true;
+            const observacao = qualidade === false ? String(data.observacao || '').trim() : null;
+            if (qualidade === false && !observacao) {
                 return res.status(400).json({ error: 'Informe o motivo da não-qualidade.' });
             }
             await client.query(
@@ -169,7 +169,7 @@ router.post('/', async (req, res) => {
             );
             logActivity(req.user && req.user.name || 'Sistema', 'UPDATE_QUALIDADE_CARGA', 'acabamento_externo', {
                 carga: data.carga,
-                qualidade: qualidade ? 'SIM' : 'NÃO',
+                qualidade: qualidade === null ? 'NÃO AVALIADA' : qualidade ? 'SIM' : 'NÃO',
                 observacao
             });
             return res.status(200).json({ success: true });
