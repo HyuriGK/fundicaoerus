@@ -608,14 +608,31 @@
         .modal-stat strong {
             color: var(--color-primary);
         }
-        .quality-select {
-            background: rgba(0,0,0,0.3);
-            border: 1px solid var(--border-subtle);
-            color: #fff;
-            border-radius: 6px;
-            padding: 6px 9px;
+        .quality-options {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .quality-option {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            cursor: pointer;
+            font-size: 0.75rem;
             font-weight: 700;
-            outline: none;
+            color: var(--text-muted);
+        }
+        .quality-option input {
+            width: 16px;
+            height: 16px;
+            accent-color: var(--color-primary);
+            cursor: pointer;
+        }
+        .quality-option.yes {
+            color: #34d399;
+        }
+        .quality-option.no {
+            color: #ef4444;
         }
         .quality-popup-card {
             width: min(520px, 92vw);
@@ -1465,8 +1482,7 @@
                 };
                 const prevCell = makeDateCell(prev.acordada || '', `prevInput_${c}_acordada`, 'previsao_entrega') + makeDateCell(prev.entrega || '', `prevInput_${c}_entrega`, 'data_entrega');
                 const qualityValue = prev.qualidade === true ? 'sim' : prev.qualidade === false ? 'nao' : '';
-                const qualityColor = qualityValue === 'sim' ? '#34d399' : qualityValue === 'nao' ? '#ef4444' : '#a1a1aa';
-                const qualityCell = `<td onclick="event.stopPropagation()"><select class="quality-select" style="color:${qualityColor};" onchange="alterarQualidade('${c}',this)" onclick="event.stopPropagation()"><option value="" disabled ${qualityValue === '' ? 'selected' : ''}>SELECIONE</option><option value="sim" ${qualityValue === 'sim' ? 'selected' : ''}>SIM</option><option value="nao" ${qualityValue === 'nao' ? 'selected' : ''}>NÃO</option></select>${qualityValue === 'nao' && prev.qualidadeObservacao ? `<i class="fa-solid fa-comment-dots" title="Ver ou editar observação" onclick="event.stopPropagation();abrirQualidadeNao('${c}')" style="color:#ef4444;margin-left:7px;cursor:pointer;"></i>` : ''}</td>`;
+                const qualityCell = `<td onclick="event.stopPropagation()"><div class="quality-options"><label class="quality-option yes"><input type="checkbox" ${qualityValue === 'sim' ? 'checked' : ''} onchange="alterarQualidadeCheckbox('${c}','sim',this)">SIM</label><label class="quality-option no"><input type="checkbox" ${qualityValue === 'nao' ? 'checked' : ''} onchange="alterarQualidadeCheckbox('${c}','nao',this)">NÃO</label></div>${qualityValue === 'nao' && prev.qualidadeObservacao ? `<i class="fa-solid fa-comment-dots" title="Ver ou editar observação" onclick="event.stopPropagation();abrirQualidadeNao('${c}')" style="color:#ef4444;margin-left:7px;cursor:pointer;"></i>` : ''}</td>`;
                 let rowHTML = `<td>${c}</td><td>${formatDate(p.data)}</td>${prevCell}${qualityCell}<td>${p.terceiro}</td><td>${formatNumber(tP)}</td><td>${tQ}</td>`;
                 // Only sum Sales Value for pending items (not received)
                 const vSales = its.reduce((s, i) => {
@@ -1492,15 +1508,15 @@
             try { await apiRequest('previsao', 'POST', { carga, field, value: date || null }); }
             catch (e) { console.error('Erro ao salvar previsão:', e); }
         }
-        async function alterarQualidade(carga, select) {
+        async function alterarQualidadeCheckbox(carga, value, checkbox) {
             if (!previsoes[carga]) previsoes[carga] = {};
             qualidadeValorAnterior = previsoes[carga].qualidade;
-            if (select.value === 'nao') {
-                abrirQualidadeNao(carga);
+            if (!checkbox.checked) {
+                renderTable(currentFilteredData.length ? currentFilteredData : undefined);
                 return;
             }
-            if (select.value !== 'sim') {
-                renderTable(currentFilteredData.length ? currentFilteredData : undefined);
+            if (value === 'nao') {
+                abrirQualidadeNao(carga);
                 return;
             }
             previsoes[carga].qualidade = true;
