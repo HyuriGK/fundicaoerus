@@ -241,14 +241,29 @@ router.get('/op-apontamentos-resumo', async (req, res) => {
         console.log('📊 [API-POSTGRES] Buscando resumo global de apontamentos...');
 
         const query = `
-            SELECT 
+            SELECT
                 op,
                 setor,
                 SUM(quantidade) as quantidade,
                 MIN(data_producao) as data_inicio,
-                MAX(data_producao) as data_fim
-            FROM producao_apontada_sincronizada
-            WHERE op IS NOT NULL
+                MAX(data_producao) as data_fim,
+                JSON_AGG(
+                    JSON_BUILD_OBJECT(
+                        'data', data_producao,
+                        'quantidade', quantidade
+                    )
+                    ORDER BY data_producao
+                ) as lotes
+            FROM (
+                SELECT
+                    op,
+                    setor,
+                    data_producao::date as data_producao,
+                    SUM(quantidade) as quantidade
+                FROM producao_apontada_sincronizada
+                WHERE op IS NOT NULL
+                GROUP BY op, setor, data_producao::date
+            ) apontamentos_diarios
             GROUP BY op, setor
         `;
 
@@ -263,7 +278,11 @@ router.get('/op-apontamentos-resumo', async (req, res) => {
             summary[row.op][row.setor] = {
                 quantidade: parseFloat(row.quantidade),
                 data_inicio: row.data_inicio,
-                data_fim: row.data_fim
+                data_fim: row.data_fim,
+                lotes: row.lotes.map(lote => ({
+                    data: lote.data,
+                    quantidade: parseFloat(lote.quantidade)
+                }))
             };
         });
 

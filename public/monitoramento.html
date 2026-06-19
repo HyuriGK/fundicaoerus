@@ -2099,45 +2099,74 @@
             return activeStages;
         }
 
-        function getStageArrivalDate(op, stage, fallbackDate) {
-            const previousSectorByStage = {
-                'FUSÃO': 'MOLDAGEM',
-                'ACABAMENTO': 'FUSAO',
-                'TRATAMENTO TÉRMICO': 'ACABAMENTO',
-                'AGUARDANDO USINAGEM EXTERNA': 'TRATAMENTO TERMICO',
-                'AGUARDANDO QUALIDADE': 'TRATAMENTO TERMICO',
-                'EM USINAGEM EXTERNA': 'TRATAMENTO TERMICO',
-                'AGUARDANDO EXPEDIÇÃO': 'QUALIDADE',
-                'AGUARDANDO FATURAMENTO': 'EXPEDICAO'
+        function getStageArrivalDate(op, stage, stageQty, fallbackDate) {
+            const fifoFlowByStage = {
+                'FUSÃO': { source: 'MOLDAGEM', consumedBy: 'FUSAO' },
+                'ACABAMENTO': { source: 'FUSAO', consumedBy: 'ACABAMENTO' },
+                'TRATAMENTO TÉRMICO': { source: 'ACABAMENTO', consumedBy: 'TRATAMENTO TERMICO' },
+                'AGUARDANDO USINAGEM EXTERNA': { source: 'TRATAMENTO TERMICO', consumedBy: 'USINAGEM' },
+                'AGUARDANDO QUALIDADE': { source: 'TRATAMENTO TERMICO', consumedBy: 'QUALIDADE' },
+                'EM USINAGEM EXTERNA': { source: 'USINAGEM', consumedBy: 'QUALIDADE' },
+                'AGUARDANDO EXPEDIÇÃO': { source: 'QUALIDADE', consumedBy: 'EXPEDICAO' },
+                'AGUARDANDO FATURAMENTO': { source: 'EXPEDICAO', consumedBy: 'FATURAMENTO' }
             };
             const aliasesBySector = {
                 MOLDAGEM: ['MOLDAGEM'],
                 FUSAO: ['FUSAO', 'FUNDICAO'],
                 ACABAMENTO: ['ACABAMENTO', 'REBARBACAO', 'GRALHA'],
                 'TRATAMENTO TERMICO': ['TRATAMENTO TERMICO', 'NORMALIZACAO', 'TEMPERA'],
+                USINAGEM: ['USINAGEM', 'TORNEARIA'],
                 QUALIDADE: ['INSPECAO DE QUALIDADE', 'QUALIDADE', 'REVISAO'],
-                EXPEDICAO: ['EXPEDICAO', 'LOGISTICA']
+                EXPEDICAO: ['EXPEDICAO', 'LOGISTICA'],
+                FATURAMENTO: ['FATURAMENTO', 'FATURADO']
             };
             const normalize = value => String(value || '')
                 .normalize('NFD')
                 .replace(/[\u0300-\u036f]/g, '')
                 .trim()
                 .toUpperCase();
-            const previousSector = previousSectorByStage[stage];
+            const flow = fifoFlowByStage[stage];
             const opPointings = pointingSummary[String(op.OP_PCS || '').trim()];
-            if (!previousSector || !opPointings) return toLocalDate(fallbackDate);
+            if (!flow || !opPointings) return toLocalDate(fallbackDate);
 
-            const aliases = aliasesBySector[previousSector] || [previousSector];
-            let latestDate = null;
-            Object.entries(opPointings).forEach(([sectorName, data]) => {
+            const matchesSector = (sectorName, sectorKey) => {
                 const normalizedSector = normalize(sectorName);
-                if (!aliases.some(alias => normalizedSector.includes(alias))) return;
-                const date = toLocalDate(data.data_fim);
-                if (!Number.isNaN(date.getTime()) && (!latestDate || date > latestDate)) {
-                    latestDate = date;
+                const aliases = aliasesBySector[sectorKey] || [sectorKey];
+                return aliases.some(alias => normalizedSector.includes(alias));
+            };
+            const lots = [];
+            let consumedQty = 0;
+            Object.entries(opPointings).forEach(([sectorName, data]) => {
+                if (matchesSector(sectorName, flow.source)) {
+                    const sourceLots = Array.isArray(data.lotes) && data.lotes.length
+                        ? data.lotes
+                        : [{ data: data.data_fim, quantidade: data.quantidade }];
+                    sourceLots.forEach(lot => {
+                        const date = toLocalDate(lot.data);
+                        const quantity = Number(lot.quantidade) || 0;
+                        if (!Number.isNaN(date.getTime()) && quantity > 0) {
+                            lots.push({ date, quantity });
+                        }
+                    });
+                }
+                if (matchesSector(sectorName, flow.consumedBy)) {
+                    consumedQty += Number(data.quantidade) || 0;
                 }
             });
-            return latestDate || toLocalDate(fallbackDate);
+
+            lots.sort((a, b) => a.date - b.date);
+            const totalIncoming = lots.reduce((sum, lot) => sum + lot.quantity, 0);
+            let quantityToConsume = Math.max(consumedQty, totalIncoming - Number(stageQty || 0));
+
+            for (const lot of lots) {
+                const consumedFromLot = Math.min(lot.quantity, quantityToConsume);
+                lot.quantity -= consumedFromLot;
+                quantityToConsume -= consumedFromLot;
+                if (quantityToConsume <= 0) break;
+            }
+
+            const oldestRemainingLot = lots.find(lot => lot.quantity > 0.001);
+            return oldestRemainingLot?.date || toLocalDate(fallbackDate);
         }
 
         function getCarteiraStages(op) {
@@ -2193,7 +2222,7 @@
             return stageRows
                 .filter(([, qty]) => qty > 0)
                 .map(([stage, qty]) => {
-                    const arrivalDate = getStageArrivalDate(op, stage, emissionDate);
+                    const arrivalDate = getStageArrivalDate(op, stage, qty, emissionDate);
                     const configKey = stageLeadTimeKeyMap[stage] || configKeyMap[stage];
                     const lt = leadTimes[configKey] || 0;
                     const metaDate = toLocalDate(arrivalDate);
