@@ -1456,115 +1456,124 @@
             </div>
             <div class="audit-body">
                 <p class="audit-intro">
-                    Este painel documenta o significado de cada informação, sua origem e o cálculo aplicado.
+                    Pense em cada coluna como uma fila de produção. Cada card mostra quantas peças da OP estão
+                    naquele ponto, há quanto tempo estão ali e se já deveriam ter seguido para o próximo setor.
                     Os dados são atualizados automaticamente a cada 60 segundos.
                 </p>
 
                 <div class="audit-grid">
                     <section class="audit-card">
-                        <h3><i class="fa-solid fa-database"></i> Fontes de dados</h3>
+                        <h3><i class="fa-solid fa-map"></i> Como ler esta tela</h3>
                         <ul>
-                            <li><strong>Carteira e OP:</strong> dados sincronizados do ERP em <code>/api/pedidos-sync</code>.</li>
-                            <li><strong>Apontamentos:</strong> histórico da produção sincronizada em <code>/api/pedidos-firebird/op-apontamentos-resumo</code>.</li>
-                            <li><strong>Pesos manuais:</strong> cadastro retornado por <code>/api/weights/list</code>.</li>
-                            <li><strong>Entrega PCP:</strong> <code>ENTREGA_PETR</code>; na ausência, <code>DATA_ENTREGA_PPR</code>.</li>
+                            <li><strong>Cada coluna</strong> representa um setor ou uma espera antes do próximo setor.</li>
+                            <li><strong>Cada card</strong> representa uma OP ou um item de pedido.</li>
+                            <li><strong>QTD</strong> é a quantidade de peças naquele ponto da produção.</li>
+                            <li><strong>Dias</strong> é o tempo de espera do lote mais antigo.</li>
+                            <li><strong>Atraso ou prazo</strong> compara a espera com o tempo permitido no setor.</li>
                         </ul>
                     </section>
 
                     <section class="audit-card">
-                        <h3><i class="fa-solid fa-arrow-right-arrow-left"></i> Fluxo entre setores</h3>
-                        <p>As quantidades são distribuídas conforme os apontamentos acumulados e o roteiro produtivo da OP.</p>
+                        <h3><i class="fa-solid fa-arrow-right-arrow-left"></i> Como as peças mudam de coluna</h3>
+                        <p>As peças avançam quando existe um apontamento de produção no setor atual.</p>
                         <ul>
-                            <li>Ao apontar peças em um setor, elas deixam o saldo do setor anterior.</li>
-                            <li>As peças produzidas passam a formar o saldo aguardando o próximo setor.</li>
-                            <li>Refugos são descontados no setor em que ocorreram.</li>
-                            <li>Uma OP pode aparecer simultaneamente em mais de uma coluna quando há produção parcial.</li>
+                            <li>Exemplo: uma OP tem 10 peças e 4 são apontadas na Moldagem. Ficam 6 na Moldagem e surgem 4 na Fusão.</li>
+                            <li>Quando apenas parte avança, a mesma OP aparece em duas colunas.</li>
+                            <li>Peças refugadas são retiradas do saldo no setor onde ocorreu o refugo.</li>
                         </ul>
                     </section>
 
                     <section class="audit-card">
-                        <h3><i class="fa-solid fa-layer-group"></i> FIFO por quantidade</h3>
-                        <p>Cada apontamento diário do setor anterior cria um lote com data e quantidade. O setor seguinte consome primeiro os lotes mais antigos.</p>
-                        <div class="audit-formula">lote remanescente = entradas do setor anterior − consumo FIFO do setor atual</div>
-                        <p>O card usa a data do lote mais antigo que ainda possui quantidade pendente.</p>
+                        <h3><i class="fa-solid fa-layer-group"></i> O que significa FIFO</h3>
+                        <p>FIFO significa que as peças que chegaram primeiro são consideradas as primeiras a avançar.</p>
+                        <p><strong>Exemplo:</strong> chegaram 4 peças na sexta e 2 na segunda. Se 2 avançarem, elas são retiradas do lote de sexta. Sobram 2 de sexta e 2 de segunda.</p>
+                        <div class="audit-formula">primeiro que entra → primeiro que sai</div>
+                        <p>A idade exibida pertence ao lote mais antigo que ainda não avançou.</p>
                     </section>
 
                     <section class="audit-card">
-                        <h3><i class="fa-solid fa-hourglass-half"></i> Dias parados</h3>
-                        <p>Representa o tempo do lote FIFO mais antigo ainda pendente no setor.</p>
-                        <div class="audit-formula">dias parados = dias úteis entre a entrada do lote e hoje</div>
+                        <h3><i class="fa-solid fa-hourglass-half"></i> Como calculamos os dias parados</h3>
+                        <p>Encontramos o lote mais antigo que ainda está no setor e contamos os dias úteis desde a entrada dele até hoje.</p>
+                        <div class="audit-formula">dias parados = hoje − entrada do lote mais antigo</div>
                         <ul>
-                            <li>Sábados e domingos não são contados.</li>
+                            <li>Sábado e domingo não entram na conta.</li>
                             <li>Feriados ainda não são descontados.</li>
-                            <li>Na Moldagem sem apontamento anterior, a referência é a emissão da OP/pedido.</li>
+                            <li>Na primeira etapa, sem entrada anterior, usamos a emissão da OP ou do pedido.</li>
                         </ul>
                     </section>
 
                     <section class="audit-card">
-                        <h3><i class="fa-solid fa-triangle-exclamation"></i> Atraso do setor</h3>
-                        <p>Indica há quanto tempo as peças deveriam ter saído do setor atual.</p>
-                        <div class="audit-formula">prazo de saída = entrada FIFO + lead time do setor<br>atraso = hoje − prazo de saída</div>
+                        <h3><i class="fa-solid fa-triangle-exclamation"></i> Como calculamos o atraso</h3>
+                        <p>Cada setor possui um tempo permitido. Somamos esse tempo à data em que o lote entrou.</p>
+                        <div class="audit-formula">data em que deveria sair = entrada + tempo permitido<br>atraso = hoje − data em que deveria sair</div>
                         <ul>
-                            <li><strong>“3d atraso”:</strong> deveria ter saído há 3 dias úteis.</li>
-                            <li><strong>“2d prazo”:</strong> ainda restam 2 dias úteis.</li>
-                            <li><strong>“vence hoje”:</strong> o prazo do setor termina hoje.</li>
+                            <li><strong>3d atraso:</strong> o lote deveria ter saído há 3 dias úteis.</li>
+                            <li><strong>2d prazo:</strong> ainda existem 2 dias úteis para sair.</li>
+                            <li><strong>Vence hoje:</strong> hoje é o último dia permitido.</li>
                         </ul>
                     </section>
 
                     <section class="audit-card">
-                        <h3><i class="fa-solid fa-calendar-check"></i> Lead times</h3>
-                        <p>São os tempos permitidos para permanência em cada setor, configurados em dias úteis no botão <strong>Config</strong>.</p>
-                        <p>As configurações ficam salvas no navegador em <code>erus_monitoramento_lt</code>.</p>
+                        <h3><i class="fa-solid fa-calendar-check"></i> Tempo permitido por setor</h3>
+                        <p>É o número de dias úteis que uma peça pode permanecer no setor antes de ser considerada atrasada.</p>
+                        <p><strong>Exemplo:</strong> entrou na Fusão na segunda e o tempo permitido é 1 dia útil. Deve sair até terça-feira.</p>
+                        <p>Esses tempos podem ser alterados no botão <strong>Config</strong>.</p>
                     </section>
 
                     <section class="audit-card">
-                        <h3><i class="fa-solid fa-weight-hanging"></i> Peso alocado</h3>
-                        <p>É a soma do peso das peças atualmente atribuídas à coluna.</p>
-                        <div class="audit-formula">peso alocado = Σ (quantidade no setor × peso unitário)</div>
-                        <p>O peso unitário prioriza peso corrigido/manual, depois peso técnico e, por último, peso total dividido pela quantidade.</p>
+                        <h3><i class="fa-solid fa-weight-hanging"></i> O que é peso alocado</h3>
+                        <p>É o peso total das peças que aparecem naquela coluna.</p>
+                        <div class="audit-formula">peso da coluna = quantidade × peso de cada peça</div>
+                        <p><strong>Exemplo:</strong> 10 peças de 4 kg representam 40 kg alocados.</p>
+                        <p>Se existir um peso corrigido manualmente, ele tem prioridade.</p>
                     </section>
 
                     <section class="audit-card">
-                        <h3><i class="fa-solid fa-coins"></i> Valores</h3>
-                        <p>Quando habilitados, representam o valor proporcional da quantidade atualmente alocada no setor.</p>
-                        <div class="audit-formula">valor alocado = quantidade no setor × valor unitário</div>
-                        <p>Quando há preço por quilo e peso manual, o valor unitário é calculado por preço/kg × peso unitário.</p>
+                        <h3><i class="fa-solid fa-coins"></i> Como o valor é calculado</h3>
+                        <p>Quando a opção de valores está ligada, mostramos somente o valor das peças que estão naquela coluna.</p>
+                        <div class="audit-formula">valor da coluna = quantidade × valor de uma peça</div>
+                        <p>Se o produto for vendido por quilo, usamos o preço por quilo multiplicado pelo peso da peça.</p>
                     </section>
 
                     <section class="audit-card">
-                        <h3><i class="fa-solid fa-list-ol"></i> Ordenação</h3>
+                        <h3><i class="fa-solid fa-list-ol"></i> Como funciona a ordenação</h3>
                         <ul>
-                            <li><strong>Peso:</strong> maior peso alocado primeiro.</li>
-                            <li><strong>Tempo parado:</strong> maior número de dias parados primeiro.</li>
-                            <li><strong>Urgência:</strong> menor prazo de entrega PCP primeiro.</li>
-                            <li><strong>Cliente:</strong> ordem alfabética.</li>
+                            <li><strong>Maior peso:</strong> cards mais pesados no topo.</li>
+                            <li><strong>Mais tempo parado:</strong> lote mais antigo no topo.</li>
+                            <li><strong>Mais atrasado:</strong> entrega programada pelo PCP mais urgente primeiro.</li>
+                            <li><strong>Cliente:</strong> ordem pelo nome do cliente.</li>
                             <li><strong>OP:</strong> número crescente ou decrescente.</li>
                         </ul>
                     </section>
 
                     <section class="audit-card">
-                        <h3><i class="fa-solid fa-filter"></i> Busca e filtros</h3>
+                        <h3><i class="fa-solid fa-filter"></i> Busca e filtro de atrasados</h3>
                         <ul>
-                            <li>A busca de cada coluna verifica OP, pedido, produto, descrição e cliente.</li>
-                            <li>“Somente atrasados” mantém apenas cards cujo prazo do setor já venceu.</li>
-                            <li>A mesma OP é exibida uma única vez em cada setor.</li>
+                            <li>Você pode procurar por OP, pedido, produto, descrição ou cliente.</li>
+                            <li><strong>Somente atrasados</strong> mostra apenas lotes que passaram do tempo permitido no setor.</li>
+                            <li>Uma OP aparece no máximo uma vez dentro da mesma coluna.</li>
                         </ul>
                     </section>
 
                     <section class="audit-card">
-                        <h3><i class="fa-solid fa-tv"></i> Modo TV</h3>
+                        <h3><i class="fa-solid fa-tv"></i> Para que serve o Modo TV</h3>
                         <ul>
-                            <li>Oculta o cabeçalho e amplia o quadro produtivo.</li>
-                            <li>Exibe até cinco cards por coluna antes da rolagem automática.</li>
-                            <li>A rolagem avança em grupos e retorna ao início ao chegar ao final.</li>
-                            <li>O intervalo é configurável entre 3 e 120 segundos.</li>
+                            <li>Usa mais espaço da tela para mostrar os cards.</li>
+                            <li>Quando há muitos cards, a coluna rola automaticamente.</li>
+                            <li>Ao chegar ao final, volta para o primeiro card.</li>
+                            <li>O tempo entre as rolagens pode ser alterado em <strong>Config</strong>.</li>
                         </ul>
                     </section>
 
                     <section class="audit-card">
-                        <h3><i class="fa-solid fa-clock-rotate-left"></i> Detalhes da OP</h3>
-                        <p>Ao clicar em um card com OP, a tela detalha emissão, entrega PCP, quantidade, roteiro, saldos e apontamentos por etapa.</p>
-                        <p>Os registros de histórico mostram as datas e quantidades efetivamente apontadas.</p>
+                        <h3><i class="fa-solid fa-clock-rotate-left"></i> De onde vêm as informações</h3>
+                        <ul>
+                            <li><strong>OP, pedido, cliente e produto:</strong> vêm dos dados sincronizados do ERP.</li>
+                            <li><strong>Quantidades e datas por setor:</strong> vêm dos apontamentos da produção.</li>
+                            <li><strong>Data de entrega:</strong> usa a programação do PCP mostrada em pedidos.html.</li>
+                            <li><strong>Atualização:</strong> acontece automaticamente a cada 60 segundos.</li>
+                        </ul>
+                        <p>Ao clicar no card, você pode conferir os dados e o histórico da OP.</p>
                     </section>
                 </div>
             </div>
