@@ -9,11 +9,13 @@ router.get('/', async (req, res) => {
     try {
         await client.query(`CREATE TABLE IF NOT EXISTS acabamento_externo_previsoes (carga VARCHAR PRIMARY KEY, previsao_entrega DATE, data_entrega DATE)`);
         await client.query(`ALTER TABLE acabamento_externo_previsoes ADD COLUMN IF NOT EXISTS data_entrega DATE`);
+        await client.query(`ALTER TABLE acabamento_externo_previsoes ADD COLUMN IF NOT EXISTS qualidade BOOLEAN`);
+        await client.query(`ALTER TABLE acabamento_externo_previsoes ADD COLUMN IF NOT EXISTS qualidade_observacao TEXT`);
         const registros = await client.query('SELECT * FROM acabamento_externo_registros ORDER BY data DESC, id DESC');
         // Nota: Ajustei a query de recebidos para retornar o formato esperado pelo front
         const recebidos = await client.query('SELECT registro_id as id, carga FROM acabamento_externo_recebidos');
         const itens = await client.query('SELECT * FROM acabamento_externo_itens');
-        const previsoes = await client.query('SELECT carga, previsao_entrega, data_entrega FROM acabamento_externo_previsoes');
+        const previsoes = await client.query('SELECT carga, previsao_entrega, data_entrega, qualidade, qualidade_observacao FROM acabamento_externo_previsoes');
 
         return res.status(200).json({
             registros: registros.rows,
@@ -148,6 +150,27 @@ router.post('/', async (req, res) => {
             }
             logActivity(req.user && req.user.name || 'Sistema', 'UPDATE_PREVISAO_ENTREGA', 'acabamento_externo', {
                 carga: data.carga, campo: data.field === 'data_entrega' ? 'Data de Entrega' : 'Previsão de Entrega', valor: data.value || null
+            });
+            return res.status(200).json({ success: true });
+        }
+
+        if (action === 'save-qualidade') {
+            const qualidade = data.qualidade === true;
+            const observacao = qualidade ? null : String(data.observacao || '').trim();
+            if (!qualidade && !observacao) {
+                return res.status(400).json({ error: 'Informe o motivo da não-qualidade.' });
+            }
+            await client.query(
+                `INSERT INTO acabamento_externo_previsoes (carga, qualidade, qualidade_observacao)
+                 VALUES ($1, $2, $3)
+                 ON CONFLICT (carga) DO UPDATE
+                 SET qualidade = $2, qualidade_observacao = $3`,
+                [data.carga, qualidade, observacao]
+            );
+            logActivity(req.user && req.user.name || 'Sistema', 'UPDATE_QUALIDADE_CARGA', 'acabamento_externo', {
+                carga: data.carga,
+                qualidade: qualidade ? 'SIM' : 'NÃO',
+                observacao
             });
             return res.status(200).json({ success: true });
         }
