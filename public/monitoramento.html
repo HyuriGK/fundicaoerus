@@ -1919,14 +1919,16 @@
         async function fetchData() {
             try {
                 // Fetch OPs from the sync endpoint (like pedidos.html)
-                const [resOps, resWeights] = await Promise.all([
+                const [resOps, resWeights, resPointings] = await Promise.all([
                     fetch('/api/pedidos-sync?carteiraOnly=true'),
-                    fetch('/api/weights/list')
+                    fetch('/api/weights/list'),
+                    fetch('/api/pedidos-firebird/op-apontamentos-resumo')
                 ]);
  
                 if (!resOps.ok) throw new Error('Falha ao buscar dados');
  
                 if (resWeights.ok) customWeights = await resWeights.json();
+                if (resPointings.ok) pointingSummary = await resPointings.json();
 
                 const rawOps = await resOps.json();
 
@@ -2097,6 +2099,47 @@
             return activeStages;
         }
 
+        function getStageArrivalDate(op, stage, fallbackDate) {
+            const previousSectorByStage = {
+                'FUSÃO': 'MOLDAGEM',
+                'ACABAMENTO': 'FUSAO',
+                'TRATAMENTO TÉRMICO': 'ACABAMENTO',
+                'AGUARDANDO USINAGEM EXTERNA': 'TRATAMENTO TERMICO',
+                'AGUARDANDO QUALIDADE': 'TRATAMENTO TERMICO',
+                'EM USINAGEM EXTERNA': 'TRATAMENTO TERMICO',
+                'AGUARDANDO EXPEDIÇÃO': 'QUALIDADE',
+                'AGUARDANDO FATURAMENTO': 'EXPEDICAO'
+            };
+            const aliasesBySector = {
+                MOLDAGEM: ['MOLDAGEM'],
+                FUSAO: ['FUSAO', 'FUNDICAO'],
+                ACABAMENTO: ['ACABAMENTO', 'REBARBACAO', 'GRALHA'],
+                'TRATAMENTO TERMICO': ['TRATAMENTO TERMICO', 'NORMALIZACAO', 'TEMPERA'],
+                QUALIDADE: ['INSPECAO DE QUALIDADE', 'QUALIDADE', 'REVISAO'],
+                EXPEDICAO: ['EXPEDICAO', 'LOGISTICA']
+            };
+            const normalize = value => String(value || '')
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .trim()
+                .toUpperCase();
+            const previousSector = previousSectorByStage[stage];
+            const opPointings = pointingSummary[String(op.OP_PCS || '').trim()];
+            if (!previousSector || !opPointings) return toLocalDate(fallbackDate);
+
+            const aliases = aliasesBySector[previousSector] || [previousSector];
+            let latestDate = null;
+            Object.entries(opPointings).forEach(([sectorName, data]) => {
+                const normalizedSector = normalize(sectorName);
+                if (!aliases.some(alias => normalizedSector.includes(alias))) return;
+                const date = toLocalDate(data.data_fim);
+                if (!Number.isNaN(date.getTime()) && (!latestDate || date > latestDate)) {
+                    latestDate = date;
+                }
+            });
+            return latestDate || toLocalDate(fallbackDate);
+        }
+
         function getCarteiraStages(op) {
             if (typeof getItemSectorMetrics !== 'function') {
                 const totalQty = parseInt(op.OP_QUANTIDADE) || parseInt(op.QUANTIDADE_PPR) || 0;
@@ -2107,13 +2150,13 @@
             const route = String(op.ROTEIRO_PRODUCAO || '').toUpperCase();
             const hasUsinagem = route.includes('USINAGEM') || route.includes('TORNEARIA');
             const now = toLocalDate(new Date());
-            const arrivalDate = toLocalDate(op.OP_EMISSAO || op.DATA_EMISSAO_PEDIDO || new Date());
+            const emissionDate = toLocalDate(op.OP_EMISSAO || op.DATA_EMISSAO_PEDIDO || new Date());
             const hasOp = !!String(op.OP_PCS || '').trim() && String(op.OP_PCS || '').trim() !== '-';
             if (!hasOp) {
                 const qty = getCommercialBalance(op) || metrics.totalBalance || metrics.targetTotalQty || 0;
                 const stage = getMoldagemStage(op);
                 const configKey = stageLeadTimeKeyMap[stage];
-                const metaDate = toLocalDate(arrivalDate);
+                const metaDate = toLocalDate(emissionDate);
                 let daysToAdd = leadTimes[configKey] || 0;
                 while (daysToAdd > 0) {
                     metaDate.setDate(metaDate.getDate() + 1);
@@ -2128,7 +2171,7 @@
                     isDelayed: diff > 0,
                     statusColor: diff > 0 ? 'var(--status-danger)' : 'var(--status-success)',
                     qtyExpedited: 0,
-                    daysStopped: getBusinessDaysDiff(arrivalDate, now)
+                    daysStopped: getBusinessDaysDiff(emissionDate, now)
                 }] : [];
             }
 
@@ -2150,6 +2193,7 @@
             return stageRows
                 .filter(([, qty]) => qty > 0)
                 .map(([stage, qty]) => {
+                    const arrivalDate = getStageArrivalDate(op, stage, emissionDate);
                     const configKey = stageLeadTimeKeyMap[stage] || configKeyMap[stage];
                     const lt = leadTimes[configKey] || 0;
                     const metaDate = toLocalDate(arrivalDate);
