@@ -2892,21 +2892,20 @@
                             <tbody>
                 `;
 
-                let prevFlowQty = totalQty;
                 ordered.forEach(sector => {
-                    const qtyMovedOut = Math.max(aggregated[sector] || 0, maxForwardModal[sector] || 0);
                     const qtyPointed = aggregated[sector] || 0;
-                    const qtyExpected = prevFlowQty;
+                    const qtyExpected = totalQty;
                     const qtyBalance = Math.max(0, qtyExpected - qtyPointed);
                     const meta = metaDates[sector];
                     const metaMidnight = toLocalDate(meta);
+                    const hasPointing = qtyPointed > 0;
+                    let statusHtml = `<span style="color: var(--text-muted);">Aguardando</span>`;
 
-                    if (qtyPointed > 0) {
+                    if (hasPointing) {
                         const referenceDate = toLocalDate(lastPointingDate[sector]);
                         const timeDiff = referenceDate.getTime() - metaMidnight.getTime();
                         const daysDiff = Math.round(timeDiff / (1000 * 3600 * 24));
 
-                        let statusHtml = '';
                         if (daysDiff > 0) {
                             const bizDelay = Math.abs(getBusinessDaysDiff(metaMidnight, referenceDate));
                             statusHtml = `<span style="color: var(--status-danger); font-weight: 600;"><i class="fa-solid fa-clock"></i> Atrasou (${bizDelay} d)</span>`;
@@ -2947,9 +2946,35 @@
                                 </td>
                             </tr>
                         `;
+                    } else {
+                        html += `
+                            <tr class="op-detail-row is-zero"
+                                 style="border-bottom: 1px solid var(--border-subtle); color: var(--text-muted); background: transparent;">
+                                <td style="padding: 15px 25px;">
+                                    <div style="display: flex; align-items: center; gap: 12px;">
+                                        <div style="width: 8px; height: 8px; border-radius: 50%; background: var(--border-subtle);"></div>
+                                        <span style="font-weight: 600;">${sector}</span>
+                                    </div>
+                                </td>
+                                <td style="padding: 15px 25px; text-align: center; font-weight: 700;">
+                                    ${qtyExpected.toLocaleString('pt-BR')} <small style="font-size: 0.7em;">PÇS</small>
+                                </td>
+                                <td style="padding: 15px 25px; text-align: center; font-weight: 700;">
+                                    0 <small style="font-size: 0.7em;">PÇS</small>
+                                </td>
+                                <td style="padding: 15px 25px; text-align: center; font-weight: 700; color: var(--color-primary);">
+                                    ${qtyBalance.toLocaleString('pt-BR')} <small style="font-size: 0.7em;">PÇS</small>
+                                </td>
+                                <td style="padding: 15px 25px; text-align: center; font-family: var(--font-mono); font-size: 0.85rem;">
+                                    ${meta.toLocaleDateString('pt-BR')}
+                                </td>
+                                <td style="padding: 15px 25px; text-align: center; font-size: 0.85rem;">
+                                    ${statusHtml}
+                                </td>
+                            </tr>
+                        `;
                     }
 
-                    prevFlowQty = qtyMovedOut;
                 });
 
                 html += `
