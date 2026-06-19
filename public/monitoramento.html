@@ -139,6 +139,23 @@
             background: rgba(var(--color-primary-rgb), 0.2);
         }
 
+        .btn-info {
+            width: 40px;
+            height: 40px;
+            padding: 0;
+            justify-content: center;
+            border-radius: 50%;
+            color: var(--color-primary);
+            border: 1px solid rgba(var(--color-primary-rgb), 0.35);
+            background: rgba(var(--color-primary-rgb), 0.08);
+            font-size: 1.1rem;
+        }
+
+        .btn-info:hover {
+            background: rgba(var(--color-primary-rgb), 0.18);
+            border-color: var(--color-primary);
+        }
+
         /* --- PRESENTATION MODE STYLES --- */
         body.presentation-mode {
             padding: 0;
@@ -1040,6 +1057,7 @@
 
         #opDetailsModal,
         #opSectorHistoryModal,
+        #auditModal,
         #configModal {
             z-index: 1000000 !important;
             background: #09090b !important;
@@ -1048,14 +1066,78 @@
 
         #opDetailsModal .modal-card,
         #opSectorHistoryModal .modal-card,
+        #auditModal .modal-card,
         #configModal .modal-card {
             background: #111113 !important;
         }
 
         #opDetailsModal .modal-card.fullscreen,
+        #auditModal .modal-card.fullscreen,
         #configModal .modal-card.fullscreen {
             background: #09090b !important;
         }
+
+        .audit-body {
+            padding: 32px 40px 60px;
+            overflow-y: auto;
+        }
+
+        .audit-intro {
+            max-width: 1100px;
+            color: var(--text-muted);
+            line-height: 1.6;
+            margin-bottom: 28px;
+        }
+
+        .audit-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 16px;
+        }
+
+        .audit-card {
+            background: rgba(255,255,255,0.025);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            padding: 22px;
+        }
+
+        .audit-card h3 {
+            color: var(--color-primary);
+            font-size: 1rem;
+            margin: 0 0 14px;
+            display: flex;
+            align-items: center;
+            gap: 9px;
+        }
+
+        .audit-card p,
+        .audit-card li {
+            color: #d4d4d8;
+            font-size: 0.88rem;
+            line-height: 1.55;
+        }
+
+        .audit-card ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+
+        .audit-card li + li {
+            margin-top: 8px;
+        }
+
+        .audit-formula {
+            margin-top: 12px;
+            padding: 10px 12px;
+            border-left: 3px solid var(--color-primary);
+            background: rgba(var(--color-primary-rgb), 0.06);
+            color: #fff;
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+            line-height: 1.5;
+        }
+
 
         .modal-header {
             display: flex;
@@ -1216,8 +1298,8 @@
             <button class="btn-glass btn-presentation toggle-btn" onclick="togglePresentationMode()"> <span id="presentation-text">Modo TV</span>
  </button>
             <button class="btn-glass" onclick="openConfig()"> Config</button>
-            <a href="index.html" class="btn-glass" style="color: var(--status-danger);"><i
-                    class="fa-solid fa-arrow-left"></i> Voltar</a>
+            <button class="btn-glass btn-info" onclick="openAudit()" title="Informações e auditoria da tela"
+                aria-label="Abrir informações e auditoria"><i class="fa-solid fa-info"></i></button>
         </div>
     </header>
 
@@ -1364,6 +1446,132 @@
                     oninput="renderBoard()">
             </div>
             <div class="cards-list" id="list-expedicao"></div>
+        </div>
+    </div>
+
+    <div id="auditModal" class="modal-overlay" style="padding: 0;">
+        <div class="modal-card fullscreen">
+            <div class="modal-header" style="padding: 22px 40px; margin: 0;">
+                <h2 class="modal-title" style="font-size: 1.55rem;">
+                    <i class="fa-solid fa-circle-info" style="color: var(--color-primary);"></i>
+                    Auditoria da tela de Monitoramento
+                </h2>
+                <span class="modal-close" style="font-size: 2.5rem;" onclick="closeAudit()">&times;</span>
+            </div>
+            <div class="audit-body">
+                <p class="audit-intro">
+                    Este painel documenta o significado de cada informação, sua origem e o cálculo aplicado.
+                    Os dados são atualizados automaticamente a cada 60 segundos.
+                </p>
+
+                <div class="audit-grid">
+                    <section class="audit-card">
+                        <h3><i class="fa-solid fa-database"></i> Fontes de dados</h3>
+                        <ul>
+                            <li><strong>Carteira e OP:</strong> dados sincronizados do ERP em <code>/api/pedidos-sync</code>.</li>
+                            <li><strong>Apontamentos:</strong> histórico da produção sincronizada em <code>/api/pedidos-firebird/op-apontamentos-resumo</code>.</li>
+                            <li><strong>Pesos manuais:</strong> cadastro retornado por <code>/api/weights/list</code>.</li>
+                            <li><strong>Entrega PCP:</strong> <code>ENTREGA_PETR</code>; na ausência, <code>DATA_ENTREGA_PPR</code>.</li>
+                        </ul>
+                    </section>
+
+                    <section class="audit-card">
+                        <h3><i class="fa-solid fa-arrow-right-arrow-left"></i> Fluxo entre setores</h3>
+                        <p>As quantidades são distribuídas conforme os apontamentos acumulados e o roteiro produtivo da OP.</p>
+                        <ul>
+                            <li>Ao apontar peças em um setor, elas deixam o saldo do setor anterior.</li>
+                            <li>As peças produzidas passam a formar o saldo aguardando o próximo setor.</li>
+                            <li>Refugos são descontados no setor em que ocorreram.</li>
+                            <li>Uma OP pode aparecer simultaneamente em mais de uma coluna quando há produção parcial.</li>
+                        </ul>
+                    </section>
+
+                    <section class="audit-card">
+                        <h3><i class="fa-solid fa-layer-group"></i> FIFO por quantidade</h3>
+                        <p>Cada apontamento diário do setor anterior cria um lote com data e quantidade. O setor seguinte consome primeiro os lotes mais antigos.</p>
+                        <div class="audit-formula">lote remanescente = entradas do setor anterior − consumo FIFO do setor atual</div>
+                        <p>O card usa a data do lote mais antigo que ainda possui quantidade pendente.</p>
+                    </section>
+
+                    <section class="audit-card">
+                        <h3><i class="fa-solid fa-hourglass-half"></i> Dias parados</h3>
+                        <p>Representa o tempo do lote FIFO mais antigo ainda pendente no setor.</p>
+                        <div class="audit-formula">dias parados = dias úteis entre a entrada do lote e hoje</div>
+                        <ul>
+                            <li>Sábados e domingos não são contados.</li>
+                            <li>Feriados ainda não são descontados.</li>
+                            <li>Na Moldagem sem apontamento anterior, a referência é a emissão da OP/pedido.</li>
+                        </ul>
+                    </section>
+
+                    <section class="audit-card">
+                        <h3><i class="fa-solid fa-triangle-exclamation"></i> Atraso do setor</h3>
+                        <p>Indica há quanto tempo as peças deveriam ter saído do setor atual.</p>
+                        <div class="audit-formula">prazo de saída = entrada FIFO + lead time do setor<br>atraso = hoje − prazo de saída</div>
+                        <ul>
+                            <li><strong>“3d atraso”:</strong> deveria ter saído há 3 dias úteis.</li>
+                            <li><strong>“2d prazo”:</strong> ainda restam 2 dias úteis.</li>
+                            <li><strong>“vence hoje”:</strong> o prazo do setor termina hoje.</li>
+                        </ul>
+                    </section>
+
+                    <section class="audit-card">
+                        <h3><i class="fa-solid fa-calendar-check"></i> Lead times</h3>
+                        <p>São os tempos permitidos para permanência em cada setor, configurados em dias úteis no botão <strong>Config</strong>.</p>
+                        <p>As configurações ficam salvas no navegador em <code>erus_monitoramento_lt</code>.</p>
+                    </section>
+
+                    <section class="audit-card">
+                        <h3><i class="fa-solid fa-weight-hanging"></i> Peso alocado</h3>
+                        <p>É a soma do peso das peças atualmente atribuídas à coluna.</p>
+                        <div class="audit-formula">peso alocado = Σ (quantidade no setor × peso unitário)</div>
+                        <p>O peso unitário prioriza peso corrigido/manual, depois peso técnico e, por último, peso total dividido pela quantidade.</p>
+                    </section>
+
+                    <section class="audit-card">
+                        <h3><i class="fa-solid fa-coins"></i> Valores</h3>
+                        <p>Quando habilitados, representam o valor proporcional da quantidade atualmente alocada no setor.</p>
+                        <div class="audit-formula">valor alocado = quantidade no setor × valor unitário</div>
+                        <p>Quando há preço por quilo e peso manual, o valor unitário é calculado por preço/kg × peso unitário.</p>
+                    </section>
+
+                    <section class="audit-card">
+                        <h3><i class="fa-solid fa-list-ol"></i> Ordenação</h3>
+                        <ul>
+                            <li><strong>Peso:</strong> maior peso alocado primeiro.</li>
+                            <li><strong>Tempo parado:</strong> maior número de dias parados primeiro.</li>
+                            <li><strong>Urgência:</strong> menor prazo de entrega PCP primeiro.</li>
+                            <li><strong>Cliente:</strong> ordem alfabética.</li>
+                            <li><strong>OP:</strong> número crescente ou decrescente.</li>
+                        </ul>
+                    </section>
+
+                    <section class="audit-card">
+                        <h3><i class="fa-solid fa-filter"></i> Busca e filtros</h3>
+                        <ul>
+                            <li>A busca de cada coluna verifica OP, pedido, produto, descrição e cliente.</li>
+                            <li>“Somente atrasados” mantém apenas cards cujo prazo do setor já venceu.</li>
+                            <li>A mesma OP é exibida uma única vez em cada setor.</li>
+                        </ul>
+                    </section>
+
+                    <section class="audit-card">
+                        <h3><i class="fa-solid fa-tv"></i> Modo TV</h3>
+                        <ul>
+                            <li>Oculta o cabeçalho e amplia o quadro produtivo.</li>
+                            <li>Exibe até cinco cards por coluna antes da rolagem automática.</li>
+                            <li>A rolagem avança em grupos e retorna ao início ao chegar ao final.</li>
+                            <li>O intervalo é configurável entre 3 e 120 segundos.</li>
+                        </ul>
+                    </section>
+
+                    <section class="audit-card">
+                        <h3><i class="fa-solid fa-clock-rotate-left"></i> Detalhes da OP</h3>
+                        <p>Ao clicar em um card com OP, a tela detalha emissão, entrega PCP, quantidade, roteiro, saldos e apontamentos por etapa.</p>
+                        <p>Os registros de histórico mostram as datas e quantidades efetivamente apontadas.</p>
+                    </section>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -1881,6 +2089,14 @@
 
         function closeConfig() {
             document.getElementById('configModal').style.display = 'none';
+        }
+
+        function openAudit() {
+            document.getElementById('auditModal').style.display = 'flex';
+        }
+
+        function closeAudit() {
+            document.getElementById('auditModal').style.display = 'none';
         }
 
         function saveConfig() {
@@ -2858,7 +3074,9 @@
             // ESC to close modals
             window.addEventListener('keydown', (e) => {
                 if (e.key === "Escape") {
-                    if (document.getElementById('opSectorHistoryModal').style.display === 'flex') {
+                    if (document.getElementById('auditModal').style.display === 'flex') {
+                        closeAudit();
+                    } else if (document.getElementById('opSectorHistoryModal').style.display === 'flex') {
                         closeSectorHistory();
                     } else if (document.getElementById('opDetailsModal').style.display === 'flex') {
                         closeOPDetails();
