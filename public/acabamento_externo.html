@@ -1914,6 +1914,18 @@
                 `Período selecionado: ${MONTHS_SHORT[selectedMonthIndex]}/${selectedYear}`;
             abrirModalPorId('pontualidadeReportModal');
         }
+        function businessDayDiff(endDate, startDate) {
+            const end = new Date(`${endDate}T00:00:00Z`);
+            const current = new Date(`${startDate}T00:00:00Z`);
+            const direction = end >= current ? 1 : -1;
+            let days = 0;
+            while (current.getTime() !== end.getTime()) {
+                current.setUTCDate(current.getUTCDate() + direction);
+                const weekDay = current.getUTCDay();
+                if (weekDay !== 0 && weekDay !== 6) days += direction;
+            }
+            return days;
+        }
         function getPontualidadeReportData(terceiro) {
             const periodRecords = getPontualidadePeriodRecords().filter(r => String(r.terceiro || '').trim() === terceiro);
             const byCarga = {};
@@ -1921,10 +1933,9 @@
                 if (!byCarga[r.carga]) byCarga[r.carga] = [];
                 byCarga[r.carga].push(r);
             });
-            const dayDiff = (a, b) => Math.round((new Date(a + 'T00:00:00') - new Date(b + 'T00:00:00')) / 86400000);
             const rows = Object.entries(byCarga).map(([carga, items]) => {
                 const prev = previsoes[carga] || {};
-                const atraso = prev.acordada && prev.entrega ? dayDiff(prev.entrega, prev.acordada) : null;
+                const atraso = prev.acordada && prev.entrega ? businessDayDiff(prev.entrega, prev.acordada) : null;
                 return {
                     carga,
                     dataEnvio: items[0].data,
@@ -2225,7 +2236,6 @@
             // 1. Reduz registros para cargas únicas (cada carga tem um terceiro e uma previsão)
             const cargasTerceiro = {};
             filtrados.forEach(r => { if (!(r.carga in cargasTerceiro)) cargasTerceiro[r.carga] = r.terceiro || '—'; });
-            const dayDiff = (a, b) => Math.round((new Date(a + 'T00:00:00') - new Date(b + 'T00:00:00')) / 86400000);
             // 2. Agrupa avaliação por terceiro (só cargas com data acordada E data de entrega)
             const stats = {};
             // Semeia todos os fornecedores cadastrados para que apareçam mesmo sem registros
@@ -2235,7 +2245,7 @@
             Object.keys(cargasTerceiro).forEach(carga => {
                 const prev = previsoes[carga];
                 if (!prev || !prev.acordada || !prev.entrega) return;
-                const atraso = dayDiff(prev.entrega, prev.acordada); // >0 = atrasou, <=0 = no prazo
+                const atraso = businessDayDiff(prev.entrega, prev.acordada); // >0 = atrasou, <=0 = no prazo
                 const terc = cargasTerceiro[carga];
                 if (!stats[terc]) stats[terc] = { total: 0, onTime: 0, late: 0, daysLate: 0, worst: 0 };
                 const s = stats[terc];
