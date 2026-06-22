@@ -578,7 +578,13 @@
             left: 0 !important;
         }
         #qualidadeModal {
+            top: 0 !important;
+            right: 0 !important;
+            bottom: 0 !important;
             left: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            padding: 0 !important;
             z-index: 100001 !important;
         }
         #cargaModal .modal-content {
@@ -667,12 +673,14 @@
             color: #ef4444;
         }
         .quality-popup-card {
-            width: min(1280px, 97vw);
-            min-height: 84vh;
+            width: 100vw;
+            max-width: 100vw;
+            height: 100vh;
+            max-height: 100vh;
             background: #18181b;
-            border: 1px solid var(--border-highlight);
-            border-radius: 14px;
-            box-shadow: 0 28px 70px rgba(0,0,0,0.65);
+            border: 0;
+            border-radius: 0;
+            box-shadow: none;
             overflow: hidden;
             display: flex;
             flex-direction: column;
@@ -742,6 +750,40 @@
             color: var(--text-muted);
             font-size: .85rem;
             margin-top: 12px;
+        }
+        .quality-image-viewer {
+            position: fixed;
+            inset: 0;
+            z-index: 100002;
+            display: none;
+            flex-direction: column;
+            background: rgba(0,0,0,.94);
+        }
+        .quality-image-viewer.visible {
+            display: flex;
+        }
+        .quality-image-viewer-toolbar {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            padding: 12px;
+            background: rgba(24,24,27,.95);
+            border-bottom: 1px solid var(--border-subtle);
+        }
+        .quality-image-viewer-stage {
+            flex: 1;
+            overflow: auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+        .quality-image-viewer-stage img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            transform-origin: center;
+            transition: transform .15s ease;
         }
         #qualidadeModal .modal-title {
             color: #fff !important;
@@ -1248,6 +1290,17 @@
             </div>
         </div>
     </div>
+    <div id="qualidadeImagemViewer" class="quality-image-viewer" onclick="if(event.target === this || event.target.classList.contains('quality-image-viewer-stage')) fecharImagemQualidade()">
+        <div class="quality-image-viewer-toolbar">
+            <button type="button" class="btn-modern" onclick="alterarZoomImagemQualidade(-.25)" title="Diminuir zoom"><i class="fa-solid fa-magnifying-glass-minus"></i></button>
+            <button type="button" class="btn-modern" onclick="resetarZoomImagemQualidade()" title="Restaurar zoom">100%</button>
+            <button type="button" class="btn-modern" onclick="alterarZoomImagemQualidade(.25)" title="Aumentar zoom"><i class="fa-solid fa-magnifying-glass-plus"></i></button>
+            <button type="button" class="btn-modern" onclick="fecharImagemQualidade()" title="Fechar"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="quality-image-viewer-stage">
+            <img id="qualidadeImagemAmpliada" alt="Foto ampliada da não-qualidade">
+        </div>
+    </div>
     <div id="pontualidadeReportModal" class="modal-overlay" style="z-index: 10002;">
         <div class="report-selector-card">
             <div class="modal-header">
@@ -1395,6 +1448,7 @@
         let qualidadeValorAnterior = null;
         let qualidadeFotosAtuais = [];
         let qualidadeFotosCarregadas = false;
+        let qualidadeImagemZoom = 1;
         let itensConhecidos = new Map();
         let currentFilteredData = [];
         let mainChartInstance = null;
@@ -1429,6 +1483,10 @@
         }
         document.addEventListener('keydown', e => {
             if (e.key === 'Escape') {
+                if (document.getElementById('qualidadeImagemViewer')?.classList.contains('visible')) {
+                    fecharImagemQualidade();
+                    return;
+                }
                 fecharModalTopo();
             }
         });
@@ -1793,8 +1851,28 @@
             const grid = document.getElementById('qualidadeFotosGrid');
             document.getElementById('qualidadeFotosContador').textContent = `${qualidadeFotosAtuais.length} de 5 fotos`;
             grid.innerHTML = qualidadeFotosAtuais.length
-                ? qualidadeFotosAtuais.map((foto, index) => `<div class="quality-photo-item"><img src="${foto}" alt="Foto da não-qualidade" onclick="window.open(this.src, '_blank')"><button type="button" class="quality-photo-remove" title="Remover foto" onclick="removerFotoQualidade(${index})"><i class="fa-solid fa-xmark"></i></button></div>`).join('')
+                ? qualidadeFotosAtuais.map((foto, index) => `<div class="quality-photo-item"><img src="${foto}" alt="Foto da não-qualidade" onclick="abrirImagemQualidade(${index})"><button type="button" class="quality-photo-remove" title="Remover foto" onclick="removerFotoQualidade(${index})"><i class="fa-solid fa-xmark"></i></button></div>`).join('')
                 : '<div class="quality-photo-empty">Nenhuma foto anexada.</div>';
+        }
+        function abrirImagemQualidade(index) {
+            const viewer = document.getElementById('qualidadeImagemViewer');
+            const imagem = document.getElementById('qualidadeImagemAmpliada');
+            imagem.src = qualidadeFotosAtuais[index];
+            qualidadeImagemZoom = 1;
+            imagem.style.transform = 'scale(1)';
+            viewer.classList.add('visible');
+        }
+        function alterarZoomImagemQualidade(valor) {
+            qualidadeImagemZoom = Math.min(5, Math.max(.25, qualidadeImagemZoom + valor));
+            document.getElementById('qualidadeImagemAmpliada').style.transform = `scale(${qualidadeImagemZoom})`;
+        }
+        function resetarZoomImagemQualidade() {
+            qualidadeImagemZoom = 1;
+            document.getElementById('qualidadeImagemAmpliada').style.transform = 'scale(1)';
+        }
+        function fecharImagemQualidade() {
+            document.getElementById('qualidadeImagemViewer').classList.remove('visible');
+            document.getElementById('qualidadeImagemAmpliada').src = '';
         }
         function removerFotoQualidade(index) {
             qualidadeFotosAtuais.splice(index, 1);
