@@ -2698,13 +2698,7 @@
                 datasets.push({
                     label: 'Caixas por Dia',
                     data: dataCaixas,
-                    backgroundColor: (ctx2) => {
-                        if (currentMonthFilter !== 0) {
-                            const ds = `${currentYearFilter}-${String(currentMonthFilter).padStart(2,'0')}-${String(labels[ctx2.dataIndex]).padStart(2,'0')}`;
-                            if (isParadaAtiva(ds, currentSectorFilter)) return '#ef4444';
-                        }
-                        return window.isGraphicReportRunning ? '#d97706' : '#fbbf24';
-                    },
+                    backgroundColor: '#ea580c',
                     borderRadius: 4,
                     order: 2,
                     yAxisID: 'y'
@@ -2727,13 +2721,7 @@
                 datasets.push({
                     label: 'Produção Diária',
                     data: dataDaily,
-                    backgroundColor: (ctx2) => {
-                        if (currentMonthFilter !== 0) {
-                            const ds = `${currentYearFilter}-${String(currentMonthFilter).padStart(2,'0')}-${String(labels[ctx2.dataIndex]).padStart(2,'0')}`;
-                            if (isParadaAtiva(ds, currentSectorFilter)) return '#ef4444';
-                        }
-                        return window.isGraphicReportRunning ? '#c2410c' : '#ea580c';
-                    },
+                    backgroundColor: '#ea580c',
                     borderRadius: 4,
                     order: 2,
                     yAxisID: 'y'
@@ -2756,7 +2744,7 @@
 
             // Y axis max for bars
             const barMax = (() => {
-                const raw = Math.max(...activeBarData) * 1.05 || 100;
+                const raw = Math.max(...activeBarData) * (currentMonthFilter === 0 ? 1.05 : 1.15) || 100;
                 const step = isCaixasMode ? 10 : 2000;
                 return Math.ceil(raw / step) * step;
             })();
@@ -2856,20 +2844,38 @@
                             }
                         },
                         datalabels: {
-                            display: true,
-                            anchor: 'end',
-                            align: 'top',
-                            color: window.isGraphicReportRunning ? '#000000' : ((window.ErusTheme && window.ErusTheme.isLight()) ? '#1a1f2e' : '#fff'),
-                            offset: 4,
-                            font: { size: window.isGraphicReportRunning ? 14 : 10, weight: 'bold' },
-                            formatter: (value, context) => {
-                                if (!value || value <= 0) return '';
-                                if (context.dataset.yAxisID === 'y1') return '';
-                                if (isCaixasMode) {
-                                    return value % 1 === 0 ? value.toLocaleString('pt-BR') : value.toLocaleString('pt-BR', {minimumFractionDigits:1, maximumFractionDigits:1});
+                            labels: {
+                                value: {
+                                    display: true,
+                                    anchor: 'end',
+                                    align: 'top',
+                                    color: window.isGraphicReportRunning ? '#000000' : ((window.ErusTheme && window.ErusTheme.isLight()) ? '#1a1f2e' : '#fff'),
+                                    offset: 4,
+                                    font: { size: window.isGraphicReportRunning ? 14 : 10, weight: 'bold' },
+                                    formatter: (value, context) => {
+                                        if (!value || value <= 0) return '';
+                                        if (context.dataset.yAxisID === 'y1') return '';
+                                        if (isCaixasMode) {
+                                            return value % 1 === 0 ? value.toLocaleString('pt-BR') : value.toLocaleString('pt-BR', {minimumFractionDigits:1, maximumFractionDigits:1});
+                                        }
+                                        if (window.isGraphicReportRunning) return formatNumber(value / 1000, 2) + ' Ton';
+                                        return formatNumber(value, 0);
+                                    }
+                                },
+                                parada: {
+                                    display: (context) => {
+                                        if (currentMonthFilter === 0 || context.dataset.yAxisID !== 'y') return false;
+                                        const day = labels[context.dataIndex];
+                                        const ds = `${currentYearFilter}-${String(currentMonthFilter).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+                                        return isParadaAtiva(ds, currentSectorFilter);
+                                    },
+                                    anchor: 'end',
+                                    align: 'top',
+                                    offset: 18,
+                                    color: '#ef4444',
+                                    font: { size: window.isGraphicReportRunning ? 16 : 12, weight: 'bold' },
+                                    formatter: () => 'P'
                                 }
-                                if (window.isGraphicReportRunning) return formatNumber(value / 1000, 2) + ' Ton';
-                                return formatNumber(value, 0);
                             }
                         }
                     },
