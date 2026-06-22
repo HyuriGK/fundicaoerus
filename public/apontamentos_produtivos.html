@@ -2592,15 +2592,6 @@
             const dataCumulative = dataDaily.map(val => { accumKg += val; return accumKg; });
             let accumCx = 0;
             const dataCumulativeCaixas = dataCaixas.map(val => { accumCx += val; return accumCx; });
-            const dataVariation = dataDaily.map((val, index) => {
-                if (index === 0 || !dataDaily[index - 1]) return null;
-                return ((val - dataDaily[index - 1]) / dataDaily[index - 1]) * 100;
-            });
-            const dataVariationCaixas = dataCaixas.map((val, index) => {
-                if (index === 0 || !dataCaixas[index - 1]) return null;
-                return ((val - dataCaixas[index - 1]) / dataCaixas[index - 1]) * 100;
-            });
-
             const goalValue = parseFloat(sectorGoalDisplay.innerText.replace(/[^0-9]/g, '')) || 0;
 
             // Active bar data
@@ -2720,8 +2711,8 @@
                 });
                 datasets.push({
                     type: 'line',
-                    label: currentMonthFilter === 0 ? 'Variação (%)' : 'Acumulado',
-                    data: currentMonthFilter === 0 ? dataVariationCaixas : dataCumulativeCaixas,
+                    label: currentMonthFilter === 0 ? 'Evolução da Produção' : 'Acumulado',
+                    data: currentMonthFilter === 0 ? dataCaixas : dataCumulativeCaixas,
                     borderColor: '#10b981',
                     backgroundColor: 'rgba(16, 185, 129, 0.1)',
                     borderWidth: 3,
@@ -2729,7 +2720,7 @@
                     tension: 0.3,
                     pointRadius: 2,
                     order: 1,
-                    yAxisID: 'y1',
+                    yAxisID: currentMonthFilter === 0 ? 'y' : 'y1',
                     datalabels: { display: false }
                 });
             } else {
@@ -2749,8 +2740,8 @@
                 });
                 datasets.push({
                     type: 'line',
-                    label: currentMonthFilter === 0 ? 'Variação (%)' : 'Acumulado',
-                    data: currentMonthFilter === 0 ? dataVariation : dataCumulative,
+                    label: currentMonthFilter === 0 ? 'Evolução da Produção' : 'Acumulado',
+                    data: currentMonthFilter === 0 ? dataDaily : dataCumulative,
                     borderColor: '#10b981',
                     backgroundColor: 'rgba(16, 185, 129, 0.1)',
                     borderWidth: 3,
@@ -2758,7 +2749,7 @@
                     tension: 0.3,
                     pointRadius: 2,
                     order: 1,
-                    yAxisID: 'y1',
+                    yAxisID: currentMonthFilter === 0 ? 'y' : 'y1',
                     datalabels: { display: false }
                 });
             }
@@ -2797,7 +2788,7 @@
                             footerMarginTop: 8,
                             cornerRadius: 10,
                             itemSort: (a, b) => {
-                                const order = { 'Produção Diária': 0, 'Caixas por Dia': 0, 'Variação (%)': 1, 'Acumulado': 2, 'Meta Mensal': 3 };
+                                const order = { 'Produção Diária': 0, 'Caixas por Dia': 0, 'Evolução da Produção': 1, 'Acumulado': 2, 'Meta Mensal': 3 };
                                 return (order[a.dataset.label] ?? 99) - (order[b.dataset.label] ?? 99);
                             },
                             callbacks: {
@@ -2815,10 +2806,7 @@
                                     const lbl = context.dataset.label;
                                     if (lbl === 'Produção Diária') return `  Produção: ${Math.round(value).toLocaleString('pt-BR')} Kg`;
                                     if (lbl === 'Caixas por Dia') return `  Caixas: ${value.toLocaleString('pt-BR', {minimumFractionDigits:1, maximumFractionDigits:1})} cx`;
-                                    if (lbl === 'Variação (%)') {
-                                        const sinal = value > 0 ? '+' : '';
-                                        return `  Variação: ${sinal}${value.toLocaleString('pt-BR', {minimumFractionDigits:1, maximumFractionDigits:1})}%`;
-                                    }
+                                    if (lbl === 'Evolução da Produção') return null;
                                     if (lbl === 'Acumulado') return isCaixasMode
                                         ? `  Acumulado: ${value.toLocaleString('pt-BR', {minimumFractionDigits:1, maximumFractionDigits:1})} cx`
                                         : `  Acumulado: ${Math.round(value).toLocaleString('pt-BR')} Kg`;
@@ -2939,18 +2927,16 @@
                         },
                         y1: {
                             type: 'linear',
-                            display: true,
+                            display: currentMonthFilter !== 0,
                             position: 'right',
                             title: { display: false },
                             grid: { display: false, drawOnChartArea: false },
-                            beginAtZero: currentMonthFilter !== 0,
-                            max: currentMonthFilter === 0 ? undefined : (Math.max(isCaixasMode ? 0 : goalValue, accumMax * 1.05) || 100),
+                            beginAtZero: true,
+                            max: Math.max(isCaixasMode ? 0 : goalValue, accumMax * 1.05) || 100,
                             ticks: {
                                 color: window.isGraphicReportRunning ? '#000000' : (window.ErusTheme && window.ErusTheme.isLight() ? '#4b5563' : '#a1a1aa'),
                                 font: { size: window.isGraphicReportRunning ? 14 : 12 },
-                                callback: currentMonthFilter === 0
-                                    ? (v) => `${v}%`
-                                    : (isCaixasMode ? (v) => Number.isInteger(v) ? v + ' cx' : null : undefined)
+                                callback: isCaixasMode ? (v) => Number.isInteger(v) ? v + ' cx' : null : undefined
                             }
                         }
                     }
