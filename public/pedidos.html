@@ -6610,6 +6610,10 @@ function flashConcentracaoBar(barIndex) {
                     <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">Selecione o mês e ano para visualizar o histórico</p>
                 </div>
                 <div style="display: flex; align-items: center; gap: 10px; margin-right: 20px;">
+                    <div style="display:flex; gap:4px; padding:3px; border:1px solid var(--border-subtle); border-radius:7px;">
+                        <button id="historyDailyBtn" onclick="setIndustrialHistoryView('daily')" style="background:#ea580c;border:0;color:#fff;padding:6px 12px;border-radius:5px;font-size:0.75rem;font-weight:700;cursor:pointer;">EVOLUÇÃO DIÁRIA</button>
+                        <button id="historyMonthlyBtn" onclick="setIndustrialHistoryView('monthly')" style="background:transparent;border:0;color:var(--text-muted);padding:6px 12px;border-radius:5px;font-size:0.75rem;font-weight:700;cursor:pointer;">EVOLUÇÃO MENSAL</button>
+                    </div>
                     <select id="historyMonthSelect" onchange="reloadIndustrialHistory()" style="background: var(--bg-body); border: 1px solid var(--border-subtle); color: var(--text-main); padding: 6px 10px; border-radius: 6px; font-size: 0.85rem; cursor: pointer; outline: none;">
                         <option value="1"  style="background:#18181b; color:#f4f4f5;">Janeiro</option>
                         <option value="2"  style="background:#18181b; color:#f4f4f5;">Fevereiro</option>
@@ -6648,6 +6652,7 @@ function flashConcentracaoBar(barIndex) {
         // --- LÃÂ“GICA DE HISTÃÂ“RICO INDUSTRIAL (CLIQUE DIREITO) ---
         let historyChart = null;
         let currentHistoryStage = 'moldagem';
+        let industrialHistoryView = 'daily';
         const historyStageNames = {
             'aguardando': 'Aguardando Moldagem',
             'moldagem': 'Moldagem',
@@ -6680,6 +6685,19 @@ function flashConcentracaoBar(barIndex) {
             document.getElementById('industrialHistoryModal').style.display = 'none';
         }
 
+        function setIndustrialHistoryView(view) {
+            industrialHistoryView = view;
+            const dailyBtn = document.getElementById('historyDailyBtn');
+            const monthlyBtn = document.getElementById('historyMonthlyBtn');
+            const monthSelect = document.getElementById('historyMonthSelect');
+            dailyBtn.style.background = view === 'daily' ? '#ea580c' : 'transparent';
+            dailyBtn.style.color = view === 'daily' ? '#fff' : 'var(--text-muted)';
+            monthlyBtn.style.background = view === 'monthly' ? '#ea580c' : 'transparent';
+            monthlyBtn.style.color = view === 'monthly' ? '#fff' : 'var(--text-muted)';
+            monthSelect.style.display = view === 'daily' ? '' : 'none';
+            reloadIndustrialHistory();
+        }
+
         async function reloadIndustrialHistory() {
             const month = document.getElementById('historyMonthSelect').value;
             const year  = document.getElementById('historyYearSelect').value;
@@ -6688,17 +6706,19 @@ function flashConcentracaoBar(barIndex) {
             const chartDiv = document.getElementById('historyChartContainer');
             const emptyDiv = document.getElementById('historyEmpty');
             const monthName = document.getElementById('historyMonthSelect').options[document.getElementById('historyMonthSelect').selectedIndex].text;
-            title.innerText = `Histórico: ${historyStageNames[currentHistoryStage] || currentHistoryStage} — ${monthName}/${year}`;
+            const periodLabel = industrialHistoryView === 'daily' ? `${monthName}/${year}` : year;
+            title.innerText = `Histórico: ${historyStageNames[currentHistoryStage] || currentHistoryStage} — ${periodLabel}`;
             loading.style.display = 'block';
             chartDiv.style.display = 'none';
             emptyDiv.style.display = 'none';
             try {
-                const response = await fetch(`/api/pedidos-sync/industrial-history?month=${month}&year=${year}`);
+                const viewParam = industrialHistoryView === 'monthly' ? '&view=monthly' : '';
+                const response = await fetch(`/api/pedidos-sync/industrial-history?month=${month}&year=${year}${viewParam}`);
                 const data = await response.json();
                 loading.style.display = 'none';
                 if (!data || data.length === 0) { emptyDiv.style.display = 'block'; return; }
                 chartDiv.style.display = 'block';
-                renderIndustrialHistoryChart(data, currentHistoryStage, parseInt(month), parseInt(year));
+                renderIndustrialHistoryChart(data, currentHistoryStage, parseInt(month), parseInt(year), industrialHistoryView);
             } catch (err) {
                 console.error("Erro ao carregar histórico:", err);
                 loading.style.display = 'none';
@@ -6710,27 +6730,36 @@ function flashConcentracaoBar(barIndex) {
             currentHistoryStage = stage;
             const modal = document.getElementById('industrialHistoryModal');
             modal.style.display = 'flex';
+            industrialHistoryView = 'daily';
             initHistorySelects();
+            const dailyBtn = document.getElementById('historyDailyBtn');
+            const monthlyBtn = document.getElementById('historyMonthlyBtn');
+            const monthSelect = document.getElementById('historyMonthSelect');
+            dailyBtn.style.background = '#ea580c';
+            dailyBtn.style.color = '#fff';
+            monthlyBtn.style.background = 'transparent';
+            monthlyBtn.style.color = 'var(--text-muted)';
+            monthSelect.style.display = '';
             await reloadIndustrialHistory();
         }
 
-        function renderIndustrialHistoryChart(historyLogs, stage, month, year) {
+        function renderIndustrialHistoryChart(historyLogs, stage, month, year, view) {
             const canvas = document.getElementById('industrialHistoryChart');
             if (historyChart) {
                 historyChart.destroy();
             }
-            // Gerar todos os dias do mês selecionado
-            const daysInMonth = new Date(year, month, 0).getDate();
             const labels = [];
             const qtyData = [];
             const weightData = [];
             const valueData = [];
-            for (let d = 1; d <= daysInMonth; d++) {
-                const dayStr = String(d).padStart(2, '0');
-                const monthStr = String(month).padStart(2, '0');
-                const dateKey = `${year}-${monthStr}-${dayStr}`;
-                labels.push(`${dayStr}/${monthStr}`);
-                const entry = historyLogs.find(h => h.date === dateKey);
+            const periods = view === 'monthly'
+                ? Array.from({ length: 12 }, (_, i) => ({ label: ['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'][i], month: i + 1 }))
+                : Array.from({ length: new Date(year, month, 0).getDate() }, (_, i) => ({ label: `${String(i + 1).padStart(2, '0')}/${String(month).padStart(2, '0')}`, day: i + 1 }));
+            periods.forEach(period => {
+                labels.push(period.label);
+                const entry = view === 'monthly'
+                    ? historyLogs.find(h => Number(h.date.split('-')[1]) === period.month)
+                    : historyLogs.find(h => h.date === `${year}-${String(month).padStart(2, '0')}-${String(period.day).padStart(2, '0')}`);
                 if (entry) {
                     qtyData.push(parseFloat(entry[`${stage}_qty`] || 0));
                     weightData.push(parseFloat(entry[`${stage}_weight`] || 0));
@@ -6740,7 +6769,7 @@ function flashConcentracaoBar(barIndex) {
                     weightData.push(0);
                     valueData.push(0);
                 }
-            }
+            });
             const ctx = canvas.getContext('2d');
             historyChart = new Chart(ctx, {
                 type: 'bar',

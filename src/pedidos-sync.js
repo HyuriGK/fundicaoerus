@@ -159,8 +159,9 @@ router.get('/industrial-history', async (req, res) => {
         const now = new Date();
         const month = parseInt(req.query.month) || (now.getMonth() + 1);
         const year  = parseInt(req.query.year)  || now.getFullYear();
+        const monthly = req.query.view === 'monthly';
         const query = `
-            SELECT
+            SELECT ${monthly ? 'DISTINCT ON (EXTRACT(MONTH FROM s.snapshot_date))' : ''}
                 TO_CHAR(s.snapshot_date, 'YYYY-MM-DD') as date,
                 aguardando_qty, aguardando_weight,
                 COALESCE((TO_JSONB(s)->>'aguardando_value')::numeric, 0) AS aguardando_value,
@@ -180,10 +181,10 @@ router.get('/industrial-history', async (req, res) => {
                 COALESCE((TO_JSONB(s)->>'expedicao_value')::numeric, 0) AS expedicao_value
             FROM industrial_snapshots s
             WHERE EXTRACT(YEAR  FROM s.snapshot_date) = $1
-              AND EXTRACT(MONTH FROM s.snapshot_date) = $2
-            ORDER BY s.snapshot_date ASC
+              ${monthly ? '' : 'AND EXTRACT(MONTH FROM s.snapshot_date) = $2'}
+            ORDER BY ${monthly ? 'EXTRACT(MONTH FROM s.snapshot_date), s.snapshot_date DESC' : 's.snapshot_date ASC'}
         `;
-        const result = await pool.query(query, [year, month]);
+        const result = await pool.query(query, monthly ? [year] : [year, month]);
         res.json(result.rows);
     } catch (error) {
         console.error('Erro ao buscar histórico industrial:', error);
