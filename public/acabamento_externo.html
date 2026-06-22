@@ -680,6 +680,7 @@
         .quality-popup-body {
             padding: 40px;
             flex: 1;
+            overflow-y: auto;
         }
         .quality-popup-body textarea {
             width: 100%;
@@ -698,6 +699,49 @@
             outline: none;
             border-color: var(--border-subtle);
             box-shadow: none;
+        }
+        .quality-photo-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-top: 18px;
+        }
+        .quality-photo-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 12px;
+            margin-top: 14px;
+        }
+        .quality-photo-item {
+            position: relative;
+            height: 140px;
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+            overflow: hidden;
+            background: #09090b;
+        }
+        .quality-photo-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            cursor: zoom-in;
+        }
+        .quality-photo-remove {
+            position: absolute;
+            top: 7px;
+            right: 7px;
+            width: 28px;
+            height: 28px;
+            border: 0;
+            border-radius: 50%;
+            background: rgba(0,0,0,.78);
+            color: #fff;
+            cursor: pointer;
+        }
+        .quality-photo-empty {
+            color: var(--text-muted);
+            font-size: .85rem;
+            margin-top: 12px;
         }
         #qualidadeModal .modal-title {
             color: #fff !important;
@@ -1191,10 +1235,16 @@
             <div class="quality-popup-body">
                 <p style="color:var(--text-muted); margin:0 0 12px;">Descreva por que a carga não foi aprovada na qualidade.</p>
                 <textarea id="qualidadeObservacao" placeholder="INFORME A OBSERVAÇÃO..." maxlength="1000"></textarea>
+                <div class="quality-photo-toolbar">
+                    <button id="qualidadeFotosButton" type="button" class="btn-modern" onclick="document.getElementById('qualidadeFotosInput').click()"><i class="fa-solid fa-camera"></i> Anexar fotos</button>
+                    <span id="qualidadeFotosContador" style="color:var(--text-muted);font-size:.85rem;">0 de 5 fotos</span>
+                    <input id="qualidadeFotosInput" type="file" accept="image/jpeg,image/png,image/webp" multiple hidden onchange="adicionarFotosQualidade(this.files)">
+                </div>
+                <div id="qualidadeFotosGrid" class="quality-photo-grid"></div>
             </div>
             <div class="modal-footer">
                 <button class="btn-modern" onclick="cancelarQualidadeNao()">Cancelar</button>
-                <button class="btn-modern" onclick="confirmarQualidadeNao()" style="background:#fff; border-color:#fff; color:#000; font-weight:800;">Salvar observação</button>
+                <button class="btn-modern" onclick="confirmarQualidadeNao()" style="background:#fff; border-color:#fff; color:#000; font-weight:800;">Salvar não-qualidade</button>
             </div>
         </div>
     </div>
@@ -1343,6 +1393,8 @@
         let previsoes = {};
         let qualidadeCargaAtual = null;
         let qualidadeValorAnterior = null;
+        let qualidadeFotosAtuais = [];
+        let qualidadeFotosCarregadas = false;
         let itensConhecidos = new Map();
         let currentFilteredData = [];
         let mainChartInstance = null;
@@ -1396,6 +1448,8 @@
                 };
                 const action = actionMap[actionOrEndpoint] || actionOrEndpoint;
                 url += `?action=${action}`;
+            } else if (actionOrEndpoint === 'qualidade-fotos' && data?.carga) {
+                url += `?action=qualidade-fotos&carga=${encodeURIComponent(data.carga)}`;
             }
             const options = {
                 method,
@@ -1682,9 +1736,10 @@
             if (!checkbox.checked) {
                 previsoes[carga].qualidade = null;
                 previsoes[carga].qualidadeObservacao = '';
+                previsoes[carga].qualidadeFotos = [];
                 renderTable(currentFilteredData.length ? currentFilteredData : undefined);
                 try {
-                    await apiRequest('qualidade', 'POST', { carga, qualidade: null, observacao: '' });
+                    await apiRequest('qualidade', 'POST', { carga, qualidade: null, observacao: '', fotos: [] });
                 } catch (e) {
                     previsoes[carga].qualidade = qualidadeValorAnterior;
                     renderTable(currentFilteredData.length ? currentFilteredData : undefined);
@@ -1698,24 +1753,96 @@
             }
             previsoes[carga].qualidade = true;
             previsoes[carga].qualidadeObservacao = '';
+            previsoes[carga].qualidadeFotos = [];
             renderTable(currentFilteredData.length ? currentFilteredData : undefined);
             try {
-                await apiRequest('qualidade', 'POST', { carga, qualidade: true, observacao: '' });
+                await apiRequest('qualidade', 'POST', { carga, qualidade: true, observacao: '', fotos: [] });
             } catch (e) {
                 previsoes[carga].qualidade = qualidadeValorAnterior;
                 renderTable(currentFilteredData.length ? currentFilteredData : undefined);
                 showToast('Erro', 'Não foi possível salvar a qualidade.', 'danger');
             }
         }
-        function abrirQualidadeNao(carga) {
+        async function abrirQualidadeNao(carga) {
             qualidadeCargaAtual = carga;
             qualidadeValorAnterior = previsoes[carga]?.qualidade;
             document.getElementById('qualidadeObservacao').value = previsoes[carga]?.qualidadeObservacao || '';
+            qualidadeFotosAtuais = [];
+            qualidadeFotosCarregadas = false;
+            renderFotosQualidade();
+            document.getElementById('qualidadeFotosButton').disabled = true;
+            document.getElementById('qualidadeFotosInput').disabled = true;
             abrirModalPorId('qualidadeModal');
             setTimeout(() => document.getElementById('qualidadeObservacao').focus(), 80);
+            try {
+                const data = await apiRequest('qualidade-fotos', 'GET', { carga });
+                if (qualidadeCargaAtual !== carga) return;
+                qualidadeFotosAtuais = Array.isArray(data.fotos) ? data.fotos : [];
+                qualidadeFotosCarregadas = true;
+                renderFotosQualidade();
+            } catch (e) {
+                showToast('Erro', 'Não foi possível carregar as fotos desta carga.', 'danger');
+            } finally {
+                if (qualidadeCargaAtual === carga && qualidadeFotosCarregadas) {
+                    document.getElementById('qualidadeFotosButton').disabled = false;
+                    document.getElementById('qualidadeFotosInput').disabled = false;
+                }
+            }
+        }
+        function renderFotosQualidade() {
+            const grid = document.getElementById('qualidadeFotosGrid');
+            document.getElementById('qualidadeFotosContador').textContent = `${qualidadeFotosAtuais.length} de 5 fotos`;
+            grid.innerHTML = qualidadeFotosAtuais.length
+                ? qualidadeFotosAtuais.map((foto, index) => `<div class="quality-photo-item"><img src="${foto}" alt="Foto da não-qualidade" onclick="window.open(this.src, '_blank')"><button type="button" class="quality-photo-remove" title="Remover foto" onclick="removerFotoQualidade(${index})"><i class="fa-solid fa-xmark"></i></button></div>`).join('')
+                : '<div class="quality-photo-empty">Nenhuma foto anexada.</div>';
+        }
+        function removerFotoQualidade(index) {
+            qualidadeFotosAtuais.splice(index, 1);
+            renderFotosQualidade();
+        }
+        function compactarFotoQualidade(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onerror = reject;
+                reader.onload = () => {
+                    const img = new Image();
+                    img.onerror = reject;
+                    img.onload = () => {
+                        const scale = Math.min(1, 1400 / Math.max(img.width, img.height));
+                        const canvas = document.createElement('canvas');
+                        canvas.width = Math.round(img.width * scale);
+                        canvas.height = Math.round(img.height * scale);
+                        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+                        resolve(canvas.toDataURL('image/jpeg', .78));
+                    };
+                    img.src = reader.result;
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+        async function adicionarFotosQualidade(files) {
+            const disponiveis = 5 - qualidadeFotosAtuais.length;
+            const selecionadas = Array.from(files).slice(0, disponiveis);
+            if (!disponiveis) {
+                showToast('Limite de fotos', 'É permitido anexar até 5 fotos.', 'danger');
+                return;
+            }
+            try {
+                for (const file of selecionadas) {
+                    if (!file.type.startsWith('image/')) continue;
+                    qualidadeFotosAtuais.push(await compactarFotoQualidade(file));
+                }
+            } catch (e) {
+                showToast('Foto inválida', 'Não foi possível processar uma das imagens.', 'danger');
+            }
+            document.getElementById('qualidadeFotosInput').value = '';
+            renderFotosQualidade();
+            if (files.length > disponiveis) showToast('Limite de fotos', 'Somente as primeiras fotos disponíveis foram adicionadas.', 'danger');
         }
         function cancelarQualidadeNao() {
             qualidadeCargaAtual = null;
+            qualidadeFotosAtuais = [];
+            qualidadeFotosCarregadas = false;
             fecharModalTopo();
             renderTable(currentFilteredData.length ? currentFilteredData : undefined);
         }
@@ -1726,12 +1853,18 @@
                 showToast('Observação obrigatória', 'Informe o motivo da não-qualidade.', 'danger');
                 return;
             }
+            if (!qualidadeFotosCarregadas) {
+                showToast('Aguarde', 'As fotos da carga ainda não foram carregadas.', 'danger');
+                return;
+            }
             if (!previsoes[carga]) previsoes[carga] = {};
-            previsoes[carga].qualidade = false;
-            previsoes[carga].qualidadeObservacao = observacao;
             try {
-                await apiRequest('qualidade', 'POST', { carga, qualidade: false, observacao });
+                await apiRequest('qualidade', 'POST', { carga, qualidade: false, observacao, fotos: qualidadeFotosAtuais });
+                previsoes[carga].qualidade = false;
+                previsoes[carga].qualidadeObservacao = observacao;
                 qualidadeCargaAtual = null;
+                qualidadeFotosAtuais = [];
+                qualidadeFotosCarregadas = false;
                 fecharModalTopo();
                 renderTable(currentFilteredData.length ? currentFilteredData : undefined);
                 showToast('Qualidade registrada', 'A não-qualidade e sua observação foram salvas.', 'info');

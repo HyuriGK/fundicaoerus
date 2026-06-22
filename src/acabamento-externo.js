@@ -11,6 +11,14 @@ router.get('/', async (req, res) => {
         await client.query(`ALTER TABLE acabamento_externo_previsoes ADD COLUMN IF NOT EXISTS data_entrega DATE`);
         await client.query(`ALTER TABLE acabamento_externo_previsoes ADD COLUMN IF NOT EXISTS qualidade BOOLEAN`);
         await client.query(`ALTER TABLE acabamento_externo_previsoes ADD COLUMN IF NOT EXISTS qualidade_observacao TEXT`);
+        await client.query(`ALTER TABLE acabamento_externo_previsoes ADD COLUMN IF NOT EXISTS qualidade_fotos JSONB NOT NULL DEFAULT '[]'::jsonb`);
+        if (req.query.action === 'qualidade-fotos') {
+            const result = await client.query(
+                'SELECT qualidade_fotos FROM acabamento_externo_previsoes WHERE carga = $1',
+                [req.query.carga]
+            );
+            return res.status(200).json({ fotos: result.rows[0]?.qualidade_fotos || [] });
+        }
         const registros = await client.query('SELECT * FROM acabamento_externo_registros ORDER BY data DESC, id DESC');
         // Nota: Ajustei a query de recebidos para retornar o formato esperado pelo front
         const recebidos = await client.query('SELECT registro_id as id, carga FROM acabamento_externo_recebidos');
@@ -157,15 +165,19 @@ router.post('/', async (req, res) => {
         if (action === 'save-qualidade') {
             const qualidade = data.qualidade === null ? null : data.qualidade === true;
             const observacao = qualidade === false ? String(data.observacao || '').trim() : null;
+            const fotos = qualidade === false && Array.isArray(data.fotos) ? data.fotos.slice(0, 5) : [];
             if (qualidade === false && !observacao) {
                 return res.status(400).json({ error: 'Informe o motivo da não-qualidade.' });
             }
+            if (fotos.some(foto => typeof foto !== 'string' || !/^data:image\/(jpeg|png|webp);base64,/i.test(foto) || foto.length > 3000000)) {
+                return res.status(400).json({ error: 'Uma ou mais fotos são inválidas ou muito grandes.' });
+            }
             await client.query(
-                `INSERT INTO acabamento_externo_previsoes (carga, qualidade, qualidade_observacao)
-                 VALUES ($1, $2, $3)
+                `INSERT INTO acabamento_externo_previsoes (carga, qualidade, qualidade_observacao, qualidade_fotos)
+                 VALUES ($1, $2, $3, $4::jsonb)
                  ON CONFLICT (carga) DO UPDATE
-                 SET qualidade = $2, qualidade_observacao = $3`,
-                [data.carga, qualidade, observacao]
+                 SET qualidade = $2, qualidade_observacao = $3, qualidade_fotos = $4::jsonb`,
+                [data.carga, qualidade, observacao, JSON.stringify(fotos)]
             );
             logActivity(req.user && req.user.name || 'Sistema', 'UPDATE_QUALIDADE_CARGA', 'acabamento_externo', {
                 carga: data.carga,
