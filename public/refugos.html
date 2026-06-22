@@ -1834,13 +1834,21 @@
             if (barChartInstance) barChartInstance.destroy();
             const labels = Object.keys(dataObj);
             const weights = Object.values(dataObj).map(v => v.weight);
+            const percentages = Object.values(dataObj).map(v => v.pct || 0);
             let runningTotal = 0;
             const accumulatedWeights = weights.map(v => {
                 runningTotal += v;
                 return runningTotal;
             });
             const barMax = Math.max(...weights) * 1.05 || 100;
-            const accumMax = Math.max(...accumulatedWeights) * 1.05 || 100;
+            const pctMax = Math.max(...percentages) * 1.25 || 1;
+            const pointColors = percentages.map((value, index) => {
+                const previous = percentages[index - 1];
+                const next = percentages[index + 1];
+                if (previous !== undefined && next !== undefined && value > previous && value > next) return '#ef4444';
+                if (previous !== undefined && next !== undefined && value < previous && value < next) return '#10b981';
+                return '#fbbf24';
+            });
             const datasets = [{
                 label: 'Refugo (kg)',
                 data: weights,
@@ -1850,6 +1858,21 @@
                 borderRadius: 4,
                 order: 2,
                 yAxisID: 'y'
+            }, {
+                label: '% Refugada — Picos e Fundos',
+                data: percentages,
+                type: 'line',
+                borderColor: '#fbbf24',
+                backgroundColor: 'rgba(251, 191, 36, 0.08)',
+                borderWidth: 3,
+                fill: false,
+                tension: 0.35,
+                pointBackgroundColor: pointColors,
+                pointBorderColor: pointColors,
+                pointRadius: 5,
+                pointHoverRadius: 7,
+                order: 1,
+                yAxisID: 'y1'
             }, {
                 label: 'Acumulado',
                 data: accumulatedWeights,
@@ -1861,8 +1884,9 @@
                 tension: 0.3,
                 pointBackgroundColor: '#10b981',
                 pointRadius: 2,
-                order: 1,
-                yAxisID: 'y1'
+                order: 3,
+                yAxisID: 'y2',
+                hidden: true
             }];
             barChartInstance = new Chart(ctx, {
                 type: 'bar',
@@ -1904,10 +1928,14 @@
                             callbacks: {
                                 label: (ctx) => {
                                     const val = ctx.parsed.y;
-                                    if (ctx.dataset.label === 'Acumulado') return `  Acumulado: ${Math.round(val).toLocaleString('pt-BR')} kg`;
+                                    if (ctx.dataset.label === '% Refugada — Picos e Fundos') return `  % Refugada: ${val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
                                     return `  Refugo: ${val.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} kg`;
                                 },
-                                afterBody: () => ['', 'Clique na barra para ver o diário do mês.']
+                                afterBody: (items) => {
+                                    const index = items[0]?.dataIndex;
+                                    const acumulado = accumulatedWeights[index] || 0;
+                                    return [`  Acumulado: ${acumulado.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kg`, '', 'Clique na barra para ver o diário do mês.'];
+                                }
                             }
                         },
                         datalabels: {
@@ -1919,7 +1947,10 @@
                             font: { weight: 'bold', size: 9 },
                             formatter: (value, ctx) => {
                                 if (value <= 0) return '';
-                                if (ctx.dataset.yAxisID === 'y1') return '';
+                                if (ctx.dataset.label === '% Refugada — Picos e Fundos') {
+                                    return `${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
+                                }
+                                if (ctx.dataset.label === 'Acumulado') return '';
                                 return value.toLocaleString('pt-BR', { maximumFractionDigits: 0 });
                             }
                         }
@@ -1942,12 +1973,19 @@
                         y1: {
                             type: 'linear',
                             display: true,
-                            max: accumMax,
+                            max: pctMax,
                             beginAtZero: true,
                             position: 'right',
-                            title: { display: false },
+                            title: { display: true, text: '% Refugada', color: _tc() },
                             grid: { display: false, drawOnChartArea: false },
-                            ticks: { color: _tc(), font: { size: 12 } }
+                            ticks: { color: _tc(), font: { size: 12 }, callback: value => `${value}%` }
+                        },
+                        y2: {
+                            type: 'linear',
+                            display: false,
+                            beginAtZero: true,
+                            position: 'right',
+                            grid: { display: false, drawOnChartArea: false }
                         }
                     }
                 }
