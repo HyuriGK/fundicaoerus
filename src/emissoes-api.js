@@ -131,16 +131,41 @@ router.get('/list', async (req, res) => {
         const query = `
             SELECT 
                 p.data,
-                pc.peso as peso_customizado
+                p.sync_key,
+                pc.peso as peso_customizado,
+                f.data_fic,
+                f.pro_codigo_fic AS has_ficha,
+                f.tipo_moldagem_procedimento,
+                obs.observacao
             FROM firebird_sync_emissoes p
             LEFT JOIN pesos_customizados pc ON TRIM(p.data->>'PRODUTO_PPR') = pc.codigo
+            LEFT JOIN ficha_tecnica f ON f.pro_codigo_fic = (p.data->>'PRODUTO_PPR')
+            LEFT JOIN pedidos_observacoes obs ON obs.sync_key = p.sync_key
             ${whereClause}
             ORDER BY (p.data->>'DATA_EMISSAO_PEDIDO')::date DESC
         `;
 
         const result = await pool.query(query, params);
+        const linksResult = await pool.query('SELECT sync_key, op, status FROM pedidos_op_links');
+        const linksMap = {};
+        linksResult.rows.forEach(link => { linksMap[link.sync_key] = link; });
         const records = result.rows.map(row => {
-            const data = row.data;
+            const data = {
+                ...row.data,
+                sync_key: row.sync_key,
+                observacao: row.observacao || '',
+                _data_fic: row.data_fic,
+                _has_ficha: !!row.has_ficha,
+                _tipo_moldagem_procedimento: row.tipo_moldagem_procedimento || null
+            };
+            const manualLink = linksMap[row.sync_key];
+            if (manualLink?.status === 'confirmado') {
+                data.LINK_STATUS = 'confirmado';
+                data.OP_PCS = manualLink.op;
+            } else if (manualLink?.status === 'rejeitado' && data.LINK_STATUS !== 'oficial') {
+                data.LINK_STATUS = 'rejeitado';
+                data.OP_PCS = null;
+            }
             if (row.peso_customizado !== null && !(parseFloat(data.PESO_LIQUIDO_NPR) > 0)) {
                 // Return corrected weight in the data object
                 data.PESO_LIQUIDO_NPR = row.peso_customizado * (parseFloat(data.QUANTIDADE_PPR) || 0);
