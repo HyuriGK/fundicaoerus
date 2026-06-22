@@ -6724,6 +6724,7 @@ function flashConcentracaoBar(barIndex) {
             const labels = [];
             const qtyData = [];
             const weightData = [];
+            const valueData = [];
             for (let d = 1; d <= daysInMonth; d++) {
                 const dayStr = String(d).padStart(2, '0');
                 const monthStr = String(month).padStart(2, '0');
@@ -6733,9 +6734,11 @@ function flashConcentracaoBar(barIndex) {
                 if (entry) {
                     qtyData.push(parseFloat(entry[`${stage}_qty`] || 0));
                     weightData.push(parseFloat(entry[`${stage}_weight`] || 0));
+                    valueData.push(parseFloat(entry[`${stage}_value`] || 0));
                 } else {
                     qtyData.push(0);
                     weightData.push(0);
+                    valueData.push(0);
                 }
             }
             const ctx = canvas.getContext('2d');
@@ -6761,6 +6764,18 @@ function flashConcentracaoBar(barIndex) {
                             borderWidth: 1,
                             borderRadius: 4,
                             yAxisID: 'y-kg'
+                        },
+                        {
+                            type: 'line',
+                            label: 'Valor Total (R$)',
+                            data: valueData,
+                            borderColor: '#a855f7',
+                            backgroundColor: 'rgba(168, 85, 247, 0.1)',
+                            borderWidth: 3,
+                            tension: 0.3,
+                            pointRadius: 3,
+                            pointBackgroundColor: '#a855f7',
+                            yAxisID: 'y-value'
                         }
                     ]
                 },
@@ -6776,7 +6791,19 @@ function flashConcentracaoBar(barIndex) {
                             labels: { color: _tc(), font: { family: 'Inter' } }
                         },
                         tooltip: {
-                            callbacks: { afterBody: () => ['', 'Clique na barra para ver os registros.'] } }
+                            callbacks: {
+                                label: (context) => {
+                                    if (context.dataset.yAxisID === 'y-value') {
+                                        return valorVisible
+                                            ? `Valor: ${Number(context.parsed.y).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`
+                                            : 'Valor: -----';
+                                    }
+                                    if (context.dataset.yAxisID === 'y-kg') return `Peso: ${Number(context.parsed.y).toLocaleString('pt-BR', { maximumFractionDigits: 2 })} kg`;
+                                    return `Quantidade: ${Number(context.parsed.y).toLocaleString('pt-BR')} pçs`;
+                                },
+                                afterBody: () => ['', 'Clique na barra para ver os registros.']
+                            }
+                        }
                     },
                     scales: {
                         x: {
@@ -6799,6 +6826,14 @@ function flashConcentracaoBar(barIndex) {
                             title: { display: true, text: 'Peso (kg)', color: '#06b6d4' },
                             grid: { drawOnChartArea: false }, 
                             ticks: { color: '#06b6d4' },
+                            grace: '15%'
+                        },
+                        'y-value': {
+                            type: 'linear',
+                            display: false,
+                            position: 'right',
+                            beginAtZero: true,
+                            grid: { drawOnChartArea: false },
                             grace: '15%'
                         }
                     }

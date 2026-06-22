@@ -40,17 +40,17 @@ async function takeSnapshot() {
 
         // 2. Acumuladores para os 8 setores
         const stats = {
-            aguardando: { qty: 0, weight: 0, ops: new Set() },
-            moldagem:   { qty: 0, weight: 0, ops: new Set() },
-            fusao:      { qty: 0, weight: 0, ops: new Set() },
-            acabamento: { qty: 0, weight: 0, ops: new Set() },
-            tt:         { qty: 0, weight: 0, ops: new Set() },
-            usinagem:   { qty: 0, weight: 0, ops: new Set() },
-            qualidade:  { qty: 0, weight: 0, ops: new Set() },
-            expedicao:  { qty: 0, weight: 0, ops: new Set() }
+            aguardando: { qty: 0, weight: 0, value: 0, ops: new Set() },
+            moldagem:   { qty: 0, weight: 0, value: 0, ops: new Set() },
+            fusao:      { qty: 0, weight: 0, value: 0, ops: new Set() },
+            acabamento: { qty: 0, weight: 0, value: 0, ops: new Set() },
+            tt:         { qty: 0, weight: 0, value: 0, ops: new Set() },
+            usinagem:   { qty: 0, weight: 0, value: 0, ops: new Set() },
+            qualidade:  { qty: 0, weight: 0, value: 0, ops: new Set() },
+            expedicao:  { qty: 0, weight: 0, value: 0, ops: new Set() }
         };
 
-        const addKpi = (sectorKey, qty, unitWeight, opKey) => {
+        const addKpi = (sectorKey, qty, unitWeight, unitPrice, opKey) => {
             if (qty <= 0) return;
 
             // Deduplicação por OP (idêntico ao dashboard)
@@ -62,6 +62,7 @@ async function takeSnapshot() {
 
             stats[sectorKey].qty += qty;
             stats[sectorKey].weight += (qty * unitWeight);
+            stats[sectorKey].value += (qty * unitPrice);
         };
 
         // 3. Calcular métricas usando o shared-utils (garante consistência)
@@ -86,16 +87,20 @@ async function takeSnapshot() {
             }
 
             const op = item.OP_PCS;
+            let unitPrice = parseFloat(item.VALOR_PPR || 0);
+            if (item.PRECO_KG && Number(item.PRECO_KG) > 0 && customWeights[prodCode]) {
+                unitPrice = Number(item.PRECO_KG) * unitWeight;
+            }
 
             // Somar pesos/quantidades do backlog de cada setor
-            addKpi('aguardando', metrics.qAguardando, unitWeight, op);
-            addKpi('moldagem',   metrics.qMoldada,    unitWeight, op);
-            addKpi('fusao',      metrics.qFusao,      unitWeight, op);
-            addKpi('acabamento', metrics.qAcabamento, unitWeight, op);
-            addKpi('tt',         metrics.qTT,         unitWeight, op);
-            addKpi('usinagem',   metrics.qUsinagem,   unitWeight, op);
-            addKpi('qualidade',  metrics.qQualidade,  unitWeight, op);
-            addKpi('expedicao',  metrics.qExpedicao,  unitWeight, op);
+            addKpi('aguardando', metrics.qAguardando, unitWeight, unitPrice, op);
+            addKpi('moldagem',   metrics.qMoldada,    unitWeight, unitPrice, op);
+            addKpi('fusao',      metrics.qFusao,      unitWeight, unitPrice, op);
+            addKpi('acabamento', metrics.qAcabamento, unitWeight, unitPrice, op);
+            addKpi('tt',         metrics.qTT,         unitWeight, unitPrice, op);
+            addKpi('usinagem',   metrics.qUsinagem,   unitWeight, unitPrice, op);
+            addKpi('qualidade',  metrics.qQualidade,  unitWeight, unitPrice, op);
+            addKpi('expedicao',  metrics.qExpedicao,  unitWeight, unitPrice, op);
         }
         
         // 4. Salvar no Banco
@@ -103,52 +108,72 @@ async function takeSnapshot() {
         
         console.log(`✅ Snapshot de ${snapshotDate} calculado com sucesso:`);
         Object.keys(stats).forEach(k => {
-            console.log(`   - ${k.padEnd(12)}: ${String(stats[k].qty.toFixed(0)).padStart(5)} pçs / ${String(stats[k].weight.toFixed(2)).padStart(9)} kg (OPs: ${stats[k].ops.size})`);
+            console.log(`   - ${k.padEnd(12)}: ${String(stats[k].qty.toFixed(0)).padStart(5)} pçs / ${String(stats[k].weight.toFixed(2)).padStart(9)} kg / R$ ${stats[k].value.toFixed(2)} (OPs: ${stats[k].ops.size})`);
         });
+
+        await pgClient.query(`
+            ALTER TABLE industrial_snapshots
+                ADD COLUMN IF NOT EXISTS aguardando_value NUMERIC DEFAULT 0,
+                ADD COLUMN IF NOT EXISTS moldagem_value NUMERIC DEFAULT 0,
+                ADD COLUMN IF NOT EXISTS fusao_value NUMERIC DEFAULT 0,
+                ADD COLUMN IF NOT EXISTS acabamento_value NUMERIC DEFAULT 0,
+                ADD COLUMN IF NOT EXISTS tt_value NUMERIC DEFAULT 0,
+                ADD COLUMN IF NOT EXISTS usinagem_value NUMERIC DEFAULT 0,
+                ADD COLUMN IF NOT EXISTS qualidade_value NUMERIC DEFAULT 0,
+                ADD COLUMN IF NOT EXISTS expedicao_value NUMERIC DEFAULT 0
+        `);
 
         const queryInsert = `
             INSERT INTO industrial_snapshots (
                 snapshot_date, 
-                aguardando_qty, aguardando_weight,
-                moldagem_qty, moldagem_weight,
-                fusao_qty, fusao_weight,
-                acabamento_qty, acabamento_weight,
-                tt_qty, tt_weight,
-                usinagem_qty, usinagem_weight,
-                qualidade_qty, qualidade_weight,
-                expedicao_qty, expedicao_weight
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+                aguardando_qty, aguardando_weight, aguardando_value,
+                moldagem_qty, moldagem_weight, moldagem_value,
+                fusao_qty, fusao_weight, fusao_value,
+                acabamento_qty, acabamento_weight, acabamento_value,
+                tt_qty, tt_weight, tt_value,
+                usinagem_qty, usinagem_weight, usinagem_value,
+                qualidade_qty, qualidade_weight, qualidade_value,
+                expedicao_qty, expedicao_weight, expedicao_value
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
             ON CONFLICT (snapshot_date) 
             DO UPDATE SET 
                 aguardando_qty = EXCLUDED.aguardando_qty, 
                 aguardando_weight = EXCLUDED.aguardando_weight,
+                aguardando_value = EXCLUDED.aguardando_value,
                 moldagem_qty = EXCLUDED.moldagem_qty,
                 moldagem_weight = EXCLUDED.moldagem_weight,
+                moldagem_value = EXCLUDED.moldagem_value,
                 fusao_qty = EXCLUDED.fusao_qty,
                 fusao_weight = EXCLUDED.fusao_weight,
+                fusao_value = EXCLUDED.fusao_value,
                 acabamento_qty = EXCLUDED.acabamento_qty,
                 acabamento_weight = EXCLUDED.acabamento_weight,
+                acabamento_value = EXCLUDED.acabamento_value,
                 tt_qty = EXCLUDED.tt_qty,
                 tt_weight = EXCLUDED.tt_weight,
+                tt_value = EXCLUDED.tt_value,
                 usinagem_qty = EXCLUDED.usinagem_qty,
                 usinagem_weight = EXCLUDED.usinagem_weight,
+                usinagem_value = EXCLUDED.usinagem_value,
                 qualidade_qty = EXCLUDED.qualidade_qty,
                 qualidade_weight = EXCLUDED.qualidade_weight,
+                qualidade_value = EXCLUDED.qualidade_value,
                 expedicao_qty = EXCLUDED.expedicao_qty,
                 expedicao_weight = EXCLUDED.expedicao_weight,
+                expedicao_value = EXCLUDED.expedicao_value,
                 created_at = CURRENT_TIMESTAMP;
         `;
 
         await pgClient.query(queryInsert, [
             snapshotDate,
-            stats.aguardando.qty, stats.aguardando.weight,
-            stats.moldagem.qty, stats.moldagem.weight,
-            stats.fusao.qty, stats.fusao.weight,
-            stats.acabamento.qty, stats.acabamento.weight,
-            stats.tt.qty, stats.tt.weight,
-            stats.usinagem.qty, stats.usinagem.weight,
-            stats.qualidade.qty, stats.qualidade.weight,
-            stats.expedicao.qty, stats.expedicao.weight
+            stats.aguardando.qty, stats.aguardando.weight, stats.aguardando.value,
+            stats.moldagem.qty, stats.moldagem.weight, stats.moldagem.value,
+            stats.fusao.qty, stats.fusao.weight, stats.fusao.value,
+            stats.acabamento.qty, stats.acabamento.weight, stats.acabamento.value,
+            stats.tt.qty, stats.tt.weight, stats.tt.value,
+            stats.usinagem.qty, stats.usinagem.weight, stats.usinagem.value,
+            stats.qualidade.qty, stats.qualidade.weight, stats.qualidade.value,
+            stats.expedicao.qty, stats.expedicao.weight, stats.expedicao.value
         ]);
 
         console.log(`✅ Snapshot de ${snapshotDate} salvo no banco.`);

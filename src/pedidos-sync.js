@@ -161,19 +161,27 @@ router.get('/industrial-history', async (req, res) => {
         const year  = parseInt(req.query.year)  || now.getFullYear();
         const query = `
             SELECT
-                TO_CHAR(snapshot_date, 'YYYY-MM-DD') as date,
+                TO_CHAR(s.snapshot_date, 'YYYY-MM-DD') as date,
                 aguardando_qty, aguardando_weight,
+                COALESCE((TO_JSONB(s)->>'aguardando_value')::numeric, 0) AS aguardando_value,
                 moldagem_qty, moldagem_weight,
+                COALESCE((TO_JSONB(s)->>'moldagem_value')::numeric, 0) AS moldagem_value,
                 fusao_qty, fusao_weight,
+                COALESCE((TO_JSONB(s)->>'fusao_value')::numeric, 0) AS fusao_value,
                 acabamento_qty, acabamento_weight,
+                COALESCE((TO_JSONB(s)->>'acabamento_value')::numeric, 0) AS acabamento_value,
                 tt_qty, tt_weight,
+                COALESCE((TO_JSONB(s)->>'tt_value')::numeric, 0) AS tt_value,
                 usinagem_qty, usinagem_weight,
+                COALESCE((TO_JSONB(s)->>'usinagem_value')::numeric, 0) AS usinagem_value,
                 qualidade_qty, qualidade_weight,
-                expedicao_qty, expedicao_weight
-            FROM industrial_snapshots
-            WHERE EXTRACT(YEAR  FROM snapshot_date) = $1
-              AND EXTRACT(MONTH FROM snapshot_date) = $2
-            ORDER BY snapshot_date ASC
+                COALESCE((TO_JSONB(s)->>'qualidade_value')::numeric, 0) AS qualidade_value,
+                expedicao_qty, expedicao_weight,
+                COALESCE((TO_JSONB(s)->>'expedicao_value')::numeric, 0) AS expedicao_value
+            FROM industrial_snapshots s
+            WHERE EXTRACT(YEAR  FROM s.snapshot_date) = $1
+              AND EXTRACT(MONTH FROM s.snapshot_date) = $2
+            ORDER BY s.snapshot_date ASC
         `;
         const result = await pool.query(query, [year, month]);
         res.json(result.rows);
