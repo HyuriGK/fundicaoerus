@@ -6658,18 +6658,20 @@ function flashConcentracaoBar(barIndex) {
         // --- LÃÂ“GICA DE HISTÃÂ“RICO INDUSTRIAL (CLIQUE DIREITO) ---
         let historyChart = null;
         let currentHistoryStage = 'moldagem';
+        let currentHistoryDataStage = 'moldagem';
+        let currentHistoryMoldagemType = null;
         let industrialHistoryView = 'monthly';
         const historyStageNames = {
             'aguardando': 'Aguardando Moldagem',
-            'moldagem': 'Moldagem',
-            'fusao': 'Fusão',
-            'acabamento': 'Acabamento',
-            'tt': 'Tratamento Térmico (TT)',
+            'moldagem_tipo': 'Moldagem',
+            'moldagem': 'Fusão',
+            'fusao': 'Acabamento',
+            'acabamento': 'Tratamento Térmico (TT)',
             'tt_usinagem': 'Aguardando Usinagem Externa',
-            'tt_qualidade': 'Aguardando Qualidade (TT)',
-            'usinagem': 'Usinagem',
-            'qualidade': 'Qualidade',
-            'expedicao': 'Expedição'
+            'tt_qualidade': 'Aguardando Qualidade',
+            'usinagem': 'Em Usinagem Externa',
+            'qualidade': 'Aguardando Expedição',
+            'expedicao': 'Aguardando Faturamento'
         };
 
         function initHistorySelects() {
@@ -6723,8 +6725,8 @@ function flashConcentracaoBar(barIndex) {
             const chartDiv = document.getElementById('historyChartContainer');
             const emptyDiv = document.getElementById('historyEmpty');
             const moldagemTypeSelect = document.getElementById('historyMoldagemTypeSelect');
-            const selectedStage = currentHistoryStage === 'moldagem' ? moldagemTypeSelect.value : currentHistoryStage;
-            const selectedStageName = currentHistoryStage === 'moldagem'
+            const selectedStage = currentHistoryMoldagemType ? moldagemTypeSelect.value : currentHistoryDataStage;
+            const selectedStageName = currentHistoryMoldagemType
                 ? moldagemTypeSelect.options[moldagemTypeSelect.selectedIndex].text
                 : (historyStageNames[currentHistoryStage] || currentHistoryStage);
             const monthName = document.getElementById('historyMonthSelect').options[document.getElementById('historyMonthSelect').selectedIndex].text;
@@ -6748,15 +6750,17 @@ function flashConcentracaoBar(barIndex) {
             }
         }
 
-        async function openIndustrialHistory(stage, moldagemType = 'moldagem') {
+        async function openIndustrialHistory(stage, dataStage = stage, moldagemType = null) {
             currentHistoryStage = stage;
+            currentHistoryDataStage = dataStage;
+            currentHistoryMoldagemType = moldagemType;
             const modal = document.getElementById('industrialHistoryModal');
             modal.style.display = 'flex';
             industrialHistoryView = 'monthly';
             initHistorySelects();
             const moldagemTypeSelect = document.getElementById('historyMoldagemTypeSelect');
-            moldagemTypeSelect.style.display = stage === 'moldagem' ? '' : 'none';
-            moldagemTypeSelect.value = moldagemType;
+            moldagemTypeSelect.style.display = moldagemType ? '' : 'none';
+            if (moldagemType) moldagemTypeSelect.value = moldagemType;
             const dailyBtn = document.getElementById('historyDailyBtn');
             const monthlyBtn = document.getElementById('historyMonthlyBtn');
             dailyBtn.classList.remove('active');
@@ -6907,21 +6911,20 @@ function flashConcentracaoBar(barIndex) {
         // Inicializar os manipuladores de clique direito
         function initIndustrialHistoryHandlers() {
             const containers = [
-                { id: 'groupAguardandoContainer', stage: 'aguardando' },
-                { id: 'groupMoldadoContainer',    stage: 'moldagem' },
-                { id: 'barMoldPesada',            stage: 'moldagem', type: 'moldagem_pesada' },
-                { id: 'barMoldLeve',              stage: 'moldagem', type: 'moldagem_leve' },
-                { id: 'barMoldManual',            stage: 'moldagem', type: 'moldagem_manual' },
-                { id: 'barMoldOutros',            stage: 'moldagem', type: 'moldagem_outros' },
-                { id: 'groupFundidoContent',      stage: 'fusao' },
-                { id: 'barFusao',                 stage: 'fusao' },
-                { id: 'barAcabamento',            stage: 'acabamento' },
-                { id: 'barTT',                    stage: 'tt' },
-                { id: 'barTT_Usinagem',           stage: 'tt' },
-                { id: 'barTT_Qualidade',          stage: 'tt' },
-                { id: 'barUsinagem',              stage: 'usinagem' },
-                { id: 'barQualidade',             stage: 'qualidade' },
-                { id: 'barExpedicao',             stage: 'expedicao' }
+                { id: 'groupAguardandoContent', stage: 'aguardando', dataStage: 'aguardando' },
+                { id: 'barMoldPesada',          stage: 'moldagem_tipo', dataStage: 'moldagem_pesada', type: 'moldagem_pesada' },
+                { id: 'barMoldLeve',            stage: 'moldagem_tipo', dataStage: 'moldagem_leve', type: 'moldagem_leve' },
+                { id: 'barMoldManual',          stage: 'moldagem_tipo', dataStage: 'moldagem_manual', type: 'moldagem_manual' },
+                { id: 'barMoldOutros',          stage: 'moldagem_tipo', dataStage: 'moldagem_outros', type: 'moldagem_outros' },
+                { id: 'groupMoldadoContent',    stage: 'moldagem', dataStage: 'moldagem' },
+                { id: 'barMoldado',             stage: 'moldagem', dataStage: 'moldagem' },
+                { id: 'barFusao',               stage: 'fusao', dataStage: 'fusao' },
+                { id: 'barAcabamento',          stage: 'acabamento', dataStage: 'acabamento' },
+                { id: 'barTT_Usinagem',         stage: 'tt_usinagem', dataStage: 'tt' },
+                { id: 'barTT_Qualidade',        stage: 'tt_qualidade', dataStage: 'tt' },
+                { id: 'barUsinagem',            stage: 'usinagem', dataStage: 'usinagem' },
+                { id: 'barQualidade',           stage: 'qualidade', dataStage: 'qualidade' },
+                { id: 'barExpedicao',           stage: 'expedicao', dataStage: 'expedicao' }
             ];
             containers.forEach(item => {
                 const el = document.getElementById(item.id);
@@ -6929,7 +6932,7 @@ function flashConcentracaoBar(barIndex) {
                     el.oncontextmenu = function(e) {
                         e.preventDefault();
                         e.stopPropagation();
-                        openIndustrialHistory(item.stage, item.type);
+                        openIndustrialHistory(item.stage, item.dataStage, item.type);
                     };
                 }
             });
