@@ -567,6 +567,15 @@
             });
         }
 
+        if (!isIndex) {
+            document.addEventListener('click', function(e) {
+                if (document.body.classList.contains('erus-sidebar-collapsed')) return;
+                if (e.target.closest && e.target.closest('#erus-sidebar')) return;
+                document.body.classList.add('erus-sidebar-collapsed');
+                applySidebarContentOffset();
+            });
+        }
+
         window.addEventListener('resize', applySidebarContentOffset);
 
         // ESC closes pref/logout modals
