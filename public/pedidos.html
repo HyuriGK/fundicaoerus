@@ -1824,6 +1824,26 @@
             </div>
         </div>
     </div>
+
+    <div id="emissaoClientChoiceModal" class="modal-overlay" style="z-index: 5000;">
+        <div class="modal-card" style="max-width:520px;width:92%;">
+            <div class="modal-header">
+                <h2 class="modal-title"><i class="fa-solid fa-chart-column" style="margin-right:12px;"></i>Visualização do cliente</h2>
+                <span class="modal-close" onclick="closeEmissaoClientChoice()">&times;</span>
+            </div>
+            <div class="modal-body" style="padding:28px 32px;">
+                <p id="emissaoClientChoiceText" style="margin:0;color:#d4d4d8;line-height:1.6;"></p>
+            </div>
+            <div class="modal-footer" style="display:flex;justify-content:flex-end;gap:10px;">
+                <button class="btn-modern" onclick="resolveEmissaoClientChoice('total')">
+                    <i class="fa-solid fa-list"></i> Total no período
+                </button>
+                <button class="btn-modern" onclick="resolveEmissaoClientChoice('mensal')">
+                    <i class="fa-solid fa-chart-bar"></i> Emissão mês a mês
+                </button>
+            </div>
+        </div>
+    </div>
     <!-- MODAL DE DETALHES DO PEDIDO -->
     <div id="orderDetailsModal" class="modal-overlay" style="z-index: 2000;">
         <div class="modal-card fullscreen" style="background: #09090b;">
@@ -4816,10 +4836,52 @@ function flashConcentracaoBar(barIndex) {
             suggestions.style.display = 'block';
         }
 
-        function selectEmissaoClient(barIndex, name) {
+        let emissaoClientChoiceResolver = null;
+
+        function closeEmissaoClientChoice() {
+            document.getElementById('emissaoClientChoiceModal').style.display = 'none';
+            if (emissaoClientChoiceResolver) emissaoClientChoiceResolver(null);
+            emissaoClientChoiceResolver = null;
+        }
+
+        function resolveEmissaoClientChoice(choice) {
+            document.getElementById('emissaoClientChoiceModal').style.display = 'none';
+            if (emissaoClientChoiceResolver) emissaoClientChoiceResolver(choice);
+            emissaoClientChoiceResolver = null;
+        }
+
+        function askEmissaoClientChoice(name) {
+            document.getElementById('emissaoClientChoiceText').textContent =
+                `Como deseja visualizar a emissão de ${name}?`;
+            document.getElementById('emissaoClientChoiceModal').style.display = 'flex';
+            return new Promise(resolve => { emissaoClientChoiceResolver = resolve; });
+        }
+
+        async function selectEmissaoClient(barIndex, name) {
             const suggestions = document.getElementById('emissaoSuggestions');
             if (suggestions) suggestions.style.display = 'none';
-            showClientMonthlyEmissao(name);
+            const choice = await askEmissaoClientChoice(name);
+            if (choice === 'mensal') {
+                showClientMonthlyEmissao(name);
+                return;
+            }
+            if (choice !== 'total') return;
+
+            const yearEl = document.getElementById('yearFilterHistorical');
+            const year = yearEl ? (parseInt(yearEl.value) || new Date().getFullYear()) : new Date().getFullYear();
+            const month = activePillMonth === null ? 'Todos' : activePillMonth + 1;
+            try {
+                const res = await fetch(`/api/emissoes/list?ano=${year}&mes=${month}`);
+                if (!res.ok) return;
+                const records = (await res.json()).filter(r =>
+                    (r.NOME_CLIENTE || '').trim().toUpperCase() === name
+                );
+                const monthLabels = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+                const period = month === 'Todos' ? String(year) : `${monthLabels[month - 1]}/${year}`;
+                await showHistoricalDetails(records, `Emissão ${name} — ${period}`);
+            } catch (err) {
+                console.error('Erro ao carregar total do cliente:', err);
+            }
         }
 
         function _calcEmissaoWeight(r) {
