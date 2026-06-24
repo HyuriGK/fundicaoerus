@@ -5985,6 +5985,7 @@
                 }
 
                 async function togglePermission(role, pageKey, allowed) {
+                    const previous = _permData[role] && typeof _permData[role][pageKey] === 'boolean' ? _permData[role][pageKey] : true;
                     if (!_permData[role]) _permData[role] = {};
                     _permData[role][pageKey] = allowed;
                     const gi = _PERM_PAGES.findIndex(g => g.pages.some(p => p.key === pageKey));
@@ -5993,12 +5994,18 @@
                         if (sum) sum.textContent = _catSummary(_PERM_PAGES[gi]);
                     }
                     try {
-                        await fetch('/api/permissions', {
+                        const response = await fetch('/api/permissions', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json', 'x-role': localStorage.getItem('erus_role') },
                             body: JSON.stringify({ role, page_key: pageKey, allowed })
                         });
-                    } catch(e) { console.error('Erro ao salvar permissão', e); }
+                        if (!response.ok) throw new Error('Falha ao salvar permissao');
+                    } catch(e) {
+                        console.error('Erro ao salvar permissao', e);
+                        _permData[role][pageKey] = previous;
+                        renderPermissionsMatrix();
+                        if (window.showToast) showToast('Erro', 'Permissao nao foi salva.', 'danger');
+                    }
                 }
 
                 async function permissionsSelectAll(allowed) {
