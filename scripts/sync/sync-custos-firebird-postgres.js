@@ -124,8 +124,7 @@ async function syncData() {
 
     // Removemos o agrupamento (GROUP BY) e o limitador (FIRST 20)
     // Coleta o registro cru: Nome, Valor Específico do item, a Data e NF.
-    const dataInicio = new Date();
-    dataInicio.setDate(dataInicio.getDate() - 90);
+    const dataInicio = new Date(new Date().getFullYear(), 0, 1);
     const dataInicioStr = dataInicio.toISOString().split('T')[0];
     console.log(`📅 Janela de Sincronização: ${dataInicioStr} até hoje.`);
 
