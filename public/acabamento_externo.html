@@ -2133,6 +2133,10 @@
                 return selectedMonthIndex === -1 || month === selectedMonthIndex + 1;
             });
         }
+        function isCargaTotalmenteRecebida(carga, items) {
+            const recebidosCarga = recebidos[carga] || [];
+            return items.length > 0 && items.every(item => recebidosCarga.some(rec => rec.id === item.id));
+        }
         function abrirRelatorioPontualidade() {
             if (selectedMonthIndex === -1) {
                 showToast('Selecione um mês', 'O relatório de pontualidade é gerado para um mês específico.', 'danger');
@@ -2176,6 +2180,7 @@
             const rows = Object.entries(byCarga).filter(([carga]) => previsoes[carga]?.entrega).map(([carga, items]) => {
                 const prev = previsoes[carga] || {};
                 const atraso = prev.acordada && prev.entrega ? businessDayDiff(prev.entrega, prev.acordada) : null;
+                const recebida = isCargaTotalmenteRecebida(carga, items);
                 return {
                     carga,
                     dataEnvio: items[0].data,
@@ -2185,11 +2190,14 @@
                     status: atraso === null ? 'SEM AVALIACAO' : atraso > 0 ? 'ATRASADA' : 'NO PRAZO',
                     peso: items.reduce((sum, item) => sum + (Number(item.quant) || 0) * (Number(item.peso) || 0), 0),
                     quantidade: items.reduce((sum, item) => sum + (Number(item.quant) || 0), 0),
+                    recebida,
                     qualidade: prev.qualidade === true ? 'SIM' : prev.qualidade === false ? 'NAO' : 'NAO AVALIADA',
                     qualidadeObservacao: prev.qualidadeObservacao || ''
                 };
             }).sort((a, b) => new Date(a.dataEnvio) - new Date(b.dataEnvio));
             const avaliadas = rows.filter(r => r.atraso !== null);
+            const qualidadeAvaliadas = rows.filter(r => r.recebida && (r.qualidade === 'SIM' || r.qualidade === 'NAO'));
+            const qualidadeOk = qualidadeAvaliadas.filter(r => r.qualidade === 'SIM').length;
             const noPrazo = avaliadas.filter(r => r.atraso <= 0).length;
             const atrasadas = avaliadas.length - noPrazo;
             const diasAtraso = avaliadas.reduce((sum, r) => sum + Math.max(0, r.atraso), 0);
@@ -2200,6 +2208,9 @@
                 noPrazo,
                 atrasadas,
                 pontualidade: avaliadas.length ? noPrazo / avaliadas.length * 100 : 0,
+                qualidadeAvaliadas: qualidadeAvaliadas.length,
+                qualidadeOk,
+                qualidadePercentual: qualidadeAvaliadas.length ? qualidadeOk / qualidadeAvaliadas.length * 100 : 0,
                 atrasoMedio: avaliadas.length ? diasAtraso / avaliadas.length : 0,
                 pesoTotal: rows.reduce((sum, r) => sum + r.peso, 0),
                 quantidadeTotal: rows.reduce((sum, r) => sum + r.quantidade, 0)
@@ -2232,6 +2243,7 @@
             const cards = [
                 ['PESO ENVIADO', `${formatNumber(report.pesoTotal)} kg`],
                 ['PONTUALIDADE', `${report.pontualidade.toFixed(1)}%`],
+                ['QUALIDADE', `${report.qualidadePercentual.toFixed(1)}%`],
                 ['CARGAS ENVIADAS', String(report.total)],
                 ['NO PRAZO', String(report.noPrazo)],
                 ['ATRASADAS', String(report.atrasadas)]
@@ -2255,7 +2267,7 @@
 
             doc.autoTable({
                 startY: 73,
-                head: [['CARGA', 'ENVIO', 'DATA ACORDADA', 'ENTREGA', 'STATUS', 'ATRASO', 'QTD', 'PESO (KG)', 'QUALIDADE']],
+                head: [['CARGA', 'ENVIO', 'DATA ACORDADA', 'ENTREGA', 'STATUS', 'ATRASO', 'QTD', 'PESO (KG)', 'RECEBIDA', 'QUALIDADE']],
                 body: report.rows.map(row => [
                     row.carga,
                     formatDate(row.dataEnvio),
@@ -2265,6 +2277,7 @@
                     row.atraso === null ? '-' : `${Math.max(0, row.atraso)} d`,
                     row.quantidade.toLocaleString('pt-BR'),
                     formatNumber(row.peso),
+                    row.recebida ? 'SIM' : 'NAO',
                     row.qualidade
                 ]),
                 styles: { fontSize: 8, cellPadding: 2.5, halign: 'center', valign: 'middle' },
@@ -2278,13 +2291,14 @@
                         if (data.cell.raw === 'NO PRAZO') data.cell.styles.textColor = [16, 185, 129];
                     }
                     if (data.column.index === 8 && data.cell.raw === 'NAO') data.cell.styles.textColor = [239, 68, 68];
+                    if (data.column.index === 9 && data.cell.raw === 'NAO') data.cell.styles.textColor = [239, 68, 68];
                 },
                 margin: { left: 14, right: 14, bottom: 20 },
                 didDrawPage: data => {
                     doc.setFontSize(9);
                     doc.setTextColor(71, 85, 105);
                     doc.text(`Total enviado: ${report.quantidadeTotal.toLocaleString('pt-BR')} pecas | ${formatNumber(report.pesoTotal)} kg`, 14, pageHeight - 14);
-                    doc.text(`Cargas avaliadas: ${report.avaliadas} de ${report.total}`, pageWidth - 14, pageHeight - 14, { align: 'right' });
+                    doc.text(`Pontualidade: ${report.avaliadas} de ${report.total} | Qualidade: ${report.qualidadeOk} de ${report.qualidadeAvaliadas}`, pageWidth - 14, pageHeight - 14, { align: 'right' });
                     doc.setFontSize(7);
                     doc.setTextColor(148, 163, 184);
                     doc.text(`Gerado em ${new Date().toLocaleString('pt-BR')} - Pagina ${data.pageNumber}`, 14, pageHeight - 8);
@@ -2476,22 +2490,29 @@
             const stats = {};
             // Semeia todos os fornecedores cadastrados para que apareçam mesmo sem registros
             Array.from(document.getElementById('inputTerceiro')?.options || [])
-                .forEach(o => { stats[o.value] = { total: 0, onTime: 0, late: 0, daysLate: 0, worst: 0 }; });
-            let gTotal = 0, gOnTime = 0, gDaysLate = 0;
+                .forEach(o => { stats[o.value] = { total: 0, onTime: 0, late: 0, daysLate: 0, worst: 0, qualityTotal: 0, qualityOk: 0 }; });
+            let gTotal = 0, gOnTime = 0, gDaysLate = 0, gQualityTotal = 0, gQualityOk = 0;
             Object.keys(cargasTerceiro).forEach(carga => {
                 const prev = previsoes[carga];
-                if (!prev || !prev.acordada || !prev.entrega) return;
-                const atraso = businessDayDiff(prev.entrega, prev.acordada); // >0 = atrasou, <=0 = no prazo
                 const terc = cargasTerceiro[carga];
-                if (!stats[terc]) stats[terc] = { total: 0, onTime: 0, late: 0, daysLate: 0, worst: 0 };
+                if (!stats[terc]) stats[terc] = { total: 0, onTime: 0, late: 0, daysLate: 0, worst: 0, qualityTotal: 0, qualityOk: 0 };
                 const s = stats[terc];
-                s.total++; gTotal++;
-                if (atraso > 0) { s.late++; s.daysLate += atraso; if (atraso > s.worst) s.worst = atraso; gDaysLate += atraso; }
-                else { s.onTime++; gOnTime++; }
+                if (prev && prev.acordada && prev.entrega) {
+                    const atraso = businessDayDiff(prev.entrega, prev.acordada); // >0 = atrasou, <=0 = no prazo
+                    s.total++; gTotal++;
+                    if (atraso > 0) { s.late++; s.daysLate += atraso; if (atraso > s.worst) s.worst = atraso; gDaysLate += atraso; }
+                    else { s.onTime++; gOnTime++; }
+                }
+                const items = filtrados.filter(r => r.carga === carga);
+                if (items.length && isCargaTotalmenteRecebida(carga, items) && (prev?.qualidade === true || prev?.qualidade === false)) {
+                    s.qualityTotal++; gQualityTotal++;
+                    if (prev.qualidade === true) { s.qualityOk++; gQualityOk++; }
+                }
             });
             // 3. KPIs gerais do período
             const gRate = gTotal ? (gOnTime / gTotal * 100) : 0;
             const gAvg = gTotal ? (gDaysLate / gTotal) : 0;
+            const gQualityRate = gQualityTotal ? (gQualityOk / gQualityTotal * 100) : 0;
             const statsPanel = document.getElementById('statsPanel');
             if (statsPanel) {
                 statsPanel.innerHTML = `
@@ -2506,9 +2527,9 @@
                     <div class="kpi-subtext">${gOnTime} no prazo / ${gTotal - gOnTime} atrasadas</div>
                 </div>
                 <div class="kpi-card kpi-blue">
-                    <div class="kpi-title">Dias de Atraso (Acum.)</div>
-                    <div class="kpi-value">${gDaysLate}</div>
-                    <div class="kpi-subtext">Soma dos dias atrasados</div>
+                    <div class="kpi-title">Ãndice de Qualidade</div>
+                    <div class="kpi-value">${gQualityRate.toFixed(1)}%</div>
+                    <div class="kpi-subtext">${gQualityOk} com qualidade / ${gQualityTotal} recebidas</div>
                 </div>
                 <div class="kpi-card kpi-red">
                     <div class="kpi-title">Atraso Médio por Carga</div>
@@ -2527,9 +2548,12 @@
             });
             const labels = terceiros;
             const rates = terceiros.map(t => stats[t].total ? stats[t].onTime / stats[t].total * 100 : 0);
+            const qualityRates = terceiros.map(t => stats[t].qualityTotal ? stats[t].qualityOk / stats[t].qualityTotal * 100 : 0);
             const avgDelays = terceiros.map(t => stats[t].total ? stats[t].daysLate / stats[t].total : 0);
             const barColors = terceiros.map(t => stats[t].total === 0 ? 'rgba(113,113,122,0.3)' : chartColorAmber);
             const barBorders = terceiros.map(t => stats[t].total === 0 ? '#71717a' : chartColorAmber);
+            const qualityBarColors = terceiros.map(t => stats[t].qualityTotal === 0 ? 'rgba(113,113,122,0.18)' : 'rgba(16,185,129,0.65)');
+            const qualityBarBorders = terceiros.map(t => stats[t].qualityTotal === 0 ? '#71717a' : '#10b981');
             const ctx = document.getElementById('mainChart').getContext('2d');
             if (mainChartInstance) mainChartInstance.destroy();
             mainChartInstance = new Chart(ctx, {
@@ -2552,6 +2576,17 @@
                                 font: { size: 11, weight: 'bold' },
                                 formatter: (v, c) => stats[terceiros[c.dataIndex]].total === 0 ? 's/ dados' : `${v.toFixed(0)}%`
                             }
+                        },
+                        {
+                            label: 'Qualidade (%)',
+                            data: qualityRates,
+                            backgroundColor: qualityBarColors,
+                            borderColor: qualityBarBorders,
+                            borderWidth: 1,
+                            borderRadius: 4,
+                            order: 3,
+                            yAxisID: 'y',
+                            datalabels: { display: false }
                         },
                         {
                             type: 'line',
@@ -2584,13 +2619,14 @@
                                 afterBody: items => {
                                     const t = items[0].label;
                                     const s = stats[t];
-                                    if (!s.total) return ['Sem cargas avaliadas no período'];
+                                    if (!s.total && !s.qualityTotal) return ['Sem cargas avaliadas no período'];
                                     return [
                                         `Avaliadas: ${s.total}`,
-                                        `No prazo: ${s.onTime}  (${(s.onTime / s.total * 100).toFixed(0)}%)`,
+                                        `No prazo: ${s.onTime}  (${(s.total ? s.onTime / s.total * 100 : 0).toFixed(0)}%)`,
+                                        `Qualidade: ${s.qualityOk}/${s.qualityTotal}  (${(s.qualityTotal ? s.qualityOk / s.qualityTotal * 100 : 0).toFixed(0)}%)`,
                                         `Atrasadas: ${s.late}`,
                                         `Dias de atraso (total): ${s.daysLate}`,
-                                        `Atraso médio/carga: ${(s.daysLate / s.total).toFixed(1)} d`,
+                                        `Atraso médio/carga: ${(s.total ? s.daysLate / s.total : 0).toFixed(1)} d`,
                                         `Pior atraso: ${s.worst} d`
                                     ];
                                 }
@@ -2599,7 +2635,7 @@
                     },
                     interaction: { mode: 'index', intersect: false },
                     scales: {
-                        y:  { beginAtZero: true, max: 100, position: 'left', grid: { color: _gc() }, ticks: { color: _tc(), callback: v => v + '%' }, title: { display: true, text: 'No prazo (%)', color: _tc() } },
+                        y:  { beginAtZero: true, max: 100, position: 'left', grid: { color: _gc() }, ticks: { color: _tc(), callback: v => v + '%' }, title: { display: true, text: 'Pontualidade / Qualidade (%)', color: _tc() } },
                         y1: { beginAtZero: true, position: 'right', grid: { display: false }, ticks: { color: '#f97316' }, title: { display: true, text: 'Atraso médio (dias)', color: '#f97316' } },
                         x:  { grid: { display: false }, ticks: { color: _tc(), font: { size: 10, weight: 'bold' } } }
                     }
