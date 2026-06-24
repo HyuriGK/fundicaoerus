@@ -159,6 +159,8 @@ async function syncData() {
             LEFT JOIN CENTRO_CUSTO CC ON PAG.CTU_CODIGO_PAG = CC.CODIGO_CTU
             LEFT JOIN FORNECEDOR FORN ON PAG.FORNECEDOR_PAG = FORN.CODIGO_FRN
             WHERE PAG.DATA_EMISSAO_PAG >= ?
+              AND PAG.DATA_CANCELAMENTO_PAG IS NULL
+              AND TRIM(COALESCE(PAG.STATUS_PAG, '')) <> 'C'
         `,
         materiais: `
             SELECT 
