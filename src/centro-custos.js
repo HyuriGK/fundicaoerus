@@ -198,7 +198,7 @@ router.get('/estrutura-totais', async (req, res) => {
     try {
         const { mes, ano } = req.query;
         const params = [];
-        let where = `centro_custo_mascara IS NOT NULL`;
+        let where = `1=1`;
 
         if (mes) {
             params.push(Number(mes));
@@ -211,16 +211,20 @@ router.get('/estrutura-totais', async (req, res) => {
 
         const { rows } = await pool.query(`
             SELECT
-                centro_custo_codigo AS codigo,
-                centro_custo_nome AS nome,
-                centro_custo_mascara AS mascara,
-                centro_custo_tipo AS tipo,
+                COALESCE(centro_custo_codigo, -1) AS codigo,
+                COALESCE(NULLIF(TRIM(centro_custo_nome), ''), 'Sem centro de custo') AS nome,
+                COALESCE(NULLIF(TRIM(centro_custo_mascara), ''), 'SEM') AS mascara,
+                COALESCE(NULLIF(TRIM(centro_custo_tipo), ''), 'ANALITICA') AS tipo,
                 SUM(valor)::numeric AS total,
                 COUNT(*)::int AS registros
             FROM custos_registros
             WHERE ${where}
-            GROUP BY centro_custo_codigo, centro_custo_nome, centro_custo_mascara, centro_custo_tipo
-            ORDER BY centro_custo_mascara
+            GROUP BY
+                COALESCE(centro_custo_codigo, -1),
+                COALESCE(NULLIF(TRIM(centro_custo_nome), ''), 'Sem centro de custo'),
+                COALESCE(NULLIF(TRIM(centro_custo_mascara), ''), 'SEM'),
+                COALESCE(NULLIF(TRIM(centro_custo_tipo), ''), 'ANALITICA')
+            ORDER BY COALESCE(NULLIF(TRIM(centro_custo_mascara), ''), 'SEM')
         `, params);
 
         res.json({
@@ -245,8 +249,11 @@ router.get('/estrutura-registros', async (req, res) => {
         const { mascara, mes, ano } = req.query;
         if (!mascara) return res.status(400).json({ success: false, error: 'Mascara obrigatoria' });
 
-        const params = [String(mascara)];
-        let where = `(centro_custo_mascara = $1 OR centro_custo_mascara LIKE $1 || '.%')`;
+        const isSemCentro = String(mascara) === 'SEM';
+        const params = isSemCentro ? [] : [String(mascara)];
+        let where = isSemCentro
+            ? `(centro_custo_mascara IS NULL OR TRIM(centro_custo_mascara) = '')`
+            : `(centro_custo_mascara = $1 OR centro_custo_mascara LIKE $1 || '.%')`;
 
         if (mes) {
             params.push(Number(mes));
