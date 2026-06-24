@@ -194,6 +194,104 @@ router.get('/estrutura', async (req, res) => {
     }
 });
 
+router.get('/estrutura-totais', async (req, res) => {
+    try {
+        const { mes, ano } = req.query;
+        const params = [];
+        let where = `centro_custo_mascara IS NOT NULL`;
+
+        if (mes) {
+            params.push(Number(mes));
+            where += ` AND mes = $${params.length}`;
+        }
+        if (ano) {
+            params.push(Number(ano));
+            where += ` AND ano = $${params.length}`;
+        }
+
+        const { rows } = await pool.query(`
+            SELECT
+                centro_custo_codigo AS codigo,
+                centro_custo_nome AS nome,
+                centro_custo_mascara AS mascara,
+                centro_custo_tipo AS tipo,
+                SUM(valor)::numeric AS total,
+                COUNT(*)::int AS registros
+            FROM custos_registros
+            WHERE ${where}
+            GROUP BY centro_custo_codigo, centro_custo_nome, centro_custo_mascara, centro_custo_tipo
+            ORDER BY centro_custo_mascara
+        `, params);
+
+        res.json({
+            success: true,
+            data: rows.map(r => ({
+                codigo: r.codigo,
+                nome: r.nome,
+                mascara: r.mascara,
+                tipo: String(r.tipo || '').trim(),
+                total: Number(r.total) || 0,
+                registros: Number(r.registros) || 0
+            }))
+        });
+    } catch (e) {
+        console.error('Erro ao buscar totais por centro de custo:', e);
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+router.get('/estrutura-registros', async (req, res) => {
+    try {
+        const { mascara, mes, ano } = req.query;
+        if (!mascara) return res.status(400).json({ success: false, error: 'Mascara obrigatoria' });
+
+        const params = [String(mascara)];
+        let where = `(centro_custo_mascara = $1 OR centro_custo_mascara LIKE $1 || '.%')`;
+
+        if (mes) {
+            params.push(Number(mes));
+            where += ` AND mes = $${params.length}`;
+        }
+        if (ano) {
+            params.push(Number(ano));
+            where += ` AND ano = $${params.length}`;
+        }
+
+        const { rows } = await pool.query(`
+            SELECT
+                data_emissao,
+                documento,
+                fornecedor,
+                produto,
+                valor,
+                centro_custo_codigo,
+                centro_custo_nome,
+                centro_custo_mascara
+            FROM custos_registros
+            WHERE ${where}
+            ORDER BY data_emissao DESC NULLS LAST, valor DESC
+            LIMIT 500
+        `, params);
+
+        res.json({
+            success: true,
+            data: rows.map(r => ({
+                data_emissao: r.data_emissao,
+                documento: r.documento,
+                fornecedor: r.fornecedor,
+                produto: r.produto,
+                valor: Number(r.valor) || 0,
+                centro_custo_codigo: r.centro_custo_codigo,
+                centro_custo_nome: r.centro_custo_nome,
+                centro_custo_mascara: r.centro_custo_mascara
+            }))
+        });
+    } catch (e) {
+        console.error('Erro ao buscar registros por centro de custo:', e);
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
 // POST /api/centro-custos — Salvar/atualizar centro de custo de um item specifico
 router.post('/', async (req, res) => {
     try {

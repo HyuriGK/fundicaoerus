@@ -21,11 +21,19 @@ async function createTableIfNotExists() {
                 data_emissao DATE,
                 mes INTEGER,
                 ano INTEGER,
+                centro_custo_codigo INTEGER,
+                centro_custo_nome VARCHAR(255),
+                centro_custo_mascara VARCHAR(50),
+                centro_custo_tipo VARCHAR(20),
                 atualizado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
             ALTER TABLE custos_registros ADD COLUMN IF NOT EXISTS produto VARCHAR(255);
             ALTER TABLE custos_registros ADD COLUMN IF NOT EXISTS produto_cod VARCHAR(50);
             ALTER TABLE custos_registros ADD COLUMN IF NOT EXISTS fornecedor VARCHAR(255);
+            ALTER TABLE custos_registros ADD COLUMN IF NOT EXISTS centro_custo_codigo INTEGER;
+            ALTER TABLE custos_registros ADD COLUMN IF NOT EXISTS centro_custo_nome VARCHAR(255);
+            ALTER TABLE custos_registros ADD COLUMN IF NOT EXISTS centro_custo_mascara VARCHAR(50);
+            ALTER TABLE custos_registros ADD COLUMN IF NOT EXISTS centro_custo_tipo VARCHAR(20);
 
             -- REMOVER ÍNDICE PARA PERMITIR LIMPEZA (Se ele existir de uma falha anterior)
             DROP INDEX IF EXISTS idx_custos_unique_upsert;
@@ -72,6 +80,8 @@ async function createTableIfNotExists() {
 
             CREATE INDEX IF NOT EXISTS idx_custos_registros_mes_ano ON custos_registros(mes, ano);
             CREATE INDEX IF NOT EXISTS idx_custos_registros_categoria ON custos_registros(categoria);
+            CREATE INDEX IF NOT EXISTS idx_custos_registros_cc_codigo ON custos_registros(centro_custo_codigo);
+            CREATE INDEX IF NOT EXISTS idx_custos_registros_cc_mascara ON custos_registros(centro_custo_mascara);
         `);
         
         console.log('✅ Tabela custos_registros inicializada com sucesso.');
@@ -163,7 +173,15 @@ async function syncData() {
                 PAG.DATA_EMISSAO_PAG AS DATA_EMISSAO,
                 PAG.DOCUMENTO_PAG AS DOCUMENTO,
                 EXTRACT(MONTH FROM PAG.DATA_EMISSAO_PAG) AS MES,
-                PAG.ANO_PAG AS ANO
+                PAG.ANO_PAG AS ANO,
+                CC.CODIGO_CTU AS CENTRO_CUSTO_CODIGO,
+                CC.NOME_CTU AS CENTRO_CUSTO_NOME,
+                CC.MASCARA_CTU AS CENTRO_CUSTO_MASCARA,
+                CASE
+                    WHEN CC.TIPO_MASCARA_CTU = 1 THEN 'SINTETICA'
+                    WHEN CC.TIPO_MASCARA_CTU = 0 THEN 'ANALITICA'
+                    ELSE NULL
+                END AS CENTRO_CUSTO_TIPO
             FROM PAGAR PAG
             LEFT JOIN CENTRO_CUSTO CC ON PAG.CTU_CODIGO_PAG = CC.CODIGO_CTU
             LEFT JOIN FORNECEDOR FORN ON PAG.FORNECEDOR_PAG = FORN.CODIGO_FRN
@@ -242,8 +260,8 @@ async function syncData() {
                     const params = [];
 
                     chunk.forEach((row, idx) => {
-                        const baseIdx = idx * 10;
-                        values.push(`($${baseIdx + 1}, $${baseIdx + 2}, $${baseIdx + 3}, $${baseIdx + 4}, $${baseIdx + 5}, $${baseIdx + 6}, $${baseIdx + 7}, $${baseIdx + 8}, $${baseIdx + 9}, $${baseIdx + 10})`);
+                        const baseIdx = idx * 14;
+                        values.push(`($${baseIdx + 1}, $${baseIdx + 2}, $${baseIdx + 3}, $${baseIdx + 4}, $${baseIdx + 5}, $${baseIdx + 6}, $${baseIdx + 7}, $${baseIdx + 8}, $${baseIdx + 9}, $${baseIdx + 10}, $${baseIdx + 11}, $${baseIdx + 12}, $${baseIdx + 13}, $${baseIdx + 14})`);
                         params.push(
                             cat,
                             row.NOME,
@@ -254,17 +272,28 @@ async function syncData() {
                             String(row.DOCUMENTO || ''),
                             row.DATA_EMISSAO,
                             row.MES,
-                            row.ANO
+                            row.ANO,
+                            row.CENTRO_CUSTO_CODIGO || null,
+                            row.CENTRO_CUSTO_NOME ? String(row.CENTRO_CUSTO_NOME).replace(/\s+/g, ' ').trim() : null,
+                            row.CENTRO_CUSTO_MASCARA ? String(row.CENTRO_CUSTO_MASCARA).trim() : null,
+                            row.CENTRO_CUSTO_TIPO ? String(row.CENTRO_CUSTO_TIPO).trim() : null
                         );
                     });
 
                     const query = `
-                        INSERT INTO custos_registros (categoria, nome, produto, produto_cod, fornecedor, valor, documento, data_emissao, mes, ano) 
+                        INSERT INTO custos_registros (
+                            categoria, nome, produto, produto_cod, fornecedor, valor, documento, data_emissao, mes, ano,
+                            centro_custo_codigo, centro_custo_nome, centro_custo_mascara, centro_custo_tipo
+                        )
                         VALUES ${values.join(',')}
                         ON CONFLICT (categoria, documento, produto_cod, fornecedor, data_emissao, valor) DO UPDATE SET
                             nome = EXCLUDED.nome,
                             produto = EXCLUDED.produto,
                             valor = EXCLUDED.valor,
+                            centro_custo_codigo = EXCLUDED.centro_custo_codigo,
+                            centro_custo_nome = EXCLUDED.centro_custo_nome,
+                            centro_custo_mascara = EXCLUDED.centro_custo_mascara,
+                            centro_custo_tipo = EXCLUDED.centro_custo_tipo,
                             atualizado_em = CURRENT_TIMESTAMP
                     `;
 
