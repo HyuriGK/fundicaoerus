@@ -318,6 +318,8 @@
                     '<i class="fa-solid fa-file-invoice-dollar"></i><span>Custos Gerais</span></a>' +
                 '<a href="custopeca.html" data-stip="Calculadora" class="erus-nav-link' + isActive('custopeca.html') + '">' +
                     '<i class="fa-solid fa-calculator"></i><span>Calculadora</span></a>' +
+                '<a href="centrocusto.html" data-stip="Centro de Custo" class="erus-nav-link' + isActive('centrocusto.html') + '">' +
+                    '<i class="fa-solid fa-sitemap"></i><span>Centro de Custo</span></a>' +
             '</div>' +
             // INDICADORES
             '<div class="erus-nav-group-sep" data-stip="Indicadores" onclick="erusSidebarToggleGroup(\'eg-indicadores\')">' +

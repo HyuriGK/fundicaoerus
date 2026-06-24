@@ -3,6 +3,10 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../lib/db');
+const { attach } = require('../lib/firebird-helper');
+
+const firebirdQuery = (db, sql, params = []) =>
+    new Promise((resolve, reject) => db.query(sql, params, (err, rows) => err ? reject(err) : resolve(rows)));
 
 // Lista fixa de centros de custo para fundição
 const CENTROS_CUSTO = [
@@ -158,6 +162,47 @@ router.get('/resumo', async (req, res) => {
 });
 
 // POST /api/centro-custos — Salvar/atualizar centro de custo de um item specifico
+router.get('/estrutura', async (req, res) => {
+    attach(async (err, db) => {
+        if (err) {
+            console.error('Erro ao conectar no Firebird centro-custos/estrutura:', err);
+            return res.status(500).json({ success: false, error: err.message });
+        }
+
+        try {
+            const rows = await firebirdQuery(db, `
+                SELECT
+                    CODIGO_CTU,
+                    EMP_CODIGO_CTU,
+                    NOME_CTU,
+                    ATIVO_CTU,
+                    TIPO_MASCARA_CTU,
+                    MASCARA_CTU
+                FROM CENTRO_CUSTO
+                WHERE ATIVO_CTU = 'S'
+                ORDER BY MASCARA_CTU
+            `);
+
+            const items = rows.map(row => ({
+                codigo: row.CODIGO_CTU,
+                empresa: row.EMP_CODIGO_CTU,
+                nome: String(row.NOME_CTU || '').replace(/\s+/g, ' ').trim(),
+                ativo: String(row.ATIVO_CTU || '').trim(),
+                tipo: Number(row.TIPO_MASCARA_CTU) === 1 ? 'SINTETICA' : 'ANALITICA',
+                tipo_mascara: Number(row.TIPO_MASCARA_CTU),
+                mascara: String(row.MASCARA_CTU || '').trim()
+            }));
+
+            res.json({ success: true, data: items });
+        } catch (e) {
+            console.error('Erro ao buscar estrutura de centro de custo:', e);
+            res.status(500).json({ success: false, error: e.message });
+        } finally {
+            db.detach();
+        }
+    });
+});
+
 router.post('/', async (req, res) => {
     try {
         const { fornecedor, produto, centro_custo } = req.body;

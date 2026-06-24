@@ -38,7 +38,8 @@ router.get('/', checkDevRole, async (req, res) => {
                     'fichatecmoldagem.html',
                     'fichatecfusao.html',
                     'fichatecacabamento.html',
-                    'custos.html'
+                    'custos.html',
+                    'centrocusto.html'
                   )
                 ORDER BY created_at DESC
                 LIMIT 1
