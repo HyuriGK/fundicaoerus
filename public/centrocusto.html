@@ -473,7 +473,7 @@
                 <div class="node ${isOpen ? 'open' : ''}" data-codigo="${node.codigo}" data-force-open="${node.forceOpen ? '1' : '0'}" style="--depth:${depth}">
                     <div class="row" onclick="selectNode('${node.codigo}')">
                         <button class="toggle ${hasChildren ? 'has-children' : ''}" type="button" onclick="toggleNode(event, '${node.codigo}')">
-                            <i class="fa-solid ${hasChildren ? 'fa-chevron-right' : 'fa-circle'}"></i>
+                            <i class="fa-solid ${hasChildren ? (isOpen ? 'fa-chevron-down' : 'fa-chevron-right') : 'fa-circle'}"></i>
                         </button>
                         <span class="code">${node.codigo}</span>
                         <span class="name" title="${esc(node.nome)}">${esc(node.nome)}</span>
@@ -489,7 +489,13 @@
         window.toggleNode = function(event, codigo) {
             event.stopPropagation();
             const node = document.querySelector(`.node[data-codigo="${codigo}"]`);
-            if (node) node.classList.toggle('open');
+            if (!node) return;
+            const isOpen = node.classList.toggle('open');
+            const icon = node.querySelector(':scope > .row .toggle i');
+            if (icon) {
+                icon.classList.toggle('fa-chevron-right', !isOpen);
+                icon.classList.toggle('fa-chevron-down', isOpen);
+            }
         };
 
         window.selectNode = function(codigo) {
@@ -633,8 +639,24 @@
         el('searchInput').addEventListener('input', renderTree);
         el('monthSelect').addEventListener('change', loadData);
         el('yearSelect').addEventListener('change', loadData);
-        el('expandAllBtn').addEventListener('click', () => document.querySelectorAll('.node').forEach(node => node.classList.add('open')));
-        el('collapseAllBtn').addEventListener('click', () => document.querySelectorAll('.node').forEach(node => node.classList.remove('open')));
+        function syncToggleIcons() {
+            document.querySelectorAll('.node').forEach(node => {
+                const icon = node.querySelector(':scope > .row .toggle.has-children i');
+                if (!icon) return;
+                const isOpen = node.classList.contains('open');
+                icon.classList.toggle('fa-chevron-right', !isOpen);
+                icon.classList.toggle('fa-chevron-down', isOpen);
+            });
+        }
+
+        el('expandAllBtn').addEventListener('click', () => {
+            document.querySelectorAll('.node').forEach(node => node.classList.add('open'));
+            syncToggleIcons();
+        });
+        el('collapseAllBtn').addEventListener('click', () => {
+            document.querySelectorAll('.node').forEach(node => node.classList.remove('open'));
+            syncToggleIcons();
+        });
         el('reloadBtn').addEventListener('click', loadData);
         document.addEventListener('dragstart', event => event.preventDefault());
         setupPeriod();
