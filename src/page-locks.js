@@ -97,7 +97,9 @@ router.post('/sync-lock', async (req, res) => {
             INSERT INTO page_locks (page_id, is_locked, is_syncing, sync_started_at, sync_estimated_ms, sync_progress)
             VALUES ($1, false, true, $2, $3, 0)
             ON CONFLICT (page_id)
-            DO UPDATE SET is_syncing = true,
+            DO UPDATE SET is_locked = false,
+                          lock_reason = NULL,
+                          is_syncing = true,
                           sync_started_at = $2, sync_estimated_ms = $3, sync_progress = 0,
                           updated_at = CURRENT_TIMESTAMP
         `, [page_id, now, estimatedMs]);
@@ -147,7 +149,9 @@ router.post('/sync-unlock', async (req, res) => {
         // Encerrar sincronização (não mexe em is_locked/lock_reason — bloqueio manual é independente)
         await pool.query(`
             UPDATE page_locks
-            SET is_syncing = false,
+            SET is_locked = false,
+                lock_reason = NULL,
+                is_syncing = false,
                 sync_started_at = NULL, sync_estimated_ms = NULL,
                 updated_at = CURRENT_TIMESTAMP
             WHERE page_id = $1

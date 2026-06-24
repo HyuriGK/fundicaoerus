@@ -248,6 +248,13 @@ async function syncData() {
                     if (!seenKeys.has(key)) {
                         seenKeys.add(key);
                         uniqueRows.push(r);
+                    } else {
+                        const existingIndex = uniqueRows.findIndex(item =>
+                            `${cat}|${String(item.DOCUMENTO || '')}|${String(item.PRODUTO_COD || '')}|${String(item.FORNECEDOR || '')}|${item.DATA_EMISSAO}|${item.VALOR}`.toUpperCase() === key
+                        );
+                        if (existingIndex >= 0 && r.CENTRO_CUSTO_MASCARA && !uniqueRows[existingIndex].CENTRO_CUSTO_MASCARA) {
+                            uniqueRows[existingIndex] = r;
+                        }
                     }
                 });
 
@@ -319,6 +326,11 @@ async function syncData() {
                 await client.query(`
                     INSERT INTO sync_status (screen_name, last_sync_at)
                     VALUES ('Custos', NOW())
+                    ON CONFLICT (screen_name) DO UPDATE SET last_sync_at = NOW();
+                `);
+                await client.query(`
+                    INSERT INTO sync_status (screen_name, last_sync_at)
+                    VALUES ('Centro de Custo', NOW())
                     ON CONFLICT (screen_name) DO UPDATE SET last_sync_at = NOW();
                 `);
                 console.log('📊 Status de sincronização atualizado para: Custos');
