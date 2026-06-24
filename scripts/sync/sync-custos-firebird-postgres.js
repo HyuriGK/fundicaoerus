@@ -39,44 +39,18 @@ async function createTableIfNotExists() {
             DROP INDEX IF EXISTS idx_custos_unique_upsert;
         `);
 
-        console.log('🛠️ [2/4] Normalizando dados para Índice Único...');
+        console.log('🛠️ [2/4] Normalizando defaults...');
         await client.query(`
-            UPDATE custos_registros SET documento = TRIM(COALESCE(documento, '')) WHERE documento IS NULL OR documento != TRIM(documento);
-            UPDATE custos_registros SET produto_cod = TRIM(COALESCE(produto_cod, '')) WHERE produto_cod IS NULL OR produto_cod != TRIM(produto_cod);
-            UPDATE custos_registros SET fornecedor = TRIM(COALESCE(fornecedor, '')) WHERE fornecedor IS NULL OR fornecedor != TRIM(fornecedor);
-
             ALTER TABLE custos_registros ALTER COLUMN documento SET DEFAULT '';
             ALTER TABLE custos_registros ALTER COLUMN produto_cod SET DEFAULT '';
             ALTER TABLE custos_registros ALTER COLUMN fornecedor SET DEFAULT '';
         `);
 
-        console.log('🛠️ [3/4] Removendo duplicatas legadas...');
-        await client.query(`
-            DELETE FROM custos_registros
-            WHERE id IN (
-                SELECT id
-                FROM (
-                    SELECT id,
-                           ROW_NUMBER() OVER (
-                               PARTITION BY 
-                                 TRIM(categoria), 
-                                 TRIM(COALESCE(documento, '')), 
-                                 TRIM(COALESCE(produto_cod, '')), 
-                                 TRIM(COALESCE(fornecedor, '')), 
-                                 data_emissao, 
-                                 valor
-                               ORDER BY id DESC
-                           ) as row_num
-                    FROM custos_registros
-                ) t
-                WHERE t.row_num > 1
-            );
-        `);
+        console.log('🛠️ [3/4] Modelo truncate habilitado...');
+        console.log('Modelo truncate habilitado para a sincronizacao.');
 
-        console.log('🛠️ [4/4] Gerando Índice de Sincronização Incremental...');
+        console.log('🛠️ [4/4] Garantindo índices de consulta...');
         await client.query(`
-            CREATE UNIQUE INDEX idx_custos_unique_upsert 
-            ON custos_registros(categoria, documento, produto_cod, fornecedor, data_emissao, valor);
 
             CREATE INDEX IF NOT EXISTS idx_custos_registros_mes_ano ON custos_registros(mes, ano);
             CREATE INDEX IF NOT EXISTS idx_custos_registros_categoria ON custos_registros(categoria);
@@ -234,31 +208,16 @@ async function syncData() {
         try {
             // Chamada de migração para o mestre
             await createTableIfNotExists();
+            await client.query('BEGIN');
+            await client.query('TRUNCATE TABLE custos_registros RESTART IDENTITY');
 
             const totalGeral = dados.fornecedores.length + dados.tipos.length + dados.setores.length + dados.materiais.length;
             let totalInseridos = 0;
 
             const insertBatch = async (cat, rows) => {
-                // Deduplicação em tempo de execução para evitar erro de "ON CONFLICT" no mesmo lote
-                const uniqueRows = [];
-                const seenKeys = new Set();
-                rows.forEach(r => {
-                    const key = `${cat}|${String(r.DOCUMENTO || '')}|${String(r.PRODUTO_COD || '')}|${String(r.FORNECEDOR || '')}|${r.DATA_EMISSAO}|${r.VALOR}`.toUpperCase();
-                    if (!seenKeys.has(key)) {
-                        seenKeys.add(key);
-                        uniqueRows.push(r);
-                    } else {
-                        const existingIndex = uniqueRows.findIndex(item =>
-                            `${cat}|${String(item.DOCUMENTO || '')}|${String(item.PRODUTO_COD || '')}|${String(item.FORNECEDOR || '')}|${item.DATA_EMISSAO}|${item.VALOR}`.toUpperCase() === key
-                        );
-                        if (existingIndex >= 0 && r.CENTRO_CUSTO_MASCARA && !uniqueRows[existingIndex].CENTRO_CUSTO_MASCARA) {
-                            uniqueRows[existingIndex] = r;
-                        }
-                    }
-                });
-
-                const BATCH_SIZE = 200; // Lotes menores para commit mais frequente e feedback rápido
-                console.log(`📤 Inserindo ${uniqueRows.length} registros únicos para a categoria: ${cat} (de ${rows.length} totais)...`);
+                const uniqueRows = rows;
+                const BATCH_SIZE = 200;
+                console.log(`Inserindo ${uniqueRows.length} registros para a categoria: ${cat}...`);
 
                 for (let i = 0; i < uniqueRows.length; i += BATCH_SIZE) {
                     const chunk = uniqueRows.slice(i, i + BATCH_SIZE);
@@ -292,15 +251,6 @@ async function syncData() {
                             centro_custo_codigo, centro_custo_nome, centro_custo_mascara, centro_custo_tipo
                         )
                         VALUES ${values.join(',')}
-                        ON CONFLICT (categoria, documento, produto_cod, fornecedor, data_emissao, valor) DO UPDATE SET
-                            nome = EXCLUDED.nome,
-                            produto = EXCLUDED.produto,
-                            valor = EXCLUDED.valor,
-                            centro_custo_codigo = EXCLUDED.centro_custo_codigo,
-                            centro_custo_nome = EXCLUDED.centro_custo_nome,
-                            centro_custo_mascara = EXCLUDED.centro_custo_mascara,
-                            centro_custo_tipo = EXCLUDED.centro_custo_tipo,
-                            atualizado_em = CURRENT_TIMESTAMP
                     `;
 
                     await client.query(query, params);
@@ -316,6 +266,7 @@ async function syncData() {
             await insertBatch('tipos', dados.tipos);
             await insertBatch('setores', dados.setores);
             await insertBatch('materiais', dados.materiais);
+            await client.query('COMMIT');
 
             console.log(`\n✨ Sincronização concluída com sucesso! ${totalInseridos} registros totais armazenados.`);
 
