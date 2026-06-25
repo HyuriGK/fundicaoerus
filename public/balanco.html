@@ -71,6 +71,29 @@
         .toolbar-search { background:rgba(255,255,255,0.03); border:1px solid var(--border-subtle); color:var(--text-main); padding:8px 14px; border-radius:8px; font-family:var(--font-main); font-size:0.82rem; outline:none; transition:all 0.2s; width:190px; }
         .toolbar-search::placeholder{color:var(--text-muted)}
         .toolbar-search:focus{border-color:var(--color-primary);background:rgba(251,191,36,0.04)}
+        .year-select, .month-select {
+            height: 36px;
+            min-width: 108px;
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+            background: #0f0f12;
+            background-image: none !important;
+            color: #fff;
+            padding: 0 12px;
+            font-family: var(--font-mono);
+            font-size: .76rem;
+            font-weight: 800;
+            text-align: center;
+            text-align-last: center;
+            outline: none;
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+        }
+        .year-select::-ms-expand, .month-select::-ms-expand { display: none; }
+        .year-select option, .month-select option { background:#18181b; color:#fff; text-align:center; }
+        .year-select:hover, .month-select:hover,
+        .year-select:focus, .month-select:focus { border-color: var(--color-primary); }
 
         /* Seletor de gráfico */
         .chart-select { background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.1); color:#f4f4f5; border-radius:8px; font-family:var(--font-mono); font-size:0.72rem; font-weight:700; padding:8px 30px 8px 12px; cursor:pointer; outline:none; transition:all 0.2s; letter-spacing:0.04em;
@@ -199,19 +222,23 @@
                         <option value="2025">2025</option>
                         <option value="2026" selected>2026</option>
                     </select>
-                    <button class="month-btn all-btn active" data-month="all" onclick="onMonthClick(this)">TODOS</button>
-                    <button class="month-btn" data-month="1"  onclick="onMonthClick(this)">JAN</button>
-                    <button class="month-btn" data-month="2"  onclick="onMonthClick(this)">FEV</button>
-                    <button class="month-btn" data-month="3"  onclick="onMonthClick(this)">MAR</button>
-                    <button class="month-btn" data-month="4"  onclick="onMonthClick(this)">ABR</button>
-                    <button class="month-btn" data-month="5"  onclick="onMonthClick(this)">MAI</button>
-                    <button class="month-btn" data-month="6"  onclick="onMonthClick(this)">JUN</button>
-                    <button class="month-btn" data-month="7"  onclick="onMonthClick(this)">JUL</button>
-                    <button class="month-btn" data-month="8"  onclick="onMonthClick(this)">AGO</button>
-                    <button class="month-btn" data-month="9"  onclick="onMonthClick(this)">SET</button>
-                    <button class="month-btn" data-month="10" onclick="onMonthClick(this)">OUT</button>
-                    <button class="month-btn" data-month="11" onclick="onMonthClick(this)">NOV</button>
-                    <button class="month-btn" data-month="12" onclick="onMonthClick(this)">DEZ</button>
+                    <select class="month-select" id="monthSelect" onchange="onMonthSelectChange()">
+                        <option value="all">TODOS</option>
+                        <option value="1">JAN</option>
+                        <option value="2">FEV</option>
+                        <option value="3">MAR</option>
+                        <option value="4">ABR</option>
+                        <option value="5">MAI</option>
+                        <option value="6">JUN</option>
+                        <option value="7">JUL</option>
+                        <option value="8">AGO</option>
+                        <option value="9">SET</option>
+                        <option value="10">OUT</option>
+                        <option value="11">NOV</option>
+                        <option value="12">DEZ</option>
+                    </select>
+                    <button id="btnViewDiaria" class="month-btn active" onclick="setBalanceChartView('diaria')">EVOLUÇÃO DIÁRIA</button>
+                    <button id="btnViewMensal" class="month-btn" onclick="setBalanceChartView('mensal')">EVOLUÇÃO MENSAL</button>
                 </div>
                 <div class="toolbar-spacer"></div>
                 <div class="toolbar-right">
@@ -228,7 +255,7 @@
             <div class="charts-row" id="chartsRow">
 
                 <!-- Gráfico mensal -->
-                <div class="chart-panel" style="flex:1;">
+                <div class="chart-panel" id="chartPanelMensal" style="flex:1;display:none;">
                     <div id="chartLoadingMensal" class="loading-overlay" style="display:none;"><div class="spinner"></div></div>
                     <div class="chart-panel-header">
                         <span class="chart-panel-title" id="titleMensal"><i class="fas fa-chart-bar" style="margin-right:8px;color:var(--color-primary);"></i>Pagamentos por Mês</span>
@@ -238,7 +265,7 @@
                 </div>
 
                 <!-- Gráfico diário -->
-                <div class="chart-panel" style="flex:1.6;">
+                <div class="chart-panel" id="chartPanelDiario" style="flex:1.6;">
                     <div id="chartLoadingDiario" class="loading-overlay" style="display:none;"><div class="spinner"></div></div>
                     <div class="chart-panel-header">
                         <span class="chart-panel-title" id="titleDiario"><i class="fas fa-calendar-day" style="margin-right:8px;color:var(--color-primary);"></i>Pagamentos Diários</span>
@@ -289,6 +316,7 @@ let activeMonth = 'all', activeYear = '2026';
 let valorOculto = true;
 const kpiVals = { kpiTotalPag:'R$ —', kpiTotalRec:'R$ —', kpiSaldo:'R$ —', kpiMaior:'R$ —', kpiMaiorRec:'R$ —', kpiMaiorInfo:'—', kpiMaiorRecInfo:'—', kpiSaldoSub:'—' };
 let activeView = 'pagamentos'; // 'pagamentos' | 'recebimentos'
+let activeChartView = 'diaria'; // 'diaria' | 'mensal'
 
 const MESES = ['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'];
 
@@ -349,8 +377,26 @@ async function loadData(){
 
 // --- Filtros ---
 function onYearChange(){ activeYear=document.getElementById('yearSelect').value; resetMonth(); applyFilters(); }
-function onMonthClick(btn){ document.querySelectorAll('.month-btn[data-month]').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); activeMonth=btn.dataset.month; applyFilters(); }
-function resetMonth(){ activeMonth='all'; document.querySelectorAll('.month-btn[data-month]').forEach(b=>b.classList.remove('active')); document.querySelector('.month-btn.all-btn').classList.add('active'); }
+function onMonthSelectChange(){ activeMonth=document.getElementById('monthSelect').value; applyFilters(); }
+function setMonthValue(month){ activeMonth=String(month); document.getElementById('monthSelect').value=activeMonth; }
+function resetMonth(){ setMonthValue('all'); }
+function setBalanceChartView(view){
+    activeChartView=view;
+    document.getElementById('btnViewDiaria').classList.toggle('active', view==='diaria');
+    document.getElementById('btnViewMensal').classList.toggle('active', view==='mensal');
+    updateChartVisibility();
+}
+function updateChartVisibility(){
+    document.getElementById('chartPanelDiario').style.display=activeChartView==='diaria'?'flex':'none';
+    document.getElementById('chartPanelMensal').style.display=activeChartView==='mensal'?'flex':'none';
+    if(activeChartView==='diaria'){
+        renderChartDiario();
+        setTimeout(()=>{ if(chartDiarioInst) chartDiarioInst.resize(); },40);
+    } else {
+        renderChartMensal();
+        setTimeout(()=>{ if(chartMensalInst) chartMensalInst.resize(); },40);
+    }
+}
 
 function onChartSelectChange(){
     activeView = document.getElementById('chartSelect').value;
@@ -369,9 +415,8 @@ function applyFilters(){
     });
     modalData=[...filteredData];
     renderKPIs();
-    renderChartMensal();
-    renderChartDiario();
     updateChartLabels();
+    updateChartVisibility();
     renderModalTable();
 }
 
@@ -466,7 +511,7 @@ function renderChartMensal(){
                 x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#71717a',font:{family:"'JetBrains Mono',monospace",size:10},maxRotation:0}},
                 y:{min:0,max:yMax,grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#71717a',font:{family:"'JetBrains Mono',monospace",size:9},callback:v=>v>=1000?'R$'+(v/1000).toFixed(0)+'k':'R$'+v}}
             },
-            onClick:(evt,els)=>{ if(!els.length)return; const pill=document.querySelector(`.month-btn[data-month="${els[0].index+1}"]`); if(pill)onMonthClick(pill); }
+            onClick:(evt,els)=>{ if(!els.length)return; setMonthValue(els[0].index+1); applyFilters(); }
         }
     });
 }
@@ -597,9 +642,9 @@ window.addEventListener('DOMContentLoaded',()=>{
     const ys=document.getElementById('yearSelect');
     if([...ys.options].some(o=>o.value===curYear))ys.value=curYear;
     else{ys.value='2026';activeYear='2026';}
-    document.querySelectorAll('.month-btn[data-month]').forEach(b=>b.classList.remove('active'));
-    const pill=document.querySelector(`.month-btn[data-month="${curMonth}"]`);
-    if(pill)pill.classList.add('active');
+    const ms=document.getElementById('monthSelect');
+    if(ms) ms.value=activeMonth;
+    setBalanceChartView('diaria');
     loadData();
 });
 </script>
