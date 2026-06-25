@@ -266,7 +266,7 @@
                     <select class="chart-select" id="chartSelect" onchange="onChartSelectChange()">
                         <option value="pagamentos">GRÁFICOS DE PAGAMENTOS</option>
                         <option value="recebimentos">GRÁFICOS DE RECEBIMENTOS</option>
-                        <option value="variacao" disabled>VARIAÇÃO (EM BREVE)</option>
+                        <option value="variacao">GRAFICOS DE VARIACAO</option>
                     </select>
                     <button class="month-btn active" onclick="openModal()">REGISTROS</button>
                 </div>
@@ -293,6 +293,15 @@
                         <span style="font-size:0.65rem;color:var(--text-muted);font-family:var(--font-mono);" id="chartSubtitleDiario">—</span>
                     </div>
                     <div class="chart-canvas-wrapper"><canvas id="barChartDiario"></canvas></div>
+                </div>
+
+                <div class="chart-panel is-hidden" id="chartPanelVariacao" style="flex:1.6;">
+                    <div id="chartLoadingVariacao" class="loading-overlay" style="display:none;"><div class="spinner"></div></div>
+                    <div class="chart-panel-header">
+                        <span class="chart-panel-title" id="titleVariacao"><i class="fas fa-chart-line" style="margin-right:8px;color:#10b981;"></i>Variação Diária</span>
+                        <span style="font-size:0.65rem;color:var(--text-muted);font-family:var(--font-mono);" id="chartSubtitleVariacao">—</span>
+                    </div>
+                    <div class="chart-canvas-wrapper"><canvas id="barChartVariacao"></canvas></div>
                 </div>
 
             </div>
@@ -332,11 +341,11 @@ const API_BASE = window.location.hostname==='localhost'||window.location.hostnam
 
 let allPagamentos = [], allRecebimentos = [];
 let filteredData = [], modalData = [];
-let chartMensalInst = null, chartDiarioInst = null;
+let chartMensalInst = null, chartDiarioInst = null, chartVariacaoInst = null;
 let activeMonth = 'all', activeYear = '2026';
 let valorOculto = true;
 const kpiVals = { kpiTotalPag:'R$ —', kpiTotalRec:'R$ —', kpiSaldo:'R$ —', kpiMaior:'R$ —', kpiMaiorRec:'R$ —', kpiMaiorInfo:'—', kpiMaiorRecInfo:'—', kpiSaldoSub:'—' };
-let activeView = 'pagamentos'; // 'pagamentos' | 'recebimentos'
+let activeView = 'pagamentos'; // 'pagamentos' | 'recebimentos' | 'variacao'
 let activeChartView = 'diaria'; // 'diaria' | 'mensal'
 
 const MESES = ['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'];
@@ -428,8 +437,15 @@ function setBalanceChartView(view){
     updateChartVisibility();
 }
 function updateChartVisibility(){
-    document.getElementById('chartPanelDiario').classList.toggle('is-hidden', activeChartView!=='diaria');
-    document.getElementById('chartPanelMensal').classList.toggle('is-hidden', activeChartView!=='mensal');
+    const isVariacao = activeView === 'variacao';
+    document.getElementById('chartPanelDiario').classList.toggle('is-hidden', isVariacao || activeChartView!=='diaria');
+    document.getElementById('chartPanelMensal').classList.toggle('is-hidden', isVariacao || activeChartView!=='mensal');
+    document.getElementById('chartPanelVariacao').classList.toggle('is-hidden', !isVariacao);
+    if(isVariacao){
+        renderChartVariacao();
+        setTimeout(()=>{ if(chartVariacaoInst) chartVariacaoInst.resize(); },40);
+        return;
+    }
     if(activeChartView==='diaria'){
         renderChartDiario();
         setTimeout(()=>{ if(chartDiarioInst) chartDiarioInst.resize(); },40);
@@ -444,7 +460,11 @@ function onChartSelectChange(){
     applyFilters();
 }
 
-function getCurrentData(){ return activeView==='pagamentos' ? allPagamentos : allRecebimentos; }
+function getCurrentData(){
+    if(activeView==='pagamentos') return allPagamentos;
+    if(activeView==='recebimentos') return allRecebimentos;
+    return [];
+}
 
 function applyFilters(){
     const src=getCurrentData();
@@ -462,6 +482,11 @@ function applyFilters(){
 }
 
 function updateChartLabels(){
+    if(activeView==='variacao'){
+        document.getElementById('modalTitleText').innerHTML=`<i class="fa-solid fa-list-check" style="margin-right:15px;"></i>Registros de Variação`;
+        document.getElementById('modalTotal').className='modal-total-badge rec';
+        return;
+    }
     const isPag = activeView==='pagamentos';
     const pal = isPag ? PAL_PAG : PAL_REC;
     const acento = isPag ? 'var(--color-primary)' : '#10b981';
@@ -592,6 +617,129 @@ function renderChartDiario(){
             scales:{
                 x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#71717a',font:{family:"'JetBrains Mono',monospace",size:dias.length>20?8:10},maxRotation:dias.length>15?45:0,autoSkip:true,maxTicksLimit:31}},
                 y:{min:0,max:yMax,grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#71717a',font:{family:"'JetBrains Mono',monospace",size:9},callback:v=>axisMoney(v)}}
+            }
+        }
+    });
+}
+
+function sumRowsByKey(rows, keyFn){
+    return rows.reduce((acc,r)=>{
+        if(!r.data)return acc;
+        const key=keyFn(r.data);
+        if(key)acc[key]=(acc[key]||0)+(Number(r.valor)||0);
+        return acc;
+    },{});
+}
+
+function buildVariacaoData(){
+    if(activeChartView==='mensal'){
+        const recByMonth=sumRowsByKey(allRecebimentos,d=>d.split('-')[0]===activeYear?d.slice(0,7):null);
+        const pagByMonth=sumRowsByKey(allPagamentos,d=>d.split('-')[0]===activeYear?d.slice(0,7):null);
+        const labels=[],keys=[],entradas=[],saidas=[],variacao=[];
+        for(let m=1;m<=12;m++){
+            const key=`${activeYear}-${String(m).padStart(2,'0')}`;
+            keys.push(key);
+            labels.push(MESES[m-1]);
+            const entrada=recByMonth[key]||0;
+            const saida=pagByMonth[key]||0;
+            entradas.push(entrada);
+            saidas.push(saida);
+            variacao.push(entrada-saida);
+        }
+        return { labels, keys, entradas, saidas, variacao, subtitle:activeYear };
+    }
+
+    const monthForChart = activeMonth === 'all' ? String(new Date().getMonth() + 1) : activeMonth;
+    const monthKey=`${activeYear}-${String(monthForChart).padStart(2,'0')}`;
+    const recByDay=sumRowsByKey(allRecebimentos,d=>d.startsWith(monthKey)?d:null);
+    const pagByDay=sumRowsByKey(allPagamentos,d=>d.startsWith(monthKey)?d:null);
+    const daysInMonth = new Date(parseInt(activeYear), parseInt(monthForChart), 0).getDate();
+    const labels=[],keys=[],entradas=[],saidas=[],variacao=[];
+    for(let day=1; day<=daysInMonth; day++){
+        const key=`${monthKey}-${String(day).padStart(2,'0')}`;
+        keys.push(key);
+        labels.push(`${String(day).padStart(2,'0')}/${String(monthForChart).padStart(2,'0')}`);
+        const entrada=recByDay[key]||0;
+        const saida=pagByDay[key]||0;
+        entradas.push(entrada);
+        saidas.push(saida);
+        variacao.push(entrada-saida);
+    }
+    return { labels, keys, entradas, saidas, variacao, subtitle:`${MESES[parseInt(monthForChart)-1]}/${activeYear}` };
+}
+
+function renderChartVariacao(){
+    const data=buildVariacaoData();
+    let acumulado=0;
+    const acumulados=data.variacao.map(v=>acumulado+=v);
+    const maxBar=Math.max(...data.variacao.map(v=>Math.abs(v)),0);
+    const maxLine=Math.max(...acumulados.map(v=>Math.abs(v)),0);
+    const yMax=roundedAxisMax(maxBar);
+    const yLineMax=roundedAxisMax(maxLine);
+
+    document.getElementById('titleVariacao').innerHTML=`<i class="fas fa-chart-line" style="margin-right:8px;color:#10b981;"></i>Variação ${activeChartView==='mensal'?'Mensal':'Diária'}`;
+    document.getElementById('chartSubtitleVariacao').textContent=data.subtitle;
+
+    if(chartVariacaoInst)chartVariacaoInst.destroy();
+    chartVariacaoInst=new Chart(document.getElementById('barChartVariacao').getContext('2d'),{
+        type:'bar',
+        data:{
+            labels:data.labels,
+            datasets:[
+                {
+                    type:'bar',
+                    label:'Variação',
+                    data:data.variacao,
+                    backgroundColor:data.variacao.map(v=>v>=0?'rgba(16,185,129,0.82)':'rgba(239,68,68,0.82)'),
+                    borderColor:data.variacao.map(v=>v>=0?'#10b981':'#ef4444'),
+                    borderWidth:1,
+                    borderRadius:6,
+                    borderSkipped:false,
+                    yAxisID:'y'
+                },
+                {
+                    type:'line',
+                    label:'Acumulado',
+                    data:acumulados,
+                    borderColor:'#fbbf24',
+                    backgroundColor:'rgba(251,191,36,0.08)',
+                    borderWidth:2,
+                    pointRadius:2,
+                    pointHoverRadius:4,
+                    tension:0.28,
+                    fill:false,
+                    yAxisID:'y1'
+                }
+            ]
+        },
+        options:{
+            responsive:true,maintainAspectRatio:false,animation:{duration:350},
+            plugins:{
+                legend:{display:false},
+                tooltip:{
+                    backgroundColor:'rgba(9,9,11,0.95)',
+                    borderColor:'rgba(251,191,36,0.35)',
+                    borderWidth:1,
+                    titleColor:'#fbbf24',
+                    bodyColor:'#f4f4f5',
+                    callbacks:{
+                        title:ctx=>activeChartView==='mensal'?data.labels[ctx[0].dataIndex]:fmtDate(data.keys[ctx[0].dataIndex]),
+                        label:ctx=>{
+                            const i=ctx.dataIndex;
+                            if(ctx.datasetIndex===1)return ' Acumulado: '+fmt(acumulados[i]);
+                            return [
+                                ' Entradas: '+fmt(data.entradas[i]),
+                                ' Saídas: '+fmt(data.saidas[i]),
+                                ' Variação: '+fmt(data.variacao[i])
+                            ];
+                        }
+                    }
+                }
+            },
+            scales:{
+                x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#71717a',font:{family:"'JetBrains Mono',monospace",size:data.labels.length>20?8:10},maxRotation:data.labels.length>15?45:0,autoSkip:true,maxTicksLimit:31}},
+                y:{min:-yMax,max:yMax,grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#71717a',font:{family:"'JetBrains Mono',monospace",size:9},callback:v=>axisMoney(v)}},
+                y1:{position:'right',min:-yLineMax,max:yLineMax,grid:{drawOnChartArea:false},ticks:{color:'#71717a',font:{family:"'JetBrains Mono',monospace",size:9},callback:v=>axisMoney(v)}}
             }
         }
     });
