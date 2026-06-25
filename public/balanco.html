@@ -343,6 +343,7 @@ let allPagamentos = [], allRecebimentos = [];
 let filteredData = [], modalData = [];
 let chartMensalInst = null, chartDiarioInst = null, chartVariacaoInst = null;
 let activeMonth = 'all', activeYear = '2026';
+let selectedBarFilter = null;
 let valorOculto = true;
 const kpiVals = { kpiTotalPag:'R$ —', kpiTotalRec:'R$ —', kpiSaldo:'R$ —', kpiMaior:'R$ —', kpiMaiorRec:'R$ —', kpiMaiorInfo:'—', kpiMaiorRecInfo:'—', kpiSaldoSub:'—' };
 let activeView = 'pagamentos'; // 'pagamentos' | 'recebimentos' | 'variacao'
@@ -424,11 +425,12 @@ async function loadData(){
 }
 
 // --- Filtros ---
-function onYearChange(){ activeYear=document.getElementById('yearSelect').value; resetMonth(); applyFilters(); }
-function onMonthSelectChange(){ activeMonth=document.getElementById('monthSelect').value; applyFilters(); }
+function onYearChange(){ selectedBarFilter=null; activeYear=document.getElementById('yearSelect').value; resetMonth(); applyFilters(); }
+function onMonthSelectChange(){ selectedBarFilter=null; activeMonth=document.getElementById('monthSelect').value; applyFilters(); }
 function setMonthValue(month){ activeMonth=String(month); document.getElementById('monthSelect').value=activeMonth; }
 function resetMonth(){ setMonthValue('all'); }
 function setBalanceChartView(view){
+    selectedBarFilter=null;
     activeChartView=view;
     if(view==='mensal') setMonthValue('all');
     if(view==='diaria') setMonthValue(String(new Date().getMonth()+1));
@@ -456,6 +458,7 @@ function updateChartVisibility(){
 }
 
 function onChartSelectChange(){
+    selectedBarFilter=null;
     activeView = document.getElementById('chartSelect').value;
     applyFilters();
 }
@@ -479,6 +482,28 @@ function applyFilters(){
     updateChartLabels();
     updateChartVisibility();
     renderModalTable();
+}
+
+function rowMatchesSelectedBar(r){
+    if(!selectedBarFilter || !r.data)return true;
+    if(selectedBarFilter.type==='day')return r.data===selectedBarFilter.key;
+    if(selectedBarFilter.type==='month')return r.data.startsWith(selectedBarFilter.key);
+    return true;
+}
+
+function setSelectedBarFilter(type,key,label){
+    selectedBarFilter={type,key,label};
+}
+
+function getModalSourceData(){
+    if(activeView==='variacao'){
+        const baseEntradas=selectedBarFilter ? allRecebimentos.filter(rowMatchesSelectedBar) : filterByPeriod(allRecebimentos);
+        const baseSaidas=selectedBarFilter ? allPagamentos.filter(rowMatchesSelectedBar) : filterByPeriod(allPagamentos);
+        const entradas=baseEntradas.map(r=>({...r,tipoMovimento:'Entrada'}));
+        const saidas=baseSaidas.map(r=>({...r,tipoMovimento:'Saída'}));
+        return [...entradas,...saidas].sort((a,b)=>(a.data||'').localeCompare(b.data||''));
+    }
+    return filteredData.filter(rowMatchesSelectedBar);
 }
 
 function updateChartLabels(){
@@ -577,7 +602,14 @@ function renderChartMensal(){
                 x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#71717a',font:{family:"'JetBrains Mono',monospace",size:10},maxRotation:0}},
                 y:{min:0,max:yMax,grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#71717a',font:{family:"'JetBrains Mono',monospace",size:9},callback:v=>axisMoney(v)}}
             },
-            onClick:(evt,els)=>{ if(!els.length)return; setMonthValue(els[0].index+1); applyFilters(); }
+            onClick:(evt,els)=>{
+                if(!els.length)return;
+                const month=els[0].index+1;
+                const key=`${activeYear}-${String(month).padStart(2,'0')}`;
+                setSelectedBarFilter('month',key,labels[els[0].index]);
+                setMonthValue(month);
+                applyFilters();
+            }
         }
     });
 }
@@ -617,7 +649,8 @@ function renderChartDiario(){
             scales:{
                 x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#71717a',font:{family:"'JetBrains Mono',monospace",size:dias.length>20?8:10},maxRotation:dias.length>15?45:0,autoSkip:true,maxTicksLimit:31}},
                 y:{min:0,max:yMax,grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#71717a',font:{family:"'JetBrains Mono',monospace",size:9},callback:v=>axisMoney(v)}}
-            }
+            },
+            onClick:(evt,els)=>{ if(!els.length)return; setSelectedBarFilter('day',dias[els[0].index],labels[els[0].index]); }
         }
     });
 }
@@ -740,6 +773,11 @@ function renderChartVariacao(){
                 x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#71717a',font:{family:"'JetBrains Mono',monospace",size:data.labels.length>20?8:10},maxRotation:data.labels.length>15?45:0,autoSkip:true,maxTicksLimit:31}},
                 y:{min:-yMax,max:yMax,grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#71717a',font:{family:"'JetBrains Mono',monospace",size:9},callback:v=>axisMoney(v)}},
                 y1:{position:'right',min:-yLineMax,max:yLineMax,grid:{drawOnChartArea:false},ticks:{color:'#71717a',font:{family:"'JetBrains Mono',monospace",size:9},callback:v=>axisMoney(v)}}
+            },
+            onClick:(evt,els)=>{
+                if(!els.length)return;
+                const i=els[0].index;
+                setSelectedBarFilter(activeChartView==='mensal'?'month':'day',data.keys[i],data.labels[i]);
             }
         }
     });
@@ -747,6 +785,23 @@ function renderChartVariacao(){
 
 // --- Modal ---
 function buildModalThead(){
+    if(activeView==='variacao'){
+        const cols=[{w:'9%',l:'TIPO'},{w:'9%',l:'COD.'},{w:'14%',l:'VALOR'},{w:'11%',l:'DATA'},{w:'',l:'HISTORICO'}];
+        document.getElementById('modalThead').innerHTML=`
+        <tr>${cols.map(c=>`<th style="${c.w?'width:'+c.w:''}">${c.l}</th>`).join('')}</tr>
+        <tr>${cols.map((_,i)=>`<th><input class="filter-input-table modal-col-filter" data-col="${i}" placeholder="..."></th>`).join('')}</tr>`;
+        document.querySelectorAll('.modal-col-filter').forEach(inp=>{
+            inp.addEventListener('input',()=>{
+                const fs=[...document.querySelectorAll('.modal-col-filter')].map(i=>i.value.toLowerCase());
+                modalData=getModalSourceData().filter(r=>{
+                    const cols=[r.tipoMovimento||'',String(r.codigo||''),fmt(r.valor),fmtDate(r.data),r.historico||''];
+                    return fs.every((f,i)=>!f||cols[i].toLowerCase().includes(f));
+                });
+                renderModalTable();
+            });
+        });
+        return;
+    }
     const isPag=activeView==='pagamentos';
     const cols=isPag
         ?[{w:'9%',l:'CÓD. PAG.'},{w:'9%',l:'CÓD. DESPESA'},{w:'',l:'NOME DESPESA'},{w:'14%',l:'VALOR'},{w:'11%',l:'DATA BAIXA'},{w:'',l:'HISTÓRICO'}]
@@ -757,7 +812,7 @@ function buildModalThead(){
     document.querySelectorAll('.modal-col-filter').forEach(inp=>{
         inp.addEventListener('input',()=>{
             const fs=[...document.querySelectorAll('.modal-col-filter')].map(i=>i.value.toLowerCase());
-            modalData=filteredData.filter(r=>{
+            modalData=getModalSourceData().filter(r=>{
                 const cols=activeView==='pagamentos'
                     ?[String(r.codigo||''),String(r.despesa||''),fmt(r.valor),fmtDate(r.data),r.historico||'']
                     :[String(r.codigo||''),fmt(r.valor),fmtDate(r.data),r.historico||''];
@@ -769,7 +824,7 @@ function buildModalThead(){
 }
 function openModal(){
     buildModalThead();
-    modalData=[...filteredData];
+    modalData=getModalSourceData();
     updateChartLabels();
     renderModalTable();
     document.getElementById('recordsModal').classList.add('open');
@@ -780,7 +835,7 @@ document.addEventListener('keydown',e=>{ if(e.key==='Escape')closeModal(); });
 
 function onModalSearch(){
     const s=(document.getElementById('modalSearch').value||'').toLowerCase();
-    modalData=filteredData.filter(r=>!s||(r.historico||'').toLowerCase().includes(s)||String(r.codigo||'').toLowerCase().includes(s));
+    modalData=getModalSourceData().filter(r=>!s||(r.historico||'').toLowerCase().includes(s)||String(r.codigo||'').toLowerCase().includes(s)||(r.tipoMovimento||'').toLowerCase().includes(s));
     renderModalTable();
 }
 
@@ -792,6 +847,16 @@ function renderModalTable(){
     document.getElementById('modalTotal').textContent=valorOculto?'••••••':fmt(total);
     const mask='••••••';
     if(modalData.length===0){ tbody.innerHTML=`<tr><td colspan="6"><div class="empty-state"><i class="fas fa-search"></i><span>Nenhum registro encontrado</span></div></td></tr>`; return; }
+    if(activeView==='variacao'){
+        tbody.innerHTML=modalData.map(r=>`<tr>
+            <td class="${r.tipoMovimento==='Entrada'?'td-valor-rec':'td-valor-pag'}">${r.tipoMovimento||'—'}</td>
+            <td class="td-code">${r.codigo||'—'}</td>
+            <td class="${r.tipoMovimento==='Entrada'?'td-valor-rec':'td-valor-pag'}">${valorOculto?mask:fmt(r.valor)}</td>
+            <td class="td-date">${fmtDate(r.data)}</td>
+            <td class="td-hist">${r.historico||'—'}</td>
+        </tr>`).join('');
+        return;
+    }
     if(isPag){
         tbody.innerHTML=modalData.map(r=>`<tr>
             <td class="td-code">${r.codigo||'—'}</td>

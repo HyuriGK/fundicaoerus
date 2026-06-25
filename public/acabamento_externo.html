@@ -338,6 +338,28 @@
             background: var(--status-info);
             color: #000;
         }
+        .chart-supplier-select {
+            background: rgba(255, 255, 255, 0.02) !important;
+            border: 1px solid var(--border-subtle) !important;
+            color: var(--text-muted) !important;
+            padding: 0 34px 0 14px !important;
+            height: 32px !important;
+            min-width: 210px;
+            border-radius: 6px !important;
+            font-family: var(--font-mono) !important;
+            font-size: 0.79rem !important;
+            font-weight: 700 !important;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            text-align: center !important;
+            text-align-last: center !important;
+        }
+        .chart-supplier-select:hover {
+            background: rgba(255, 255, 255, 0.06) !important;
+            border-color: var(--border-highlight) !important;
+            color: #fff !important;
+        }
         .chart-filters {
             display: flex;
             gap: 6px;
@@ -1172,7 +1194,10 @@
             <div class="chart-panel" style="flex:1; min-height:0;">
                 <div class="chart-header">
                     <div class="chart-title" id="mainChartTitle">Terceirizado Diário</div>
-                    <button id="pontualidadeReportBtn" class="btn-modern" style="display:none; margin-left:auto;" onclick="abrirRelatorioPontualidade()">
+                    <select id="chartFornecedorSelect" class="chart-supplier-select" onchange="changeChartFornecedor()" style="margin-left:auto;">
+                        <option value="TODOS">TODOS</option>
+                    </select>
+                    <button id="pontualidadeReportBtn" class="btn-modern" style="display:none; margin-left:8px;" onclick="abrirRelatorioPontualidade()">
                         <i class="fa-solid fa-file-pdf"></i> RELATÓRIO
                     </button>
                 </div>
@@ -1468,6 +1493,7 @@
         let currentFilteredData = [];
         let mainChartInstance = null;
         let currentView = 'diaria';
+        let selectedChartFornecedor = 'TODOS';
         const modalStack = [];
         // Variável para contolar visibilidade do valor total
         let isValorTotalVisible = false;
@@ -1725,6 +1751,7 @@
                         qualidadeObservacao: p.qualidade_observacao || ''
                     };
                 });
+                populateChartFornecedorFilter();
             } catch (e) { throw e; }
         }
         function renderTable(dadosParaExibir = registros) {
@@ -2011,6 +2038,33 @@
             const sel = document.getElementById('monthSelect');
             if (sel) sel.value = selectedMonthIndex;
         }
+        function getFornecedorValue(r) {
+            return (r?.terceiro || '').toString().trim().toUpperCase();
+        }
+        function matchesChartFornecedor(r) {
+            return selectedChartFornecedor === 'TODOS' || getFornecedorValue(r) === selectedChartFornecedor;
+        }
+        function populateChartFornecedorFilter() {
+            const select = document.getElementById('chartFornecedorSelect');
+            if (!select) return;
+            const previous = selectedChartFornecedor;
+            const fornecedores = new Set();
+            Array.from(document.getElementById('inputTerceiro')?.options || []).forEach(o => {
+                const v = (o.value || o.textContent || '').trim().toUpperCase();
+                if (v) fornecedores.add(v);
+            });
+            registros.forEach(r => {
+                const v = getFornecedorValue(r);
+                if (v) fornecedores.add(v);
+            });
+            select.innerHTML = '<option value="TODOS">TODOS</option>' + Array.from(fornecedores).sort((a,b)=>a.localeCompare(b)).map(f => `<option value="${f.replace(/"/g,'&quot;')}">${f}</option>`).join('');
+            selectedChartFornecedor = fornecedores.has(previous) ? previous : 'TODOS';
+            select.value = selectedChartFornecedor;
+        }
+        function changeChartFornecedor() {
+            selectedChartFornecedor = document.getElementById('chartFornecedorSelect')?.value || 'TODOS';
+            updateDashboardAndCharts();
+        }
         function populateDateFilters() {
             const sA = document.getElementById('yearSelect');
             if (!sA) return;
@@ -2041,7 +2095,7 @@
             const filtrados = registros.filter(r => {
                 if (!r.data) return false;
                 const p = r.data.split('T')[0].split('-');
-                return (!fM || p[1] === fM) && (!fA || p[0] === fA);
+                return (!fM || p[1] === fM) && (!fA || p[0] === fA) && matchesChartFornecedor(r);
             });
             // Calculate Sales Value and Weight only for pending items
             const tVenda = filtrados.reduce((acc, r) => {
@@ -2097,7 +2151,7 @@
             // Gráfico principal: sempre visão anual do ano selecionado
             const cD = {};
             for (let i = 1; i <= 12; i++) cD[i.toString().padStart(2, '0')] = 0;
-            registros.forEach(r => {
+            registros.filter(matchesChartFornecedor).forEach(r => {
                 if (!r.data) return;
                 const p = r.data.split('T')[0].split('-');
                 if (p[0] === fA) cD[p[1]] = (cD[p[1]] || 0) + (parseFloat(r.quant || 0) * parseFloat(r.peso || 0));
@@ -2318,7 +2372,7 @@
             const titleEl = document.getElementById('mainChartTitle');
             if (titleEl) titleEl.textContent = `Terceirizado Diário — ${monthName}/${curYear}`;
             const dayData = {};
-            registros.forEach(r => {
+            registros.filter(matchesChartFornecedor).forEach(r => {
                 if (!r.data) return;
                 const p = r.data.split('T')[0].split('-');
                 if (p[0] === curYear && p[1] === curMonth) {
@@ -2485,12 +2539,16 @@
             if (titleEl) titleEl.textContent = `Pontualidade por Terceiro — ${periodo}`;
             // 1. Reduz registros para cargas únicas (cada carga tem um terceiro e uma previsão)
             const cargasTerceiro = {};
-            filtrados.forEach(r => { if (!(r.carga in cargasTerceiro)) cargasTerceiro[r.carga] = r.terceiro || '—'; });
+            filtrados.forEach(r => { if (!(r.carga in cargasTerceiro)) cargasTerceiro[r.carga] = getFornecedorValue(r) || '—'; });
             // 2. Agrupa avaliação por terceiro (só cargas com data acordada E data de entrega)
             const stats = {};
             // Semeia todos os fornecedores cadastrados para que apareçam mesmo sem registros
             Array.from(document.getElementById('inputTerceiro')?.options || [])
-                .forEach(o => { stats[o.value] = { total: 0, onTime: 0, late: 0, daysLate: 0, worst: 0, qualityTotal: 0, qualityOk: 0 }; });
+                .forEach(o => {
+                    const fornecedor = (o.value || '').trim().toUpperCase();
+                    if (selectedChartFornecedor !== 'TODOS' && fornecedor !== selectedChartFornecedor) return;
+                    stats[fornecedor] = { total: 0, onTime: 0, late: 0, daysLate: 0, worst: 0, qualityTotal: 0, qualityOk: 0 };
+                });
             let gTotal = 0, gOnTime = 0, gDaysLate = 0, gQualityTotal = 0, gQualityOk = 0;
             Object.keys(cargasTerceiro).forEach(carga => {
                 const prev = previsoes[carga];
