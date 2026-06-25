@@ -7,7 +7,7 @@
     style.textContent = `
         #sync-notif {
             position: fixed; bottom: 20px; right: 20px; z-index: 99999;
-            background: #18181b; border: 1px solid rgba(99,102,241,0.35);
+            background: #18181b; border: 1px solid rgba(161,161,170,0.2);
             border-radius: 14px; padding: 14px 16px 12px; width: 228px;
             box-shadow: 0 8px 32px rgba(0,0,0,0.5);
             display: none; opacity: 0; transition: opacity 0.35s ease;
@@ -17,7 +17,7 @@
         #sync-notif-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
         #sync-notif-spinner {
             width: 15px; height: 15px; flex-shrink: 0;
-            border: 2px solid rgba(99,102,241,0.2); border-top-color: #6366f1;
+            border: 2px solid rgba(161,161,170,0.2); border-top-color: #a1a1aa;
             border-radius: 50%; animation: _sync-spin 0.75s linear infinite;
         }
         @keyframes _sync-spin { to { transform: rotate(360deg); } }
@@ -25,7 +25,7 @@
         #sync-notif-track { background: rgba(255,255,255,0.08); border-radius: 4px; height: 4px; overflow: hidden; }
         #sync-notif-bar {
             height: 100%; width: 0%;
-            background: linear-gradient(90deg, #6366f1, #8b5cf6);
+            background: linear-gradient(90deg, #71717a, #a1a1aa);
             border-radius: 4px; transition: width 0.6s ease;
         }
         #sync-notif-pct { text-align: right; font-size: 0.71rem; color: #71717a; margin-top: 5px; }
