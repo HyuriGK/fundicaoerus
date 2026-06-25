@@ -45,4 +45,23 @@ router.get('/recebimentos', async (req, res) => {
     }
 });
 
+router.get('/sync-status', async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT GREATEST(
+                COALESCE((SELECT MAX(sincronizado_em) FROM balanco_pagamentos), '1970-01-01'::timestamp),
+                COALESCE((SELECT MAX(sincronizado_em) FROM balanco_recebimentos), '1970-01-01'::timestamp),
+                COALESCE((SELECT MAX(sincronizado_em) FROM balanco_despesas), '1970-01-01'::timestamp)
+            ) AS last_sync_at
+        `);
+        const lastSync = result.rows[0]?.last_sync_at;
+        res.json({
+            success: true,
+            last_sync_at: lastSync && new Date(lastSync).getFullYear() > 1970 ? lastSync : null
+        });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
 module.exports = router;

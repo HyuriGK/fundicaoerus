@@ -354,6 +354,10 @@ const PAL_REC  = { bar:PEDIDOS_BAR_COLOR, border:PEDIDOS_BAR_COLOR, dimBar:'rgba
 
 function fmt(v){ return new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',minimumFractionDigits:2}).format(v||0); }
 function fmtDate(d){ if(!d)return'—'; const p=d.split('-'); return p.length===3?`${p[2]}/${p[1]}/${p[0]}`:d; }
+function fmtDateTime(d){
+    if(!d)return 'Nao informada';
+    return new Date(d).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'});
+}
 
 function axisMoney(v){
     const n=Number(v)||0;
@@ -403,16 +407,17 @@ async function loadData(){
     document.getElementById('chartLoadingMensal').style.display='flex';
     document.getElementById('chartLoadingDiario').style.display='flex';
     try {
-        const [rPag,rRec] = await Promise.all([
+        const [rPag,rRec,rSync] = await Promise.all([
             fetch(`${API_BASE}/api/balanco/pagamentos`).then(r=>r.json()),
             fetch(`${API_BASE}/api/balanco/recebimentos`).then(r=>r.json()),
+            fetch(`${API_BASE}/api/balanco/sync-status`).then(r=>r.json()).catch(()=>({success:false,last_sync_at:null})),
         ]);
         if(!rPag.success) throw new Error(rPag.error);
         if(!rRec.success) throw new Error(rRec.error);
         allPagamentos  = rPag.data  || [];
         allRecebimentos= rRec.data  || [];
         applyFilters();
-        showToast('Dados carregados',`${allPagamentos.length} pag. · ${allRecebimentos.length} rec.`,'success');
+        showToast('Ultima sincronizacao',fmtDateTime(rSync.last_sync_at),'success');
     } catch(e){
         showToast('Erro',e.message,'danger');
     } finally {
