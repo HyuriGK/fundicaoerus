@@ -878,7 +878,7 @@
             color: #f4f4f5;
         }
         .view-select {
-            width: 220px !important;
+            width: 260px !important;
             padding: 0 12px !important;
             text-transform: uppercase;
         }
@@ -1142,6 +1142,7 @@
                 </button>
                 <select id="dashboardViewSelect" class="year-select view-select" onchange="handleDashboardViewSelect(this.value)">
                     <option value="faturamento">GR&Aacute;FICOS DE FATURAMENTO</option>
+                    <option value="vendedor">FATURAMENTO POR VENDEDOR</option>
                     <option value="abc">CURVA ABC</option>
                     <option value="mapa">MAPA DE CALOR</option>
                 </select>
@@ -1185,6 +1186,21 @@
                     </div>
                 </div>
                 <div style="position: relative; flex: 1; width: 100%; min-height: 0;"><canvas id="annualChart"></canvas>
+                </div>
+            </div>
+        </div>
+        <!-- CHARTS ROW (VENDEDOR) -->
+        <div class="charts-row" id="vendorChartsRow" style="display:none; grid-template-columns: 1fr;">
+            <div class="chart-panel">
+                <div class="chart-header-row">
+                    <div class="chart-title">Faturamento por Vendedor</div>
+                    <div class="chart-header-kpi" style="gap: 5px;">
+                        <button class="btn-mini-chart active" id="btnVendorPeso" onclick="setVendorChartMetric('peso')">Peso (kg)</button>
+                        <button class="btn-mini-chart" id="btnVendorValor" onclick="setVendorChartMetric('valor')">Valor (R$)</button>
+                    </div>
+                </div>
+                <div style="position: relative; flex: 1; width: 100%; min-height: 350px; display: flex; align-items: center; justify-content: center;">
+                    <canvas id="vendorChart"></canvas>
                 </div>
             </div>
         </div>
@@ -1294,6 +1310,9 @@
         let abcAllLabels = [];
         let abcBarHeightPx = 28;
         // --- MAPA DE CALOR STATE ---
+        let showVendor = false;
+        let vendorChart = null;
+        let vendorChartMetric = 'peso';
         let showMapa = false;
         let mapaMetric = 'peso'; // 'peso' | 'valor'
         let fatMap = null, fatHeatLayer = null, fatCityLayer = null;
@@ -1703,9 +1722,12 @@
                 renderABCChart(rangeData);
             }
             // --- MAPA DE CALOR UPDATE ---
-            // Mesmas bases do KPI "TOTAL FATURADO - INTERNO": valor e peso têm filtros próprios
             if (showMapa) {
                 renderFatHeatmap(rangeDataSemServicos, rangeFatPesoComServ.filter(item => !isServiceClient(item)));
+            }
+            // --- VENDOR CHART UPDATE ---
+            if (showVendor) {
+                renderVendorChart();
             }
         }
         function toggleDailyChartMode() {
@@ -2500,6 +2522,7 @@ async function loadRecordsData() {
         function handleDashboardViewSelect(value) {
             if (value === 'abc') showABCCharts();
             else if (value === 'mapa') showMapaCalor();
+            else if (value === 'vendedor') showVendorCharts();
             else showFaturamentoCharts();
         }
         function selectDailyEvolution() {
@@ -2527,9 +2550,11 @@ async function loadRecordsData() {
             syncDashboardViewSelect('faturamento');
             showABC = false;
             showMapa = false;
+            showVendor = false;
             document.getElementById('standardChartsRow').style.display = 'grid';
             document.getElementById('annualChartsRow').style.display = 'none';
             document.getElementById('abcChartsRow').style.display = 'none';
+            document.getElementById('vendorChartsRow').style.display = 'none';
             document.getElementById('mapaChartsRow').style.display = 'none';
             updateEvolutionButtons(true);
             const sideBtn = document.getElementById('btnToggleCharts');
@@ -2549,9 +2574,11 @@ async function loadRecordsData() {
             syncDashboardViewSelect('faturamento');
             showABC = false;
             showMapa = false;
+            showVendor = false;
             document.getElementById('standardChartsRow').style.display = 'none';
             document.getElementById('annualChartsRow').style.display = 'grid';
             document.getElementById('abcChartsRow').style.display = 'none';
+            document.getElementById('vendorChartsRow').style.display = 'none';
             document.getElementById('mapaChartsRow').style.display = 'none';
             updateEvolutionButtons(false);
             const _d2 = hasActiveModalFilters() ? getModalFilteredData() : allData;
@@ -2562,9 +2589,11 @@ async function loadRecordsData() {
             syncDashboardViewSelect('abc');
             showABC = true;
             showMapa = false;
+            showVendor = false;
             document.getElementById('standardChartsRow').style.display = 'none';
             document.getElementById('annualChartsRow').style.display = 'none';
             document.getElementById('abcChartsRow').style.display = 'grid';
+            document.getElementById('vendorChartsRow').style.display = 'none';
             document.getElementById('mapaChartsRow').style.display = 'none';
             updateEvolutionButtons(null);
             // Update side menu button
@@ -2587,9 +2616,11 @@ async function loadRecordsData() {
             syncDashboardViewSelect('mapa');
             showABC = false;
             showMapa = true;
+            showVendor = false;
             document.getElementById('standardChartsRow').style.display = 'none';
             document.getElementById('annualChartsRow').style.display = 'none';
             document.getElementById('abcChartsRow').style.display = 'none';
+            document.getElementById('vendorChartsRow').style.display = 'none';
             document.getElementById('mapaChartsRow').style.display = 'grid';
             updateEvolutionButtons(null);
             const sideBtn = document.getElementById('btnToggleCharts');
@@ -2612,6 +2643,122 @@ async function loadRecordsData() {
             document.getElementById('btnMapaValor').classList.toggle('active', m === 'valor');
             const _d = hasActiveModalFilters() ? getModalFilteredData() : allData;
             updateDashboardfromRecords(_d);
+        }
+        // --- FATURAMENTO POR VENDEDOR ---
+        function showVendorCharts() {
+            dashboardView = 'vendedor';
+            syncDashboardViewSelect('vendedor');
+            showABC = false;
+            showMapa = false;
+            showVendor = true;
+            document.getElementById('standardChartsRow').style.display = 'none';
+            document.getElementById('annualChartsRow').style.display = 'none';
+            document.getElementById('abcChartsRow').style.display = 'none';
+            document.getElementById('vendorChartsRow').style.display = 'grid';
+            document.getElementById('mapaChartsRow').style.display = 'none';
+            updateEvolutionButtons(null);
+            document.getElementById('btnVendorPeso').classList.toggle('active', vendorChartMetric === 'peso');
+            document.getElementById('btnVendorValor').classList.toggle('active', vendorChartMetric === 'valor');
+            const _d = hasActiveModalFilters() ? getModalFilteredData() : allData;
+            updateDashboardfromRecords(_d);
+        }
+        function setVendorChartMetric(m) {
+            vendorChartMetric = m;
+            document.getElementById('btnVendorPeso').classList.toggle('active', m === 'peso');
+            document.getElementById('btnVendorValor').classList.toggle('active', m === 'valor');
+            renderVendorChart();
+        }
+        function renderVendorChart() {
+            if (!showVendor) return;
+            const startInput = document.getElementById('startDate').value;
+            const endInput = document.getElementById('endDate').value;
+            const vendorFilter = item => !selectedVendor || item.vendedorNome === selectedVendor;
+            const dataToSum = allData.filter(item => {
+                if (item.gera_financeiro === 'N') return false;
+                if (isServiceClient(item) && !showServices) return false;
+                const name = (item.clienteNome || 'Desconhecido').trim();
+                if (excludedClients.has(name)) return false;
+                if (item.excluido_manualmente === true) return false;
+                if (startInput && item.data < startInput) return false;
+                if (endInput && item.data > endInput) return false;
+                return vendorFilter(item);
+            });
+            const vendorMap = {};
+            dataToSum.forEach(item => {
+                const v = item.vendedorNome || 'Sem Vendedor';
+                if (!vendorMap[v]) vendorMap[v] = { peso: 0, valor: 0 };
+                vendorMap[v].peso += item.pesoTotal || 0;
+                vendorMap[v].valor += calculateCalculatedTotal(item);
+            });
+            const entries = Object.entries(vendorMap).sort((a, b) => {
+                const key = vendorChartMetric === 'peso' ? 'peso' : 'valor';
+                return b[1][key] - a[1][key];
+            });
+            const labels = entries.map(e => e[0]);
+            const values = entries.map(e => vendorChartMetric === 'peso' ? e[1].peso : e[1].valor);
+            const total = values.reduce((a, b) => a + b, 0);
+            const palette = ['#f59e0b','#10b981','#3b82f6','#ef4444','#8b5cf6','#ec4899','#06b6d4','#84cc16','#f97316','#6366f1','#14b8a6','#e11d48','#a855f7','#22d3ee','#eab308'];
+            const bgColors = labels.map((_, i) => palette[i % palette.length]);
+            const ctx = document.getElementById('vendorChart');
+            if (!ctx) return;
+            if (vendorChart) vendorChart.destroy();
+            vendorChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: values,
+                        backgroundColor: bgColors,
+                        borderColor: '#18181b',
+                        borderWidth: 2,
+                        hoverOffset: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '45%',
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                            labels: {
+                                color: _tc(),
+                                font: { size: 12, weight: '600', family: "'Inter', sans-serif" },
+                                padding: 14,
+                                usePointStyle: true,
+                                pointStyleWidth: 10
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(10,10,14,0.97)',
+                            titleColor: '#fbbf24',
+                            bodyColor: '#f4f4f5',
+                            borderColor: 'rgba(251,191,36,0.3)',
+                            borderWidth: 1,
+                            padding: 12,
+                            callbacks: {
+                                label: function(ctx) {
+                                    const val = ctx.parsed;
+                                    const pct = total > 0 ? ((val / total) * 100).toFixed(1) : 0;
+                                    if (vendorChartMetric === 'peso') {
+                                        return ` ${ctx.label}: ${formatWeight(val)} (${pct}%)`;
+                                    }
+                                    return ` ${ctx.label}: ${formatCurrency(val)} (${pct}%)`;
+                                }
+                            }
+                        },
+                        datalabels: {
+                            color: '#fff',
+                            font: { size: 11, weight: '700', family: "'Inter', sans-serif" },
+                            formatter: (val) => {
+                                const pct = total > 0 ? ((val / total) * 100).toFixed(0) : 0;
+                                return pct >= 5 ? pct + '%' : '';
+                            }
+                        }
+                    }
+                },
+                plugins: [ChartDataLabels]
+            });
         }
         function openCityRecords(city) {
             mapaCityFilter = { nome: city.nome, uf: city.uf, clients: city.clients };
