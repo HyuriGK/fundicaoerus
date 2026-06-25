@@ -1,27 +1,70 @@
-# Plano: Botão "Gerar PDF" branco no modal de Relatório de Pontualidade
+# Plano: Seletor de Vendedor no Faturamentos
 
-## Problema
-O botão "Gerar PDF" no modal "Relatório de Pontualidade" está com cor amarela/dourada (`var(--color-primary)`). O usuário quer que seja branco.
+## [S1] Problemo
+O usuário quer filtrar os dados de faturamento por vendedor específico, atualizando os KPIs e gráficos.
 
-## Arquivo alvo
-`public/acabamento_externo.html` — linha 1362
+## [S2] Dados disponíveis
+- `allData` contém registros com campos `vendedorNome` e `vendedorCodigo`
+- Os dados já são carregados via `/api/faturamento-postgres/detalhado`
+- Filtros existentes: período (data), clientes excluídos, toggle serviços
 
+## [S3] Localização do seletor
+Adicionar um `<select>` na toolbar-row (linha 1126-1147), após o seletor de mês e antes dos botões de navegação.
+
+## [S4] Implementação
+
+### HTML (linha ~1131)
 ```html
-<button class="btn-modern btn-add" onclick="gerarRelatorioPontualidadePDF()">
-  <i class="fa-solid fa-download"></i> Gerar PDF
-</button>
+<select id="dashboardVendorSelect" class="year-select" style="width:160px !important;" onchange="changeDashboardVendor()">
+    <option value="">TODOS OS VENDEDORES</option>
+</select>
 ```
 
-A classe `.btn-add` (linha 452) define:
-```css
-.btn-add {
-    background: var(--color-primary);
-    color: #000;
+### JavaScript
+
+1. **Variável de estado** (linha ~1263):
+```js
+let selectedVendor = '';
+```
+
+2. **Popular o select** - extrair vendedores únicos de `allData` após load:
+```js
+function populateVendorSelect() {
+    const sel = document.getElementById('dashboardVendorSelect');
+    const vendors = [...new Set(allData.map(i => i.vendedorNome).filter(Boolean))].sort();
+    // manter option "TODOS", recriar opções
+    sel.innerHTML = '<option value="">TODOS OS VENDEDORES</option>';
+    vendors.forEach(v => {
+        const opt = document.createElement('option');
+        opt.value = v; opt.textContent = v;
+        sel.appendChild(opt);
+    });
 }
 ```
 
-## Solução
-Adicionar `style="background:#fff; color:#000;"` inline no botão específico, sem alterar a classe global `.btn-add` (usada em outros botões do modal de carga, etc).
+3. **Handler** `changeDashboardVendor()`:
+```js
+function changeDashboardVendor() {
+    selectedVendor = document.getElementById('dashboardVendorSelect').value;
+    const dataToUse = hasActiveModalFilters() ? getModalFilteredData() : allData;
+    updateDashboardfromRecords(dataToUse);
+}
+```
 
-## Verificação
-Abrir o modal de "Relatório de Pontualidade" e confirmar que o botão "Gerar PDF" aparece com fundo branco e texto preto.
+4. **Filtrar por vendedor** em `updateDashboardfromRecords()` - adicionar filtro em todas as variáveis `dataToSum`, `rangeData`, `filteredAll`, `dailyContextData` etc:
+```js
+const vendorFilter = item => !selectedVendor || item.vendedorNome === selectedVendor;
+```
+E aplicar `.filter(vendorFilter)` nos filtros relevantes.
+
+5. **Chamar `populateVendorSelect()`** dentro de `loadRecordsData()` após `allData` ser preenchido.
+
+## [S5] CSS
+Usar a classe `.year-select` existente com `width:160px` para o select de vendedor (maior que year-select padrão para caber nomes).
+
+## [S6] Verificação
+- Abrir faturamentos.html
+- Seletor de vendedor aparece na toolbar
+- Selecionar um vendedor filtra KPIs e gráficos
+- "TODOS OS VENDEDORES" mostra dados completos
+- Combinar com filtro de mês/ano funciona corretamente

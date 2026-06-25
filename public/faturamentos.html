@@ -1128,6 +1128,9 @@
             <div style="display: flex; gap: 6px; align-items: center;">
                 <select id="dashboardYearSelect" class="year-select" onchange="changeDashboardYear()"></select>
                 <div id="dashboardMonthButtons"></div>
+                <select id="dashboardVendorSelect" class="year-select" style="width:160px !important;" onchange="changeDashboardVendor()">
+                    <option value="">TODOS OS VENDEDORES</option>
+                </select>
             </div>
             <!-- Right: Navigation Buttons -->
             <div style="display: flex; gap: 10px; align-items: center; margin-left: auto;">
@@ -1260,6 +1263,7 @@
         }
         let selectedDashboardYear = new Date().getFullYear();
         let selectedDashboardMonthIndex = new Date().getMonth(); // 0-based
+        let selectedVendor = '';
         let allData = [];
         let excludedClients = new Set();
         let fatPesoOverrides = new Map(); // key → true/false (explicit override)
@@ -1336,11 +1340,28 @@
         function changeDashboardYear() {
             selectedDashboardYear = parseInt(document.getElementById('dashboardYearSelect').value);
             syncPeriodInputs();
-            // Ano inteiro selecionado: redireciona para mensal e aplica blur no diário
             if (selectedDashboardMonthIndex === -1) {
                 if (dashboardView === 'faturamento') showAnnualView();
                 setDailyChartBlur(true);
             }
+        }
+        function populateVendorSelect() {
+            const sel = document.getElementById('dashboardVendorSelect');
+            if (!sel) return;
+            const current = sel.value;
+            const vendors = [...new Set(allData.map(i => i.vendedorNome).filter(Boolean))].sort();
+            sel.innerHTML = '<option value="">TODOS OS VENDEDORES</option>';
+            vendors.forEach(v => {
+                const opt = document.createElement('option');
+                opt.value = v; opt.textContent = v;
+                sel.appendChild(opt);
+            });
+            if (vendors.includes(current)) sel.value = current;
+        }
+        function changeDashboardVendor() {
+            selectedVendor = document.getElementById('dashboardVendorSelect').value;
+            const dataToUse = hasActiveModalFilters() ? getModalFilteredData() : allData;
+            updateDashboardfromRecords(dataToUse);
         }
         function updateDashboardMonthButtonsUI() {
             const sel = document.getElementById('monthSelect');
@@ -1450,15 +1471,16 @@
         function updateDashboardfromRecords(data) {
             const startInput = document.getElementById('startDate').value;
             const endInput = document.getElementById('endDate').value;
+            const vendorFilter = item => !selectedVendor || item.vendedorNome === selectedVendor;
             // 1. Base Data (Filtered for Exclusions and Service Toggle)
             const filteredAll = data.filter(item => {
                 if (item.gera_financeiro === 'N') return false;
                 const isService = isServiceClient(item);
                 if (isService) {
-                    return showServices; // Show only if toggle is ON
+                    return showServices;
                 }
                 const name = (item.clienteNome || 'Desconhecido').trim();
-                return !excludedClients.has(name) && item.excluido_manualmente !== true;
+                return !excludedClients.has(name) && item.excluido_manualmente !== true && vendorFilter(item);
             });
             // 1.5 Special check for Sums: ensure service clients are NOT ignored if toggle is ON
             const dataToSum = data.filter(item => {
@@ -1467,7 +1489,7 @@
                 const name = (item.clienteNome || 'Desconhecido').trim();
                 if (excludedClients.has(name)) return false;
                 if (item.excluido_manualmente === true) return false;
-                return true;
+                return vendorFilter(item);
             });
             const selectedYear = selectedDashboardYear.toString();
             const annualFilteredData = data.filter(item => {
@@ -1475,7 +1497,7 @@
                 if (isServiceClient(item)) return false;
                 const name = (item.clienteNome || 'Desconhecido').trim();
                 const countsValue = !excludedClients.has(name) && item.excluido_manualmente !== true;
-                return countsValue || getFatPesoState(item);
+                return (countsValue || getFatPesoState(item)) && vendorFilter(item);
             });
             // 2. Filter for Range (Drivers Table & KPIs)
             const rangeData = dataToSum.filter(item => {
@@ -1490,7 +1512,7 @@
             const rangeFatPeso = data.filter(item => {
                 if (startInput && item.data < startInput) return false;
                 if (endInput && item.data > endInput) return false;
-                return getFatPesoState(item);
+                return getFatPesoState(item) && vendorFilter(item);
             });
             const totalPesoFat = rangeFatPeso.reduce((acc, curr) => acc + (curr.pesoTotal || 0), 0);
             // KPIs: Total Geral (sempre com serviços) e Total sem serviços
@@ -1502,13 +1524,13 @@
                 if (!isService && excludedClients.has(name)) return false;
                 if (startInput && item.data < startInput) return false;
                 if (endInput && item.data > endInput) return false;
-                return true;
+                return vendorFilter(item);
             });
             const totalGeralValor = rangeDataComServicos.reduce((acc, curr) => acc + calculateCalculatedTotal(curr), 0);
             const rangeFatPesoComServ = data.filter(item => {
                 if (startInput && item.data < startInput) return false;
                 if (endInput && item.data > endInput) return false;
-                return getFatPesoState(item);
+                return getFatPesoState(item) && vendorFilter(item);
             });
             const totalGeralPeso = rangeFatPesoComServ.reduce((acc, curr) => acc + (curr.pesoTotal || 0), 0);
             const rangeDataSemServicos = rangeDataComServicos.filter(item => !isServiceClient(item));
@@ -1634,6 +1656,7 @@
             const dailyContextData = data.filter(item => {
                 if (isServiceClient(item)) return false;
                 if (!getFatPesoState(item)) return false;
+                if (!vendorFilter(item)) return false;
                 return item.data >= monthStartStr && item.data <= monthEndStr;
             });
             const dailyMap = {};
@@ -1648,6 +1671,7 @@
             // Dados de serviços para modo alternado
             const dailyContextServicos = filteredAll.filter(item => {
                 if (!isServiceClient(item)) return false;
+                if (!vendorFilter(item)) return false;
                 return item.data >= monthStartStr && item.data <= monthEndStr;
             });
             const dailyMapServ = {};
@@ -2142,7 +2166,6 @@ async function loadRecordsData() {
                 const res = await (await fetch(url)).json();
                 if (res.success) {
                     allData = res.data.map(item => {
-                        // gera_financeiro='N' tem prioridade máxima
                         if (item.gera_financeiro === 'N') {
                             item.excluido_manualmente = true;
                             return item;
@@ -2158,6 +2181,7 @@ async function loadRecordsData() {
                         }
                         return item;
                     });
+                    populateVendorSelect();
                     processClients(allData);
                     renderTable();
                     const dataToUse = hasActiveModalFilters() ? getModalFilteredData() : allData;
