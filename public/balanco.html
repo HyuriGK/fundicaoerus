@@ -344,6 +344,20 @@ const PAL_REC  = { bar:PEDIDOS_BAR_COLOR, border:PEDIDOS_BAR_COLOR, dimBar:'rgba
 function fmt(v){ return new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',minimumFractionDigits:2}).format(v||0); }
 function fmtDate(d){ if(!d)return'—'; const p=d.split('-'); return p.length===3?`${p[2]}/${p[1]}/${p[0]}`:d; }
 
+function axisMoney(v){
+    const n=Number(v)||0;
+    if(n>=1000000) return 'R$ '+(n/1000000).toLocaleString('pt-BR',{maximumFractionDigits:1})+' mi';
+    if(n>=1000) return 'R$ '+(n/1000).toLocaleString('pt-BR',{maximumFractionDigits:0})+' mil';
+    return 'R$ '+n.toLocaleString('pt-BR',{maximumFractionDigits:0});
+}
+function niceMax(value){
+    const n=Number(value)||0;
+    if(n<=0) return 1000;
+    const raw=n*1.15;
+    const pow=Math.pow(10, Math.floor(Math.log10(raw)));
+    const step=pow/2;
+    return Math.ceil(raw/step)*step;
+}
 function showToast(title,msg,type='default'){
     const c=document.getElementById('toastContainer');
     const t=document.createElement('div');
@@ -504,11 +518,11 @@ function renderChartMensal(){
     for(let m=1;m<=12;m++){
         labels.push(MESES[m-1]);
         const key=`${activeYear}-${String(m).padStart(2,'0')}`;
-        valores.push(allSrc.filter(r=>r.data&&r.data.startsWith(key)).reduce((s,r)=>s+r.valor,0));
+        valores.push(allSrc.filter(r=>r.data&&r.data.startsWith(key)).reduce((s,r)=>s+(Number(r.valor)||0),0));
     }
     document.getElementById('chartSubtitleMensal').textContent=activeYear;
     const maxVal=Math.max(...valores,0);
-    const yMax=maxVal>0?maxVal*1.2:1000;
+    const yMax=niceMax(maxVal);
     if(chartMensalInst)chartMensalInst.destroy();
     chartMensalInst=new Chart(document.getElementById('barChartMensal').getContext('2d'),{
         type:'bar', plugins:[ChartDataLabels],
@@ -526,7 +540,7 @@ function renderChartMensal(){
             },
             scales:{
                 x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#71717a',font:{family:"'JetBrains Mono',monospace",size:10},maxRotation:0}},
-                y:{min:0,max:yMax,grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#71717a',font:{family:"'JetBrains Mono',monospace",size:9},callback:v=>v>=1000?'R$'+(v/1000).toFixed(0)+'k':'R$'+v}}
+                y:{min:0,max:yMax,grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#71717a',font:{family:"'JetBrains Mono',monospace",size:9},callback:v=>axisMoney(v)}}
             },
             onClick:(evt,els)=>{ if(!els.length)return; setMonthValue(els[0].index+1); applyFilters(); }
         }
@@ -538,7 +552,7 @@ function renderChartDiario(){
     const isPag=activeView==='pagamentos';
     const pal=isPag?PAL_PAG:PAL_REC;
     const byDay={};
-    filteredData.forEach(r=>{if(r.data)byDay[r.data]=(byDay[r.data]||0)+r.valor;});
+    filteredData.forEach(r=>{if(r.data)byDay[r.data]=(byDay[r.data]||0)+(Number(r.valor)||0);});
     const monthForChart = activeMonth === 'all' ? String(new Date().getMonth() + 1) : activeMonth;
     const daysInMonth = new Date(parseInt(activeYear), parseInt(monthForChart), 0).getDate();
     const dias = [];
@@ -550,7 +564,7 @@ function renderChartDiario(){
     const subtitle=`${MESES[parseInt(monthForChart)-1]}/${activeYear}`;
     document.getElementById('chartSubtitleDiario').textContent=subtitle;
     const maxVal=Math.max(...valores,0);
-    const yMax=maxVal>0?maxVal*1.2:1000;
+    const yMax=niceMax(maxVal);
     if(chartDiarioInst)chartDiarioInst.destroy();
     chartDiarioInst=new Chart(document.getElementById('barChartDiario').getContext('2d'),{
         type:'bar', plugins:[ChartDataLabels],
@@ -567,7 +581,7 @@ function renderChartDiario(){
             },
             scales:{
                 x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#71717a',font:{family:"'JetBrains Mono',monospace",size:dias.length>20?8:10},maxRotation:dias.length>15?45:0,autoSkip:true,maxTicksLimit:31}},
-                y:{min:0,max:yMax,grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#71717a',font:{family:"'JetBrains Mono',monospace",size:9},callback:v=>v>=1000?'R$'+(v/1000).toFixed(0)+'k':'R$'+v}}
+                y:{min:0,max:yMax,grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#71717a',font:{family:"'JetBrains Mono',monospace",size:9},callback:v=>axisMoney(v)}}
             }
         }
     });
@@ -673,4 +687,5 @@ window.addEventListener('DOMContentLoaded',()=>{
     <script src="session-guard.js"></script>
 </body>
 </html>
+
 
