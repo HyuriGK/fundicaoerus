@@ -560,8 +560,8 @@
                 100% { background-position: 200% center; }
             }
             @keyframes sync-border-glow {
-                0%, 100% { border-color: rgba(59, 130, 246, 0.15); }
-                50% { border-color: rgba(59, 130, 246, 0.4); }
+                0%, 100% { border-color: rgba(161,161,170,0.15); }
+                50% { border-color: rgba(161,161,170,0.4); }
             }
             #sync-overlay {
                 animation: sync-fadein 0.5s ease-out forwards;
@@ -577,7 +577,7 @@
                 animation: sync-pulse 2s ease-in-out infinite;
             }
             #sync-overlay .sync-title {
-                background: linear-gradient(90deg, #fff 0%, #60a5fa 30%, #fff 60%, #60a5fa 100%);
+                background: linear-gradient(90deg, #fff 0%, #a1a1aa 30%, #fff 60%, #a1a1aa 100%);
                 background-size: 200% auto;
                 -webkit-background-clip: text;
                 -webkit-text-fill-color: transparent;
@@ -589,8 +589,8 @@
             }
             #sync-overlay .sync-btn:hover {
                 transform: translateY(-2px) scale(1.04);
-                box-shadow: 0 14px 30px -6px rgba(59, 130, 246, 0.35);
-                background: linear-gradient(135deg, #60a5fa, #3b82f6) !important;
+                box-shadow: 0 14px 30px -6px rgba(161,161,170,0.25);
+                background: linear-gradient(135deg, #a1a1aa, #71717a) !important;
             }
         `;
         document.head.appendChild(style);
@@ -639,27 +639,27 @@
                 -webkit-backdrop-filter: blur(40px) saturate(1.5);
                 padding: 48px 40px 40px;
                 border-radius: 28px;
-                border: 1px solid rgba(59, 130, 246, 0.15);
-                box-shadow: 0 0 0 1px rgba(255,255,255,0.04), 0 30px 60px -12px rgba(0,0,0,0.6), 0 0 80px -20px rgba(59, 130, 246, 0.12);
+                border: 1px solid rgba(161,161,170,0.15);
+                box-shadow: 0 0 0 1px rgba(255,255,255,0.04), 0 30px 60px -12px rgba(0,0,0,0.6), 0 0 80px -20px rgba(161,161,170,0.08);
                 position: relative; overflow: hidden;
             ">
                 <!-- Status -->
                 <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 28px;">
-                    <span class="sync-pulse" style="width: 8px; height: 8px; background: #60a5fa; border-radius: 50%; display: inline-block;"></span>
-                    <span style="font-size: 0.75rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #60a5fa;">Sincronização em Andamento</span>
+                    <span class="sync-pulse" style="width: 8px; height: 8px; background: #a1a1aa; border-radius: 50%; display: inline-block;"></span>
+                    <span style="font-size: 0.75rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #a1a1aa;">Sincronização em Andamento</span>
                 </div>
 
                 <!-- Icon -->
                 <div style="
                     width: 88px; height: 88px;
-                    background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(59, 130, 246, 0.05));
+                    background: linear-gradient(135deg, rgba(161,161,170,0.15), rgba(161,161,170,0.05));
                     border-radius: 24px;
                     display: flex; align-items: center; justify-content: center;
                     margin: 0 auto 28px;
-                    border: 1px solid rgba(59, 130, 246, 0.2);
-                    box-shadow: 0 8px 24px -4px rgba(59, 130, 246, 0.15);
+                    border: 1px solid rgba(161,161,170,0.2);
+                    box-shadow: 0 8px 24px -4px rgba(161,161,170,0.15);
                 ">
-                    <i class="fa-solid fa-arrows-rotate sync-spinner" style="font-size: 36px; color: #60a5fa;"></i>
+                    <i class="fa-solid fa-arrows-rotate sync-spinner" style="font-size: 36px; color: #a1a1aa;"></i>
                 </div>
 
                 <!-- Title -->
@@ -672,19 +672,19 @@
                     Os dados desta tela estão sendo <strong style="color: #e4e4e7;">sincronizados</strong> com o sistema ERP.
                 </p>
                 <p style="color: #71717a; line-height: 1.6; margin-bottom: 20px; font-size: 0.85rem;">
-                    Tempo estimado: <strong style="color: #60a5fa;">${estimatedLabel}</strong>
+                    Tempo estimado: <strong style="color: #a1a1aa;">${estimatedLabel}</strong>
                 </p>
 
                 <!-- Progress bar -->
                 <div style="
                     width: 100%; max-width: 360px; height: 6px;
-                    background: rgba(59, 130, 246, 0.1);
+                    background: rgba(161,161,170,0.15);
                     border-radius: 3px; margin: 0 auto 6px;
                     overflow: hidden;
                 ">
                     <div id="sync-progress-fill" style="
-                        height: 100%; 
-                        background: linear-gradient(90deg, #3b82f6, #60a5fa); 
+                        height: 100%;
+                        background: linear-gradient(90deg, #71717a, #a1a1aa);
                         border-radius: 3px; 
                         width: ${initialProgress}%;
                         transition: width 1s linear;
@@ -695,15 +695,15 @@
                 </p>
 
                 <!-- Divider -->
-                <div style="width: 60px; height: 2px; background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.4), transparent); margin: 0 auto 28px; border-radius: 1px;"></div>
+                <div style="width: 60px; height: 2px; background: linear-gradient(90deg, transparent, rgba(161,161,170,0.4), transparent); margin: 0 auto 28px; border-radius: 1px;"></div>
 
                 <!-- Button -->
                 <a href="index.html" class="sync-btn" style="
                     display: inline-flex; align-items: center; justify-content: center; gap: 10px;
-                    background: linear-gradient(135deg, #3b82f6, #2563eb);
+                    background: linear-gradient(135deg, #71717a, #52525b);
                     color: #fff; padding: 14px 36px; border-radius: 14px;
                     font-weight: 700; font-size: 0.9rem; text-decoration: none;
-                    box-shadow: 0 10px 25px -5px rgba(59, 130, 246, 0.3);
+                    box-shadow: 0 10px 25px -5px rgba(161,161,170,0.2);
                     letter-spacing: 0.01em;
                 ">
                     <i class="fa-solid fa-arrow-left" style="font-size: 14px;"></i>
@@ -766,8 +766,8 @@
         const style = document.createElement('style');
         style.textContent = `
             @keyframes sync-float-pulse {
-                0%, 100% { box-shadow: 0 8px 32px rgba(59, 130, 246, 0.2); }
-                50% { box-shadow: 0 8px 48px rgba(59, 130, 246, 0.4); }
+                0%, 100% { box-shadow: 0 8px 32px rgba(161,161,170,0.1); }
+                50% { box-shadow: 0 8px 48px rgba(161,161,170,0.2); }
             }
             #sync-floating-indicator.sync-float-visible {
                 animation: sync-float-pulse 3s ease-in-out infinite;
@@ -800,7 +800,7 @@
             background: rgba(15, 15, 20, 0.85);
             backdrop-filter: blur(20px) saturate(1.8);
             -webkit-backdrop-filter: blur(20px) saturate(1.8);
-            border: 1px solid rgba(59, 130, 246, 0.3);
+            border: 1px solid rgba(161,161,170,0.2);
             border-radius: 16px;
             padding: 16px;
             z-index: 100000;
@@ -822,14 +822,14 @@
         indicator.innerHTML = `
             <div style="display: flex; align-items: center; justify-content: space-between;">
                 <div style="display: flex; align-items: center; gap: 8px;">
-                    <i class="fa-solid fa-arrows-rotate sync-spinner" style="color: #60a5fa; font-size: 14px;"></i>
-                    <span style="font-size: 0.8rem; font-weight: 700; color: #60a5fa; letter-spacing: 0.02em;">SINC-DATA DEV</span>
+                    <i class="fa-solid fa-arrows-rotate sync-spinner" style="color: #a1a1aa; font-size: 14px;"></i>
+                    <span style="font-size: 0.8rem; font-weight: 700; color: #a1a1aa; letter-spacing: 0.02em;">SINC-DATA DEV</span>
                 </div>
                 <span id="sync-float-pct" style="font-size: 0.75rem; font-weight: 600; color: #a1a1aa;">${Math.round(initialProgress)}%</span>
             </div>
             
-            <div style="width: 100%; height: 4px; background: rgba(59, 130, 246, 0.1); border-radius: 2px; overflow: hidden;">
-                <div id="sync-float-fill" class="sync-float-progress" style="width: ${initialProgress}%; height: 100%; background: #3b82f6; border-radius: 2px;"></div>
+            <div style="width: 100%; height: 4px; background: rgba(161,161,170,0.15); border-radius: 2px; overflow: hidden;">
+                <div id="sync-float-fill" class="sync-float-progress" style="width: ${initialProgress}%; height: 100%; background: #a1a1aa; border-radius: 2px;"></div>
             </div>
 
             <div id="sync-float-status" style="font-size: 0.7rem; color: #71717a; display: flex; align-items: center; gap: 4px;">
@@ -837,8 +837,8 @@
                 <span>Sincronizando com SIGE...</span>
             </div>
 
-            <div style="height:3px;background:rgba(147,197,253,0.12);border-radius:999px;overflow:hidden;">
-                <div id="sync-float-toast-fill" class="sync-float-toast-progress" style="height:100%;width:0%;background:linear-gradient(90deg,#3b82f6,#93c5fd);border-radius:999px;"></div>
+            <div style="height:3px;background:rgba(161,161,170,0.12);border-radius:999px;overflow:hidden;">
+                <div id="sync-float-toast-fill" class="sync-float-toast-progress" style="height:100%;width:0%;background:linear-gradient(90deg,#71717a,#a1a1aa);border-radius:999px;"></div>
             </div>
         `;
 
