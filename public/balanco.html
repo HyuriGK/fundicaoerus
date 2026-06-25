@@ -495,6 +495,10 @@ function setSelectedBarFilter(type,key,label){
     selectedBarFilter={type,key,label};
 }
 
+function isSelectedBar(type,key){
+    return selectedBarFilter && selectedBarFilter.type===type && selectedBarFilter.key===key;
+}
+
 function getModalSourceData(){
     if(activeView==='variacao'){
         const baseEntradas=selectedBarFilter ? allRecebimentos.filter(rowMatchesSelectedBar) : filterByPeriod(allRecebimentos);
@@ -588,8 +592,15 @@ function renderChartMensal(){
         type:'bar', plugins:[ChartDataLabels],
         data:{ labels, datasets:[{
             data:valores,
-            backgroundColor:labels.map((_,i)=>{const sel=activeMonth!=='all'&&parseInt(activeMonth)===(i+1);return sel?'#ffffff':pal.bar;}),
-            borderColor:pal.border, borderWidth:1, borderRadius:8, borderSkipped:false
+            backgroundColor:labels.map((_,i)=>{
+                const key=`${activeYear}-${String(i+1).padStart(2,'0')}`;
+                const sel=isSelectedBar('month',key) || (activeMonth!=='all'&&parseInt(activeMonth)===(i+1));
+                return sel?'#ffffff':pal.bar;
+            }),
+            borderColor:labels.map((_,i)=>{
+                const key=`${activeYear}-${String(i+1).padStart(2,'0')}`;
+                return isSelectedBar('month',key)?'#ffffff':pal.border;
+            }), borderWidth:1, borderRadius:8, borderSkipped:false
         }]},
         options:{
             responsive:true,maintainAspectRatio:false,animation:{duration:350},
@@ -636,7 +647,9 @@ function renderChartDiario(){
     chartDiarioInst=new Chart(document.getElementById('barChartDiario').getContext('2d'),{
         type:'bar', plugins:[ChartDataLabels],
         data:{ labels, datasets:[{
-            data:valores, backgroundColor:pal.daily, borderColor:pal.dailyBorder,
+            data:valores,
+            backgroundColor:dias.map(d=>isSelectedBar('day',d)?'#ffffff':pal.daily),
+            borderColor:dias.map(d=>isSelectedBar('day',d)?'#ffffff':pal.dailyBorder),
             borderWidth:1, borderRadius:6, borderSkipped:false
         }]},
         options:{
@@ -650,7 +663,7 @@ function renderChartDiario(){
                 x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#71717a',font:{family:"'JetBrains Mono',monospace",size:dias.length>20?8:10},maxRotation:dias.length>15?45:0,autoSkip:true,maxTicksLimit:31}},
                 y:{min:0,max:yMax,grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#71717a',font:{family:"'JetBrains Mono',monospace",size:9},callback:v=>axisMoney(v)}}
             },
-            onClick:(evt,els)=>{ if(!els.length)return; setSelectedBarFilter('day',dias[els[0].index],labels[els[0].index]); }
+            onClick:(evt,els)=>{ if(!els.length)return; setSelectedBarFilter('day',dias[els[0].index],labels[els[0].index]); renderChartDiario(); }
         }
     });
 }
@@ -723,8 +736,8 @@ function renderChartVariacao(){
                     type:'bar',
                     label:'Variação',
                     data:data.variacao,
-                    backgroundColor:data.variacao.map(v=>v>=0?'rgba(16,185,129,0.82)':'rgba(239,68,68,0.82)'),
-                    borderColor:data.variacao.map(v=>v>=0?'#10b981':'#ef4444'),
+                    backgroundColor:data.variacao.map((v,i)=>isSelectedBar(activeChartView==='mensal'?'month':'day',data.keys[i])?'#ffffff':v>=0?'rgba(16,185,129,0.82)':'rgba(239,68,68,0.82)'),
+                    borderColor:data.variacao.map((v,i)=>isSelectedBar(activeChartView==='mensal'?'month':'day',data.keys[i])?'#ffffff':v>=0?'#10b981':'#ef4444'),
                     borderWidth:1,
                     borderRadius:6,
                     borderSkipped:false,
@@ -778,6 +791,7 @@ function renderChartVariacao(){
                 if(!els.length)return;
                 const i=els[0].index;
                 setSelectedBarFilter(activeChartView==='mensal'?'month':'day',data.keys[i],data.labels[i]);
+                renderChartVariacao();
             }
         }
     });
