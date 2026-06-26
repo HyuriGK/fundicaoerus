@@ -1033,10 +1033,12 @@
                             <th class="text-right" style="min-width: 95px;">Quant. Original</th>
                             <th class="text-right" style="min-width: 105px;">Quant. Devolvida</th>
                             <th class="text-right" style="min-width: 95px;">Quant. L&iacute;quida</th>
-                            <th class="text-right" style="min-width: 100px;">Valor Unit.</th>
+                            <th class="text-right" style="min-width: 100px;">R$ Item</th>
+                            <th class="text-right" style="min-width: 100px;">R$ ICMS</th>
+                            <th class="text-right" style="min-width: 100px;">R$ IPI</th>
+                            <th class="text-right" style="min-width: 110px;">Valor Total</th>
                             <th class="text-right" style="min-width: 100px;">Peso Unit.</th>
                             <th class="text-right" style="min-width: 100px;">Peso Total</th>
-                            <th class="text-right" style="min-width: 110px;">Valor Total</th>
                         </tr>
                         <tr id="filterRow">
                             <th id="colInclFilter"></th>
@@ -1068,6 +1070,10 @@
                             <th><input class="filter-input-table text-right" data-col="12" placeholder="..."
                                     oninput="applyLocalFilters()"></th>
                             <th><input class="filter-input-table text-right" data-col="13" placeholder="..."
+                                    oninput="applyLocalFilters()"></th>
+                            <th><input class="filter-input-table text-right" data-col="14" placeholder="..."
+                                    oninput="applyLocalFilters()"></th>
+                            <th><input class="filter-input-table text-right" data-col="15" placeholder="..."
                                     oninput="applyLocalFilters()"></th>
                         </tr>
                     </thead>
@@ -1491,7 +1497,7 @@
             } catch (e) { console.error(e); }
         }
         function calculateCalculatedTotal(item) {
-            return (item.valorUnitario || 0) * (item.quantidade || 0);
+            return item.valorTotal ?? ((item.valorUnitario || 0) * (item.quantidade || 0));
         }
         function updateDashboardfromRecords(data) {
             const startInput = document.getElementById('startDate').value;
@@ -2342,10 +2348,12 @@ async function loadRecordsData() {
                         else if (col == '7') target = String(item.quantidadeOriginal ?? item.quantidade ?? '');
                         else if (col == '8') target = String(item.quantidadeDevolvida || '');
                         else if (col == '9') target = String(item.quantidade || '');
-                        else if (col == '10') target = String(item.valorUnitario || '');
-                        else if (col == '11') target = String(item.pesoUn || '');
-                        else if (col == '12') target = String(item.pesoTotal || '');
+                        else if (col == '10') target = String(item.valorItem || '');
+                        else if (col == '11') target = String(item.valorIcms || '');
+                        else if (col == '12') target = String(item.valorIpi || '');
                         else if (col == '13') target = String(item.valorTotal || '');
+                        else if (col == '14') target = String(item.pesoUn || '');
+                        else if (col == '15') target = String(item.pesoTotal || '');
                         return target.toLowerCase().includes(val);
                     });
                 }
@@ -2354,7 +2362,9 @@ async function loadRecordsData() {
             tbody.innerHTML = filteredClients.map((item) => {
                 const globalIdx = allData.indexOf(item);
                 const calculatedTotal = calculateCalculatedTotal(item);
-                const valorUnit = isVisible ? formatCurrency(item.valorUnitario || 0) : 'R$ ---';
+                const valorItem = isVisible ? formatCurrency(item.valorItem ?? ((item.valorUnitario || 0) * (item.quantidade || 0))) : 'R$ ---';
+                const valorIcms = isVisible ? formatCurrency(item.valorIcms || 0) : 'R$ ---';
+                const valorIpi = isVisible ? formatCurrency(item.valorIpi || 0) : 'R$ ---';
                 const valorTotal = isVisible ? formatCurrency(calculatedTotal) : 'R$ ---';
                 const isService = isServiceClient(item);
                 const isIgnored = item.gera_financeiro === 'N' || (item.excluido_manualmente === true && (!isService || !showServices));
@@ -2377,12 +2387,14 @@ async function loadRecordsData() {
                     <td class="text-right">${formatNumber(item.quantidadeOriginal ?? item.quantidade ?? 0, 0)}</td>
                     <td class="text-right">${formatNumber(item.quantidadeDevolvida || 0, 0)}</td>
                     <td class="text-right">${formatNumber(item.quantidade || 0, 0)}</td>
-                    <td class="text-right">${valorUnit}</td>
+                    <td class="text-right">${valorItem}</td>
+                    <td class="text-right">${valorIcms}</td>
+                    <td class="text-right">${valorIpi}</td>
+                    <td class="text-right" style="color:var(--color-primary); font-weight:600;">${valorTotal}</td>
                     <td class="text-right">${formatNumber(item.pesoUn, 2)}</td>
                     <td class="text-right">${formatNumber(item.pesoTotal, 2)}</td>
-                    <td class="text-right" style="color:var(--color-primary); font-weight:600;">${valorTotal}</td>
                 </tr>
-            `}).join('') || '<tr><td colspan="16" style="text-align:center; padding: 20px;">Nenhum registro.</td></tr>';
+            `}).join('') || '<tr><td colspan="18" style="text-align:center; padding: 20px;">Nenhum registro.</td></tr>';
             const incl = filteredClients.filter(item => {
                 const isService = isServiceClient(item);
                 if (isService) return showServices;
@@ -2430,10 +2442,12 @@ async function loadRecordsData() {
                         else if (col == '7') target = String(item.quantidadeOriginal ?? item.quantidade ?? '');
                         else if (col == '8') target = String(item.quantidadeDevolvida || '');
                         else if (col == '9') target = String(item.quantidade || '');
-                        else if (col == '10') target = String(item.valorUnitario || '');
-                        else if (col == '11') target = String(item.pesoUn || '');
-                        else if (col == '12') target = String(item.pesoTotal || '');
+                        else if (col == '10') target = String(item.valorItem || '');
+                        else if (col == '11') target = String(item.valorIcms || '');
+                        else if (col == '12') target = String(item.valorIpi || '');
                         else if (col == '13') target = String(item.valorTotal || '');
+                        else if (col == '14') target = String(item.pesoUn || '');
+                        else if (col == '15') target = String(item.pesoTotal || '');
                         return target.toLowerCase().includes(val);
                     });
                 }

@@ -23,6 +23,9 @@ const { logActivity } = require('./lib/logger');
         `);
         await client.query(`ALTER TABLE faturamento_firebird ADD COLUMN IF NOT EXISTS vendedor_codigo VARCHAR(20)`);
         await client.query(`ALTER TABLE faturamento_firebird ADD COLUMN IF NOT EXISTS vendedor_nome VARCHAR(255)`);
+        await client.query(`ALTER TABLE faturamento_firebird ADD COLUMN IF NOT EXISTS valor_item DECIMAL(15, 4) DEFAULT 0`);
+        await client.query(`ALTER TABLE faturamento_firebird ADD COLUMN IF NOT EXISTS valor_icms DECIMAL(15, 4) DEFAULT 0`);
+        await client.query(`ALTER TABLE faturamento_firebird ADD COLUMN IF NOT EXISTS valor_ipi DECIMAL(15, 4) DEFAULT 0`);
         await client.query(`
             CREATE TABLE IF NOT EXISTS faturamento_vendedores_nota (
                 nota_fiscal INTEGER NOT NULL,
@@ -223,7 +226,22 @@ router.get('/detalhado', async (req, res) => {
                 COALESCE(dev.quantidade_devolvida, 0) AS quantidade_devolvida,
                 GREATEST(f.quantidade - COALESCE(dev.quantidade_devolvida, 0), 0) AS quantidade,
                 f.valor_unitario,
-                (f.valor_unitario * GREATEST(f.quantidade - COALESCE(dev.quantidade_devolvida, 0), 0)) AS valor_total,
+                CASE
+                    WHEN f.quantidade > 0 THEN COALESCE(NULLIF(f.valor_item, 0), f.valor_unitario * f.quantidade) * GREATEST(f.quantidade - COALESCE(dev.quantidade_devolvida, 0), 0) / f.quantidade
+                    ELSE 0
+                END AS valor_item,
+                CASE
+                    WHEN f.quantidade > 0 THEN COALESCE(f.valor_icms, 0) * GREATEST(f.quantidade - COALESCE(dev.quantidade_devolvida, 0), 0) / f.quantidade
+                    ELSE 0
+                END AS valor_icms,
+                CASE
+                    WHEN f.quantidade > 0 THEN COALESCE(f.valor_ipi, 0) * GREATEST(f.quantidade - COALESCE(dev.quantidade_devolvida, 0), 0) / f.quantidade
+                    ELSE 0
+                END AS valor_ipi,
+                CASE
+                    WHEN f.quantidade > 0 THEN COALESCE(NULLIF(f.valor_total, 0), f.valor_unitario * f.quantidade) * GREATEST(f.quantidade - COALESCE(dev.quantidade_devolvida, 0), 0) / f.quantidade
+                    ELSE 0
+                END AS valor_total,
                 f.peso_un,
                 (f.peso_un * GREATEST(f.quantidade - COALESCE(dev.quantidade_devolvida, 0), 0)) AS peso_total,
                 f.status,
@@ -321,6 +339,9 @@ router.get('/detalhado', async (req, res) => {
             quantidadeDevolvida: parseFloat(row.quantidade_devolvida || 0),
             quantidade: parseFloat(row.quantidade || 0),
             valorUnitario: parseFloat(row.valor_unitario || 0),
+            valorItem: parseFloat(row.valor_item || 0),
+            valorIcms: parseFloat(row.valor_icms || 0),
+            valorIpi: parseFloat(row.valor_ipi || 0),
             valorTotal: parseFloat(row.valor_total || 0),
             pesoUn: parseFloat(row.peso_un || 0),
             pesoTotal: parseFloat(row.peso_total || 0),
@@ -368,7 +389,12 @@ router.get('/evolucao-mensal', async (req, res) => {
             SELECT 
                 m.mes,
                 COALESCE(SUM(f.peso_un * GREATEST(f.quantidade - COALESCE(dev.quantidade_devolvida, 0), 0)), 0) as peso_total,
-                COALESCE(SUM(f.valor_unitario * GREATEST(f.quantidade - COALESCE(dev.quantidade_devolvida, 0), 0)), 0) as valor_total
+                COALESCE(SUM(
+                    CASE
+                        WHEN f.quantidade > 0 THEN COALESCE(NULLIF(f.valor_total, 0), f.valor_unitario * f.quantidade) * GREATEST(f.quantidade - COALESCE(dev.quantidade_devolvida, 0), 0) / f.quantidade
+                        ELSE 0
+                    END
+                ), 0) as valor_total
             FROM meses m
             LEFT JOIN faturamento_firebird f 
                 ON DATE_TRUNC('month', f.data_faturamento) = m.mes

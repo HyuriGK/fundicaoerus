@@ -158,6 +158,9 @@ async function sincronizarDetalhado(fbDb) {
         descricao VARCHAR(255),
         quantidade DECIMAL(15, 3),
         valor_unitario DECIMAL(15, 4),
+        valor_item DECIMAL(15, 4),
+        valor_icms DECIMAL(15, 4),
+        valor_ipi DECIMAL(15, 4),
         valor_total DECIMAL(15, 4),
         status VARCHAR(10),
         excluido_manualmente BOOLEAN DEFAULT FALSE,
@@ -170,6 +173,9 @@ async function sincronizarDetalhado(fbDb) {
     await pool.query(`ALTER TABLE faturamento_firebird ADD COLUMN IF NOT EXISTS item_nota INTEGER DEFAULT 0`);
     await pool.query(`ALTER TABLE faturamento_firebird ADD COLUMN IF NOT EXISTS peso_un DECIMAL(15, 3) DEFAULT 0`);
     await pool.query(`ALTER TABLE faturamento_firebird ADD COLUMN IF NOT EXISTS peso_total DECIMAL(15, 3) DEFAULT 0`);
+    await pool.query(`ALTER TABLE faturamento_firebird ADD COLUMN IF NOT EXISTS valor_item DECIMAL(15, 4) DEFAULT 0`);
+    await pool.query(`ALTER TABLE faturamento_firebird ADD COLUMN IF NOT EXISTS valor_icms DECIMAL(15, 4) DEFAULT 0`);
+    await pool.query(`ALTER TABLE faturamento_firebird ADD COLUMN IF NOT EXISTS valor_ipi DECIMAL(15, 4) DEFAULT 0`);
     await pool.query(`ALTER TABLE faturamento_firebird ADD COLUMN IF NOT EXISTS excluido_manualmente BOOLEAN DEFAULT FALSE`);
     await pool.query(`ALTER TABLE faturamento_firebird ADD COLUMN IF NOT EXISTS atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP`);
     await pool.query(`ALTER TABLE faturamento_firebird ADD COLUMN IF NOT EXISTS gera_financeiro CHAR(1)`);
@@ -227,6 +233,9 @@ async function sincronizarDetalhado(fbDb) {
         nfp.NOME_PRODUTO_NPR,
         nfp.QUANTIDADE_NPR,
         nfp.PRECO_NPR as UNITARIO_NPR,
+        nfp.VALOR_ITEM_NPR,
+        nfp.VALOR_ICMS_NPR,
+        nfp.VALOR_IPI_NPR,
         nfp.TOTAL_NPR,
         p.PESO_LIQUIDO_PRO as PESO_UNITARIO
         FROM NOTA_FISCAL nf
@@ -334,9 +343,9 @@ async function sincronizarDetalhado(fbDb) {
                             INSERT INTO faturamento_firebird
                             (nota_fiscal, serie, item_nota, data_faturamento, cliente_codigo, cliente_nome,
                              vendedor_codigo, vendedor_nome,
-                             codigo_item, descricao, quantidade, valor_unitario, valor_total,
+                             codigo_item, descricao, quantidade, valor_unitario, valor_item, valor_icms, valor_ipi, valor_total,
                              peso_un, peso_total, status, excluido_manualmente, pedido, gera_financeiro)
-                            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+                            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
                             ON CONFLICT ON CONSTRAINT faturamento_firebird_nf_serie_item_prod_key DO UPDATE SET
                                 data_faturamento = EXCLUDED.data_faturamento,
                                 cliente_nome = EXCLUDED.cliente_nome,
@@ -345,6 +354,9 @@ async function sincronizarDetalhado(fbDb) {
                                 descricao = EXCLUDED.descricao,
                                 quantidade = EXCLUDED.quantidade,
                                 valor_unitario = EXCLUDED.valor_unitario,
+                                valor_item = EXCLUDED.valor_item,
+                                valor_icms = EXCLUDED.valor_icms,
+                                valor_ipi = EXCLUDED.valor_ipi,
                                 valor_total = EXCLUDED.valor_total,
                                 peso_un = EXCLUDED.peso_un,
                                 peso_total = EXCLUDED.peso_total,
@@ -366,6 +378,9 @@ async function sincronizarDetalhado(fbDb) {
                             row.NOME_PRODUTO_NPR,
                             quantidade,
                             centavosParaReais(row.UNITARIO_NPR),
+                            centavosParaReais(row.VALOR_ITEM_NPR),
+                            centavosParaReais(row.VALOR_ICMS_NPR),
+                            centavosParaReais(row.VALOR_IPI_NPR),
                             centavosParaReais(row.TOTAL_NPR),
                             pesoUn,
                             pesoTotal,
