@@ -25,6 +25,9 @@ router.get('/', async (req, res) => {
                 peso_un,
                 peso_total,
                 motivo,
+                nota_original,
+                serie_original,
+                item_original,
                 atualizado_em
             FROM firebird_sync_devolucoes
             WHERE 1=1

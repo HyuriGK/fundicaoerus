@@ -1030,7 +1030,9 @@
                             <th style="min-width: 160px;">Vendedor</th>
                             <th style="min-width: 100px;">Cód. Item</th>
                             <th style="min-width: 300px;">Descrição</th>
-                            <th class="text-right" style="min-width: 80px;">Qtd</th>
+                            <th class="text-right" style="min-width: 95px;">Quant. Original</th>
+                            <th class="text-right" style="min-width: 105px;">Quant. Devolvida</th>
+                            <th class="text-right" style="min-width: 95px;">Quant. L&iacute;quida</th>
                             <th class="text-right" style="min-width: 100px;">Valor Unit.</th>
                             <th class="text-right" style="min-width: 100px;">Peso Unit.</th>
                             <th class="text-right" style="min-width: 100px;">Peso Total</th>
@@ -1062,6 +1064,10 @@
                             <th><input class="filter-input-table text-right" data-col="10" placeholder="..."
                                     oninput="applyLocalFilters()"></th>
                             <th><input class="filter-input-table text-right" data-col="11" placeholder="..."
+                                    oninput="applyLocalFilters()"></th>
+                            <th><input class="filter-input-table text-right" data-col="12" placeholder="..."
+                                    oninput="applyLocalFilters()"></th>
+                            <th><input class="filter-input-table text-right" data-col="13" placeholder="..."
                                     oninput="applyLocalFilters()"></th>
                         </tr>
                     </thead>
@@ -2219,7 +2225,7 @@ async function loadRecordsData() {
             const codigoClean = item.codigoItem ? String(item.codigoItem).trim() : '';
             const pedidoClean = item.pedido ? String(item.pedido).trim() : '';
             const dataClean = item.data ? String(item.data).split('T')[0] : '';
-            const quantClean = item.quantidade || 0;
+            const quantClean = item.quantidadeOriginal ?? item.quantidade ?? 0;
             return `${item.notaFiscal}-${codigoClean}-${pedidoClean}-${dataClean}-${quantClean}`;
         }
         function getFatPesoState(item) {
@@ -2254,7 +2260,7 @@ async function loadRecordsData() {
             const codigoClean = item.codigoItem ? String(item.codigoItem).trim() : '';
             const pedidoClean = item.pedido ? String(item.pedido).trim() : '';
             const dataClean = item.data ? String(item.data).split('T')[0] : '';
-            const quantClean = item.quantidade || 0;
+            const quantClean = item.quantidadeOriginal ?? item.quantidade ?? 0;
             const key = `${item.notaFiscal}-${codigoClean}-${pedidoClean}-${dataClean}-${quantClean}`;
             try {
                 // EXPLICIT null for empty series + Added cliente_codigo for extra safety
@@ -2273,7 +2279,7 @@ async function loadRecordsData() {
                         pedido: item.pedido || null,
                         cliente_codigo: item.clienteCodigo,
                         data_faturamento: item.data, // Backend expects YYYY-MM-DD
-                        quantidade: item.quantidade
+                        quantidade: item.quantidadeOriginal ?? item.quantidade
                     })
                 });
                 if (res.ok) {
@@ -2339,11 +2345,13 @@ async function loadRecordsData() {
                         else if (col == 'vendedor') target = String(item.vendedorNome || item.vendedorCodigo || '');
                         else if (col == '5') target = String(item.codigoItem || '');
                         else if (col == '6') target = String(item.descricao || '');
-                        else if (col == '7') target = String(item.quantidade || '');
-                        else if (col == '8') target = String(item.valorUnitario || '');
-                        else if (col == '9') target = String(item.pesoUn || '');
-                        else if (col == '10') target = String(item.pesoTotal || '');
-                        else if (col == '11') target = String(item.valorTotal || '');
+                        else if (col == '7') target = String(item.quantidadeOriginal ?? item.quantidade ?? '');
+                        else if (col == '8') target = String(item.quantidadeDevolvida || '');
+                        else if (col == '9') target = String(item.quantidade || '');
+                        else if (col == '10') target = String(item.valorUnitario || '');
+                        else if (col == '11') target = String(item.pesoUn || '');
+                        else if (col == '12') target = String(item.pesoTotal || '');
+                        else if (col == '13') target = String(item.valorTotal || '');
                         return target.toLowerCase().includes(val);
                     });
                 }
@@ -2372,13 +2380,15 @@ async function loadRecordsData() {
                     <td>${item.vendedorNome || item.vendedorCodigo || ''}</td>
                     <td class="copyable" onclick="copyToClipboard('${item.codigoItem || ''}', 'Cód. Item')">${item.codigoItem || ''} <i class="fa-regular fa-copy" style="font-size:0.7em; margin-left:5px; opacity:0.5;"></i></td>
                     <td>${item.descricao || ''}</td>
-                    <td class="text-right">${formatNumber(item.quantidade, 0)}</td>
+                    <td class="text-right">${formatNumber(item.quantidadeOriginal ?? item.quantidade ?? 0, 0)}</td>
+                    <td class="text-right">${formatNumber(item.quantidadeDevolvida || 0, 0)}</td>
+                    <td class="text-right">${formatNumber(item.quantidade || 0, 0)}</td>
                     <td class="text-right">${valorUnit}</td>
                     <td class="text-right">${formatNumber(item.pesoUn, 2)}</td>
                     <td class="text-right">${formatNumber(item.pesoTotal, 2)}</td>
                     <td class="text-right" style="color:var(--color-primary); font-weight:600;">${valorTotal}</td>
                 </tr>
-            `}).join('') || '<tr><td colspan="14" style="text-align:center; padding: 20px;">Nenhum registro.</td></tr>';
+            `}).join('') || '<tr><td colspan="16" style="text-align:center; padding: 20px;">Nenhum registro.</td></tr>';
             const incl = filteredClients.filter(item => {
                 const isService = isServiceClient(item);
                 if (isService) return showServices;
@@ -2423,11 +2433,13 @@ async function loadRecordsData() {
                         else if (col == 'vendedor') target = String(item.vendedorNome || item.vendedorCodigo || '');
                         else if (col == '5') target = String(item.codigoItem || '');
                         else if (col == '6') target = String(item.descricao || '');
-                        else if (col == '7') target = String(item.quantidade || '');
-                        else if (col == '8') target = String(item.valorUnitario || '');
-                        else if (col == '9') target = String(item.pesoUn || '');
-                        else if (col == '10') target = String(item.pesoTotal || '');
-                        else if (col == '11') target = String(item.valorTotal || '');
+                        else if (col == '7') target = String(item.quantidadeOriginal ?? item.quantidade ?? '');
+                        else if (col == '8') target = String(item.quantidadeDevolvida || '');
+                        else if (col == '9') target = String(item.quantidade || '');
+                        else if (col == '10') target = String(item.valorUnitario || '');
+                        else if (col == '11') target = String(item.pesoUn || '');
+                        else if (col == '12') target = String(item.pesoTotal || '');
+                        else if (col == '13') target = String(item.valorTotal || '');
                         return target.toLowerCase().includes(val);
                     });
                 }

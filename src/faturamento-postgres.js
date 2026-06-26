@@ -218,11 +218,14 @@ router.get('/detalhado', async (req, res) => {
                 COALESCE(f.vendedor_nome, v.vendedor_nome) AS vendedor_nome,
                 f.codigo_item,
                 f.descricao,
-                f.quantidade,
+                f.item_nota,
+                f.quantidade AS quantidade_original,
+                COALESCE(dev.quantidade_devolvida, 0) AS quantidade_devolvida,
+                GREATEST(f.quantidade - COALESCE(dev.quantidade_devolvida, 0), 0) AS quantidade,
                 f.valor_unitario,
-                f.valor_total,
+                (f.valor_unitario * GREATEST(f.quantidade - COALESCE(dev.quantidade_devolvida, 0), 0)) AS valor_total,
                 f.peso_un,
-                f.peso_total,
+                (f.peso_un * GREATEST(f.quantidade - COALESCE(dev.quantidade_devolvida, 0), 0)) AS peso_total,
                 f.status,
                 f.pedido,
                 f.gera_financeiro,
@@ -232,6 +235,25 @@ router.get('/detalhado', async (req, res) => {
                     ELSE COALESCE(p.excluido, f.excluido_manualmente OR f.pedido IS NULL OR f.pedido = '' OR f.pedido = ' ')
                 END as excluido_manualmente
             FROM faturamento_firebird f
+            LEFT JOIN (
+                SELECT
+                    nota_original,
+                    COALESCE(TRIM(serie_original), '') AS serie_original,
+                    item_original,
+                    TRIM(codigo_item) AS codigo_item,
+                    SUM(quantidade) AS quantidade_devolvida
+                FROM firebird_sync_devolucoes
+                WHERE nota_original IS NOT NULL
+                GROUP BY
+                    nota_original,
+                    COALESCE(TRIM(serie_original), ''),
+                    item_original,
+                    TRIM(codigo_item)
+            ) dev
+                ON dev.nota_original = f.nota_fiscal
+                AND dev.serie_original = COALESCE(TRIM(f.serie), '')
+                AND dev.item_original = f.item_nota
+                AND dev.codigo_item = TRIM(f.codigo_item)
             LEFT JOIN faturamento_firebird_preferencias p 
                 ON p.nota_fiscal = f.nota_fiscal
                 AND p.codigo_item IS NOT DISTINCT FROM CAST(TRIM(f.codigo_item) AS VARCHAR)
@@ -292,8 +314,11 @@ router.get('/detalhado', async (req, res) => {
             clienteNome: row.cliente_nome,
             vendedorCodigo: row.vendedor_codigo,
             vendedorNome: row.vendedor_nome,
+            itemNota: row.item_nota,
             codigoItem: row.codigo_item,
             descricao: row.descricao,
+            quantidadeOriginal: parseFloat(row.quantidade_original || 0),
+            quantidadeDevolvida: parseFloat(row.quantidade_devolvida || 0),
             quantidade: parseFloat(row.quantidade || 0),
             valorUnitario: parseFloat(row.valor_unitario || 0),
             valorTotal: parseFloat(row.valor_total || 0),
@@ -342,14 +367,33 @@ router.get('/evolucao-mensal', async (req, res) => {
             )
             SELECT 
                 m.mes,
-                COALESCE(SUM(f.peso_total), 0) as peso_total,
-                COALESCE(SUM(f.valor_total), 0) as valor_total
+                COALESCE(SUM(f.peso_un * GREATEST(f.quantidade - COALESCE(dev.quantidade_devolvida, 0), 0)), 0) as peso_total,
+                COALESCE(SUM(f.valor_unitario * GREATEST(f.quantidade - COALESCE(dev.quantidade_devolvida, 0), 0)), 0) as valor_total
             FROM meses m
             LEFT JOIN faturamento_firebird f 
                 ON DATE_TRUNC('month', f.data_faturamento) = m.mes
                 AND (f.excluido_manualmente = FALSE OR f.excluido_manualmente IS NULL)
                 AND (f.pedido IS NOT NULL AND TRIM(f.pedido) != '')
                 AND NOT (UPPER(TRIM(f.cliente_nome)) = ANY($1))
+            LEFT JOIN (
+                SELECT
+                    nota_original,
+                    COALESCE(TRIM(serie_original), '') AS serie_original,
+                    item_original,
+                    TRIM(codigo_item) AS codigo_item,
+                    SUM(quantidade) AS quantidade_devolvida
+                FROM firebird_sync_devolucoes
+                WHERE nota_original IS NOT NULL
+                GROUP BY
+                    nota_original,
+                    COALESCE(TRIM(serie_original), ''),
+                    item_original,
+                    TRIM(codigo_item)
+            ) dev
+                ON dev.nota_original = f.nota_fiscal
+                AND dev.serie_original = COALESCE(TRIM(f.serie), '')
+                AND dev.item_original = f.item_nota
+                AND dev.codigo_item = TRIM(f.codigo_item)
             GROUP BY m.mes
             ORDER BY m.mes
         `;

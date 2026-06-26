@@ -35,6 +35,9 @@ async function sincronizar() {
             peso_total DECIMAL(15,3),
             motivo TEXT,
             codigo_not INTEGER,
+            nota_original INTEGER,
+            serie_original VARCHAR(10),
+            item_original INTEGER,
             atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(nota_fiscal, serie, item_nota, codigo_item)
         )
@@ -42,6 +45,9 @@ async function sincronizar() {
 
     // Migração: Adicionar coluna se não existir
     await pool.query('ALTER TABLE firebird_sync_devolucoes ADD COLUMN IF NOT EXISTS codigo_not INTEGER');
+    await pool.query('ALTER TABLE firebird_sync_devolucoes ADD COLUMN IF NOT EXISTS nota_original INTEGER');
+    await pool.query('ALTER TABLE firebird_sync_devolucoes ADD COLUMN IF NOT EXISTS serie_original VARCHAR(10)');
+    await pool.query('ALTER TABLE firebird_sync_devolucoes ADD COLUMN IF NOT EXISTS item_original INTEGER');
 
     Firebird.attach(firebirdOptions, (err, db) => {
         if (err) {
@@ -49,8 +55,7 @@ async function sincronizar() {
             process.exit(1);
         }
 
-        const dataInicio = new Date();
-        dataInicio.setDate(dataInicio.getDate() - 90);
+        const dataInicio = new Date(new Date().getFullYear() - 1, 0, 1);
         const dataInicioStr = dataInicio.toISOString().split('T')[0];
         console.log(`📅 Janela de Sincronização: ${dataInicioStr} até hoje.`);
 
@@ -69,6 +74,9 @@ async function sincronizar() {
                 p.PESO_LIQUIDO_PRO as PESO_UN,
                 (dp.QUANTIDADE_DEP * COALESCE(p.PESO_LIQUIDO_PRO, 0)) as PESO_TOTAL,
                 d.OBSERVACAO_DEV as MOTIVO,
+                COALESCE(dp.NPR_CODIGO_DEP, dp.NOTA_DEP) as NOTA_ORIGINAL,
+                dp.NPR_SERIE_DEP as SERIE_ORIGINAL,
+                COALESCE(dp.NPR_ITEM_DEP, dp.ITEM_NOTA_DEP) as ITEM_ORIGINAL,
                 d.CODIGO_DEV
             FROM DEVOLUCAO d
             INNER JOIN DEVOLUCAO_PRODUTO dp 
@@ -100,13 +108,17 @@ async function sincronizar() {
                         INSERT INTO firebird_sync_devolucoes (
                             nota_fiscal, serie, item_nota, data_entrada, cliente_codigo, 
                             cliente_nome, codigo_item, descricao, quantidade, valor_unitario, 
-                            valor_total, peso_un, peso_total, motivo, codigo_not
-                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+                            valor_total, peso_un, peso_total, motivo, codigo_not,
+                            nota_original, serie_original, item_original
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
                         ON CONFLICT (nota_fiscal, serie, item_nota, codigo_item) DO UPDATE SET
                             cliente_nome = EXCLUDED.cliente_nome,
                             quantidade = EXCLUDED.quantidade,
                             valor_total = EXCLUDED.valor_total,
                             peso_total = EXCLUDED.peso_total,
+                            nota_original = EXCLUDED.nota_original,
+                            serie_original = EXCLUDED.serie_original,
+                            item_original = EXCLUDED.item_original,
                             atualizado_em = CURRENT_TIMESTAMP
                     `, [
                         row.NOTA_FISCAL,
@@ -123,7 +135,10 @@ async function sincronizar() {
                         row.PESO_UN,
                         row.PESO_TOTAL,
                         row.MOTIVO ? String(row.MOTIVO).trim() : '',
-                        row.CODIGO_DEV
+                        row.CODIGO_DEV,
+                        row.NOTA_ORIGINAL,
+                        row.SERIE_ORIGINAL !== null && row.SERIE_ORIGINAL !== undefined ? String(row.SERIE_ORIGINAL).trim() : null,
+                        row.ITEM_ORIGINAL
                     ]);
 
                     inserted++;
