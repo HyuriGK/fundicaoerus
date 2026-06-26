@@ -232,7 +232,7 @@ router.get('/detalhado', async (req, res) => {
                 -- gera_financeiro='N' tem prioridade máxima; senão usa preferência do usuário
                 CASE
                     WHEN f.gera_financeiro = 'N' THEN true
-                    ELSE COALESCE(p.excluido, f.excluido_manualmente OR f.pedido IS NULL OR f.pedido = '' OR f.pedido = ' ')
+                    ELSE COALESCE(p.excluido, f.excluido_manualmente)
                 END as excluido_manualmente
             FROM faturamento_firebird f
             LEFT JOIN (
@@ -373,7 +373,6 @@ router.get('/evolucao-mensal', async (req, res) => {
             LEFT JOIN faturamento_firebird f 
                 ON DATE_TRUNC('month', f.data_faturamento) = m.mes
                 AND (f.excluido_manualmente = FALSE OR f.excluido_manualmente IS NULL)
-                AND (f.pedido IS NOT NULL AND TRIM(f.pedido) != '')
                 AND NOT (UPPER(TRIM(f.cliente_nome)) = ANY($1))
             LEFT JOIN (
                 SELECT
