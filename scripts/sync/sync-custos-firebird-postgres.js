@@ -25,6 +25,7 @@ async function createTableIfNotExists() {
                 centro_custo_nome VARCHAR(255),
                 centro_custo_mascara VARCHAR(50),
                 centro_custo_tipo VARCHAR(20),
+                quantidade NUMERIC(15,4),
                 atualizado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
             ALTER TABLE custos_registros ADD COLUMN IF NOT EXISTS produto VARCHAR(255);
@@ -34,6 +35,7 @@ async function createTableIfNotExists() {
             ALTER TABLE custos_registros ADD COLUMN IF NOT EXISTS centro_custo_nome VARCHAR(255);
             ALTER TABLE custos_registros ADD COLUMN IF NOT EXISTS centro_custo_mascara VARCHAR(50);
             ALTER TABLE custos_registros ADD COLUMN IF NOT EXISTS centro_custo_tipo VARCHAR(20);
+            ALTER TABLE custos_registros ADD COLUMN IF NOT EXISTS quantidade NUMERIC(15,4);
 
             -- REMOVER ÍNDICE PARA PERMITIR LIMPEZA (Se ele existir de uma falha anterior)
             DROP INDEX IF EXISTS idx_custos_unique_upsert;
@@ -98,9 +100,11 @@ async function syncData() {
 
     // Removemos o agrupamento (GROUP BY) e o limitador (FIRST 20)
     // Coleta o registro cru: Nome, Valor Específico do item, a Data e NF.
-    const dataInicio = new Date(new Date().getFullYear(), 0, 1);
+    const dataInicio = new Date(2026, 0, 1);
+    const dataFim = new Date(2027, 0, 1);
     const dataInicioStr = dataInicio.toISOString().split('T')[0];
-    console.log(`📅 Janela de Sincronização: ${dataInicioStr} até hoje.`);
+    const dataFimStr = dataFim.toISOString().split('T')[0];
+    console.log(`📅 Janela de Sincronização: ${dataInicioStr} até ${dataFimStr}.`);
 
     const queries = {
         fornecedores: `
@@ -138,15 +142,16 @@ async function syncData() {
         `,
         setores: `
             SELECT 
-                COALESCE(CC.NOME_CTU, 'GERAL / NAO ALOCADO') AS NOME,
-                NULL AS PRODUTO,
-                NULL AS PRODUTO_COD,
-                COALESCE(FORN.RAZAO_SOCIAL_FRN, 'PAGAMENTO DIRETO') AS FORNECEDOR,
-                PAG.VALOR_PARCELA_PAG AS VALOR,
-                PAG.DATA_EMISSAO_PAG AS DATA_EMISSAO,
-                PAG.DOCUMENTO_PAG AS DOCUMENTO,
-                EXTRACT(MONTH FROM PAG.DATA_EMISSAO_PAG) AS MES,
-                PAG.ANO_PAG AS ANO,
+                COALESCE(CC.NOME_CTU, 'SEM CENTRO DE CUSTO') AS NOME,
+                COALESCE(PRO.NOME_PRO, CAST(PMV.PRODUTO_PMV AS VARCHAR(50))) AS PRODUTO,
+                PMV.PRODUTO_PMV AS PRODUTO_COD,
+                'MOVIMENTACAO DE PRODUTO' AS FORNECEDOR,
+                (COALESCE(PMV.CUSTO_PMV, 0) * COALESCE(PMV.QUANTIDADE_PMV, 0)) AS VALOR,
+                PMV.QUANTIDADE_PMV AS QUANTIDADE,
+                PMV.DATA_PMV AS DATA_EMISSAO,
+                CAST(PMV.PRODUTO_PMV AS VARCHAR(50)) AS DOCUMENTO,
+                EXTRACT(MONTH FROM PMV.DATA_PMV) AS MES,
+                EXTRACT(YEAR FROM PMV.DATA_PMV) AS ANO,
                 CC.CODIGO_CTU AS CENTRO_CUSTO_CODIGO,
                 CC.NOME_CTU AS CENTRO_CUSTO_NOME,
                 CC.MASCARA_CTU AS CENTRO_CUSTO_MASCARA,
@@ -155,12 +160,12 @@ async function syncData() {
                     WHEN CC.TIPO_MASCARA_CTU = 0 THEN 'ANALITICA'
                     ELSE NULL
                 END AS CENTRO_CUSTO_TIPO
-            FROM PAGAR PAG
-            LEFT JOIN CENTRO_CUSTO CC ON PAG.CTU_CODIGO_PAG = CC.CODIGO_CTU
-            LEFT JOIN FORNECEDOR FORN ON PAG.FORNECEDOR_PAG = FORN.CODIGO_FRN
-            WHERE PAG.DATA_EMISSAO_PAG >= ?
-              AND PAG.DATA_CANCELAMENTO_PAG IS NULL
-              AND TRIM(COALESCE(PAG.STATUS_PAG, '')) <> 'C'
+            FROM PRODUTO_MOVIMENTACAO PMV
+            LEFT JOIN CENTRO_CUSTO CC ON PMV.CENTRO_CUSTO_PMV = CC.CODIGO_CTU
+            LEFT JOIN PRODUTO PRO ON PMV.PRODUTO_PMV = PRO.CODIGO_PRO
+            WHERE PMV.EMPRESA_PMV = 1
+              AND PMV.DATA_PMV >= ?
+              AND PMV.DATA_PMV < ?
         `,
         materiais: `
             SELECT 
@@ -199,7 +204,7 @@ async function syncData() {
         const dados = {
             fornecedores: await fetchFbData(queries.fornecedores, 'Fornecedores', [dataInicio]),
             tipos: await fetchFbData(queries.tipos, 'Tipos', [dataInicio]),
-            setores: await fetchFbData(queries.setores, 'Setores', [dataInicio]),
+            setores: await fetchFbData(queries.setores, 'Setores', [dataInicio, dataFim]),
             materiais: await fetchFbData(queries.materiais, 'Materiais', [dataInicio])
         };
 
@@ -227,8 +232,8 @@ async function syncData() {
                     const params = [];
 
                     chunk.forEach((row, idx) => {
-                        const baseIdx = idx * 14;
-                        values.push(`($${baseIdx + 1}, $${baseIdx + 2}, $${baseIdx + 3}, $${baseIdx + 4}, $${baseIdx + 5}, $${baseIdx + 6}, $${baseIdx + 7}, $${baseIdx + 8}, $${baseIdx + 9}, $${baseIdx + 10}, $${baseIdx + 11}, $${baseIdx + 12}, $${baseIdx + 13}, $${baseIdx + 14})`);
+                        const baseIdx = idx * 15;
+                        values.push(`($${baseIdx + 1}, $${baseIdx + 2}, $${baseIdx + 3}, $${baseIdx + 4}, $${baseIdx + 5}, $${baseIdx + 6}, $${baseIdx + 7}, $${baseIdx + 8}, $${baseIdx + 9}, $${baseIdx + 10}, $${baseIdx + 11}, $${baseIdx + 12}, $${baseIdx + 13}, $${baseIdx + 14}, $${baseIdx + 15})`);
                         params.push(
                             cat,
                             row.NOME,
@@ -243,14 +248,15 @@ async function syncData() {
                             row.CENTRO_CUSTO_CODIGO || null,
                             row.CENTRO_CUSTO_NOME ? String(row.CENTRO_CUSTO_NOME).replace(/\s+/g, ' ').trim() : null,
                             row.CENTRO_CUSTO_MASCARA ? String(row.CENTRO_CUSTO_MASCARA).trim() : null,
-                            row.CENTRO_CUSTO_TIPO ? String(row.CENTRO_CUSTO_TIPO).trim() : null
+                            row.CENTRO_CUSTO_TIPO ? String(row.CENTRO_CUSTO_TIPO).trim() : null,
+                            row.QUANTIDADE || null
                         );
                     });
 
                     const query = `
                         INSERT INTO custos_registros (
                             categoria, nome, produto, produto_cod, fornecedor, valor, documento, data_emissao, mes, ano,
-                            centro_custo_codigo, centro_custo_nome, centro_custo_mascara, centro_custo_tipo
+                            centro_custo_codigo, centro_custo_nome, centro_custo_mascara, centro_custo_tipo, quantidade
                         )
                         VALUES ${values.join(',')}
                     `;

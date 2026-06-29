@@ -105,6 +105,30 @@
             gap: 8px;
         }
         .btn:hover { border-color: rgba(251,191,36,.35); color: var(--primary); }
+        .tabs {
+            display: inline-flex;
+            gap: 6px;
+            padding: 4px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: #0f0f12;
+        }
+        .tab-btn {
+            height: 32px;
+            border: 0;
+            border-radius: 6px;
+            background: transparent;
+            color: var(--muted);
+            padding: 0 12px;
+            font: 800 .72rem var(--font);
+            text-transform: uppercase;
+            letter-spacing: .06em;
+            cursor: pointer;
+        }
+        .tab-btn.active {
+            background: var(--primary-soft);
+            color: var(--primary);
+        }
         .kpi-row {
             display: grid !important;
             grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -322,6 +346,11 @@
             color: var(--muted);
             line-height: 1.45;
         }
+        .quantity {
+            font: 700 .74rem var(--mono);
+            color: var(--blue);
+            white-space: nowrap;
+        }
         .empty, .loading {
             color: var(--muted);
             padding: 24px;
@@ -373,6 +402,10 @@
             <div class="actions">
                 <select id="monthSelect" class="period"></select>
                 <select id="yearSelect" class="period"></select>
+                <div class="tabs">
+                    <button id="tabPlano" class="tab-btn active" type="button" onclick="setViewMode('plano')">Plano hierarquico</button>
+                    <button id="tabSemCentro" class="tab-btn" type="button" onclick="setViewMode('sem-centro')">Sem centro de custo</button>
+                </div>
                 <input id="searchInput" class="search" type="search" placeholder="Buscar codigo, nome ou mascara">
                 <button id="expandAllBtn" class="btn" type="button"><i class="fa-solid fa-plus"></i>Expandir</button>
                 <button id="collapseAllBtn" class="btn" type="button"><i class="fa-solid fa-minus"></i>Recolher</button>
@@ -409,6 +442,10 @@
         let costByMask = new Map();
         let detailRecords = [];
         let selectedCodigo = null;
+        let viewMode = 'plano';
+        let semCentroProdutos = [];
+        let semCentroRecords = [];
+        let selectedProdutoCod = null;
 
         const el = id => document.getElementById(id);
         const esc = value => String(value || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -511,6 +548,114 @@
             `;
         }
 
+        window.setViewMode = function(mode) {
+            viewMode = mode;
+            selectedProdutoCod = null;
+            semCentroRecords = [];
+            el('tabPlano').classList.toggle('active', mode === 'plano');
+            el('tabSemCentro').classList.toggle('active', mode === 'sem-centro');
+            el('expandAllBtn').style.display = mode === 'plano' ? '' : 'none';
+            el('collapseAllBtn').style.display = mode === 'plano' ? '' : 'none';
+            if (mode === 'plano') {
+                renderTree();
+                renderDetail();
+                if (selectedCodigo) loadDetailRecords();
+            } else {
+                loadSemCentroProdutos();
+            }
+        };
+
+        function renderSemCentroProdutos() {
+            const term = el('searchInput').value.trim().toLowerCase();
+            const rows = semCentroProdutos.filter(item => {
+                const hay = `${item.produto_cod} ${item.produto}`.toLowerCase();
+                return !term || hay.includes(term);
+            });
+            visibleItems = rows;
+            el('statShown').textContent = rows.length;
+            el('tree').innerHTML = rows.length ? rows.map(item => `
+                <div class="row ${String(item.produto_cod) === String(selectedProdutoCod) ? 'selected' : ''}" onclick="selectSemCentroProduto('${esc(item.produto_cod)}')">
+                    <span></span>
+                    <span class="code">${esc(item.produto_cod)}</span>
+                    <span class="name" title="${esc(item.produto)}">${esc(item.produto)}</span>
+                    <span class="quantity">${formatQuantity(item.quantidade)}</span>
+                    <span class="money">${fmtBRL(item.total)}</span>
+                    <span class="badge direto">${item.registros} reg.</span>
+                </div>
+            `).join('') : '<div class="empty">Nenhum produto sem centro de custo no periodo.</div>';
+            if (!selectedProdutoCod) {
+                el('detailCount').textContent = `${rows.length} produtos`;
+                el('detail').innerHTML = '<div class="empty">Selecione um produto sem centro de custo.</div>';
+            }
+        }
+
+        async function loadSemCentroProdutos() {
+            el('statusText').textContent = 'Carregando';
+            el('tree').innerHTML = '<div class="loading">Carregando produtos sem centro de custo...</div>';
+            try {
+                const params = selectedPeriodParams();
+                const res = await fetch(`/api/centro-custos/sem-centro-produtos?${params.toString()}`, { cache: 'no-store' });
+                const json = await res.json();
+                if (!json.success) throw new Error(json.error || 'Falha ao carregar produtos');
+                semCentroProdutos = json.data || [];
+                renderSemCentroProdutos();
+                el('statusText').textContent = 'Atualizado';
+            } catch (error) {
+                el('statusText').textContent = 'Erro';
+                el('tree').innerHTML = `<div class="empty">Erro ao carregar: ${esc(error.message)}</div>`;
+            }
+        }
+
+        window.selectSemCentroProduto = function(produtoCod) {
+            selectedProdutoCod = produtoCod;
+            renderSemCentroProdutos();
+            loadSemCentroRecords();
+        };
+
+        async function loadSemCentroRecords() {
+            const item = semCentroProdutos.find(p => String(p.produto_cod) === String(selectedProdutoCod));
+            if (!item) return;
+            el('detailCount').textContent = `${item.registros} registros`;
+            el('detail').innerHTML = `
+                <h2 class="detail-title">${esc(item.produto)}</h2>
+                <div class="detail-grid">
+                    <div class="detail-item"><span>Produto</span><strong>${esc(item.produto_cod)}</strong></div>
+                    <div class="detail-item"><span>Total periodo</span><strong>${fmtBRL(item.total)}</strong></div>
+                    <div class="detail-item"><span>Quantidade</span><strong>${formatQuantity(item.quantidade)}</strong></div>
+                    <div class="detail-item"><span>Registros</span><strong>${item.registros}</strong></div>
+                </div>
+                <div class="panel-head" style="height:34px;padding:0;margin:18px 0 10px;border:0;">Lancamentos do periodo</div>
+                <div id="recordList" class="record-list"><div class="empty" style="padding:12px;">Carregando lancamentos...</div></div>
+            `;
+            try {
+                const params = selectedPeriodParams();
+                params.set('produto_cod', selectedProdutoCod);
+                const res = await fetch(`/api/centro-custos/sem-centro-registros?${params.toString()}`, { cache: 'no-store' });
+                const json = await res.json();
+                if (!json.success) throw new Error(json.error || 'Falha ao carregar registros');
+                semCentroRecords = json.data || [];
+                renderSemCentroRecords();
+            } catch (error) {
+                const box = el('recordList');
+                if (box) box.innerHTML = `<div class="empty" style="padding:12px;">Erro: ${esc(error.message)}</div>`;
+            }
+        }
+
+        function renderSemCentroRecords() {
+            const box = el('recordList');
+            if (!box) return;
+            if (!semCentroRecords.length) {
+                box.innerHTML = '<div class="empty" style="padding:12px;">Nenhum lancamento para este produto no periodo.</div>';
+                return;
+            }
+            box.innerHTML = semCentroRecords.map(row => `
+                <div class="record-card">
+                    <strong><span>${esc(row.produto || row.produto_cod || 'Sem produto')}</span><span>${fmtBRL(row.valor)}</span></strong>
+                    <small>${esc(row.documento || 'Sem documento')} | ${formatDate(row.data_emissao)}<br>Quantidade: ${formatQuantity(row.quantidade)}</small>
+                </div>
+            `).join('');
+        }
+
         window.toggleNode = function(event, codigo) {
             event.stopPropagation();
             const node = document.querySelector(`.node[data-codigo="${codigo}"]`);
@@ -524,6 +669,7 @@
         };
 
         window.selectNode = function(codigo) {
+            if (viewMode !== 'plano') return;
             selectedCodigo = String(codigo);
             markSelected();
             renderDetail();
@@ -537,8 +683,13 @@
         }
 
         function renderDetail() {
+            if (viewMode !== 'plano') return;
             const item = nodeMap.get(selectedCodigo);
-            if (!item) return;
+            if (!item) {
+                el('detailCount').textContent = '0 filhos';
+                el('detail').innerHTML = '<div class="empty">Selecione um centro de custo.</div>';
+                return;
+            }
             const filhos = item.descendants || [];
             el('detailCount').textContent = `${filhos.length} analitica${filhos.length === 1 ? '' : 's'}`;
             el('detail').innerHTML = `
@@ -586,7 +737,12 @@
             return Number.isNaN(d.getTime()) ? '-' : d.toLocaleDateString('pt-BR');
         }
 
+        function formatQuantity(value) {
+            return Number(value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 4 });
+        }
+
         async function loadDetailRecords() {
+            if (viewMode !== 'plano') return;
             const item = nodeMap.get(selectedCodigo);
             if (!item) return;
             try {
@@ -620,12 +776,10 @@
         }
 
         function setupPeriod() {
-            const now = new Date();
             el('monthSelect').innerHTML = monthNames.map((name, i) => `<option value="${i + 1}">${name}</option>`).join('');
-            const year = now.getFullYear();
-            el('yearSelect').innerHTML = [year, year - 1, year - 2].map(y => `<option value="${y}">${y}</option>`).join('');
-            el('monthSelect').value = String(now.getMonth() + 1);
-            el('yearSelect').value = String(year);
+            el('yearSelect').innerHTML = '<option value="2026">2026</option>';
+            el('monthSelect').value = String(new Date().getMonth() + 1);
+            el('yearSelect').value = '2026';
         }
 
         async function loadTotals() {
@@ -637,6 +791,10 @@
         }
 
         async function loadData() {
+            if (viewMode === 'sem-centro') {
+                await loadSemCentroProdutos();
+                return;
+            }
             el('statusText').textContent = 'Carregando';
             el('tree').innerHTML = '<div class="loading">Carregando centros de custo...</div>';
             try {
@@ -661,7 +819,10 @@
             }
         }
 
-        el('searchInput').addEventListener('input', renderTree);
+        el('searchInput').addEventListener('input', () => {
+            if (viewMode === 'sem-centro') renderSemCentroProdutos();
+            else renderTree();
+        });
         el('monthSelect').addEventListener('change', loadData);
         el('yearSelect').addEventListener('change', loadData);
         function syncToggleIcons() {

@@ -292,6 +292,95 @@ router.get('/estrutura-registros', async (req, res) => {
     }
 });
 
+router.get('/sem-centro-produtos', async (req, res) => {
+    try {
+        const { mes, ano = 2026 } = req.query;
+        const params = [Number(ano)];
+        let where = `categoria = 'setores' AND ano = $1 AND centro_custo_codigo IS NULL`;
+
+        if (mes) {
+            params.push(Number(mes));
+            where += ` AND mes = $${params.length}`;
+        }
+
+        const { rows } = await pool.query(`
+            SELECT
+                COALESCE(NULLIF(produto_cod, ''), 'SEM_CODIGO') AS produto_cod,
+                COALESCE(NULLIF(produto, ''), 'Sem produto') AS produto,
+                SUM(valor)::numeric AS total,
+                SUM(COALESCE(quantidade, 0))::numeric AS quantidade,
+                COUNT(*)::int AS registros
+            FROM custos_registros
+            WHERE ${where}
+            GROUP BY COALESCE(NULLIF(produto_cod, ''), 'SEM_CODIGO'), COALESCE(NULLIF(produto, ''), 'Sem produto')
+            ORDER BY total DESC
+        `, params);
+
+        res.json({
+            success: true,
+            data: rows.map(r => ({
+                produto_cod: r.produto_cod,
+                produto: r.produto,
+                total: Number(r.total) || 0,
+                quantidade: Number(r.quantidade) || 0,
+                registros: Number(r.registros) || 0
+            }))
+        });
+    } catch (e) {
+        console.error('Erro ao buscar produtos sem centro de custo:', e);
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+router.get('/sem-centro-registros', async (req, res) => {
+    try {
+        const { produto_cod, mes, ano = 2026 } = req.query;
+        if (!produto_cod) return res.status(400).json({ success: false, error: 'Produto obrigatorio' });
+
+        const params = [String(produto_cod), Number(ano)];
+        let where = `
+            categoria = 'setores'
+            AND COALESCE(NULLIF(produto_cod, ''), 'SEM_CODIGO') = $1
+            AND ano = $2
+            AND centro_custo_codigo IS NULL
+        `;
+
+        if (mes) {
+            params.push(Number(mes));
+            where += ` AND mes = $${params.length}`;
+        }
+
+        const { rows } = await pool.query(`
+            SELECT
+                data_emissao,
+                documento,
+                produto,
+                produto_cod,
+                valor,
+                quantidade
+            FROM custos_registros
+            WHERE ${where}
+            ORDER BY data_emissao DESC NULLS LAST, valor DESC
+            LIMIT 500
+        `, params);
+
+        res.json({
+            success: true,
+            data: rows.map(r => ({
+                data_emissao: r.data_emissao,
+                documento: r.documento,
+                produto: r.produto,
+                produto_cod: r.produto_cod,
+                valor: Number(r.valor) || 0,
+                quantidade: Number(r.quantidade) || 0
+            }))
+        });
+    } catch (e) {
+        console.error('Erro ao buscar registros sem centro de custo:', e);
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
 // POST /api/centro-custos — Salvar/atualizar centro de custo de um item specifico
 router.post('/', async (req, res) => {
     try {
