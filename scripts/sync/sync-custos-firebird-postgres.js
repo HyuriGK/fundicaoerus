@@ -164,6 +164,7 @@ async function syncData() {
             LEFT JOIN CENTRO_CUSTO CC ON PMV.CENTRO_CUSTO_PMV = CC.CODIGO_CTU
             LEFT JOIN PRODUTO PRO ON PMV.PRODUTO_PMV = PRO.CODIGO_PRO
             WHERE PMV.EMPRESA_PMV = 1
+              AND PMV.OPERACAO_PMV = 109
               AND PMV.DATA_PMV >= ?
               AND PMV.DATA_PMV < ?
         `,
