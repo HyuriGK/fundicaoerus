@@ -296,7 +296,7 @@ router.get('/sem-centro-produtos', async (req, res) => {
     try {
         const { mes, ano = 2026 } = req.query;
         const params = [Number(ano)];
-        let where = `categoria = 'setores' AND ano = $1 AND centro_custo_codigo IS NULL`;
+        let where = `categoria = 'setores' AND ano = $1 AND centro_custo_codigo IS NULL AND NULLIF(produto_cod, '') IS NOT NULL`;
 
         if (mes) {
             params.push(Number(mes));
@@ -343,6 +343,7 @@ router.get('/sem-centro-registros', async (req, res) => {
             AND COALESCE(NULLIF(produto_cod, ''), 'SEM_CODIGO') = $1
             AND ano = $2
             AND centro_custo_codigo IS NULL
+            AND NULLIF(produto_cod, '') IS NOT NULL
         `;
 
         if (mes) {
