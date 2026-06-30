@@ -1345,6 +1345,7 @@
         }
         function selectDashboardMonth(idx) {
             selectedDashboardMonthIndex = idx;
+            if (window.erusAudit) window.erusAudit('SELECT_PERIODO_FAT', { ano: selectedDashboardYear, mes: idx === -1 ? 'ANO' : idx + 1 });
             updateDashboardMonthButtonsUI();
             if (idx === -1) {
                 if (dashboardView === 'faturamento') showAnnualView();
@@ -1362,6 +1363,7 @@
         }
         function changeDashboardYear() {
             selectedDashboardYear = parseInt(document.getElementById('dashboardYearSelect').value);
+            if (window.erusAudit) window.erusAudit('SELECT_ANO_FAT', { ano: selectedDashboardYear });
             syncPeriodInputs();
             if (selectedDashboardMonthIndex === -1) {
                 if (dashboardView === 'faturamento') showAnnualView();
@@ -1383,6 +1385,7 @@
         }
         function changeDashboardVendor() {
             selectedVendor = document.getElementById('dashboardVendorSelect').value;
+            if (window.erusAudit) window.erusAudit('SELECT_VENDEDOR_FAT', { vendedor: selectedVendor || 'TODOS' });
             const dataToUse = hasActiveModalFilters() ? getModalFilteredData() : allData;
             updateDashboardfromRecords(dataToUse);
         }
@@ -2258,6 +2261,12 @@ async function loadRecordsData() {
             } catch (e) { console.error(e); }
             renderTable();
             updateDashboardfromRecords(allData);
+            if (window.erusAudit) window.erusAudit(newState ? 'INCLUIR_FAT_PESO' : 'EXCLUIR_FAT_PESO', {
+                nota: item.notaFiscal,
+                item: item.codigoItem,
+                cliente: item.clienteNome,
+                peso: item.pesoTotal || 0
+            });
         }
         async function saveClientExclusion() { await fetch('/api/preferences/excluded_clients', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ value: Array.from(excludedClients) }) }); }
         async function toggleRowExclusion(idx) {
@@ -2291,6 +2300,13 @@ async function loadRecordsData() {
                 });
                 if (res.ok) {
                     item.excluido_manualmente = newState;
+                    if (window.erusAudit) window.erusAudit(newState ? 'EXCLUIR_ITEM_FAT_UI' : 'INCLUIR_ITEM_FAT_UI', {
+                        nota: item.notaFiscal,
+                        item: item.codigoItem,
+                        cliente: item.clienteNome,
+                        valor: calculateCalculatedTotal(item),
+                        peso: item.pesoTotal || 0
+                    });
                     renderTable();
                     updateDashboardfromRecords(allData);
                 }
@@ -2660,6 +2676,7 @@ async function loadRecordsData() {
             document.getElementById('mapaTypeLabel').textContent = m === 'valor' ? 'Valor (R$)' : 'Peso (kg)';
             document.getElementById('btnMapaPeso').classList.toggle('active', m === 'peso');
             document.getElementById('btnMapaValor').classList.toggle('active', m === 'valor');
+            if (window.erusAudit) window.erusAudit('SELECT_METRICA_MAPA_FAT', { metrica: m });
             const _d = hasActiveModalFilters() ? getModalFilteredData() : allData;
             updateDashboardfromRecords(_d);
         }
@@ -2832,6 +2849,7 @@ async function loadRecordsData() {
         }
         function openCityRecords(city) {
             mapaCityFilter = { nome: city.nome, uf: city.uf, clients: city.clients };
+            if (window.erusAudit) window.erusAudit('ABRIR_REGISTROS_CIDADE_FAT', { cidade: city.nome, uf: city.uf || null, clientes: city.clients ? city.clients.size : 0 });
             const chip = document.getElementById('mapaCityChip');
             const label = document.getElementById('mapaCityChipLabel');
             if (chip && label) {
@@ -3019,6 +3037,7 @@ async function loadRecordsData() {
             if (type === 'peso') document.getElementById('btnAbcPeso').classList.add('active');
             else if (type === 'valor') document.getElementById('btnAbcValor').classList.add('active');
             else if (type === 'preco') document.getElementById('btnAbcPreco').classList.add('active');
+            if (window.erusAudit) window.erusAudit('SELECT_METRICA_ABC_FAT', { metrica: type });
             updateDashboardfromRecords(allData);
         }
         function renderABCChart(data) {
