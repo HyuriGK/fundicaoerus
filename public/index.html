@@ -4311,7 +4311,7 @@
             </ul>
 
 
-            <!-- RODAPÉÂ‰ DA SIDEBAR COM BOT?O SAIR -->
+            <!-- RODAPÉ DA SIDEBAR COM BOTÃO SAIR -->
 
 
             <div class="sidebar-footer">
@@ -8377,7 +8377,7 @@
                         fetch(`/api/metas?mes_ano=${curYear}-${String(curMonth + 1).padStart(2, '0')}`),
 
 
-                        fetch(`/api/faturamento-postgres/detalhado?startDate=${startOfMonth}&endDate=${endOfMonth}&limit=50000`)
+                        fetch(`/api/faturamento-postgres/detalhado?startDate=${startOfMonth}&endDate=${endOfMonth}&limit=100000`)
 
 
                     ]);
@@ -8395,6 +8395,21 @@
 
 
                     let fatTotalWeight = 0;
+                    const calcInternalFatWeight = (items) => {
+                        const _itemKey = (item) => {
+                            const cod = item.codigoItem ? String(item.codigoItem).trim() : '';
+                            const ped = item.pedido ? String(item.pedido).trim() : '';
+                            const dat = item.data ? String(item.data).split('T')[0] : '';
+                            return `${item.notaFiscal}-${cod}-${ped}-${dat}-${item.quantidade || 0}`;
+                        };
+                        return (items || []).reduce((acc, item) => {
+                            if (isServiceItem(item)) return acc;
+                            const key = _itemKey(item);
+                            if (fatPesoOverridesMap.has(key)) return fatPesoOverridesMap.get(key) ? acc + (parseFloat(item.pesoTotal || 0)) : acc;
+                            if (item.excluido_manualmente === true) return acc;
+                            return acc + (parseFloat(item.pesoTotal || 0));
+                        }, 0);
+                    };
 
 
                     if (fatData.success) {
@@ -8435,34 +8450,22 @@
                     // monthly comparison for trend
 
 
-                    const evolRes = await fetch(`/api/faturamento-postgres/evolucao-mensal`);
-
-
-                    const evolData = await evolRes.json();
-
-
-                    // Find previous month in historical data array (Safe UTC check)
-
-
                     const prevDate = new Date(curYear, curMonth - 1, 1);
 
 
-                    const prevEntry = evolData.success ? evolData.data.find(d => {
+                    const prevStart = new Date(prevDate.getFullYear(), prevDate.getMonth(), 1).toISOString().split('T')[0];
 
 
-                        const dDate = new Date(d.mes);
+                    const prevEnd = new Date(prevDate.getFullYear(), prevDate.getMonth() + 1, 0).toISOString().split('T')[0];
 
 
-                        // Using UTC methods to avoid local timezone shifts (e.g., 2026-03-01 UTC becoming Feb 28th locally)
+                    const prevFatRes = await fetch(`/api/faturamento-postgres/detalhado?startDate=${prevStart}&endDate=${prevEnd}&limit=100000`);
 
 
-                        return dDate.getUTCMonth() === prevDate.getMonth() && dDate.getUTCFullYear() === prevDate.getFullYear();
+                    const prevFatData = await prevFatRes.json();
 
 
-                    }) : null;
-
-
-                    const fatPrev = prevEntry ? prevEntry.pesoTotal : 0;
+                    const fatPrev = prevFatData.success ? calcInternalFatWeight(prevFatData.data) : 0;
 
 
                     const fatDiff = fatPrev > 0 ? (((fatTotalWeight) - fatPrev) / fatPrev * 100) : 0;
