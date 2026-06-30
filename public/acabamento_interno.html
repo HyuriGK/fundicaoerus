@@ -1055,6 +1055,10 @@
         let savedDatesSet = new Set();
         let currentModalMode = 'NEW';
 
+        function auditAcabamento(action, details = {}) {
+            if (window.erusAudit) window.erusAudit(action, details);
+        }
+
         // Headers Main Table
         const colunasHeaders = ["DATA", "OP", "CÓDIGO", "DESCRIÇÃO", "MATERIAL", "GRUPO", "PESO UN", "QUANT.", "PESO", "STATUS"];
 
@@ -1085,6 +1089,7 @@
             const count = allExcelData.length;
             const el = document.getElementById('registrosOpsCount');
             if (el) el.textContent = count > 0 ? `(${count} OPs)` : '';
+            auditAcabamento('ABRIR_REGISTROS_ACABAMENTO_INTERNO', { ops: count });
         }
 
         function closeRegistrosModal() {
@@ -1103,6 +1108,7 @@
                 const g = String(row[14] || '').trim();
                 if (g) gruposSet.add(g);
             });
+            auditAcabamento('ABRIR_MAPEAMENTO_ACABAMENTO_INTERNO', { grupos: gruposSet.size });
 
             if (gruposSet.size === 0) {
                 list.innerHTML = `<p style="text-align:center;color:var(--text-muted);padding:20px;">Nenhuma OP carregada ou sem grupos definidos.</p>`;
@@ -1153,6 +1159,7 @@
                     body: JSON.stringify({ materialDays: Array.from(grupoDaysMap.entries()) })
                 });
                 if (!res.ok) throw new Error('HTTP ' + res.status);
+                auditAcabamento('UPDATE_MAPEAMENTO_ACABAMENTO_INTERNO', { grupos: grupoDaysMap.size });
                 closeMapeamentoModal();
             } catch (err) {
                 alert('Erro ao salvar: ' + err.message);
@@ -1346,6 +1353,11 @@
                     li.addEventListener('click', () => {
                         reportDateInput.value = item.date;
                         setModalMode('SAVED');
+                        auditAcabamento('ABRIR_PROGRAMACAO_SALVA_ACABAMENTO_INTERNO', {
+                            data: item.date,
+                            peso: item.totalWeight || 0,
+                            quantidade: totalQty
+                        });
                         loadSavedButton.click();
                         reportModal.classList.add('show');
                     });
@@ -1463,6 +1475,12 @@
             const cliente = row[COL_MAP.CLIENTE] || '-';
             const entrega = row[COL_MAP.DATA] ? row[COL_MAP.DATA].toLocaleDateString('pt-BR') : '-';
             const originalQty = row[12] !== undefined ? row[12] : Number(row[COL_MAP.QTD]);
+            auditAcabamento('ABRIR_DETALHE_OP_ACABAMENTO_INTERNO', {
+                op,
+                codigo: row[COL_MAP.CODIGO],
+                cliente,
+                entrega
+            });
 
             document.getElementById('opModalNumber').textContent   = op;
             document.getElementById('opModalClient').textContent   = firstNameOf(cliente);
@@ -1548,6 +1566,7 @@
             span.innerText = category;
             modal.style.display = 'flex';
             content.innerHTML = `<div style="text-align:center;padding:30px;"><i class="fa-solid fa-circle-notch fa-spin" style="font-size:1.5rem;color:var(--color-primary);"></i></div>`;
+            auditAcabamento('ABRIR_HISTORICO_SETOR_OP_ACABAMENTO_INTERNO', { op, setor: category });
 
             try {
                 const aliases = sectorGroups[category] || [category];
@@ -1647,6 +1666,7 @@
             reportDateInput.value = getTodayDateString();
             resetModalState();
             reportModal.classList.add('show');
+            auditAcabamento('ABRIR_GERAR_PROGRAMACAO_ACABAMENTO_INTERNO', { data: reportDateInput.value });
         });
 
         closeModalButton.addEventListener('click', () => reportModal.classList.remove('show'));
@@ -1754,6 +1774,12 @@
                 } else {
                     if (index >= 0 && index < currentReportData.length) currentReportData.splice(index, 1);
                 }
+                auditAcabamento('REMOVER_LINHA_PROGRAMACAO_ACABAMENTO_INTERNO', {
+                    modo: currentModalMode,
+                    manual: !!isManual,
+                    data: reportDateInput.value || null,
+                    item: label || null
+                });
                 displayTable(currentReportData, 'modalReportContainer');
 
                 // Auto-salvar quando editando programação já salva
@@ -2039,6 +2065,11 @@
 
             let agg = aggregateData(filt);
             currentReportData = agg;
+            auditAcabamento('GERAR_PROGRAMACAO_ACABAMENTO_INTERNO', {
+                data: dateStr,
+                ops: agg.length,
+                peso: agg.reduce((s, r) => s + (Number(r[COL_MAP.PESO_TOTAL]) || 0), 0)
+            });
 
             fetchOpsStatus(agg).then(() => displayTable(agg, 'modalReportContainer'));
             if (!isVisitante) addManualRowButton.style.display = 'inline-flex';
@@ -2055,6 +2086,11 @@
         addManualRowButton.addEventListener('click', () => {
             updateManualRowsData();
             manualRowsData.push([null, '', '', '', '', 0, 0, '', 0, '', 0]);
+            auditAcabamento('ADD_LINHA_MANUAL_ACABAMENTO_INTERNO', {
+                modo: currentModalMode,
+                data: reportDateInput.value || null,
+                linhasManuais: manualRowsData.length
+            });
             displayTable(currentReportData, 'modalReportContainer');
             saveScheduleButton.disabled = false;
             saveScheduleButton.style.display = 'inline-flex';
@@ -2084,6 +2120,13 @@
                 });
 
                 if (response.ok) {
+                    auditAcabamento('SALVAR_PROGRAMACAO_ACABAMENTO_INTERNO', {
+                        data: dateStr,
+                        modo: currentModalMode,
+                        autoRows: currentReportData.length,
+                        manualRows: manualRowsData.length,
+                        peso: [...currentReportData, ...manualRowsData].reduce((s, r) => s + (Number(r[COL_MAP.PESO_TOTAL]) || 0), 0)
+                    });
                     alert("Programação salva com sucesso!");
                     loadSavedSchedulesList();
                 } else {
@@ -2129,6 +2172,11 @@
 
                 await fetchOpsStatus(currentReportData);
                 displayTable(currentReportData, 'modalReportContainer');
+                auditAcabamento('CARREGAR_PROGRAMACAO_ACABAMENTO_INTERNO', {
+                    data: dateStr,
+                    autoRows: currentReportData.length,
+                    manualRows: manualRowsData.length
+                });
                 if (!isVisitante) addManualRowButton.style.display = 'inline-flex';
 
                 generatePDFButton.disabled = false;
@@ -2157,6 +2205,7 @@
                     body: JSON.stringify({ date: dateStr })
                 });
                 if (response.ok) {
+                    auditAcabamento('DELETE_PROGRAMACAO_ACABAMENTO_INTERNO', { data: dateStr });
                     loadSavedSchedulesList();
                 } else {
                     alert("Erro ao apagar.");
@@ -2191,6 +2240,11 @@
                 return acc;
             }, []);
             if (all.length === 0) return alert("Nada para PDF — todas as OPs já foram processadas.");
+            auditAcabamento('GERAR_PDF_PROGRAMACAO_ACABAMENTO_INTERNO', {
+                data: targetDateForPDF ? targetDateForPDF.toISOString().slice(0, 10) : null,
+                registros: all.length,
+                peso: all.reduce((s, r) => s + (Number(r[COL_MAP.PESO_TOTAL]) || 0), 0)
+            });
 
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF('l', 'mm', 'a4');
