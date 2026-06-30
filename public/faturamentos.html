@@ -1314,6 +1314,7 @@
         let abcBarHeightPx = 28;
         // --- MAPA DE CALOR STATE ---
         let showVendor = false;
+        let vendorModalFilterActive = false;
         let vendorChart = null;
         let vendorChartMetric = 'peso';
         let showMapa = false;
@@ -2174,7 +2175,21 @@
                 }
             });
         }
-        async function openRecordsModal() {
+        async function openRecordsModal(filters = {}) {
+            const titleEl = document.getElementById('recordsModalTitle');
+            if (filters.vendedor) {
+                document.querySelectorAll('.filter-input-table').forEach(input => input.value = '');
+                const vendorInput = document.querySelector('.filter-input-table[data-col="vendedor"]');
+                if (vendorInput) vendorInput.value = filters.vendedor;
+                if (titleEl) titleEl.textContent = `DETALHAMENTO DE FATURAMENTO - ${filters.vendedor}`;
+                vendorModalFilterActive = true;
+            } else if (titleEl) {
+                if (vendorModalFilterActive) {
+                    document.querySelectorAll('.filter-input-table').forEach(input => input.value = '');
+                    vendorModalFilterActive = false;
+                }
+                titleEl.textContent = 'DETALHAMENTO DE FATURAMENTO';
+            }
             document.getElementById('recordsModal').style.display = 'flex';
             document.body.style.overflow = 'hidden';
             renderTable(); // Ensure table is rendered with latest data
@@ -2704,7 +2719,6 @@ async function loadRecordsData() {
             });
             const labels = labeledEntries.map(e => `[${e.abc}] ${e.name}`);
             const values = labeledEntries.map(e => e.value);
-            const cumulativeData = labeledEntries.map(e => e.pct);
             const bgColors = labeledEntries.map(e => e.abc === 'A' ? '#f59e0b' : (e.abc === 'B' ? '#a1a1aa' : '#3f3f46'));
             const ctx = document.getElementById('vendorChart');
             if (!ctx) return;
@@ -2714,19 +2728,6 @@ async function loadRecordsData() {
                 data: {
                     labels: labels,
                     datasets: [
-                        {
-                            type: 'line',
-                            label: '% Acumulado',
-                            data: cumulativeData,
-                            borderColor: '#ffffff',
-                            backgroundColor: 'rgba(255,255,255,0.12)',
-                            borderWidth: 2,
-                            pointRadius: 3,
-                            pointHoverRadius: 5,
-                            tension: 0.25,
-                            yAxisID: 'yPercent',
-                            datalabels: { display: false }
-                        },
                         {
                             type: 'bar',
                             label: vendorChartMetric === 'peso' ? 'Peso (kg)' : 'Valor (R$)',
@@ -2753,14 +2754,6 @@ async function loadRecordsData() {
                                     return isVisible ? formatCurrency(value) : 'R$ -----';
                                 }
                             }
-                        },
-                        yPercent: {
-                            type: 'linear',
-                            position: 'right',
-                            beginAtZero: true,
-                            max: 100,
-                            grid: { drawOnChartArea: false },
-                            ticks: { color: _tc(), callback: value => value + '%' }
                         },
                         x: {
                             grid: { display: false },
@@ -2796,9 +2789,6 @@ async function loadRecordsData() {
                             padding: 12,
                             callbacks: {
                                 label: function(ctx) {
-                                    if (ctx.dataset.yAxisID === 'yPercent') {
-                                        return `% Acumulado: ${ctx.parsed.y.toFixed(1)}%`;
-                                    }
                                     const val = ctx.parsed.y;
                                     const pct = total > 0 ? ((val / total) * 100).toFixed(1) : 0;
                                     if (vendorChartMetric === 'peso') {
@@ -2820,7 +2810,16 @@ async function loadRecordsData() {
                             }
                         }
                     },
-                    interaction: { mode: 'index', intersect: false }
+                    interaction: { mode: 'index', intersect: false },
+                    onClick: (event) => {
+                        const points = vendorChart.getElementsAtEventForMode(event, 'nearest', { intersect: true }, true);
+                        if (!points.length) return;
+                        const vendor = labeledEntries[points[0].index]?.name;
+                        if (vendor) openRecordsModal({ vendedor: vendor });
+                    },
+                    onHover: (event, elements) => {
+                        event.native.target.style.cursor = elements.length ? 'pointer' : 'default';
+                    }
                 },
                 plugins: [ChartDataLabels]
             });
