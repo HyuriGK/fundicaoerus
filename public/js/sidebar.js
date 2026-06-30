@@ -800,6 +800,19 @@
     };
 
     window.erusSidebarDoLogout = function() {
+        try {
+            var payload = JSON.stringify({
+                user_name: localStorage.getItem('erus_user') || localStorage.getItem('erus_username') || 'Visitante',
+                action: 'LOGOUT',
+                table_name: window.location.pathname.split('/').pop() || 'index.html',
+                details: { origem: 'sidebar' }
+            });
+            if (navigator.sendBeacon) {
+                navigator.sendBeacon('/api/audit-logger/log', new Blob([payload], { type: 'application/json' }));
+            } else if (window.erusAudit) {
+                window.erusAudit('LOGOUT', { origem: 'sidebar' });
+            }
+        } catch (e) {}
         var modal = document.getElementById('erus-logout-modal');
         if (modal) modal.classList.remove('open');
         var ov = document.createElement('div');
