@@ -1196,13 +1196,13 @@
         <div class="charts-row" id="vendorChartsRow" style="display:none; grid-template-columns: 1fr;">
             <div class="chart-panel">
                 <div class="chart-header-row">
-                    <div class="chart-title">Faturamento por Vendedor</div>
+                    <div class="chart-title">ABC - Faturamento por Vendedor</div>
                     <div class="chart-header-kpi" style="gap: 5px;">
                         <button class="btn-mini-chart active" id="btnVendorPeso" onclick="setVendorChartMetric('peso')">Peso (kg)</button>
                         <button class="btn-mini-chart" id="btnVendorValor" onclick="setVendorChartMetric('valor')">Valor (R$)</button>
                     </div>
                 </div>
-                <div style="position: relative; flex: 1; width: 100%; min-height: 350px; display: flex; align-items: center; justify-content: center;">
+                <div style="position: relative; flex: 1; width: 100%; min-height: 350px;">
                     <canvas id="vendorChart"></canvas>
                 </div>
             </div>
@@ -2694,37 +2694,95 @@ async function loadRecordsData() {
                 const key = vendorChartMetric === 'peso' ? 'peso' : 'valor';
                 return b[1][key] - a[1][key];
             });
-            const labels = entries.map(e => e[0]);
-            const values = entries.map(e => vendorChartMetric === 'peso' ? e[1].peso : e[1].valor);
-            const total = values.reduce((a, b) => a + b, 0);
-            const palette = ['#f59e0b','#10b981','#3b82f6','#ef4444','#8b5cf6','#ec4899','#06b6d4','#84cc16','#f97316','#6366f1','#14b8a6','#e11d48','#a855f7','#22d3ee','#eab308'];
-            const bgColors = labels.map((_, i) => palette[i % palette.length]);
+            const total = entries.reduce((acc, e) => acc + (vendorChartMetric === 'peso' ? e[1].peso : e[1].valor), 0);
+            let cumulative = 0;
+            const labeledEntries = entries.map(e => {
+                const value = vendorChartMetric === 'peso' ? e[1].peso : e[1].valor;
+                cumulative += value;
+                const pct = total > 0 ? (cumulative / total) * 100 : 0;
+                return { name: e[0], value, peso: e[1].peso, valor: e[1].valor, pct, abc: pct <= 70 ? 'A' : (pct <= 95 ? 'B' : 'C') };
+            });
+            const labels = labeledEntries.map(e => `[${e.abc}] ${e.name}`);
+            const values = labeledEntries.map(e => e.value);
+            const cumulativeData = labeledEntries.map(e => e.pct);
+            const bgColors = labeledEntries.map(e => e.abc === 'A' ? '#f59e0b' : (e.abc === 'B' ? '#a1a1aa' : '#3f3f46'));
             const ctx = document.getElementById('vendorChart');
             if (!ctx) return;
             if (vendorChart) vendorChart.destroy();
             vendorChart = new Chart(ctx, {
-                type: 'doughnut',
+                type: 'bar',
                 data: {
                     labels: labels,
-                    datasets: [{
-                        data: values,
-                        backgroundColor: bgColors,
-                        borderColor: '#18181b',
-                        borderWidth: 2,
-                        hoverOffset: 8
-                    }]
+                    datasets: [
+                        {
+                            type: 'line',
+                            label: '% Acumulado',
+                            data: cumulativeData,
+                            borderColor: '#ffffff',
+                            backgroundColor: 'rgba(255,255,255,0.12)',
+                            borderWidth: 2,
+                            pointRadius: 3,
+                            pointHoverRadius: 5,
+                            tension: 0.25,
+                            yAxisID: 'yPercent',
+                            datalabels: { display: false }
+                        },
+                        {
+                            type: 'bar',
+                            label: vendorChartMetric === 'peso' ? 'Peso (kg)' : 'Valor (R$)',
+                            data: values,
+                            backgroundColor: bgColors,
+                            borderColor: 'rgba(255,255,255,0.08)',
+                            borderWidth: 1,
+                            borderRadius: 4,
+                            yAxisID: 'y'
+                        }
+                    ]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    cutout: '45%',
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: _gc() },
+                            ticks: {
+                                color: _tc(),
+                                callback: function(value) {
+                                    if (vendorChartMetric === 'peso') return formatNumber(value, 0) + ' kg';
+                                    return isVisible ? formatCurrency(value) : 'R$ -----';
+                                }
+                            }
+                        },
+                        yPercent: {
+                            type: 'linear',
+                            position: 'right',
+                            beginAtZero: true,
+                            max: 100,
+                            grid: { drawOnChartArea: false },
+                            ticks: { color: _tc(), callback: value => value + '%' }
+                        },
+                        x: {
+                            grid: { display: false },
+                            ticks: {
+                                color: _tc(),
+                                maxRotation: 45,
+                                minRotation: 45,
+                                callback: function(value) {
+                                    const label = this.getLabelForValue(value);
+                                    return typeof label === 'string' ? label.replace(/^\[[ABC]\]\s*/, '').split(' ')[0] : label;
+                                }
+                            }
+                        }
+                    },
                     plugins: {
                         legend: {
-                            position: 'right',
+                            display: true,
+                            position: 'top',
                             labels: {
                                 color: _tc(),
                                 font: { size: 12, weight: '600', family: "'Inter', sans-serif" },
-                                padding: 12,
+                                padding: 14,
                                 boxWidth: 12,
                                 boxHeight: 12
                             }
@@ -2738,7 +2796,10 @@ async function loadRecordsData() {
                             padding: 12,
                             callbacks: {
                                 label: function(ctx) {
-                                    const val = ctx.parsed;
+                                    if (ctx.dataset.yAxisID === 'yPercent') {
+                                        return `% Acumulado: ${ctx.parsed.y.toFixed(1)}%`;
+                                    }
+                                    const val = ctx.parsed.y;
                                     const pct = total > 0 ? ((val / total) * 100).toFixed(1) : 0;
                                     if (vendorChartMetric === 'peso') {
                                         return ` ${ctx.label}: ${formatWeight(val)} (${pct}%)`;
@@ -2749,14 +2810,17 @@ async function loadRecordsData() {
                             }
                         },
                         datalabels: {
-                            color: '#fff',
+                            color: _tc(),
+                            anchor: 'end',
+                            align: 'top',
                             font: { size: 11, weight: '700', family: "'Inter', sans-serif" },
                             formatter: (val) => {
-                                const pct = total > 0 ? ((val / total) * 100).toFixed(0) : 0;
-                                return pct >= 5 ? pct + '%' : '';
+                                if (vendorChartMetric === 'peso') return val > 0 ? formatNumber(val, 0) + ' kg' : '';
+                                return val > 0 ? (isVisible ? formatCurrency(val) : 'R$ -----') : '';
                             }
                         }
-                    }
+                    },
+                    interaction: { mode: 'index', intersect: false }
                 },
                 plugins: [ChartDataLabels]
             });
