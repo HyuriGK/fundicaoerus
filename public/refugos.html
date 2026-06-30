@@ -802,8 +802,7 @@
                     </div>
                     <select id="chartViewSelect" class="year-select" onchange="switchView(this.value)" style="min-width: 180px; padding:4px 12px; font-size:0.8rem;">
                         <option value="apontamentos">APONTAMENTOS</option>
-                        <option value="reasonSector">POR MOTIVO/SETOR</option>
-                        <option value="material">POR MATERIAL</option>
+                        <option value="reasonSector">POR MOTIVO / SETOR / MATERIAL</option>
                         <option value="client">POR CLIENTE</option>
                     </select>
                     <button class="month-btn" onclick="openTableModal()">REGISTROS</button>
@@ -830,7 +829,7 @@
                             <span style="color:#a1a1aa; font-size:0.75rem;">Use o filtro de mês acima.</span>
                         </div>
                     </div>
-                    <!-- Motivo/Setor -->
+                    <!-- Motivo/Setor/Material -->
                     <div id="viewReasonSector" style="flex:1; display:none; flex-direction:row; gap:10px; min-height: 0;">
                         <div style="flex:1; display:flex; flex-direction:column; min-height:0;">
                             <div class="chart-title">REFUGO POR MOTIVO (TOP 5)</div>
@@ -840,11 +839,10 @@
                             <div class="chart-title">REFUGO POR SETOR (TOP 5)</div>
                             <div class="chart-wrapper" style="flex:1; min-height:0;"><canvas id="sectorChart"></canvas></div>
                         </div>
-                    </div>
-                    <!-- Material -->
-                    <div id="viewMaterial" style="flex:1; display:none; flex-direction:column; min-height:0;">
-                        <div class="chart-title">REFUGO POR MATERIAL (TOP 5)</div>
-                        <div class="chart-wrapper" style="flex:1; min-height:0;"><canvas id="materialChart"></canvas></div>
+                        <div style="flex:1; display:flex; flex-direction:column; min-height:0;">
+                            <div class="chart-title">REFUGO POR MATERIAL (TOP 5)</div>
+                            <div class="chart-wrapper" style="flex:1; min-height:0;"><canvas id="materialChart"></canvas></div>
+                        </div>
                     </div>
                     <!-- Cliente -->
                     <div id="viewClient" style="flex:1; display:none; flex-direction:column; min-height:0;">
@@ -1214,7 +1212,6 @@
             document.getElementById('viewDay-month').style.display = 'none';
             document.getElementById('viewDay-day').style.display = 'none';
             document.getElementById('viewReasonSector').style.display = 'none';
-            document.getElementById('viewMaterial').style.display = 'none';
             document.getElementById('viewClient').style.display = 'none';
             if (period === 'mensal') {
                 document.getElementById('viewDay-month').style.display = '';
@@ -1232,7 +1229,6 @@
             document.getElementById('viewDay-month').style.display = 'none';
             document.getElementById('viewDay-day').style.display = 'none';
             document.getElementById('viewReasonSector').style.display = 'none';
-            document.getElementById('viewMaterial').style.display = 'none';
             document.getElementById('viewClient').style.display = 'none';
             if (view === 'apontamentos') {
                 if (currentPeriod === 'mensal') {
@@ -1246,8 +1242,6 @@
                 document.getElementById('viewReasonSector').style.display = 'flex';
                 renderPieChart('sectorChart', getDataForTop5(currentFilteredData, 'setor_responsavel'), 'Setor');
                 renderPieChart('reasonChart', getDataForTop5(currentFilteredData, 'motivo'), 'Motivo');
-            } else if (view === 'material') {
-                document.getElementById('viewMaterial').style.display = 'flex';
                 renderPieChart('materialChart', getDataForTop5(currentFilteredData, 'material'), 'Material');
             } else if (view === 'client') {
                 document.getElementById('viewClient').style.display = 'flex';
@@ -1683,8 +1677,6 @@
             else if (currentView === 'reasonSector') {
                 renderPieChart('sectorChart', getDataForTop5(filteredData, 'setor_responsavel'), 'Setor');
                 renderPieChart('reasonChart', getDataForTop5(filteredData, 'motivo'), 'Motivo');
-            }
-            else if (currentView === 'material') {
                 renderPieChart('materialChart', getDataForTop5(filteredData, 'material'), 'Material');
             }
             else if (currentView === 'client') renderParetoChart(filteredData);
@@ -1843,7 +1835,7 @@
                 }
             });
         }
-        function renderBarChart(dataObj) {
+        function renderBarChartLegacy(dataObj) {
             const ctx = document.getElementById('barChart').getContext('2d');
             if (barChartInstance) barChartInstance.destroy();
             const labels = Object.keys(dataObj);
@@ -1865,8 +1857,8 @@
                 return '#fbbf24';
             });
             const datasets = [{
-                label: 'Refugo (kg)',
-                data: weights,
+                label: '% Refugada',
+                data: percentages,
                 backgroundColor: '#ea580c',
                 borderColor: '#ea580c',
                 borderWidth: 1,
@@ -2012,6 +2004,126 @@
                         }
                     }
                 }
+            });
+        }
+        function renderBarChart(dataObj) {
+            const ctx = document.getElementById('barChart').getContext('2d');
+            if (barChartInstance) barChartInstance.destroy();
+            const labels = Object.keys(dataObj);
+            const weights = Object.values(dataObj).map(v => v.weight || 0);
+            const percentages = Object.values(dataObj).map(v => v.pct || 0);
+            let runningTotal = 0;
+            const accumulatedWeights = weights.map(v => {
+                runningTotal += v;
+                return runningTotal;
+            });
+            const pctMax = Math.ceil((Math.max(...percentages) * 1.25 || 1) * 100) / 100;
+            barChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [{
+                        label: '% Refugada',
+                        data: percentages,
+                        backgroundColor: '#ea580c',
+                        borderColor: '#ea580c',
+                        borderWidth: 1,
+                        borderRadius: 4,
+                        yAxisID: 'y'
+                    }, {
+                        label: 'Acumulado',
+                        data: accumulatedWeights,
+                        type: 'line',
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        borderWidth: 3,
+                        fill: true,
+                        tension: 0.3,
+                        pointBackgroundColor: '#10b981',
+                        pointRadius: 2,
+                        yAxisID: 'y2',
+                        hidden: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    layout: { padding: { top: 0, bottom: 0, left: 0, right: 0 } },
+                    interaction: { mode: 'index', intersect: false },
+                    onClick: (evt, elements) => {
+                        if (!elements.length) return;
+                        const label = labels[elements[0].index];
+                        if (selectedYear !== 0) {
+                            const monthIdx = MONTHS_SHORT.indexOf(label);
+                            if (monthIdx !== -1) {
+                                selectedMonthIndex = monthIdx;
+                                updateMonthButtonsUI();
+                                switchPeriod('diario');
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: true, position: 'bottom', labels: { color: _tc(), boxWidth: 12, padding: 15 } },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            callbacks: {
+                                label: (ctx) => {
+                                    const val = ctx.parsed.y;
+                                    const weight = weights[ctx.dataIndex] || 0;
+                                    if (ctx.dataset.label === '% Refugada') {
+                                        return [
+                                            `  % Refugada: ${val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`,
+                                            `  Peso Refugado: ${weight.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kg`
+                                        ];
+                                    }
+                                    return `  Acumulado: ${val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kg`;
+                                },
+                                afterBody: () => ['', 'Clique na barra para ver o diário do mês.']
+                            }
+                        },
+                        datalabels: {
+                            display: true,
+                            align: 'top',
+                            anchor: 'end',
+                            offset: 4,
+                            color: '#ea580c',
+                            font: { weight: 'bold', size: 9 },
+                            formatter: (value, ctx) => {
+                                if (ctx.dataset.label !== '% Refugada' || value <= 0) return '';
+                                return `${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { display: true, color: _gc() },
+                            ticks: { autoSkip: false, maxRotation: 0, minRotation: 0, color: _tc(), font: { size: 11 } }
+                        },
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            max: pctMax,
+                            beginAtZero: true,
+                            title: { display: true, text: '% Refugada', color: _tc() },
+                            grid: { color: _gc() },
+                            ticks: {
+                                color: _tc(),
+                                font: { size: 12 },
+                                callback: value => `${Number(value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`
+                            }
+                        },
+                        y2: {
+                            type: 'linear',
+                            display: false,
+                            beginAtZero: true,
+                            position: 'right',
+                            grid: { display: false, drawOnChartArea: false }
+                        }
+                    }
+                },
+                plugins: [ChartDataLabels]
             });
         }
         // --- PARETO CHART ---
