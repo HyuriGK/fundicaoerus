@@ -24,6 +24,25 @@ async function ensureTable(client) {
     await client.query(`ALTER TABLE ti_chamados ADD COLUMN IF NOT EXISTS anexo_nome VARCHAR(255)`);
 }
 
+async function ensureSenhasTable(client) {
+    await client.query(`
+        CREATE TABLE IF NOT EXISTS ti_senhas (
+            id SERIAL PRIMARY KEY,
+            tipo VARCHAR(30) NOT NULL DEFAULT 'programa',
+            titulo VARCHAR(255) NOT NULL,
+            sistema VARCHAR(255),
+            usuario_acesso VARCHAR(255),
+            senha TEXT NOT NULL,
+            computador VARCHAR(255),
+            url TEXT,
+            observacoes TEXT,
+            criado_por VARCHAR(255),
+            criado_em TIMESTAMP DEFAULT NOW(),
+            atualizado_em TIMESTAMP DEFAULT NOW()
+        )
+    `);
+}
+
 // GET /api/chamados — lista todos (desenvolvedor) ou do usuário
 router.get('/', async (req, res) => {
     const client = await pool.connect();
@@ -64,6 +83,74 @@ router.post('/', async (req, res) => {
         );
         logActivity(usuario || req.user && req.user.name || 'Sistema', 'ABRIR_CHAMADO', 'ti_chamados', { id: r.rows[0].id, titulo, urgencia: urgencia || 'media' });
         res.json(r.rows[0]);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    } finally {
+        client.release();
+    }
+});
+
+router.get('/senhas', async (req, res) => {
+    const client = await pool.connect();
+    try {
+        await ensureSenhasTable(client);
+        const result = await client.query('SELECT * FROM ti_senhas ORDER BY atualizado_em DESC, titulo ASC');
+        res.json(result.rows);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    } finally {
+        client.release();
+    }
+});
+
+router.post('/senhas', async (req, res) => {
+    const { tipo, titulo, sistema, usuario_acesso, senha, computador, url, observacoes, criado_por } = req.body;
+    if (!titulo || !senha) return res.status(400).json({ error: 'titulo e senha são obrigatórios' });
+    const client = await pool.connect();
+    try {
+        await ensureSenhasTable(client);
+        const r = await client.query(
+            `INSERT INTO ti_senhas (tipo, titulo, sistema, usuario_acesso, senha, computador, url, observacoes, criado_por)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+            [tipo || 'programa', titulo, sistema || null, usuario_acesso || null, senha, computador || null, url || null, observacoes || null, criado_por || null]
+        );
+        logActivity(criado_por || req.user && req.user.name || 'Sistema', 'CRIAR_SENHA_TI', 'ti_senhas', { id: r.rows[0].id, titulo });
+        res.json(r.rows[0]);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    } finally {
+        client.release();
+    }
+});
+
+router.put('/senhas/:id', async (req, res) => {
+    const { tipo, titulo, sistema, usuario_acesso, senha, computador, url, observacoes, criado_por } = req.body;
+    if (!titulo || !senha) return res.status(400).json({ error: 'titulo e senha são obrigatórios' });
+    const client = await pool.connect();
+    try {
+        await ensureSenhasTable(client);
+        const r = await client.query(
+            `UPDATE ti_senhas
+             SET tipo=$1, titulo=$2, sistema=$3, usuario_acesso=$4, senha=$5, computador=$6, url=$7, observacoes=$8, atualizado_em=NOW()
+             WHERE id=$9 RETURNING *`,
+            [tipo || 'programa', titulo, sistema || null, usuario_acesso || null, senha, computador || null, url || null, observacoes || null, req.params.id]
+        );
+        if (r.rows.length === 0) return res.status(404).json({ error: 'Senha não encontrada' });
+        logActivity(criado_por || req.user && req.user.name || 'Sistema', 'ATUALIZAR_SENHA_TI', 'ti_senhas', { id: req.params.id, titulo });
+        res.json(r.rows[0]);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    } finally {
+        client.release();
+    }
+});
+
+router.delete('/senhas/:id', async (req, res) => {
+    const client = await pool.connect();
+    try {
+        const r = await client.query('DELETE FROM ti_senhas WHERE id=$1 RETURNING titulo', [req.params.id]);
+        logActivity(req.user && req.user.name || 'Sistema', 'DELETE_SENHA_TI', 'ti_senhas', { id: req.params.id, titulo: r.rows[0]?.titulo });
+        res.json({ ok: true });
     } catch (e) {
         res.status(500).json({ error: e.message });
     } finally {
