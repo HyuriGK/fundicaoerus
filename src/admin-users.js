@@ -4,7 +4,7 @@ const pool = require('../lib/db');
 const { logActivity } = require('./lib/logger');
 const { requireRole } = require('../lib/middleware');
 
-const checkDevRole = requireRole('desenvolvedor');
+const checkDevRole = requireRole('desenvolvedor', 'admin');
 
 // LISTAR USUÁRIOS (com última atividade do audit_logs)
 router.get('/', checkDevRole, async (req, res) => {

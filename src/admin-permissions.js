@@ -4,7 +4,7 @@ const pool = require('../lib/db');
 
 function checkDevPermission(req, res, next) {
     const role = String((req.user && req.user.role) || req.headers['x-role'] || '').toLowerCase();
-    if (role !== 'desenvolvedor') {
+    if (role !== 'desenvolvedor' && role !== 'admin') {
         return res.status(403).json({ success: false, message: 'Acesso negado.' });
     }
     next();
