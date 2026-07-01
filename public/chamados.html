@@ -940,13 +940,18 @@
             adminContent(`<div class="native-admin-tablewrap"><table class="native-admin-table"><thead><tr><th>Página</th><th>Status</th><th>Ação</th></tr></thead><tbody>
                 ${pages.map(p => {
                     const locked = !!locks[p]?.is_locked;
-                    return `<tr><td>${p}</td><td>${locked ? '<span class="native-badge bad">Bloqueada</span>' : '<span class="native-badge good">Liberada</span>'}</td><td><button class="native-btn ${locked?'good':'danger'}" onclick="nativeToggleLock('${p}',${!locked})">${locked?'Desbloquear':'Bloquear'}</button></td></tr>`;
+                    const reason = locks[p]?.lock_reason;
+                    const status = !locked ? '<span class="native-badge good">Liberada</span>' : (reason === 'development' ? '<span class="native-badge" style="color:#a855f7;border-color:rgba(168,85,247,.3);background:rgba(168,85,247,.09)">Desenvolvimento</span>' : '<span class="native-badge pending">Manutenção</span>');
+                    const actions = locked
+                        ? `<button class="native-btn good" onclick="nativeToggleLock('${p}',false,null)">Liberar</button>`
+                        : `<div class="native-admin-actions"><button class="native-btn warn" onclick="nativeToggleLock('${p}',true,'maintenance')">Manutenção</button><button class="native-btn purple" onclick="nativeToggleLock('${p}',true,'development')">Desenvolvimento</button></div>`;
+                    return `<tr><td>${p}</td><td>${status}</td><td>${actions}</td></tr>`;
                 }).join('')}
             </tbody></table></div>`);
         } catch(e) { adminContent('<div class="native-empty">Erro ao carregar bloqueios.</div>'); }
     }
 
-    async function nativeToggleLock(page, lock) { await fetch('/api/page-locks/toggle', { method:'POST', headers:adminHeaders(), body:JSON.stringify({ page_id:page, is_locked:lock, lock_reason:'maintenance' }) }); await loadNativeLocks(); }
+    async function nativeToggleLock(page, lock, reason) { await fetch('/api/page-locks/toggle', { method:'POST', headers:adminHeaders(), body:JSON.stringify({ page_id:page, is_locked:lock, lock_reason:reason }) }); await loadNativeLocks(); }
 
     async function loadNativeTasks() {
         adminContent('<div class="native-empty">Carregando tarefas...</div>');
@@ -993,10 +998,18 @@
         alert('Comunicado enviado.');
     }
 
-    function loadNativeDevelopments() {
-        adminContent(`<div class="native-admin-tablewrap"><table class="native-admin-table"><thead><tr><th>Tela</th><th>Arquivo</th><th>Status</th></tr></thead><tbody>
-            ${devPages.map(p => `<tr><td>${escapeHtml(p.name)}</td><td>${escapeHtml(p.id)}</td><td><span class="native-badge">${escapeHtml(p.status)}</span></td></tr>`).join('')}
-        </tbody></table></div>`);
+    async function loadNativeDevelopments() {
+        adminContent('<div class="native-empty">Carregando desenvolvimentos...</div>');
+        try {
+            const r = await fetch('/api/page-locks', { headers: adminHeaders() });
+            const json = await r.json();
+            const devs = (json.data || []).filter(x => x.is_locked && x.lock_reason === 'development');
+            adminContent(`<div class="native-admin-tablewrap"><table class="native-admin-table"><thead><tr><th>Tela</th><th>Arquivo</th><th>Status</th><th>Atualizado</th></tr></thead><tbody>
+                ${devs.length ? devs.map(p => `<tr><td>${escapeHtml(p.page_id.replace('.html',''))}</td><td>${escapeHtml(p.page_id)}</td><td><span class="native-badge" style="color:#a855f7;border-color:rgba(168,85,247,.3);background:rgba(168,85,247,.09)">Desenvolvimento</span></td><td>${formatDate(p.updated_at)}</td></tr>`).join('') : '<tr><td colspan="4"><div class="native-empty">Nenhuma tela marcada como desenvolvimento.</div></td></tr>'}
+            </tbody></table></div>`);
+        } catch(e) {
+            adminContent('<div class="native-empty">Erro ao carregar desenvolvimentos.</div>');
+        }
     }
 
     async function loadNativePermissions() {
