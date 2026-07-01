@@ -427,13 +427,23 @@
         .native-btn:hover{background:rgba(255,255,255,.08);color:#fff}
         .native-btn.good{border-color:rgba(16,185,129,.28);color:#10b981;background:rgba(16,185,129,.08)}
         .native-btn.warn{border-color:rgba(251,191,36,.28);color:#fbbf24;background:rgba(251,191,36,.08)}
+        .native-btn.purple{border-color:rgba(99,102,241,.34);color:#818cf8;background:rgba(99,102,241,.1)}
+        .native-btn.orange{border-color:rgba(249,115,22,.34);color:#fb923c;background:rgba(249,115,22,.1)}
+        .native-btn.gray{border-color:rgba(148,163,184,.18);color:#9ca3af;background:rgba(148,163,184,.08)}
         .native-btn.danger{border-color:rgba(239,68,68,.25);color:#ef4444;background:rgba(239,68,68,.07)}
+        .native-icon-btn{width:33px;height:33px;padding:0;border-radius:8px}
         .native-input,.native-select,.native-textarea{background:rgba(255,255,255,.045);border:1px solid var(--border-subtle);border-radius:8px;color:#f4f4f5;font-family:var(--font-main);font-size:.82rem;padding:9px 11px;outline:none}
         .native-input:focus,.native-select:focus,.native-textarea:focus{border-color:rgba(251,191,36,.42)}
         .native-select option{background:#18181b}
         .native-badge{display:inline-flex;align-items:center;gap:5px;border-radius:999px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.04);padding:3px 8px;font-size:.66rem;font-weight:800;color:#a1a1aa}
         .native-badge.good{color:#10b981;border-color:rgba(16,185,129,.28);background:rgba(16,185,129,.08)}
         .native-badge.bad{color:#ef4444;border-color:rgba(239,68,68,.25);background:rgba(239,68,68,.07)}
+        .native-badge.pending{color:#fbbf24;border-color:rgba(251,191,36,.3);background:rgba(251,191,36,.08)}
+        .native-role{display:inline-flex;align-items:center;border-radius:7px;border:1px solid rgba(255,255,255,.12);padding:5px 10px;font-size:.66rem;font-weight:900;text-transform:uppercase;letter-spacing:.08em}
+        .native-role.desenvolvedor,.native-role.gerente-comercial{color:#ef4444;border-color:rgba(239,68,68,.32);background:rgba(239,68,68,.08)}
+        .native-role.visitante,.native-role.diretor{color:#f59e0b;border-color:rgba(245,158,11,.32);background:rgba(245,158,11,.08)}
+        .native-role.fusão,.native-role.moldagem{color:#c084fc;border-color:rgba(192,132,252,.32);background:rgba(192,132,252,.1)}
+        .native-role.sgq{color:#60a5fa;border-color:rgba(96,165,250,.32);background:rgba(96,165,250,.08)}
         .native-grid-2{display:grid;grid-template-columns:340px minmax(0,1fr);gap:18px;min-height:0;flex:1}
         .native-panel{border:1px solid var(--border-subtle);border-radius:14px;background:rgba(255,255,255,.025);padding:16px;min-height:0;overflow:auto}
         .native-empty{height:100%;display:flex;align-items:center;justify-content:center;color:#71717a;text-align:center;padding:30px}
@@ -1354,10 +1364,97 @@
         }
     }
 
+    function roleClass(role) {
+        return String(role || '').toLowerCase().replace(/\s+/g, '-');
+    }
+
+    async function loadNativeUsers() {
+        adminContent('<div class="native-empty">Carregando usuários...</div>');
+        try {
+            const r = await fetch('/api/admin/users', { headers: adminHeaders() });
+            const json = await r.json();
+            window.__nativeUsers = json.users || [];
+            adminContent(`
+                <div class="native-admin-toolbar">
+                    <input class="native-input" id="nativeUserSearch" placeholder="Buscar usuário..." oninput="renderNativeUsers()" style="width:280px">
+                    <button class="native-btn" onclick="loadNativeUsers()"><i class="fa-solid fa-rotate"></i> Atualizar</button>
+                </div>
+                <div class="native-admin-tablewrap"><table class="native-admin-table">
+                    <thead><tr><th>ID</th><th>Usuário</th><th>Nome</th><th>Role Atual</th><th>Status</th><th>Último Login</th><th>Últ. Atividade</th><th style="text-align:center">Ações</th></tr></thead>
+                    <tbody id="nativeUsersBody"></tbody>
+                </table></div>`);
+            renderNativeUsers();
+        } catch(e) {
+            adminContent('<div class="native-empty">Erro ao carregar usuários.</div>');
+        }
+    }
+
+    function renderNativeUsers() {
+        const q = (document.getElementById('nativeUserSearch')?.value || '').toLowerCase();
+        const tbody = document.getElementById('nativeUsersBody');
+        if (!tbody) return;
+        const users = (window.__nativeUsers || []).filter(u => [u.username,u.name,u.role].some(v => String(v||'').toLowerCase().includes(q)));
+        tbody.innerHTML = users.map(u => `
+            <tr>
+                <td style="font-family:var(--font-mono);text-align:center">${u.id}</td>
+                <td style="font-weight:800">${escapeHtml(u.username)}${u.can_view_monetary ? ' <span style="color:#10b981">$</span>' : ''}</td>
+                <td>${escapeHtml(u.name)}</td>
+                <td><span class="native-role ${roleClass(u.role)}">${escapeHtml(u.role || '')}</span></td>
+                <td>${u.approved ? '<span class="native-badge good"><i class="fa-solid fa-check"></i> Ativo</span>' : '<span class="native-badge pending"><i class="fa-solid fa-clock"></i> Pendente</span>'}</td>
+                <td>${formatDate(u.last_login)}</td>
+                <td>${formatDate(u.last_activity_at)}</td>
+                <td>
+                    <div class="native-admin-actions" style="justify-content:center">
+                        <button class="native-btn native-icon-btn ${u.approved ? 'warn' : 'good'}" onclick="nativeToggleUser('${escapeHtml(u.username)}',${u.approved ? 'false':'true'})" title="${u.approved ? 'Bloquear acesso':'Liberar acesso'}"><i class="fa-solid fa-user-${u.approved ? 'lock':'check'}"></i></button>
+                        <button class="native-btn native-icon-btn purple" onclick="nativeOpenUserLogs('${escapeHtml(u.username)}')" title="Ver logs de atividade"><i class="fa-solid fa-clock-rotate-left"></i></button>
+                        <button class="native-btn native-icon-btn ${u.can_view_monetary ? 'good':'gray'}" onclick="nativeToggleMonetary('${escapeHtml(u.username)}',${u.can_view_monetary ? 'false':'true'})" title="${u.can_view_monetary ? 'Revogar permissão monetária':'Conceder permissão monetária'}"><i class="fa-solid fa-dollar-sign"></i></button>
+                        <button class="native-btn native-icon-btn orange" onclick="nativeKickUser('${escapeHtml(u.username)}')" title="Forçar logout"><i class="fa-solid fa-right-from-bracket"></i></button>
+                        <button class="native-btn native-icon-btn gray" onclick="nativePromptRole('${escapeHtml(u.username)}','${escapeHtml(u.role || '')}')" title="Alterar role"><i class="fa-solid fa-pen"></i></button>
+                        <button class="native-btn native-icon-btn danger" onclick="nativeDeleteUser('${escapeHtml(u.username)}')" title="Excluir usuário"><i class="fa-solid fa-trash"></i></button>
+                    </div>
+                </td>
+            </tr>`).join('') || '<tr><td colspan="8" class="native-empty">Nenhum usuário.</td></tr>';
+    }
+
+    async function nativePromptRole(username, currentRole) {
+        const role = await classicPrompt(`Novo role para ${username}?`, currentRole || 'visitante');
+        if (!role) return;
+        await nativeUpdateRole(username, role);
+    }
+
+    async function nativeToggleMonetary(username, can_view_monetary) {
+        await fetch(`/api/admin/users/${encodeURIComponent(username)}/monetary`, { method:'PUT', headers:adminHeaders(), body:JSON.stringify({ can_view_monetary }) });
+        await loadNativeUsers();
+    }
+
+    async function nativeKickUser(username) {
+        await fetch(`/api/admin/users/${encodeURIComponent(username)}/kick`, { method:'PUT', headers:adminHeaders() });
+        alert('Logout forçado solicitado.');
+    }
+
+    async function nativeOpenUserLogs(username) {
+        document.getElementById('tiAdminNativeTitle').innerHTML = `<i class="fa-solid fa-clock-rotate-left" style="color:#818cf8"></i> Logs de ${escapeHtml(username)}`;
+        switchTiView('admin');
+        adminContent('<div class="native-empty">Carregando logs do usuário...</div>');
+        try {
+            const r = await fetch(`/api/admin/users/${encodeURIComponent(username)}/logs?limit=200`, { headers:adminHeaders() });
+            const json = await r.json();
+            const logs = json.logs || [];
+            adminContent(`<div class="native-admin-toolbar"><button class="native-btn" onclick="openAdminFeature('users')"><i class="fa-solid fa-arrow-left"></i> Usuários</button></div>
+                <div class="native-admin-tablewrap"><table class="native-admin-table"><thead><tr><th>Data</th><th>Ação</th><th>Tela/Tabela</th><th>Detalhes</th></tr></thead><tbody>
+                ${logs.map(l => `<tr><td>${formatDate(l.created_at)}</td><td><span class="native-badge">${escapeHtml(l.action)}</span></td><td>${escapeHtml(l.table_name||'')}</td><td>${escapeHtml(typeof l.details === 'string' ? l.details : JSON.stringify(l.details||''))}</td></tr>`).join('') || '<tr><td colspan="4" class="native-empty">Sem logs.</td></tr>'}
+                </tbody></table></div>`);
+        } catch(e) {
+            adminContent('<div class="native-empty">Erro ao carregar logs.</div>');
+        }
+    }
+
     document.addEventListener('keydown', e => {
         if (e.key === 'Escape') {
             if (document.getElementById('lbOverlay').classList.contains('open')) closeLightbox();
             else if (document.getElementById('passwordOverlay').classList.contains('open')) closePasswordModal();
+            else if (document.getElementById('modalOverlay').classList.contains('open')) closeModal();
+            else if (!document.getElementById('tiDashboardView').classList.contains('active')) switchTiView('dashboard');
             else closeModal();
         }
     });
