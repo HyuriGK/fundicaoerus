@@ -1183,6 +1183,7 @@
                         <button class="chart-view-btn active" id="btn-view-peso" onclick="setChartViewMode('peso')"><i class="fa-solid fa-weight-hanging" style="margin-right:5px;font-size:0.6rem;opacity:0.8;"></i>Peso</button>
                         <button class="chart-view-btn" id="btn-view-caixas" onclick="setChartViewMode('caixas')"><i class="fa-solid fa-box" style="margin-right:5px;font-size:0.6rem;opacity:0.8;"></i>Caixas</button>
                         <button class="chart-view-btn" id="btn-view-paradas" onclick="setChartViewMode('paradas')"><i class="fa-solid fa-circle-stop" style="margin-right:5px;font-size:0.6rem;opacity:0.8;"></i>Paradas</button>
+                        <button class="chart-view-btn" id="btn-view-lingote" onclick="setChartViewMode('lingote')"><i class="fa-solid fa-cubes-stacked" style="margin-right:5px;font-size:0.6rem;opacity:0.8;"></i>Lingote</button>
                     </div>
                 </div>
                 <div id="parada-maquina-filter-wrap" style="display:none;justify-content:flex-end;align-items:center;gap:8px;margin:6px 0 10px;">
@@ -1517,6 +1518,8 @@
         const MOLDAGEM_GERAL_TYPES = ['MOLDAGEM MANUAL', 'MOLDAGEM LEVE', 'MOLDAGEM PESADA'];
         // Setores que habilitam o seletor de Caixas
         const CAIXAS_ALLOWED_SECTORS = ['MOLDAGEM GERAL', 'MOLDAGEM LEVE', 'MOLDAGEM MANUAL', 'MOLDAGEM PESADA', 'FUSAO'];
+        const LINGOTE_CODE = '18358';
+        const LINGOTE_SECTOR = 'FUSAO';
         // const WEEKLY_GOAL = 30000; // Calculated dynamically
         const MOLDAGEM_SECTORS = ['moldagem leve', 'moldagem rollover', 'moldagem pesada', 'moldagem manual'];
         const PRIMARY_SECTORS = ['ACABAMENTO', 'EXPEDICAO', 'FUSAO', 'MOLDAGEM GERAL'];
@@ -2307,6 +2310,7 @@
 
             const isCaixasMode = chartViewMode === 'caixas';
             const isParadasMode = chartViewMode === 'paradas';
+            const isLingoteMode = chartViewMode === 'lingote';
 
             if (isParadasMode) {
                 // Calcular horas totais de parada no período filtrado
@@ -2340,6 +2344,33 @@
                 document.getElementById('kpi-title-homem').innerText = 'Kg / Dia / Homem';
 
                 footerTotal.innerText = fmtH(totalHoras);
+                return;
+            }
+
+            if (isLingoteMode) {
+                const lingoteData = filteredData.filter(item =>
+                    String(item.codigo_peca || '').trim() === LINGOTE_CODE &&
+                    String(item.setor || '').trim().toUpperCase() === LINGOTE_SECTOR
+                );
+                const totalLingotes = lingoteData.reduce((sum, item) => sum + (Number(item.quantidade) || 0), 0);
+                const dataMapLingote = {};
+                lingoteData.forEach(d => { dataMapLingote[d.data] = (dataMapLingote[d.data] || 0) + (Number(d.quantidade) || 0); });
+                const diasLingote = currentMonthFilter === 0 ? (new Set(lingoteData.map(d => d.data)).size || 1) : countValidDays(year, month, dataMapLingote);
+                const avgLingotes = diasLingote > 0 ? totalLingotes / diasLingote : 0;
+                const lingoteHomem = avgLingotes / numFunc;
+                const fmtLingote = (v) => v.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' pçs';
+
+                sectorTotalDisplay.innerText = fmtLingote(totalLingotes);
+                sectorAverageDisplay.innerText = fmtLingote(avgLingotes);
+                if (kgHomemEl) kgHomemEl.innerText = fmtLingote(lingoteHomem);
+                sectorAvgPieceWeightDisplay.innerText = totalLingotes.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' pçs';
+
+                document.getElementById('kpi-title-total').innerText = 'Total Lingote';
+                document.getElementById('kpi-sub-total').innerText = 'Quantidade apontada do código 18358 na FUSÃO';
+                document.getElementById('kpi-title-avg').innerText = 'Média Diária';
+                document.getElementById('kpi-title-homem').innerText = 'Pçs / Dia / Homem';
+
+                footerTotal.innerText = fmtLingote(totalLingotes);
                 return;
             }
 
@@ -2495,15 +2526,26 @@
                 document.getElementById('btn-view-peso').classList.add('active');
                 btnCaixas.classList.remove('active');
             }
+            const lingoteAllowed = currentSectorFilter === LINGOTE_SECTOR;
+            const btnLingote = document.getElementById('btn-view-lingote');
+            if (btnLingote) btnLingote.disabled = !lingoteAllowed;
+            if (!lingoteAllowed && chartViewMode === 'lingote') {
+                chartViewMode = 'peso';
+                document.getElementById('btn-view-peso').classList.add('active');
+                if (btnLingote) btnLingote.classList.remove('active');
+            }
         }
 
         function setChartViewMode(mode) {
             const allowed = CAIXAS_ALLOWED_SECTORS.includes(currentSectorFilter);
             if (mode === 'caixas' && !allowed) return;
+            if (mode === 'lingote' && currentSectorFilter !== LINGOTE_SECTOR) return;
             chartViewMode = mode;
             document.getElementById('btn-view-peso').classList.toggle('active', mode === 'peso');
             document.getElementById('btn-view-caixas').classList.toggle('active', mode === 'caixas');
             document.getElementById('btn-view-paradas').classList.toggle('active', mode === 'paradas');
+            const btnLingote = document.getElementById('btn-view-lingote');
+            if (btnLingote) btnLingote.classList.toggle('active', mode === 'lingote');
             if (window.erusAudit) window.erusAudit('SELECT_GRAFICO_APONTAMENTOS', { modo: mode, setor: currentSectorFilter, ano: currentYearFilter, mes: currentMonthFilter });
             updateMaquinaFilterUI();
             updateKPIs();
@@ -2561,8 +2603,30 @@
                 return caixasMap[key] || 0;
             });
 
+            const lingoteMap = {};
+            filteredData
+                .filter(item =>
+                    String(item.codigo_peca || '').trim() === LINGOTE_CODE &&
+                    String(item.setor || '').trim().toUpperCase() === LINGOTE_SECTOR
+                )
+                .forEach(item => {
+                    const quantidade = Number(item.quantidade) || 0;
+                    if (currentMonthFilter === 0) {
+                        const monthIdx = new Date(item.data + 'T12:00:00').getMonth();
+                        lingoteMap[monthIdx] = (lingoteMap[monthIdx] || 0) + quantidade;
+                    } else {
+                        const day = parseInt(item.data.split('-')[2]);
+                        lingoteMap[day] = (lingoteMap[day] || 0) + quantidade;
+                    }
+                });
+            const dataLingote = labels.map((l, i) => {
+                const key = currentMonthFilter === 0 ? i : l;
+                return lingoteMap[key] || 0;
+            });
+
             const isCaixasMode = chartViewMode === 'caixas';
             const isParadasMode = chartViewMode === 'paradas';
+            const isLingoteMode = chartViewMode === 'lingote';
 
             // Build paradas data
             const dataParadas = labels.map((l, i) => {
@@ -2594,16 +2658,22 @@
                 else titleEl.innerText = currentMonthFilter === 0 ? 'Produção Mensal (KG)' : 'Produção Diária (KG)';
             }
 
+            if (titleEl && isLingoteMode) {
+                titleEl.innerText = currentMonthFilter === 0 ? 'Lingote Mensal (Cod. 18358)' : 'Lingote Diario (Cod. 18358)';
+            }
+
             // Accumulated lines
             let accumKg = 0;
             const dataCumulative = dataDaily.map(val => { accumKg += val; return accumKg; });
             let accumCx = 0;
             const dataCumulativeCaixas = dataCaixas.map(val => { accumCx += val; return accumCx; });
+            let accumLingote = 0;
+            const dataCumulativeLingote = dataLingote.map(val => { accumLingote += val; return accumLingote; });
             const goalValue = parseFloat(sectorGoalDisplay.innerText.replace(/[^0-9]/g, '')) || 0;
 
             // Active bar data
-            const activeBarData = isCaixasMode ? dataCaixas : dataDaily;
-            const accumMax = isCaixasMode ? accumCx : accumKg;
+            const activeBarData = isLingoteMode ? dataLingote : (isCaixasMode ? dataCaixas : dataDaily);
+            const accumMax = isLingoteMode ? accumLingote : (isCaixasMode ? accumCx : accumKg);
 
             // Datasets
             const datasets = [];
@@ -2724,6 +2794,38 @@
                     yAxisID: currentMonthFilter === 0 ? 'y' : 'y1',
                     datalabels: { display: false }
                 });
+            } else if (isLingoteMode) {
+                datasets.push({
+                    label: 'Lingotes por Dia',
+                    data: dataLingote,
+                    backgroundColor: '#7c3aed',
+                    borderRadius: 4,
+                    order: 2,
+                    yAxisID: 'y',
+                    datalabels: {
+                        display: true,
+                        anchor: 'end',
+                        align: 'top',
+                        offset: 4,
+                        color: '#fff',
+                        font: { size: 10, weight: 'bold' },
+                        formatter: v => v > 0 ? v.toLocaleString('pt-BR', { maximumFractionDigits: 0 }) : ''
+                    }
+                });
+                datasets.push({
+                    type: 'line',
+                    label: currentMonthFilter === 0 ? 'Evolucao do Lingote' : 'Acumulado',
+                    data: currentMonthFilter === 0 ? dataLingote : dataCumulativeLingote,
+                    borderColor: '#fbbf24',
+                    backgroundColor: 'rgba(251, 191, 36, 0.1)',
+                    borderWidth: 3,
+                    fill: currentMonthFilter !== 0,
+                    tension: 0.3,
+                    pointRadius: 2,
+                    order: 1,
+                    yAxisID: currentMonthFilter === 0 ? 'y' : 'y1',
+                    datalabels: { display: false }
+                });
             } else {
                 datasets.push({
                     label: 'Produção Diária',
@@ -2752,7 +2854,7 @@
             // Y axis max for bars
             const barMax = (() => {
                 const raw = Math.max(...activeBarData) * (currentMonthFilter === 0 ? 1.05 : 1.15) || 100;
-                const step = isCaixasMode ? 10 : 2000;
+                const step = isLingoteMode ? 100 : (isCaixasMode ? 10 : 2000);
                 return Math.ceil(raw / step) * step;
             })();
 
@@ -2801,6 +2903,8 @@
                                     const lbl = context.dataset.label;
                                     if (lbl === 'Produção Diária') return `  Produção: ${Math.round(value).toLocaleString('pt-BR')} Kg`;
                                     if (lbl === 'Caixas por Dia') return `  Caixas: ${value.toLocaleString('pt-BR', {minimumFractionDigits:1, maximumFractionDigits:1})} cx`;
+                                    if (lbl === 'Lingotes por Dia') return `  Lingote: ${Math.round(value).toLocaleString('pt-BR')} pçs`;
+                                    if (lbl === 'Evolucao do Lingote') return null;
                                     if (lbl === 'Evolução da Produção') return null;
                                     if (lbl === 'Acumulado') return isCaixasMode
                                         ? `  Acumulado: ${value.toLocaleString('pt-BR', {minimumFractionDigits:1, maximumFractionDigits:1})} cx`
@@ -2816,10 +2920,10 @@
                                 afterBody: (items) => {
                                     if (currentMonthFilter !== 0 || !items.length) return [];
                                     const idx = items[0].dataIndex;
-                                    const value = isCaixasMode ? dataCumulativeCaixas[idx] : dataCumulative[idx];
+                                    const value = isLingoteMode ? dataCumulativeLingote[idx] : (isCaixasMode ? dataCumulativeCaixas[idx] : dataCumulative[idx]);
                                     return isCaixasMode
                                         ? [`  Acumulado: ${value.toLocaleString('pt-BR', {minimumFractionDigits:1, maximumFractionDigits:1})} cx`]
-                                        : [`  Acumulado: ${Math.round(value).toLocaleString('pt-BR')} Kg`];
+                                        : (isLingoteMode ? [`  Acumulado: ${Math.round(value).toLocaleString('pt-BR')} pçs`] : [`  Acumulado: ${Math.round(value).toLocaleString('pt-BR')} Kg`]);
                                 },
                                 footer: (items) => {
                                     if (currentMonthFilter === 0) return [];
@@ -2865,6 +2969,7 @@
                                         if (isCaixasMode) {
                                             return value % 1 === 0 ? value.toLocaleString('pt-BR') : value.toLocaleString('pt-BR', {minimumFractionDigits:1, maximumFractionDigits:1});
                                         }
+                                        if (isLingoteMode) return Math.round(value).toLocaleString('pt-BR');
                                         if (window.isGraphicReportRunning) return formatNumber(value / 1000, 2) + ' Ton';
                                         return formatNumber(value, 0);
                                     }
@@ -2933,9 +3038,9 @@
                             title: { display: false },
                             grid: { color: window.isGraphicReportRunning ? 'rgba(0,0,0,0.1)' : (window.ErusTheme && window.ErusTheme.isLight() ? 'rgba(0,0,0,0.07)' : 'rgba(255,255,255,0.05)') },
                             ticks: {
-                                color: isCaixasMode ? '#fbbf24' : (window.isGraphicReportRunning ? '#000000' : (window.ErusTheme && window.ErusTheme.isLight() ? '#4b5563' : '#a1a1aa')),
+                                color: (isCaixasMode || isLingoteMode) ? '#fbbf24' : (window.isGraphicReportRunning ? '#000000' : (window.ErusTheme && window.ErusTheme.isLight() ? '#4b5563' : '#a1a1aa')),
                                 font: { size: window.isGraphicReportRunning ? 14 : 12 },
-                                callback: isCaixasMode ? (v) => Number.isInteger(v) ? v + ' cx' : null : undefined
+                                callback: isLingoteMode ? (v) => Number.isInteger(v) ? v + ' pçs' : null : (isCaixasMode ? (v) => Number.isInteger(v) ? v + ' cx' : null : undefined)
                             }
                         },
                         y1: {
@@ -2945,11 +3050,11 @@
                             title: { display: false },
                             grid: { display: false, drawOnChartArea: false },
                             beginAtZero: true,
-                            max: Math.max(isCaixasMode ? 0 : goalValue, accumMax * 1.05) || 100,
+                            max: Math.max((isCaixasMode || isLingoteMode) ? 0 : goalValue, accumMax * 1.05) || 100,
                             ticks: {
                                 color: window.isGraphicReportRunning ? '#000000' : (window.ErusTheme && window.ErusTheme.isLight() ? '#4b5563' : '#a1a1aa'),
                                 font: { size: window.isGraphicReportRunning ? 14 : 12 },
-                                callback: isCaixasMode ? (v) => Number.isInteger(v) ? v + ' cx' : null : undefined
+                                callback: isLingoteMode ? (v) => Number.isInteger(v) ? v + ' pçs' : null : (isCaixasMode ? (v) => Number.isInteger(v) ? v + ' cx' : null : undefined)
                             }
                         }
                     }
@@ -3177,6 +3282,11 @@
                 // Let's check filter logic again. 
                 // "if (colFilters.data && !item.data.includes(colFilters.data))"
                 // Yes, so setting YYYY-MM-DD works.
+            }
+
+            const codigoInput = document.querySelector('.column-filter[data-col="codigo_peca"]');
+            if (codigoInput && chartViewMode === 'lingote') {
+                codigoInput.value = LINGOTE_CODE;
             }
 
             // Clear other filters? Maybe.
