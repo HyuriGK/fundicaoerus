@@ -2300,17 +2300,28 @@
             });
         }
 
+        function isLingoteItem(item) {
+            return String(item.codigo_peca || '').trim() === LINGOTE_CODE &&
+                String(item.setor || '').trim().toUpperCase() === LINGOTE_SECTOR;
+        }
+
+        function getPesoCaixasData() {
+            if (currentSectorFilter !== LINGOTE_SECTOR) return filteredData;
+            return filteredData.filter(item => !isLingoteItem(item));
+        }
+
         function updateKPIs() {
             updateMaquinaFilterUI();
-            const totalWeight = filteredData.reduce((sum, item) => sum + item.pesoTotal, 0);
-            const totalQty = filteredData.reduce((sum, item) => sum + item.quantidade, 0);
+            const pesoCaixasData = getPesoCaixasData();
+            const totalWeight = pesoCaixasData.reduce((sum, item) => sum + item.pesoTotal, 0);
+            const totalQty = pesoCaixasData.reduce((sum, item) => sum + item.quantidade, 0);
 
             // Dias válidos
             const dataMapKPI = {};
-            filteredData.forEach(d => { dataMapKPI[d.data] = (dataMapKPI[d.data] || 0) + d.pesoTotal; });
+            pesoCaixasData.forEach(d => { dataMapKPI[d.data] = (dataMapKPI[d.data] || 0) + d.pesoTotal; });
             const year = parseInt(currentYearFilter) || new Date().getFullYear();
             const month = currentMonthFilter || new Date().getMonth() + 1;
-            const diasValidos = currentMonthFilter === 0 ? (new Set(filteredData.map(d => d.data)).size || 1) : countValidDays(year, month, dataMapKPI);
+            const diasValidos = currentMonthFilter === 0 ? (new Set(pesoCaixasData.map(d => d.data)).size || 1) : countValidDays(year, month, dataMapKPI);
             const avgDaily = diasValidos > 0 ? totalWeight / diasValidos : 0;
             const avgDiasEl = document.getElementById('avg-dias-uteis');
             if (avgDiasEl) avgDiasEl.textContent = diasValidos;
@@ -2389,7 +2400,7 @@
 
             if (isCaixasMode) {
                 // Calcular total de caixas
-                const totalCaixas = filteredData.reduce((sum, item) => {
+                const totalCaixas = pesoCaixasData.reduce((sum, item) => {
                     return sum + (item.quantidade / (figurasMap[item.codigo_peca] || 1));
                 }, 0);
                 const avgCaixas = diasValidos > 0 ? totalCaixas / diasValidos : 0;
@@ -2568,19 +2579,20 @@
             updateMaquinaFilterUI();
             let labels = [];
             let dataDaily = [];
+            const pesoCaixasData = getPesoCaixasData();
 
             // Build labels and daily Kg data
             if (currentMonthFilter === 0) {
                 labels = MONTHS_SHORT;
                 const monthlyMap = {};
-                filteredData.forEach(item => {
+                pesoCaixasData.forEach(item => {
                     const monthIdx = new Date(item.data + 'T12:00:00').getMonth();
                     monthlyMap[monthIdx] = (monthlyMap[monthIdx] || 0) + item.pesoTotal;
                 });
                 dataDaily = labels.map((_, i) => monthlyMap[i] || 0);
             } else {
                 const dailyMap = {};
-                filteredData.forEach(item => {
+                pesoCaixasData.forEach(item => {
                     const day = parseInt(item.data.split('-')[2]);
                     dailyMap[day] = (dailyMap[day] || 0) + item.pesoTotal;
                 });
@@ -2591,7 +2603,7 @@
 
             // Build caixas data (always computed, used only in caixas mode)
             const caixasMap = {};
-            filteredData.forEach(item => {
+            pesoCaixasData.forEach(item => {
                 const figuras = (figurasMap[item.codigo_peca] || 1);
                 const caixas = item.quantidade / figuras;
                 if (currentMonthFilter === 0) {
@@ -2627,6 +2639,7 @@
             const isCaixasMode = chartViewMode === 'caixas';
             const isParadasMode = chartViewMode === 'paradas';
             const isLingoteMode = chartViewMode === 'lingote';
+            const activeProductionData = isLingoteMode ? getLingoteData() : pesoCaixasData;
 
             // Build paradas data
             const dataParadas = labels.map((l, i) => {
@@ -2938,7 +2951,7 @@
                                     const isWeekend = dow === 0 || dow === 6;
                                     const isFeriado = feriadosT2.has(ds);
                                     const dataMapF = {};
-                                    filteredData.forEach(d => { dataMapF[d.data] = true; });
+                                    activeProductionData.forEach(d => { dataMapF[d.data] = true; });
                                     const today5 = new Date(); today5.setHours(0,0,0,0);
                                     const isSemProd = !isWeekend && !isFeriado && !dataMapF[ds] && new Date(ds + 'T12:00:00') <= today5;
                                     const dowNames4 = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
@@ -3016,7 +3029,7 @@
                                     const ds = `${year2}-${String(currentMonthFilter).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
                                     const dow = new Date(ds + 'T12:00:00').getDay();
                                     const dataMapChart = {};
-                                    filteredData.forEach(d => { dataMapChart[d.data] = true; });
+                                    activeProductionData.forEach(d => { dataMapChart[d.data] = true; });
                                     const isNaoUtil2 = dow === 0 || dow === 6 || feriados2.has(ds);
                                     if (isNaoUtil2 && !dataMapChart[ds]) return 'rgba(239,68,68,0.9)';
                                     const today2 = new Date(); today2.setHours(0,0,0,0);
@@ -3093,7 +3106,7 @@
                 const yearT = parseInt(currentYearFilter) || new Date().getFullYear();
                 const feriadosT = getBrazilianHolidaysAP(yearT);
                 const dataMapT = {};
-                filteredData.forEach(d => { dataMapT[d.data] = true; });
+                activeProductionData.forEach(d => { dataMapT[d.data] = true; });
                 const dowNames3 = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
                 canvasAP._apTooltipHandler = (e) => {
                     const chart = chartInstance;
