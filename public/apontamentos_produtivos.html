@@ -2310,6 +2310,12 @@
             return filteredData.filter(item => !isLingoteItem(item));
         }
 
+        function getRecordsData() {
+            if (chartViewMode === 'lingote') return getLingoteData();
+            if (chartViewMode === 'peso' || chartViewMode === 'caixas') return getPesoCaixasData();
+            return filteredData;
+        }
+
         function updateKPIs() {
             updateMaquinaFilterUI();
             const pesoCaixasData = getPesoCaixasData();
@@ -2921,7 +2927,7 @@
                                     if (lbl === 'Evolução da Produção') return null;
                                     if (lbl === 'Acumulado') return isCaixasMode
                                         ? `  Acumulado: ${value.toLocaleString('pt-BR', {minimumFractionDigits:1, maximumFractionDigits:1})} cx`
-                                        : `  Acumulado: ${Math.round(value).toLocaleString('pt-BR')} Kg`;
+                                        : (isLingoteMode ? `  Acumulado: ${Math.round(value).toLocaleString('pt-BR')} pçs` : `  Acumulado: ${Math.round(value).toLocaleString('pt-BR')} Kg`);
                                     if (lbl === 'Meta Mensal') {
                                         const accumData = context.chart.data.datasets[1]?.data[context.dataIndex] || 0;
                                         const meta = goalValue || 1;
@@ -3175,7 +3181,7 @@
                 if (input.value) colFilters[input.dataset.col] = input.value.toLowerCase();
             });
 
-            const tableData = filteredData.filter(item => {
+            const tableData = getRecordsData().filter(item => {
                 if (colFilters.data && !item.data.includes(colFilters.data)) return false;
                 if (colFilters.setor && !item.setor.toLowerCase().includes(colFilters.setor)) return false;
                 if (colFilters.cliente && !String(item.cliente || '').toLowerCase().includes(colFilters.cliente)) return false;
@@ -3298,8 +3304,13 @@
             }
 
             const codigoInput = document.querySelector('.column-filter[data-col="codigo_peca"]');
-            if (codigoInput && chartViewMode === 'lingote') {
-                codigoInput.value = LINGOTE_CODE;
+            const setorInput = document.querySelector('.column-filter[data-col="setor"]');
+            if (chartViewMode === 'lingote') {
+                if (codigoInput) codigoInput.value = LINGOTE_CODE;
+                if (setorInput) setorInput.value = LINGOTE_SECTOR;
+            } else {
+                if (codigoInput && codigoInput.value === LINGOTE_CODE) codigoInput.value = '';
+                if (setorInput && setorInput.value.toUpperCase() === LINGOTE_SECTOR) setorInput.value = '';
             }
 
             // Clear other filters? Maybe.
