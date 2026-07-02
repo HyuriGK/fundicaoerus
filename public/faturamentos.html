@@ -1504,6 +1504,12 @@
         function calculateCalculatedTotal(item) {
             return item.valorTotalOriginal ?? ((item.valorUnitario || 0) * (item.quantidadeOriginal ?? item.quantidade ?? 0));
         }
+        function calculateCalculatedWeight(item) {
+            return item.pesoTotalOriginal ?? ((item.pesoUn || 0) * (item.quantidadeOriginal ?? item.quantidade ?? 0));
+        }
+        function getCalculatedQuantity(item) {
+            return item.quantidadeOriginal ?? item.quantidade ?? 0;
+        }
         function updateDashboardfromRecords(data) {
             const startInput = document.getElementById('startDate').value;
             const endInput = document.getElementById('endDate').value;
@@ -1543,14 +1549,14 @@
             });
             // 3. Update KPIs with Range Data
             const totalFaturado = rangeData.reduce((acc, curr) => acc + calculateCalculatedTotal(curr), 0);
-            const totalPeso = rangeData.reduce((acc, curr) => acc + (curr.pesoTotal || 0), 0);
+            const totalPeso = rangeData.reduce((acc, curr) => acc + calculateCalculatedWeight(curr), 0);
             // FAT PESO: weight totals use independent fat_peso state (not INCL.)
             const rangeFatPeso = data.filter(item => {
                 if (startInput && item.data < startInput) return false;
                 if (endInput && item.data > endInput) return false;
                 return getFatPesoState(item) && vendorFilter(item);
             });
-            const totalPesoFat = rangeFatPeso.reduce((acc, curr) => acc + (curr.pesoTotal || 0), 0);
+            const totalPesoFat = rangeFatPeso.reduce((acc, curr) => acc + calculateCalculatedWeight(curr), 0);
             // KPIs: Total Geral (sempre com serviços) e Total sem serviços
             const rangeDataComServicos = data.filter(item => {
                 if (item.gera_financeiro === 'N') return false;
@@ -1568,10 +1574,10 @@
                 if (endInput && item.data > endInput) return false;
                 return getFatPesoState(item) && vendorFilter(item);
             });
-            const totalGeralPeso = rangeFatPesoComServ.reduce((acc, curr) => acc + (curr.pesoTotal || 0), 0);
+            const totalGeralPeso = rangeFatPesoComServ.reduce((acc, curr) => acc + calculateCalculatedWeight(curr), 0);
             const rangeDataSemServicos = rangeDataComServicos.filter(item => !isServiceClient(item));
             const totalSemServValor = rangeDataSemServicos.reduce((acc, curr) => acc + calculateCalculatedTotal(curr), 0);
-            const totalSemServPeso = rangeFatPesoComServ.filter(item => !isServiceClient(item)).reduce((acc, curr) => acc + (curr.pesoTotal || 0), 0);
+            const totalSemServPeso = rangeFatPesoComServ.filter(item => !isServiceClient(item)).reduce((acc, curr) => acc + calculateCalculatedWeight(curr), 0);
             const isVisible = document.getElementById('cardValorTotal').getAttribute('data-visible') === 'true';
             const elGeral = document.getElementById('totalGeralFaturadoValor');
             const elGeralPeso = document.getElementById('totalGeralFaturadoPeso');
@@ -1583,7 +1589,7 @@
             if (elSemServPeso) elSemServPeso.textContent = formatWeight(totalSemServPeso);
             const rangeDataSoServicos = rangeDataComServicos.filter(item => isServiceClient(item));
             const totalServValor = rangeDataSoServicos.reduce((acc, curr) => acc + calculateCalculatedTotal(curr), 0);
-            const totalServPeso = rangeFatPesoComServ.filter(item => isServiceClient(item)).reduce((acc, curr) => acc + (curr.pesoTotal || 0), 0);
+            const totalServPeso = rangeFatPesoComServ.filter(item => isServiceClient(item)).reduce((acc, curr) => acc + calculateCalculatedWeight(curr), 0);
             const elServ = document.getElementById('totalServicosValor');
             const elServPeso = document.getElementById('totalServicosPeso');
             if (elServ) elServ.textContent = isVisible ? formatCurrency(totalServValor) : 'R$ -----';
@@ -1632,7 +1638,7 @@
                 document.getElementById('pesoDiarioNecessario').textContent = formatWeight(necDiario);
                 document.getElementById('metaProgressPercent').textContent = (currentMeta > 0 ? (totalSemServPeso / currentMeta) * 100 : 0).toFixed(1) + '%';
             }
-            const totalQtd = rangeData.reduce((acc, curr) => acc + (curr.quantidade || 0), 0);
+            const totalQtd = rangeData.reduce((acc, curr) => acc + getCalculatedQuantity(curr), 0);
             const avgPorPeca = totalQtd > 0 ? totalPesoFat / totalQtd : 0;
             const elAvgPeca = document.getElementById('avgWeightPerPiece');
             if (elAvgPeca) elAvgPeca.textContent = formatWeight(avgPorPeca);
@@ -1654,11 +1660,11 @@
             // KPIs do gráfico mensal: média dia e peso médio/peça sobre o ano
             // KPIs gráfico mensal: usa o período filtrado (rangeData), não o ano inteiro
             const annualKpiData = rangeDataComServicos; // já filtrado por startInput/endInput
-            const annualPesoTotal = annualKpiData.reduce((a, b) => a + (b.pesoTotal || 0), 0);
-            const annualQtdTotal = annualKpiData.reduce((a, b) => a + (b.quantidade || 0), 0);
+            const annualPesoTotal = annualKpiData.reduce((a, b) => a + calculateCalculatedWeight(b), 0);
+            const annualQtdTotal = annualKpiData.reduce((a, b) => a + getCalculatedQuantity(b), 0);
             const annualFeriadosSet = getBrazilianHolidays(sDate.getFullYear());
             const annualDailyMap = {};
-            annualKpiData.forEach(item => { const k = (item.data || '').split('T')[0]; if (k) annualDailyMap[k] = (annualDailyMap[k] || 0) + (item.pesoTotal || 0); });
+            annualKpiData.forEach(item => { const k = (item.data || '').split('T')[0]; if (k) annualDailyMap[k] = (annualDailyMap[k] || 0) + calculateCalculatedWeight(item); });
             const fmtA = (d) => { const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),dd=String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${dd}`; };
             const annualPeriodStart = startInput ? new Date(startInput + 'T00:00:00') : new Date(sDate.getFullYear(), 0, 1);
             const annualPeriodEnd = endInput ? new Date(endInput + 'T00:00:00') : new Date(sDate.getFullYear(), 11, 31);
@@ -1700,7 +1706,7 @@
             dailyContextData.forEach(item => {
                 const k = (item.data || '').split('T')[0];
                 if (!k) return;
-                dailyMap[k] = (dailyMap[k] || 0) + (item.weightTotal || item.pesoTotal || 0);
+                dailyMap[k] = (dailyMap[k] || 0) + calculateCalculatedWeight(item);
                 dailyValorMap[k] = (dailyValorMap[k] || 0) + calculateCalculatedTotal(item);
             });
             const dailyChartData = Object.keys(dailyMap).sort().map(k => ({ data: k, pesoTotal: dailyMap[k], valorTotal: dailyValorMap[k] || 0 }));
@@ -1712,14 +1718,14 @@
             });
             const dailyMapServ = {};
             const dailyValorMapServ = {};
-            dailyContextServicos.forEach(item => { const k = (item.data || '').split('T')[0]; if (k) { dailyMapServ[k] = (dailyMapServ[k] || 0) + (item.weightTotal || item.pesoTotal || 0); dailyValorMapServ[k] = (dailyValorMapServ[k] || 0) + calculateCalculatedTotal(item); } });
+            dailyContextServicos.forEach(item => { const k = (item.data || '').split('T')[0]; if (k) { dailyMapServ[k] = (dailyMapServ[k] || 0) + calculateCalculatedWeight(item); dailyValorMapServ[k] = (dailyValorMapServ[k] || 0) + calculateCalculatedTotal(item); } });
             const dailyChartDataServ = Object.keys(dailyMapServ).sort().map(k => ({ data: k, pesoTotal: dailyMapServ[k], valorTotal: dailyValorMapServ[k] || 0 }));
             // Cache para reuso no toggle
             _lastDailyChartArgs = { normal: dailyChartData, servicos: dailyChartDataServ, highlightedDay, monthStartStr, monthEndStr };
             // Calculate KPI for Chart Header (Avg Daily within Context)
             const activeData = dailyChartMode === 'servicos' ? dailyContextServicos : dailyContextData;
             const activeMap = dailyChartMode === 'servicos' ? dailyMapServ : dailyMap;
-            const totalPesoContext = activeData.reduce((a, b) => a + (b.pesoTotal || 0), 0);
+            const totalPesoContext = activeData.reduce((a, b) => a + calculateCalculatedWeight(b), 0);
             const feriadosNacionais = getBrazilianHolidays(year);
             const today = new Date(); today.setHours(0,0,0,0);
             const limitDate = monthEnd < today ? monthEnd : today;
@@ -1795,7 +1801,7 @@
                 const [y, m, d] = item.data.split('-').map(Number);
                 const monthKey = m - 1;
                 if (monthlyData[monthKey] !== undefined) {
-                    if (getFatPesoState(item)) monthlyData[monthKey] += (item.pesoTotal || 0);
+                    if (getFatPesoState(item)) monthlyData[monthKey] += calculateCalculatedWeight(item);
                     const name = (item.clienteNome || 'Desconhecido').trim();
                     if (!excludedClients.has(name) && item.excluido_manualmente !== true) {
                         monthlyValor[monthKey] += calculateCalculatedTotal(item);
@@ -2275,7 +2281,7 @@ async function loadRecordsData() {
                 nota: item.notaFiscal,
                 item: item.codigoItem,
                 cliente: item.clienteNome,
-                peso: item.pesoTotal || 0
+                peso: calculateCalculatedWeight(item)
             });
         }
         async function saveClientExclusion() { await fetch('/api/preferences/excluded_clients', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ value: Array.from(excludedClients) }) }); }
@@ -2315,7 +2321,7 @@ async function loadRecordsData() {
                         item: item.codigoItem,
                         cliente: item.clienteNome,
                         valor: calculateCalculatedTotal(item),
-                        peso: item.pesoTotal || 0
+                        peso: calculateCalculatedWeight(item)
                     });
                     renderTable();
                     updateDashboardfromRecords(allData);
@@ -2383,7 +2389,7 @@ async function loadRecordsData() {
                         else if (col == '9') target = String(item.quantidade || '');
                         else if (col == '10') target = String(calculateCalculatedTotal(item) || '');
                         else if (col == '11') target = String(item.pesoUn || '');
-                        else if (col == '12') target = String(item.pesoTotal || '');
+                        else if (col == '12') target = String(calculateCalculatedWeight(item) || '');
                         return target.toLowerCase().includes(val);
                     });
                 }
@@ -2416,7 +2422,7 @@ async function loadRecordsData() {
                     <td class="text-right">${formatNumber(item.quantidade || 0, 0)}</td>
                     <td class="text-right" style="color:var(--color-primary); font-weight:600;">${valorTotal}</td>
                     <td class="text-right">${formatNumber(item.pesoUn, 2)}</td>
-                    <td class="text-right">${formatNumber(item.pesoTotal, 2)}</td>
+                    <td class="text-right">${formatNumber(calculateCalculatedWeight(item), 2)}</td>
                 </tr>
             `}).join('') || '<tr><td colspan="15" style="text-align:center; padding: 20px;">Nenhum registro.</td></tr>';
             const incl = filteredClients.filter(item => {
@@ -2428,7 +2434,7 @@ async function loadRecordsData() {
             const elWeight = document.getElementById('totalWeight');
             const elValue = document.getElementById('totalValue');
             if (elRecords) elRecords.textContent = incl.length;
-            if (elWeight) elWeight.textContent = formatWeight(filteredClients.filter(item => getFatPesoState(item)).reduce((a, b) => a + (b.pesoTotal || 0), 0));
+            if (elWeight) elWeight.textContent = formatWeight(filteredClients.filter(item => getFatPesoState(item)).reduce((a, b) => a + calculateCalculatedWeight(b), 0));
             if (elValue) {
                 if (isVisible) {
                     elValue.textContent = formatCurrency(incl.reduce((a, b) => a + calculateCalculatedTotal(b), 0));
@@ -2468,7 +2474,7 @@ async function loadRecordsData() {
                         else if (col == '9') target = String(item.quantidade || '');
                         else if (col == '10') target = String(calculateCalculatedTotal(item) || '');
                         else if (col == '11') target = String(item.pesoUn || '');
-                        else if (col == '12') target = String(item.pesoTotal || '');
+                        else if (col == '12') target = String(calculateCalculatedWeight(item) || '');
                         return target.toLowerCase().includes(val);
                     });
                 }
@@ -2735,7 +2741,7 @@ async function loadRecordsData() {
             dataToSum.forEach(item => {
                 const v = item.vendedorNome || 'Sem Vendedor';
                 if (!vendorMap[v]) vendorMap[v] = { peso: 0, valor: 0 };
-                vendorMap[v].peso += item.pesoTotal || 0;
+                vendorMap[v].peso += calculateCalculatedWeight(item);
                 vendorMap[v].valor += calculateCalculatedTotal(item);
             });
             const entries = Object.entries(vendorMap).sort((a, b) => {
@@ -2945,7 +2951,7 @@ async function loadRecordsData() {
                 ensureClient(norm(item.clienteNome || 'Desconhecido')).valor += calculateCalculatedTotal(item);
             });
             pesoData.forEach(item => {
-                ensureClient(norm(item.clienteNome || 'Desconhecido')).peso += (item.pesoTotal || 0);
+                ensureClient(norm(item.clienteNome || 'Desconhecido')).peso += calculateCalculatedWeight(item);
             });
 
             // Índice nome do cliente → cidade/coordenadas
@@ -3058,7 +3064,7 @@ async function loadRecordsData() {
             data.forEach(item => {
                 const name = (item.clienteNome || 'Desconhecido').trim();
                 if (!clientGroups[name]) clientGroups[name] = { peso: 0, valor: 0 };
-                clientGroups[name].peso += (item.pesoTotal || 0);
+                clientGroups[name].peso += calculateCalculatedWeight(item);
                 clientGroups[name].valor += calculateCalculatedTotal(item);
             });
             const clientList = Object.keys(clientGroups).map(name => {

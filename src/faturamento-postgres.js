@@ -240,6 +240,7 @@ router.get('/detalhado', async (req, res) => {
                 COALESCE(NULLIF(f.valor_total, 0), f.valor_unitario * f.quantidade) AS valor_total_original,
                 f.peso_un,
                 (f.peso_un * GREATEST(f.quantidade - COALESCE(dev.quantidade_devolvida, 0), 0)) AS peso_total,
+                (f.peso_un * f.quantidade) AS peso_total_original,
                 f.status,
                 f.pedido,
                 f.gera_financeiro,
@@ -341,6 +342,7 @@ router.get('/detalhado', async (req, res) => {
             valorTotalOriginal: parseFloat(row.valor_total_original || 0),
             pesoUn: parseFloat(row.peso_un || 0),
             pesoTotal: parseFloat(row.peso_total || 0),
+            pesoTotalOriginal: parseFloat(row.peso_total_original || 0),
             status: row.status,
             pedido: row.pedido,
             gera_financeiro: row.gera_financeiro,
@@ -384,12 +386,9 @@ router.get('/evolucao-mensal', async (req, res) => {
             )
             SELECT 
                 m.mes,
-                COALESCE(SUM(f.peso_un * GREATEST(f.quantidade - COALESCE(dev.quantidade_devolvida, 0), 0)), 0) as peso_total,
+                COALESCE(SUM(f.peso_un * f.quantidade), 0) as peso_total,
                 COALESCE(SUM(
-                    CASE
-                        WHEN f.quantidade > 0 THEN COALESCE(NULLIF(f.valor_total, 0), f.valor_unitario * f.quantidade) * GREATEST(f.quantidade - COALESCE(dev.quantidade_devolvida, 0), 0) / f.quantidade
-                        ELSE 0
-                    END
+                    COALESCE(NULLIF(f.valor_total, 0), f.valor_unitario * f.quantidade)
                 ), 0) as valor_total
             FROM meses m
             LEFT JOIN faturamento_firebird f 
