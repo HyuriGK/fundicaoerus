@@ -237,6 +237,7 @@ router.get('/detalhado', async (req, res) => {
                     WHEN f.quantidade > 0 THEN COALESCE(NULLIF(f.valor_total, 0), f.valor_unitario * f.quantidade) * GREATEST(f.quantidade - COALESCE(dev.quantidade_devolvida, 0), 0) / f.quantidade
                     ELSE 0
                 END AS valor_total,
+                COALESCE(NULLIF(f.valor_total, 0), f.valor_unitario * f.quantidade) AS valor_total_original,
                 f.peso_un,
                 (f.peso_un * GREATEST(f.quantidade - COALESCE(dev.quantidade_devolvida, 0), 0)) AS peso_total,
                 f.status,
@@ -337,6 +338,7 @@ router.get('/detalhado', async (req, res) => {
             valorItem: parseFloat(row.valor_item || 0),
             valorIpi: parseFloat(row.valor_ipi || 0),
             valorTotal: parseFloat(row.valor_total || 0),
+            valorTotalOriginal: parseFloat(row.valor_total_original || 0),
             pesoUn: parseFloat(row.peso_un || 0),
             pesoTotal: parseFloat(row.peso_total || 0),
             status: row.status,
