@@ -2286,6 +2286,20 @@
             renderTable();
         }
 
+        function getLingoteData() {
+            return allData.filter(item => {
+                const date = new Date(item.data + 'T12:00:00');
+                const month = date.getMonth() + 1;
+                const year = date.getFullYear().toString();
+                const matchMonth = currentMonthFilter === 0 || month === currentMonthFilter;
+                const matchYear = currentYearFilter === 'TODOS' || year === currentYearFilter;
+                return matchMonth &&
+                    matchYear &&
+                    String(item.codigo_peca || '').trim() === LINGOTE_CODE &&
+                    String(item.setor || '').trim().toUpperCase() === LINGOTE_SECTOR;
+            });
+        }
+
         function updateKPIs() {
             updateMaquinaFilterUI();
             const totalWeight = filteredData.reduce((sum, item) => sum + item.pesoTotal, 0);
@@ -2348,18 +2362,17 @@
             }
 
             if (isLingoteMode) {
-                const lingoteData = filteredData.filter(item =>
-                    String(item.codigo_peca || '').trim() === LINGOTE_CODE &&
-                    String(item.setor || '').trim().toUpperCase() === LINGOTE_SECTOR
-                );
+                const lingoteData = getLingoteData();
                 const totalLingotes = lingoteData.reduce((sum, item) => sum + (Number(item.quantidade) || 0), 0);
                 const dataMapLingote = {};
                 lingoteData.forEach(d => { dataMapLingote[d.data] = (dataMapLingote[d.data] || 0) + (Number(d.quantidade) || 0); });
                 const diasLingote = currentMonthFilter === 0 ? (new Set(lingoteData.map(d => d.data)).size || 1) : countValidDays(year, month, dataMapLingote);
                 const avgLingotes = diasLingote > 0 ? totalLingotes / diasLingote : 0;
-                const lingoteHomem = avgLingotes / numFunc;
+                const lingoteNumFunc = getFuncionariosBySetor(LINGOTE_SECTOR);
+                const lingoteHomem = avgLingotes / lingoteNumFunc;
                 const fmtLingote = (v) => v.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' pçs';
 
+                if (numFuncEl) numFuncEl.textContent = lingoteNumFunc;
                 sectorTotalDisplay.innerText = fmtLingote(totalLingotes);
                 sectorAverageDisplay.innerText = fmtLingote(avgLingotes);
                 if (kgHomemEl) kgHomemEl.innerText = fmtLingote(lingoteHomem);
@@ -2526,20 +2539,11 @@
                 document.getElementById('btn-view-peso').classList.add('active');
                 btnCaixas.classList.remove('active');
             }
-            const lingoteAllowed = currentSectorFilter === LINGOTE_SECTOR;
-            const btnLingote = document.getElementById('btn-view-lingote');
-            if (btnLingote) btnLingote.disabled = !lingoteAllowed;
-            if (!lingoteAllowed && chartViewMode === 'lingote') {
-                chartViewMode = 'peso';
-                document.getElementById('btn-view-peso').classList.add('active');
-                if (btnLingote) btnLingote.classList.remove('active');
-            }
         }
 
         function setChartViewMode(mode) {
             const allowed = CAIXAS_ALLOWED_SECTORS.includes(currentSectorFilter);
             if (mode === 'caixas' && !allowed) return;
-            if (mode === 'lingote' && currentSectorFilter !== LINGOTE_SECTOR) return;
             chartViewMode = mode;
             document.getElementById('btn-view-peso').classList.toggle('active', mode === 'peso');
             document.getElementById('btn-view-caixas').classList.toggle('active', mode === 'caixas');
@@ -2604,11 +2608,7 @@
             });
 
             const lingoteMap = {};
-            filteredData
-                .filter(item =>
-                    String(item.codigo_peca || '').trim() === LINGOTE_CODE &&
-                    String(item.setor || '').trim().toUpperCase() === LINGOTE_SECTOR
-                )
+            getLingoteData()
                 .forEach(item => {
                     const quantidade = Number(item.quantidade) || 0;
                     if (currentMonthFilter === 0) {
@@ -2798,7 +2798,7 @@
                 datasets.push({
                     label: 'Lingotes por Dia',
                     data: dataLingote,
-                    backgroundColor: '#7c3aed',
+                    backgroundColor: '#ea580c',
                     borderRadius: 4,
                     order: 2,
                     yAxisID: 'y',
