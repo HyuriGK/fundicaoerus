@@ -6,6 +6,14 @@ const { requireRole } = require('../lib/middleware');
 
 const checkDevRole = requireRole('desenvolvedor', 'admin');
 
+(async () => {
+    try {
+        await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS can_view_monetary BOOLEAN NOT NULL DEFAULT FALSE');
+    } catch (error) {
+        console.error('Erro ao verificar coluna can_view_monetary:', error);
+    }
+})();
+
 // LISTAR USUÁRIOS (com última atividade do audit_logs)
 router.get('/', checkDevRole, async (req, res) => {
     try {
@@ -63,7 +71,8 @@ router.put('/:username/role', checkDevRole, async (req, res) => {
     }
 
     try {
-        await pool.query('UPDATE users SET role = $1 WHERE username = $2', [role.toLowerCase(), username]);
+        const result = await pool.query('UPDATE users SET role = $1 WHERE username = $2 RETURNING username, role', [role.toLowerCase(), username]);
+        if (!result.rows.length) return res.status(404).json({ success: false, message: 'Usuário não encontrado.' });
         const adminUser = req.user.name || 'Admin'; // Idealmente pegaríamos do req.user
         logActivity(adminUser, 'UPDATE_ROLE', 'users', { affected_user: username, new_role: role });
         res.json({ success: true, message: 'Permissão atualizada com sucesso.' });
@@ -80,7 +89,8 @@ router.delete('/:username', checkDevRole, async (req, res) => {
     try {
         // Prevenir deletar a si mesmo ou usuários protegidos se necessário
         // Aqui apenas deletamos direto
-        await pool.query('DELETE FROM users WHERE username = $1', [username]);
+        const result = await pool.query('DELETE FROM users WHERE username = $1 RETURNING username', [username]);
+        if (!result.rows.length) return res.status(404).json({ success: false, message: 'Usuário não encontrado.' });
         const adminUser = req.user.name || 'Admin';
         logActivity(adminUser, 'BAN_USER', 'users', { affected_user: username });
         res.json({ success: true, message: 'Usuário banido com sucesso.' });
@@ -95,7 +105,8 @@ router.put('/:username/approve', checkDevRole, async (req, res) => {
     const { username } = req.params;
 
     try {
-        await pool.query('UPDATE users SET approved = TRUE WHERE username = $1', [username]);
+        const result = await pool.query('UPDATE users SET approved = TRUE WHERE username = $1 RETURNING username', [username]);
+        if (!result.rows.length) return res.status(404).json({ success: false, message: 'Usuário não encontrado.' });
         const adminUser = req.user.name || 'Admin';
         logActivity(adminUser, 'APPROVE_USER', 'users', { affected_user: username });
         res.json({ success: true, message: 'Usuário aprovado com sucesso.' });
@@ -110,7 +121,8 @@ router.put('/:username/block', checkDevRole, async (req, res) => {
     const { username } = req.params;
 
     try {
-        await pool.query('UPDATE users SET approved = FALSE WHERE username = $1', [username]);
+        const result = await pool.query('UPDATE users SET approved = FALSE WHERE username = $1 RETURNING username', [username]);
+        if (!result.rows.length) return res.status(404).json({ success: false, message: 'Usuário não encontrado.' });
         const adminUser = req.user.name || 'Admin';
         logActivity(adminUser, 'BLOCK_USER', 'users', { affected_user: username });
         res.json({ success: true, message: 'Usuário bloqueado com sucesso.' });
@@ -124,7 +136,8 @@ router.put('/:username/block', checkDevRole, async (req, res) => {
 router.put('/:username/kick', checkDevRole, async (req, res) => {
     const { username } = req.params;
     try {
-        await pool.query('UPDATE users SET force_logout = TRUE WHERE username = $1', [username]);
+        const result = await pool.query('UPDATE users SET force_logout = TRUE WHERE username = $1 RETURNING username', [username]);
+        if (!result.rows.length) return res.status(404).json({ success: false, message: 'Usuário não encontrado.' });
         const adminUser = req.user.name || 'Admin';
         logActivity(adminUser, 'KICK_USER', 'users', { affected_user: username });
         res.json({ success: true, message: `Usuário ${username} será desconectado.` });
@@ -144,7 +157,8 @@ router.put('/:username/monetary', checkDevRole, async (req, res) => {
     }
 
     try {
-        await pool.query('UPDATE users SET can_view_monetary = $1 WHERE username = $2', [can_view_monetary, username]);
+        const result = await pool.query('UPDATE users SET can_view_monetary = $1 WHERE username = $2 RETURNING username, can_view_monetary', [can_view_monetary, username]);
+        if (!result.rows.length) return res.status(404).json({ success: false, message: 'Usuário não encontrado.' });
         const adminUser = req.user.name || 'Admin';
         logActivity(adminUser, 'UPDATE_MONETARY_PERM', 'users', { affected_user: username, can_view_monetary });
         res.json({ success: true, message: `Permissão monetária ${can_view_monetary ? 'habilitada' : 'desabilitada'} para ${username}.` });

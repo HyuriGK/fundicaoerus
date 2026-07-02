@@ -13,7 +13,13 @@
                 if (data.force_logout) {
                     localStorage.clear();
                     window.location.replace('login.html');
+                    return;
                 }
+                if (typeof data.can_view_monetary !== 'undefined') {
+                    localStorage.setItem('erus_can_view_monetary', data.can_view_monetary ? 'true' : 'false');
+                }
+                if (data.role) localStorage.setItem('erus_role', data.role);
+                if (data.name) localStorage.setItem('erus_user', data.name);
             })
             .catch(function () {});
     }

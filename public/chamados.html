@@ -860,6 +860,24 @@
         return { 'Content-Type':'application/json', 'Authorization':'Bearer ' + (localStorage.getItem('erus_token') || ''), 'x-role': localStorage.getItem('erus_role') || '', 'x-user': localStorage.getItem('erus_user') || '' };
     }
 
+    function jsString(v) {
+        return String(v || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r?\n/g, ' ');
+    }
+
+    function decodeHtml(v) {
+        const el = document.createElement('textarea');
+        el.innerHTML = String(v || '');
+        return el.value;
+    }
+
+    async function adminRequest(url, options = {}) {
+        const r = await fetch(url, { ...options, headers: { ...adminHeaders(), ...(options.headers || {}) } });
+        let data = {};
+        try { data = await r.json(); } catch(e) {}
+        if (!r.ok || data.success === false) throw new Error(data.message || data.error || 'Erro ao executar ação.');
+        return data;
+    }
+
     function adminContent(html) {
         document.getElementById('tiAdminNativeContent').innerHTML = html;
     }
@@ -901,21 +919,21 @@
         tbody.innerHTML = users.map(u => `
             <tr>
                 <td>#${u.id}</td><td>${escapeHtml(u.username)}</td><td>${escapeHtml(u.name)}</td>
-                <td><select class="native-select" onchange="nativeUpdateRole('${escapeHtml(u.username)}',this.value)">${adminRoles.map(r => `<option value="${r}" ${String(u.role||'').toLowerCase()===r?'selected':''}>${r}</option>`).join('')}</select></td>
+                <td><select class="native-select" onchange="nativeUpdateRole('${jsString(u.username)}',this.value)">${adminRoles.map(r => `<option value="${r}" ${String(u.role||'').toLowerCase()===r?'selected':''}>${r}</option>`).join('')}</select></td>
                 <td>${u.approved ? '<span class="native-badge good">Aprovado</span>' : '<span class="native-badge bad">Bloqueado</span>'}</td>
                 <td>${formatDate(u.last_login)}</td>
                 <td class="native-admin-actions">
-                    <button class="native-btn ${u.approved ? 'danger' : 'good'}" onclick="nativeToggleUser('${escapeHtml(u.username)}',${u.approved ? 'false':'true'})">${u.approved ? 'Bloquear':'Aprovar'}</button>
-                    <button class="native-btn warn" onclick="nativeKickUser('${escapeHtml(u.username)}')">Logout</button>
-                    <button class="native-btn danger" onclick="nativeDeleteUser('${escapeHtml(u.username)}')">Excluir</button>
+                    <button class="native-btn ${u.approved ? 'danger' : 'good'}" onclick="nativeToggleUser('${jsString(u.username)}',${u.approved ? 'false':'true'})">${u.approved ? 'Bloquear':'Aprovar'}</button>
+                    <button class="native-btn warn" onclick="nativeKickUser('${jsString(u.username)}')">Logout</button>
+                    <button class="native-btn danger" onclick="nativeDeleteUser('${jsString(u.username)}')">Excluir</button>
                 </td>
             </tr>`).join('') || '<tr><td colspan="7" class="native-empty">Nenhum usuário.</td></tr>';
     }
 
-    async function nativeUpdateRole(username, role) { await fetch(`/api/admin/users/${encodeURIComponent(username)}/role`, { method:'PUT', headers:adminHeaders(), body:JSON.stringify({ role }) }); await loadNativeUsers(); }
-    async function nativeToggleUser(username, approve) { await fetch(`/api/admin/users/${encodeURIComponent(username)}/${approve ? 'approve':'block'}`, { method:'PUT', headers:adminHeaders() }); await loadNativeUsers(); }
-    async function nativeKickUser(username) { await fetch(`/api/admin/users/${encodeURIComponent(username)}/kick`, { method:'PUT', headers:adminHeaders() }); }
-    async function nativeDeleteUser(username) { if (!await classicConfirm('Excluir este usuário?')) return; await fetch(`/api/admin/users/${encodeURIComponent(username)}`, { method:'DELETE', headers:adminHeaders() }); await loadNativeUsers(); }
+    async function nativeUpdateRole(username, role) { username = decodeHtml(username); try { await adminRequest(`/api/admin/users/${encodeURIComponent(username)}/role`, { method:'PUT', body:JSON.stringify({ role }) }); await loadNativeUsers(); } catch(e) { alert(e.message); await loadNativeUsers(); } }
+    async function nativeToggleUser(username, approve) { username = decodeHtml(username); try { await adminRequest(`/api/admin/users/${encodeURIComponent(username)}/${approve ? 'approve':'block'}`, { method:'PUT' }); await loadNativeUsers(); } catch(e) { alert(e.message); await loadNativeUsers(); } }
+    async function nativeKickUser(username) { username = decodeHtml(username); try { await adminRequest(`/api/admin/users/${encodeURIComponent(username)}/kick`, { method:'PUT' }); alert('Logout forçado solicitado.'); } catch(e) { alert(e.message); } }
+    async function nativeDeleteUser(username) { username = decodeHtml(username); if (!await classicConfirm('Excluir este usuário?')) return; try { await adminRequest(`/api/admin/users/${encodeURIComponent(username)}`, { method:'DELETE' }); await loadNativeUsers(); } catch(e) { alert(e.message); await loadNativeUsers(); } }
 
     async function loadNativeLogs() {
         adminContent('<div class="native-empty">Carregando logs...</div>');
@@ -1418,8 +1436,8 @@
                 <td title="${escapeHtml(u.last_activity_page || 'Sem tela registrada')}" style="cursor:help">${formatDate(u.last_activity_at)}</td>
                 <td>
                     <div class="native-admin-actions" style="justify-content:center">
-                        <button class="native-btn native-icon-btn ${u.approved ? 'warn' : 'good'}" onclick="nativeToggleUser('${escapeHtml(u.username)}',${u.approved ? 'false':'true'})" title="${u.approved ? 'Bloquear acesso':'Liberar acesso'}"><i class="fa-solid fa-user-${u.approved ? 'lock':'check'}"></i></button>
-                        <button class="native-btn native-icon-btn purple" onclick="nativeOpenUserLogs('${escapeHtml(u.username)}')" title="Ver logs de atividade"><i class="fa-solid fa-clock-rotate-left"></i></button>
+                        <button class="native-btn native-icon-btn ${u.approved ? 'warn' : 'good'}" onclick="nativeToggleUser('${jsString(u.username)}',${u.approved ? 'false':'true'})" title="${u.approved ? 'Bloquear acesso':'Liberar acesso'}"><i class="fa-solid fa-user-${u.approved ? 'lock':'check'}"></i></button>
+                        <button class="native-btn native-icon-btn purple" onclick="nativeOpenUserLogs('${jsString(u.username)}')" title="Ver logs de atividade"><i class="fa-solid fa-clock-rotate-left"></i></button>
                         <button class="native-btn native-icon-btn ${u.can_view_monetary ? 'good':'gray'}" onclick="nativeToggleMonetary('${escapeHtml(u.username)}',${u.can_view_monetary ? 'false':'true'})" title="${u.can_view_monetary ? 'Revogar permissão monetária':'Conceder permissão monetária'}"><i class="fa-solid fa-dollar-sign"></i></button>
                         <button class="native-btn native-icon-btn orange" onclick="nativeKickUser('${escapeHtml(u.username)}')" title="Forçar logout"><i class="fa-solid fa-right-from-bracket"></i></button>
                         <button class="native-btn native-icon-btn gray" onclick="nativePromptRole('${escapeHtml(u.username)}','${escapeHtml(u.role || '')}')" title="Alterar role"><i class="fa-solid fa-pen"></i></button>
@@ -1443,6 +1461,31 @@
     async function nativeKickUser(username) {
         await fetch(`/api/admin/users/${encodeURIComponent(username)}/kick`, { method:'PUT', headers:adminHeaders() });
         alert('Logout forçado solicitado.');
+    }
+
+    async function nativeToggleMonetary(username, can_view_monetary) {
+        username = decodeHtml(username);
+        try {
+            const action = can_view_monetary ? 'conceder' : 'revogar';
+            if (!await classicConfirm(`Deseja ${action} permissão monetária para ${username}?`)) return;
+            const data = await adminRequest(`/api/admin/users/${encodeURIComponent(username)}/monetary`, { method:'PUT', body:JSON.stringify({ can_view_monetary }) });
+            if (username === localStorage.getItem('erus_username')) localStorage.setItem('erus_can_view_monetary', can_view_monetary ? 'true' : 'false');
+            alert(data.message || 'Permissão monetária atualizada.');
+            await loadNativeUsers();
+        } catch(e) {
+            alert(e.message);
+            await loadNativeUsers();
+        }
+    }
+
+    async function nativeKickUser(username) {
+        username = decodeHtml(username);
+        try {
+            await adminRequest(`/api/admin/users/${encodeURIComponent(username)}/kick`, { method:'PUT' });
+            alert('Logout forçado solicitado.');
+        } catch(e) {
+            alert(e.message);
+        }
     }
 
     async function nativeOpenUserLogs(username) {

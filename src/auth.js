@@ -74,9 +74,14 @@ router.get('/check', async (req, res) => {
     const { username } = req.query;
     if (!username) return res.json({ force_logout: false });
     try {
-        const result = await pool.query('SELECT force_logout FROM users WHERE username = $1', [username]);
+        const result = await pool.query('SELECT force_logout, role, name, can_view_monetary FROM users WHERE username = $1', [username]);
         if (!result.rows.length) return res.json({ force_logout: true }); // usuário deletado
-        return res.json({ force_logout: result.rows[0].force_logout || false });
+        return res.json({
+            force_logout: result.rows[0].force_logout || false,
+            role: result.rows[0].role,
+            name: result.rows[0].name,
+            can_view_monetary: result.rows[0].can_view_monetary || false
+        });
     } catch {
         return res.json({ force_logout: false });
     }
