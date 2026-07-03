@@ -298,6 +298,8 @@
         '  #erus-sidebar .erus-nav-group-sep .fa-plus,',
         '  #erus-sidebar .erus-nav-group-sep .fa-minus { width:18px !important; min-width:18px !important; height:18px !important; line-height:18px !important; margin:0 !important; justify-self:center !important; }',
         '  #erus-sidebar .erus-nav-group-wrapper { transition:none !important; }',
+        '  body.erus-sidebar-collapsed #erus-sidebar .erus-nav-group-wrapper:not(.collapsed) { max-height:500px !important; display:block !important; }',
+        '  body.erus-sidebar-collapsed #erus-sidebar .erus-nav-group-wrapper.collapsed { max-height:0 !important; display:block !important; }',
         '  body.erus-sidebar-collapsed #erus-sidebar .erus-nav-group-sep {',
         '    display:grid !important; grid-template-columns:22px max-content minmax(20px,1fr) 18px !important;',
         '    align-items:center !important; justify-content:stretch !important; column-gap:8px !important;',
