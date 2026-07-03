@@ -2556,6 +2556,82 @@
         let chartMode = 'delivery'; // Default mode for date filtering
         // Tooltip Dinâmico Logic
         const dynamicTooltip = document.getElementById('floatingIndustrialTooltip');
+        let industrialTapState = { key: null, time: 0, timer: null };
+
+        function isIndustrialTouchMode() {
+            return window.matchMedia && window.matchMedia('(max-width: 900px)').matches;
+        }
+
+        function getIndustrialTouchLabel(stage, tipo, target) {
+            const tooltipSource = target && target.closest ? target.closest('[data-tooltip]') : null;
+            const tooltip = tooltipSource ? tooltipSource.getAttribute('data-tooltip') : '';
+            if (tooltip) return tooltip;
+            const labels = {
+                aguardando: 'Aguardando Moldagem',
+                moldagem: 'Moldado',
+                fusao: 'FusÃ£o',
+                acabamento: 'Acabamento',
+                tt_usinagem: 'Aguardando Usinagem Externa',
+                tt_qualidade: 'Aguardando Qualidade',
+                usinagem: 'Em Usinagem Externa',
+                qualidade: 'Qualidade',
+                expedicao: 'ExpediÃ§Ã£o'
+            };
+            return tipo || labels[stage] || stage || 'PosiÃ§Ã£o Industrial';
+        }
+
+        function showIndustrialTouchTooltip(stage, tipo) {
+            if (!dynamicTooltip) return;
+            const e = window.event;
+            const target = e && e.target;
+            const label = getIndustrialTouchLabel(stage, tipo, target);
+            dynamicTooltip.innerHTML = label.indexOf('<') >= 0 ? label : `<div class="tooltip-header"><i class="fa-solid fa-circle-info"></i>${label}</div><div>Toque novamente para abrir os registros.</div>`;
+            dynamicTooltip.style.display = 'block';
+            dynamicTooltip.style.opacity = '1';
+
+            const rect = target && target.getBoundingClientRect ? target.getBoundingClientRect() : { left: 20, top: 120, width: 0, height: 0, bottom: 120 };
+            const tooltipWidth = Math.min(280, window.innerWidth - 24);
+            dynamicTooltip.style.width = tooltipWidth + 'px';
+            let x = rect.left + (rect.width / 2) - (tooltipWidth / 2);
+            let y = rect.top - dynamicTooltip.offsetHeight - 12;
+            if (y < 12) y = rect.bottom + 12;
+            x = Math.max(12, Math.min(x, window.innerWidth - tooltipWidth - 12));
+            y = Math.max(12, Math.min(y, window.innerHeight - dynamicTooltip.offsetHeight - 12));
+            dynamicTooltip.style.left = x + 'px';
+            dynamicTooltip.style.top = y + 'px';
+
+            if (industrialTapState.timer) clearTimeout(industrialTapState.timer);
+            industrialTapState.timer = setTimeout(() => {
+                if (dynamicTooltip) {
+                    dynamicTooltip.style.display = 'none';
+                    dynamicTooltip.style.opacity = '0';
+                }
+                industrialTapState.key = null;
+            }, 2400);
+        }
+
+        function shouldWaitSecondIndustrialTap(stage, tipo) {
+            if (!isIndustrialTouchMode()) return false;
+            const e = window.event;
+            if (!e || !e.target || !e.target.closest || !e.target.closest('#industrialProgressContainer')) return false;
+            const key = `${stage || ''}|${tipo || ''}`;
+            const now = Date.now();
+            if (industrialTapState.key === key && now - industrialTapState.time < 2600) {
+                industrialTapState.key = null;
+                if (industrialTapState.timer) clearTimeout(industrialTapState.timer);
+                if (dynamicTooltip) {
+                    dynamicTooltip.style.display = 'none';
+                    dynamicTooltip.style.opacity = '0';
+                }
+                return false;
+            }
+            industrialTapState.key = key;
+            industrialTapState.time = now;
+            showIndustrialTouchTooltip(stage, tipo);
+            if (e.preventDefault) e.preventDefault();
+            if (e.stopPropagation) e.stopPropagation();
+            return true;
+        }
         document.querySelectorAll('.bar-segment').forEach(segment => {
             segment.addEventListener('mouseenter', (e) => {
                 const html = segment.getAttribute('data-tooltip');
@@ -2591,12 +2667,20 @@
             });
         });
         function filterByStage(stage) {
+            const industrialClickEvent = window.event;
+            const clickedIndustrialBar = industrialClickEvent && industrialClickEvent.target && industrialClickEvent.target.closest && industrialClickEvent.target.closest('.bar-segment');
+            if (shouldWaitSecondIndustrialTap(stage, null)) return;
+            if (clickedIndustrialBar && industrialClickEvent.stopPropagation) industrialClickEvent.stopPropagation();
             activeChartFilters.stage = stage;
             activeChartFilters.moldagemTipo = null;
             applyColumnFilters();
             openModal();
         }
         function filterByMoldagemTipo(tipo) {
+            const industrialClickEvent = window.event;
+            const clickedIndustrialBar = industrialClickEvent && industrialClickEvent.target && industrialClickEvent.target.closest && industrialClickEvent.target.closest('.bar-segment');
+            if (shouldWaitSecondIndustrialTap('aguardando', tipo)) return;
+            if (clickedIndustrialBar && industrialClickEvent.stopPropagation) industrialClickEvent.stopPropagation();
             activeChartFilters.stage = 'aguardando';
             activeChartFilters.moldagemTipo = tipo;
             applyColumnFilters();
