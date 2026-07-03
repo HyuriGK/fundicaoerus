@@ -22,13 +22,15 @@ router.get('/', checkDevRole, async (req, res) => {
                 u.id, u.username, u.name, u.role, u.last_login, u.created_at, u.approved,
                 u.can_view_monetary,
                 la.last_activity_at,
-                la.last_activity_page
+                la.last_activity_page,
+                la.last_activity_device
             FROM users u
             LEFT JOIN LATERAL (
-                SELECT created_at AS last_activity_at, table_name AS last_activity_page
+                SELECT created_at AS last_activity_at, table_name AS last_activity_page, details->>'device_type' AS last_activity_device
                 FROM audit_logs
                 WHERE user_name = u.name
                   AND table_name IN (
+                    'users',
                     'index.html',
                     'apontamentos_produtivos.html',
                     'amostras.html',

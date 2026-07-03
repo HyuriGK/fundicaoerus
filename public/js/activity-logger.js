@@ -13,10 +13,22 @@
         return localStorage.getItem('erus_user') || localStorage.getItem('erus_username') || 'Visitante';
     }
 
+    function getClientDeviceInfo() {
+        const ua = navigator.userAgent || '';
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile/i.test(ua)
+            || (window.matchMedia && window.matchMedia('(max-width: 900px)').matches);
+        return {
+            device_type: isMobile ? 'mobile' : 'desktop',
+            viewport: `${window.innerWidth || 0}x${window.innerHeight || 0}`,
+            user_agent: ua
+        };
+    }
+
     // Helper to log activity
     async function logActivity(action, details = {}) {
         const user = getUserName();
         const page = window.location.pathname.split('/').pop() || 'index.html';
+        const enrichedDetails = Object.assign({}, details || {}, getClientDeviceInfo());
 
         try {
             await fetch('/api/audit-logger/log', {
@@ -26,7 +38,7 @@
                     user_name: user,
                     action: action,
                     table_name: page,
-                    details: details
+                    details: enrichedDetails
                 })
             });
         } catch (e) {

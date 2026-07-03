@@ -14,6 +14,16 @@ const loginLimiter = rateLimit({
     legacyHeaders: false
 });
 
+function getDeviceDetails(req) {
+    const ua = String(req.body.user_agent || req.headers['user-agent'] || '');
+    const deviceType = req.body.device_type || (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile/i.test(ua) ? 'mobile' : 'desktop');
+    return {
+        device_type: deviceType === 'mobile' ? 'mobile' : 'desktop',
+        viewport: req.body.viewport || null,
+        user_agent: ua
+    };
+}
+
 // Rota: POST /api/auth (definido no index.js)
 router.post('/', loginLimiter, async (req, res) => {
     const { user, pass } = req.body;
@@ -46,8 +56,9 @@ router.post('/', loginLimiter, async (req, res) => {
 
             // Sucesso!
             // 3. Atualiza o timestamp de último login e reseta force_logout (Fire & Forget)
+            const deviceDetails = getDeviceDetails(req);
             pool.query('UPDATE users SET last_login = NOW(), force_logout = FALSE WHERE username = $1', [user])
-                .then(() => logActivity(user, 'LOGIN', 'users', { name: userData.name, role: userData.role }))
+                .then(() => logActivity(user, 'LOGIN', 'users', { name: userData.name, role: userData.role, ...deviceDetails }))
                 .catch(err => console.error('Erro ao atualizar last_login ou logar atividade:', err));
 
             // Retorna os dados
