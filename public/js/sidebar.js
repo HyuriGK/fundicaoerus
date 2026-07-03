@@ -285,6 +285,8 @@
         '    width:22px; margin-right:10px; font-size:0.85rem;',
         '  }',
         '  body.erus-sidebar-collapsed #erus-sidebar .erus-brand { justify-content:flex-start; padding:8px 12px; }',
+        '  #erus-sidebar .erus-brand-icon,',
+        '  body.erus-sidebar-collapsed #erus-sidebar .erus-brand-icon { width:38px !important; height:38px !important; }',
         '  #erus-sidebar .erus-nav-group-sep {',
         '    display:grid !important; grid-template-columns:22px max-content minmax(20px,1fr) 18px !important;',
         '    align-items:center !important; column-gap:8px !important;',
@@ -1031,7 +1033,7 @@
 
     // ---- Global sidebar functions ----
     window.erusSidebarToggleGroup = function(id) {
-        var isCollapsed = document.body.classList.contains('erus-sidebar-collapsed');
+        var isCollapsed = document.body.classList.contains('erus-sidebar-collapsed') && !isMobileSidebar();
         var group = document.getElementById(id);
         var icon = document.getElementById('icon-' + id);
         if (isCollapsed) {
