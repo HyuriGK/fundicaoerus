@@ -2542,6 +2542,7 @@
         // Tooltip Dinâmico Logic
         const dynamicTooltip = document.getElementById('floatingIndustrialTooltip');
         let industrialTapState = { key: null, time: 0, timer: null };
+        let mobileChartTapState = { key: null, time: 0 };
 
         function isIndustrialTouchMode() {
             return window.matchMedia && window.matchMedia('(max-width: 900px)').matches;
@@ -2615,6 +2616,32 @@
             showIndustrialTouchTooltip(stage, tipo);
             if (e.preventDefault) e.preventDefault();
             if (e.stopPropagation) e.stopPropagation();
+            return true;
+        }
+
+        function shouldWaitSecondMobileChartTap(chart, event, activeElements, scope = '') {
+            if (!isIndustrialTouchMode() || !chart || !activeElements || !activeElements.length) return false;
+            const first = activeElements[0];
+            const index = first.index;
+            const datasetIndex = first.datasetIndex ?? 0;
+            const canvasId = chart.canvas ? chart.canvas.id : 'chart';
+            const key = `${canvasId}|${scope}|${index}|${datasetIndex}`;
+            const now = Date.now();
+            if (mobileChartTapState.key === key && now - mobileChartTapState.time < 2600) {
+                mobileChartTapState.key = null;
+                if (chart.tooltip && chart.tooltip.setActiveElements) chart.tooltip.setActiveElements([], { x: 0, y: 0 });
+                return false;
+            }
+            mobileChartTapState.key = key;
+            mobileChartTapState.time = now;
+            const tooltipItems = activeElements.map(item => ({ datasetIndex: item.datasetIndex ?? 0, index: item.index }));
+            const point = first.element
+                ? { x: first.element.x, y: first.element.y }
+                : { x: event && event.x ? event.x : 0, y: event && event.y ? event.y : 0 };
+            if (chart.setActiveElements) chart.setActiveElements(tooltipItems);
+            if (chart.tooltip && chart.tooltip.setActiveElements) chart.tooltip.setActiveElements(tooltipItems, point);
+            chart.update();
+            if (event && event.native && event.native.preventDefault) event.native.preventDefault();
             return true;
         }
         document.querySelectorAll('.bar-segment').forEach(segment => {
@@ -4541,6 +4568,7 @@
                     interaction: { mode: 'index', intersect: false },
                     onClick: (e) => {
                         const elems = chartDaily.getElementsAtEventForMode(e, 'index', { intersect: false }, true);
+                        if (shouldWaitSecondMobileChartTap(chartDaily, e, elems, `${selYear}-${selMonth}`)) return;
                         if (!elems.length) {
                             activeChartFilters.day = null;
                             updateDailyChart(allData);
@@ -4669,6 +4697,7 @@
                     },
                     onClick: (e) => {
                         const activeElements = chartPCP.getElementsAtEventForMode(e, 'index', { intersect: false }, true);
+                        if (shouldWaitSecondMobileChartTap(chartPCP, e, activeElements, String(selectedYear))) return;
                         if (activeElements.length > 0) {
                             const clickedIndex = activeElements[0].index;
                             if (chartMode === 'delivery' && activeChartFilters.month === clickedIndex) {
@@ -4833,6 +4862,7 @@
                     onClick: (e, elements) => {
                         const selectedYear = parseInt(document.getElementById('yearPillSelect')?.value) || new Date().getFullYear();
                         const isMonthlyView = (currentDeliveryView === 'mensal') || (activePillMonth === null);
+                        if (shouldWaitSecondMobileChartTap(chartPending, e, elements, `${selectedYear}-${isMonthlyView ? 'mensal' : activePillMonth}`)) return;
                         if (elements.length === 0) {
                             chartMode = null;
                             activeChartFilters.month = null;
@@ -4958,6 +4988,7 @@
                     },
                     onClick: (e, elements) => {
                         const activeElements = chartPareto.getElementsAtEventForMode(e, 'index', { intersect: false }, true);
+                        if (shouldWaitSecondMobileChartTap(chartPareto, e, activeElements)) return;
                         if (activeElements.length > 0) {
                             const clickedId = ids[activeElements[0].index];
                             activeChartFilters.client = (activeChartFilters.client == clickedId) ? null : clickedId;
@@ -5108,6 +5139,7 @@
                     interaction: { mode: 'index', intersect: false },
                     onClick: (e) => {
                         const els = chartConcentracao.getElementsAtEventForMode(e, 'index', { intersect: false }, true);
+                        if (shouldWaitSecondMobileChartTap(chartConcentracao, e, els)) return;
                         if (els.length > 0) {
                             const clickedId = ids[els[0].index];
                             activeChartFilters.client = (activeChartFilters.client == clickedId) ? null : clickedId;
@@ -5711,6 +5743,8 @@ function flashConcentracaoBar(barIndex) {
                 },
                 onClick: async (e, elements) => {
                     const activeElements = chartHistorical.getElementsAtEventForMode(e, 'index', { intersect: false }, true);
+                    const historyScope = `${currentDeliveryView}|${activePillMonth}|${emissaoClientView || ''}|${document.getElementById('modeFilterHistorical')?.value || ''}`;
+                    if (shouldWaitSecondMobileChartTap(chartHistorical, e, activeElements, historyScope)) return;
                     if (activeElements.length === 0) {
                         chartMode = null;
                         activeChartFilters.month = null;
@@ -6995,6 +7029,7 @@ function flashConcentracaoBar(barIndex) {
                             }
                         },
                         onClick: (e, elements) => {
+                            if (shouldWaitSecondMobileChartTap(chartVariacao, e, elements, `${ano}-${mes}`)) return;
                             if (!elements.length) return;
                             const idx = elements[0].index;
                             const cd  = clickData[idx];
