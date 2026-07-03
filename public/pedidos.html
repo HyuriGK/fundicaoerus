@@ -1980,21 +1980,6 @@
             <div class="toolbar-row">
                 <div class="toolbar-group">
                     <button class="btn-modern" onclick="this.blur(); openFiltersModal()"> Filtros </button>
-                    <!-- Banner de Resumo do Setor (Industrial) -->
-                    <div id="sectorSummaryBanner" style="display: none; margin-left: 15px; align-items: center; gap: 20px; background: rgba(251, 191, 36, 0.1); padding: 8px 20px; border-radius: 6px; border: 1px solid rgba(251, 191, 36, 0.3);">
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <span style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;">Saldo Setor:</span>
-                            <strong id="sectorTotalQty" style="color: var(--color-primary); font-family: var(--font-mono); font-size: 1rem;">0</strong>
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <span style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;">Peso Setor:</span>
-                            <strong id="sectorTotalWeight" style="color: #fff; font-family: var(--font-mono); font-size: 1rem;">0 kg</strong>
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <span style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;">Valor Setor:</span>
-                            <strong id="sectorTotalValue" style="color: var(--status-purple); font-family: var(--font-mono); font-size: 1rem;">R$ 0,00</strong>
-                        </div>
-                    </div>
                 </div>
                 <div class="toolbar-group" style="margin-left: auto;">
                     <button id="btnGerarEmail" class="btn-modern" onclick="openEmailModal()">Gerar Email</button>
@@ -2773,7 +2758,6 @@
         function openModal(hideOP = false) { 
             const modal = document.getElementById('recordsModal');
             const titleEl = document.getElementById('recordsModalTitle');
-            const banner = document.getElementById('sectorSummaryBanner');
             if (hideOP) {
                 modal.classList.add('hide-op-column');
             } else {
@@ -2795,46 +2779,16 @@
                     'expedicao': 'Aguardando Faturamento'
                 };
                 if (titleEl) titleEl.innerHTML = `<i class="fa-solid fa-industry" style="margin-right: 15px;"></i>Registros: ${stageNames[stage] || stage.toUpperCase()}`;
-                // Calculate Sector Totals from currentFilteredData
-                let sQty = 0, sWeight = 0, sValue = 0;
-                currentFilteredData.forEach(item => {
-                    sQty += (item._sectorQty || 0);
-                    sWeight += (item._sectorWeight || 0);
-                    sValue += (item._sectorValue || 0);
-                });
-                if (banner) {
-                    banner.style.display = 'flex';
-                    // Banner shows Produzido no Setor (exact ERP values, deduplicated by OP)
-                    let sQty = 0, sWeight = 0, sValue = 0;
-                    const uniqueOPs = new Set();
-                    currentFilteredData.forEach(item => {
-                        const opKey = String(item.OP_PCS || '').trim();
-                        if (opKey && opKey !== '-') {
-                            if (uniqueOPs.has(opKey)) return;
-                            uniqueOPs.add(opKey);
-                        }
-                        sQty += (item._sectorQty || 0);
-                        sWeight += (item._sectorWeight || 0);
-                        sValue += (item._sectorValue || 0);
-                    });
-                    document.getElementById('sectorTotalQty').innerHTML = `<span title="Saldo no Setor" style="color:var(--color-primary);">${formatNumber(sQty, 0)} pçs</span>`;
-                    document.getElementById('sectorTotalWeight').innerText = formatNumber(sWeight) + ' kg';
-                    document.getElementById('sectorTotalValue').innerText = valorVisible ? formatCurrency(sValue) : '-----';
-                }
             } else if (chartMode === 'emission_pending') {
                 if (titleEl) titleEl.innerHTML = `<i class="fa-solid fa-list-check" style="margin-right: 15px;"></i>Registros: Emissão C/ Entrega Pendente`;
-                if (banner) banner.style.display = 'none';
             } else if (chartMode === 'emission_total') {
                 if (titleEl) titleEl.innerHTML = `<i class="fa-solid fa-history" style="margin-right: 15px;"></i>Registros: Emissão de Pedidos (Histórico)`;
-                if (banner) banner.style.display = 'none';
             } else if (activeChartFilters.day !== null) {
                 const [dy, dm, dd] = activeChartFilters.day.split('-').map(Number);
                 const fmtDate = `${String(dd).padStart(2,'0')}/${String(dm).padStart(2,'0')}/${dy}`;
                 if (titleEl) titleEl.innerHTML = `<i class="fa-solid fa-calendar-day" style="margin-right: 15px;"></i>Registros: Entrega em ${fmtDate}`;
-                if (banner) banner.style.display = 'none';
             } else {
                 if (titleEl) titleEl.innerHTML = `<i class="fa-solid fa-list-check" style="margin-right: 15px;"></i>Registros de Pedidos`;
-                if (banner) banner.style.display = 'none';
             }
             modal.style.display = 'flex';
             if (window.erusAudit) window.erusAudit('ABRIR_REGISTROS_PEDIDOS', {
@@ -4422,7 +4376,7 @@
                     else if (s === 'qualidade') { sectorQty = qQualidade; rawQty = metrics.rawQualidade; }
                     else if (s === 'expedicao') { sectorQty = qExpedicao; rawQty = metrics.rawExpedicao; }
                     if (sectorQty <= 0) return false;
-                    // Attach metrics for renderTable and summary banner
+                    // Attach metrics for renderTable
                     item._sectorQty = sectorQty;
                     item._sectorRaw = rawQty;
                     // Consistent Unit Weight Calculation
