@@ -2257,6 +2257,7 @@
             return count;
         }
         function renderDailyChart(data, highlightedDay, contextStart, contextEnd) {
+            const isMobileChart = window.matchMedia && window.matchMedia('(max-width: 900px)').matches;
             // Remove any leftover axis tooltip from DOM
             const oldTip = document.getElementById('dailyAxisTooltip');
             if (oldTip) oldTip.remove();
@@ -2344,12 +2345,18 @@
                             order: 2,
                             yAxisID: 'y',
                             datalabels: {
-                                display: (ctx) => ctx.dataset.data[ctx.dataIndex] > 0,
+                                display: (ctx) => {
+                                    const value = ctx.dataset.data[ctx.dataIndex];
+                                    if (value <= 0) return false;
+                                    if (!isMobileChart) return true;
+                                    const ds = allDays[ctx.dataIndex];
+                                    return ds === highlightedDay || ctx.dataIndex === 0 || ctx.dataIndex === allDays.length - 1 || ctx.dataIndex % 4 === 0;
+                                },
                                 anchor: 'end',
                                 align: 'end',
                                 offset: 2,
                                 color: _tc(),
-                                font: { size: 10, weight: 'bold' },
+                                font: { size: isMobileChart ? 8 : 10, weight: 'bold' },
                                 formatter: (v) => Math.round(v).toLocaleString('pt-BR')
                             }
                         },
@@ -2444,7 +2451,16 @@
                                     if (!dataMap[ds] && dDate <= today2) return 'rgba(147,197,253,0.9)';
                                     return _tc();
                                 },
-                                maxRotation: 0, minRotation: 0, font: { size: 10 }, autoSkip: false
+                                callback: function(value, index) {
+                                    const label = this.getLabelForValue(value);
+                                    if (!isMobileChart) return label;
+                                    const ds = allDays[index];
+                                    return ds === highlightedDay || index === 0 || index === allDays.length - 1 || index % 4 === 0 ? label : '';
+                                },
+                                maxRotation: 0,
+                                minRotation: 0,
+                                font: { size: isMobileChart ? 9 : 10 },
+                                autoSkip: false
                             }
                         }
                     },
