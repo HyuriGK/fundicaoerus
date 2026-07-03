@@ -1,6 +1,7 @@
 (function() {
     var SIDEBAR_WIDTH = '280px';
     var SIDEBAR_WIDTH_COLLAPSED = '80px';
+    var MOBILE_BREAKPOINT = 900;
 
     function ensureUiComponents() {
         if (window.ErusUI || document.getElementById('erus-ui-components-js')) return;
@@ -203,6 +204,70 @@
         '  width:calc(100vw - var(--erus-sidebar-offset)) !important;',
         '  max-width:calc(100vw - var(--erus-sidebar-offset)) !important;',
         '}',
+        '#erus-mobile-menu-btn {',
+        '  position:fixed; top:12px; left:12px; z-index:2101;',
+        '  width:42px; height:42px; border-radius:10px;',
+        '  border:1px solid rgba(255,255,255,0.1);',
+        '  background:rgba(12,12,15,0.92); color:#fafafa;',
+        '  display:none; align-items:center; justify-content:center;',
+        '  box-shadow:0 10px 30px rgba(0,0,0,0.35);',
+        '  backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);',
+        '  cursor:pointer;',
+        '}',
+        '#erus-sidebar-scrim {',
+        '  position:fixed; inset:0; z-index:1999; display:none;',
+        '  background:rgba(0,0,0,0.55); backdrop-filter:blur(2px);',
+        '}',
+        '@media (max-width: 900px) {',
+        '  body.erus-shared-sidebar-active { --erus-sidebar-offset:0px !important; }',
+        '  body.erus-shared-sidebar-active.erus-is-index { --erus-sidebar-offset:0px !important; }',
+        '  body.erus-shared-sidebar-active .erus-sidebar-content-offset,',
+        '  body.erus-shared-sidebar-active .erus-sidebar-content-offset.erus-fill-layout,',
+        '  body.erus-shared-sidebar-active .erus-sidebar-content-offset.erus-fixed-layout,',
+        '  body.erus-shared-sidebar-active .erus-sidebar-content-offset.erus-absolute-layout {',
+        '    margin-left:0 !important; left:0 !important;',
+        '    width:100vw !important; max-width:100vw !important;',
+        '  }',
+        '  body.erus-shared-sidebar-active .top-header,',
+        '  body.erus-shared-sidebar-active .main-header,',
+        '  body.erus-shared-sidebar-active .page-header {',
+        '    padding-left:64px !important;',
+        '  }',
+        '  #erus-mobile-menu-btn { display:flex; }',
+        '  #erus-sidebar {',
+        '    width:min(86vw, 320px) !important;',
+        '    transform:translateX(-105%);',
+        '    transition:transform 0.28s var(--erus-ease), width 0.28s var(--erus-ease);',
+        '    z-index:2100;',
+        '  }',
+        '  body.erus-mobile-sidebar-open #erus-sidebar { transform:translateX(0); }',
+        '  body.erus-mobile-sidebar-open #erus-sidebar-scrim { display:block; }',
+        '  body.erus-sidebar-collapsed #erus-sidebar .erus-brand-text,',
+        '  body.erus-sidebar-collapsed #erus-sidebar .erus-nav-link span,',
+        '  body.erus-sidebar-collapsed #erus-sidebar .erus-nav-group-label,',
+        '  body.erus-sidebar-collapsed #erus-sidebar .erus-nav-group-line { display:block; }',
+        '  body.erus-sidebar-collapsed #erus-sidebar .erus-nav-link {',
+        '    justify-content:flex-start; padding:9px 12px; width:auto; height:auto; margin-bottom:3px;',
+        '  }',
+        '  body.erus-sidebar-collapsed #erus-sidebar .erus-nav-link i {',
+        '    width:22px; margin-right:10px; font-size:0.85rem;',
+        '  }',
+        '  body.erus-sidebar-collapsed #erus-sidebar .erus-brand { justify-content:flex-start; padding:8px 12px; }',
+        '  body.erus-sidebar-collapsed #erus-sidebar .erus-nav-group-sep {',
+        '    display:flex; align-items:center !important; justify-content:flex-start !important;',
+        '    padding:4px 12px !important; margin:16px 0 6px !important;',
+        '    width:auto !important; height:auto !important; background:transparent !important; border:0 !important;',
+        '  }',
+        '  body.erus-sidebar-collapsed #erus-sidebar .erus-nav-group-wrapper { display:block !important; }',
+        '  body.erus-sidebar-collapsed #erus-sidebar .erus-sidebar-footer { align-items:stretch; }',
+        '  body.erus-sidebar-collapsed #erus-sidebar .erus-sidebar-footer .erus-nav-link {',
+        '    width:auto; height:auto; margin-bottom:3px; padding:9px 12px;',
+        '    justify-content:flex-start;',
+        '  }',
+        '  body.erus-sidebar-collapsed #erus-sidebar .erus-sidebar-footer .erus-nav-link i {',
+        '    width:22px; margin-right:10px; font-size:0.85rem;',
+        '  }',
+        '}',
         // Tooltip for collapsed sidebar
         '#erus-stip { position:fixed; background:#1c1c1f; color:#fafafa; padding:5px 11px; border-radius:7px;',
         '  font-size:0.75rem; font-weight:500; white-space:nowrap; z-index:10000; pointer-events:none;',
@@ -213,6 +278,7 @@
     document.head.appendChild(style);
 
     var currentPage = window.location.pathname.split('/').pop() || 'index.html';
+    var lastMobileState = null;
 
     function isActive(page) {
         return currentPage === page ? ' active' : '';
@@ -430,6 +496,129 @@
         '</div>' +
     '</div>';
 
+    var mobileSidebarHTML =
+        '<button id="erus-mobile-menu-btn" type="button" aria-label="Abrir menu" aria-expanded="false">' +
+            '<i class="fa-solid fa-bars"></i>' +
+        '</button>' +
+        '<div id="erus-sidebar-scrim"></div>';
+
+    function isMobileSidebar() {
+        return window.matchMedia && window.matchMedia('(max-width: ' + MOBILE_BREAKPOINT + 'px)').matches;
+    }
+
+    function setMobileSidebarOpen(open) {
+        document.body.classList.toggle('erus-mobile-sidebar-open', !!open);
+        var btn = document.getElementById('erus-mobile-menu-btn');
+        if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+
+    function syncResponsiveSidebarState() {
+        var mobile = isMobileSidebar();
+        document.body.classList.toggle('erus-mobile-sidebar', mobile);
+        if (mobile !== lastMobileState) {
+            setMobileSidebarOpen(false);
+            lastMobileState = mobile;
+        }
+    }
+
+    function ensureLateMobileStyles() {
+        if (document.getElementById('erus-late-mobile-css')) return;
+        var s = document.createElement('style');
+        s.id = 'erus-late-mobile-css';
+        s.textContent = [
+            '@media (max-width: 900px) {',
+            '  html, body { min-height:100dvh !important; overflow-x:hidden !important; }',
+            '  body.erus-mobile-sidebar { width:100% !important; max-width:100% !important; }',
+            '  body.erus-mobile-sidebar .page-wrapper,',
+            '  body.erus-mobile-sidebar .main-wrapper,',
+            '  body.erus-mobile-sidebar .main-container,',
+            '  body.erus-mobile-sidebar .app-shell,',
+            '  body.erus-mobile-sidebar .app-content {',
+            '    width:100% !important; max-width:100% !important;',
+            '  }',
+            '  body.erus-mobile-sidebar .scroll-area,',
+            '  body.erus-mobile-sidebar .ti-admin-body {',
+            '    padding:14px !important;',
+            '    overflow:auto !important;',
+            '    -webkit-overflow-scrolling:touch !important;',
+            '  }',
+            '  body.erus-mobile-sidebar .content-grid,',
+            '  body.erus-mobile-sidebar .native-grid-2,',
+            '  body.erus-mobile-sidebar .dev-admin-layout,',
+            '  body.erus-mobile-sidebar .comm-admin-grid,',
+            '  body.erus-mobile-sidebar .password-shell,',
+            '  body.erus-mobile-sidebar .modal-cols,',
+            '  body.erus-mobile-sidebar .form-grid,',
+            '  body.erus-mobile-sidebar .aval-grid,',
+            '  body.erus-mobile-sidebar .view-cards-grid,',
+            '  body.erus-mobile-sidebar .config-grid,',
+            '  body.erus-mobile-sidebar .ld-diff {',
+            '    grid-template-columns:1fr !important;',
+            '  }',
+            '  body.erus-mobile-sidebar .charts-row,',
+            '  body.erus-mobile-sidebar .bento-grid {',
+            '    grid-template-columns:1fr !important;',
+            '    gap:14px !important;',
+            '  }',
+            '  body.erus-mobile-sidebar .kpi-row {',
+            '    display:grid !important;',
+            '    grid-template-columns:repeat(2, minmax(0,1fr)) !important;',
+            '    gap:12px !important;',
+            '  }',
+            '  body.erus-mobile-sidebar .kpi-row .kpi-card {',
+            '    width:100% !important;',
+            '    min-width:0 !important;',
+            '  }',
+            '  body.erus-mobile-sidebar #kpi-strip { flex-wrap:wrap !important; gap:12px !important; }',
+            '  body.erus-mobile-sidebar #kpi-strip .kpi-card { flex:1 1 100% !important; }',
+            '  body.erus-mobile-sidebar .detail-row,',
+            '  body.erus-mobile-sidebar .modal-info-grid,',
+            '  body.erus-mobile-sidebar .password-form-row {',
+            '    grid-template-columns:1fr !important;',
+            '  }',
+            '  body.erus-mobile-sidebar .urgencia-grid { grid-template-columns:repeat(2, minmax(0,1fr)) !important; }',
+            '  body.erus-mobile-sidebar .page-header,',
+            '  body.erus-mobile-sidebar .ti-admin-header,',
+            '  body.erus-mobile-sidebar .top-header,',
+            '  body.erus-mobile-sidebar .main-header {',
+            '    min-height:auto !important;',
+            '    height:auto !important;',
+            '    gap:10px !important;',
+            '    flex-wrap:wrap !important;',
+            '  }',
+            '  body.erus-mobile-sidebar .page-header h1,',
+            '  body.erus-mobile-sidebar .header-title,',
+            '  body.erus-mobile-sidebar .ti-title {',
+            '    font-size:1rem !important;',
+            '    overflow-wrap:anywhere !important;',
+            '  }',
+            '  body.erus-mobile-sidebar .card { padding:16px !important; }',
+            '  body.erus-mobile-sidebar .modal-card,',
+            '  body.erus-mobile-sidebar .modal-content,',
+            '  body.erus-mobile-sidebar .detail-card,',
+            '  body.erus-mobile-sidebar .ti-admin-card {',
+            '    width:100vw !important;',
+            '    max-width:100vw !important;',
+            '    height:100dvh !important;',
+            '    max-height:100dvh !important;',
+            '    border-radius:0 !important;',
+            '    margin:0 !important;',
+            '  }',
+            '  body.erus-mobile-sidebar table { font-size:0.76rem !important; }',
+            '}',
+            '@media (max-width: 640px) {',
+            '  body.erus-mobile-sidebar .kpi-row { grid-template-columns:1fr !important; }',
+            '  body.erus-mobile-sidebar .scroll-area,',
+            '  body.erus-mobile-sidebar .ti-admin-body { padding:10px !important; }',
+            '  body.erus-mobile-sidebar .page-header,',
+            '  body.erus-mobile-sidebar .ti-admin-header,',
+            '  body.erus-mobile-sidebar .top-header,',
+            '  body.erus-mobile-sidebar .main-header { padding-right:12px !important; }',
+            '}'
+        ].join('\n');
+        document.head.appendChild(s);
+    }
+
     var prefsModalHTML = '<div id="erus-pref-modal" onclick="if(event.target===this)this.classList.remove(\'open\')">' +
         '<div style="max-width:440px;width:92%;border-radius:16px;overflow:hidden;background:#18181b;border:1px solid #27272a;box-shadow:0 25px 50px -12px rgba(0,0,0,0.5);">' +
             '<div style="padding:24px 28px 20px;border-bottom:1px solid rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:space-between;">' +
@@ -529,9 +718,11 @@
     function init() {
         if (document.getElementById('erus-sidebar')) return;
         document.body.classList.add('erus-shared-sidebar-active');
+        ensureLateMobileStyles();
 
         // Inject sidebar
         document.body.insertAdjacentHTML('afterbegin', sidebarHTML);
+        document.body.insertAdjacentHTML('afterbegin', mobileSidebarHTML);
         // Inject modals at end
         document.body.insertAdjacentHTML('beforeend', logoutModalHTML);
         document.body.insertAdjacentHTML('beforeend', prefsModalHTML);
@@ -543,6 +734,7 @@
         } else {
             document.body.classList.add('erus-sidebar-collapsed');
         }
+        syncResponsiveSidebarState();
         applySidebarContentOffset();
 
         var sidebarEl = document.getElementById('erus-sidebar');
@@ -563,14 +755,29 @@
         var brandEl = document.getElementById('erus-brand');
         if (brandEl && !isIndex) {
             brandEl.addEventListener('click', function(e) {
+                if (isMobileSidebar()) return;
                 e.preventDefault();
                 document.body.classList.toggle('erus-sidebar-collapsed');
                 applySidebarContentOffset();
             });
         }
 
+        var mobileBtn = document.getElementById('erus-mobile-menu-btn');
+        var mobileScrim = document.getElementById('erus-sidebar-scrim');
+        if (mobileBtn) {
+            mobileBtn.addEventListener('click', function() {
+                setMobileSidebarOpen(!document.body.classList.contains('erus-mobile-sidebar-open'));
+            });
+        }
+        if (mobileScrim) {
+            mobileScrim.addEventListener('click', function() {
+                setMobileSidebarOpen(false);
+            });
+        }
+
         if (!isIndex) {
             document.addEventListener('click', function(e) {
+                if (isMobileSidebar()) return;
                 if (document.body.classList.contains('erus-sidebar-collapsed')) return;
                 if (e.target.closest && e.target.closest('#erus-sidebar')) return;
                 document.body.classList.add('erus-sidebar-collapsed');
@@ -578,11 +785,21 @@
             });
         }
 
-        window.addEventListener('resize', applySidebarContentOffset);
+        document.querySelectorAll('#erus-sidebar a').forEach(function(link) {
+            link.addEventListener('click', function() {
+                if (isMobileSidebar()) setMobileSidebarOpen(false);
+            });
+        });
+
+        window.addEventListener('resize', function() {
+            syncResponsiveSidebarState();
+            applySidebarContentOffset();
+        });
 
         // ESC closes pref/logout modals
         document.addEventListener('keydown', function(e) {
             if (e.key !== 'Escape') return;
+            if (document.body.classList.contains('erus-mobile-sidebar-open')) { setMobileSidebarOpen(false); return; }
             var pref = document.getElementById('erus-pref-modal');
             if (pref && pref.classList.contains('open')) { pref.classList.remove('open'); return; }
             var logout = document.getElementById('erus-logout-modal');
