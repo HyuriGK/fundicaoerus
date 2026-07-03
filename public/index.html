@@ -4246,7 +4246,9 @@
             }
 
             #kpi-strip .kpi-card[style*="display: none"],
-            body.erus-mobile-sidebar #kpi-strip .kpi-card[style*="display: none"] {
+            #kpi-strip .kpi-card[style*="display:none"],
+            body.erus-mobile-sidebar #kpi-strip .kpi-card[style*="display: none"],
+            body.erus-mobile-sidebar #kpi-strip .kpi-card[style*="display:none"] {
                 display: none !important;
             }
 
@@ -10275,10 +10277,62 @@
                 }, 1000);
 
 
+                function normalizeIndexMobileKpis() {
+                    const isMobile = window.matchMedia && window.matchMedia('(max-width: 900px)').matches;
+                    const strip = document.getElementById('kpi-strip');
+                    if (!strip) return;
+
+                    if (!isMobile) {
+                        strip.style.flexDirection = '';
+                        strip.style.width = '';
+                        strip.style.height = '';
+                        strip.style.overflow = '';
+
+                        strip.querySelectorAll('.kpi-card[data-index-mobile-kpi-normalized="1"]').forEach(card => {
+                            if (card.style.display === 'flex') card.style.display = '';
+                            card.style.flex = '';
+                            card.style.flexDirection = '';
+                            card.style.width = '';
+                            card.style.height = '';
+                            card.style.minHeight = '';
+                            delete card.dataset.indexMobileKpiNormalized;
+                        });
+                        return;
+                    }
+
+                    strip.style.display = 'flex';
+                    strip.style.flexDirection = 'column';
+                    strip.style.width = '100%';
+                    strip.style.height = 'auto';
+                    strip.style.overflow = 'visible';
+
+                    strip.querySelectorAll('.kpi-card').forEach(card => {
+                        if ((card.style.display || '').replace(/\s/g, '').toLowerCase() === 'none') return;
+                        card.style.display = 'flex';
+                        card.style.flex = '0 0 auto';
+                        card.style.flexDirection = 'column';
+                        card.style.width = '100%';
+                        card.style.height = 'auto';
+                        card.style.minHeight = '132px';
+                        card.dataset.indexMobileKpiNormalized = '1';
+                    });
+                }
+
+                function scheduleIndexMobileKpiNormalization() {
+                    normalizeIndexMobileKpis();
+                    setTimeout(normalizeIndexMobileKpis, 120);
+                    setTimeout(normalizeIndexMobileKpis, 700);
+                }
+
+                window.addEventListener('resize', scheduleIndexMobileKpiNormalization);
+
                 async function enforceSidebarRoleFilter() {
                     const stripAccentsRole = value => (value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
                     const role = stripAccentsRole((localStorage.getItem('erus_role') || '').toLowerCase());
-                    if (role !== 'moldagem' && role !== 'fusao') return;
+                    if (role !== 'moldagem' && role !== 'fusao') {
+                        scheduleIndexMobileKpiNormalization();
+                        return;
+                    }
 
                     const isFusao = role === 'fusao';
                     ['live-carteira-peso', 'live-faturamento', 'card-clientes-concentracao'].forEach(id => {
@@ -10314,6 +10368,7 @@
                     if (cardSetor) { cardSetor.style.gridColumn = '1/3'; cardSetor.style.gridRow = '2 / span 2'; cardSetor.classList.remove('wide'); }
                     if (cardRefugo) { cardRefugo.style.gridColumn = '3/5'; cardRefugo.style.gridRow = '2 / span 2'; cardRefugo.classList.add('wide'); }
                     if (cardFat) cardFat.style.display = 'none';
+                    scheduleIndexMobileKpiNormalization();
                 }
 
 
