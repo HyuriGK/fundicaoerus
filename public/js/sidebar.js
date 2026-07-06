@@ -952,6 +952,12 @@
         if (activeLink) {
             var parentGroup = activeLink.closest('.erus-nav-group-wrapper');
             if (parentGroup) {
+                parentGroup.classList.remove('collapsed');
+                var activeIcon = document.getElementById('icon-' + parentGroup.id);
+                if (activeIcon) {
+                    activeIcon.classList.remove('fa-plus');
+                    activeIcon.classList.add('fa-minus');
+                }
                 var sep = parentGroup.previousElementSibling;
                 while (sep && !sep.classList.contains('erus-nav-group-sep')) {
                     sep = sep.previousElementSibling;
