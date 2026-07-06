@@ -873,6 +873,24 @@
         { cat:'Custos', pages:[['custos.html','Custos'],['centrocusto.html','Centro de Custo'],['custopeca.html','Custo Peça'],['balanco.html','Balanço']] },
         { cat:'Sistema', pages:[['comunicacao.html','Comunicação'],['relatorio.html','Relatórios'],['rh.html','RH']] }
     ];
+    const nativePermPages = [
+        { cat:'Dashboard', pages:[['index.html','Dashboard']] },
+        { cat:'Comercial', pages:[['pedidos.html','Carteira de Pedidos'],['clientes.html','Clientes']] },
+        { cat:'Faturamento', pages:[['faturamentos.html','Producao Faturada']] },
+        { cat:'Producao', pages:[['apontamentos_produtivos.html','Producao Apontada'],['monitoramento.html','Monitoramento OPs'],['ordemdeproducao.html','Ordens de Producao']] },
+        { cat:'PPCP', pages:[['acabamento_interno.html','Acabamento Interno'],['insumosmoldagem.html','Insumos de Moldagem'],['programacaofusao.html','Programacao da Fusao']] },
+        { cat:'Terceirizacao', pages:[['acabamento_externo.html','Acabamento Externo']] },
+        { cat:'Engenharia', pages:[['fichatecmoldagem.html','Ficha Moldagem'],['fichatecfusao.html','Ficha Fusao'],['fichatecacabamento.html','Ficha Acabamento']] },
+        { cat:'Custos', pages:[['custos.html','Custos Gerais'],['custopeca.html','Calculadora de Custos'],['centrocusto.html','Centro de Custo']] },
+        { cat:'Indicadores', pages:[['otif.html','OTIF']] },
+        { cat:'Controles', pages:[['aderencia.html','Aderencia'],['refugos.html','Refugos'],['devolucoes.html','Devolucoes']] },
+        { cat:'Organizacao', pages:[['planner.html','Planner']] },
+        { cat:'Financeiro', pages:[['balanco.html','Balanco']] },
+        { cat:'RH', pages:[['rh.html','Funcionarios']] },
+        { cat:'Chamados TI', pages:[['solicitarchamados.html','Solicitar Chamado']] },
+        { cat:'TI', pages:[['chamados.html','Painel TI']] },
+        { cat:'Comunicacao', pages:[['comunicacao.html','Comunicacao'],['relatorio.html','Relatorios']] }
+    ];
     const devPages = [
         { id:'index.html', name:'Dashboard', status:'Operacional' },
         { id:'chamados.html', name:'Painel Admin / TI', status:'Em expansão' },
@@ -1076,15 +1094,23 @@
         return d[role] && typeof d[role][page] === 'boolean' ? d[role][page] : true;
     }
     function renderNativePermissions() {
-        adminContent(`<div class="native-admin-tablewrap"><table class="native-admin-table"><thead><tr><th>Tela</th>${permRoles.map(r => `<th>${r}</th>`).join('')}</tr></thead><tbody>
-            ${permPages.flatMap(g => [[`<tr><td colspan="${permRoles.length+1}" style="color:#fbbf24;font-weight:800">${g.cat}</td></tr>`], ...g.pages.map(p => [`<tr><td>${p[1]}<br><span style="color:#52525b">${p[0]}</span></td>${permRoles.map(r => `<td><input type="checkbox" ${nativePermAllowed(r,p[0])?'checked':''} onchange="nativeTogglePermission('${r}','${p[0]}',this.checked)"></td>`).join('')}</tr>`])]).map(x=>x[0]).join('')}
+        adminContent(`<div class="native-admin-tablewrap"><table class="native-admin-table"><thead><tr><th>Tela</th><th>Dev</th>${permRoles.map(r => `<th>${r}</th>`).join('')}</tr></thead><tbody>
+            ${nativePermPages.flatMap(g => [[`<tr><td colspan="${permRoles.length+2}" style="color:#fbbf24;font-weight:800">${g.cat}</td></tr>`], ...g.pages.map(p => [`<tr><td>${p[1]}<br><span style="color:#52525b">${p[0]}</span></td><td><input type="checkbox" checked disabled></td>${permRoles.map(r => `<td><input type="checkbox" ${nativePermAllowed(r,p[0])?'checked':''} onchange="nativeTogglePermission('${r}','${p[0]}',this.checked)"></td>`).join('')}</tr>`])]).map(x=>x[0]).join('')}
         </tbody></table></div>`);
     }
+
     async function nativeTogglePermission(role, page_key, allowed) {
+        const previous = window.__nativePermData[role] && typeof window.__nativePermData[role][page_key] === 'boolean' ? window.__nativePermData[role][page_key] : true;
         if (!window.__nativePermData[role]) window.__nativePermData[role] = {};
         window.__nativePermData[role][page_key] = allowed;
-        const r = await fetch('/api/permissions', { method:'POST', headers:adminHeaders(), body:JSON.stringify({ role, page_key, allowed }) });
-        if (!r.ok) alert('Erro ao salvar permissão.');
+        try {
+            const r = await fetch('/api/permissions', { method:'POST', headers:adminHeaders(), body:JSON.stringify({ role, page_key, allowed }) });
+            if (!r.ok) throw new Error('Erro ao salvar permissao.');
+        } catch(e) {
+            window.__nativePermData[role][page_key] = previous;
+            renderNativePermissions();
+            showToast('Erro', 'Permissao nao foi salva.', 'danger');
+        }
     }
 
     function formatDate(iso) {
