@@ -509,6 +509,15 @@
             '<div id="eg-chamados" class="erus-nav-group-wrapper collapsed">' +
                 '<a href="solicitarchamados.html" data-stip="Solicitar Chamado" class="erus-nav-link' + isActive('solicitarchamados.html') + '">' +
                     '<i class="fa-solid fa-headset"></i><span>Solicitar Chamado</span></a>' +
+            '</div>' +
+            // TI
+            '<div class="erus-nav-group-sep" data-stip="TI" onclick="erusSidebarToggleGroup(\'eg-ti\')">' +
+                '<i class="fas fa-screwdriver-wrench" style="font-size:0.8rem;color:#52525b;margin-right:8px;flex-shrink:0;"></i>' +
+                '<span class="erus-nav-group-label">TI</span>' +
+                '<div class="erus-nav-group-line"></div>' +
+                '<i class="fa-solid fa-plus" id="icon-eg-ti"></i>' +
+            '</div>' +
+            '<div id="eg-ti" class="erus-nav-group-wrapper collapsed">' +
                 '<a href="chamados.html" id="erus-link-chamados-ti" data-stip="Painel TI" class="erus-nav-link' + isActive('chamados.html') + '">' +
                     '<i class="fa-solid fa-ticket"></i><span>Painel TI</span></a>' +
             '</div>' +
