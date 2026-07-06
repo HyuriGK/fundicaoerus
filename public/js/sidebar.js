@@ -512,19 +512,7 @@
                 '<a href="chamados.html" id="erus-link-chamados-ti" data-stip="Painel TI" class="erus-nav-link' + isActive('chamados.html') + '">' +
                     '<i class="fa-solid fa-ticket"></i><span>Painel TI</span></a>' +
             '</div>' +
-            // COMUNICACAO
-            '<div class="erus-nav-group-sep" data-stip="Comunicação" onclick="erusSidebarToggleGroup(\'eg-comunicacao\')">' +
-                '<i class="fas fa-comments" style="font-size:0.8rem;color:#52525b;margin-right:8px;flex-shrink:0;"></i>' +
-                '<span class="erus-nav-group-label">Comunicação</span>' +
-                '<div class="erus-nav-group-line"></div>' +
-                '<i class="fa-solid fa-plus" id="icon-eg-comunicacao"></i>' +
-            '</div>' +
-            '<div id="eg-comunicacao" class="erus-nav-group-wrapper collapsed">' +
-                '<a href="comunicacao.html" data-stip="Comunicação" class="erus-nav-link' + isActive('comunicacao.html') + '">' +
-                    '<i class="fa-solid fa-bullhorn"></i><span>Comunicação</span></a>' +
-                '<a href="relatorio.html" data-stip="Relatórios" class="erus-nav-link' + isActive('relatorio.html') + '">' +
-                    '<i class="fa-solid fa-file-lines"></i><span>Relatórios</span></a>' +
-            '</div>' +        '</ul>' +
+            '</ul>' +
         '<div class="erus-sidebar-footer">' +
             '<a href="#" id="erus-admin-btn" data-stip="Sistema Admin" class="erus-nav-link" onclick="erusSidebarOpenAdmin()" style="display:none;">' +
                 '<i class="fa-solid fa-users-gear"></i><span>Sistema Admin</span>' +
