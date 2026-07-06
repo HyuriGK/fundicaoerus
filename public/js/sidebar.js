@@ -523,10 +523,6 @@
             '</div>' +
             '</ul>' +
         '<div class="erus-sidebar-footer">' +
-            '<a href="#" id="erus-admin-btn" data-stip="Sistema Admin" class="erus-nav-link" onclick="erusSidebarOpenAdmin()" style="display:none;">' +
-                '<i class="fa-solid fa-users-gear"></i><span>Sistema Admin</span>' +
-                '<div class="erus-notif-dot" id="erus-admin-notif" style="display:none;"></div>' +
-            '</a>' +
             '<a href="#" data-stip="Preferências" class="erus-nav-link" onclick="erusSidebarOpenPrefs(); return false;">' +
                 '<i class="fa-solid fa-sliders"></i><span>Preferências</span></a>' +
             '<a href="#" data-stip="Sair do Sistema" onclick="erusSidebarOpenLogout()" class="erus-nav-link erus-logout-link">' +
@@ -870,9 +866,7 @@
             return href.split('')[0].split('#')[0];
         };
         var adminBtn = document.getElementById('erus-admin-btn');
-        if (adminBtn && (role === 'desenvolvedor' || role === 'admin')) {
-            adminBtn.style.display = 'flex';
-        }
+        if (adminBtn) adminBtn.style.display = 'none';
 
         // CLASSIC THEME CHIP — apenas desenvolvedor
         if (role === 'desenvolvedor') {
