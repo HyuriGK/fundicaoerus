@@ -1766,7 +1766,14 @@
                     <label style="margin-bottom:12px;font-size:.9rem;color:var(--text-muted);font-weight:600">Sua Mensagem</label>
                     <textarea id="commMessageInput" class="comm-textarea" placeholder="Digite aqui o aviso ou comunicado importante..." oninput="updateCommCharCount()"></textarea>
                     <div style="margin-top:25px;display:flex;justify-content:flex-end;align-items:center;gap:20px">
-                        <div style="display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.03);padding:8px 15px;border-radius:10px;border:1px solid var(--border-subtle)"><i class="fa-solid fa-calendar-clock" style="color:var(--color-primary);font-size:.8rem"></i><label style="font-size:.75rem;color:var(--text-muted);font-weight:600">Validade (dias):</label><input type="number" id="commExpiryInput" value="7" min="0" style="width:60px;background:transparent;border:none;color:var(--color-primary);font-weight:800;text-align:center;font-family:var(--font-mono)"></div>
+                        <div style="display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.03);padding:8px 12px;border-radius:10px;border:1px solid var(--border-subtle);flex-wrap:wrap">
+                            <i class="fa-solid fa-calendar-clock" style="color:var(--color-primary);font-size:.8rem"></i>
+                            <label style="font-size:.75rem;color:var(--text-muted);font-weight:600">Validade:</label>
+                            <input type="number" id="commExpiryDays" value="7" min="0" style="width:48px;background:transparent;border:none;color:var(--color-primary);font-weight:800;text-align:center;font-family:var(--font-mono)"><span style="font-size:.72rem;color:#71717a">d</span>
+                            <input type="number" id="commExpiryHours" value="0" min="0" max="23" style="width:42px;background:transparent;border:none;color:var(--color-primary);font-weight:800;text-align:center;font-family:var(--font-mono)"><span style="font-size:.72rem;color:#71717a">h</span>
+                            <input type="number" id="commExpiryMinutes" value="0" min="0" max="59" style="width:42px;background:transparent;border:none;color:var(--color-primary);font-weight:800;text-align:center;font-family:var(--font-mono)"><span style="font-size:.72rem;color:#71717a">min</span>
+                            <input type="number" id="commExpirySeconds" value="0" min="0" max="59" style="width:42px;background:transparent;border:none;color:var(--color-primary);font-weight:800;text-align:center;font-family:var(--font-mono)"><span style="font-size:.72rem;color:#71717a">s</span>
+                        </div>
                         <div id="commCharCount" style="color:#71717a;font-size:.75rem;font-family:var(--font-mono)">0 caracteres</div>
                         <button class="btn-save" onclick="sendCommunication()" style="min-width:180px;justify-content:center">Enviar Agora</button>
                     </div>
@@ -1787,16 +1794,23 @@
 
     function toggleAllRecipients(v) { document.querySelectorAll('.comm-recipient').forEach(cb => cb.checked = v); }
     function updateCommCharCount() { const el = document.getElementById('commCharCount'); if (el) el.textContent = `${(document.getElementById('commMessageInput')?.value || '').length} caracteres`; }
+    function commExpiryValue(id, max = null) {
+        const value = Math.max(0, Number(document.getElementById(id)?.value || 0));
+        return max === null ? value : Math.min(max, value);
+    }
     async function sendCommunication() {
         const recipient_ids = [...document.querySelectorAll('.comm-recipient:checked')].map(cb => Number(cb.value));
         const subject = document.getElementById('commSubjectInput')?.value.trim() || '';
         const message = document.getElementById('commMessageInput')?.value.trim() || '';
-        const expiry_days = Number(document.getElementById('commExpiryInput')?.value || 7);
+        const expiry_days = commExpiryValue('commExpiryDays');
+        const expiry_hours = commExpiryValue('commExpiryHours', 23);
+        const expiry_minutes = commExpiryValue('commExpiryMinutes', 59);
+        const expiry_seconds = commExpiryValue('commExpirySeconds', 59);
         if (!message) return showToast('Erro', 'Por favor, digite uma mensagem.', 'danger');
         const confirmMsg = recipient_ids.length === 0 ? 'Deseja enviar esta mensagem para TODOS os usuarios?' : `Deseja enviar esta mensagem para ${recipient_ids.length} usuario(s) selecionado(s)?`;
         if (!await classicConfirm(confirmMsg)) return;
         try {
-            await adminRequest('/api/communications', { method:'POST', body:JSON.stringify({ recipient_ids, subject, message, expiry_days }) });
+            await adminRequest('/api/communications', { method:'POST', body:JSON.stringify({ recipient_ids, subject, message, expiry_days, expiry_hours, expiry_minutes, expiry_seconds }) });
             showToast('Sucesso', 'Mensagem enviada com sucesso.', 'success');
             document.getElementById('commMessageInput').value = '';
             document.getElementById('commSubjectInput').value = '';

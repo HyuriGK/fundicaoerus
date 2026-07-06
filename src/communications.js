@@ -48,7 +48,7 @@ router.post('/', getUserId, async (req, res) => {
     if (req.userRole !== 'desenvolvedor' && req.userRole !== 'admin') {
         return res.status(403).json({ success: false, message: 'Acesso negado.' });
     }
-    const { recipient_ids, message, subject, expiry_days, expiry_hours, expiry_minutes } = req.body;
+    const { recipient_ids, message, subject, expiry_days, expiry_hours, expiry_minutes, expiry_seconds } = req.body;
 
     if (!message) {
         return res.status(400).json({ success: false, message: 'Mensagem vazia.' });
@@ -59,7 +59,8 @@ router.post('/', getUserId, async (req, res) => {
         const d = parseInt(expiry_days) || 0;
         const h = parseInt(expiry_hours) || 0;
         const m = parseInt(expiry_minutes) || 0;
-        const totalMs = (((d * 24 + h) * 60) + m) * 60 * 1000;
+        const s = parseInt(expiry_seconds) || 0;
+        const totalMs = ((((d * 24 + h) * 60) + m) * 60 + s) * 1000;
         if (totalMs > 0) {
             valid_until = new Date(Date.now() + totalMs);
         }
