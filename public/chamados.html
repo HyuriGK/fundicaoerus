@@ -489,7 +489,7 @@
             <button class="filter-btn" id="f-aberto" onclick="setFilter('aberto')">Abertos</button>
             <button class="filter-btn" id="f-em_andamento" onclick="setFilter('em_andamento')">Em Andamento</button>
             <button class="filter-btn" id="f-resolvido" onclick="setFilter('resolvido')">Resolvidos</button>
-            <button class="filter-btn" onclick="loadChamados()" style="border-color:rgba(168,85,247,0.3);color:#a855f7"> </button>
+            <button class="filter-btn" onclick="loadChamados()" title="Atualizar chamados" style="border-color:rgba(168,85,247,0.3);color:#a855f7"><i class="fa-solid fa-rotate"></i></button>
         </div>
     </div>
 
@@ -651,7 +651,7 @@
                 <div class="modal-chamado-titulo" id="modalTitulo"></div>
                 <div class="modal-badges" id="modalBadges"></div>
             </div>
-            <button class="modal-close" onclick="closeModal()"> </button>
+            <button class="modal-close" onclick="closeModal()"><i class="fa-solid fa-xmark"></i></button>
         </div>
         <div class="modal-body">
             <div class="modal-meta-row">
@@ -679,8 +679,8 @@
                     <div class="modal-anexo-bar">
                         <span class="modal-anexo-name" id="modalAnexoName"></span>
                         <div class="modal-anexo-actions">
-                            <button class="btn-icon-sm" onclick="event.stopPropagation();downloadAnexo()" title="Baixar"> </button>
-                            <button class="btn-icon-sm" onclick="event.stopPropagation();openLightbox()" title="Zoom"> </button>
+                            <button class="btn-icon-sm" onclick="event.stopPropagation();downloadAnexo()" title="Baixar"><i class="fa-solid fa-download"></i></button>
+                            <button class="btn-icon-sm" onclick="event.stopPropagation();openLightbox()" title="Zoom"><i class="fa-solid fa-magnifying-glass-plus"></i></button>
                         </div>
                     </div>
                 </div>
@@ -699,10 +699,9 @@
             </div>
         </div>
         <div class="modal-footer">
-            <button class="btn-delete" onclick="deleteChamado()" title="Excluir chamado"> </button>
+            <button class="btn-delete" onclick="deleteChamado()" title="Excluir chamado"><i class="fa-solid fa-trash"></i></button>
             <button class="btn-cancel" onclick="closeModal()">Cancelar</button>
-            <button class="btn-save" id="btnSave" onclick="saveChamado()"> Salvar
- </button>
+            <button class="btn-save" id="btnSave" onclick="saveChamado()"><i class="fa-solid fa-floppy-disk"></i> Salvar</button>
         </div>
     </div>
 </div>
@@ -788,11 +787,11 @@
 <!-- Lightbox -->
 <div class="lb-overlay" id="lbOverlay">
     <div class="lb-toolbar">
-        <button class="lb-btn" onclick="lbZoom(0.25)" title="Zoom +"> </button>
-        <button class="lb-btn" onclick="lbZoom(-0.25)" title="Zoom −"> </button>
-        <button class="lb-btn" onclick="lbReset()" title="Resetar"> </button>
-        <button class="lb-btn" onclick="downloadAnexo()" title="Baixar"> </button>
-        <button class="lb-btn" onclick="closeLightbox()" title="Fechar"> </button>
+        <button class="lb-btn" onclick="lbZoom(0.25)" title="Zoom +"><i class="fa-solid fa-plus"></i></button>
+        <button class="lb-btn" onclick="lbZoom(-0.25)" title="Zoom -"><i class="fa-solid fa-minus"></i></button>
+        <button class="lb-btn" onclick="lbReset()" title="Resetar"><i class="fa-solid fa-rotate-left"></i></button>
+        <button class="lb-btn" onclick="downloadAnexo()" title="Baixar"><i class="fa-solid fa-download"></i></button>
+        <button class="lb-btn" onclick="closeLightbox()" title="Fechar"><i class="fa-solid fa-xmark"></i></button>
     </div>
     <div class="lb-canvas" id="lbCanvas">
         <img class="lb-img" id="lbImg" src="" alt="anexo ampliado" draggable="false">
@@ -939,142 +938,17 @@
         if (view === 'developments') return loadNativeDevelopments();
     }
 
-    async function loadNativeUsers() {
-        adminContent('<div class="native-empty">Carregando usuários...</div>');
-        try {
-            const r = await fetch('/api/admin/users', { headers: adminHeaders() });
-            const json = await r.json();
-            const users = json.users || [];
-            adminContent(`
-                <div class="native-admin-toolbar">
-                    <input class="native-input" id="nativeUserSearch" placeholder="Buscar usuário..." oninput="renderNativeUsers()" style="width:280px">
-                    <button class="native-btn" onclick="loadNativeUsers()"><i class="fa-solid fa-rotate"></i> Atualizar</button>
-                </div>
-                <div class="native-admin-tablewrap"><table class="native-admin-table">
-                    <thead><tr><th>ID</th><th>Usuário</th><th>Nome</th><th>Role</th><th>Status</th><th>Último login</th><th>Ações</th></tr></thead>
-                    <tbody id="nativeUsersBody"></tbody>
-                </table></div>`);
-            window.__nativeUsers = users;
-            renderNativeUsers();
-        } catch(e) { adminContent('<div class="native-empty">Erro ao carregar usuários.</div>'); }
-    }
-
-    function renderNativeUsers() {
-        const q = (document.getElementById('nativeUserSearch')?.value || '').toLowerCase();
-        const tbody = document.getElementById('nativeUsersBody');
-        const users = (window.__nativeUsers || []).filter(u => [u.username,u.name,u.role].some(v => String(v||'').toLowerCase().includes(q)));
-        tbody.innerHTML = users.map(u => `
-            <tr>
-                <td>#${u.id}</td><td>${escapeHtml(u.username)}</td><td>${escapeHtml(u.name)}</td>
-                <td><select class="native-select" onchange="nativeUpdateRole('${jsAttr(u.username)}',this.value)">${adminRoles.map(r => `<option value="${r}" ${String(u.role||'').toLowerCase()===r?'selected':''}>${r}</option>`).join('')}</select></td>
-                <td>${u.approved ? '<span class="native-badge good">Aprovado</span>' : '<span class="native-badge bad">Bloqueado</span>'}</td>
-                <td>${formatDate(u.last_login)}</td>
-                <td class="native-admin-actions">
-                    <button class="native-btn ${u.approved ? 'danger' : 'good'}" onclick="nativeToggleUser('${jsAttr(u.username)}',${u.approved ? 'false':'true'})">${u.approved ? 'Bloquear':'Aprovar'}</button>
-                    <button class="native-btn warn" onclick="nativeKickUser('${jsAttr(u.username)}')">Logout</button>
-                    <button class="native-btn danger" onclick="nativeDeleteUser('${jsAttr(u.username)}')">Excluir</button>
-                </td>
-            </tr>`).join('') || '<tr><td colspan="7" class="native-empty">Nenhum usuário.</td></tr>';
-    }
-
-    async function nativeUpdateRole(username, role) { username = decodeHtml(username); try { await adminRequest(`/api/admin/users/${encodeURIComponent(username)}/role`, { method:'PUT', body:JSON.stringify({ role }) }); await loadNativeUsers(); } catch(e) { alert(e.message); await loadNativeUsers(); } }
-    async function nativeToggleUser(username, approve) { username = decodeHtml(username); try { await adminRequest(`/api/admin/users/${encodeURIComponent(username)}/${approve ? 'approve':'block'}`, { method:'PUT' }); await loadNativeUsers(); } catch(e) { alert(e.message); await loadNativeUsers(); } }
-    async function nativeKickUser(username) { username = decodeHtml(username); try { await adminRequest(`/api/admin/users/${encodeURIComponent(username)}/kick`, { method:'PUT' }); alert('Logout forçado solicitado.'); } catch(e) { alert(e.message); } }
-    async function nativeDeleteUser(username) { username = decodeHtml(username); if (!await classicConfirm('Excluir este usuário?')) return; try { await adminRequest(`/api/admin/users/${encodeURIComponent(username)}`, { method:'DELETE' }); await loadNativeUsers(); } catch(e) { alert(e.message); await loadNativeUsers(); } }
-
-    async function loadNativeLogs() {
-        adminContent('<div class="native-empty">Carregando logs...</div>');
-        try {
-            const r = await fetch('/api/audit-logger/recent?limit=200', { headers: adminHeaders() });
-            const logs = await r.json();
-            adminContent(`<div class="native-admin-toolbar"><button class="native-btn" onclick="loadNativeLogs()"><i class="fa-solid fa-rotate"></i> Atualizar</button></div>
-                <div class="native-admin-tablewrap"><table class="native-admin-table"><thead><tr><th>Data</th><th>Usuário</th><th>Ação</th><th>Tela/Tabela</th><th>Detalhes</th></tr></thead><tbody>
-                ${logs.map(l => `<tr><td>${formatDate(l.created_at)}</td><td>${escapeHtml(l.user_name)}</td><td><span class="native-badge">${escapeHtml(l.action)}</span></td><td>${escapeHtml(l.table_name||'')}</td><td>${escapeHtml(typeof l.details === 'string' ? l.details : JSON.stringify(l.details||''))}</td></tr>`).join('')}
-                </tbody></table></div>`);
-        } catch(e) { adminContent('<div class="native-empty">Erro ao carregar logs.</div>'); }
-    }
-
-    async function loadNativeLocks() {
-        adminContent('<div class="native-empty">Carregando bloqueios...</div>');
-        const pages = permPages.flatMap(g => g.pages).map(p => p[0]);
-        try {
-            const r = await fetch('/api/page-locks', { headers: adminHeaders() });
-            const json = await r.json();
-            const locks = {};
-            (json.data || []).forEach(l => locks[l.page_id] = l);
-            adminContent(`<div class="native-admin-tablewrap"><table class="native-admin-table"><thead><tr><th>Página</th><th>Status</th><th>Ação</th></tr></thead><tbody>
-                ${pages.map(p => {
-                    const locked = !!locks[p]?.is_locked;
-                    const reason = locks[p]?.lock_reason;
-                    const status = !locked ? '<span class="native-badge good">Liberada</span>' : (reason === 'development' ? '<span class="native-badge" style="color:#a855f7;border-color:rgba(168,85,247,.3);background:rgba(168,85,247,.09)">Desenvolvimento</span>' : '<span class="native-badge pending">Manutenção</span>');
-                    const actions = locked
-                        ? `<button class="native-btn good" onclick="nativeToggleLock('${p}',false,null)">Liberar</button>`
-                        : `<div class="native-admin-actions"><button class="native-btn warn" onclick="nativeToggleLock('${p}',true,'maintenance')">Manutenção</button><button class="native-btn purple" onclick="nativeToggleLock('${p}',true,'development')">Desenvolvimento</button></div>`;
-                    return `<tr><td>${p}</td><td>${status}</td><td>${actions}</td></tr>`;
-                }).join('')}
-            </tbody></table></div>`);
-        } catch(e) { adminContent('<div class="native-empty">Erro ao carregar bloqueios.</div>'); }
-    }
-
-    async function nativeToggleLock(page, lock, reason) { await fetch('/api/page-locks/toggle', { method:'POST', headers:adminHeaders(), body:JSON.stringify({ page_id:page, is_locked:lock, lock_reason:reason }) }); await loadNativeLocks(); }
-
     async function loadNativeTasks() {
         adminContent('<div class="native-empty">Carregando tarefas...</div>');
         try {
             const r = await fetch('/api/producao-postgres?action=check-tasks', { headers: adminHeaders() });
+            if (!r.ok) throw new Error('Erro ao carregar tarefas');
             const json = await r.json();
-            const tasks = json.tasks || [];
+            const tasks = Array.isArray(json.tasks) ? json.tasks : [];
             adminContent(`<div class="native-admin-tablewrap"><table class="native-admin-table"><thead><tr><th>Setor</th><th>Descrição</th><th>Pendente</th><th>Ação</th></tr></thead><tbody>
                 ${tasks.length ? tasks.map(t => `<tr><td><span class="native-badge">${escapeHtml(t.sector)}</span></td><td>${escapeHtml(t.description)}</td><td>${t.count||0}</td><td><a class="native-btn warn" href="${escapeHtml(t.actionUrl||'#')}">Resolver</a></td></tr>`).join('') : '<tr><td colspan="4"><div class="native-empty">Tudo em dia.</div></td></tr>'}
             </tbody></table></div>`);
         } catch(e) { adminContent('<div class="native-empty">Erro ao carregar tarefas.</div>'); }
-    }
-
-    async function loadNativeCommunication() {
-        let users = [];
-        try {
-            const r = await fetch('/api/admin/users', { headers: adminHeaders() });
-            users = (await r.json()).users || [];
-        } catch(e) {}
-        adminContent(`
-            <div class="native-grid-2">
-                <div class="native-panel">
-                    <div class="ti-subview-title" style="margin-bottom:12px">Destinatários</div>
-                    <div class="native-admin-actions" style="margin-bottom:12px"><button class="native-btn" onclick="nativeSetRecipients(true)">Todos</button><button class="native-btn" onclick="nativeSetRecipients(false)">Nenhum</button></div>
-                    <div id="nativeRecipients">${users.map(u => `<label style="display:flex;gap:8px;align-items:center;margin-bottom:8px;color:#d4d4d8;font-size:.82rem"><input type="checkbox" class="native-recipient" value="${u.id}"> ${escapeHtml(u.name||u.username)}</label>`).join('')}</div>
-                </div>
-                <div class="native-panel" style="display:flex;flex-direction:column;gap:12px">
-                    <input class="native-input" id="nativeCommSubject" placeholder="Assunto">
-                    <textarea class="native-textarea" id="nativeCommMessage" placeholder="Digite o comunicado..." style="flex:1;min-height:220px"></textarea>
-                    <div class="native-admin-actions" style="justify-content:flex-end"><input class="native-input" id="nativeCommExpiry" type="number" min="0" value="7" style="width:90px"><button class="native-btn good" onclick="nativeSendCommunication()">Enviar</button></div>
-                </div>
-            </div>`);
-    }
-
-    function nativeSetRecipients(v) { document.querySelectorAll('.native-recipient').forEach(cb => cb.checked = v); }
-    async function nativeSendCommunication() {
-        const recipient_ids = [...document.querySelectorAll('.native-recipient:checked')].map(cb => Number(cb.value));
-        const subject = document.getElementById('nativeCommSubject').value.trim();
-        const message = document.getElementById('nativeCommMessage').value.trim();
-        const expiry_days = Number(document.getElementById('nativeCommExpiry').value || 0);
-        if (!message) return alert('Digite a mensagem.');
-        const r = await fetch('/api/communications', { method:'POST', headers:adminHeaders(), body:JSON.stringify({ recipient_ids, subject, message, expiry_days }) });
-        if (!r.ok) return alert('Erro ao enviar comunicado.');
-        alert('Comunicado enviado.');
-    }
-
-    async function loadNativeDevelopments() {
-        adminContent('<div class="native-empty">Carregando desenvolvimentos...</div>');
-        try {
-            const r = await fetch('/api/page-locks', { headers: adminHeaders() });
-            const json = await r.json();
-            const devs = (json.data || []).filter(x => x.is_locked && x.lock_reason === 'development');
-            adminContent(`<div class="native-admin-tablewrap"><table class="native-admin-table"><thead><tr><th>Tela</th><th>Arquivo</th><th>Status</th><th>Atualizado</th></tr></thead><tbody>
-                ${devs.length ? devs.map(p => `<tr><td>${escapeHtml(p.page_id.replace('.html',''))}</td><td>${escapeHtml(p.page_id)}</td><td><span class="native-badge" style="color:#a855f7;border-color:rgba(168,85,247,.3);background:rgba(168,85,247,.09)">Desenvolvimento</span></td><td>${formatDate(p.updated_at)}</td></tr>`).join('') : '<tr><td colspan="4"><div class="native-empty">Nenhuma tela marcada como desenvolvimento.</div></td></tr>'}
-            </tbody></table></div>`);
-        } catch(e) {
-            adminContent('<div class="native-empty">Erro ao carregar desenvolvimentos.</div>');
-        }
     }
 
     async function loadNativePermissions() {
@@ -1141,7 +1015,10 @@
     async function loadChamados() {
         try {
             const r = await fetch('/api/chamados?todos=1');
-            allChamados = await r.json();
+            if (!r.ok) throw new Error('Erro ao carregar chamados');
+            const data = await r.json();
+            if (!Array.isArray(data)) throw new Error('Resposta invalida');
+            allChamados = data;
             updateKPIs();
             renderTable();
         } catch(e) {
@@ -1274,7 +1151,8 @@
         if (!currentId) return;
         if (!await classicConfirm('Excluir este chamado permanentemente?')) return;
         try {
-            await fetch(`/api/chamados/${currentId}`, { method: 'DELETE', headers: { 'x-user': localStorage.getItem('erus_user') || 'Desconhecido' } });
+            const r = await fetch(`/api/chamados/${currentId}`, { method: 'DELETE', headers: { 'x-user': localStorage.getItem('erus_user') || 'Desconhecido' } });
+            if (!r.ok) throw new Error('Erro ao excluir chamado');
             closeModal();
             await loadChamados();
         } catch(e) {
@@ -1474,7 +1352,9 @@
         adminContent('<div class="native-empty">Carregando usuários...</div>');
         try {
             const r = await fetch('/api/admin/users', { headers: adminHeaders() });
+            if (!r.ok) throw new Error('Erro ao carregar usuarios');
             const json = await r.json();
+            if (!Array.isArray(json.users)) throw new Error('Resposta invalida');
             window.__nativeUsers = (json.users || []).sort((a, b) => new Date(b.last_activity_at || 0) - new Date(a.last_activity_at || 0));
             adminContent(`
                 <div class="native-admin-toolbar">
@@ -1523,58 +1403,6 @@
         const role = await classicPrompt(`Novo role para ${username}?`, currentRole || 'visitante');
         if (!role) return;
         await nativeUpdateRole(username, role);
-    }
-
-    async function nativeToggleMonetary(username, can_view_monetary) {
-        await fetch(`/api/admin/users/${encodeURIComponent(username)}/monetary`, { method:'PUT', headers:adminHeaders(), body:JSON.stringify({ can_view_monetary }) });
-        await loadNativeUsers();
-    }
-
-    async function nativeKickUser(username) {
-        await fetch(`/api/admin/users/${encodeURIComponent(username)}/kick`, { method:'PUT', headers:adminHeaders() });
-        alert('Logout forçado solicitado.');
-    }
-
-    async function nativeToggleMonetary(username, can_view_monetary) {
-        username = decodeHtml(username);
-        try {
-            const action = can_view_monetary ? 'conceder' : 'revogar';
-            if (!await classicConfirm(`Deseja ${action} permissão monetária para ${username}?`)) return;
-            const data = await adminRequest(`/api/admin/users/${encodeURIComponent(username)}/monetary`, { method:'PUT', body:JSON.stringify({ can_view_monetary }) });
-            if (username === localStorage.getItem('erus_username')) localStorage.setItem('erus_can_view_monetary', can_view_monetary ? 'true' : 'false');
-            alert(data.message || 'Permissão monetária atualizada.');
-            await loadNativeUsers();
-        } catch(e) {
-            alert(e.message);
-            await loadNativeUsers();
-        }
-    }
-
-    async function nativeKickUser(username) {
-        username = decodeHtml(username);
-        try {
-            await adminRequest(`/api/admin/users/${encodeURIComponent(username)}/kick`, { method:'PUT' });
-            alert('Logout forçado solicitado.');
-        } catch(e) {
-            alert(e.message);
-        }
-    }
-
-    async function nativeOpenUserLogs(username) {
-        document.getElementById('tiAdminNativeTitle').innerHTML = `<i class="fa-solid fa-clock-rotate-left" style="color:#818cf8"></i> Logs de ${escapeHtml(username)}`;
-        switchTiView('admin');
-        adminContent('<div class="native-empty">Carregando logs do usuário...</div>');
-        try {
-            const r = await fetch(`/api/admin/users/${encodeURIComponent(username)}/logs?limit=200`, { headers:adminHeaders() });
-            const json = await r.json();
-            const logs = json.logs || [];
-            adminContent(`<div class="native-admin-toolbar"><button class="native-btn" onclick="openAdminFeature('users')"><i class="fa-solid fa-arrow-left"></i> Usuários</button></div>
-                <div class="native-admin-tablewrap"><table class="native-admin-table"><thead><tr><th>Data</th><th>Ação</th><th>Tela/Tabela</th><th>Detalhes</th></tr></thead><tbody>
-                ${logs.map(l => `<tr><td>${formatDate(l.created_at)}</td><td><span class="native-badge">${escapeHtml(l.action)}</span></td><td>${escapeHtml(l.table_name||'')}</td><td>${escapeHtml(typeof l.details === 'string' ? l.details : JSON.stringify(l.details||''))}</td></tr>`).join('') || '<tr><td colspan="4" class="native-empty">Sem logs.</td></tr>'}
-                </tbody></table></div>`);
-        } catch(e) {
-            adminContent('<div class="native-empty">Erro ao carregar logs.</div>');
-        }
     }
 
     function showToast(title, subtitle, type = 'info') {
@@ -1692,7 +1520,10 @@
     async function loadNativeLogs() {
         adminContent('<div class="native-empty">Carregando logs...</div>');
         try {
-            const logs = await (await fetch('/api/audit-logger/recent?limit=200', { headers: adminHeaders() })).json();
+            const r = await fetch('/api/audit-logger/recent?limit=200', { headers: adminHeaders() });
+            if (!r.ok) throw new Error('Erro ao carregar logs');
+            const logs = await r.json();
+            if (!Array.isArray(logs)) throw new Error('Resposta invalida');
             adminContent(`<div class="admin-skin">
                 <div class="native-admin-toolbar"><button class="native-btn" onclick="loadNativeLogs()"><i class="fa-solid fa-rotate"></i> Atualizar</button></div>
                 <div class="table-container"><table id="adminLogsTable"><thead><tr><th>Data/Hora</th><th>Usuario</th><th>Dispositivo</th><th>Acao</th><th>Tela</th><th>Detalhes</th></tr></thead><tbody>${adminLogRows(logs, true, '__nativeLogs')}</tbody></table></div>
