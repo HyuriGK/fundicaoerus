@@ -167,7 +167,7 @@
         'body.erus-sidebar-collapsed #erus-sidebar .erus-nav-group-sep i:first-child {',
         '  display:block !important; margin:0 !important; font-size:0.72rem; opacity:0.45;',
         '}',
-        'body.erus-sidebar-collapsed #erus-sidebar .erus-nav-group-sep.active-group { background:transparent !important; border-color:transparent !important; }',
+        'body.erus-sidebar-collapsed #erus-sidebar .erus-nav-group-sep.active-group { background:rgba(63,63,70,0.35) !important; border-color:rgba(255,255,255,0.08) !important; }',
         'body.erus-sidebar-collapsed #erus-sidebar .erus-nav-group-sep.active-group i:first-child { color:#a1a1aa !important; opacity:1 !important; }',
         'body.erus-sidebar-collapsed #erus-sidebar .erus-nav-group-sep:hover i:first-child { opacity:0.85; }',
         // Role-based hidden — expanded state (no competing !important, simple rule is enough)
