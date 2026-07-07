@@ -2,6 +2,20 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../lib/db');
 
+let modeloStatusTableReady = false;
+async function ensureModeloStatusTable() {
+    if (modeloStatusTableReady) return;
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS pedidos_modelo_status (
+            sync_key TEXT PRIMARY KEY,
+            modelo_status TEXT NOT NULL,
+            updated_at TIMESTAMP DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_pedidos_modelo_status_sync_key ON pedidos_modelo_status(sync_key);
+    `);
+    modeloStatusTableReady = true;
+}
+
 // Rota para buscar peso unitário, descrição e saldo em aberto por código (usado por acabamento_externo)
 // Prioridade peso: PRODUTO.PESO_LIQUIDO_PRO sincronizado > pesos_customizados (fallback manual)
 router.get('/peso-lookup', async (req, res) => {
@@ -67,6 +81,7 @@ router.get('/peso-lookup', async (req, res) => {
 router.get('/', async (req, res) => {
     const { carteiraOnly } = req.query;
     try {
+        await ensureModeloStatusTable();
         let query;
         if (carteiraOnly === 'true') {
             query = `
@@ -77,10 +92,12 @@ router.get('/', async (req, res) => {
                     f.data_fic,
                     f.pro_codigo_fic AS has_ficha,
                     f.tipo_moldagem_procedimento,
-                    obs.observacao
+                    obs.observacao,
+                    ms.modelo_status
                 FROM firebird_sync_emissoes p
                 LEFT JOIN ficha_tecnica f ON f.pro_codigo_fic = (p.data->>'PRODUTO_PPR')
                 LEFT JOIN pedidos_observacoes obs ON obs.sync_key = p.sync_key
+                LEFT JOIN pedidos_modelo_status ms ON ms.sync_key = p.sync_key
                 WHERE
                     ((p.data->>'QUANTIDADE_PPR')::numeric - COALESCE((p.data->>'QUANTIDADE_FATURADA_PPR')::numeric, 0) - COALESCE((p.data->>'QUANTIDADE_DESISTENCIA_PPR')::numeric, 0)) > 0
                     AND (p.data->>'STATUS_PPR') <> 'C'
@@ -99,10 +116,12 @@ router.get('/', async (req, res) => {
                     f.data_fic,
                     f.pro_codigo_fic AS has_ficha,
                     f.tipo_moldagem_procedimento,
-                    obs.observacao
+                    obs.observacao,
+                    ms.modelo_status
                 FROM firebird_sync_emissoes p
                 LEFT JOIN ficha_tecnica f ON f.pro_codigo_fic = (p.data->>'PRODUTO_PPR')
                 LEFT JOIN pedidos_observacoes obs ON obs.sync_key = p.sync_key
+                LEFT JOIN pedidos_modelo_status ms ON ms.sync_key = p.sync_key
                 ORDER BY
                     (f.pro_codigo_fic IS NOT NULL) DESC,
                     f.data_fic DESC NULLS LAST,
@@ -124,6 +143,7 @@ router.get('/', async (req, res) => {
                 ...row.data,
                 sync_key: row.sync_key,
                 observacao: row.observacao || '',
+                modelo_status: row.modelo_status || '',
                 _sync_updated_at: row.updated_at,
                 _data_fic: row.data_fic,
                 _has_ficha: !!row.has_ficha,

@@ -1245,16 +1245,22 @@
             width: 10%;
             text-align: center;
         }
-        /* 10. ENTREGA / OP */
+        /* 10. MODELO */
         th:nth-child(10),
         td:nth-child(10) {
+            width: 210px;
+            text-align: center;
+        }
+        /* 11. OBSERVACOES */
+        th:nth-child(11),
+        td:nth-child(11) {
             width: 17%;
             text-align: center;
         }
         /* Ocultar OP no modal de emissões */
-        .hide-op-column th:nth-child(10),
-        .hide-op-column td:nth-child(10),
-        .hide-op-column tr#filterRow th:nth-child(10) {
+        .hide-op-column th:nth-child(11),
+        .hide-op-column td:nth-child(11),
+        .hide-op-column tr#filterRow th:nth-child(11) {
             display: none !important;
         }
         .filter-input-table {
@@ -1335,6 +1341,20 @@
             outline: none;
             box-shadow: 0 0 5px rgba(251, 191, 36, 0.3);
         }
+        .modelo-status-select {
+            width: 100%;
+            min-width: 190px;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-main);
+            border-radius: 6px;
+            padding: 5px 7px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+        .modelo-status-select option { background: #18181b; color: #f4f4f5; }
+        .modelo-status-select:focus { border-color: var(--color-primary); background: rgba(251,191,36,0.08); }
         .clickable-op:hover {
             background: rgba(234, 88, 12, 0.1);
             transform: scale(1.1);
@@ -2063,6 +2083,7 @@
                             <th class="sortable-th" id="th-peso_un" onclick="toggleSort('peso_un')" style="width: 8%; white-space: nowrap;">PESO UN</th>
                             <th class="sortable-th" id="th-peso_total" onclick="toggleSort('peso_total')" style="width: 9%; white-space: nowrap;">PESO TOTAL</th>
                             <th class="sortable-th" id="th-valor_total" onclick="toggleSort('valor_total')" style="width: 9%; white-space: nowrap;">TOTAL (R$)</th>
+                            <th style="width: 210px; min-width: 210px;">MODELO</th>
                             <th style="width: 18%; min-width: 300px;">OBSERVAÇÕES</th>
                         </tr>
                         <tr id="filterRow">
@@ -2077,8 +2098,9 @@
                             <!-- Total R$ -->
                             <th><input class="filter-input-table" data-col="8" placeholder="...">
                             </th>
-                            <!-- Observações (was 10) -->
                             <th><input class="filter-input-table" data-col="9" placeholder="..."></th>
+                            <!-- Observações (was 10) -->
+                            <th><input class="filter-input-table" data-col="10" placeholder="..."></th>
                         </tr>
                     </thead>
                     <tbody id="table-body"></tbody>
@@ -3656,10 +3678,47 @@
                 input.blur();
             }
         }
+        const MODELO_STATUS_OPTIONS = [
+            'MODELO LIBERADO PRODUZIR',
+            'MODELO NÃO ESTA NA ERUS',
+            'MODELO ESTA NA MODELARIA AJUSTANDO',
+            'MODELO VEIO DA FASE E PRECISA SAIR PARA MODELARIA AJUSTAR'
+        ];
+        function renderModeloStatusSelect(item) {
+            const current = String(item.modelo_status || '').toUpperCase();
+            return `<select class="modelo-status-select" data-original="${current}" onchange="saveModeloStatus('${item.sync_key}',this)">
+                <option value="">...</option>
+                ${MODELO_STATUS_OPTIONS.map(opt => `<option value="${opt}" ${current === opt ? 'selected' : ''}>${opt}</option>`).join('')}
+            </select>`;
+        }
+        async function saveModeloStatus(syncKey, select) {
+            const modeloStatus = String(select.value || '').toUpperCase();
+            const original = select.getAttribute('data-original') || '';
+            select.disabled = true;
+            try {
+                const res = await fetch('/api/pedidos-modelo-status/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sync_key: syncKey, modelo_status: modeloStatus })
+                });
+                if (!res.ok) throw new Error('Falha ao salvar status do modelo');
+                select.setAttribute('data-original', modeloStatus);
+                const item = allData.find(d => d.sync_key === syncKey);
+                if (item) item.modelo_status = modeloStatus;
+                if (window.erusAudit) window.erusAudit('UPDATE_MODELO_STATUS', { sync_key: syncKey, antes: original || '(vazio)', depois: modeloStatus || '(vazio)' });
+                showToast("Sucesso", "Status do modelo salvo!", "success");
+            } catch (err) {
+                console.error(err);
+                select.value = original;
+                showToast("Erro", "Erro ao salvar status do modelo.", "danger");
+            } finally {
+                select.disabled = false;
+            }
+        }
         function renderTable(list) {
             const tbody = document.getElementById('table-body');
             if (list.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding:20px;">Nenhum registro encontrado.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="11" style="text-align:center; padding:20px;">Nenhum registro encontrado.</td></tr>';
                 return;
             }
             tbody.innerHTML = list.map((item, index) => {
@@ -3769,6 +3828,7 @@
                     <td style="text-align:center;">${weightInputHtml}</td>
                     <td style="text-align:center;">${formatNumber(totalWeightReal)}</td>
                     <td style="text-align:center; color:var(--status-purple); font-weight:bold;">${valorVisible ? formatCurrency(valorTotal) : '-----'}</td>
+                    <td style="text-align:center;" onclick="event.stopPropagation()">${renderModeloStatusSelect(item)}</td>
                     <td style="text-align:center;">
                         <input 
                             type="text" 
@@ -4267,7 +4327,8 @@
                 '6': 'PESO_UNIT',
                 '7': 'PESO_LIQUIDO_NPR',
                 '8': 'VALOR_TOTAL',
-                '9': 'observacao'
+                '9': 'modelo_status',
+                '10': 'observacao'
             };
             // Collect individual column filters
             const filters = {};
@@ -6948,7 +7009,8 @@ function flashConcentracaoBar(barIndex) {
                     "Produto": item.NOME_PRODUTO_PPR || '-',
                     "Saldo": saldoReal,
                     "Peso Un. (kg)": parseFloat(unitWeight.toFixed(3)),
-                    "Peso Total (kg)": parseFloat(totalWeightReal.toFixed(2))
+                    "Peso Total (kg)": parseFloat(totalWeightReal.toFixed(2)),
+                    "Modelo": item.modelo_status || ''
                 };
                 if (valorVisible) {
                     row["Total (R$)"] = parseFloat(valorTotal.toFixed(2));
