@@ -3,10 +3,10 @@ const router = express.Router();
 const pool = require('../lib/db');
 
 const VALID_STATUSES = new Set([
-    'MODELO LIBERADO PRODUZIR',
-    'MODELO NÃO ESTA NA ERUS',
-    'MODELO ESTA NA MODELARIA AJUSTANDO',
-    'MODELO VEIO DA FASE E PRECISA SAIR PARA MODELARIA AJUSTAR'
+    'LIBERADO PARA PRODUÇÃO',
+    'MODELO NÃO ESTÁ NA ERUS',
+    'MODELO SENDO AJUSTADO NA MODELARIA',
+    'MODELO PRECISA AJUSTAR NA MODELARIA'
 ]);
 
 let tableReady = false;
