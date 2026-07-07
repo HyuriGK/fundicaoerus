@@ -2283,7 +2283,115 @@
                 quantidadeTotal: rows.reduce((sum, r) => sum + r.quantidade, 0)
             };
         }
-        function gerarRelatorioPontualidadePDF() {
+        function carregarImagemParaPDF(src) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.naturalWidth || img.width;
+                    canvas.height = img.naturalHeight || img.height;
+                    canvas.getContext('2d').drawImage(img, 0, 0);
+                    resolve({
+                        dataUrl: canvas.toDataURL('image/jpeg', .82),
+                        width: canvas.width,
+                        height: canvas.height
+                    });
+                };
+                img.onerror = reject;
+                img.src = src;
+            });
+        }
+
+        async function carregarNaoQualidadesComFotos(report) {
+            const cargasNaoQualidade = report.rows.filter(row => row.qualidade === 'NAO');
+            const anexos = [];
+            for (const row of cargasNaoQualidade) {
+                try {
+                    const data = await apiRequest('qualidade-fotos', 'GET', { carga: row.carga });
+                    const fotos = Array.isArray(data.fotos) ? data.fotos.slice(0, 5) : [];
+                    anexos.push({ row, fotos });
+                } catch (e) {
+                    anexos.push({ row, fotos: [] });
+                }
+            }
+            return anexos;
+        }
+
+        async function adicionarAnexosNaoQualidadePDF(doc, report) {
+            const anexos = await carregarNaoQualidadesComFotos(report);
+            if (!anexos.length) return;
+            const pageWidth = doc.internal.pageSize.getWidth();
+            const pageHeight = doc.internal.pageSize.getHeight();
+            const margin = 14;
+            const gap = 8;
+            const photoWidth = (pageWidth - margin * 2 - gap) / 2;
+            const photoHeight = 52;
+
+            for (const anexo of anexos) {
+                doc.addPage('a4', 'l');
+                doc.setFillColor(24, 24, 27);
+                doc.rect(0, 0, pageWidth, 30, 'F');
+                doc.setTextColor(251, 191, 36);
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(16);
+                doc.text('ANEXO FOTOGRAFICO - NAO QUALIDADE', margin, 13);
+                doc.setTextColor(255, 255, 255);
+                doc.setFontSize(11);
+                doc.text(`CARGA: ${anexo.row.carga}`, margin, 23);
+
+                doc.setFillColor(248, 250, 252);
+                doc.roundedRect(margin, 38, pageWidth - margin * 2, 28, 2, 2, 'F');
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(8);
+                doc.setTextColor(82, 82, 91);
+                doc.text('TERCEIRO', margin + 6, 47);
+                doc.text('ENVIO', margin + 76, 47);
+                doc.text('ENTREGA', margin + 112, 47);
+                doc.text('PESO', margin + 150, 47);
+                doc.text('OBSERVACAO', margin + 190, 47);
+                doc.setFont('helvetica', 'normal');
+                doc.setTextColor(24, 24, 27);
+                doc.text(String(document.getElementById('pontualidadeReportTerceiro').value || '-'), margin + 6, 58, { maxWidth: 62 });
+                doc.text(formatDate(anexo.row.dataEnvio), margin + 76, 58);
+                doc.text(anexo.row.entrega ? formatDate(anexo.row.entrega) : '-', margin + 112, 58);
+                doc.text(`${formatNumber(anexo.row.peso)} kg`, margin + 150, 58);
+                doc.text(anexo.row.qualidadeObservacao || '-', margin + 190, 58, { maxWidth: pageWidth - margin - 196 });
+
+                if (!anexo.fotos.length) {
+                    doc.setTextColor(113, 113, 122);
+                    doc.setFontSize(11);
+                    doc.text('Nenhuma foto anexada para esta nao-qualidade.', margin, 84);
+                    continue;
+                }
+
+                for (let i = 0; i < anexo.fotos.length; i++) {
+                    const col = i % 2;
+                    const row = Math.floor(i / 2);
+                    const x = margin + col * (photoWidth + gap);
+                    const y = 80 + row * (photoHeight + 16);
+                    if (y + photoHeight > pageHeight - 18) break;
+                    try {
+                        const foto = await carregarImagemParaPDF(anexo.fotos[i]);
+                        const ratio = Math.min(photoWidth / foto.width, photoHeight / foto.height);
+                        const w = foto.width * ratio;
+                        const h = foto.height * ratio;
+                        doc.setDrawColor(226, 232, 240);
+                        doc.setFillColor(255, 255, 255);
+                        doc.roundedRect(x, y, photoWidth, photoHeight, 2, 2, 'FD');
+                        doc.addImage(foto.dataUrl, 'JPEG', x + (photoWidth - w) / 2, y + (photoHeight - h) / 2, w, h);
+                        doc.setFontSize(8);
+                        doc.setTextColor(82, 82, 91);
+                        doc.text(`Foto ${i + 1}`, x, y + photoHeight + 6);
+                    } catch (e) {
+                        doc.setTextColor(239, 68, 68);
+                        doc.setFontSize(9);
+                        doc.text(`Foto ${i + 1} indisponivel`, x, y + 10);
+                    }
+                }
+            }
+        }
+
+        async function gerarRelatorioPontualidadePDF() {
             const terceiro = document.getElementById('pontualidadeReportTerceiro').value;
             if (!terceiro) return;
             const report = getPontualidadeReportData(terceiro);
@@ -2371,6 +2479,8 @@
                     doc.text(`Gerado em ${new Date().toLocaleString('pt-BR')} - Pagina ${data.pageNumber}`, 14, pageHeight - 8);
                 }
             });
+
+            await adicionarAnexosNaoQualidadePDF(doc, report);
 
             const safeName = terceiro.replace(/[^a-zA-Z0-9_-]+/g, '_');
             doc.save(`Pontualidade_${safeName}_${monthLabel}_${selectedYear}.pdf`);
