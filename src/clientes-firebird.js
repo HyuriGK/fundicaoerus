@@ -26,11 +26,98 @@ function onlyDigits(value) {
 }
 
 function hasValidDigisacToken(req) {
-    const expected = process.env.DIGISAC_API_TOKEN;
+    const expected = process.env.DIGISAC_WEBHOOK_TOKEN;
     if (!expected) return true;
     const bearer = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
     const headerToken = String(req.headers['x-digisac-token'] || '').trim();
     return bearer === expected || headerToken === expected;
+}
+
+function getDigisacConfig() {
+    return {
+        baseUrl: String(process.env.DIGISAC_API_BASE_URL || 'https://fundicaoerus.digisac.co/api/v1').replace(/\/+$/, ''),
+        token: process.env.DIGISAC_API_TOKEN
+    };
+}
+
+async function fetchDigisacJson(path) {
+    const { baseUrl, token } = getDigisacConfig();
+    if (!token || typeof fetch !== 'function') return null;
+
+    const response = await fetch(`${baseUrl}${path}`, {
+        headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: 'application/json'
+        }
+    });
+
+    if (!response.ok) return null;
+    return response.json();
+}
+
+function findFirstObjectWithCnpjField(value) {
+    if (!value || typeof value !== 'object') return null;
+
+    if (Array.isArray(value)) {
+        for (const item of value) {
+            const found = findFirstObjectWithCnpjField(item);
+            if (found) return found;
+        }
+        return null;
+    }
+
+    const directKeys = ['cnpj', 'CNPJ', 'value', 'valor'];
+    const name = String(value.name || value.nome || value.key || value.chave || value.label || '').toLowerCase();
+    if (name === 'cnpj') {
+        for (const key of directKeys) {
+            const digits = onlyDigits(value[key]);
+            if (digits.length >= 11) return digits;
+        }
+    }
+
+    for (const [key, child] of Object.entries(value)) {
+        if (String(key).toLowerCase() === 'cnpj') {
+            const digits = onlyDigits(child);
+            if (digits.length >= 11) return digits;
+        }
+        const found = findFirstObjectWithCnpjField(child);
+        if (found) return found;
+    }
+
+    return null;
+}
+
+function normalizeDigisacContacts(payload) {
+    if (!payload) return [];
+    if (Array.isArray(payload)) return payload;
+    if (Array.isArray(payload.data)) return payload.data;
+    if (Array.isArray(payload.items)) return payload.items;
+    if (Array.isArray(payload.contacts)) return payload.contacts;
+    return [payload];
+}
+
+async function getCnpjFromDigisacContact(numeroContato) {
+    const numero = onlyDigits(numeroContato);
+    if (!numero) return '';
+
+    const encoded = encodeURIComponent(numero);
+    const candidates = [
+        `/contacts?search=${encoded}`,
+        `/contacts?number=${encoded}`,
+        `/contacts?phone=${encoded}`,
+        `/contacts?where=${encodeURIComponent(JSON.stringify({ number: numero }))}`
+    ];
+
+    for (const path of candidates) {
+        const payload = await fetchDigisacJson(path);
+        const contacts = normalizeDigisacContacts(payload);
+        for (const contact of contacts) {
+            const cnpj = findFirstObjectWithCnpjField(contact);
+            if (cnpj) return cnpj;
+        }
+    }
+
+    return '';
 }
 
 function buildDigisacMessage(row) {
@@ -144,7 +231,10 @@ router.all('/digisac/consultor', async (req, res) => {
         }
 
         await ensureResponsaveisTable();
-        const documento = onlyDigits(req.body?.documento || req.body?.cnpjCpf || req.body?.cnpj || req.query.documento || req.query.cnpjCpf || req.query.cnpj);
+        let documento = onlyDigits(req.body?.documento || req.body?.cnpjCpf || req.body?.cnpj || req.query.documento || req.query.cnpjCpf || req.query.cnpj);
+        if (!documento) {
+            documento = await getCnpjFromDigisacContact(req.body?.numeroContato || req.body?.numero_contato || req.query.numeroContato || req.query.numero_contato);
+        }
         if (!documento) {
             return res.status(400).json({ success: false, found: false, error: 'Informe o CNPJ/CPF.' });
         }
