@@ -2,8 +2,28 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../lib/db');
 
+const RESPONSAVEIS_COMERCIAIS = new Set([
+    'GERUZA MENDES',
+    'GUILHERME FENALI',
+    'ELISANGELA',
+    'MARIA EDUARDA'
+]);
+
+async function ensureResponsaveisTable() {
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS clientes_responsavel_comercial (
+            empresa INTEGER NOT NULL,
+            codigo INTEGER NOT NULL,
+            responsavel_comercial TEXT,
+            updated_at TIMESTAMP DEFAULT NOW(),
+            PRIMARY KEY (empresa, codigo)
+        )
+    `);
+}
+
 router.get('/list/all', async (req, res) => {
     try {
+        await ensureResponsaveisTable();
         await pool.query(`
             CREATE TABLE IF NOT EXISTS clientes_firebird_sync (
                 empresa INTEGER NOT NULL,
@@ -42,12 +62,16 @@ router.get('/list/all', async (req, res) => {
 
         const result = await pool.query(`
         SELECT
-            empresa, codigo, razao_social, fantasia, ativo, bloqueado,
-            cnpj_cpf, ie_rg, contato, telefone1, telefone2, email,
-            cidade_codigo, cidade_nome, cidade_uf, cidade_latitude, cidade_longitude, cep, logradouro, numero, bairro,
-            data_cadastro, data_inativacao, motivo_bloqueio, observacao, synced_at
-        FROM clientes_firebird_sync
-        ORDER BY razao_social NULLS LAST, codigo
+            c.empresa, c.codigo, c.razao_social, c.fantasia, c.ativo, c.bloqueado,
+            c.cnpj_cpf, c.ie_rg, c.contato, c.telefone1, c.telefone2, c.email,
+            c.cidade_codigo, c.cidade_nome, c.cidade_uf, c.cidade_latitude, c.cidade_longitude, c.cep, c.logradouro, c.numero, c.bairro,
+            c.data_cadastro, c.data_inativacao, c.motivo_bloqueio, c.observacao, c.synced_at,
+            rc.responsavel_comercial
+        FROM clientes_firebird_sync c
+        LEFT JOIN clientes_responsavel_comercial rc
+            ON rc.empresa = c.empresa
+            AND rc.codigo = c.codigo
+        ORDER BY c.razao_social NULLS LAST, c.codigo
         `);
 
         const data = result.rows.map(row => ({
@@ -76,6 +100,7 @@ router.get('/list/all', async (req, res) => {
             dataInativacao: row.data_inativacao,
             motivoBloqueio: row.motivo_bloqueio,
             observacao: row.observacao,
+            responsavelComercial: row.responsavel_comercial,
             syncedAt: row.synced_at
         }));
 
@@ -86,6 +111,33 @@ router.get('/list/all', async (req, res) => {
             error: 'Erro ao consultar clientes sincronizados no Postgres',
             details: err.message
         });
+    }
+});
+
+router.post('/responsavel-comercial', async (req, res) => {
+    try {
+        await ensureResponsaveisTable();
+        const empresa = Number(req.body.empresa);
+        const codigo = Number(req.body.codigo);
+        const responsavel = String(req.body.responsavelComercial || '').trim().toUpperCase();
+
+        if (!Number.isInteger(empresa) || !Number.isInteger(codigo)) {
+            return res.status(400).json({ success: false, error: 'Cliente inválido.' });
+        }
+        if (responsavel && !RESPONSAVEIS_COMERCIAIS.has(responsavel)) {
+            return res.status(400).json({ success: false, error: 'Responsável comercial inválido.' });
+        }
+
+        await pool.query(`
+            INSERT INTO clientes_responsavel_comercial (empresa, codigo, responsavel_comercial, updated_at)
+            VALUES ($1, $2, NULLIF($3, ''), NOW())
+            ON CONFLICT (empresa, codigo)
+            DO UPDATE SET responsavel_comercial = EXCLUDED.responsavel_comercial, updated_at = NOW()
+        `, [empresa, codigo, responsavel]);
+
+        res.json({ success: true, responsavelComercial: responsavel || null });
+    } catch (err) {
+        res.status(500).json({ success: false, error: 'Erro ao salvar responsável comercial', details: err.message });
     }
 });
 

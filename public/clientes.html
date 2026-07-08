@@ -304,7 +304,7 @@
             background:var(--bg-card); border:1px solid var(--border-subtle);
             border-radius:var(--radius-md); width:100%; position:relative;
         }
-        #clientsRecordsModal table { width:100%; min-width:1500px; border-collapse:collapse; font-family:var(--font-mono); font-size:0.75rem; }
+        #clientsRecordsModal table { width:100%; min-width:1660px; border-collapse:collapse; font-family:var(--font-mono); font-size:0.75rem; }
         #clientsRecordsModal th {
             background:#18181b;
             color:var(--text-muted); padding:10px 12px;
@@ -326,6 +326,15 @@
             font-family:var(--font-main); outline:none;
         }
         .client-filter-input:focus { border-color:var(--color-primary); }
+        .commercial-owner-select {
+            width:100%; min-width:150px; height:28px;
+            background:rgba(255,255,255,0.04); border:1px solid var(--border-subtle);
+            color:#f4f4f5; border-radius:5px; padding:0 8px;
+            font-family:var(--font-mono); font-size:0.68rem; font-weight:700;
+            text-transform:uppercase; cursor:pointer;
+        }
+        .commercial-owner-select:focus { border-color:var(--color-primary); }
+        .commercial-owner-select option { background:#18181b; color:#f4f4f5; }
         .client-status-badge {
             display:inline-flex; align-items:center; justify-content:center;
             min-width:70px; padding:3px 7px; border-radius:4px;
@@ -432,6 +441,7 @@
                         <th>Razão Social</th>
                         <th>Fantasia</th>
                         <th style="width:150px;">CNPJ/CPF</th>
+                        <th style="width:170px;">Responsável Comercial</th>
                         <th style="width:150px;">Contato</th>
                         <th style="width:130px;">Telefone</th>
                         <th style="width:220px;">E-mail</th>
@@ -451,6 +461,7 @@
                         <th><input class="client-filter-input" data-col="8" placeholder="..."></th>
                         <th><input class="client-filter-input" data-col="9" placeholder="..."></th>
                         <th><input class="client-filter-input" data-col="10" placeholder="..."></th>
+                        <th><input class="client-filter-input" data-col="11" placeholder="..."></th>
                     </tr>
                 </thead>
                 <tbody id="clientsRecordsBody"></tbody>
@@ -610,6 +621,7 @@ let clientsHeatLayer = null;
 let clientsCityLayer = null;
 
 const MONTHS = ['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'];
+const COMMERCIAL_OWNER_OPTIONS = ['GERUZA MENDES', 'GUILHERME FENALI', 'ELISANGELA', 'MARIA EDUARDA'];
 
 // ─── SERVICE CLIENT LOGIC (igual faturamentos.html) ──────────────────────────
 const _serviceClients = ['IMEPEL INDUSTRIA MECANICA LTDA','STEELROOL INDUSTRIA METALURGICA','SPILROD FUNDICAO DE FERRO E ACO LTDA'];
@@ -1474,7 +1486,7 @@ async function openClientsRecordsModal() {
 
     if (!clientRecordsLoaded) {
         count.textContent = 'Carregando clientes sincronizados...';
-        tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--text-muted);padding:28px;">Carregando clientes...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:var(--text-muted);padding:28px;">Carregando clientes...</td></tr>';
         try {
             const res = await fetch('/api/clientes-firebird/list/all');
             const json = await res.json();
@@ -1482,7 +1494,7 @@ async function openClientsRecordsModal() {
             clientRecords = json.data || [];
             clientRecordsLoaded = true;
         } catch (e) {
-            tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;color:#ef4444;padding:28px;">${escapeHtml(e.message)}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="12" style="text-align:center;color:#ef4444;padding:28px;">${escapeHtml(e.message)}</td></tr>`;
             count.textContent = 'Erro ao carregar clientes';
             return;
         }
@@ -1536,14 +1548,15 @@ function renderClientsRecords() {
             ${clientCell(values[2], { style:'font-weight:700;color:#fff;max-width:340px;overflow:hidden;text-overflow:ellipsis;' })}
             ${clientCell(values[3])}
             ${clientCell(values[4])}
-            ${clientCell(values[5])}
+            <td onclick="event.stopPropagation()">${renderCommercialOwnerSelect(c)}</td>
             ${clientCell(values[6])}
-            ${clientCell(values[7], { style:'max-width:260px;overflow:hidden;text-overflow:ellipsis;' })}
-            ${clientCell(values[8])}
+            ${clientCell(values[7])}
+            ${clientCell(values[8], { style:'max-width:260px;overflow:hidden;text-overflow:ellipsis;' })}
             ${clientCell(values[9])}
-            ${clientCell(values[10], { style:'max-width:320px;overflow:hidden;text-overflow:ellipsis;' })}
+            ${clientCell(values[10])}
+            ${clientCell(values[11], { style:'max-width:320px;overflow:hidden;text-overflow:ellipsis;' })}
         </tr>`;
-    }).join('') || '<tr><td colspan="11" style="text-align:center;color:var(--text-muted);padding:28px;">Nenhum cliente encontrado.</td></tr>';
+    }).join('') || '<tr><td colspan="12" style="text-align:center;color:var(--text-muted);padding:28px;">Nenhum cliente encontrado.</td></tr>';
 }
 
 function toggleClientsCadastroSort() {
@@ -1564,6 +1577,7 @@ function getClientRecordValues(c) {
         c.razaoSocial || '-',
         c.fantasia || '-',
         c.cnpjCpf || '-',
+        c.responsavelComercial || '-',
         c.contato || '-',
         c.telefone1 || c.telefone2 || '-',
         c.email || '-',
@@ -1571,6 +1585,38 @@ function getClientRecordValues(c) {
         fmtDateShort(c.dataCadastro),
         address || '-'
     ];
+}
+
+function renderCommercialOwnerSelect(c) {
+    const current = String(c.responsavelComercial || '').trim().toUpperCase();
+    const options = ['<option value="">...</option>'].concat(
+        COMMERCIAL_OWNER_OPTIONS.map(name => `<option value="${name}" ${current === name ? 'selected' : ''}>${name}</option>`)
+    ).join('');
+    return `<select class="commercial-owner-select" data-previous="${escapeHtml(current)}" onchange="saveCommercialOwner(${Number(c.empresa)},${Number(c.codigo)},this)">${options}</select>`;
+}
+
+async function saveCommercialOwner(empresa, codigo, select) {
+    const responsavelComercial = select.value;
+    const previous = select.getAttribute('data-previous') || '';
+    select.disabled = true;
+    try {
+        const res = await fetch('/api/clientes-firebird/responsavel-comercial', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ empresa, codigo, responsavelComercial })
+        });
+        const json = await res.json();
+        if (!res.ok || !json.success) throw new Error(json.error || 'Erro ao salvar responsável comercial');
+        const client = clientRecords.find(c => Number(c.empresa) === empresa && Number(c.codigo) === codigo);
+        if (client) client.responsavelComercial = json.responsavelComercial || '';
+        select.setAttribute('data-previous', responsavelComercial);
+        toast('Salvo', 'Responsável comercial atualizado.', 'success');
+    } catch (err) {
+        select.value = previous;
+        toast('Erro', err.message || 'Falha ao salvar responsável comercial.', 'danger');
+    } finally {
+        select.disabled = false;
+    }
 }
 
 function formatClientCity(c) {
