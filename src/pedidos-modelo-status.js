@@ -8,6 +8,7 @@ const VALID_STATUSES = new Set([
     'MODELO SENDO AJUSTADO NA MODELARIA',
     'MODELO PRECISA AJUSTAR NA MODELARIA'
 ]);
+const EDIT_ROLES = new Set(['ppcp', 'desenvolvedor', 'diretor']);
 
 let tableReady = false;
 async function ensureTable() {
@@ -26,8 +27,10 @@ async function ensureTable() {
 router.post('/save', async (req, res) => {
     const { sync_key, modelo_status } = req.body;
     const status = String(modelo_status || '').trim().toUpperCase();
+    const role = String((req.user && req.user.role) || '').toLowerCase();
 
     if (!sync_key) return res.status(400).json({ error: 'Sync Key é obrigatório' });
+    if (!EDIT_ROLES.has(role)) return res.status(403).json({ error: 'Sem permissão para alterar status do modelo' });
     if (status && !VALID_STATUSES.has(status)) return res.status(400).json({ error: 'Status inválido' });
 
     try {
