@@ -21,6 +21,29 @@ async function ensureResponsaveisTable() {
     `);
 }
 
+function onlyDigits(value) {
+    return String(value || '').replace(/\D/g, '');
+}
+
+function hasValidDigisacToken(req) {
+    const expected = process.env.DIGISAC_API_TOKEN;
+    if (!expected) return true;
+    const bearer = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
+    const headerToken = String(req.headers['x-digisac-token'] || '').trim();
+    return bearer === expected || headerToken === expected;
+}
+
+function buildDigisacMessage(row) {
+    if (!row) {
+        return 'Não localizamos seu cadastro com o CNPJ/CPF informado. Por favor, confira o número digitado ou aguarde nosso time comercial para continuar o atendimento.';
+    }
+    const nomeCliente = row.razao_social || row.fantasia || 'cliente';
+    if (!row.responsavel_comercial) {
+        return `Identificamos seu cadastro: ${nomeCliente}. Ainda não há responsável comercial definido no sistema. Nossa equipe comercial dará continuidade ao atendimento.`;
+    }
+    return `Identificamos seu cadastro: ${nomeCliente}. Você será redirecionado para o responsável comercial ${row.responsavel_comercial}.`;
+}
+
 router.get('/list/all', async (req, res) => {
     try {
         await ensureResponsaveisTable();
@@ -111,6 +134,65 @@ router.get('/list/all', async (req, res) => {
             error: 'Erro ao consultar clientes sincronizados no Postgres',
             details: err.message
         });
+    }
+});
+
+router.all('/digisac/consultor', async (req, res) => {
+    try {
+        if (!hasValidDigisacToken(req)) {
+            return res.status(401).json({ success: false, error: 'Token Digisac inválido.' });
+        }
+
+        await ensureResponsaveisTable();
+        const documento = onlyDigits(req.body?.documento || req.body?.cnpjCpf || req.body?.cnpj || req.query.documento || req.query.cnpjCpf || req.query.cnpj);
+        if (!documento) {
+            return res.status(400).json({ success: false, found: false, error: 'Informe o CNPJ/CPF.' });
+        }
+
+        const result = await pool.query(`
+            SELECT
+                c.empresa,
+                c.codigo,
+                c.razao_social,
+                c.fantasia,
+                c.cnpj_cpf,
+                c.contato,
+                c.telefone1,
+                c.telefone2,
+                c.email,
+                c.ativo,
+                c.bloqueado,
+                rc.responsavel_comercial
+            FROM clientes_firebird_sync c
+            LEFT JOIN clientes_responsavel_comercial rc
+                ON rc.empresa = c.empresa
+                AND rc.codigo = c.codigo
+            WHERE regexp_replace(COALESCE(c.cnpj_cpf, ''), '\\D', '', 'g') = $1
+            ORDER BY c.ativo DESC, c.bloqueado ASC, c.razao_social NULLS LAST
+            LIMIT 1
+        `, [documento]);
+
+        const row = result.rows[0] || null;
+        res.json({
+            success: true,
+            found: !!row,
+            message: buildDigisacMessage(row),
+            cliente: row ? {
+                empresa: row.empresa,
+                codigo: row.codigo,
+                razaoSocial: row.razao_social,
+                fantasia: row.fantasia,
+                cnpjCpf: row.cnpj_cpf,
+                contato: row.contato,
+                telefone: row.telefone1 || row.telefone2 || null,
+                email: row.email,
+                ativo: row.ativo,
+                bloqueado: row.bloqueado,
+                responsavelComercial: row.responsavel_comercial
+            } : null
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, found: false, error: 'Erro ao consultar cliente para Digisac', details: err.message });
     }
 });
 
