@@ -236,7 +236,12 @@ router.all('/digisac/consultor', async (req, res) => {
             documento = await getCnpjFromDigisacContact(req.body?.numeroContato || req.body?.numero_contato || req.query.numeroContato || req.query.numero_contato);
         }
         if (!documento) {
-            return res.status(400).json({ success: false, found: false, error: 'Informe o CNPJ/CPF.' });
+            return res.json({
+                success: true,
+                found: false,
+                message: 'Não consegui localizar o CNPJ/CPF salvo no contato. Por favor, aguarde nosso time comercial para continuar o atendimento.',
+                cliente: null
+            });
         }
 
         const result = await pool.query(`
