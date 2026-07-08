@@ -25,6 +25,39 @@ function onlyDigits(value) {
     return String(value || '').replace(/\D/g, '');
 }
 
+function findDocumentInPayload(value) {
+    if (value == null) return '';
+
+    if (typeof value === 'string' || typeof value === 'number') {
+        const digits = onlyDigits(value);
+        if (digits.length === 11 || digits.length === 14) return digits;
+        return '';
+    }
+
+    if (Array.isArray(value)) {
+        for (const item of value) {
+            const found = findDocumentInPayload(item);
+            if (found) return found;
+        }
+        return '';
+    }
+
+    if (typeof value === 'object') {
+        const preferredKeys = ['documento', 'cnpj', 'cpf', 'cnpjCpf', 'answer', 'resposta', 'text', 'texto', 'message', 'mensagem', 'body', 'content', 'valor', 'value'];
+        for (const key of preferredKeys) {
+            const found = findDocumentInPayload(value[key]);
+            if (found) return found;
+        }
+
+        for (const child of Object.values(value)) {
+            const found = findDocumentInPayload(child);
+            if (found) return found;
+        }
+    }
+
+    return '';
+}
+
 function hasValidDigisacToken(req) {
     const expected = process.env.DIGISAC_WEBHOOK_TOKEN;
     if (!expected) return true;
@@ -233,6 +266,9 @@ router.all('/digisac/consultor', async (req, res) => {
         await ensureResponsaveisTable();
         let documento = onlyDigits(req.body?.documento || req.body?.cnpjCpf || req.body?.cnpj || req.query.documento || req.query.cnpjCpf || req.query.cnpj);
         if (!documento) {
+            documento = findDocumentInPayload(req.body);
+        }
+        if (!documento) {
             documento = await getCnpjFromDigisacContact(req.body?.numeroContato || req.body?.numero_contato || req.query.numeroContato || req.query.numero_contato);
         }
         if (!documento) {
@@ -272,6 +308,8 @@ router.all('/digisac/consultor', async (req, res) => {
             success: true,
             found: !!row,
             message: buildDigisacMessage(row),
+            responsavel_comercial: row?.responsavel_comercial || null,
+            responsavelComercial: row?.responsavel_comercial || null,
             cliente: row ? {
                 empresa: row.empresa,
                 codigo: row.codigo,
