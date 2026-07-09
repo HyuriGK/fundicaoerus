@@ -332,14 +332,15 @@ async function transferDigisacTicketTo(contactId, departmentId, userId, comments
     };
 }
 
-async function transferDigisacTicket(contactId, responsavelComercial, clienteNome) {
+async function transferDigisacTicket(contactId, responsavelComercial, clienteNome, clienteCnpj) {
     const responsavel = String(responsavelComercial || '').trim().toUpperCase();
     const nome = String(clienteNome || '').trim() || 'cliente';
+    const cnpj = String(clienteCnpj || '').trim() || 'não informado';
     return transferDigisacTicketTo(
         contactId,
         DIGISAC_COMERCIAL_DEPARTMENT_ID,
         DIGISAC_USER_IDS[responsavel] || null,
-        `Transferido automaticamente para o responsável comercial de ${nome}: ${responsavel || 'NAO DEFINIDO'}`
+        `Cliente: ${nome} | CNPJ: ${cnpj} | Destino: Comercial | Responsável: ${responsavel || 'não definido'}`
     );
 }
 
@@ -613,11 +614,12 @@ router.all('/digisac/consultor', async (req, res) => {
             if (opcao === '2') {
                 const notification = await sendDigisacMessage(contactId, '✅ Cadastro identificado!\nSeu atendimento será redirecionado para o setor financeiro.');
                 const clienteNome = session?.cliente?.razao_social || session?.cliente?.fantasia || 'cliente';
+                const clienteCnpj = session?.cliente?.cnpjCpf || 'não informado';
                 const transfer = await transferDigisacTicketTo(
                     contactId,
                     DIGISAC_FINANCEIRO_DEPARTMENT_ID,
                     DIGISAC_FINANCEIRO_USER_ID,
-                    `Transferido automaticamente para financeiro: 2 via de boleto para ${clienteNome}`
+                    `Cliente: ${clienteNome} | CNPJ: ${clienteCnpj} | Destino: Financeiro | Motivo: 2ª via de boleto`
                 );
 
                 return res.json({
@@ -635,7 +637,8 @@ router.all('/digisac/consultor', async (req, res) => {
             if (opcao === '1' || opcao === '3') {
                 const notification = await sendDigisacMessage(contactId, '✅ Cadastro identificado!\nSeu atendimento será direcionado ao responsável comercial.\nEnquanto isso, conte-nos qual assunto você deseja tratar.');
                 const clienteNome = session?.cliente?.razao_social || session?.cliente?.fantasia || 'cliente';
-                const transfer = await transferDigisacTicket(contactId, session.responsavel_comercial, clienteNome);
+                const clienteCnpj = session?.cliente?.cnpjCpf || 'não informado';
+                const transfer = await transferDigisacTicket(contactId, session.responsavel_comercial, clienteNome, clienteCnpj);
 
                 return res.json({
                     success: true,
