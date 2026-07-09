@@ -685,7 +685,7 @@ router.all('/digisac/consultor', async (req, res) => {
         if (!documento) {
             if (contactId) {
                 await clearDigisacClienteSession(contactId);
-                await sendDigisacMessage(contactId, 'Não encontramos CNPJ/CPF válido para este contato. Seu atendimento será transferido para o departamento Comercial.');
+                await sendDigisacMessage(contactId, '❌ Não encontramos CNPJ/CPF válido para este contato. Seu atendimento será transferido para o departamento Comercial.');
                 await transferDigisacTicketTo(
                     contactId,
                     DIGISAC_COMERCIAL_DEPARTMENT_ID,
