@@ -732,6 +732,18 @@ router.all('/digisac/consultor', async (req, res) => {
         const row = result.rows[0] || null;
         if (row && contactId) {
             await saveDigisacClienteSession(contactId, documento, row);
+            if (row.responsavel_comercial) {
+                await sendDigisacMessage(contactId, `✅ Cadastro identificado: ${row.razao_social || row.fantasia || 'cliente'}. Seu atendimento será direcionado para o responsável comercial ${row.responsavel_comercial}.`);
+                await transferDigisacTicket(contactId, row.responsavel_comercial);
+            } else {
+                await sendDigisacMessage(contactId, `✅ Cadastro identificado: ${row.razao_social || row.fantasia || 'cliente'}. Ainda não há responsável comercial definido. Seu atendimento será direcionado ao departamento Comercial.`);
+                await transferDigisacTicketTo(
+                    contactId,
+                    DIGISAC_COMERCIAL_DEPARTMENT_ID,
+                    null,
+                    'Cadastro encontrado sem responsável comercial. Transferido automaticamente para o departamento Comercial.'
+                );
+            }
         } else if (contactId) {
             await clearDigisacClienteSession(contactId);
         }
