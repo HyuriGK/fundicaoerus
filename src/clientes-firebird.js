@@ -444,7 +444,7 @@ async function findClienteByDocumento(documento) {
 
 function buildDigisacMessage(row) {
     if (!row) {
-        return 'Não localizamos seu cadastro com o CNPJ/CPF informado. Por favor, confira o número digitado ou aguarde nosso time comercial para continuar o atendimento.';
+        return '❌ Não encontramos cadastro para o CNPJ/CPF informado. Nossa equipe comercial já foi acionada e em breve dará continuidade ao atendimento.';
     }
     const nomeCliente = row.razao_social || row.fantasia || 'cliente';
     if (!row.responsavel_comercial) {
@@ -583,7 +583,7 @@ router.all('/digisac/consultor', async (req, res) => {
 
             if (!contactId || !session) {
                 const notification = contactId
-                    ? await sendDigisacMessage(contactId, 'Não localizamos seu cadastro com o CNPJ/CPF informado. Por favor, aguarde nosso time comercial para continuar o atendimento.')
+                    ? await sendDigisacMessage(contactId, 'Não encontramos cadastro para o CNPJ/CPF informado. Nossa equipe comercial já foi acionada e em breve dará continuidade ao atendimento.')
                     : null;
                 return res.json({ success: true, found: false, encontrado: 'nao', message: 'Cadastro nao encontrado para este contato.', notification });
             }
