@@ -553,15 +553,15 @@ router.all('/digisac/consultor', async (req, res) => {
         if (commandNormalized === 'opcao_cliente') {
             const optionText = String(req.body?.opcao || req.body?.option || req.query.opcao || req.query.option || findTextInPayload(req.body) || '').trim();
             const opcao = onlyDigits(optionText).slice(0, 1);
-            let session = await getDigisacClienteSession(contactId);
-            let documentoOpcao = session?.documento || onlyDigits(req.body?.documento || req.body?.cnpjCpf || req.body?.cnpj || req.query.documento || req.query.cnpjCpf || req.query.cnpj);
+            let session = null;
+            let documentoOpcao = onlyDigits(req.body?.documento || req.body?.cnpjCpf || req.body?.cnpj || req.query.documento || req.query.cnpjCpf || req.query.cnpj);
             if (!documentoOpcao) {
                 documentoOpcao = findDocumentInPayload(req.body);
             }
             if (!documentoOpcao) {
                 documentoOpcao = await getCnpjFromDigisacContactId(contactId);
             }
-            if (!session && documentoOpcao) {
+            if (documentoOpcao) {
                 const rowOpcao = await findClienteByDocumento(documentoOpcao);
                 if (rowOpcao && contactId) {
                     await saveDigisacClienteSession(contactId, documentoOpcao, rowOpcao);
