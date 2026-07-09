@@ -398,6 +398,42 @@ async function getCnpjFromDigisacContact(numeroContato) {
     return '';
 }
 
+async function getCnpjFromDigisacContactId(contactId) {
+    if (!contactId) return '';
+
+    const payload = await fetchDigisacJson(`/contacts/${encodeURIComponent(contactId)}`);
+    return findFirstObjectWithCnpjField(payload) || '';
+}
+
+async function findClienteByDocumento(documento) {
+    if (!documento) return null;
+
+    const result = await pool.query(`
+        SELECT
+            c.empresa,
+            c.codigo,
+            c.razao_social,
+            c.fantasia,
+            c.cnpj_cpf,
+            c.contato,
+            c.telefone1,
+            c.telefone2,
+            c.email,
+            c.ativo,
+            c.bloqueado,
+            rc.responsavel_comercial
+        FROM clientes_firebird_sync c
+        LEFT JOIN clientes_responsavel_comercial rc
+            ON rc.empresa = c.empresa
+            AND rc.codigo = c.codigo
+        WHERE regexp_replace(COALESCE(c.cnpj_cpf, ''), '\\D', '', 'g') = $1
+        ORDER BY c.ativo DESC, c.bloqueado ASC, c.razao_social NULLS LAST
+        LIMIT 1
+    `, [documento]);
+
+    return result.rows[0] || null;
+}
+
 function buildDigisacMessage(row) {
     if (!row) {
         return 'Não localizamos seu cadastro com o CNPJ/CPF informado. Por favor, confira o número digitado ou aguarde nosso time comercial para continuar o atendimento.';
@@ -517,14 +553,28 @@ router.all('/digisac/consultor', async (req, res) => {
         if (commandNormalized === 'opcao_cliente') {
             const optionText = String(req.body?.opcao || req.body?.option || req.query.opcao || req.query.option || findTextInPayload(req.body) || '').trim();
             const opcao = onlyDigits(optionText).slice(0, 1);
-            const session = await getDigisacClienteSession(contactId);
-            await saveDigisacDebug(req, session?.documento || opcao || null);
+            let session = await getDigisacClienteSession(contactId);
+            let documentoOpcao = session?.documento || onlyDigits(req.body?.documento || req.body?.cnpjCpf || req.body?.cnpj || req.query.documento || req.query.cnpjCpf || req.query.cnpj);
+            if (!documentoOpcao) {
+                documentoOpcao = findDocumentInPayload(req.body);
+            }
+            if (!documentoOpcao) {
+                documentoOpcao = await getCnpjFromDigisacContactId(contactId);
+            }
+            if (!session && documentoOpcao) {
+                const rowOpcao = await findClienteByDocumento(documentoOpcao);
+                if (rowOpcao && contactId) {
+                    await saveDigisacClienteSession(contactId, documentoOpcao, rowOpcao);
+                    session = await getDigisacClienteSession(contactId);
+                }
+            }
+            await saveDigisacDebug(req, documentoOpcao || opcao || null);
 
             if (!contactId || !session) {
                 const notification = contactId
-                    ? await sendDigisacMessage(contactId, 'Nao consegui recuperar a consulta do CNPJ. Por favor, informe o CNPJ novamente.')
+                    ? await sendDigisacMessage(contactId, 'Não localizamos seu cadastro com o CNPJ/CPF informado. Por favor, aguarde nosso time comercial para continuar o atendimento.')
                     : null;
-                return res.json({ success: true, found: false, message: 'Consulta do CNPJ nao encontrada para este contato.', notification });
+                return res.json({ success: true, found: false, message: 'Cadastro nao encontrado para este contato.', notification });
             }
 
             if (opcao === '1') {
