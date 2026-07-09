@@ -11,6 +11,7 @@ const RESPONSAVEIS_COMERCIAIS = new Set([
 
 const DIGISAC_COMERCIAL_DEPARTMENT_ID = process.env.DIGISAC_COMERCIAL_DEPARTMENT_ID || 'a0dd4917-91dd-4d33-9dcc-567c3f3ddff2';
 const DIGISAC_FINANCEIRO_DEPARTMENT_ID = process.env.DIGISAC_FINANCEIRO_DEPARTMENT_ID || '6edd21e5-f88a-4e87-94e1-61a3e97f2466';
+const DIGISAC_FINANCEIRO_USER_ID = process.env.DIGISAC_FINANCEIRO_USER_ID || 'c18bbc09-a6ad-49d8-a993-508b4f210166';
 
 const DIGISAC_USER_IDS = {
     'GERUZA MENDES': process.env.DIGISAC_USER_GERUZA_ID || '2f3518c3-7a5d-42c3-805d-7d33735e8303',
@@ -531,7 +532,7 @@ router.all('/digisac/consultor', async (req, res) => {
                 const transfer = await transferDigisacTicketTo(
                     contactId,
                     DIGISAC_FINANCEIRO_DEPARTMENT_ID,
-                    null,
+                    DIGISAC_FINANCEIRO_USER_ID,
                     'Transferido automaticamente para financeiro: 2 via de boleto'
                 );
 
