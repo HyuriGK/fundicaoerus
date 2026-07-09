@@ -729,7 +729,6 @@ router.all('/digisac/consultor', async (req, res) => {
         if (row && contactId) {
             await saveDigisacClienteSession(contactId, documento, row);
             await sendDigisacMessage(contactId, buildDigisacMessage(row));
-            await sendDigisacMessage(contactId, buildDigisacMessage(row));
         } else if (contactId) {
             await clearDigisacClienteSession(contactId);
         }
