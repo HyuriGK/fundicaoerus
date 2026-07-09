@@ -98,6 +98,24 @@ async function saveDigisacDebug(req, documento) {
     }
 }
 
+async function getRecentDigisacWebhookDocument() {
+    try {
+        await ensureDigisacDebugTable();
+        const result = await pool.query(`
+            SELECT documento
+            FROM digisac_webhook_debug
+            WHERE documento IS NOT NULL
+              AND created_at >= NOW() - INTERVAL '2 minutes'
+            ORDER BY id DESC
+            LIMIT 1
+        `);
+        return result.rows[0]?.documento || '';
+    } catch (err) {
+        console.warn('Erro ao consultar último documento Digisac:', err.message);
+        return '';
+    }
+}
+
 function getDigisacConfig() {
     return {
         baseUrl: String(process.env.DIGISAC_API_BASE_URL || 'https://fundicaoerus.digisac.co/api/v1').replace(/\/+$/, ''),
@@ -302,6 +320,9 @@ router.all('/digisac/consultor', async (req, res) => {
         }
         if (!documento) {
             documento = await getCnpjFromDigisacContact(req.body?.numeroContato || req.body?.numero_contato || req.query.numeroContato || req.query.numero_contato);
+        }
+        if (!documento) {
+            documento = await getRecentDigisacWebhookDocument();
         }
         await saveDigisacDebug(req, documento);
         if (!documento) {
