@@ -21,6 +21,20 @@ async function ensureResponsaveisTable() {
     `);
 }
 
+async function ensureDigisacDebugTable() {
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS digisac_webhook_debug (
+            id SERIAL PRIMARY KEY,
+            created_at TIMESTAMP DEFAULT NOW(),
+            method TEXT,
+            path TEXT,
+            query JSONB,
+            body JSONB,
+            documento TEXT
+        )
+    `);
+}
+
 function onlyDigits(value) {
     return String(value || '').replace(/\D/g, '');
 }
@@ -64,6 +78,24 @@ function hasValidDigisacToken(req) {
     const bearer = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
     const headerToken = String(req.headers['x-digisac-token'] || '').trim();
     return bearer === expected || headerToken === expected;
+}
+
+async function saveDigisacDebug(req, documento) {
+    try {
+        await ensureDigisacDebugTable();
+        await pool.query(`
+            INSERT INTO digisac_webhook_debug (method, path, query, body, documento)
+            VALUES ($1, $2, $3::jsonb, $4::jsonb, $5)
+        `, [
+            req.method,
+            req.originalUrl || req.url,
+            JSON.stringify(req.query || {}),
+            JSON.stringify(req.body || {}),
+            documento || null
+        ]);
+    } catch (err) {
+        console.warn('Erro ao salvar debug Digisac:', err.message);
+    }
 }
 
 function getDigisacConfig() {
@@ -271,6 +303,7 @@ router.all('/digisac/consultor', async (req, res) => {
         if (!documento) {
             documento = await getCnpjFromDigisacContact(req.body?.numeroContato || req.body?.numero_contato || req.query.numeroContato || req.query.numero_contato);
         }
+        await saveDigisacDebug(req, documento);
         if (!documento) {
             return res.json({
                 success: true,
@@ -326,6 +359,21 @@ router.all('/digisac/consultor', async (req, res) => {
         });
     } catch (err) {
         res.status(500).json({ success: false, found: false, error: 'Erro ao consultar cliente para Digisac', details: err.message });
+    }
+});
+
+router.get('/digisac/debug-last', async (req, res) => {
+    try {
+        await ensureDigisacDebugTable();
+        const result = await pool.query(`
+            SELECT id, created_at, method, path, query, body, documento
+            FROM digisac_webhook_debug
+            ORDER BY id DESC
+            LIMIT 5
+        `);
+        res.json({ success: true, data: result.rows });
+    } catch (err) {
+        res.status(500).json({ success: false, error: 'Erro ao consultar debug Digisac', details: err.message });
     }
 });
 
