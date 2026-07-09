@@ -10,6 +10,7 @@ const RESPONSAVEIS_COMERCIAIS = new Set([
 ]);
 
 const DIGISAC_COMERCIAL_DEPARTMENT_ID = process.env.DIGISAC_COMERCIAL_DEPARTMENT_ID || 'a0dd4917-91dd-4d33-9dcc-567c3f3ddff2';
+const DIGISAC_FINANCEIRO_DEPARTMENT_ID = process.env.DIGISAC_FINANCEIRO_DEPARTMENT_ID || '6edd21e5-f88a-4e87-94e1-61a3e97f2466';
 
 const DIGISAC_USER_IDS = {
     'GERUZA MENDES': process.env.DIGISAC_USER_GERUZA_ID || '2f3518c3-7a5d-42c3-805d-7d33735e8303',
@@ -43,8 +44,77 @@ async function ensureDigisacDebugTable() {
     `);
 }
 
+async function ensureDigisacClienteSessionsTable() {
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS digisac_cliente_sessions (
+            contact_id TEXT PRIMARY KEY,
+            documento TEXT,
+            responsavel_comercial TEXT,
+            cliente JSONB,
+            updated_at TIMESTAMP DEFAULT NOW()
+        )
+    `);
+}
+
 function onlyDigits(value) {
     return String(value || '').replace(/\D/g, '');
+}
+
+function findCommandInPayload(value) {
+    if (!value || typeof value !== 'object') return '';
+
+    if (Array.isArray(value)) {
+        for (const item of value) {
+            const found = findCommandInPayload(item);
+            if (found) return found;
+        }
+        return '';
+    }
+
+    const directKeys = ['command', 'comando', 'identifier', 'identificador', 'commandId', 'command_id'];
+    for (const key of directKeys) {
+        if (typeof value[key] === 'string' && value[key].trim()) {
+            return value[key].trim();
+        }
+    }
+
+    for (const child of Object.values(value)) {
+        const found = findCommandInPayload(child);
+        if (found) return found;
+    }
+
+    return '';
+}
+
+function findTextInPayload(value) {
+    if (value == null) return '';
+
+    if (typeof value === 'string' || typeof value === 'number') {
+        return String(value).trim();
+    }
+
+    if (Array.isArray(value)) {
+        for (const item of value) {
+            const found = findTextInPayload(item);
+            if (found) return found;
+        }
+        return '';
+    }
+
+    if (typeof value === 'object') {
+        const preferredKeys = ['text', 'texto', 'answer', 'resposta', 'message', 'mensagem', 'body', 'content', 'valor', 'value', 'data'];
+        for (const key of preferredKeys) {
+            const found = findTextInPayload(value[key]);
+            if (found) return found;
+        }
+
+        for (const child of Object.values(value)) {
+            const found = findTextInPayload(child);
+            if (found) return found;
+        }
+    }
+
+    return '';
 }
 
 function findDocumentInPayload(value) {
@@ -124,6 +194,44 @@ async function getRecentDigisacWebhookDocument() {
     }
 }
 
+async function saveDigisacClienteSession(contactId, documento, row) {
+    if (!contactId || !row) return null;
+
+    await ensureDigisacClienteSessionsTable();
+    await pool.query(`
+        INSERT INTO digisac_cliente_sessions (contact_id, documento, responsavel_comercial, cliente, updated_at)
+        VALUES ($1, $2, $3, $4::jsonb, NOW())
+        ON CONFLICT (contact_id)
+        DO UPDATE SET
+            documento = EXCLUDED.documento,
+            responsavel_comercial = EXCLUDED.responsavel_comercial,
+            cliente = EXCLUDED.cliente,
+            updated_at = NOW()
+    `, [
+        contactId,
+        documento,
+        row.responsavel_comercial || null,
+        JSON.stringify(row)
+    ]);
+
+    return { success: true };
+}
+
+async function getDigisacClienteSession(contactId) {
+    if (!contactId) return null;
+
+    await ensureDigisacClienteSessionsTable();
+    const result = await pool.query(`
+        SELECT contact_id, documento, responsavel_comercial, cliente, updated_at
+        FROM digisac_cliente_sessions
+        WHERE contact_id = $1
+          AND updated_at >= NOW() - INTERVAL '2 hours'
+        LIMIT 1
+    `, [contactId]);
+
+    return result.rows[0] || null;
+}
+
 function getDigisacConfig() {
     return {
         baseUrl: String(process.env.DIGISAC_API_BASE_URL || 'https://fundicaoerus.digisac.co/api/v1').replace(/\/+$/, ''),
@@ -175,17 +283,15 @@ function findContactIdInPayload(value) {
     return '';
 }
 
-async function transferDigisacTicket(contactId, responsavelComercial) {
-    const responsavel = String(responsavelComercial || '').trim().toUpperCase();
-    if (!contactId || !DIGISAC_COMERCIAL_DEPARTMENT_ID) return null;
-
+async function transferDigisacTicketTo(contactId, departmentId, userId, comments) {
+    if (!contactId || !departmentId) return null;
     const body = {
-        departmentId: DIGISAC_COMERCIAL_DEPARTMENT_ID,
-        comments: `Transferido automaticamente conforme responsavel comercial: ${responsavel || 'NAO DEFINIDO'}`
+        departmentId,
+        comments
     };
 
-    if (DIGISAC_USER_IDS[responsavel]) {
-        body.userId = DIGISAC_USER_IDS[responsavel];
+    if (userId) {
+        body.userId = userId;
     }
 
     const result = await requestDigisacJson(`/contacts/${encodeURIComponent(contactId)}/ticket/transfer`, {
@@ -198,6 +304,16 @@ async function transferDigisacTicket(contactId, responsavelComercial) {
         departmentId: body.departmentId,
         userId: body.userId || null
     };
+}
+
+async function transferDigisacTicket(contactId, responsavelComercial) {
+    const responsavel = String(responsavelComercial || '').trim().toUpperCase();
+    return transferDigisacTicketTo(
+        contactId,
+        DIGISAC_COMERCIAL_DEPARTMENT_ID,
+        DIGISAC_USER_IDS[responsavel] || null,
+        `Transferido automaticamente conforme responsavel comercial: ${responsavel || 'NAO DEFINIDO'}`
+    );
 }
 
 async function sendDigisacMessage(contactId, text) {
@@ -392,7 +508,63 @@ router.all('/digisac/consultor', async (req, res) => {
         }
 
         await ensureResponsaveisTable();
+        await ensureDigisacClienteSessionsTable();
         const contactId = req.body?.contactId || req.body?.contact_id || req.query.contactId || req.query.contact_id || findContactIdInPayload(req.body);
+        const command = String(req.body?.command || req.body?.comando || req.query.command || req.query.comando || findCommandInPayload(req.body) || 'consulta_cliente').trim();
+        const commandNormalized = command.toLowerCase();
+
+        if (commandNormalized === 'opcao_cliente') {
+            const optionText = String(req.body?.opcao || req.body?.option || req.query.opcao || req.query.option || findTextInPayload(req.body) || '').trim();
+            const opcao = onlyDigits(optionText).slice(0, 1);
+            const session = await getDigisacClienteSession(contactId);
+            await saveDigisacDebug(req, session?.documento || opcao || null);
+
+            if (!contactId || !session) {
+                const notification = contactId
+                    ? await sendDigisacMessage(contactId, 'Nao consegui recuperar a consulta do CNPJ. Por favor, informe o CNPJ novamente.')
+                    : null;
+                return res.json({ success: true, found: false, message: 'Consulta do CNPJ nao encontrada para este contato.', notification });
+            }
+
+            if (opcao === '1') {
+                const notification = await sendDigisacMessage(contactId, '✅ Cadastro identificado!\nSeu atendimento será redirecionado para o setor financeiro.');
+                const transfer = await transferDigisacTicketTo(
+                    contactId,
+                    DIGISAC_FINANCEIRO_DEPARTMENT_ID,
+                    null,
+                    'Transferido automaticamente para financeiro: 2 via de boleto'
+                );
+
+                return res.json({
+                    success: true,
+                    found: true,
+                    action: 'segunda_via_boleto',
+                    responsavel_comercial: session.responsavel_comercial,
+                    responsavelComercial: session.responsavel_comercial,
+                    notification,
+                    transfer
+                });
+            }
+
+            if (opcao === '2') {
+                const notification = await sendDigisacMessage(contactId, '✅ Cadastro identificado!\nSeu atendimento será redirecionado para o responsável comercial.');
+                const transfer = await transferDigisacTicket(contactId, session.responsavel_comercial);
+
+                return res.json({
+                    success: true,
+                    found: true,
+                    action: 'segunda_via_nota_fiscal',
+                    responsavel_comercial: session.responsavel_comercial,
+                    responsavelComercial: session.responsavel_comercial,
+                    notification,
+                    transfer
+                });
+            }
+
+            const notification = await sendDigisacMessage(contactId, 'Opcao invalida. Responda 1 para 2 via de boleto ou 2 para 2 via de nota fiscal.');
+            return res.json({ success: true, found: true, invalidOption: true, message: 'Opcao invalida.', notification });
+        }
+
         let documento = onlyDigits(req.body?.documento || req.body?.cnpjCpf || req.body?.cnpj || req.query.documento || req.query.cnpjCpf || req.query.cnpj);
         if (!documento) {
             documento = findDocumentInPayload(req.body);
@@ -441,11 +613,8 @@ router.all('/digisac/consultor', async (req, res) => {
         if (contactId) {
             consultingNotification = await sendDigisacMessage(contactId, '🔎 Estamos consultando seu cadastro...');
         }
-        let transfer = null;
-        let notification = null;
         if (row && contactId) {
-            notification = await sendDigisacMessage(contactId, '✅ Cadastro identificado!\nSeu atendimento será redirecionado para o responsável comercial.');
-            transfer = await transferDigisacTicket(contactId, row.responsavel_comercial);
+            await saveDigisacClienteSession(contactId, documento, row);
         }
 
         res.json({
@@ -455,8 +624,7 @@ router.all('/digisac/consultor', async (req, res) => {
             responsavel_comercial: row?.responsavel_comercial || null,
             responsavelComercial: row?.responsavel_comercial || null,
             consultingNotification,
-            notification,
-            transfer,
+            pendingSelection: !!row,
             cliente: row ? {
                 empresa: row.empresa,
                 codigo: row.codigo,
