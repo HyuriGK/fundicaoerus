@@ -151,6 +151,23 @@ function findDocumentInPayload(value) {
     return '';
 }
 
+function getRawDocumentoInput(req) {
+    return String(
+        req.body?.documento ||
+        req.body?.cnpjCpf ||
+        req.body?.cnpj ||
+        req.query.documento ||
+        req.query.cnpjCpf ||
+        req.query.cnpj ||
+        ''
+    ).trim();
+}
+
+function isDocumentoFormatValid(value) {
+    const digits = onlyDigits(value);
+    return digits.length === 11 || digits.length === 14;
+}
+
 function hasValidDigisacToken(req) {
     const expected = process.env.DIGISAC_WEBHOOK_TOKEN;
     if (!expected) return true;
@@ -637,7 +654,27 @@ router.all('/digisac/consultor', async (req, res) => {
             return res.json({ success: true, found: true, encontrado: 'sim', invalidOption: true, message: 'Opcao invalida.', notification });
         }
 
-        let documento = onlyDigits(req.body?.documento || req.body?.cnpjCpf || req.body?.cnpj || req.query.documento || req.query.cnpjCpf || req.query.cnpj);
+        const rawDocumentoInput = getRawDocumentoInput(req);
+        let documento = onlyDigits(rawDocumentoInput);
+        const documentProvided = String(rawDocumentoInput || '').trim().length > 0;
+        const documentoValido = isDocumentoFormatValid(rawDocumentoInput);
+
+        if (documentProvided && !documentoValido) {
+            await saveDigisacDebug(req, documento || null);
+            if (contactId) {
+                await clearDigisacClienteSession(contactId);
+                await sendDigisacMessage(contactId, 'Por favor, digite o CNPJ/CPF apenas com números, sem pontos, barras ou traços. Ex: 12345678000199');
+            }
+            return res.json({
+                success: true,
+                found: false,
+                encontrado: 'nao',
+                formatoInvalido: true,
+                message: 'Por favor, digite o CNPJ/CPF apenas com números, sem pontos, barras ou traços. Ex: 12345678000199',
+                cliente: null
+            });
+        }
+
         if (!documento) {
             documento = findDocumentInPayload(req.body);
         }
