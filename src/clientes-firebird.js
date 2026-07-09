@@ -609,7 +609,7 @@ router.all('/digisac/consultor', async (req, res) => {
                 return res.json({ success: true, found: false, encontrado: 'nao', message: 'Cadastro nao encontrado para este contato.', notification, transfer });
             }
 
-            if (opcao === '2') {
+                if (opcao === '2') {
                 const notification = await sendDigisacMessage(contactId, '✅ Cadastro identificado!\nSeu atendimento será redirecionado para o setor financeiro.');
                 const transfer = await transferDigisacTicketTo(
                     contactId,
@@ -631,7 +631,7 @@ router.all('/digisac/consultor', async (req, res) => {
             }
 
             if (opcao === '1' || opcao === '3') {
-                const notification = await sendDigisacMessage(contactId, '✅ Cadastro identificado!\nSeu atendimento será redirecionado para o responsável comercial.');
+                const notification = await sendDigisacMessage(contactId, `✅ Cadastro identificado!\nSeu atendimento será redirecionado para o responsável comercial ${session.responsavel_comercial || ''}.`);
                 const transfer = await transferDigisacTicket(contactId, session.responsavel_comercial);
 
                 return res.json({
@@ -728,6 +728,8 @@ router.all('/digisac/consultor', async (req, res) => {
         const row = result.rows[0] || null;
         if (row && contactId) {
             await saveDigisacClienteSession(contactId, documento, row);
+            await sendDigisacMessage(contactId, buildDigisacMessage(row));
+            await sendDigisacMessage(contactId, buildDigisacMessage(row));
         } else if (contactId) {
             await clearDigisacClienteSession(contactId);
         }
