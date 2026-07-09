@@ -511,7 +511,7 @@ router.all('/digisac/consultor', async (req, res) => {
         await ensureResponsaveisTable();
         await ensureDigisacClienteSessionsTable();
         const contactId = req.body?.contactId || req.body?.contact_id || req.query.contactId || req.query.contact_id || findContactIdInPayload(req.body);
-        const command = String(req.body?.command || req.body?.comando || req.query.command || req.query.comando || findCommandInPayload(req.body) || 'consulta_cliente').trim();
+        const command = String(req.body?.command || req.body?.comando || req.query.command || req.query.comando || findCommandInPayload(req.body) || '').trim();
         const commandNormalized = command.toLowerCase();
 
         if (commandNormalized === 'opcao_cliente') {
@@ -573,8 +573,9 @@ router.all('/digisac/consultor', async (req, res) => {
         if (!documento) {
             documento = await getCnpjFromDigisacContact(req.body?.numeroContato || req.body?.numero_contato || req.query.numeroContato || req.query.numero_contato);
         }
-        if (!documento) {
-            documento = await getRecentDigisacWebhookDocument();
+        if (!commandNormalized && !documento) {
+            await saveDigisacDebug(req, null);
+            return res.json({ success: true, ignored: true, message: 'Evento Digisac ignorado: sem comando e sem documento.' });
         }
         await saveDigisacDebug(req, documento);
         if (!documento) {
@@ -610,10 +611,6 @@ router.all('/digisac/consultor', async (req, res) => {
         `, [documento]);
 
         const row = result.rows[0] || null;
-        let consultingNotification = null;
-        if (contactId) {
-            consultingNotification = await sendDigisacMessage(contactId, '🔎 Estamos consultando seu cadastro...');
-        }
         if (row && contactId) {
             await saveDigisacClienteSession(contactId, documento, row);
         }
@@ -624,7 +621,6 @@ router.all('/digisac/consultor', async (req, res) => {
             message: buildDigisacMessage(row),
             responsavel_comercial: row?.responsavel_comercial || null,
             responsavelComercial: row?.responsavel_comercial || null,
-            consultingNotification,
             pendingSelection: !!row,
             cliente: row ? {
                 empresa: row.empresa,
