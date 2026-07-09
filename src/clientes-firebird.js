@@ -200,6 +200,22 @@ async function transferDigisacTicket(contactId, responsavelComercial) {
     };
 }
 
+async function sendDigisacMessage(contactId, text) {
+    if (!contactId || !text) return null;
+
+    const result = await requestDigisacJson('/messages', {
+        method: 'POST',
+        body: {
+            text,
+            type: 'chat',
+            contactId,
+            origin: 'bot'
+        }
+    });
+
+    return { success: !!result };
+}
+
 function findFirstObjectWithCnpjField(value) {
     if (!value || typeof value !== 'object') return null;
 
@@ -422,7 +438,9 @@ router.all('/digisac/consultor', async (req, res) => {
 
         const row = result.rows[0] || null;
         let transfer = null;
+        let notification = null;
         if (row && contactId) {
+            notification = await sendDigisacMessage(contactId, 'Cadastro identificado. Seu atendimento sera redirecionado para o responsavel comercial.');
             transfer = await transferDigisacTicket(contactId, row.responsavel_comercial);
         }
 
@@ -432,6 +450,7 @@ router.all('/digisac/consultor', async (req, res) => {
             message: buildDigisacMessage(row),
             responsavel_comercial: row?.responsavel_comercial || null,
             responsavelComercial: row?.responsavel_comercial || null,
+            notification,
             transfer,
             cliente: row ? {
                 empresa: row.empresa,
