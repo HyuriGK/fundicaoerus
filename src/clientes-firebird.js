@@ -9,6 +9,14 @@ const RESPONSAVEIS_COMERCIAIS = new Set([
     'MARIA EDUARDA'
 ]);
 
+const DIGISAC_COMERCIAL_DEPARTMENT_ID = process.env.DIGISAC_COMERCIAL_DEPARTMENT_ID || 'a0dd4917-91dd-4d33-9dcc-567c3f3ddff2';
+
+const DIGISAC_USER_IDS = {
+    'GERUZA MENDES': process.env.DIGISAC_USER_GERUZA_ID || '2f3518c3-7a5d-42c3-805d-7d33735e8303',
+    'GUILHERME FENALI': process.env.DIGISAC_USER_GUILHERME_ID || 'c40ebf25-7157-40ee-ac79-1395b8fa58d2',
+    'ELISANGELA': process.env.DIGISAC_USER_ELISANGELA_ID || '9cad129c-20bc-4a38-9f14-9d2fa664017c'
+};
+
 async function ensureResponsaveisTable() {
     await pool.query(`
         CREATE TABLE IF NOT EXISTS clientes_responsavel_comercial (
@@ -123,19 +131,73 @@ function getDigisacConfig() {
     };
 }
 
-async function fetchDigisacJson(path) {
+async function requestDigisacJson(path, options = {}) {
     const { baseUrl, token } = getDigisacConfig();
     if (!token || typeof fetch !== 'function') return null;
 
     const response = await fetch(`${baseUrl}${path}`, {
+        method: options.method || 'GET',
         headers: {
             Authorization: `Bearer ${token}`,
-            Accept: 'application/json'
-        }
+            Accept: 'application/json',
+            ...(options.body ? { 'Content-Type': 'application/json' } : {})
+        },
+        body: options.body ? JSON.stringify(options.body) : undefined
     });
 
     if (!response.ok) return null;
     return response.json();
+}
+
+async function fetchDigisacJson(path) {
+    return requestDigisacJson(path);
+}
+
+function findContactIdInPayload(value) {
+    if (!value || typeof value !== 'object') return '';
+
+    if (Array.isArray(value)) {
+        for (const item of value) {
+            const found = findContactIdInPayload(item);
+            if (found) return found;
+        }
+        return '';
+    }
+
+    const direct = value.contactId || value.contact_id || value.idContato || value.contatoId;
+    if (direct && /^[0-9a-f-]{20,}$/i.test(String(direct))) return String(direct);
+
+    for (const child of Object.values(value)) {
+        const found = findContactIdInPayload(child);
+        if (found) return found;
+    }
+
+    return '';
+}
+
+async function transferDigisacTicket(contactId, responsavelComercial) {
+    const responsavel = String(responsavelComercial || '').trim().toUpperCase();
+    if (!contactId || !DIGISAC_COMERCIAL_DEPARTMENT_ID) return null;
+
+    const body = {
+        departmentId: DIGISAC_COMERCIAL_DEPARTMENT_ID,
+        comments: `Transferido automaticamente conforme responsavel comercial: ${responsavel || 'NAO DEFINIDO'}`
+    };
+
+    if (DIGISAC_USER_IDS[responsavel]) {
+        body.userId = DIGISAC_USER_IDS[responsavel];
+    }
+
+    const result = await requestDigisacJson(`/contacts/${encodeURIComponent(contactId)}/ticket/transfer`, {
+        method: 'POST',
+        body
+    });
+
+    return {
+        success: !!result,
+        departmentId: body.departmentId,
+        userId: body.userId || null
+    };
 }
 
 function findFirstObjectWithCnpjField(value) {
@@ -314,6 +376,7 @@ router.all('/digisac/consultor', async (req, res) => {
         }
 
         await ensureResponsaveisTable();
+        const contactId = req.body?.contactId || req.body?.contact_id || req.query.contactId || req.query.contact_id || findContactIdInPayload(req.body);
         let documento = onlyDigits(req.body?.documento || req.body?.cnpjCpf || req.body?.cnpj || req.query.documento || req.query.cnpjCpf || req.query.cnpj);
         if (!documento) {
             documento = findDocumentInPayload(req.body);
@@ -358,12 +421,18 @@ router.all('/digisac/consultor', async (req, res) => {
         `, [documento]);
 
         const row = result.rows[0] || null;
+        let transfer = null;
+        if (row && contactId) {
+            transfer = await transferDigisacTicket(contactId, row.responsavel_comercial);
+        }
+
         res.json({
             success: true,
             found: !!row,
             message: buildDigisacMessage(row),
             responsavel_comercial: row?.responsavel_comercial || null,
             responsavelComercial: row?.responsavel_comercial || null,
+            transfer,
             cliente: row ? {
                 empresa: row.empresa,
                 codigo: row.codigo,
