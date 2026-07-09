@@ -463,11 +463,7 @@ function buildDigisacMessage(row) {
     if (!row) {
         return '❌ Não encontramos cadastro para o CNPJ/CPF informado. Nossa equipe comercial já foi acionada e em breve dará continuidade ao atendimento.';
     }
-    const nomeCliente = row.razao_social || row.fantasia || 'cliente';
-    if (!row.responsavel_comercial) {
-        return `Identificamos seu cadastro: ${nomeCliente}. Ainda não há responsável comercial definido no sistema. Nossa equipe comercial dará continuidade ao atendimento.`;
-    }
-    return `Identificamos seu cadastro: ${nomeCliente}. Você será redirecionado para o responsável comercial ${row.responsavel_comercial}.`;
+    return '✅ Recebemos seu documento, e estamos consultando em nossa base de dados.\n\nEnquanto isso, escolha uma opção:\n\n1️⃣ - Falar com o comercial\n2️⃣ - 2ª via de boleto\n3️⃣ - 2ª via de nota fiscal';
 }
 
 router.get('/list/all', async (req, res) => {
@@ -732,18 +728,6 @@ router.all('/digisac/consultor', async (req, res) => {
         const row = result.rows[0] || null;
         if (row && contactId) {
             await saveDigisacClienteSession(contactId, documento, row);
-            if (row.responsavel_comercial) {
-                await sendDigisacMessage(contactId, `✅ Cadastro identificado: ${row.razao_social || row.fantasia || 'cliente'}. Seu atendimento será direcionado para o responsável comercial ${row.responsavel_comercial}.`);
-                await transferDigisacTicket(contactId, row.responsavel_comercial);
-            } else {
-                await sendDigisacMessage(contactId, `✅ Cadastro identificado: ${row.razao_social || row.fantasia || 'cliente'}. Ainda não há responsável comercial definido. Seu atendimento será direcionado ao departamento Comercial.`);
-                await transferDigisacTicketTo(
-                    contactId,
-                    DIGISAC_COMERCIAL_DEPARTMENT_ID,
-                    null,
-                    'Cadastro encontrado sem responsável comercial. Transferido automaticamente para o departamento Comercial.'
-                );
-            }
         } else if (contactId) {
             await clearDigisacClienteSession(contactId);
         }
