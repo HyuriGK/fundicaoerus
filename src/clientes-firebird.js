@@ -574,7 +574,7 @@ router.all('/digisac/consultor', async (req, res) => {
                 const notification = contactId
                     ? await sendDigisacMessage(contactId, 'Não localizamos seu cadastro com o CNPJ/CPF informado. Por favor, aguarde nosso time comercial para continuar o atendimento.')
                     : null;
-                return res.json({ success: true, found: false, message: 'Cadastro nao encontrado para este contato.', notification });
+                return res.json({ success: true, found: false, encontrado: 'nao', message: 'Cadastro nao encontrado para este contato.', notification });
             }
 
             if (opcao === '2') {
@@ -589,6 +589,7 @@ router.all('/digisac/consultor', async (req, res) => {
                 return res.json({
                     success: true,
                     found: true,
+                    encontrado: 'sim',
                     action: 'segunda_via_boleto',
                     responsavel_comercial: session.responsavel_comercial,
                     responsavelComercial: session.responsavel_comercial,
@@ -604,6 +605,7 @@ router.all('/digisac/consultor', async (req, res) => {
                 return res.json({
                     success: true,
                     found: true,
+                    encontrado: 'sim',
                     action: opcao === '1' ? 'falar_com_comercial' : 'segunda_via_nota_fiscal',
                     responsavel_comercial: session.responsavel_comercial,
                     responsavelComercial: session.responsavel_comercial,
@@ -613,7 +615,7 @@ router.all('/digisac/consultor', async (req, res) => {
             }
 
             const notification = await sendDigisacMessage(contactId, 'Opcao invalida. Responda 1 para 2 via de boleto ou 2 para 2 via de nota fiscal.');
-            return res.json({ success: true, found: true, invalidOption: true, message: 'Opcao invalida.', notification });
+            return res.json({ success: true, found: true, encontrado: 'sim', invalidOption: true, message: 'Opcao invalida.', notification });
         }
 
         let documento = onlyDigits(req.body?.documento || req.body?.cnpjCpf || req.body?.cnpj || req.query.documento || req.query.cnpjCpf || req.query.cnpj);
@@ -632,6 +634,7 @@ router.all('/digisac/consultor', async (req, res) => {
             return res.json({
                 success: true,
                 found: false,
+                encontrado: 'nao',
                 message: 'Não consegui localizar o CNPJ/CPF salvo no contato. Por favor, aguarde nosso time comercial para continuar o atendimento.',
                 cliente: null
             });
@@ -668,6 +671,7 @@ router.all('/digisac/consultor', async (req, res) => {
         res.json({
             success: true,
             found: !!row,
+            encontrado: row ? 'sim' : 'nao',
             message: buildDigisacMessage(row),
             responsavel_comercial: row?.responsavel_comercial || null,
             responsavelComercial: row?.responsavel_comercial || null,
@@ -687,7 +691,7 @@ router.all('/digisac/consultor', async (req, res) => {
             } : null
         });
     } catch (err) {
-        res.status(500).json({ success: false, found: false, error: 'Erro ao consultar cliente para Digisac', details: err.message });
+        res.status(500).json({ success: false, found: false, encontrado: 'nao', error: 'Erro ao consultar cliente para Digisac', details: err.message });
     }
 });
 
