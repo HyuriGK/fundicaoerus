@@ -437,10 +437,14 @@ router.all('/digisac/consultor', async (req, res) => {
         `, [documento]);
 
         const row = result.rows[0] || null;
+        let consultingNotification = null;
+        if (contactId) {
+            consultingNotification = await sendDigisacMessage(contactId, '🔎 Estamos consultando seu cadastro...');
+        }
         let transfer = null;
         let notification = null;
         if (row && contactId) {
-            notification = await sendDigisacMessage(contactId, 'Cadastro identificado. Seu atendimento sera redirecionado para o responsavel comercial.');
+            notification = await sendDigisacMessage(contactId, '✅ Cadastro identificado!\nSeu atendimento será redirecionado para o responsável comercial.');
             transfer = await transferDigisacTicket(contactId, row.responsavel_comercial);
         }
 
@@ -450,6 +454,7 @@ router.all('/digisac/consultor', async (req, res) => {
             message: buildDigisacMessage(row),
             responsavel_comercial: row?.responsavel_comercial || null,
             responsavelComercial: row?.responsavel_comercial || null,
+            consultingNotification,
             notification,
             transfer,
             cliente: row ? {
