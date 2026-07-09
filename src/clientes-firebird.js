@@ -233,6 +233,14 @@ async function getDigisacClienteSession(contactId) {
     return result.rows[0] || null;
 }
 
+async function clearDigisacClienteSession(contactId) {
+    if (!contactId) return null;
+
+    await ensureDigisacClienteSessionsTable();
+    await pool.query('DELETE FROM digisac_cliente_sessions WHERE contact_id = $1', [contactId]);
+    return { success: true };
+}
+
 function getDigisacConfig() {
     return {
         baseUrl: String(process.env.DIGISAC_API_BASE_URL || 'https://fundicaoerus.digisac.co/api/v1').replace(/\/+$/, ''),
@@ -553,7 +561,7 @@ router.all('/digisac/consultor', async (req, res) => {
         if (commandNormalized === 'opcao_cliente') {
             const optionText = String(req.body?.opcao || req.body?.option || req.query.opcao || req.query.option || findTextInPayload(req.body) || '').trim();
             const opcao = onlyDigits(optionText).slice(0, 1);
-            let session = null;
+            let session = await getDigisacClienteSession(contactId);
             let documentoOpcao = onlyDigits(req.body?.documento || req.body?.cnpjCpf || req.body?.cnpj || req.query.documento || req.query.cnpjCpf || req.query.cnpj);
             if (!documentoOpcao) {
                 documentoOpcao = findDocumentInPayload(req.body);
@@ -566,6 +574,9 @@ router.all('/digisac/consultor', async (req, res) => {
                 if (rowOpcao && contactId) {
                     await saveDigisacClienteSession(contactId, documentoOpcao, rowOpcao);
                     session = await getDigisacClienteSession(contactId);
+                } else if (contactId) {
+                    await clearDigisacClienteSession(contactId);
+                    session = null;
                 }
             }
             await saveDigisacDebug(req, documentoOpcao || opcao || null);
@@ -631,6 +642,9 @@ router.all('/digisac/consultor', async (req, res) => {
         }
         await saveDigisacDebug(req, documento);
         if (!documento) {
+            if (contactId) {
+                await clearDigisacClienteSession(contactId);
+            }
             return res.json({
                 success: true,
                 found: false,
@@ -666,6 +680,8 @@ router.all('/digisac/consultor', async (req, res) => {
         const row = result.rows[0] || null;
         if (row && contactId) {
             await saveDigisacClienteSession(contactId, documento, row);
+        } else if (contactId) {
+            await clearDigisacClienteSession(contactId);
         }
 
         res.json({
