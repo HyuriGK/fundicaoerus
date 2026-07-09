@@ -577,7 +577,7 @@ router.all('/digisac/consultor', async (req, res) => {
                 return res.json({ success: true, found: false, message: 'Cadastro nao encontrado para este contato.', notification });
             }
 
-            if (opcao === '1') {
+            if (opcao === '2') {
                 const notification = await sendDigisacMessage(contactId, '✅ Cadastro identificado!\nSeu atendimento será redirecionado para o setor financeiro.');
                 const transfer = await transferDigisacTicketTo(
                     contactId,
@@ -597,14 +597,14 @@ router.all('/digisac/consultor', async (req, res) => {
                 });
             }
 
-            if (opcao === '2') {
+            if (opcao === '1' || opcao === '3') {
                 const notification = await sendDigisacMessage(contactId, '✅ Cadastro identificado!\nSeu atendimento será redirecionado para o responsável comercial.');
                 const transfer = await transferDigisacTicket(contactId, session.responsavel_comercial);
 
                 return res.json({
                     success: true,
                     found: true,
-                    action: 'segunda_via_nota_fiscal',
+                    action: opcao === '1' ? 'falar_com_comercial' : 'segunda_via_nota_fiscal',
                     responsavel_comercial: session.responsavel_comercial,
                     responsavelComercial: session.responsavel_comercial,
                     notification,
