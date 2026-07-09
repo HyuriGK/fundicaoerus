@@ -582,10 +582,18 @@ router.all('/digisac/consultor', async (req, res) => {
             await saveDigisacDebug(req, documentoOpcao || opcao || null);
 
             if (!contactId || !session) {
-                const notification = contactId
-                    ? await sendDigisacMessage(contactId, 'Não encontramos cadastro para o CNPJ/CPF informado. Nossa equipe comercial já foi acionada e em breve dará continuidade ao atendimento.')
-                    : null;
-                return res.json({ success: true, found: false, encontrado: 'nao', message: 'Cadastro nao encontrado para este contato.', notification });
+                let notification = null;
+                let transfer = null;
+                if (contactId) {
+                    notification = await sendDigisacMessage(contactId, 'Não encontramos cadastro para o CNPJ/CPF informado. Seu atendimento será direcionado ao departamento Comercial.');
+                    transfer = await transferDigisacTicketTo(
+                        contactId,
+                        DIGISAC_COMERCIAL_DEPARTMENT_ID,
+                        null,
+                        'Nenhum cadastro encontrado. Transferido automaticamente para o departamento Comercial.'
+                    );
+                }
+                return res.json({ success: true, found: false, encontrado: 'nao', message: 'Cadastro nao encontrado para este contato.', notification, transfer });
             }
 
             if (opcao === '2') {
@@ -644,6 +652,13 @@ router.all('/digisac/consultor', async (req, res) => {
         if (!documento) {
             if (contactId) {
                 await clearDigisacClienteSession(contactId);
+                await sendDigisacMessage(contactId, 'Não encontramos CNPJ/CPF válido para este contato. Seu atendimento será transferido para o departamento Comercial.');
+                await transferDigisacTicketTo(
+                    contactId,
+                    DIGISAC_COMERCIAL_DEPARTMENT_ID,
+                    null,
+                    'Nenhum cadastro ou CNPJ encontrado. Transferido automaticamente para o departamento Comercial.'
+                );
             }
             return res.json({
                 success: true,
