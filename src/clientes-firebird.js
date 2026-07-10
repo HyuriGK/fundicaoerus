@@ -690,8 +690,7 @@ router.all('/digisac/consultor', async (req, res) => {
                         encontrado: 'nao',
                         action: 'iniciar_fluxo_comercial',
                         startDefaultFlow: true,
-                        notification,
-                        message: buildDigisacWelcomeMessage()
+                        notification
                     });
                 }
 
@@ -813,7 +812,6 @@ router.all('/digisac/consultor', async (req, res) => {
                     startDefaultFlow: true,
                     documento: documentoContato,
                     notification,
-                    message: buildDigisacWelcomeMessage(),
                     cliente: null
                 });
             }
@@ -896,8 +894,7 @@ router.all('/digisac/consultor', async (req, res) => {
                         encontrado: 'nao',
                         action: 'iniciar_fluxo_comercial',
                         startDefaultFlow: true,
-                        notification,
-                        message: buildDigisacWelcomeMessage()
+                        notification
                     });
                 }
 
