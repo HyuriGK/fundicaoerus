@@ -979,13 +979,17 @@ router.all('/digisac/consultor', async (req, res) => {
             }
 
             if (session?.etapa === 'menu_opcoes' && !opcao) {
-                const notification = await sendDigisacMessage(contactId, buildDigisacMessage(session.cliente));
+                await saveDigisacClienteSession(contactId, session.documento, {
+                    ...session.cliente,
+                    responsavel_comercial: session.responsavel_comercial
+                }, 'confirmacao_cnpj_salvo');
+                const notification = await sendDigisacMessage(contactId, buildDigisacSavedCnpjConfirmationMessage(session.cliente));
                 return res.json({
                     success: true,
                     found: true,
                     encontrado: 'sim',
-                    action: 'menu_opcoes_cliente',
-                    pendingSelection: true,
+                    action: 'confirmar_cnpj_salvo',
+                    pendingConfirmation: true,
                     responsavel_comercial: session.responsavel_comercial,
                     responsavelComercial: session.responsavel_comercial,
                     sent_by_backend: !!notification,
