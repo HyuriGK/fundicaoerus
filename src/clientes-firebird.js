@@ -912,7 +912,19 @@ router.all('/digisac/consultor', async (req, res) => {
                 await saveDigisacDebug(req, opcao || session.documento || null);
 
                 if (!opcao) {
-                    return res.json({ success: true, ignored: true, action: 'waiting_confirmation_option', message: 'Ignorado: aguardando opcao explicita de confirmacao.' });
+                    const notification = await sendDigisacMessage(contactId, buildDigisacSavedCnpjConfirmationMessage(session.cliente));
+
+                    return res.json({
+                        success: true,
+                        found: true,
+                        encontrado: 'sim',
+                        action: 'confirmar_cnpj_salvo',
+                        pendingConfirmation: true,
+                        responsavel_comercial: session.responsavel_comercial,
+                        responsavelComercial: session.responsavel_comercial,
+                        sent_by_backend: !!notification,
+                        notification
+                    });
                 }
 
                 if (opcao === '1') {
@@ -967,7 +979,18 @@ router.all('/digisac/consultor', async (req, res) => {
             }
 
             if (session?.etapa === 'menu_opcoes' && !opcao) {
-                return res.json({ success: true, ignored: true, action: 'waiting_menu_option', message: 'Ignorado: aguardando opcao explicita do menu.' });
+                const notification = await sendDigisacMessage(contactId, buildDigisacMessage(session.cliente));
+                return res.json({
+                    success: true,
+                    found: true,
+                    encontrado: 'sim',
+                    action: 'menu_opcoes_cliente',
+                    pendingSelection: true,
+                    responsavel_comercial: session.responsavel_comercial,
+                    responsavelComercial: session.responsavel_comercial,
+                    sent_by_backend: !!notification,
+                    notification
+                });
             }
 
             if (session?.etapa === 'menu_opcoes' && opcao) {
