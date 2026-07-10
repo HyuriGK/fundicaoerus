@@ -815,7 +815,7 @@ function getSessionClienteValue(session, key) {
 function buildDigisacSavedCnpjConfirmationMessage(row) {
     const nome = row?.razao_social || row?.fantasia || 'cliente';
     const documento = row?.cnpj_cpf || row?.cnpjCpf || '';
-    return `Identificamos seu cadastro conforme seu último contato conosco.\n\nCNPJ/CPF: ${documento}\nCliente: ${nome}\n\nDeseja continuar com este cadastro?\n\n1 - Sim\n2 - Não`;
+    return `Olá! Tudo bem? Identificamos seu cadastro conforme seu último contato conosco.\n\n*CNPJ/CPF:* ${documento}\n*Cliente:* ${nome}\n\nDeseja continuar com este cadastro?\n\n1️⃣ - Sim\n2️⃣ - Não`;
 }
 
 function buildDigisacContinueWithCadastroMessage() {
