@@ -255,10 +255,26 @@ async function getRecentDigisacWebhookDocumentByContact(contactId) {
     }
 }
 
+function stableStringify(value) {
+    if (value === null || typeof value !== 'object') {
+        return JSON.stringify(value);
+    }
+    if (Array.isArray(value)) {
+        return `[${value.map(stableStringify).join(',')}]`;
+    }
+    const keys = Object.keys(value).sort();
+    const parts = keys.map(key => `${JSON.stringify(key)}:${stableStringify(value[key])}`);
+    return `{${parts.join(',')}}`;
+}
+
+function normalizeRequestBody(req) {
+    return stableStringify(req.body || {});
+}
+
 async function isDuplicateDigisacRequest(req) {
     try {
         await ensureDigisacDebugTable();
-        const bodyJson = JSON.stringify(req.body || {});
+        const bodyJson = normalizeRequestBody(req);
         const result = await pool.query(`
             SELECT 1
             FROM digisac_webhook_debug
@@ -651,6 +667,7 @@ router.all('/digisac/consultor', async (req, res) => {
             return res.status(401).json({ success: false, error: 'Token Digisac inválido.' });
         }
 
+        await saveDigisacDebug(req, null);
         if (await isDuplicateDigisacRequest(req)) {
             return res.json({ success: true, ignored: true, action: 'duplicate_request', message: 'Duplicado Digisac ignorado.' });
         }
