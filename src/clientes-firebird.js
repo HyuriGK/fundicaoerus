@@ -854,7 +854,7 @@ function buildDigisacCommercialReceptionMessage(responsavelComercial) {
     const nomeResponsavel = formatDigisacResponsavelDisplayName(responsavelComercial);
     const cumprimento = getDigisacGreetingByCurrentHour();
 
-    return `${nomeResponsavel}:\n${cumprimento}, ${nomeResponsavel} por aqui, como posso ajudar?`;
+    return `*${nomeResponsavel}:*\n${cumprimento}. Tudo bem? Como posso ajudar?`;
 }
 
 function buildDigisacWelcomeMessage() {
