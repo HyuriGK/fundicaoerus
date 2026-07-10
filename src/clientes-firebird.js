@@ -95,33 +95,14 @@ function buildDigisacRequestFingerprint(req) {
 }
 
 function isDigisacWebhookFromBot(req) {
-    return objectContainsBotOrigin(req.body);
+    return valueHasBotOrigin(req.body);
 }
 
-function objectContainsBotOrigin(value) {
+function valueHasBotOrigin(value) {
     if (value == null || typeof value !== 'object') return false;
-    if (Array.isArray(value)) {
-        return value.some(objectContainsBotOrigin);
-    }
 
-    const origin = String(value.origin || value.origem || value.source || '').trim().toLowerCase();
-    if (origin === 'bot' || origin === 'system' || origin === 'auto') {
-        return true;
-    }
-
-    const sender = value.from || value.sender || value.autor || '';
-    if (typeof sender === 'string' && sender.toLowerCase().includes('bot')) {
-        return true;
-    }
-    if (typeof sender === 'object' && objectContainsBotOrigin(sender)) {
-        return true;
-    }
-
-    for (const child of Object.values(value)) {
-        if (objectContainsBotOrigin(child)) return true;
-    }
-
-    return false;
+    const origin = String(value.origin || value.origem || value.source || value.type || '').trim().toLowerCase();
+    return origin === 'bot';
 }
 
 async function ensureDigisacClienteSessionsTable() {
@@ -356,9 +337,11 @@ async function isDuplicateDigisacRequest(req) {
         await ensureDigisacDedupeTable();
         const fingerprint = buildDigisacRequestFingerprint(req);
         const result = await pool.query(`
-            INSERT INTO digisac_webhook_dedupe (fingerprint)
-            VALUES ($1)
-            ON CONFLICT DO NOTHING
+            INSERT INTO digisac_webhook_dedupe (fingerprint, created_at)
+            VALUES ($1, NOW())
+            ON CONFLICT (fingerprint) DO UPDATE
+            SET created_at = EXCLUDED.created_at
+            WHERE digisac_webhook_dedupe.created_at < NOW() - INTERVAL '10 seconds'
             RETURNING fingerprint
         `, [fingerprint]);
         return result.rowCount === 0;
@@ -456,8 +439,14 @@ function findContactIdInPayload(value) {
         return '';
     }
 
-    const direct = value.contactId || value.contact_id || value.idContato || value.contatoId;
-    if (direct && /^[0-9a-f-]{20,}$/i.test(String(direct))) return String(direct);
+    const directKeys = ['contactId', 'contact_id', 'idContato', 'contatoId', 'fromId', 'from_id', 'senderId', 'sender_id', 'userId', 'user_id'];
+    for (const key of directKeys) {
+        const candidate = value[key];
+        if (candidate != null) {
+            const str = String(candidate).trim();
+            if (str) return str;
+        }
+    }
 
     for (const child of Object.values(value)) {
         const found = findContactIdInPayload(child);
