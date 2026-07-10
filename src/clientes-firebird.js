@@ -1150,13 +1150,13 @@ router.all('/digisac/consultor', async (req, res) => {
             if (!session && !hasDigisacUserContent(req)) {
                 return res.json({ success: true, ignored: true, action: 'no_user_input', message: 'Ignorado: sem conteúdo de usuário válido.' });
             }
-            if (!documentoOpcao) {
+            if (!session && !documentoOpcao) {
                 documentoOpcao = findDocumentInPayload(req.body);
             }
-            if (!documentoOpcao && session?.etapa !== 'confirmacao_cnpj_salvo') {
+            if (!session && !documentoOpcao) {
                 documentoOpcao = await getCnpjFromDigisacContactId(contactId);
             }
-            if (documentoOpcao && session?.etapa !== 'confirmacao_cnpj_salvo') {
+            if (!session && documentoOpcao) {
                 const rowOpcao = await findClienteByDocumento(documentoOpcao);
                 if (rowOpcao && contactId) {
                     await saveDigisacClienteSession(contactId, documentoOpcao, rowOpcao);
