@@ -85,7 +85,7 @@ function getDigisacWebhookFingerprintData(req) {
     const command = String(req.body?.command || req.body?.comando || req.query.command || req.query.comando || findCommandInPayload(req.body) || '').trim().toLowerCase();
     const text = String(getDigisacMessageText(req) || findTextInPayload(req.body) || '').trim().toLowerCase();
     const document = onlyDigits(getRawDocumentoInput(req) || findDocumentInPayload(req.body) || findFirstObjectWithCnpjField(req.body) || '');
-    const eventId = extractDigisacWebhookEventId(req.body);
+    const eventId = String(req.body?.data?.message?.id || req.body?.data?.id || extractDigisacWebhookEventId(req.body) || '').trim();
     return { contactId, command, text, document, eventId };
 }
 
