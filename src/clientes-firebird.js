@@ -761,9 +761,112 @@ router.all('/digisac/consultor', async (req, res) => {
         const messageText = getDigisacMessageText(req) || findTextInPayload(req.body);
         const opcaoText = onlyDigits(messageText).slice(0, 1);
         const session = await getDigisacClienteSession(contactId);
+        const sessionStage = String(session?.etapa || '').toLowerCase();
 
-        if (!commandNormalized && session && ['confirmacao_cnpj_salvo', 'menu_opcoes'].includes(session.etapa) && ['1', '2', '3'].includes(opcaoText)) {
-            commandNormalized = 'consulta_cnpj_contato';
+        if (!commandNormalized && session && ['confirmacao_cnpj_salvo', 'menu_opcoes'].includes(sessionStage) && ['1', '2', '3'].includes(opcaoText)) {
+            const opcao = opcaoText;
+            await saveDigisacDebug(req, opcao || session.documento || null);
+
+            if (session.etapa === 'confirmacao_cnpj_salvo') {
+                if (opcao === '1') {
+                    await saveDigisacClienteSession(contactId, session.documento, {
+                        ...session.cliente,
+                        responsavel_comercial: session.responsavel_comercial
+                    }, 'menu_opcoes');
+                    const notification = await sendDigisacMessage(contactId, buildDigisacContinueWithCadastroMessage());
+
+                    return res.json({
+                        success: true,
+                        found: true,
+                        encontrado: 'sim',
+                        action: 'menu_opcoes_cliente',
+                        pendingSelection: true,
+                        responsavel_comercial: session.responsavel_comercial,
+                        responsavelComercial: session.responsavel_comercial,
+                        sent_by_backend: !!notification,
+                        notification
+                    });
+                }
+
+                if (opcao === '2') {
+                    await clearDigisacClienteSession(contactId);
+                    const notification = await sendDigisacMessage(contactId, buildDigisacWelcomeMessage());
+
+                    return res.json({
+                        success: true,
+                        found: false,
+                        encontrado: 'nao',
+                        action: 'iniciar_fluxo_comercial',
+                        startDefaultFlow: true,
+                        sent_by_backend: !!notification,
+                        notification
+                    });
+                }
+
+                const notification = await sendDigisacMessage(contactId, 'Opcao invalida. Responda 1 para continuar com este cadastro ou 2 para informar outro cadastro.');
+                return res.json({
+                    success: true,
+                    found: true,
+                    encontrado: 'sim',
+                    action: 'confirmar_cnpj_salvo',
+                    pendingConfirmation: true,
+                    invalidOption: true,
+                    notification
+                });
+            }
+
+            if (session.etapa === 'menu_opcoes') {
+                if (opcao === '2') {
+                    const notification = await sendDigisacMessage(contactId, 'Cadastro identificado!\nSeu atendimento sera redirecionado para o setor financeiro.');
+                    const clienteNome = getSessionClienteValue(session, 'razaoSocial') || getSessionClienteValue(session, 'fantasia') || 'cliente';
+                    const clienteCnpj = session.documento || getSessionClienteValue(session, 'cnpjCpf') || 'nao informado';
+                    const transfer = await transferDigisacTicketTo(
+                        contactId,
+                        DIGISAC_FINANCEIRO_DEPARTMENT_ID,
+                        DIGISAC_FINANCEIRO_USER_ID,
+                        `Cliente: ${clienteNome} | CNPJ: ${clienteCnpj} | Destino: Financeiro | Motivo: 2a via de boleto`
+                    );
+
+                    return res.json({
+                        success: true,
+                        found: true,
+                        encontrado: 'sim',
+                        action: 'segunda_via_boleto',
+                        responsavel_comercial: session.responsavel_comercial,
+                        responsavelComercial: session.responsavel_comercial,
+                        notification,
+                        transfer
+                    });
+                }
+
+                if (opcao === '1' || opcao === '3') {
+                    const notification = await sendDigisacMessage(contactId, 'Cadastro identificado!\nSeu atendimento sera direcionado ao responsavel comercial.\nEnquanto isso, conte-nos qual assunto voce deseja tratar.');
+                    const clienteNome = getSessionClienteValue(session, 'razaoSocial') || getSessionClienteValue(session, 'fantasia') || 'cliente';
+                    const clienteCnpj = session.documento || getSessionClienteValue(session, 'cnpjCpf') || 'nao informado';
+                    const transfer = await transferDigisacTicket(contactId, session.responsavel_comercial, clienteNome, clienteCnpj);
+
+                    return res.json({
+                        success: true,
+                        found: true,
+                        encontrado: 'sim',
+                        action: opcao === '1' ? 'falar_com_comercial' : 'segunda_via_nota_fiscal',
+                        responsavel_comercial: session.responsavel_comercial,
+                        responsavelComercial: session.responsavel_comercial,
+                        sent_by_backend: !!notification,
+                        notification,
+                        transfer
+                    });
+                }
+
+                const notification = await sendDigisacMessage(contactId, 'Opcao invalida. Responda 1 para falar com o comercial, 2 para 2 via de boleto ou 3 para 2 via de nota fiscal.');
+                return res.json({
+                    success: true,
+                    found: true,
+                    encontrado: 'sim',
+                    invalidOption: true,
+                    notification
+                });
+            }
         }
 
         if (['consulta_cnpj_contato', 'consulta_contato', 'verifica_cnpj_contato'].includes(commandNormalized)) {
