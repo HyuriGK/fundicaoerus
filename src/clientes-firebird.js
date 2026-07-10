@@ -834,7 +834,7 @@ function getSessionClienteValue(session, key) {
 function buildDigisacSavedCnpjConfirmationMessage(row) {
     const nome = row?.razao_social || row?.fantasia || 'cliente';
     const documento = row?.cnpj_cpf || row?.cnpjCpf || '';
-    return `Olá! Tudo bem? Identificamos seu cadastro conforme seu último contato conosco.\n\n*CNPJ/CPF:* ${documento}\n*Cliente:* ${nome}\n\nDeseja continuar com este cadastro?\n\n1️⃣ - Sim\n2️⃣ - Não`;
+    return `Olá! Tudo bem? Identificamos seu cadastro conforme seu último contato conosco.\n\n*CNPJ/CPF:* ${documento}\n*Cliente:* ${nome}\n\nDeseja atendimento para essa mesma empresa?\n\n1️⃣ - Sim\n2️⃣ - Não`;
 }
 
 function buildDigisacContinueWithCadastroMessage() {
@@ -1114,7 +1114,7 @@ router.all('/digisac/consultor', async (req, res) => {
 
             if (incomingOption === '2') {
                 await clearDigisacClienteSession(contactId);
-                const notification = await sendDigisacMessage(contactId, 'Seja bem-vindo(a) a Fundicao Erus! Sua conversa sera direcionada ao nosso time Comercial, que entrara em contato com voce o mais breve possivel.');
+                const notification = await sendDigisacMessage(contactId, '👋 Seja bem-vindo(a) à Fundição Erus!\n\nRecebemos sua solicitação e ela será encaminhada ao nosso time Comercial.\n\nEm breve, um de nossos especialistas entrará em contato para dar continuidade ao seu atendimento.\n\nAgradecemos o seu contato!');
                 const transfer = await transferDigisacTicketTo(
                     contactId,
                     DIGISAC_COMERCIAL_DEPARTMENT_ID,
@@ -1430,7 +1430,7 @@ router.all('/digisac/consultor', async (req, res) => {
 
                 if (opcao === '2') {
                     await clearDigisacClienteSession(contactId);
-                    const notification = await sendDigisacMessage(contactId, 'Seja bem-vindo(a) A Fundição Erus! Sua conversa será direcionada ao nosso time Comercial, que entrará em contato com você o mais breve possível.');
+                    const notification = await sendDigisacMessage(contactId, '👋 Seja bem-vindo(a) à Fundição Erus!\n\nRecebemos sua solicitação e ela será encaminhada ao nosso time Comercial.\n\nEm breve, um de nossos especialistas entrará em contato para dar continuidade ao seu atendimento.\n\nAgradecemos o seu contato!');
                     const transfer = await transferDigisacTicketTo(
                         contactId,
                         DIGISAC_COMERCIAL_DEPARTMENT_ID,
