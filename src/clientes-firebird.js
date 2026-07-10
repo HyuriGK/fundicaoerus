@@ -298,13 +298,28 @@ function findFirstDigisacOptionInPayload(value) {
     return '';
 }
 
+function hasDigisacUserContent(req) {
+    const messageText = getDigisacMessageText(req) || findTextInPayload(req.body);
+    if (messageText && !isLikelyDigisacPromptText(messageText)) {
+        return true;
+    }
+
+    const documento = getRawDocumentoInput(req) || findDocumentInPayload(req.body) || findFirstObjectWithCnpjField(req.body);
+    if (documento) return true;
+
+    return false;
+}
+
 function extractDigisacUserOption(req) {
     const messageText = getDigisacMessageText(req) || findTextInPayload(req.body);
     const payloadOption = findFirstDigisacOptionInPayload(req.body);
     if (payloadOption) return payloadOption;
     if (!messageText) return '';
     if (isLikelyDigisacPromptText(messageText)) return '';
-    return onlyDigits(messageText).slice(0, 1);
+
+    const trimmed = String(messageText).trim();
+    if (/^[1-3]$/.test(trimmed)) return trimmed;
+    return '';
 }
 
 function findDocumentInPayload(value) {
@@ -866,6 +881,10 @@ router.all('/digisac/consultor', async (req, res) => {
             const opcao = extractDigisacUserOption(req);
             const session = await getDigisacClienteSession(contactId);
 
+            if (!session && !hasDigisacUserContent(req)) {
+                return res.json({ success: true, ignored: true, action: 'no_user_input', message: 'Ignorado: sem conteúdo de usuário válido.' });
+            }
+
             if (session?.etapa === 'confirmacao_cnpj_salvo') {
                 await saveDigisacDebug(req, opcao || session.documento || null);
 
@@ -1094,6 +1113,10 @@ router.all('/digisac/consultor', async (req, res) => {
             const opcao = extractDigisacUserOption(req);
             let session = await getDigisacClienteSession(contactId);
             let documentoOpcao = onlyDigits(req.body?.documento || req.body?.cnpjCpf || req.body?.cnpj || req.query.documento || req.query.cnpjCpf || req.query.cnpj);
+
+            if (!session && !hasDigisacUserContent(req)) {
+                return res.json({ success: true, ignored: true, action: 'no_user_input', message: 'Ignorado: sem conteúdo de usuário válido.' });
+            }
             if (!documentoOpcao) {
                 documentoOpcao = findDocumentInPayload(req.body);
             }
