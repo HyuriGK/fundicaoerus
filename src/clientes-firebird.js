@@ -1196,7 +1196,7 @@ router.all('/digisac/consultor', async (req, res) => {
 
                 if (opcao === '2') {
                     await clearDigisacClienteSession(contactId);
-                    const notification = await sendDigisacMessage(contactId, 'Seja bem-vindo(a) Ã  FundiÃ§Ã£o Erus! Sua conversa serÃ¡ direcionada ao nosso time Comercial, que entrarÃ¡ em contato com vocÃª o mais breve possÃ­vel.');
+                    const notification = await sendDigisacMessage(contactId, 'Seja bem-vindo(a) A Fundição Erus! Sua conversa será direcionada ao nosso time Comercial, que entrará em contato com você o mais breve possível.');
                     const transfer = await transferDigisacTicketTo(
                         contactId,
                         DIGISAC_COMERCIAL_DEPARTMENT_ID,
