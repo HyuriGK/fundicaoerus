@@ -1090,7 +1090,6 @@ router.all('/digisac/consultor', async (req, res) => {
             success: true,
             found: !!row,
             encontrado: row ? 'sim' : 'nao',
-            message: buildDigisacMessage(row),
             responsavel_comercial: row?.responsavel_comercial || null,
             responsavelComercial: row?.responsavel_comercial || null,
             pendingSelection: !!row,
