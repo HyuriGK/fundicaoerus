@@ -822,6 +822,39 @@ router.all('/digisac/consultor', async (req, res) => {
         if (!documento) {
             documento = await getCnpjFromDigisacContact(req.body?.numeroContato || req.body?.numero_contato || req.query.numeroContato || req.query.numero_contato);
         }
+        if (!commandNormalized && !documento && contactId) {
+            let documentoContato = findFirstObjectWithCnpjField(req.body) || '';
+            if (!documentoContato) {
+                documentoContato = await getCnpjFromDigisacContactId(contactId);
+            }
+            if (documentoContato) {
+                const rowContato = await findClienteByDocumento(documentoContato);
+                await saveDigisacDebug(req, documentoContato);
+
+                if (rowContato) {
+                    await saveDigisacClienteSession(contactId, documentoContato, rowContato, 'confirmacao_cnpj_salvo');
+                    const notification = await sendDigisacMessage(contactId, buildDigisacSavedCnpjConfirmationMessage(rowContato));
+                    return res.json({
+                        success: true,
+                        found: true,
+                        encontrado: 'sim',
+                        action: 'confirmar_cnpj_salvo',
+                        pendingConfirmation: true,
+                        responsavel_comercial: rowContato.responsavel_comercial || null,
+                        responsavelComercial: rowContato.responsavel_comercial || null,
+                        notification,
+                        cliente: {
+                            empresa: rowContato.empresa,
+                            codigo: rowContato.codigo,
+                            razaoSocial: rowContato.razao_social,
+                            fantasia: rowContato.fantasia,
+                            cnpjCpf: rowContato.cnpj_cpf,
+                            responsavelComercial: rowContato.responsavel_comercial
+                        }
+                    });
+                }
+            }
+        }
         if (!commandNormalized && !documento) {
             await saveDigisacDebug(req, null);
             return res.json({ success: true, ignored: true, message: 'Evento Digisac ignorado: sem comando e sem documento.' });
