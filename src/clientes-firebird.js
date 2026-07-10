@@ -214,6 +214,33 @@ async function getRecentDigisacWebhookDocument() {
     }
 }
 
+async function getRecentDigisacWebhookDocumentByContact(contactId) {
+    if (!contactId) return '';
+
+    try {
+        await ensureDigisacDebugTable();
+        const result = await pool.query(`
+            SELECT documento
+            FROM digisac_webhook_debug
+            WHERE documento IS NOT NULL
+              AND length(regexp_replace(documento, '\\D', '', 'g')) IN (11, 14)
+              AND (
+                  body #>> '{data,contactId}' = $1
+                  OR body #>> '{data,message,contactId}' = $1
+                  OR body #>> '{data,message,fromId}' = $1
+                  OR body #>> '{contactId}' = $1
+                  OR body #>> '{contact_id}' = $1
+              )
+            ORDER BY id DESC
+            LIMIT 1
+        `, [contactId]);
+        return result.rows[0]?.documento || '';
+    } catch (err) {
+        console.warn('Erro ao consultar ultimo documento Digisac por contato:', err.message);
+        return '';
+    }
+}
+
 async function saveDigisacClienteSession(contactId, documento, row, etapa = 'menu_opcoes') {
     if (!contactId || !row) return null;
 
@@ -714,6 +741,9 @@ router.all('/digisac/consultor', async (req, res) => {
             }
             if (!documentoContato) {
                 documentoContato = await getCnpjFromDigisacContact(req.body?.numeroContato || req.body?.numero_contato || req.query.numeroContato || req.query.numero_contato);
+            }
+            if (!documentoContato) {
+                documentoContato = await getRecentDigisacWebhookDocumentByContact(contactId);
             }
 
             await saveDigisacDebug(req, documentoContato || null);
