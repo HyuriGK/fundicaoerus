@@ -511,7 +511,7 @@ function buildDigisacSavedCnpjConfirmationMessage(row) {
 }
 
 function buildDigisacWelcomeMessage() {
-    return 'Ola! Seja bem-vindo a Fundicao Erus. Voce entrou em contato com o Setor Comercial.\n\nComo podemos ajuda-lo?\n\n1 - Ja sou cliente\n2 - Nao sou cliente';
+    return 'Olá! Seja bem-vindo à Fundição Erus. 🇧🇷\n\nVocê entrou em contato com o Setor Comercial.\n\nComo podemos ajudá-lo?\n\n1️⃣ - Já sou cliente\n\n2️⃣ - Não sou cliente\n\nResponda apenas com o número da opção desejada.';
 }
 
 router.get('/list/all', async (req, res) => {
