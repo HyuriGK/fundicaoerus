@@ -13,6 +13,7 @@ const RESPONSAVEIS_COMERCIAIS = new Set([
 const DIGISAC_COMERCIAL_DEPARTMENT_ID = process.env.DIGISAC_COMERCIAL_DEPARTMENT_ID || 'a0dd4917-91dd-4d33-9dcc-567c3f3ddff2';
 const DIGISAC_FINANCEIRO_DEPARTMENT_ID = process.env.DIGISAC_FINANCEIRO_DEPARTMENT_ID || '6edd21e5-f88a-4e87-94e1-61a3e97f2466';
 const DIGISAC_FINANCEIRO_USER_ID = process.env.DIGISAC_FINANCEIRO_USER_ID || 'c1d3e230-d249-4406-bbb1-2a9bd0e501f3';
+const DIGISAC_CNPJ_MAX_RETRIES = 2;
 
 const DIGISAC_USER_IDS = {
     'GERUZA MENDES': process.env.DIGISAC_USER_GERUZA_ID || '2f3518c3-7a5d-42c3-805d-7d33735e8303',
@@ -161,10 +162,12 @@ async function ensureDigisacClienteSessionsTable() {
             responsavel_comercial TEXT,
             cliente JSONB,
             etapa TEXT,
+            tentativas_cnpj INTEGER DEFAULT 0,
             updated_at TIMESTAMP DEFAULT NOW()
         )
     `);
     await pool.query(`ALTER TABLE digisac_cliente_sessions ADD COLUMN IF NOT EXISTS etapa TEXT`);
+    await pool.query(`ALTER TABLE digisac_cliente_sessions ADD COLUMN IF NOT EXISTS tentativas_cnpj INTEGER DEFAULT 0`);
 }
 
 function onlyDigits(value) {
@@ -391,6 +394,20 @@ function isDocumentoFormatValid(value) {
     return digits.length === 11 || digits.length === 14;
 }
 
+function isManualCnpjFormatValid(value) {
+    return /^\d{14}$/.test(String(value || '').trim());
+}
+
+function getManualCnpjInput(req) {
+    const rawDocumento = getRawDocumentoInput(req);
+    if (rawDocumento) return rawDocumento;
+
+    const messageText = getDigisacMessageText(req);
+    if (messageText) return messageText;
+
+    return findDocumentInPayload(req.body) || '';
+}
+
 function hasValidDigisacToken(req) {
     const expected = process.env.DIGISAC_WEBHOOK_TOKEN;
     if (!expected) return true;
@@ -503,14 +520,15 @@ async function saveDigisacClienteSession(contactId, documento, row, etapa = 'men
 
     await ensureDigisacClienteSessionsTable();
     await pool.query(`
-        INSERT INTO digisac_cliente_sessions (contact_id, documento, responsavel_comercial, cliente, etapa, updated_at)
-        VALUES ($1, $2, $3, $4::jsonb, $5, NOW())
+        INSERT INTO digisac_cliente_sessions (contact_id, documento, responsavel_comercial, cliente, etapa, tentativas_cnpj, updated_at)
+        VALUES ($1, $2, $3, $4::jsonb, $5, 0, NOW())
         ON CONFLICT (contact_id)
         DO UPDATE SET
             documento = EXCLUDED.documento,
             responsavel_comercial = EXCLUDED.responsavel_comercial,
             cliente = EXCLUDED.cliente,
             etapa = EXCLUDED.etapa,
+            tentativas_cnpj = 0,
             updated_at = NOW()
     `, [
         contactId,
@@ -523,18 +541,19 @@ async function saveDigisacClienteSession(contactId, documento, row, etapa = 'men
     return { success: true };
 }
 
-async function saveDigisacFlowSession(contactId, etapa) {
+async function saveDigisacFlowSession(contactId, etapa, tentativasCnpj = 0) {
     if (!contactId || !etapa) return null;
 
     await ensureDigisacClienteSessionsTable();
     await pool.query(`
-        INSERT INTO digisac_cliente_sessions (contact_id, etapa, updated_at)
-        VALUES ($1, $2, NOW())
+        INSERT INTO digisac_cliente_sessions (contact_id, etapa, tentativas_cnpj, updated_at)
+        VALUES ($1, $2, $3, NOW())
         ON CONFLICT (contact_id)
         DO UPDATE SET
             etapa = EXCLUDED.etapa,
+            tentativas_cnpj = EXCLUDED.tentativas_cnpj,
             updated_at = NOW()
-    `, [contactId, etapa]);
+    `, [contactId, etapa, tentativasCnpj]);
 
     return { success: true };
 }
@@ -544,7 +563,7 @@ async function getDigisacClienteSession(contactId) {
 
     await ensureDigisacClienteSessionsTable();
     const result = await pool.query(`
-        SELECT contact_id, documento, responsavel_comercial, cliente, etapa, updated_at
+        SELECT contact_id, documento, responsavel_comercial, cliente, etapa, tentativas_cnpj, updated_at
         FROM digisac_cliente_sessions
         WHERE contact_id = $1
           AND updated_at >= NOW() - INTERVAL '2 hours'
@@ -560,7 +579,7 @@ async function getDigisacStoredClienteSession(contactId) {
 
     await ensureDigisacClienteSessionsTable();
     const result = await pool.query(`
-        SELECT contact_id, documento, responsavel_comercial, cliente, etapa, updated_at
+        SELECT contact_id, documento, responsavel_comercial, cliente, etapa, tentativas_cnpj, updated_at
         FROM digisac_cliente_sessions
         WHERE contact_id = $1
           AND documento IS NOT NULL
@@ -577,7 +596,7 @@ async function clearDigisacClienteSession(contactId) {
     await ensureDigisacClienteSessionsTable();
     await pool.query(`
         UPDATE digisac_cliente_sessions
-        SET etapa = 'cnpj_salvo', updated_at = NOW()
+        SET etapa = 'cnpj_salvo', tentativas_cnpj = 0, updated_at = NOW()
         WHERE contact_id = $1
           AND documento IS NOT NULL
           AND cliente IS NOT NULL
@@ -865,6 +884,48 @@ function buildDigisacCnpjRequestMessage() {
     return 'Para identificarmos seu cadastro e direcionarmos seu atendimento ao consultor responsavel, informe o CNPJ da empresa.\n\nImportante: Informe apenas os numeros do CNPJ, sem pontos, barras ou tracos.\n\nExemplo: `12345678000199`';
 }
 
+function buildDigisacInvalidCnpjMessage() {
+    return '⚠️ Não foi possível localizar o CNPJ informado.\n\nIsso pode ter acontecido porque o CNPJ não foi encontrado em nossa base de clientes ou porque foi informado em um formato inválido.\n\n*Importante:* Informe apenas os números do CNPJ, sem pontos, barras ou traços.\n\n*Exemplo:* `12345678000199`\n\nPor favor, verifique o CNPJ e tente novamente.';
+}
+
+function buildDigisacCnpjAttemptsExceededMessage() {
+    return 'Não foi possível localizar um CNPJ válido após algumas tentativas.\n\nVamos retornar ao início para começar novamente.';
+}
+
+async function handleDigisacInvalidManualCnpj(contactId, session) {
+    const attempts = Number(session?.tentativas_cnpj || 0) + 1;
+
+    if (attempts <= DIGISAC_CNPJ_MAX_RETRIES) {
+        await saveDigisacFlowSession(contactId, 'aguardando_cnpj_manual', attempts);
+        const notification = await sendDigisacMessage(contactId, buildDigisacInvalidCnpjMessage());
+
+        return {
+            success: true,
+            found: false,
+            encontrado: 'nao',
+            action: 'cnpj_manual_invalido',
+            pendingDocument: true,
+            attempts,
+            tentativasRestantes: DIGISAC_CNPJ_MAX_RETRIES - attempts,
+            notification
+        };
+    }
+
+    await saveDigisacFlowSession(contactId, 'aguardando_tipo_cliente', 0);
+    const notification = await sendDigisacMessage(contactId, buildDigisacCnpjAttemptsExceededMessage());
+    const restartNotification = await sendDigisacMessage(contactId, buildDigisacWelcomeMessage());
+
+    return {
+        success: true,
+        found: false,
+        encontrado: 'nao',
+        action: 'cnpj_manual_tentativas_esgotadas',
+        startDefaultFlow: true,
+        notification,
+        restartNotification
+    };
+}
+
 router.get('/list/all', async (req, res) => {
     try {
         await ensureResponsaveisTable();
@@ -986,6 +1047,52 @@ router.all('/digisac/consultor', async (req, res) => {
         const incomingOption = extractDigisacUserOption(req);
         if (!commandNormalized && session && incomingOption) {
             commandNormalized = 'opcao_cliente';
+        }
+
+        if (session?.etapa === 'aguardando_cnpj_manual') {
+            const manualCnpjInput = getManualCnpjInput(req);
+            await saveDigisacDebug(req, onlyDigits(manualCnpjInput) || null);
+
+            if (!manualCnpjInput && !hasDigisacUserContent(req)) {
+                return res.json({ success: true, ignored: true, action: 'waiting_manual_cnpj', message: 'Ignorado: aguardando CNPJ manual.' });
+            }
+
+            if (!isManualCnpjFormatValid(manualCnpjInput)) {
+                const invalidResult = await handleDigisacInvalidManualCnpj(contactId, session);
+                return res.json(invalidResult);
+            }
+
+            const documentoManual = manualCnpjInput.trim();
+            const rowManual = await findClienteByDocumento(documentoManual);
+            if (!rowManual) {
+                const invalidResult = await handleDigisacInvalidManualCnpj(contactId, session);
+                return res.json({
+                    ...invalidResult,
+                    documento: documentoManual
+                });
+            }
+
+            await saveDigisacClienteSession(contactId, documentoManual, rowManual, 'menu_opcoes');
+            const notification = await sendDigisacMessage(contactId, buildDigisacMessage(rowManual));
+
+            return res.json({
+                success: true,
+                found: true,
+                encontrado: 'sim',
+                action: 'menu_opcoes_cliente',
+                pendingSelection: true,
+                responsavel_comercial: rowManual.responsavel_comercial || null,
+                responsavelComercial: rowManual.responsavel_comercial || null,
+                notification,
+                cliente: {
+                    empresa: rowManual.empresa,
+                    codigo: rowManual.codigo,
+                    razaoSocial: rowManual.razao_social,
+                    fantasia: rowManual.fantasia,
+                    cnpjCpf: rowManual.cnpj_cpf,
+                    responsavelComercial: rowManual.responsavel_comercial
+                }
+            });
         }
 
         if (session?.etapa === 'aguardando_tipo_cliente' && incomingOption) {
