@@ -880,7 +880,10 @@ router.all('/digisac/consultor', async (req, res) => {
             return res.status(401).json({ success: false, error: 'Token Digisac inválido.' });
         }
 
-        if (isDigisacWebhookFromBot(req)) {
+        const earlyCommand = String(req.body?.command || req.body?.comando || req.query.command || req.query.comando || findCommandInPayload(req.body) || '').trim().toLowerCase();
+        const isFlowWebhookCommand = ['consulta_cliente', 'consulta_cnpj_contato', 'consulta_contato', 'verifica_cnpj_contato', 'opcao_cliente'].includes(earlyCommand);
+
+        if (isDigisacWebhookFromBot(req) && !isFlowWebhookCommand) {
             return res.json({ success: true, ignored: true, action: 'bot_message', message: 'Evento Digisac originado pelo bot ignorado.' });
         }
 
@@ -901,20 +904,9 @@ router.all('/digisac/consultor', async (req, res) => {
             commandNormalized = 'opcao_cliente';
         }
 
-        if (['consulta_cnpj_contato', 'consulta_contato', 'verifica_cnpj_contato'].includes(commandNormalized)) {
+        if (['consulta_cliente', 'consulta_cnpj_contato', 'consulta_contato', 'verifica_cnpj_contato'].includes(commandNormalized)) {
             const opcao = incomingOption;
             const session = await getDigisacClienteSession(contactId);
-            const messageText = getDigisacMessageText(req);
-            const rawDocumentoInput = getRawDocumentoInput(req);
-            const hasDirectDocumento = isDocumentoFormatValid(rawDocumentoInput) || isDocumentoFormatValid(messageText);
-
-            if (!directCommand && !session && messageText && !opcao && !hasDirectDocumento) {
-                return res.json({ success: true, ignored: true, action: 'generic_user_message', message: 'Ignorado: mensagem generica sem opcao ou documento.' });
-            }
-
-            if (!directCommand && !session && !messageText && !rawDocumentoInput && !findFirstObjectWithCnpjField(req.body)) {
-                return res.json({ success: true, ignored: true, action: 'no_user_input', message: 'Ignorado: sem conteúdo de usuário válido.' });
-            }
 
             if (session?.etapa === 'confirmacao_cnpj_salvo') {
                 await saveDigisacDebug(req, opcao || session.documento || null);
