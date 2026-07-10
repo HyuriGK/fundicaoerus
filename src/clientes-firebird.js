@@ -1194,18 +1194,7 @@ router.all('/digisac/consultor', async (req, res) => {
             }
 
             if (!contactId || !session) {
-                let notification = null;
-                let transfer = null;
-                if (contactId) {
-                    notification = await sendDigisacMessage(contactId, 'Não encontramos cadastro para o CNPJ/CPF informado. Seu atendimento será direcionado ao departamento Comercial.');
-                    transfer = await transferDigisacTicketTo(
-                        contactId,
-                        DIGISAC_COMERCIAL_DEPARTMENT_ID,
-                        null,
-                        'Nenhum cadastro encontrado. Transferido automaticamente para o departamento Comercial.'
-                    );
-                }
-                return res.json({ success: true, found: false, encontrado: 'nao', action: 'iniciar_fluxo_comercial', sent_by_backend: !!notification, notification, transfer });
+                return res.json({ success: true, ignored: true, action: 'ignored', message: 'Evento Digisac ignorado: sem sessão ativa para opcao_cliente.' });
             }
 
             if (opcao === '2') {
@@ -1316,41 +1305,28 @@ router.all('/digisac/consultor', async (req, res) => {
         if (!commandNormalized && !documento) {
             await saveDigisacDebug(req, null);
 
-            if (contactId) {
-                if (session?.etapa === 'confirmacao_cnpj_salvo') {
-                    const notification = await sendDigisacMessage(contactId, 'Opção inválida. Responda 1 para continuar com este cadastro ou 2 para informar outro cadastro.');
-                    return res.json({
-                        success: true,
-                        found: true,
-                        encontrado: 'sim',
-                        action: 'confirmar_cnpj_salvo',
-                        pendingConfirmation: true,
-                        invalidOption: true,
-                        notification
-                    });
-                }
-
-                if (session?.etapa === 'menu_opcoes') {
-                    const notification = await sendDigisacMessage(contactId, 'Opção inválida. Responda 1 para falar com o comercial, 2 para 2 via de boleto ou 3 para 2 via de nota fiscal.');
-                    return res.json({
-                        success: true,
-                        found: true,
-                        encontrado: 'sim',
-                        action: 'menu_opcoes_cliente',
-                        pendingSelection: true,
-                        invalidOption: true,
-                        notification
-                    });
-                }
-
-                const notification = await sendDigisacMessage(contactId, buildDigisacWelcomeMessage());
-                await clearDigisacClienteSession(contactId);
+            if (session?.etapa === 'confirmacao_cnpj_salvo') {
+                const notification = await sendDigisacMessage(contactId, 'Opção inválida. Responda 1 para continuar com este cadastro ou 2 para informar outro cadastro.');
                 return res.json({
                     success: true,
-                    found: false,
-                    encontrado: 'nao',
-                    action: 'iniciar_fluxo_comercial',
-                    startDefaultFlow: true,
+                    found: true,
+                    encontrado: 'sim',
+                    action: 'confirmar_cnpj_salvo',
+                    pendingConfirmation: true,
+                    invalidOption: true,
+                    notification
+                });
+            }
+
+            if (session?.etapa === 'menu_opcoes') {
+                const notification = await sendDigisacMessage(contactId, 'Opção inválida. Responda 1 para falar com o comercial, 2 para 2 via de boleto ou 3 para 2 via de nota fiscal.');
+                return res.json({
+                    success: true,
+                    found: true,
+                    encontrado: 'sim',
+                    action: 'menu_opcoes_cliente',
+                    pendingSelection: true,
+                    invalidOption: true,
                     notification
                 });
             }
