@@ -265,8 +265,43 @@ function isLikelyDigisacPromptText(text) {
     return promptPatterns.some(pattern => normalized.includes(pattern));
 }
 
+function findFirstDigisacOptionInPayload(value) {
+    if (value == null) return '';
+
+    if (typeof value === 'string' || typeof value === 'number') {
+        const digits = onlyDigits(value);
+        if (digits.length === 1) return digits;
+        return '';
+    }
+
+    if (Array.isArray(value)) {
+        for (const item of value) {
+            const found = findFirstDigisacOptionInPayload(item);
+            if (found) return found;
+        }
+        return '';
+    }
+
+    if (typeof value === 'object') {
+        const preferredKeys = ['opcao', 'option', 'answer', 'resposta', 'value', 'valor', 'text', 'texto', 'message', 'mensagem'];
+        for (const key of preferredKeys) {
+            const found = findFirstDigisacOptionInPayload(value[key]);
+            if (found) return found;
+        }
+
+        for (const child of Object.values(value)) {
+            const found = findFirstDigisacOptionInPayload(child);
+            if (found) return found;
+        }
+    }
+
+    return '';
+}
+
 function extractDigisacUserOption(req) {
     const messageText = getDigisacMessageText(req) || findTextInPayload(req.body);
+    const payloadOption = findFirstDigisacOptionInPayload(req.body);
+    if (payloadOption) return payloadOption;
     if (!messageText) return '';
     if (isLikelyDigisacPromptText(messageText)) return '';
     return onlyDigits(messageText).slice(0, 1);
