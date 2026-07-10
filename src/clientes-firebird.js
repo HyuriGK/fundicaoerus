@@ -667,11 +667,11 @@ router.all('/digisac/consultor', async (req, res) => {
             return res.status(401).json({ success: false, error: 'Token Digisac inválido.' });
         }
 
-        await saveDigisacDebug(req, null);
         if (await isDuplicateDigisacRequest(req)) {
             return res.json({ success: true, ignored: true, action: 'duplicate_request', message: 'Duplicado Digisac ignorado.' });
         }
 
+        await saveDigisacDebug(req, null);
         await ensureResponsaveisTable();
         await ensureDigisacClienteSessionsTable();
         const contactId = req.body?.contactId || req.body?.contact_id || req.query.contactId || req.query.contact_id || findContactIdInPayload(req.body);
