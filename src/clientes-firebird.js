@@ -52,9 +52,11 @@ async function ensureDigisacClienteSessionsTable() {
             documento TEXT,
             responsavel_comercial TEXT,
             cliente JSONB,
+            etapa TEXT,
             updated_at TIMESTAMP DEFAULT NOW()
         )
     `);
+    await pool.query(`ALTER TABLE digisac_cliente_sessions ADD COLUMN IF NOT EXISTS etapa TEXT`);
 }
 
 function onlyDigits(value) {
@@ -212,24 +214,26 @@ async function getRecentDigisacWebhookDocument() {
     }
 }
 
-async function saveDigisacClienteSession(contactId, documento, row) {
+async function saveDigisacClienteSession(contactId, documento, row, etapa = 'menu_opcoes') {
     if (!contactId || !row) return null;
 
     await ensureDigisacClienteSessionsTable();
     await pool.query(`
-        INSERT INTO digisac_cliente_sessions (contact_id, documento, responsavel_comercial, cliente, updated_at)
-        VALUES ($1, $2, $3, $4::jsonb, NOW())
+        INSERT INTO digisac_cliente_sessions (contact_id, documento, responsavel_comercial, cliente, etapa, updated_at)
+        VALUES ($1, $2, $3, $4::jsonb, $5, NOW())
         ON CONFLICT (contact_id)
         DO UPDATE SET
             documento = EXCLUDED.documento,
             responsavel_comercial = EXCLUDED.responsavel_comercial,
             cliente = EXCLUDED.cliente,
+            etapa = EXCLUDED.etapa,
             updated_at = NOW()
     `, [
         contactId,
         documento,
         row.responsavel_comercial || null,
-        JSON.stringify(row)
+        JSON.stringify(row),
+        etapa
     ]);
 
     return { success: true };
@@ -240,7 +244,7 @@ async function getDigisacClienteSession(contactId) {
 
     await ensureDigisacClienteSessionsTable();
     const result = await pool.query(`
-        SELECT contact_id, documento, responsavel_comercial, cliente, updated_at
+        SELECT contact_id, documento, responsavel_comercial, cliente, etapa, updated_at
         FROM digisac_cliente_sessions
         WHERE contact_id = $1
           AND updated_at >= NOW() - INTERVAL '2 hours'
@@ -468,6 +472,21 @@ function buildDigisacMessage(row) {
     return '✅ Recebemos seu documento, e estamos consultando em nossa base de dados.\n\nEnquanto isso, escolha uma opção:\n\n1️⃣ - Falar com o comercial\n2️⃣ - 2ª via de boleto\n3️⃣ - 2ª via de nota fiscal';
 }
 
+function getSessionClienteValue(session, key) {
+    const snakeKey = key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+    return session?.cliente?.[key] || session?.cliente?.[snakeKey] || '';
+}
+
+function buildDigisacSavedCnpjConfirmationMessage(row) {
+    const nome = row?.razao_social || row?.fantasia || 'cliente';
+    const documento = row?.cnpj_cpf || row?.cnpjCpf || '';
+    return `Identificamos seu cadastro conforme seu ultimo contato conosco.\n\nCNPJ/CPF: ${documento}\nCliente: ${nome}\n\nDeseja continuar com este cadastro?\n\n1 - Sim\n2 - Nao`;
+}
+
+function buildDigisacWelcomeMessage() {
+    return 'Ola! Seja bem-vindo a Fundicao Erus. Voce entrou em contato com o Setor Comercial.\n\nComo podemos ajuda-lo?\n\n1 - Ja sou cliente\n2 - Nao sou cliente';
+}
+
 router.get('/list/all', async (req, res) => {
     try {
         await ensureResponsaveisTable();
@@ -573,6 +592,81 @@ router.all('/digisac/consultor', async (req, res) => {
         const command = String(req.body?.command || req.body?.comando || req.query.command || req.query.comando || findCommandInPayload(req.body) || '').trim();
         const commandNormalized = command.toLowerCase();
 
+        if (['consulta_cnpj_contato', 'consulta_contato', 'verifica_cnpj_contato'].includes(commandNormalized)) {
+            let documentoContato = onlyDigits(req.body?.documento || req.body?.cnpjCpf || req.body?.cnpj || req.query.documento || req.query.cnpjCpf || req.query.cnpj);
+            if (!isDocumentoFormatValid(documentoContato)) {
+                documentoContato = '';
+            }
+            if (!documentoContato) {
+                documentoContato = findFirstObjectWithCnpjField(req.body) || '';
+            }
+            if (!documentoContato) {
+                documentoContato = await getCnpjFromDigisacContactId(contactId);
+            }
+            if (!documentoContato) {
+                documentoContato = await getCnpjFromDigisacContact(req.body?.numeroContato || req.body?.numero_contato || req.query.numeroContato || req.query.numero_contato);
+            }
+
+            await saveDigisacDebug(req, documentoContato || null);
+
+            if (!documentoContato) {
+                if (contactId) {
+                    await clearDigisacClienteSession(contactId);
+                }
+                return res.json({
+                    success: true,
+                    found: false,
+                    encontrado: 'nao',
+                    action: 'iniciar_fluxo_comercial',
+                    startDefaultFlow: true,
+                    message: buildDigisacWelcomeMessage(),
+                    cliente: null
+                });
+            }
+
+            const rowContato = await findClienteByDocumento(documentoContato);
+            if (!rowContato) {
+                if (contactId) {
+                    await clearDigisacClienteSession(contactId);
+                }
+                return res.json({
+                    success: true,
+                    found: false,
+                    encontrado: 'nao',
+                    action: 'iniciar_fluxo_comercial',
+                    startDefaultFlow: true,
+                    documento: documentoContato,
+                    message: buildDigisacWelcomeMessage(),
+                    cliente: null
+                });
+            }
+
+            let notification = null;
+            if (contactId) {
+                await saveDigisacClienteSession(contactId, documentoContato, rowContato, 'confirmacao_cnpj_salvo');
+                notification = await sendDigisacMessage(contactId, buildDigisacSavedCnpjConfirmationMessage(rowContato));
+            }
+
+            return res.json({
+                success: true,
+                found: true,
+                encontrado: 'sim',
+                action: 'confirmar_cnpj_salvo',
+                pendingConfirmation: true,
+                responsavel_comercial: rowContato.responsavel_comercial || null,
+                responsavelComercial: rowContato.responsavel_comercial || null,
+                notification,
+                cliente: {
+                    empresa: rowContato.empresa,
+                    codigo: rowContato.codigo,
+                    razaoSocial: rowContato.razao_social,
+                    fantasia: rowContato.fantasia,
+                    cnpjCpf: rowContato.cnpj_cpf,
+                    responsavelComercial: rowContato.responsavel_comercial
+                }
+            });
+        }
+
         if (commandNormalized === 'opcao_cliente') {
             const optionText = String(req.body?.opcao || req.body?.option || req.query.opcao || req.query.option || findTextInPayload(req.body) || '').trim();
             const opcao = onlyDigits(optionText).slice(0, 1);
@@ -581,10 +675,10 @@ router.all('/digisac/consultor', async (req, res) => {
             if (!documentoOpcao) {
                 documentoOpcao = findDocumentInPayload(req.body);
             }
-            if (!documentoOpcao) {
+            if (!documentoOpcao && session?.etapa !== 'confirmacao_cnpj_salvo') {
                 documentoOpcao = await getCnpjFromDigisacContactId(contactId);
             }
-            if (documentoOpcao) {
+            if (documentoOpcao && session?.etapa !== 'confirmacao_cnpj_salvo') {
                 const rowOpcao = await findClienteByDocumento(documentoOpcao);
                 if (rowOpcao && contactId) {
                     await saveDigisacClienteSession(contactId, documentoOpcao, rowOpcao);
@@ -595,6 +689,51 @@ router.all('/digisac/consultor', async (req, res) => {
                 }
             }
             await saveDigisacDebug(req, documentoOpcao || opcao || null);
+
+            if (session?.etapa === 'confirmacao_cnpj_salvo') {
+                if (opcao === '1') {
+                    const clienteNome = getSessionClienteValue(session, 'razaoSocial') || getSessionClienteValue(session, 'fantasia') || 'cliente';
+                    const clienteCnpj = session.documento || getSessionClienteValue(session, 'cnpjCpf') || 'nao informado';
+                    const notification = await sendDigisacMessage(contactId, 'Perfeito, cadastro confirmado. Seu atendimento sera direcionado ao responsavel comercial.');
+                    const transfer = await transferDigisacTicket(contactId, session.responsavel_comercial, clienteNome, clienteCnpj);
+                    await clearDigisacClienteSession(contactId);
+
+                    return res.json({
+                        success: true,
+                        found: true,
+                        encontrado: 'sim',
+                        action: 'confirmar_cnpj_sim',
+                        responsavel_comercial: session.responsavel_comercial,
+                        responsavelComercial: session.responsavel_comercial,
+                        notification,
+                        transfer
+                    });
+                }
+
+                if (opcao === '2') {
+                    await clearDigisacClienteSession(contactId);
+                    return res.json({
+                        success: true,
+                        found: false,
+                        encontrado: 'nao',
+                        action: 'iniciar_fluxo_comercial',
+                        startDefaultFlow: true,
+                        message: buildDigisacWelcomeMessage()
+                    });
+                }
+
+                const notification = await sendDigisacMessage(contactId, 'Opcao invalida. Responda 1 para continuar com este cadastro ou 2 para informar outro cadastro.');
+                return res.json({
+                    success: true,
+                    found: true,
+                    encontrado: 'sim',
+                    action: 'confirmar_cnpj_salvo',
+                    pendingConfirmation: true,
+                    invalidOption: true,
+                    message: 'Opcao invalida.',
+                    notification
+                });
+            }
 
             if (!contactId || !session) {
                 let notification = null;
@@ -613,8 +752,8 @@ router.all('/digisac/consultor', async (req, res) => {
 
             if (opcao === '2') {
                 const notification = await sendDigisacMessage(contactId, '✅ Cadastro identificado!\nSeu atendimento será redirecionado para o setor financeiro.');
-                const clienteNome = session?.cliente?.razao_social || session?.cliente?.fantasia || 'cliente';
-                const clienteCnpj = session?.cliente?.cnpjCpf || 'não informado';
+                const clienteNome = getSessionClienteValue(session, 'razaoSocial') || getSessionClienteValue(session, 'fantasia') || 'cliente';
+                const clienteCnpj = session.documento || getSessionClienteValue(session, 'cnpjCpf') || 'nao informado';
                 const transfer = await transferDigisacTicketTo(
                     contactId,
                     DIGISAC_FINANCEIRO_DEPARTMENT_ID,
@@ -636,8 +775,8 @@ router.all('/digisac/consultor', async (req, res) => {
 
             if (opcao === '1' || opcao === '3') {
                 const notification = await sendDigisacMessage(contactId, '✅ Cadastro identificado!\nSeu atendimento será direcionado ao responsável comercial.\nEnquanto isso, conte-nos qual assunto você deseja tratar.');
-                const clienteNome = session?.cliente?.razao_social || session?.cliente?.fantasia || 'cliente';
-                const clienteCnpj = session?.cliente?.cnpjCpf || 'não informado';
+                const clienteNome = getSessionClienteValue(session, 'razaoSocial') || getSessionClienteValue(session, 'fantasia') || 'cliente';
+                const clienteCnpj = session.documento || getSessionClienteValue(session, 'cnpjCpf') || 'nao informado';
                 const transfer = await transferDigisacTicket(contactId, session.responsavel_comercial, clienteNome, clienteCnpj);
 
                 return res.json({
@@ -652,7 +791,7 @@ router.all('/digisac/consultor', async (req, res) => {
                 });
             }
 
-            const notification = await sendDigisacMessage(contactId, 'Opcao invalida. Responda 1 para 2 via de boleto ou 2 para 2 via de nota fiscal.');
+            const notification = await sendDigisacMessage(contactId, 'Opcao invalida. Responda 1 para falar com o comercial, 2 para 2 via de boleto ou 3 para 2 via de nota fiscal.');
             return res.json({ success: true, found: true, encontrado: 'sim', invalidOption: true, message: 'Opcao invalida.', notification });
         }
 
