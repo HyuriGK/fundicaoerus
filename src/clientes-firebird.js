@@ -523,6 +523,22 @@ async function saveDigisacClienteSession(contactId, documento, row, etapa = 'men
     return { success: true };
 }
 
+async function saveDigisacFlowSession(contactId, etapa) {
+    if (!contactId || !etapa) return null;
+
+    await ensureDigisacClienteSessionsTable();
+    await pool.query(`
+        INSERT INTO digisac_cliente_sessions (contact_id, etapa, updated_at)
+        VALUES ($1, $2, NOW())
+        ON CONFLICT (contact_id)
+        DO UPDATE SET
+            etapa = EXCLUDED.etapa,
+            updated_at = NOW()
+    `, [contactId, etapa]);
+
+    return { success: true };
+}
+
 async function getDigisacClienteSession(contactId) {
     if (!contactId) return null;
 
@@ -565,6 +581,11 @@ async function clearDigisacClienteSession(contactId) {
         WHERE contact_id = $1
           AND documento IS NOT NULL
           AND cliente IS NOT NULL
+    `, [contactId]);
+    await pool.query(`
+        DELETE FROM digisac_cliente_sessions
+        WHERE contact_id = $1
+          AND (documento IS NULL OR cliente IS NULL)
     `, [contactId]);
     return { success: true };
 }
@@ -1121,7 +1142,7 @@ router.all('/digisac/consultor', async (req, res) => {
             if (!documentoContato) {
                 const notification = contactId ? await sendDigisacMessage(contactId, buildDigisacWelcomeMessage()) : null;
                 if (contactId) {
-                    await clearDigisacClienteSession(contactId);
+                    await saveDigisacFlowSession(contactId, 'aguardando_tipo_cliente');
                 }
                 return res.json({
                     success: true,
@@ -1138,7 +1159,7 @@ router.all('/digisac/consultor', async (req, res) => {
             if (!rowContato) {
                 const notification = contactId ? await sendDigisacMessage(contactId, buildDigisacWelcomeMessage()) : null;
                 if (contactId) {
-                    await clearDigisacClienteSession(contactId);
+                    await saveDigisacFlowSession(contactId, 'aguardando_tipo_cliente');
                 }
                 return res.json({
                     success: true,
@@ -1211,10 +1232,7 @@ router.all('/digisac/consultor', async (req, res) => {
                 await saveDigisacDebug(req, opcao || session.documento || null);
 
                 if (opcao === '1') {
-                    await saveDigisacClienteSession(contactId, session.documento, {
-                        ...session.cliente,
-                        responsavel_comercial: session.responsavel_comercial
-                    }, 'aguardando_cnpj_manual');
+                    await saveDigisacFlowSession(contactId, 'aguardando_cnpj_manual');
                     const notification = await sendDigisacMessage(contactId, buildDigisacCnpjRequestMessage());
 
                     return res.json({
