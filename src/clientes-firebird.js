@@ -532,6 +532,23 @@ async function getDigisacClienteSession(contactId) {
         FROM digisac_cliente_sessions
         WHERE contact_id = $1
           AND updated_at >= NOW() - INTERVAL '2 hours'
+          AND COALESCE(etapa, '') <> 'cnpj_salvo'
+        LIMIT 1
+    `, [contactId]);
+
+    return result.rows[0] || null;
+}
+
+async function getDigisacStoredClienteSession(contactId) {
+    if (!contactId) return null;
+
+    await ensureDigisacClienteSessionsTable();
+    const result = await pool.query(`
+        SELECT contact_id, documento, responsavel_comercial, cliente, etapa, updated_at
+        FROM digisac_cliente_sessions
+        WHERE contact_id = $1
+          AND documento IS NOT NULL
+          AND cliente IS NOT NULL
         LIMIT 1
     `, [contactId]);
 
@@ -542,7 +559,13 @@ async function clearDigisacClienteSession(contactId) {
     if (!contactId) return null;
 
     await ensureDigisacClienteSessionsTable();
-    await pool.query('DELETE FROM digisac_cliente_sessions WHERE contact_id = $1', [contactId]);
+    await pool.query(`
+        UPDATE digisac_cliente_sessions
+        SET etapa = 'cnpj_salvo', updated_at = NOW()
+        WHERE contact_id = $1
+          AND documento IS NOT NULL
+          AND cliente IS NOT NULL
+    `, [contactId]);
     return { success: true };
 }
 
@@ -1063,21 +1086,34 @@ router.all('/digisac/consultor', async (req, res) => {
                 });
             }
 
+            const storedSession = await getDigisacStoredClienteSession(contactId);
+            if (storedSession) {
+                await saveDigisacClienteSession(contactId, storedSession.documento, {
+                    ...storedSession.cliente,
+                    responsavel_comercial: storedSession.responsavel_comercial
+                }, 'confirmacao_cnpj_salvo');
+                await saveDigisacDebug(req, storedSession.documento);
+                const notification = await sendDigisacMessage(contactId, buildDigisacSavedCnpjConfirmationMessage(storedSession.cliente));
+
+                return res.json({
+                    success: true,
+                    found: true,
+                    encontrado: 'sim',
+                    action: 'confirmar_cnpj_salvo',
+                    pendingConfirmation: true,
+                    responsavel_comercial: storedSession.responsavel_comercial,
+                    responsavelComercial: storedSession.responsavel_comercial,
+                    sent_by_backend: !!notification,
+                    notification
+                });
+            }
+
             let documentoContato = onlyDigits(req.body?.documento || req.body?.cnpjCpf || req.body?.cnpj || req.query.documento || req.query.cnpjCpf || req.query.cnpj);
             if (!isDocumentoFormatValid(documentoContato)) {
                 documentoContato = '';
             }
             if (!documentoContato) {
                 documentoContato = findFirstObjectWithCnpjField(req.body) || '';
-            }
-            if (!documentoContato) {
-                documentoContato = await getCnpjFromDigisacContactId(contactId);
-            }
-            if (!documentoContato) {
-                documentoContato = await getCnpjFromDigisacContact(req.body?.numeroContato || req.body?.numero_contato || req.query.numeroContato || req.query.numero_contato);
-            }
-            if (!documentoContato) {
-                documentoContato = await getRecentDigisacWebhookDocumentByContact(contactId);
             }
 
             await saveDigisacDebug(req, documentoContato || null);
@@ -1159,9 +1195,6 @@ router.all('/digisac/consultor', async (req, res) => {
             }
             if (!session && !documentoOpcao) {
                 documentoOpcao = findDocumentInPayload(req.body);
-            }
-            if (!session && !documentoOpcao) {
-                documentoOpcao = await getCnpjFromDigisacContactId(contactId);
             }
             if (!session && documentoOpcao) {
                 const rowOpcao = await findClienteByDocumento(documentoOpcao);
