@@ -757,7 +757,14 @@ router.all('/digisac/consultor', async (req, res) => {
         await ensureDigisacClienteSessionsTable();
         const contactId = req.body?.contactId || req.body?.contact_id || req.query.contactId || req.query.contact_id || findContactIdInPayload(req.body);
         const command = String(req.body?.command || req.body?.comando || req.query.command || req.query.comando || findCommandInPayload(req.body) || '').trim();
-        const commandNormalized = command.toLowerCase();
+        let commandNormalized = command.toLowerCase();
+        const messageText = getDigisacMessageText(req) || findTextInPayload(req.body);
+        const opcaoText = onlyDigits(messageText).slice(0, 1);
+        const session = await getDigisacClienteSession(contactId);
+
+        if (!commandNormalized && session && ['confirmacao_cnpj_salvo', 'menu_opcoes'].includes(session.etapa) && ['1', '2', '3'].includes(opcaoText)) {
+            commandNormalized = 'consulta_cnpj_contato';
+        }
 
         if (['consulta_cnpj_contato', 'consulta_contato', 'verifica_cnpj_contato'].includes(commandNormalized)) {
             const optionText = getDigisacMessageText(req) || findTextInPayload(req.body);
