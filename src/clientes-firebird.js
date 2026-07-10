@@ -952,6 +952,44 @@ router.all('/digisac/consultor', async (req, res) => {
             commandNormalized = 'opcao_cliente';
         }
 
+        if (session?.etapa === 'aguardando_tipo_cliente' && incomingOption) {
+            await saveDigisacDebug(req, incomingOption || session.documento || null);
+
+            if (incomingOption === '1') {
+                await saveDigisacFlowSession(contactId, 'aguardando_cnpj_manual');
+                const notification = await sendDigisacMessage(contactId, buildDigisacCnpjRequestMessage());
+
+                return res.json({
+                    success: true,
+                    found: false,
+                    encontrado: 'nao',
+                    action: 'solicitar_cnpj_cliente',
+                    pendingDocument: true,
+                    notification
+                });
+            }
+
+            if (incomingOption === '2') {
+                await clearDigisacClienteSession(contactId);
+                const notification = await sendDigisacMessage(contactId, 'Seja bem-vindo(a) a Fundicao Erus! Sua conversa sera direcionada ao nosso time Comercial, que entrara em contato com voce o mais breve possivel.');
+                const transfer = await transferDigisacTicketTo(
+                    contactId,
+                    DIGISAC_COMERCIAL_DEPARTMENT_ID,
+                    null,
+                    'Contato informou que nao e cliente. Transferido automaticamente para o departamento Comercial.'
+                );
+
+                return res.json({
+                    success: true,
+                    found: false,
+                    encontrado: 'nao',
+                    action: 'nao_cliente_comercial',
+                    notification,
+                    transfer
+                });
+            }
+        }
+
         if (['consulta_cliente', 'consulta_cnpj_contato', 'consulta_contato', 'verifica_cnpj_contato'].includes(commandNormalized)) {
             const opcao = incomingOption;
             const session = await getDigisacClienteSession(contactId);
