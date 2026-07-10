@@ -846,11 +846,15 @@ function formatDigisacResponsavelDisplayName(responsavelComercial) {
         .join(' ');
 }
 
+function buildDigisacCommercialRedirectMessage() {
+    return '✅ Cadastro identificado!\nSeu atendimento será direcionado ao responsável comercial.\nEnquanto isso, conte-nos qual assunto você deseja tratar.';
+}
+
 function buildDigisacCommercialReceptionMessage(responsavelComercial) {
     const nomeResponsavel = formatDigisacResponsavelDisplayName(responsavelComercial);
     const cumprimento = getDigisacGreetingByCurrentHour();
 
-    return `✅ Cadastro identificado!\nSeu atendimento será direcionado ao responsável comercial.\nEnquanto isso, conte-nos qual assunto você deseja tratar.\n\nNome do responsável comercial: *${nomeResponsavel}*\n${cumprimento}, ${nomeResponsavel} por aqui, como posso ajudar?`;
+    return `${nomeResponsavel}:\n${cumprimento}, ${nomeResponsavel} por aqui, como posso ajudar?`;
 }
 
 function buildDigisacWelcomeMessage() {
@@ -1145,7 +1149,8 @@ router.all('/digisac/consultor', async (req, res) => {
                 }
 
                 if (opcao === '1' || opcao === '3') {
-                    const notification = await sendDigisacMessage(contactId, buildDigisacCommercialReceptionMessage(session.responsavel_comercial));
+                    const notification = await sendDigisacMessage(contactId, buildDigisacCommercialRedirectMessage());
+                    const receptionNotification = await sendDigisacMessage(contactId, buildDigisacCommercialReceptionMessage(session.responsavel_comercial));
                     const clienteNome = getSessionClienteValue(session, 'razaoSocial') || getSessionClienteValue(session, 'fantasia') || 'cliente';
                     const clienteCnpj = session.documento || getSessionClienteValue(session, 'cnpjCpf') || 'nao informado';
                     const transfer = await transferDigisacTicket(contactId, session.responsavel_comercial, clienteNome, clienteCnpj);
@@ -1159,6 +1164,7 @@ router.all('/digisac/consultor', async (req, res) => {
                         responsavelComercial: session.responsavel_comercial,
                         sent_by_backend: !!notification,
                         notification,
+                        receptionNotification,
                         transfer
                     });
                 }
@@ -1424,7 +1430,8 @@ router.all('/digisac/consultor', async (req, res) => {
             }
 
             if (opcao === '1' || opcao === '3') {
-                const notification = await sendDigisacMessage(contactId, buildDigisacCommercialReceptionMessage(session.responsavel_comercial));
+                const notification = await sendDigisacMessage(contactId, buildDigisacCommercialRedirectMessage());
+                const receptionNotification = await sendDigisacMessage(contactId, buildDigisacCommercialReceptionMessage(session.responsavel_comercial));
                 const clienteNome = getSessionClienteValue(session, 'razaoSocial') || getSessionClienteValue(session, 'fantasia') || 'cliente';
                 const clienteCnpj = session.documento || getSessionClienteValue(session, 'cnpjCpf') || 'nao informado';
                 const transfer = await transferDigisacTicket(contactId, session.responsavel_comercial, clienteNome, clienteCnpj);
@@ -1437,6 +1444,7 @@ router.all('/digisac/consultor', async (req, res) => {
                     responsavel_comercial: session.responsavel_comercial,
                     responsavelComercial: session.responsavel_comercial,
                     notification,
+                    receptionNotification,
                     transfer
                 });
             }
