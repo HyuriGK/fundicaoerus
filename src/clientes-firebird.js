@@ -892,7 +892,8 @@ router.all('/digisac/consultor', async (req, res) => {
         await ensureResponsaveisTable();
         await ensureDigisacClienteSessionsTable();
         const contactId = req.body?.contactId || req.body?.contact_id || req.query.contactId || req.query.contact_id || findContactIdInPayload(req.body);
-        const command = String(req.body?.command || req.body?.comando || req.query.command || req.query.comando || findCommandInPayload(req.body) || '').trim();
+        const directCommand = String(req.body?.command || req.body?.comando || req.query.command || req.query.comando || '').trim();
+        const command = directCommand || String(findCommandInPayload(req.body) || '').trim();
         let commandNormalized = command.toLowerCase();
         const session = await getDigisacClienteSession(contactId);
         const incomingOption = extractDigisacUserOption(req);
@@ -907,11 +908,11 @@ router.all('/digisac/consultor', async (req, res) => {
             const rawDocumentoInput = getRawDocumentoInput(req);
             const hasDirectDocumento = isDocumentoFormatValid(rawDocumentoInput) || isDocumentoFormatValid(messageText);
 
-            if (!session && messageText && !opcao && !hasDirectDocumento) {
+            if (!directCommand && !session && messageText && !opcao && !hasDirectDocumento) {
                 return res.json({ success: true, ignored: true, action: 'generic_user_message', message: 'Ignorado: mensagem generica sem opcao ou documento.' });
             }
 
-            if (!session && !messageText && !rawDocumentoInput && !findFirstObjectWithCnpjField(req.body)) {
+            if (!directCommand && !session && !messageText && !rawDocumentoInput && !findFirstObjectWithCnpjField(req.body)) {
                 return res.json({ success: true, ignored: true, action: 'no_user_input', message: 'Ignorado: sem conteúdo de usuário válido.' });
             }
 
