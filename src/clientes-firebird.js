@@ -1099,7 +1099,9 @@ router.all('/digisac/consultor', async (req, res) => {
             });
         }
 
-        if (session?.etapa === 'aguardando_tipo_cliente' && incomingOption) {
+        if (session?.etapa === 'aguardando_tipo_cliente') {
+            const messageText = getDigisacMessageText(req);
+            const hasUserInput = Boolean(String(messageText || '').trim());
             await saveDigisacDebug(req, incomingOption || session.documento || null);
 
             if (incomingOption === '1') {
@@ -1136,7 +1138,7 @@ router.all('/digisac/consultor', async (req, res) => {
                 });
             }
 
-            if (incomingOption) {
+            if (incomingOption || hasUserInput) {
                 const notification = await sendDigisacMessage(contactId, buildDigisacInvalidInitialOptionMessage());
                 return res.json({
                     success: true,
@@ -1146,6 +1148,8 @@ router.all('/digisac/consultor', async (req, res) => {
                     notification
                 });
             }
+
+            return res.json({ success: true, ignored: true, action: 'waiting_cliente_type_option', message: 'Ignorado: aguardando opcao 1 ou 2 sobre tipo de cliente.' });
         }
 
         if (['consulta_cliente', 'consulta_cnpj_contato', 'consulta_contato', 'verifica_cnpj_contato'].includes(commandNormalized)) {
@@ -1427,6 +1431,8 @@ router.all('/digisac/consultor', async (req, res) => {
             }
 
             if (session?.etapa === 'aguardando_tipo_cliente') {
+                const messageText = getDigisacMessageText(req);
+                const hasUserInput = Boolean(String(messageText || '').trim());
                 await saveDigisacDebug(req, opcao || session.documento || null);
 
                 if (opcao === '1') {
@@ -1463,7 +1469,7 @@ router.all('/digisac/consultor', async (req, res) => {
                     });
                 }
 
-                if (opcao) {
+                if (opcao || hasUserInput) {
                     const notification = await sendDigisacMessage(contactId, buildDigisacInvalidInitialOptionMessage());
                     return res.json({
                         success: true,
