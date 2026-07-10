@@ -781,6 +781,10 @@ function buildDigisacWelcomeMessage() {
     return 'Olá! Seja bem-vindo à Fundição Erus. 🇧🇷\n\nVocê entrou em contato com o Setor Comercial.\n\nComo podemos ajudá-lo?\n\n1️⃣ - Já sou cliente\n\n2️⃣ - Não sou cliente\n\nResponda apenas com o número da opção desejada.';
 }
 
+function buildDigisacCnpjRequestMessage() {
+    return 'Para identificarmos seu cadastro e direcionarmos seu atendimento ao consultor responsavel, informe o CNPJ da empresa.\n\nImportante: Informe apenas os numeros do CNPJ, sem pontos, barras ou tracos.\n\nExemplo: `12345678000199`';
+}
+
 router.get('/list/all', async (req, res) => {
     try {
         await ensureResponsaveisTable();
@@ -952,7 +956,10 @@ router.all('/digisac/consultor', async (req, res) => {
                 }
 
                 if (opcao === '2') {
-                    await clearDigisacClienteSession(contactId);
+                    await saveDigisacClienteSession(contactId, session.documento, {
+                        ...session.cliente,
+                        responsavel_comercial: session.responsavel_comercial
+                    }, 'aguardando_tipo_cliente');
                     const notification = await sendDigisacMessage(contactId, buildDigisacWelcomeMessage());
 
                     return res.json({
@@ -1167,6 +1174,49 @@ router.all('/digisac/consultor', async (req, res) => {
                 }
             }
 
+            if (session?.etapa === 'aguardando_tipo_cliente') {
+                await saveDigisacDebug(req, opcao || session.documento || null);
+
+                if (opcao === '1') {
+                    await saveDigisacClienteSession(contactId, session.documento, {
+                        ...session.cliente,
+                        responsavel_comercial: session.responsavel_comercial
+                    }, 'aguardando_cnpj_manual');
+                    const notification = await sendDigisacMessage(contactId, buildDigisacCnpjRequestMessage());
+
+                    return res.json({
+                        success: true,
+                        found: false,
+                        encontrado: 'nao',
+                        action: 'solicitar_cnpj_cliente',
+                        pendingDocument: true,
+                        notification
+                    });
+                }
+
+                if (opcao === '2') {
+                    await clearDigisacClienteSession(contactId);
+                    const notification = await sendDigisacMessage(contactId, 'Seja bem-vindo(a) Ã  FundiÃ§Ã£o Erus! Sua conversa serÃ¡ direcionada ao nosso time Comercial, que entrarÃ¡ em contato com vocÃª o mais breve possÃ­vel.');
+                    const transfer = await transferDigisacTicketTo(
+                        contactId,
+                        DIGISAC_COMERCIAL_DEPARTMENT_ID,
+                        null,
+                        'Contato informou que nÃ£o Ã© cliente. Transferido automaticamente para o departamento Comercial.'
+                    );
+
+                    return res.json({
+                        success: true,
+                        found: false,
+                        encontrado: 'nao',
+                        action: 'nao_cliente_comercial',
+                        notification,
+                        transfer
+                    });
+                }
+
+                return res.json({ success: true, ignored: true, action: 'waiting_cliente_type_option', message: 'Ignorado: aguardando opcao 1 ou 2 sobre tipo de cliente.' });
+            }
+
             if (session?.etapa === 'menu_opcoes' && !opcao) {
                 return res.json({ success: true, ignored: true, action: 'waiting_menu_option', message: 'Ignorado: aguardando opcao explicita do menu.' });
             }
@@ -1194,7 +1244,10 @@ router.all('/digisac/consultor', async (req, res) => {
                 }
 
                 if (opcao === '2') {
-                    await clearDigisacClienteSession(contactId);
+                    await saveDigisacClienteSession(contactId, session.documento, {
+                        ...session.cliente,
+                        responsavel_comercial: session.responsavel_comercial
+                    }, 'aguardando_tipo_cliente');
                     const notification = await sendDigisacMessage(contactId, buildDigisacWelcomeMessage());
                     return res.json({
                         success: true,
