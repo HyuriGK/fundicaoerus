@@ -881,7 +881,7 @@ function buildDigisacWelcomeMessage() {
 }
 
 function buildDigisacInvalidInitialOptionMessage() {
-    return '⚠️ Opção inválida.\n\nPor favor, responda apenas com o número da opção desejada:\n\n**1️⃣** - Já sou cliente\n**2️⃣** - Não sou cliente\n\nNão envie textos ou outros números.';
+    return '⚠️ Opção inválida.\n\nPor favor, responda apenas com o número da opção desejada:\n\n1️⃣ - Já sou cliente\n2️⃣ - Não sou cliente\n\nNão envie textos ou outros números.';
 }
 
 function buildDigisacCnpjRequestMessage() {
