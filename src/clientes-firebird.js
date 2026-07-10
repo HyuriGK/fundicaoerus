@@ -55,20 +55,73 @@ async function ensureDigisacDedupeTable() {
     `);
 }
 
+function extractDigisacWebhookEventId(value) {
+    if (value == null || typeof value !== 'object') return '';
+    if (Array.isArray(value)) {
+        for (const item of value) {
+            const found = extractDigisacWebhookEventId(item);
+            if (found) return found;
+        }
+        return '';
+    }
+
+    const eventKeys = ['eventId', 'event_id', 'messageId', 'message_id', 'uuid', 'identifier', 'identificador'];
+    for (const key of eventKeys) {
+        if (typeof value[key] === 'string' && value[key].trim()) {
+            return value[key].trim();
+        }
+    }
+
+    for (const child of Object.values(value)) {
+        const found = extractDigisacWebhookEventId(child);
+        if (found) return found;
+    }
+
+    return '';
+}
+
+function getDigisacWebhookFingerprintData(req) {
+    const contactId = req.body?.contactId || req.body?.contact_id || req.query.contactId || req.query.contact_id || findContactIdInPayload(req.body) || '';
+    const command = String(req.body?.command || req.body?.comando || req.query.command || req.query.comando || findCommandInPayload(req.body) || '').trim().toLowerCase();
+    const text = String(getDigisacMessageText(req) || findTextInPayload(req.body) || '').trim().toLowerCase();
+    const document = onlyDigits(getRawDocumentoInput(req) || findDocumentInPayload(req.body) || findFirstObjectWithCnpjField(req.body) || '');
+    const eventId = extractDigisacWebhookEventId(req.body);
+    return { contactId, command, text, document, eventId };
+}
+
 function buildDigisacRequestFingerprint(req) {
-    const method = String(req.method || '').toUpperCase();
-    const path = String(req.originalUrl || req.url || '').trim();
-    const body = normalizeRequestBody(req);
-    const query = stableStringify(req.query || {});
-    const hash = crypto.createHash('sha256');
-    hash.update(method);
-    hash.update('\n');
-    hash.update(path);
-    hash.update('\n');
-    hash.update(query);
-    hash.update('\n');
-    hash.update(body);
-    return hash.digest('hex');
+    const fingerprintData = getDigisacWebhookFingerprintData(req);
+    return crypto.createHash('sha256').update(stableStringify(fingerprintData)).digest('hex');
+}
+
+function isDigisacWebhookFromBot(req) {
+    return objectContainsBotOrigin(req.body);
+}
+
+function objectContainsBotOrigin(value) {
+    if (value == null || typeof value !== 'object') return false;
+    if (Array.isArray(value)) {
+        return value.some(objectContainsBotOrigin);
+    }
+
+    const origin = String(value.origin || value.origem || value.source || '').trim().toLowerCase();
+    if (origin === 'bot' || origin === 'system' || origin === 'auto') {
+        return true;
+    }
+
+    const sender = value.from || value.sender || value.autor || '';
+    if (typeof sender === 'string' && sender.toLowerCase().includes('bot')) {
+        return true;
+    }
+    if (typeof sender === 'object' && objectContainsBotOrigin(sender)) {
+        return true;
+    }
+
+    for (const child of Object.values(value)) {
+        if (objectContainsBotOrigin(child)) return true;
+    }
+
+    return false;
 }
 
 async function ensureDigisacClienteSessionsTable() {
@@ -689,6 +742,10 @@ router.all('/digisac/consultor', async (req, res) => {
     try {
         if (!hasValidDigisacToken(req)) {
             return res.status(401).json({ success: false, error: 'Token Digisac inválido.' });
+        }
+
+        if (isDigisacWebhookFromBot(req)) {
+            return res.json({ success: true, ignored: true, action: 'bot_message', message: 'Evento Digisac originado pelo bot ignorado.' });
         }
 
         if (await isDuplicateDigisacRequest(req)) {
