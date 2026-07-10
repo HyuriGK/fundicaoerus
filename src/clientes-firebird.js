@@ -880,6 +880,10 @@ function buildDigisacWelcomeMessage() {
     return 'Olá! Seja bem-vindo à Fundição Erus. 🇧🇷\n\nVocê entrou em contato com o Setor Comercial.\n\nComo podemos ajudá-lo?\n\n1️⃣ - Já sou cliente\n\n2️⃣ - Não sou cliente\n\nResponda apenas com o número da opção desejada.';
 }
 
+function buildDigisacInvalidInitialOptionMessage() {
+    return '⚠️ Opção inválida.\n\nPor favor, responda apenas com o número da opção desejada:\n\n**1️⃣** - Já sou cliente\n**2️⃣** - Não sou cliente\n\nNão envie textos ou outros números.';
+}
+
 function buildDigisacCnpjRequestMessage() {
     return 'Para identificarmos seu cadastro e direcionarmos seu atendimento ao consultor responsavel, informe o CNPJ da empresa.\n\nImportante: Informe apenas os numeros do CNPJ, sem pontos, barras ou tracos.\n\nExemplo: `12345678000199`';
 }
@@ -1129,6 +1133,17 @@ router.all('/digisac/consultor', async (req, res) => {
                     action: 'nao_cliente_comercial',
                     notification,
                     transfer
+                });
+            }
+
+            if (incomingOption) {
+                const notification = await sendDigisacMessage(contactId, buildDigisacInvalidInitialOptionMessage());
+                return res.json({
+                    success: true,
+                    found: false,
+                    encontrado: 'nao',
+                    action: 'opcao_invalida_inicio',
+                    notification
                 });
             }
         }
@@ -1445,6 +1460,17 @@ router.all('/digisac/consultor', async (req, res) => {
                         action: 'nao_cliente_comercial',
                         notification,
                         transfer
+                    });
+                }
+
+                if (opcao) {
+                    const notification = await sendDigisacMessage(contactId, buildDigisacInvalidInitialOptionMessage());
+                    return res.json({
+                        success: true,
+                        found: false,
+                        encontrado: 'nao',
+                        action: 'opcao_invalida_inicio',
+                        notification
                     });
                 }
 
