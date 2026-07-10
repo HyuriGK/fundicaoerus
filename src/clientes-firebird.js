@@ -847,7 +847,7 @@ function formatDigisacResponsavelDisplayName(responsavelComercial) {
 }
 
 function buildDigisacCommercialRedirectMessage() {
-    return '✅ Cadastro identificado!\nSeu atendimento será direcionado ao responsável comercial.\nEnquanto isso, conte-nos qual assunto você deseja tratar.';
+    return '✅ Cadastro identificado!\n\nSeu atendimento já está sendo direcionado ao responsável comercial.\n\nPara agilizar, informe por favor qual assunto deseja tratar.';
 }
 
 function buildDigisacCommercialReceptionMessage(responsavelComercial) {
