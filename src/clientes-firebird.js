@@ -641,6 +641,21 @@ router.all('/digisac/consultor', async (req, res) => {
             if (session?.etapa === 'confirmacao_cnpj_salvo') {
                 await saveDigisacDebug(req, opcao || session.documento || null);
 
+                if (!opcao) {
+                    const notification = await sendDigisacMessage(contactId, buildDigisacSavedCnpjConfirmationMessage(session.cliente));
+
+                    return res.json({
+                        success: true,
+                        found: true,
+                        encontrado: 'sim',
+                        action: 'confirmar_cnpj_salvo',
+                        pendingConfirmation: true,
+                        responsavel_comercial: session.responsavel_comercial,
+                        responsavelComercial: session.responsavel_comercial,
+                        notification
+                    });
+                }
+
                 if (opcao === '1') {
                     await saveDigisacClienteSession(contactId, session.documento, {
                         ...session.cliente,
