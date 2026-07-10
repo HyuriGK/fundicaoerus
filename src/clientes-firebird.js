@@ -701,7 +701,6 @@ router.all('/digisac/consultor', async (req, res) => {
                     action: 'confirmar_cnpj_salvo',
                     pendingConfirmation: true,
                     invalidOption: true,
-                    message: 'Opcao invalida.',
                     notification
                 });
             }
@@ -756,7 +755,6 @@ router.all('/digisac/consultor', async (req, res) => {
                     found: true,
                     encontrado: 'sim',
                     invalidOption: true,
-                    message: 'Opcao invalida.',
                     notification
                 });
             }
@@ -792,7 +790,6 @@ router.all('/digisac/consultor', async (req, res) => {
                     action: 'iniciar_fluxo_comercial',
                     startDefaultFlow: true,
                     notification,
-                    message: buildDigisacWelcomeMessage(),
                     cliente: null
                 });
             }
@@ -905,7 +902,6 @@ router.all('/digisac/consultor', async (req, res) => {
                     action: 'confirmar_cnpj_salvo',
                     pendingConfirmation: true,
                     invalidOption: true,
-                    message: 'Opção inválida.',
                     notification
                 });
             }
@@ -922,7 +918,7 @@ router.all('/digisac/consultor', async (req, res) => {
                         'Nenhum cadastro encontrado. Transferido automaticamente para o departamento Comercial.'
                     );
                 }
-                return res.json({ success: true, found: false, encontrado: 'nao', message: 'Cadastro nao encontrado para este contato.', notification, transfer });
+                return res.json({ success: true, found: false, encontrado: 'nao', notification, transfer });
             }
 
             if (opcao === '2') {
@@ -966,8 +962,8 @@ router.all('/digisac/consultor', async (req, res) => {
                 });
             }
 
-            const notification = await sendDigisacMessage(contactId, 'Opcao invalida. Responda 1 para falar com o comercial, 2 para 2 via de boleto ou 3 para 2 via de nota fiscal.');
-            return res.json({ success: true, found: true, encontrado: 'sim', invalidOption: true, message: 'Opcao invalida.', notification });
+                const notification = await sendDigisacMessage(contactId, 'Opcao invalida. Responda 1 para falar com o comercial, 2 para 2 via de boleto ou 3 para 2 via de nota fiscal.');
+                return res.json({ success: true, found: true, encontrado: 'sim', invalidOption: true, notification });
         }
 
         const rawDocumentoInput = getRawDocumentoInput(req);
@@ -986,7 +982,6 @@ router.all('/digisac/consultor', async (req, res) => {
                 found: false,
                 encontrado: 'nao',
                 formatoInvalido: true,
-                message: 'Por favor, digite o CNPJ/CPF apenas com números, sem pontos, barras ou traços. Ex: 12345678000199',
                 cliente: null
             });
         }
