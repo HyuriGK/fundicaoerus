@@ -269,8 +269,8 @@ function findFirstDigisacOptionInPayload(value) {
     if (value == null) return '';
 
     if (typeof value === 'string' || typeof value === 'number') {
-        const digits = onlyDigits(value);
-        if (digits.length === 1) return digits;
+        const text = String(value).trim();
+        if (/^[0-9]$/.test(text)) return text;
         return '';
     }
 
@@ -289,8 +289,8 @@ function findFirstDigisacOptionInPayload(value) {
             if (found) return found;
         }
 
-        for (const child of Object.values(value)) {
-            const found = findFirstDigisacOptionInPayload(child);
+        for (const key of ['data', 'body', 'message', 'content']) {
+            const found = findFirstDigisacOptionInPayload(value[key]);
             if (found) return found;
         }
     }
