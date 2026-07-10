@@ -675,8 +675,7 @@ router.all('/digisac/consultor', async (req, res) => {
                         pendingSelection: true,
                         responsavel_comercial: session.responsavel_comercial,
                         responsavelComercial: session.responsavel_comercial,
-                        notification,
-                        message: buildDigisacContinueWithCadastroMessage()
+                        notification
                     });
                 }
 
