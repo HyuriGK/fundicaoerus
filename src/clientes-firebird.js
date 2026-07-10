@@ -120,6 +120,20 @@ function findTextInPayload(value) {
     return '';
 }
 
+function getDigisacMessageText(req) {
+    return String(
+        req.body?.opcao ||
+        req.body?.option ||
+        req.query.opcao ||
+        req.query.option ||
+        req.body?.data?.message?.text ||
+        req.body?.message?.text ||
+        req.body?.data?.text ||
+        req.body?.text ||
+        ''
+    ).trim();
+}
+
 function findDocumentInPayload(value) {
     if (value == null) return '';
 
@@ -620,7 +634,7 @@ router.all('/digisac/consultor', async (req, res) => {
         const commandNormalized = command.toLowerCase();
 
         if (['consulta_cnpj_contato', 'consulta_contato', 'verifica_cnpj_contato'].includes(commandNormalized)) {
-            const optionText = String(req.body?.opcao || req.body?.option || req.query.opcao || req.query.option || findTextInPayload(req.body) || '').trim();
+            const optionText = getDigisacMessageText(req) || findTextInPayload(req.body);
             const opcao = onlyDigits(optionText).slice(0, 1);
             const session = await getDigisacClienteSession(contactId);
 
@@ -811,7 +825,7 @@ router.all('/digisac/consultor', async (req, res) => {
         }
 
         if (commandNormalized === 'opcao_cliente') {
-            const optionText = String(req.body?.opcao || req.body?.option || req.query.opcao || req.query.option || findTextInPayload(req.body) || '').trim();
+            const optionText = getDigisacMessageText(req) || findTextInPayload(req.body);
             const opcao = onlyDigits(optionText).slice(0, 1);
             let session = await getDigisacClienteSession(contactId);
             let documentoOpcao = onlyDigits(req.body?.documento || req.body?.cnpjCpf || req.body?.cnpj || req.query.documento || req.query.cnpjCpf || req.query.cnpj);
