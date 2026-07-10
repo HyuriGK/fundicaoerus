@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../lib/db');
+const crypto = require('crypto');
 
 const RESPONSAVEIS_COMERCIAIS = new Set([
     'GERUZA MENDES',
@@ -43,6 +44,31 @@ async function ensureDigisacDebugTable() {
             documento TEXT
         )
     `);
+}
+
+async function ensureDigisacDedupeTable() {
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS digisac_webhook_dedupe (
+            fingerprint TEXT PRIMARY KEY,
+            created_at TIMESTAMP DEFAULT NOW()
+        )
+    `);
+}
+
+function buildDigisacRequestFingerprint(req) {
+    const method = String(req.method || '').toUpperCase();
+    const path = String(req.originalUrl || req.url || '').trim();
+    const body = normalizeRequestBody(req);
+    const query = stableStringify(req.query || {});
+    const hash = crypto.createHash('sha256');
+    hash.update(method);
+    hash.update('\n');
+    hash.update(path);
+    hash.update('\n');
+    hash.update(query);
+    hash.update('\n');
+    hash.update(body);
+    return hash.digest('hex');
 }
 
 async function ensureDigisacClienteSessionsTable() {
@@ -274,17 +300,15 @@ function normalizeRequestBody(req) {
 async function isDuplicateDigisacRequest(req) {
     try {
         await ensureDigisacDebugTable();
-        const bodyJson = normalizeRequestBody(req);
+        await ensureDigisacDedupeTable();
+        const fingerprint = buildDigisacRequestFingerprint(req);
         const result = await pool.query(`
-            SELECT 1
-            FROM digisac_webhook_debug
-            WHERE method = $1
-              AND path = $2
-              AND body = $3::jsonb
-              AND created_at >= NOW() - INTERVAL '6 seconds'
-            LIMIT 1
-        `, [req.method, req.originalUrl || req.url, bodyJson]);
-        return result.rowCount > 0;
+            INSERT INTO digisac_webhook_dedupe (fingerprint)
+            VALUES ($1)
+            ON CONFLICT DO NOTHING
+            RETURNING fingerprint
+        `, [fingerprint]);
+        return result.rowCount === 0;
     } catch (err) {
         console.warn('Erro ao verificar duplicado Digisac:', err.message);
         return false;
