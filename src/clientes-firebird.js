@@ -521,7 +521,11 @@ function getSessionClienteValue(session, key) {
 function buildDigisacSavedCnpjConfirmationMessage(row) {
     const nome = row?.razao_social || row?.fantasia || 'cliente';
     const documento = row?.cnpj_cpf || row?.cnpjCpf || '';
-    return `Identificamos seu cadastro conforme seu ultimo contato conosco.\n\nCNPJ/CPF: ${documento}\nCliente: ${nome}\n\nDeseja continuar com este cadastro?\n\n1 - Sim\n2 - Nao`;
+    return `Identificamos seu cadastro conforme seu último contato conosco.\n\nCNPJ/CPF: ${documento}\nCliente: ${nome}\n\nDeseja continuar com este cadastro?\n\n1 - Sim\n2 - Não`;
+}
+
+function buildDigisacContinueWithCadastroMessage() {
+    return 'Ok, vamos continuar com este cadastro.\n\nEscolha uma opção:\n\n1️⃣ - Falar com o comercial\n2️⃣ - 2ª via de boleto\n3️⃣ - 2ª via de nota fiscal';
 }
 
 function buildDigisacWelcomeMessage() {
@@ -661,7 +665,7 @@ router.all('/digisac/consultor', async (req, res) => {
                         ...session.cliente,
                         responsavel_comercial: session.responsavel_comercial
                     }, 'menu_opcoes');
-                    const notification = await sendDigisacMessage(contactId, buildDigisacMessage(session.cliente));
+                    const notification = await sendDigisacMessage(contactId, buildDigisacContinueWithCadastroMessage());
 
                     return res.json({
                         success: true,
@@ -671,7 +675,8 @@ router.all('/digisac/consultor', async (req, res) => {
                         pendingSelection: true,
                         responsavel_comercial: session.responsavel_comercial,
                         responsavelComercial: session.responsavel_comercial,
-                        notification
+                        notification,
+                        message: buildDigisacContinueWithCadastroMessage()
                     });
                 }
 
@@ -884,17 +889,19 @@ router.all('/digisac/consultor', async (req, res) => {
 
                 if (opcao === '2') {
                     await clearDigisacClienteSession(contactId);
+                    const notification = await sendDigisacMessage(contactId, buildDigisacWelcomeMessage());
                     return res.json({
                         success: true,
                         found: false,
                         encontrado: 'nao',
                         action: 'iniciar_fluxo_comercial',
                         startDefaultFlow: true,
+                        notification,
                         message: buildDigisacWelcomeMessage()
                     });
                 }
 
-                const notification = await sendDigisacMessage(contactId, 'Opcao invalida. Responda 1 para continuar com este cadastro ou 2 para informar outro cadastro.');
+                const notification = await sendDigisacMessage(contactId, 'Opção inválida. Responda 1 para continuar com este cadastro ou 2 para informar outro cadastro.');
                 return res.json({
                     success: true,
                     found: true,
@@ -902,7 +909,7 @@ router.all('/digisac/consultor', async (req, res) => {
                     action: 'confirmar_cnpj_salvo',
                     pendingConfirmation: true,
                     invalidOption: true,
-                    message: 'Opcao invalida.',
+                    message: 'Opção inválida.',
                     notification
                 });
             }
