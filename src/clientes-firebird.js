@@ -1114,7 +1114,7 @@ router.all('/digisac/consultor', async (req, res) => {
 
             if (incomingOption === '2') {
                 await clearDigisacClienteSession(contactId);
-                const notification = await sendDigisacMessage(contactId, '👋 Seja bem-vindo(a) à Fundição Erus!\n\nRecebemos sua solicitação e ela será encaminhada ao nosso time Comercial.\n\nEm breve, um de nossos especialistas entrará em contato para dar continuidade ao seu atendimento.\n\nAgradecemos o seu contato!');
+                const notification = await sendDigisacMessage(contactId, '👋 Seja bem-vindo(a) à Fundição Erus!\n\nSua solicitação foi recebida com sucesso e já está sendo encaminhada ao nosso time Comercial.\n\nEm breve, um de nossos atendentes dará continuidade ao seu atendimento.\n\nAgradecemos por escolher a Fundição Erus!');
                 const transfer = await transferDigisacTicketTo(
                     contactId,
                     DIGISAC_COMERCIAL_DEPARTMENT_ID,
@@ -1430,7 +1430,7 @@ router.all('/digisac/consultor', async (req, res) => {
 
                 if (opcao === '2') {
                     await clearDigisacClienteSession(contactId);
-                    const notification = await sendDigisacMessage(contactId, '👋 Seja bem-vindo(a) à Fundição Erus!\n\nRecebemos sua solicitação e ela será encaminhada ao nosso time Comercial.\n\nEm breve, um de nossos especialistas entrará em contato para dar continuidade ao seu atendimento.\n\nAgradecemos o seu contato!');
+                    const notification = await sendDigisacMessage(contactId, '👋 Seja bem-vindo(a) à Fundição Erus!\n\nSua solicitação foi recebida com sucesso e já está sendo encaminhada ao nosso time Comercial.\n\nEm breve, um de nossos atendentes dará continuidade ao seu atendimento.\n\nAgradecemos por escolher a Fundição Erus!');
                     const transfer = await transferDigisacTicketTo(
                         contactId,
                         DIGISAC_COMERCIAL_DEPARTMENT_ID,
