@@ -822,6 +822,37 @@ function buildDigisacContinueWithCadastroMessage() {
     return 'Ok, vamos continuar com este cadastro.\n\nEscolha uma opção:\n\n1️⃣ - Falar com o comercial\n\n2️⃣ - 2ª via de boleto\n\n3️⃣ - 2ª via de nota fiscal';
 }
 
+function getDigisacGreetingByCurrentHour() {
+    const hourText = new Intl.DateTimeFormat('pt-BR', {
+        timeZone: 'America/Sao_Paulo',
+        hour: '2-digit',
+        hour12: false
+    }).format(new Date());
+    const hour = Number(hourText);
+
+    if (hour < 12) return 'Bom dia';
+    if (hour < 18) return 'Boa tarde';
+    return 'Boa noite';
+}
+
+function formatDigisacResponsavelDisplayName(responsavelComercial) {
+    const responsavel = String(responsavelComercial || '').trim();
+    if (!responsavel) return 'Responsável Comercial';
+
+    return responsavel
+        .toLowerCase()
+        .split(/\s+/)
+        .map(part => part ? part.charAt(0).toUpperCase() + part.slice(1) : part)
+        .join(' ');
+}
+
+function buildDigisacCommercialReceptionMessage(responsavelComercial) {
+    const nomeResponsavel = formatDigisacResponsavelDisplayName(responsavelComercial);
+    const cumprimento = getDigisacGreetingByCurrentHour();
+
+    return `✅ Cadastro identificado!\nSeu atendimento será direcionado ao responsável comercial.\nEnquanto isso, conte-nos qual assunto você deseja tratar.\n\nNome do responsável comercial: *${nomeResponsavel}*\n${cumprimento}, ${nomeResponsavel} por aqui, como posso ajudar?`;
+}
+
 function buildDigisacWelcomeMessage() {
     return 'Olá! Seja bem-vindo à Fundição Erus. 🇧🇷\n\nVocê entrou em contato com o Setor Comercial.\n\nComo podemos ajudá-lo?\n\n1️⃣ - Já sou cliente\n\n2️⃣ - Não sou cliente\n\nResponda apenas com o número da opção desejada.';
 }
@@ -1114,7 +1145,7 @@ router.all('/digisac/consultor', async (req, res) => {
                 }
 
                 if (opcao === '1' || opcao === '3') {
-                    const notification = await sendDigisacMessage(contactId, 'Cadastro identificado!\nSeu atendimento sera direcionado ao responsavel comercial.\nEnquanto isso, conte-nos qual assunto voce deseja tratar.');
+                    const notification = await sendDigisacMessage(contactId, buildDigisacCommercialReceptionMessage(session.responsavel_comercial));
                     const clienteNome = getSessionClienteValue(session, 'razaoSocial') || getSessionClienteValue(session, 'fantasia') || 'cliente';
                     const clienteCnpj = session.documento || getSessionClienteValue(session, 'cnpjCpf') || 'nao informado';
                     const transfer = await transferDigisacTicket(contactId, session.responsavel_comercial, clienteNome, clienteCnpj);
@@ -1393,7 +1424,7 @@ router.all('/digisac/consultor', async (req, res) => {
             }
 
             if (opcao === '1' || opcao === '3') {
-                const notification = await sendDigisacMessage(contactId, '✅ Cadastro identificado!\nSeu atendimento será direcionado ao responsável comercial.\nEnquanto isso, conte-nos qual assunto você deseja tratar.');
+                const notification = await sendDigisacMessage(contactId, buildDigisacCommercialReceptionMessage(session.responsavel_comercial));
                 const clienteNome = getSessionClienteValue(session, 'razaoSocial') || getSessionClienteValue(session, 'fantasia') || 'cliente';
                 const clienteCnpj = session.documento || getSessionClienteValue(session, 'cnpjCpf') || 'nao informado';
                 const transfer = await transferDigisacTicket(contactId, session.responsavel_comercial, clienteNome, clienteCnpj);
