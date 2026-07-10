@@ -255,6 +255,26 @@ async function getRecentDigisacWebhookDocumentByContact(contactId) {
     }
 }
 
+async function isDuplicateDigisacRequest(req) {
+    try {
+        await ensureDigisacDebugTable();
+        const bodyJson = JSON.stringify(req.body || {});
+        const result = await pool.query(`
+            SELECT 1
+            FROM digisac_webhook_debug
+            WHERE method = $1
+              AND path = $2
+              AND body = $3::jsonb
+              AND created_at >= NOW() - INTERVAL '6 seconds'
+            LIMIT 1
+        `, [req.method, req.originalUrl || req.url, bodyJson]);
+        return result.rowCount > 0;
+    } catch (err) {
+        console.warn('Erro ao verificar duplicado Digisac:', err.message);
+        return false;
+    }
+}
+
 async function saveDigisacClienteSession(contactId, documento, row, etapa = 'menu_opcoes') {
     if (!contactId || !row) return null;
 
@@ -631,6 +651,10 @@ router.all('/digisac/consultor', async (req, res) => {
             return res.status(401).json({ success: false, error: 'Token Digisac inválido.' });
         }
 
+        if (await isDuplicateDigisacRequest(req)) {
+            return res.json({ success: true, ignored: true, action: 'duplicate_request', message: 'Duplicado Digisac ignorado.' });
+        }
+
         await ensureResponsaveisTable();
         await ensureDigisacClienteSessionsTable();
         const contactId = req.body?.contactId || req.body?.contact_id || req.query.contactId || req.query.contact_id || findContactIdInPayload(req.body);
@@ -656,6 +680,7 @@ router.all('/digisac/consultor', async (req, res) => {
                         pendingConfirmation: true,
                         responsavel_comercial: session.responsavel_comercial,
                         responsavelComercial: session.responsavel_comercial,
+                        sent_by_backend: !!notification,
                         notification
                     });
                 }
@@ -675,6 +700,7 @@ router.all('/digisac/consultor', async (req, res) => {
                         pendingSelection: true,
                         responsavel_comercial: session.responsavel_comercial,
                         responsavelComercial: session.responsavel_comercial,
+                        sent_by_backend: !!notification,
                         notification
                     });
                 }
@@ -689,6 +715,7 @@ router.all('/digisac/consultor', async (req, res) => {
                         encontrado: 'nao',
                         action: 'iniciar_fluxo_comercial',
                         startDefaultFlow: true,
+                        sent_by_backend: !!notification,
                         notification
                     });
                 }
@@ -744,6 +771,7 @@ router.all('/digisac/consultor', async (req, res) => {
                         action: opcao === '1' ? 'falar_com_comercial' : 'segunda_via_nota_fiscal',
                         responsavel_comercial: session.responsavel_comercial,
                         responsavelComercial: session.responsavel_comercial,
+                        sent_by_backend: !!notification,
                         notification,
                         transfer
                     });
@@ -918,7 +946,7 @@ router.all('/digisac/consultor', async (req, res) => {
                         'Nenhum cadastro encontrado. Transferido automaticamente para o departamento Comercial.'
                     );
                 }
-                return res.json({ success: true, found: false, encontrado: 'nao', notification, transfer });
+                return res.json({ success: true, found: false, encontrado: 'nao', action: 'iniciar_fluxo_comercial', sent_by_backend: !!notification, notification, transfer });
             }
 
             if (opcao === '2') {
@@ -981,6 +1009,7 @@ router.all('/digisac/consultor', async (req, res) => {
                 success: true,
                 found: false,
                 encontrado: 'nao',
+                action: 'formato_invalido',
                 formatoInvalido: true,
                 cliente: null
             });
@@ -1027,7 +1056,7 @@ router.all('/digisac/consultor', async (req, res) => {
         }
         if (!commandNormalized && !documento) {
             await saveDigisacDebug(req, null);
-            return res.json({ success: true, ignored: true, message: 'Evento Digisac ignorado: sem comando e sem documento.' });
+            return res.json({ success: true, ignored: true, action: 'ignored', message: 'Evento Digisac ignorado: sem comando e sem documento.' });
         }
         await saveDigisacDebug(req, documento);
         if (!documento) {
