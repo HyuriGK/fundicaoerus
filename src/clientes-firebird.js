@@ -692,21 +692,21 @@ router.all('/digisac/consultor', async (req, res) => {
 
             if (session?.etapa === 'confirmacao_cnpj_salvo') {
                 if (opcao === '1') {
-                    const clienteNome = getSessionClienteValue(session, 'razaoSocial') || getSessionClienteValue(session, 'fantasia') || 'cliente';
-                    const clienteCnpj = session.documento || getSessionClienteValue(session, 'cnpjCpf') || 'nao informado';
-                    const notification = await sendDigisacMessage(contactId, 'Perfeito, cadastro confirmado. Seu atendimento sera direcionado ao responsavel comercial.');
-                    const transfer = await transferDigisacTicket(contactId, session.responsavel_comercial, clienteNome, clienteCnpj);
-                    await clearDigisacClienteSession(contactId);
+                    await saveDigisacClienteSession(contactId, session.documento, {
+                        ...session.cliente,
+                        responsavel_comercial: session.responsavel_comercial
+                    }, 'menu_opcoes');
+                    const notification = await sendDigisacMessage(contactId, buildDigisacMessage(session.cliente));
 
                     return res.json({
                         success: true,
                         found: true,
                         encontrado: 'sim',
-                        action: 'confirmar_cnpj_sim',
+                        action: 'menu_opcoes_cliente',
+                        pendingSelection: true,
                         responsavel_comercial: session.responsavel_comercial,
                         responsavelComercial: session.responsavel_comercial,
-                        notification,
-                        transfer
+                        notification
                     });
                 }
 
