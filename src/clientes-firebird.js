@@ -896,6 +896,10 @@ function buildDigisacInvalidInitialOptionMessage() {
     return '⚠️ Opção inválida.\n\nPor favor, responda apenas com o número da opção desejada:\n\n1️⃣ - Já sou cliente\n2️⃣ - Não sou cliente\n\nNão envie textos ou outros números.';
 }
 
+function buildDigisacInvalidMenuOptionMessage() {
+    return '⚠️ Opção inválida.\n\nPor favor, responda apenas com o número da opção desejada:\n\n1️⃣ - Falar com o Comercial\n2️⃣ - Solicitar a 2ª via de boleto\n3️⃣ - Solicitar a 2ª via de nota fiscal\n\n*Não envie textos ou outros números.*';
+}
+
 function buildDigisacCnpjRequestMessage() {
     return 'Para identificarmos seu cadastro e direcionarmos seu atendimento ao consultor responsavel, informe o CNPJ da empresa.\n\nImportante: Informe apenas os numeros do CNPJ, sem pontos, barras ou tracos.\n\nExemplo: `12345678000199`';
 }
@@ -1315,7 +1319,7 @@ router.all('/digisac/consultor', async (req, res) => {
                     return res.json({ success: true, ignored: true, action: 'waiting_menu_option', message: 'Ignorado: aguardando opcao explicita do menu.' });
                 }
 
-                const notification = await sendDigisacMessage(contactId, 'Opcao invalida. Responda 1 para falar com o comercial, 2 para 2 via de boleto ou 3 para 2 via de nota fiscal.');
+                const notification = await sendDigisacMessage(contactId, buildDigisacInvalidMenuOptionMessage());
                 return res.json({
                     success: true,
                     found: true,
@@ -1612,7 +1616,7 @@ router.all('/digisac/consultor', async (req, res) => {
                 return res.json({ success: true, ignored: true, action: 'waiting_menu_option', message: 'Ignorado: aguardando opcao explicita do menu.' });
             }
 
-                const notification = await sendDigisacMessage(contactId, 'Opcao invalida. Responda 1 para falar com o comercial, 2 para 2 via de boleto ou 3 para 2 via de nota fiscal.');
+                const notification = await sendDigisacMessage(contactId, buildDigisacInvalidMenuOptionMessage());
                 return res.json({ success: true, found: true, encontrado: 'sim', invalidOption: true, notification });
         }
 
@@ -1657,7 +1661,19 @@ router.all('/digisac/consultor', async (req, res) => {
             }
 
             if (session?.etapa === 'menu_opcoes') {
-                return res.json({ success: true, ignored: true, action: 'waiting_menu_option', message: 'Ignorado: aguardando opcao explicita do menu.' });
+                if (!hasDigisacUserContent(req)) {
+                    return res.json({ success: true, ignored: true, action: 'waiting_menu_option', message: 'Ignorado: aguardando opcao explicita do menu.' });
+                }
+                const notification = await sendDigisacMessage(contactId, buildDigisacInvalidMenuOptionMessage());
+                return res.json({
+                    success: true,
+                    found: true,
+                    encontrado: 'sim',
+                    action: 'menu_opcoes_cliente',
+                    pendingSelection: true,
+                    invalidOption: true,
+                    notification
+                });
             }
 
             if (session?.etapa === 'confirmacao_cnpj_salvo') {
@@ -1674,7 +1690,7 @@ router.all('/digisac/consultor', async (req, res) => {
             }
 
             if (session?.etapa === 'menu_opcoes') {
-                const notification = await sendDigisacMessage(contactId, 'Opção inválida. Responda 1 para falar com o comercial, 2 para 2 via de boleto ou 3 para 2 via de nota fiscal.');
+                const notification = await sendDigisacMessage(contactId, buildDigisacInvalidMenuOptionMessage());
                 return res.json({
                     success: true,
                     found: true,
