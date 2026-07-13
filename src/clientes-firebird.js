@@ -1284,6 +1284,7 @@ router.all('/digisac/consultor', async (req, res) => {
                         DIGISAC_FINANCEIRO_USER_ID,
                         `Cliente: ${clienteNome} | CNPJ: ${clienteCnpj} | Destino: Financeiro | Motivo: 2a via de boleto`
                     );
+                    await clearDigisacClienteSession(contactId);
 
                     return res.json({
                         success: true,
@@ -1304,6 +1305,7 @@ router.all('/digisac/consultor', async (req, res) => {
                     const clienteNome = getSessionClienteValue(session, 'razaoSocial') || getSessionClienteValue(session, 'fantasia') || 'cliente';
                     const clienteCnpj = session.documento || getSessionClienteValue(session, 'cnpjCpf') || 'nao informado';
                     const transfer = await transferDigisacTicket(contactId, session.responsavel_comercial, clienteNome, clienteCnpj);
+                    await clearDigisacClienteSession(contactId);
 
                     return res.json({
                         success: true,
@@ -1594,6 +1596,7 @@ router.all('/digisac/consultor', async (req, res) => {
                     DIGISAC_FINANCEIRO_USER_ID,
                     `Cliente: ${clienteNome} | CNPJ: ${clienteCnpj} | Destino: Financeiro | Motivo: 2ª via de boleto`
                 );
+                await clearDigisacClienteSession(contactId);
 
                 return res.json({
                     success: true,
@@ -1614,6 +1617,7 @@ router.all('/digisac/consultor', async (req, res) => {
                 const clienteNome = getSessionClienteValue(session, 'razaoSocial') || getSessionClienteValue(session, 'fantasia') || 'cliente';
                 const clienteCnpj = session.documento || getSessionClienteValue(session, 'cnpjCpf') || 'nao informado';
                 const transfer = await transferDigisacTicket(contactId, session.responsavel_comercial, clienteNome, clienteCnpj);
+                await clearDigisacClienteSession(contactId);
 
                 return res.json({
                     success: true,
