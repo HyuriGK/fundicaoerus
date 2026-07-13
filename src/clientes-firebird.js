@@ -823,7 +823,7 @@ function buildDigisacMessage(row) {
         return '❌ Não encontramos cadastro para o CNPJ/CPF informado. Nossa equipe comercial já foi acionada e em breve dará continuidade ao atendimento.';
     }
     const nome = row.razao_social || row.razaoSocial || row.fantasia || 'cliente';
-    return `✅ Identificamos seu cadastro!\n\nCliente: ${nome}\n\nAgora, escolha o atendimento desejado:\n\n1️⃣ - Falar com o Comercial\n2️⃣ - Solicitar 2ª via de boleto\n3️⃣ - Solicitar 2ª via de nota fiscal\n\nResponda apenas com o número da opção desejada.`;
+    return `✅ Identificamos seu cadastro!\n\n*Cliente:* ${nome}\n\nAgora, escolha o atendimento desejado:\n\n1️⃣ - Falar com o Comercial\n2️⃣ - Solicitar 2ª via de boleto\n3️⃣ - Solicitar 2ª via de nota fiscal\n\n*Responda apenas com o número da opção desejada.*`;
 }
 
 function getSessionClienteValue(session, key) {
@@ -1252,7 +1252,7 @@ router.all('/digisac/consultor', async (req, res) => {
                 await saveDigisacDebug(req, opcao || session.documento || null);
 
                 if (opcao === '2') {
-                    const notification = await sendDigisacMessage(contactId, 'Cadastro identificado!\nSeu atendimento sera redirecionado para o setor financeiro.');
+                    const notification = await sendDigisacMessage(contactId, '✅ Solicitação recebida!\n\nSeu atendimento será encaminhado ao setor Financeiro. Em breve, nossa equipe dará sequência ao atendimento.');
                     const clienteNome = getSessionClienteValue(session, 'razaoSocial') || getSessionClienteValue(session, 'fantasia') || 'cliente';
                     const clienteCnpj = session.documento || getSessionClienteValue(session, 'cnpjCpf') || 'nao informado';
                     const transfer = await transferDigisacTicketTo(
@@ -1546,7 +1546,7 @@ router.all('/digisac/consultor', async (req, res) => {
             }
 
             if (opcao === '2') {
-                const notification = await sendDigisacMessage(contactId, '✅ Cadastro identificado!\nSeu atendimento será redirecionado para o setor financeiro.');
+                const notification = await sendDigisacMessage(contactId, '✅ Solicitação recebida!\n\nSeu atendimento será encaminhado ao setor Financeiro. Em breve, nossa equipe dará sequência ao atendimento.');
                 const clienteNome = getSessionClienteValue(session, 'razaoSocial') || getSessionClienteValue(session, 'fantasia') || 'cliente';
                 const clienteCnpj = session.documento || getSessionClienteValue(session, 'cnpjCpf') || 'nao informado';
                 const transfer = await transferDigisacTicketTo(
