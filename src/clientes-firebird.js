@@ -823,7 +823,7 @@ function buildDigisacMessage(row) {
         return '❌ Não encontramos cadastro para o CNPJ/CPF informado. Nossa equipe comercial já foi acionada e em breve dará continuidade ao atendimento.';
     }
     const nome = row.razao_social || row.razaoSocial || row.fantasia || 'cliente';
-    return `✅ Recebemos seu documento:\nCliente: ${nome}\n\nEnquanto isso, escolha uma opção:\n\n1️⃣ - Falar com o comercial\n\n2️⃣ - 2ª via de boleto\n\n3️⃣ - 2ª via de nota fiscal`;
+    return `✅ Cadastro localizado com sucesso!\n\n*Cliente:* ${nome}\n\nAgora, escolha o atendimento desejado:\n\n1️⃣ - Falar com o Comercial\n\n2️⃣ - Solicitar 2ª via de boleto\n\n3️⃣ - Solicitar 2ª via de nota fiscal\n\n*Responda apenas com o número da opção desejada*`;
 }
 
 function getSessionClienteValue(session, key) {
@@ -838,7 +838,7 @@ function buildDigisacSavedCnpjConfirmationMessage(row) {
 }
 
 function buildDigisacContinueWithCadastroMessage() {
-    return 'Ok, vamos continuar com este cadastro.\n\nEscolha uma opção:\n\n1️⃣ - Falar com o comercial\n\n2️⃣ - 2ª via de boleto\n\n3️⃣ - 2ª via de nota fiscal';
+    return 'Ok, vamos continuar com este cadastro.\n\nAgora, escolha o atendimento desejado:\n\n1️⃣ - Falar com o Comercial\n\n2️⃣ - Solicitar 2ª via de boleto\n\n3️⃣ - Solicitar 2ª via de nota fiscal\n\n*Responda apenas com o número da opção desejada*';
 }
 
 function getDigisacGreetingByCurrentHour() {
