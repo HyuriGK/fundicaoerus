@@ -823,7 +823,7 @@ function buildDigisacMessage(row) {
         return '❌ Não encontramos cadastro para o CNPJ/CPF informado. Nossa equipe comercial já foi acionada e em breve dará continuidade ao atendimento.';
     }
     const nome = row.razao_social || row.razaoSocial || row.fantasia || 'cliente';
-    return `✅ Identificamos seu cadastro!\n\n*Cliente:* ${nome}\n\nAgora, escolha o atendimento desejado:\n\n1️⃣ - Falar com o Comercial\n\n2️⃣ - Solicitar 2ª via de boleto\n\n3️⃣ - Solicitar 2ª via de nota fiscal\n\n*Responda apenas com o número da opção desejada.*`;
+    return `✅ Identificamos seu cadastro!\n\nCliente: ${nome}\n\nAgora, escolha o atendimento desejado:\n\n1️⃣ - Falar com o Comercial\n2️⃣ - Solicitar 2ª via de boleto\n3️⃣ - Solicitar 2ª via de nota fiscal\n\nResponda apenas com o número da opção desejada.`;
 }
 
 function getSessionClienteValue(session, key) {
