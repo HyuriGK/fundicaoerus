@@ -13,6 +13,8 @@ const RESPONSAVEIS_COMERCIAIS = new Set([
 const DIGISAC_COMERCIAL_DEPARTMENT_ID = process.env.DIGISAC_COMERCIAL_DEPARTMENT_ID || 'a0dd4917-91dd-4d33-9dcc-567c3f3ddff2';
 const DIGISAC_FINANCEIRO_DEPARTMENT_ID = process.env.DIGISAC_FINANCEIRO_DEPARTMENT_ID || '6edd21e5-f88a-4e87-94e1-61a3e97f2466';
 const DIGISAC_FINANCEIRO_USER_ID = process.env.DIGISAC_FINANCEIRO_USER_ID || 'c1d3e230-d249-4406-bbb1-2a9bd0e501f3';
+const DIGISAC_EM_ATENDIMENTO_TAG_ID = process.env.DIGISAC_EM_ATENDIMENTO_TAG_ID || '';
+const DIGISAC_EM_ATENDIMENTO_TAG_NAME = process.env.DIGISAC_EM_ATENDIMENTO_TAG_NAME || 'em_atendimento';
 const DIGISAC_CNPJ_MAX_RETRIES = 2;
 
 const DIGISAC_USER_IDS = {
@@ -638,6 +640,42 @@ async function fetchDigisacJson(path) {
     return requestDigisacJson(path);
 }
 
+function extractDigisacRows(payload) {
+    if (Array.isArray(payload)) return payload;
+    if (Array.isArray(payload?.data)) return payload.data;
+    if (Array.isArray(payload?.rows)) return payload.rows;
+    if (Array.isArray(payload?.items)) return payload.items;
+    if (Array.isArray(payload?.results)) return payload.results;
+    return [];
+}
+
+async function getDigisacEmAtendimentoTagId() {
+    if (DIGISAC_EM_ATENDIMENTO_TAG_ID) return DIGISAC_EM_ATENDIMENTO_TAG_ID;
+
+    const payload = await fetchDigisacJson('/tags');
+    const tagName = DIGISAC_EM_ATENDIMENTO_TAG_NAME.toLowerCase();
+    const tag = extractDigisacRows(payload).find(item => {
+        const name = String(item?.name || item?.label || item?.title || '').trim().toLowerCase();
+        return name === tagName;
+    });
+
+    return tag?.id || '';
+}
+
+async function addDigisacEmAtendimentoTag(contactId) {
+    if (!contactId) return null;
+
+    const tagId = await getDigisacEmAtendimentoTagId();
+    if (!tagId) return { success: false, reason: 'tag_not_found' };
+
+    const result = await requestDigisacJson(`/contacts/${encodeURIComponent(contactId)}/tags`, {
+        method: 'POST',
+        body: { tagId }
+    });
+
+    return { success: !!result, tagId };
+}
+
 function findContactIdInPayload(value) {
     if (!value || typeof value !== 'object') return '';
 
@@ -1148,6 +1186,7 @@ router.all('/digisac/consultor', async (req, res) => {
                     null,
                     'Contato informou que nao e cliente. Transferido automaticamente para o departamento Comercial.'
                 );
+                const atendimentoTag = await addDigisacEmAtendimentoTag(contactId);
 
                 return res.json({
                     success: true,
@@ -1156,6 +1195,7 @@ router.all('/digisac/consultor', async (req, res) => {
                     action: 'nao_cliente_comercial',
                     notification,
                     receptionNotification,
+                    atendimentoTag,
                     transfer
                 });
             }
@@ -1284,6 +1324,7 @@ router.all('/digisac/consultor', async (req, res) => {
                         DIGISAC_FINANCEIRO_USER_ID,
                         `Cliente: ${clienteNome} | CNPJ: ${clienteCnpj} | Destino: Financeiro | Motivo: 2a via de boleto`
                     );
+                    const atendimentoTag = await addDigisacEmAtendimentoTag(contactId);
                     await clearDigisacClienteSession(contactId);
 
                     return res.json({
@@ -1295,6 +1336,7 @@ router.all('/digisac/consultor', async (req, res) => {
                         responsavelComercial: session.responsavel_comercial,
                         notification,
                         receptionNotification,
+                        atendimentoTag,
                         transfer
                     });
                 }
@@ -1305,6 +1347,7 @@ router.all('/digisac/consultor', async (req, res) => {
                     const clienteNome = getSessionClienteValue(session, 'razaoSocial') || getSessionClienteValue(session, 'fantasia') || 'cliente';
                     const clienteCnpj = session.documento || getSessionClienteValue(session, 'cnpjCpf') || 'nao informado';
                     const transfer = await transferDigisacTicket(contactId, session.responsavel_comercial, clienteNome, clienteCnpj);
+                    const atendimentoTag = await addDigisacEmAtendimentoTag(contactId);
                     await clearDigisacClienteSession(contactId);
 
                     return res.json({
@@ -1486,6 +1529,8 @@ router.all('/digisac/consultor', async (req, res) => {
                         'Contato informou que nÃ£o Ã© cliente. Transferido automaticamente para o departamento Comercial.'
                     );
 
+                    const atendimentoTag = await addDigisacEmAtendimentoTag(contactId);
+
                     return res.json({
                         success: true,
                         found: false,
@@ -1493,6 +1538,7 @@ router.all('/digisac/consultor', async (req, res) => {
                         action: 'nao_cliente_comercial',
                         notification,
                         receptionNotification,
+                        atendimentoTag,
                         transfer
                     });
                 }
@@ -1596,6 +1642,7 @@ router.all('/digisac/consultor', async (req, res) => {
                     DIGISAC_FINANCEIRO_USER_ID,
                     `Cliente: ${clienteNome} | CNPJ: ${clienteCnpj} | Destino: Financeiro | Motivo: 2ª via de boleto`
                 );
+                const atendimentoTag = await addDigisacEmAtendimentoTag(contactId);
                 await clearDigisacClienteSession(contactId);
 
                 return res.json({
@@ -1607,6 +1654,7 @@ router.all('/digisac/consultor', async (req, res) => {
                     responsavelComercial: session.responsavel_comercial,
                     notification,
                     receptionNotification,
+                    atendimentoTag,
                     transfer
                 });
             }
@@ -1617,6 +1665,7 @@ router.all('/digisac/consultor', async (req, res) => {
                 const clienteNome = getSessionClienteValue(session, 'razaoSocial') || getSessionClienteValue(session, 'fantasia') || 'cliente';
                 const clienteCnpj = session.documento || getSessionClienteValue(session, 'cnpjCpf') || 'nao informado';
                 const transfer = await transferDigisacTicket(contactId, session.responsavel_comercial, clienteNome, clienteCnpj);
+                const atendimentoTag = await addDigisacEmAtendimentoTag(contactId);
                 await clearDigisacClienteSession(contactId);
 
                 return res.json({
@@ -1628,6 +1677,7 @@ router.all('/digisac/consultor', async (req, res) => {
                     responsavelComercial: session.responsavel_comercial,
                     notification,
                     receptionNotification,
+                    atendimentoTag,
                     transfer
                 });
             }
