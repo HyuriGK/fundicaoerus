@@ -900,6 +900,10 @@ function buildDigisacInvalidMenuOptionMessage() {
     return '⚠️ Opção inválida.\n\nPor favor, responda apenas com o número da opção desejada:\n\n1️⃣ - Falar com o Comercial\n2️⃣ - Solicitar a 2ª via de boleto\n3️⃣ - Solicitar a 2ª via de nota fiscal\n\n*Não envie textos ou outros números.*';
 }
 
+function buildDigisacInvalidSavedCnpjConfirmationOptionMessage() {
+    return '⚠️ Opção inválida.\n\nPor favor, responda apenas com o número da opção desejada:\n\n1️⃣ - Sim\n2️⃣ - Não\n\n*Não envie textos ou outros números.*';
+}
+
 function buildDigisacCnpjRequestMessage() {
     return 'Para identificarmos seu cadastro e direcionarmos seu atendimento ao consultor responsavel, informe o CNPJ da empresa.\n\nImportante: Informe apenas os numeros do CNPJ, sem pontos, barras ou tracos.\n\nExemplo: `12345678000199`';
 }
@@ -1235,7 +1239,7 @@ router.all('/digisac/consultor', async (req, res) => {
                     });
                 }
 
-                const notification = await sendDigisacMessage(contactId, 'Opcao invalida. Responda 1 para continuar com este cadastro ou 2 para informar outro cadastro.');
+                const notification = await sendDigisacMessage(contactId, buildDigisacInvalidSavedCnpjConfirmationOptionMessage());
                 return res.json({
                     success: true,
                     found: true,
@@ -1548,10 +1552,22 @@ router.all('/digisac/consultor', async (req, res) => {
                 }
 
                 if (!opcao) {
-                    return res.json({ success: true, ignored: true, action: 'waiting_confirmation_option', message: 'Ignorado: aguardando opcao explicita de confirmacao.' });
+                    if (!hasDigisacUserContent(req)) {
+                        return res.json({ success: true, ignored: true, action: 'waiting_confirmation_option', message: 'Ignorado: aguardando opcao explicita de confirmacao.' });
+                    }
+                    const notification = await sendDigisacMessage(contactId, buildDigisacInvalidSavedCnpjConfirmationOptionMessage());
+                    return res.json({
+                        success: true,
+                        found: true,
+                        encontrado: 'sim',
+                        action: 'confirmar_cnpj_salvo',
+                        pendingConfirmation: true,
+                        invalidOption: true,
+                        notification
+                    });
                 }
 
-                const notification = await sendDigisacMessage(contactId, 'Opção inválida. Responda 1 para continuar com este cadastro ou 2 para informar outro cadastro.');
+                const notification = await sendDigisacMessage(contactId, buildDigisacInvalidSavedCnpjConfirmationOptionMessage());
                 return res.json({
                     success: true,
                     found: true,
@@ -1657,7 +1673,19 @@ router.all('/digisac/consultor', async (req, res) => {
             await saveDigisacDebug(req, null);
 
             if (session?.etapa === 'confirmacao_cnpj_salvo') {
-                return res.json({ success: true, ignored: true, action: 'waiting_confirmation_option', message: 'Ignorado: aguardando opcao explicita de confirmacao.' });
+                if (!hasDigisacUserContent(req)) {
+                    return res.json({ success: true, ignored: true, action: 'waiting_confirmation_option', message: 'Ignorado: aguardando opcao explicita de confirmacao.' });
+                }
+                const notification = await sendDigisacMessage(contactId, buildDigisacInvalidSavedCnpjConfirmationOptionMessage());
+                return res.json({
+                    success: true,
+                    found: true,
+                    encontrado: 'sim',
+                    action: 'confirmar_cnpj_salvo',
+                    pendingConfirmation: true,
+                    invalidOption: true,
+                    notification
+                });
             }
 
             if (session?.etapa === 'menu_opcoes') {
@@ -1677,7 +1705,7 @@ router.all('/digisac/consultor', async (req, res) => {
             }
 
             if (session?.etapa === 'confirmacao_cnpj_salvo') {
-                const notification = await sendDigisacMessage(contactId, 'Opção inválida. Responda 1 para continuar com este cadastro ou 2 para informar outro cadastro.');
+                const notification = await sendDigisacMessage(contactId, buildDigisacInvalidSavedCnpjConfirmationOptionMessage());
                 return res.json({
                     success: true,
                     found: true,
