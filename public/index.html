@@ -10135,6 +10135,8 @@
 
 
                         const MOLDAGEM_SUBTYPES = ['MOLDAGEM LEVE', 'MOLDAGEM MANUAL', 'MOLDAGEM PESADA'];
+                        const LINGOTE_CODE = '18358';
+                        const SOBRAS_CODE = '801032102';
 
 
                         const totals = {};
@@ -10145,6 +10147,18 @@
 
                         MOLDAGEM_SUBTYPES.forEach(s => totals[s] = 0);
 
+
+                        const normalizeSectorName = (value) => String(value || '').trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                        const canonicalSector = (value) => {
+                            const sector = normalizeSectorName(value);
+                            if (sector === 'FUSAO' || sector === 'FUNDICAO') return 'FUSAO';
+                            if (sector === 'TRATAMENTO TERMICO' || sector === 'TT') return 'TRATAMENTO TERMICO';
+                            if (sector === 'INSPECAO DE QUALIDADE' || sector === 'QUALIDADE') return 'INSPECAO DE QUALIDADE';
+                            if (sector === 'USINAGEM EXPEDICAO' || sector === 'USINAGEM' || sector === '50') return 'USINAGEM EXPEDICAO';
+                            if (sector === 'EXPEDICAO') return 'EXPEDICAO';
+                            if (sector === 'ACABAMENTO' || sector === 'REBARBACAO' || sector === 'REBARBAÇÃO') return 'ACABAMENTO';
+                            return sector;
+                        };
 
                         result.data.forEach(item => {
 
@@ -10173,7 +10187,9 @@
                             // Robust Sector Normalization & Mapping
 
 
-                            const sRaw = String(item.setor || '').trim().toUpperCase();
+                            const sRaw = canonicalSector(item.setor);
+                            const codigoPeca = String(item.codigo_peca || '').trim();
+                            if (sRaw === 'FUSAO' && (codigoPeca === LINGOTE_CODE || codigoPeca === SOBRAS_CODE)) return;
 
 
                             // 1. Accumulate Subtypes
@@ -10194,13 +10210,10 @@
                             // 2. Accumulate other target sectors
 
 
-                            else if (TARGET_SECTORS.includes(sRaw) || sRaw === '50' || sRaw === 'USINAGEM') {
+                            else if (TARGET_SECTORS.includes(sRaw)) {
 
 
                                 let targetKey = sRaw;
-
-
-                                if (sRaw === '50' || sRaw === 'USINAGEM') targetKey = 'USINAGEM EXPEDICAO';
 
 
                                 if (totals.hasOwnProperty(targetKey)) {
