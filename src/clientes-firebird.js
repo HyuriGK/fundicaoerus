@@ -834,7 +834,7 @@ function getSessionClienteValue(session, key) {
 function buildDigisacSavedCnpjConfirmationMessage(row) {
     const nome = row?.razao_social || row?.fantasia || 'cliente';
     const documento = row?.cnpj_cpf || row?.cnpjCpf || '';
-    return `Olá! Tudo bem? Identificamos seu cadastro conforme seu último contato conosco.\n\n*CNPJ/CPF:* ${documento}\n*Cliente:* ${nome}\n\nDeseja atendimento para essa mesma empresa?\n\n1️⃣ - Sim\n2️⃣ - Não`;
+    return `Olá! Tudo bem? A Fundição Erus agradece o seu contato. 🇧🇷\n\nIdentificamos seu cadastro com base no seu último atendimento.\n\n**CNPJ/CPF:** ${documento}\n**Cliente:** ${nome}\n\nDeseja atendimento para essa mesma empresa?\n\n1️⃣ - Sim\n2️⃣ - Não\n\nResponda apenas com o número da opção desejada.`;
 }
 
 function buildDigisacContinueWithCadastroMessage() {
