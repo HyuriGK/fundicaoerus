@@ -876,6 +876,12 @@ function buildDigisacCommercialReceptionMessage(responsavelComercial) {
     return `*${nomeResponsavel}:*\n${cumprimento}. Tudo bem? Como posso ajudar?`;
 }
 
+function buildDigisacFinancialReceptionMessage() {
+    const cumprimento = getDigisacGreetingByCurrentHour();
+
+    return `*Financeiro:*\n\n${cumprimento}, Tudo bem? Como posso ajudar?`;
+}
+
 function buildDigisacWelcomeMessage() {
     return 'Olá! Seja bem-vindo à Fundição Erus. 🇧🇷\n\nVocê entrou em contato com o Setor Comercial.\n\nComo podemos ajudá-lo?\n\n1️⃣ - Já sou cliente\n\n2️⃣ - Não sou cliente\n\nResponda apenas com o número da opção desejada.';
 }
@@ -1253,6 +1259,7 @@ router.all('/digisac/consultor', async (req, res) => {
 
                 if (opcao === '2') {
                     const notification = await sendDigisacMessage(contactId, '✅ Solicitação recebida!\n\nSeu atendimento será encaminhado ao setor Financeiro. Em breve, nossa equipe dará sequência ao atendimento.');
+                    const receptionNotification = await sendDigisacMessage(contactId, buildDigisacFinancialReceptionMessage());
                     const clienteNome = getSessionClienteValue(session, 'razaoSocial') || getSessionClienteValue(session, 'fantasia') || 'cliente';
                     const clienteCnpj = session.documento || getSessionClienteValue(session, 'cnpjCpf') || 'nao informado';
                     const transfer = await transferDigisacTicketTo(
@@ -1270,6 +1277,7 @@ router.all('/digisac/consultor', async (req, res) => {
                         responsavel_comercial: session.responsavel_comercial,
                         responsavelComercial: session.responsavel_comercial,
                         notification,
+                        receptionNotification,
                         transfer
                     });
                 }
@@ -1547,6 +1555,7 @@ router.all('/digisac/consultor', async (req, res) => {
 
             if (opcao === '2') {
                 const notification = await sendDigisacMessage(contactId, '✅ Solicitação recebida!\n\nSeu atendimento será encaminhado ao setor Financeiro. Em breve, nossa equipe dará sequência ao atendimento.');
+                const receptionNotification = await sendDigisacMessage(contactId, buildDigisacFinancialReceptionMessage());
                 const clienteNome = getSessionClienteValue(session, 'razaoSocial') || getSessionClienteValue(session, 'fantasia') || 'cliente';
                 const clienteCnpj = session.documento || getSessionClienteValue(session, 'cnpjCpf') || 'nao informado';
                 const transfer = await transferDigisacTicketTo(
@@ -1564,6 +1573,7 @@ router.all('/digisac/consultor', async (req, res) => {
                     responsavel_comercial: session.responsavel_comercial,
                     responsavelComercial: session.responsavel_comercial,
                     notification,
+                    receptionNotification,
                     transfer
                 });
             }
