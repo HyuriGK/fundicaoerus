@@ -249,6 +249,39 @@
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            cursor: help;
+        }
+
+        .monitoring-column-tooltip {
+            position: fixed;
+            z-index: 100001;
+            max-width: 320px;
+            padding: 12px 14px;
+            border: 1px solid rgba(var(--color-primary-rgb), 0.34);
+            border-radius: 8px;
+            background: rgba(10, 10, 12, 0.96);
+            color: var(--text-main);
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.42);
+            font-size: 0.86rem;
+            line-height: 1.35;
+            pointer-events: none;
+            opacity: 0;
+            transform: translateY(4px);
+            transition: opacity 0.12s ease, transform 0.12s ease;
+        }
+
+        .monitoring-column-tooltip strong {
+            display: block;
+            margin-bottom: 5px;
+            color: var(--color-primary);
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.7px;
+        }
+
+        body.presentation-mode .monitoring-column-tooltip.visible {
+            opacity: 1;
+            transform: translateY(0);
         }
 
         body.presentation-mode .cards-list {
@@ -1971,6 +2004,18 @@
             'AGUARDANDO FATURAMENTO': 'col-expedicao'
         };
 
+        const columnTooltipMap = {
+            [orderedStages[0]]: 'Quantidade que ainda esta aguardando moldagem ou inicio de producao.',
+            [orderedStages[1]]: 'Quantidade que ja saiu da moldagem e esta aguardando fusao.',
+            [orderedStages[2]]: 'Quantidade que ja saiu da fusao e esta aguardando acabamento.',
+            [orderedStages[3]]: 'Quantidade que ja saiu do acabamento e esta aguardando tratamento termico.',
+            [orderedStages[4]]: 'Quantidade que ja saiu do tratamento termico e esta aguardando envio para usinagem externa.',
+            [orderedStages[5]]: 'Quantidade que esta na usinagem externa, aguardando retorno ou avanco para qualidade.',
+            [orderedStages[6]]: 'Quantidade pronta da etapa anterior e aguardando inspecao de qualidade.',
+            [orderedStages[7]]: 'Quantidade que ja passou pela qualidade e esta aguardando expedicao.',
+            [orderedStages[8]]: 'Quantidade que ja foi expedida e esta aguardando faturamento.'
+        };
+
         const stageLeadTimeKeyMap = {
             'MOLDAGEM GERAL': 'moldagem',
             'FUSÃO': 'fusao',
@@ -2022,10 +2067,11 @@
             if (!container) return;
             container.innerHTML = orderedStages.map(stage => {
                 const key = configKeyMap[stage];
+                const tooltip = columnTooltipMap[stage] || '';
                 return `
                     <div class="kanban-column" id="${columnIdMap[stage]}">
                         <div class="column-header">
-                            <h2>${stage}</h2>
+                            <h2 class="column-title-tooltip" data-stage="${stage}" data-tooltip="${tooltip}">${stage}</h2>
                             <span class="column-count" id="count-${key}">0</span>
                         </div>
                         <div class="column-stats-bar" style="flex-direction: column; align-items: flex-start; gap: 4px;">
@@ -3096,6 +3142,48 @@
             return result;
         }
 
+        function setupColumnTooltips() {
+            let tooltip = document.getElementById('monitoringColumnTooltip');
+            if (!tooltip) {
+                tooltip = document.createElement('div');
+                tooltip.id = 'monitoringColumnTooltip';
+                tooltip.className = 'monitoring-column-tooltip';
+                document.body.appendChild(tooltip);
+            }
+
+            const moveTooltip = (event) => {
+                const offset = 16;
+                const rect = tooltip.getBoundingClientRect();
+                let left = event.clientX + offset;
+                let top = event.clientY + offset;
+
+                if (left + rect.width > window.innerWidth - 12) left = event.clientX - rect.width - offset;
+                if (top + rect.height > window.innerHeight - 12) top = event.clientY - rect.height - offset;
+
+                tooltip.style.left = `${Math.max(12, left)}px`;
+                tooltip.style.top = `${Math.max(12, top)}px`;
+            };
+
+            document.addEventListener('mouseover', (event) => {
+                const title = event.target.closest('.column-title-tooltip');
+                if (!title || !document.body.classList.contains('presentation-mode')) return;
+
+                tooltip.innerHTML = `<strong>${title.dataset.stage}</strong>${title.dataset.tooltip}`;
+                tooltip.classList.add('visible');
+                moveTooltip(event);
+            });
+
+            document.addEventListener('mousemove', (event) => {
+                if (!tooltip.classList.contains('visible')) return;
+                moveTooltip(event);
+            });
+
+            document.addEventListener('mouseout', (event) => {
+                if (!event.target.closest('.column-title-tooltip')) return;
+                tooltip.classList.remove('visible');
+            });
+        }
+
 
         document.addEventListener('DOMContentLoaded', () => {
             const savedLT = localStorage.getItem('erus_monitoramento_lt');
@@ -3135,6 +3223,7 @@
             }
 
             renderKanbanColumns();
+            setupColumnTooltips();
             fetchData();
             // Refresh every 1 minute (60 seconds)
             setInterval(fetchData, 60 * 1000);
