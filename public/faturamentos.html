@@ -817,6 +817,33 @@
             color: var(--text-muted);
             font-size: 0.9rem;
         }
+        .fat-context-menu {
+            position: fixed;
+            display: none;
+            z-index: 10000;
+            min-width: 260px;
+            background: #18181b;
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+            box-shadow: 0 18px 45px rgba(0,0,0,0.45);
+            padding: 6px;
+        }
+        .fat-context-menu button {
+            width: 100%;
+            border: 0;
+            background: transparent;
+            color: #fff;
+            text-align: left;
+            padding: 10px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.82rem;
+            font-weight: 700;
+        }
+        .fat-context-menu button:hover {
+            background: rgba(251,191,36,0.12);
+            color: var(--color-primary);
+        }
         /* Content Editable Support */
         .kpi-value[contenteditable="true"] {
             outline: none;
@@ -1471,6 +1498,9 @@
             <div style="text-align: center; color: var(--text-muted); margin-top: 15px; font-size: 0.8rem;">Pressione
                 ESC para fechar</div>
         </div>
+    </div>
+    <div id="fatContextMenu" class="fat-context-menu">
+        <button type="button" onclick="openPedidosCarteiraFromContext()">Verificar se h&aacute; saldo em carteira desta pe&ccedil;a</button>
     </div>
     <!-- Side Menu Trigger Area -->
     <div class="side-menu-trigger"></div>
@@ -2810,7 +2840,7 @@ async function loadRecordsData() {
                     ? `<td class="checkbox-cell" onclick="event.stopPropagation()"><input type="checkbox" ${fatPesoChecked ? 'checked' : ''} onclick="toggleFatPeso(${globalIdx})"></td>`
                     : '';
                 return `
-                <tr class="${isIgnored ? 'row-ignored' : ''}">
+                <tr class="${isIgnored ? 'row-ignored' : ''}" data-fat-index="${globalIdx}" oncontextmenu="showFatContextMenu(event, ${globalIdx})">
                     ${inclCell}
                     ${fatPesoCell}
                     <td>${formatDate(item.data)}</td>
@@ -2846,6 +2876,36 @@ async function loadRecordsData() {
                 }
             }
         }
+        let fatContextItemIndex = null;
+        function hideFatContextMenu() {
+            const menu = document.getElementById('fatContextMenu');
+            if (menu) menu.style.display = 'none';
+        }
+        function showFatContextMenu(event, itemIndex) {
+            event.preventDefault();
+            const item = allData[itemIndex];
+            if (!item || !item.codigoItem) return;
+            fatContextItemIndex = itemIndex;
+            const menu = document.getElementById('fatContextMenu');
+            if (!menu) return;
+            menu.style.display = 'block';
+            const rect = menu.getBoundingClientRect();
+            const left = Math.min(event.clientX, window.innerWidth - rect.width - 8);
+            const top = Math.min(event.clientY, window.innerHeight - rect.height - 8);
+            menu.style.left = `${Math.max(8, left)}px`;
+            menu.style.top = `${Math.max(8, top)}px`;
+        }
+        function openPedidosCarteiraFromContext() {
+            const item = allData[fatContextItemIndex];
+            hideFatContextMenu();
+            const codigo = item && item.codigoItem ? String(item.codigoItem).trim() : '';
+            if (!codigo) return;
+            window.location.href = `pedidos.html?codigoPeca=${encodeURIComponent(codigo)}`;
+        }
+        document.addEventListener('click', hideFatContextMenu);
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') hideFatContextMenu();
+        });
         function processClients(data) { clientStats = {}; data.forEach(item => { const n = (item.clienteNome || 'Desconhecido').trim(); clientStats[n] = (clientStats[n] || 0) + 1; }); }
         function getModalFilteredData() {
             const startInput = document.getElementById('startDate').value;
