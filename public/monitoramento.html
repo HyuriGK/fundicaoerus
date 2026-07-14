@@ -1916,11 +1916,34 @@
         };
 
         let customWeights = {}; // Memory for manual weights set in pedidos.html
+
+        function getPositiveWeightNumber(value) {
+            const num = Number(value);
+            return Number.isFinite(num) && num > 0 ? num : 0;
+        }
+
+        function getMonitoramentoErpUnitWeight(op, targetQty) {
+            const qty = getPositiveWeightNumber(targetQty);
+            const totalWeight =
+                getPositiveWeightNumber(op.PESO_LIQUIDO_NPR) ||
+                getPositiveWeightNumber(op.PESO_PRODUTO) ||
+                getPositiveWeightNumber(op.PESO_LIQUIDO_PPR) ||
+                getPositiveWeightNumber(op.PESO_BRUTO_PPR);
+
+            return qty > 0 && totalWeight > 0 ? totalWeight / qty : 0;
+        }
         
         function getUnitWeight(op) {
-            if (typeof getItemSectorMetrics === 'function' && typeof getResolvedUnitWeight === 'function') {
+            if (typeof getItemSectorMetrics === 'function') {
                 const metrics = getItemSectorMetrics(op);
-                return getResolvedUnitWeight(op, customWeights, metrics.targetTotalQty);
+                const fixedUnit = getPositiveWeightNumber(op.PESO_UNIT);
+                if (fixedUnit > 0) return fixedUnit;
+
+                const erpUnit = getMonitoramentoErpUnitWeight(op, metrics.targetTotalQty);
+                if (erpUnit > 0) return erpUnit;
+
+                const prodCode = String(op.PRODUTO_PPR || '').trim();
+                return getPositiveWeightNumber(customWeights[prodCode]);
             }
 
             const prodCode = String(op.PRODUTO_PPR || '').trim();
