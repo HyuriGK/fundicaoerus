@@ -2,9 +2,36 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../lib/db');
 
+function getCommercialOwnerRestriction(req) {
+    const role = String(req.user?.role || '').trim().toLowerCase();
+    const username = String(req.user?.user || '').trim().toLowerCase();
+    const name = String(req.user?.name || '').trim().toLowerCase();
+    if (role === 'comercial' && (username === 'geruza' || name === 'geruza mendes')) return 'GERUZA MENDES';
+    if (role === 'comercial' && (username === 'elisangela' || name === 'elisangela')) return 'ELISANGELA';
+    return null;
+}
+
+function addCommercialOwnerScope(req, params) {
+    const owner = getCommercialOwnerRestriction(req);
+    if (!owner) return { join: '', condition: '' };
+    params.push(owner);
+    return {
+        join: `
+            JOIN clientes_firebird_sync c
+              ON c.codigo::text = p.data->>'ID_CLIENTE_CORE'
+            JOIN clientes_responsavel_comercial rc
+              ON rc.empresa = c.empresa
+             AND rc.codigo = c.codigo
+        `,
+        condition: ` AND rc.responsavel_comercial = $${params.length}`
+    };
+}
+
 // GET /api/emissoes/monthly-summary
 router.get('/monthly-summary', async (req, res) => {
     try {
+        const params = [];
+        const ownerScope = addCommercialOwnerScope(req, params);
         const query = `
             SELECT 
                 EXTRACT(YEAR FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) as ano,
@@ -27,12 +54,14 @@ router.get('/monthly-summary', async (req, res) => {
                 ) as total_valor
             FROM firebird_sync_emissoes p
             LEFT JOIN pesos_customizados pc ON TRIM(p.data->>'PRODUTO_PPR') = pc.codigo
+            ${ownerScope.join}
             WHERE p.data->>'DATA_EMISSAO_PEDIDO' IS NOT NULL
+            ${ownerScope.condition}
             GROUP BY 1, 2
             ORDER BY 1 DESC, 2 DESC
         `;
 
-        const result = await pool.query(query);
+        const result = await pool.query(query, params);
 
         const formatted = result.rows.map(row => ({
             ano: parseInt(row.ano),
@@ -63,6 +92,7 @@ router.get('/client-summary', async (req, res) => {
             whereClause += " AND EXTRACT(MONTH FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) = $2";
             params.push(mes);
         }
+        const ownerScope = addCommercialOwnerScope(req, params);
 
         const query = `
             SELECT 
@@ -86,7 +116,9 @@ router.get('/client-summary', async (req, res) => {
                 ) as total_valor
             FROM firebird_sync_emissoes p
             LEFT JOIN pesos_customizados pc ON TRIM(p.data->>'PRODUTO_PPR') = pc.codigo
+            ${ownerScope.join}
             ${whereClause}
+            ${ownerScope.condition}
             GROUP BY 1, 2
             ORDER BY 3 DESC
         `;
@@ -127,6 +159,7 @@ router.get('/list', async (req, res) => {
             whereClause += ` AND EXTRACT(DAY FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) = $${params.length + 1}`;
             params.push(dia);
         }
+        const ownerScope = addCommercialOwnerScope(req, params);
 
         const query = `
             SELECT 
@@ -141,7 +174,9 @@ router.get('/list', async (req, res) => {
             LEFT JOIN pesos_customizados pc ON TRIM(p.data->>'PRODUTO_PPR') = pc.codigo
             LEFT JOIN ficha_tecnica f ON f.pro_codigo_fic = (p.data->>'PRODUTO_PPR')
             LEFT JOIN pedidos_observacoes obs ON obs.sync_key = p.sync_key
+            ${ownerScope.join}
             ${whereClause}
+            ${ownerScope.condition}
             ORDER BY (p.data->>'DATA_EMISSAO_PEDIDO')::date DESC
         `;
 
