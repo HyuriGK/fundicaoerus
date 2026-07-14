@@ -16,6 +16,16 @@ async function ensureModeloStatusTable() {
     modeloStatusTableReady = true;
 }
 
+function getCommercialOwnerRestriction(req) {
+    const role = String(req.user?.role || '').trim().toLowerCase();
+    const username = String(req.user?.user || '').trim().toLowerCase();
+    const name = String(req.user?.name || '').trim().toLowerCase();
+    if (role === 'comercial' && (username === 'geruza' || name === 'geruza mendes')) {
+        return 'GERUZA MENDES';
+    }
+    return null;
+}
+
 // Rota para buscar peso unitário, descrição e saldo em aberto por código (usado por acabamento_externo)
 // Prioridade peso: PRODUTO.PESO_LIQUIDO_PRO sincronizado > pesos_customizados (fallback manual)
 router.get('/peso-lookup', async (req, res) => {
@@ -82,6 +92,16 @@ router.get('/', async (req, res) => {
     const { carteiraOnly } = req.query;
     try {
         await ensureModeloStatusTable();
+        const commercialOwner = getCommercialOwnerRestriction(req);
+        const ownerJoin = commercialOwner ? `
+                JOIN clientes_firebird_sync c
+                    ON c.codigo::text = p.data->>'ID_CLIENTE_CORE'
+                JOIN clientes_responsavel_comercial rc
+                    ON rc.empresa = c.empresa
+                    AND rc.codigo = c.codigo
+                    AND rc.responsavel_comercial = $1
+        ` : '';
+        const ownerParams = commercialOwner ? [commercialOwner] : [];
         let query;
         if (carteiraOnly === 'true') {
             query = `
@@ -98,6 +118,7 @@ router.get('/', async (req, res) => {
                 LEFT JOIN ficha_tecnica f ON f.pro_codigo_fic = (p.data->>'PRODUTO_PPR')
                 LEFT JOIN pedidos_observacoes obs ON obs.sync_key = p.sync_key
                 LEFT JOIN pedidos_modelo_status ms ON ms.sync_key = p.sync_key
+                ${ownerJoin}
                 WHERE
                     ((p.data->>'QUANTIDADE_PPR')::numeric - COALESCE((p.data->>'QUANTIDADE_FATURADA_PPR')::numeric, 0) - COALESCE((p.data->>'QUANTIDADE_DESISTENCIA_PPR')::numeric, 0)) > 0
                     AND (p.data->>'STATUS_PPR') <> 'C'
@@ -122,6 +143,7 @@ router.get('/', async (req, res) => {
                 LEFT JOIN ficha_tecnica f ON f.pro_codigo_fic = (p.data->>'PRODUTO_PPR')
                 LEFT JOIN pedidos_observacoes obs ON obs.sync_key = p.sync_key
                 LEFT JOIN pedidos_modelo_status ms ON ms.sync_key = p.sync_key
+                ${ownerJoin}
                 ORDER BY
                     (f.pro_codigo_fic IS NOT NULL) DESC,
                     f.data_fic DESC NULLS LAST,
@@ -130,7 +152,7 @@ router.get('/', async (req, res) => {
             `;
         }
 
-        const result = await pool.query(query);
+        const result = await pool.query(query, ownerParams);
 
         // Buscar vínculos manuais confirmados/rejeitados para sobrescrever LINK_STATUS em tempo real
         const linksResult = await pool.query('SELECT sync_key, op, status FROM pedidos_op_links');
