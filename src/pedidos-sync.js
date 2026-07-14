@@ -23,6 +23,9 @@ function getCommercialOwnerRestriction(req) {
     if (role === 'comercial' && (username === 'geruza' || name === 'geruza mendes')) {
         return 'GERUZA MENDES';
     }
+    if (role === 'comercial' && (username === 'elisangela' || name === 'elisangela')) {
+        return 'ELISANGELA';
+    }
     return null;
 }
 
