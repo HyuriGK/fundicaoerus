@@ -568,7 +568,7 @@ async function getDigisacClienteSession(contactId) {
         SELECT contact_id, documento, responsavel_comercial, cliente, etapa, tentativas_cnpj, updated_at
         FROM digisac_cliente_sessions
         WHERE contact_id = $1
-          AND updated_at >= NOW() - INTERVAL '2 hours'
+          AND updated_at >= NOW() - INTERVAL '30 minutes'
           AND COALESCE(etapa, '') <> 'cnpj_salvo'
         LIMIT 1
     `, [contactId]);
