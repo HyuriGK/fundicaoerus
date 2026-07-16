@@ -5,6 +5,32 @@ const router = express.Router();
 const pool = require('../lib/db');
 const { logActivity } = require('./lib/logger');
 
+function getCommercialOwnerRestriction(req) {
+    const role = String(req.user?.role || '').trim().toLowerCase();
+    const username = String(req.user?.user || '').trim().toLowerCase();
+    const name = String(req.user?.name || '').trim().toLowerCase();
+    if (role === 'comercial' && (username === 'geruza' || name === 'geruza mendes')) return 'GERUZA MENDES';
+    if (role === 'comercial' && (username === 'elisangela' || name === 'elisangela')) return 'ELISANGELA';
+    return null;
+}
+
+function appendCommercialOwnerFilter(query, params, alias, commercialOwner, paramIndex) {
+    if (!commercialOwner) return { query, paramIndex };
+    query += `
+        AND EXISTS (
+            SELECT 1
+            FROM clientes_firebird_sync c
+            JOIN clientes_responsavel_comercial rc
+                ON rc.empresa = c.empresa
+                AND rc.codigo = c.codigo
+            WHERE c.codigo::text = ${alias}.cliente_codigo::text
+              AND rc.responsavel_comercial = $${paramIndex}
+        )
+    `;
+    params.push(commercialOwner);
+    return { query, paramIndex: paramIndex + 1 };
+}
+
 // --- INIT PREFERENCES TABLE ---
 (async () => {
     const client = await pool.connect();
@@ -208,6 +234,7 @@ router.get('/detalhado', async (req, res) => {
         console.log('📝 Consultando faturamento detalhado do PostgreSQL...');
 
         const { limit = 5000, startDate, endDate } = req.query;
+        const commercialOwner = getCommercialOwnerRestriction(req);
 
         let query = `
             SELECT 
@@ -283,6 +310,7 @@ router.get('/detalhado', async (req, res) => {
 
         const params = [];
         let paramIndex = 1;
+        ({ query, paramIndex } = appendCommercialOwnerFilter(query, params, 'f', commercialOwner, paramIndex));
 
         if (startDate) {
             query += ` AND f.data_faturamento >= $${paramIndex}`;
@@ -372,6 +400,23 @@ router.get('/evolucao-mensal', async (req, res) => {
         // 1. Buscar Preferências de Clientes Excluídos
         const prefRes = await pool.query("SELECT value FROM app_preferences WHERE key = 'excluded_clients'");
         const excludedClients = prefRes.rows[0]?.value ? prefRes.rows[0].value.map(c => c.trim().toUpperCase()) : [];
+        const commercialOwner = getCommercialOwnerRestriction(req);
+        const params = [excludedClients];
+        let ownerCondition = '';
+        if (commercialOwner) {
+            params.push(commercialOwner);
+            ownerCondition = `
+                AND EXISTS (
+                    SELECT 1
+                    FROM clientes_firebird_sync c
+                    JOIN clientes_responsavel_comercial rc
+                        ON rc.empresa = c.empresa
+                        AND rc.codigo = c.codigo
+                    WHERE c.codigo::text = f.cliente_codigo::text
+                      AND rc.responsavel_comercial = $2
+                )
+            `;
+        }
 
         // 2. Query que gera os meses e soma os dados filtrados
         // Priorizamos a tabela detalhada (faturamento_firebird) em vez da faturamento_diario 
@@ -395,6 +440,7 @@ router.get('/evolucao-mensal', async (req, res) => {
                 ON DATE_TRUNC('month', f.data_faturamento) = m.mes
                 AND (f.excluido_manualmente = FALSE OR f.excluido_manualmente IS NULL)
                 AND NOT (UPPER(TRIM(f.cliente_nome)) = ANY($1))
+                ${ownerCondition}
             LEFT JOIN (
                 SELECT
                     nota_original,
@@ -418,7 +464,7 @@ router.get('/evolucao-mensal', async (req, res) => {
             ORDER BY m.mes
         `;
 
-        const result = await pool.query(query, [excludedClients]);
+        const result = await pool.query(query, params);
 
         res.json({
             success: true,

@@ -7,6 +7,35 @@ const { logActivity } = require('./lib/logger');
 let paradasTableReady = false;
 let producaoClienteColumnReady = false;
 
+function getCommercialOwnerRestriction(req) {
+    const role = String(req.user?.role || '').trim().toLowerCase();
+    const username = String(req.user?.user || '').trim().toLowerCase();
+    const name = String(req.user?.name || '').trim().toLowerCase();
+    if (role === 'comercial' && (username === 'geruza' || name === 'geruza mendes')) return 'GERUZA MENDES';
+    if (role === 'comercial' && (username === 'elisangela' || name === 'elisangela')) return 'ELISANGELA';
+    return null;
+}
+
+function appendCommercialOwnerFilter(query, params, clienteExpr, commercialOwner, paramIndex) {
+    if (!commercialOwner) return { query, paramIndex };
+    query += `
+        AND EXISTS (
+            SELECT 1
+            FROM clientes_firebird_sync c
+            JOIN clientes_responsavel_comercial rc
+                ON rc.empresa = c.empresa
+                AND rc.codigo = c.codigo
+            WHERE rc.responsavel_comercial = $${paramIndex}
+              AND (
+                  UPPER(TRIM(c.razao_social)) = UPPER(TRIM(${clienteExpr}))
+                  OR UPPER(TRIM(c.fantasia)) = UPPER(TRIM(${clienteExpr}))
+              )
+        )
+    `;
+    params.push(commercialOwner);
+    return { query, paramIndex: paramIndex + 1 };
+}
+
 async function ensureProducaoClienteColumn() {
     if (producaoClienteColumnReady) return;
     await pool.query(`ALTER TABLE producao_apontada_sincronizada ADD COLUMN IF NOT EXISTS cliente VARCHAR(255)`);
@@ -174,6 +203,7 @@ router.get('/', async (req, res) => {
         }
 
         const { startDate, endDate, sector, search, limit = 100000 } = req.query;
+        const commercialOwner = getCommercialOwnerRestriction(req);
         await ensureProducaoClienteColumn();
 
         let query = `
@@ -244,6 +274,8 @@ router.get('/', async (req, res) => {
 
         const params = [];
         let paramIndex = 1;
+        const clienteExpr = "COALESCE(NULLIF(t.cliente, ''), cliente_op.cliente, cliente_codigo.cliente, '')";
+        ({ query, paramIndex } = appendCommercialOwnerFilter(query, params, clienteExpr, commercialOwner, paramIndex));
 
         if (startDate) {
             query += ` AND t.data_producao >= $${paramIndex}`;
@@ -322,6 +354,7 @@ router.get('/grupos', async (req, res) => {
 router.get('/stats', async (req, res) => {
     try {
         const { startDate, endDate, sector } = req.query;
+        const commercialOwner = getCommercialOwnerRestriction(req);
 
         let query = `
             SELECT
@@ -331,11 +364,56 @@ router.get('/stats', async (req, res) => {
             FROM producao_apontada_sincronizada t
             LEFT JOIN pesos_customizados pc ON t.codigo_peca = pc.codigo
             LEFT JOIN produto_pesos_producao p ON t.codigo_peca = p.codigo_peca
+            LEFT JOIN (
+                SELECT DISTINCT ON (op) op, cliente
+                FROM (
+                    SELECT REPLACE(p.sync_key, 'OP-', '') as op, p.data->>'NOME_CLIENTE' as cliente, p.updated_at
+                    FROM firebird_sync_pedidos p
+                    WHERE p.sync_key LIKE 'OP-%'
+                      AND COALESCE(p.data->>'NOME_CLIENTE', '') <> ''
+
+                    UNION ALL
+
+                    SELECT TRIM(e.data->>'OP_PCS') as op, e.data->>'NOME_CLIENTE' as cliente, e.updated_at
+                    FROM firebird_sync_emissoes e
+                    WHERE COALESCE(e.data->>'OP_PCS', '') <> ''
+                      AND COALESCE(e.data->>'NOME_CLIENTE', '') <> ''
+                ) origem_op
+                WHERE op <> '' AND cliente <> ''
+                ORDER BY op, updated_at DESC
+            ) cliente_op ON cliente_op.op = TRIM(t.op)
+            LEFT JOIN (
+                SELECT DISTINCT ON (codigo_peca) codigo_peca, cliente
+                FROM (
+                    SELECT
+                        codigo_peca,
+                        cliente,
+                        COUNT(*) OVER (PARTITION BY codigo_peca, cliente) as ocorrencias,
+                        MAX(updated_at) OVER (PARTITION BY codigo_peca, cliente) as ultima_atualizacao
+                    FROM (
+                        SELECT TRIM(p.data->>'PRODUTO_PPR') as codigo_peca, p.data->>'NOME_CLIENTE' as cliente, p.updated_at
+                        FROM firebird_sync_pedidos p
+                        WHERE COALESCE(p.data->>'PRODUTO_PPR', '') <> ''
+                          AND COALESCE(p.data->>'NOME_CLIENTE', '') <> ''
+
+                        UNION ALL
+
+                        SELECT TRIM(e.data->>'PRODUTO_PPR') as codigo_peca, e.data->>'NOME_CLIENTE' as cliente, e.updated_at
+                        FROM firebird_sync_emissoes e
+                        WHERE COALESCE(e.data->>'PRODUTO_PPR', '') <> ''
+                          AND COALESCE(e.data->>'NOME_CLIENTE', '') <> ''
+                    ) origem_codigo
+                    WHERE codigo_peca <> '' AND cliente <> ''
+                ) ranking_codigo
+                ORDER BY codigo_peca, ocorrencias DESC, ultima_atualizacao DESC
+            ) cliente_codigo ON cliente_codigo.codigo_peca = TRIM(t.codigo_peca)
             WHERE 1=1
         `;
 
         const params = [];
         let paramIndex = 1;
+        const clienteExpr = "COALESCE(NULLIF(t.cliente, ''), cliente_op.cliente, cliente_codigo.cliente, '')";
+        ({ query, paramIndex } = appendCommercialOwnerFilter(query, params, clienteExpr, commercialOwner, paramIndex));
 
         if (startDate) {
             query += ` AND t.data_producao >= $${paramIndex}`;
