@@ -856,6 +856,30 @@ async function findClienteByDocumento(documento) {
     return result.rows[0] || null;
 }
 
+async function getCurrentClienteForDigisacSession(session) {
+    const documento = onlyDigits(session?.documento || getSessionClienteValue(session, 'cnpjCpf'));
+    if (!documento) return session?.cliente || null;
+
+    const current = await findClienteByDocumento(documento);
+    if (current) return current;
+
+    return {
+        ...session.cliente,
+        responsavel_comercial: session.responsavel_comercial
+    };
+}
+
+async function refreshDigisacSessionClienteAtual(session) {
+    if (!session?.cliente) return session;
+
+    const currentCliente = await getCurrentClienteForDigisacSession(session);
+    return {
+        ...session,
+        cliente: currentCliente,
+        responsavel_comercial: currentCliente?.responsavel_comercial || null
+    };
+}
+
 function buildDigisacMessage(row) {
     if (!row) {
         return '❌ Não encontramos cadastro para o CNPJ/CPF informado. Nossa equipe comercial já foi acionada e em breve dará continuidade ao atendimento.';
@@ -1380,12 +1404,10 @@ router.all('/digisac/consultor', async (req, res) => {
 
             const storedSession = await getDigisacStoredClienteSession(contactId);
             if (storedSession) {
-                await saveDigisacClienteSession(contactId, storedSession.documento, {
-                    ...storedSession.cliente,
-                    responsavel_comercial: storedSession.responsavel_comercial
-                }, 'confirmacao_cnpj_salvo');
+                const currentCliente = await getCurrentClienteForDigisacSession(storedSession);
+                await saveDigisacClienteSession(contactId, storedSession.documento, currentCliente, 'confirmacao_cnpj_salvo');
                 await saveDigisacDebug(req, storedSession.documento);
-                const notification = await sendDigisacMessage(contactId, buildDigisacSavedCnpjConfirmationMessage(storedSession.cliente));
+                const notification = await sendDigisacMessage(contactId, buildDigisacSavedCnpjConfirmationMessage(currentCliente));
 
                 return res.json({
                     success: true,
@@ -1393,8 +1415,8 @@ router.all('/digisac/consultor', async (req, res) => {
                     encontrado: 'sim',
                     action: 'confirmar_cnpj_salvo',
                     pendingConfirmation: true,
-                    responsavel_comercial: storedSession.responsavel_comercial,
-                    responsavelComercial: storedSession.responsavel_comercial,
+                    responsavel_comercial: currentCliente.responsavel_comercial,
+                    responsavelComercial: currentCliente.responsavel_comercial,
                     sent_by_backend: !!notification,
                     notification
                 });
@@ -1498,6 +1520,7 @@ router.all('/digisac/consultor', async (req, res) => {
                     session = null;
                 }
             }
+            session = await refreshDigisacSessionClienteAtual(session);
 
             if (session?.etapa === 'aguardando_tipo_cliente') {
                 const messageText = getDigisacMessageText(req);
