@@ -1276,6 +1276,15 @@
             </div>
         </div>
     </div>
+    <div id="fornecedoresModal" class="modal-overlay" style="z-index: 10003;">
+        <div class="modal-content" style="max-width: 900px;">
+            <div class="modal-header">
+                <h2 class="modal-title">Fornecimentos do Item</h2>
+                <span class="modal-close" onclick="fecharModalTopo()"><i class="fa-solid fa-xmark"></i></span>
+            </div>
+            <div id="fornecedoresModalBody" class="modal-body table-container" style="border:none; margin:0; border-radius:0;"></div>
+        </div>
+    </div>
     <div id="registrosModal" class="modal-overlay">
         <div class="modal-content">
             <div class="modal-header">
@@ -1562,6 +1571,8 @@
                 url += `?action=${action}`;
             } else if (actionOrEndpoint === 'qualidade-fotos' && data?.carga) {
                 url += `?action=qualidade-fotos&carga=${encodeURIComponent(data.carga)}`;
+            } else if (actionOrEndpoint === 'fornecedores-item' && data?.codigo) {
+                url += `?action=fornecedores-item&codigo=${encodeURIComponent(data.codigo)}`;
             }
             const options = {
                 method,
@@ -1626,6 +1637,58 @@
                 document.getElementById('customConfirmCancel').addEventListener('click', () => cleanup(false), { once: true });
             });
         }
+        function escapeHtml(value) {
+            return String(value ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+        }
+        async function carregarFornecimentosDoCodigo(codigo) {
+            try {
+                const data = await apiRequest('fornecedores-item', 'GET', { codigo });
+                const fornecedores = Array.isArray(data.fornecedores) ? data.fornecedores : [];
+                if (fornecedores.length) abrirPopupFornecedores(codigo, fornecedores);
+            } catch (e) {
+                console.error('Erro ao buscar fornecedores do item:', e);
+            }
+        }
+        function abrirPopupFornecedores(codigo, fornecedores) {
+            const body = document.getElementById('fornecedoresModalBody');
+            const rows = fornecedores.map((f, index) => {
+                const fornecedor = String(f.fornecedor ?? '').trim();
+                const valor = parseNumberSafe(f.valor_unitario);
+                const observacao = String(f.observacao ?? '').trim();
+                return `<tr>
+                    <td style="font-weight:800;color:var(--color-primary);">${escapeHtml(fornecedor || '-')}</td>
+                    <td>${formatCurrency(valor)}</td>
+                    <td>${escapeHtml(observacao || '-')}</td>
+                    <td style="text-align:right;"><button class="btn-modern btn-add" onclick="selecionarFornecedorItem(${index})">Selecionar</button></td>
+                </tr>`;
+            }).join('');
+            window.fornecedoresItemAtuais = fornecedores;
+            body.innerHTML = `<div style="padding:16px 18px;color:#a1a1aa;">CÃ³digo: <strong style="color:#fff;">${escapeHtml(codigo)}</strong></div>
+                <table>
+                    <thead><tr><th>FORNECEDOR</th><th>VALOR UNIT.</th><th>OBSERVAÃ‡ÃƒO</th><th></th></tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>`;
+            abrirModalPorId('fornecedoresModal');
+        }
+        function selecionarFornecedorItem(index) {
+            const item = (window.fornecedoresItemAtuais || [])[index];
+            if (!item) return;
+            const fornecedor = String(item.fornecedor ?? '').trim().toUpperCase();
+            const valor = parseNumberSafe(item.valor_unitario);
+            const observacao = String(item.observacao ?? '').trim().toUpperCase();
+            const select = document.getElementById('inputTerceiro');
+            if (select && fornecedor) {
+                let option = Array.from(select.options).find(opt => opt.value === fornecedor);
+                if (!option) {
+                    option = new Option(fornecedor, fornecedor);
+                    select.add(option);
+                }
+                select.value = fornecedor;
+            }
+            if (valor > 0) document.getElementById('inputValorUnit').value = valor.toFixed(2);
+            if (observacao) document.getElementById('inputObservacoes').value = observacao;
+            fecharModalTopo();
+        }
         async function carregarItensConhecidos() { return Promise.resolve(); }
         async function verificarCodigoParaAutopreenchimento() {
             const cod = document.getElementById('inputCodigo').value.trim().toUpperCase();
@@ -1671,6 +1734,7 @@
                 if (!pesoFromPedidos) document.getElementById('inputPesoUn').value = item.peso;
                 document.getElementById('inputCliente').value = item.cliente;
             }
+            await carregarFornecimentosDoCodigo(cod);
         }
         async function salvarOuAtualizarItem(data) {
             try { const res = await apiRequest('itens', 'POST', data); if (res.success) itensConhecidos.set(data.codigo, data); } catch (e) { }

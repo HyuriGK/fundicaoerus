@@ -2,6 +2,20 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../lib/db'); // Importação correta do DB
 const { logActivity } = require('./lib/logger');
+const { Firebird, options: firebirdOptions } = require('../lib/firebird-helper');
+
+function queryFirebird(sql, params = []) {
+    return new Promise((resolve, reject) => {
+        Firebird.attach(firebirdOptions, (err, db) => {
+            if (err) return reject(err);
+            db.query(sql, params, (queryErr, rows) => {
+                try { db.detach(); } catch (e) {}
+                if (queryErr) return reject(queryErr);
+                resolve(rows || []);
+            });
+        });
+    });
+}
 
 // --- ROTA GET: Ler dados ---
 router.get('/', async (req, res) => {
@@ -18,6 +32,28 @@ router.get('/', async (req, res) => {
                 [req.query.carga]
             );
             return res.status(200).json({ fotos: result.rows[0]?.qualidade_fotos || [] });
+        }
+        if (req.query.action === 'fornecedores-item') {
+            const codigo = String(req.query.codigo || '').trim().toUpperCase();
+            if (!codigo) return res.status(400).json({ error: 'Codigo nao informado' });
+
+            const rows = await queryFirebird(`
+                SELECT
+                    FRN_CODIGO_PPRF,
+                    VALOR_UNITARIO_PPRF,
+                    OBSERVACAO_PPRF
+                FROM PRODUTO_PRECO_FORNECEDOR
+                WHERE PRO_CODIGO_PPRF = ?
+                ORDER BY FRN_CODIGO_PPRF
+            `, [codigo]);
+
+            return res.status(200).json({
+                fornecedores: rows.map(row => ({
+                    fornecedor: row.FRN_CODIGO_PPRF,
+                    valor_unitario: row.VALOR_UNITARIO_PPRF,
+                    observacao: row.OBSERVACAO_PPRF
+                }))
+            });
         }
         const registros = await client.query('SELECT * FROM usinagem_externo_registros ORDER BY data DESC, id DESC');
         // Nota: Ajustei a query de recebidos para retornar o formato esperado pelo front
