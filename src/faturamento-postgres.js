@@ -228,6 +228,92 @@ router.get('/estatisticas', async (req, res) => {
     }
 });
 
+router.get('/resumo-periodo', async (req, res) => {
+    try {
+        const { startDate, endDate } = req.query;
+        if (!startDate || !endDate) {
+            return res.status(400).json({ success: false, message: 'startDate e endDate sao obrigatorios' });
+        }
+
+        const commercialOwner = getCommercialOwnerRestriction(req);
+        const params = [startDate, endDate];
+        let ownerFilter = '';
+        if (commercialOwner) {
+            params.push(commercialOwner);
+            ownerFilter = `
+                AND EXISTS (
+                    SELECT 1
+                    FROM clientes_firebird_sync c
+                    JOIN clientes_responsavel_comercial rc
+                        ON rc.empresa = c.empresa
+                        AND rc.codigo = c.codigo
+                    WHERE c.codigo::text = f.cliente_codigo::text
+                      AND rc.responsavel_comercial = $3
+                )
+            `;
+        }
+
+        const result = await pool.query(`
+            WITH devolucoes AS (
+                SELECT
+                    nota_original,
+                    COALESCE(TRIM(serie_original), '') AS serie_original,
+                    item_original,
+                    TRIM(codigo_item) AS codigo_item,
+                    SUM(quantidade) AS quantidade_devolvida
+                FROM firebird_sync_devolucoes
+                WHERE nota_original IS NOT NULL
+                GROUP BY nota_original, COALESCE(TRIM(serie_original), ''), item_original, TRIM(codigo_item)
+            ),
+            base AS (
+                SELECT
+                    f.data_faturamento::date AS data,
+                    CASE
+                        WHEN f.gera_financeiro = 'N' THEN true
+                        ELSE COALESCE(p.excluido, f.excluido_manualmente)
+                    END AS excluido_manualmente,
+                    COALESCE(f.peso_un, 0) * GREATEST(f.quantidade - COALESCE(d.quantidade_devolvida, 0), 0) AS peso_total
+                FROM faturamento_firebird f
+                LEFT JOIN devolucoes d
+                    ON d.nota_original = f.nota_fiscal
+                    AND d.serie_original = COALESCE(TRIM(f.serie), '')
+                    AND d.item_original = f.item_nota
+                    AND d.codigo_item = TRIM(f.codigo_item)
+                LEFT JOIN faturamento_firebird_preferencias p
+                    ON p.nota_fiscal = f.nota_fiscal
+                    AND p.codigo_item IS NOT DISTINCT FROM CAST(TRIM(f.codigo_item) AS VARCHAR)
+                    AND COALESCE(p.pedido, '') = COALESCE(TRIM(f.pedido), '')
+                    AND p.data_faturamento = f.data_faturamento
+                    AND p.quantidade = f.quantidade
+                WHERE f.data_faturamento >= $1
+                  AND f.data_faturamento <= $2
+                  ${ownerFilter}
+                  AND f.cliente_codigo::text NOT IN ('257', '432', '2020', '316', '2283', '253')
+                  AND UPPER(TRIM(COALESCE(f.cliente_nome, ''))) NOT LIKE '%IMEPEL INDUSTRIA MECANICA LTDA%'
+                  AND UPPER(TRIM(COALESCE(f.cliente_nome, ''))) NOT LIKE '%STEELROOL INDUSTRIA METALURGICA%'
+                  AND UPPER(TRIM(COALESCE(f.cliente_nome, ''))) NOT LIKE '%SPILROD FUNDICAO DE FERRO E ACO LTDA%'
+            )
+            SELECT
+                data,
+                SUM(CASE WHEN excluido_manualmente THEN 0 ELSE peso_total END) AS peso_total
+            FROM base
+            GROUP BY data
+            ORDER BY data
+        `, params);
+
+        res.json({
+            success: true,
+            data: result.rows.map(row => ({
+                data: row.data ? row.data.toISOString().split('T')[0] : null,
+                pesoTotal: parseFloat(row.peso_total || 0)
+            }))
+        });
+    } catch (error) {
+        console.error('Erro resumo-periodo faturamento:', error);
+        res.status(500).json({ success: false, message: 'Erro ao buscar resumo de faturamento', error: error.message });
+    }
+});
+
 // GET /api/faturamento-postgres/detalhado - Dados detalhados (Notas + Itens)
 router.get('/detalhado', async (req, res) => {
     try {

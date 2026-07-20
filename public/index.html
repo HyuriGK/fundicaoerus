@@ -9286,7 +9286,7 @@
                         fetch(`/api/metas?mes_ano=${curYear}-${String(curMonth + 1).padStart(2, '0')}`),
 
 
-                        fetch(`/api/faturamento-postgres/detalhado?startDate=${startOfMonth}&endDate=${endOfMonth}&limit=100000`)
+                        fetch(`/api/faturamento-postgres/resumo-periodo?startDate=${startOfMonth}&endDate=${endOfMonth}`)
 
 
                     ]);
@@ -9304,42 +9304,17 @@
 
 
                     let fatTotalWeight = 0;
-                    const calcInternalFatWeight = (items) => {
-                        const _itemKey = (item) => {
-                            const cod = item.codigoItem ? String(item.codigoItem).trim() : '';
-                            const ped = item.pedido ? String(item.pedido).trim() : '';
-                            const dat = item.data ? String(item.data).split('T')[0] : '';
-                            return `${item.notaFiscal}-${cod}-${ped}-${dat}-${item.quantidade || 0}`;
-                        };
-                        return (items || []).reduce((acc, item) => {
-                            if (isServiceClient(item)) return acc;
-                            const key = _itemKey(item);
-                            if (fatPesoOverridesMap.has(key)) return fatPesoOverridesMap.get(key) ? acc + (parseFloat(item.pesoTotal || 0)) : acc;
-                            if (item.excluido_manualmente === true) return acc;
-                            return acc + (parseFloat(item.pesoTotal || 0));
-                        }, 0);
-                    };
 
 
                     if (fatData.success) {
 
 
-                        dashboardData.detailedBilling = fatData.data;
+                        dashboardData.billingDaily = fatData.data || [];
 
 
                         // Mesma lógica de getFatPesoState do faturamentos.html
                         // O API já computa excluido_manualmente (gera_financeiro='N', sem_pedido, MODELO, preferências)
-                        const _itemKey = (item) => {
-                            const cod = item.codigoItem ? String(item.codigoItem).trim() : '';
-                            const ped = item.pedido ? String(item.pedido).trim() : '';
-                            const dat = item.data ? String(item.data).split('T')[0] : '';
-                            return `${item.notaFiscal}-${cod}-${ped}-${dat}-${item.quantidade || 0}`;
-                        };
-                        fatTotalWeight = fatData.data.reduce((acc, item) => {
-                            if (isServiceClient(item)) return acc;
-                            const key = _itemKey(item);
-                            if (fatPesoOverridesMap.has(key)) return fatPesoOverridesMap.get(key) ? acc + (parseFloat(item.pesoTotal || 0)) : acc;
-                            if (item.excluido_manualmente === true) return acc;
+                        fatTotalWeight = dashboardData.billingDaily.reduce((acc, item) => {
                             return acc + (parseFloat(item.pesoTotal || 0));
                         }, 0);
 
@@ -9368,13 +9343,13 @@
                     const prevEnd = new Date(prevDate.getFullYear(), prevDate.getMonth() + 1, 0).toISOString().split('T')[0];
 
 
-                    const prevFatRes = await fetch(`/api/faturamento-postgres/detalhado?startDate=${prevStart}&endDate=${prevEnd}&limit=100000`);
+                    const prevFatRes = await fetch(`/api/faturamento-postgres/resumo-periodo?startDate=${prevStart}&endDate=${prevEnd}`);
 
 
                     const prevFatData = await prevFatRes.json();
 
 
-                    const fatPrev = prevFatData.success ? calcInternalFatWeight(prevFatData.data) : 0;
+                    const fatPrev = prevFatData.success ? (prevFatData.data || []).reduce((acc, item) => acc + parseFloat(item.pesoTotal || 0), 0) : 0;
 
 
                     const fatDiff = fatPrev > 0 ? (((fatTotalWeight) - fatPrev) / fatPrev * 100) : 0;
@@ -9602,23 +9577,10 @@
                     const values = new Array(daysInMonth).fill(0);
 
 
-                    if (dashboardData.detailedBilling && dashboardData.detailedBilling.length > 0) {
+                    if (dashboardData.billingDaily && dashboardData.billingDaily.length > 0) {
 
 
-                        dashboardData.detailedBilling.forEach(item => {
-
-
-                            // Apply same exclusions as the KPI for parity
-
-
-                            if (item.excluido_manualmente === true) return;
-                            if (isServiceItem(item)) return;
-
-
-                            const clientName = (item.clienteNome || '').trim();
-
-
-                            if (excludedClientsSet.has(clientName)) return;
+                        dashboardData.billingDaily.forEach(item => {
 
 
                             const dRaw = item.data || item.DATA || '';
