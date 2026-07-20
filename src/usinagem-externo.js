@@ -2,20 +2,6 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../lib/db'); // Importação correta do DB
 const { logActivity } = require('./lib/logger');
-const { Firebird, options: firebirdOptions } = require('../lib/firebird-helper');
-
-function queryFirebird(sql, params = []) {
-    return new Promise((resolve, reject) => {
-        Firebird.attach(firebirdOptions, (err, db) => {
-            if (err) return reject(err);
-            db.query(sql, params, (queryErr, rows) => {
-                try { db.detach(); } catch (e) {}
-                if (queryErr) return reject(queryErr);
-                resolve(rows || []);
-            });
-        });
-    });
-}
 
 // --- ROTA GET: Ler dados ---
 router.get('/', async (req, res) => {
@@ -37,21 +23,18 @@ router.get('/', async (req, res) => {
             const codigo = String(req.query.codigo || '').trim().toUpperCase();
             if (!codigo) return res.status(400).json({ error: 'Codigo nao informado' });
 
-            const rows = await queryFirebird(`
-                SELECT
-                    FRN_CODIGO_PPRF,
-                    VALOR_UNITARIO_PPRF,
-                    OBSERVACAO_PPRF
-                FROM PRODUTO_PRECO_FORNECEDOR
-                WHERE PRO_CODIGO_PPRF = ?
-                ORDER BY FRN_CODIGO_PPRF
+            const rows = await client.query(`
+                SELECT fornecedor_codigo, valor_unitario, observacao
+                FROM usinagem_externa_fornecedores_sync
+                WHERE produto_codigo = $1
+                ORDER BY fornecedor_codigo
             `, [codigo]);
 
             return res.status(200).json({
-                fornecedores: rows.map(row => ({
-                    fornecedor: row.FRN_CODIGO_PPRF,
-                    valor_unitario: row.VALOR_UNITARIO_PPRF,
-                    observacao: row.OBSERVACAO_PPRF
+                fornecedores: rows.rows.map(row => ({
+                    fornecedor: row.fornecedor_codigo,
+                    valor_unitario: row.valor_unitario,
+                    observacao: row.observacao
                 }))
             });
         }
@@ -296,4 +279,5 @@ router.post('/', async (req, res) => {
 });
 
 module.exports = router;
+
 
