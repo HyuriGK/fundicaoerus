@@ -1286,7 +1286,6 @@
         /* KPI strip ? cards sempre preenchem toda a largura */
         #kpi-strip { min-width: 0; }
         #kpi-strip .kpi-card { flex: 1; min-width: 0; }
-        #card-clientes-concentracao { display: none !important; }
 
         /* KPI Card Styles */
 
@@ -9077,6 +9076,27 @@
                 };
 
 
+                const serviceClients = [
+                    "IMEPEL INDUSTRIA MECANICA LTDA",
+                    "STEELROOL INDUSTRIA METALURGICA",
+                    "SPILROD FUNDICAO DE FERRO E ACO LTDA"
+                ];
+                const serviceCodes = ["257", "432", "2283", "253"];
+                function isServiceClient(item) {
+                    if (!item) return false;
+                    const name = (item.clienteNome || '').trim().toUpperCase();
+                    const code = String(item.clienteCodigo || '').trim();
+                    if (serviceCodes.includes(code)) return true;
+                    return serviceClients.some(sc => {
+                        const search = sc.toUpperCase();
+                        return name === search || name.includes(search);
+                    });
+                }
+                function calculateBillingValue(item) {
+                    return item.valorTotalOriginal ?? ((item.valorUnitario || 0) * (item.quantidadeOriginal ?? item.quantidade ?? 0));
+                }
+
+
                 // Note: getCorrectedWeight is now provided by js/shared-utils.js
 
 
@@ -9141,6 +9161,7 @@
 
 
                     updateUserInfo();
+                    applyClientConcentrationVisibility();
 
 
                     // Load dependencies
@@ -9295,7 +9316,7 @@
                             return `${item.notaFiscal}-${cod}-${ped}-${dat}-${item.quantidade || 0}`;
                         };
                         return (items || []).reduce((acc, item) => {
-                            if (isServiceItem(item)) return acc;
+                            if (isServiceClient(item)) return acc;
                             const key = _itemKey(item);
                             if (fatPesoOverridesMap.has(key)) return fatPesoOverridesMap.get(key) ? acc + (parseFloat(item.pesoTotal || 0)) : acc;
                             if (item.excluido_manualmente === true) return acc;
@@ -9319,7 +9340,7 @@
                             return `${item.notaFiscal}-${cod}-${ped}-${dat}-${item.quantidade || 0}`;
                         };
                         fatTotalWeight = fatData.data.reduce((acc, item) => {
-                            if (isServiceItem(item)) return acc;
+                            if (isServiceClient(item)) return acc;
                             const key = _itemKey(item);
                             if (fatPesoOverridesMap.has(key)) return fatPesoOverridesMap.get(key) ? acc + (parseFloat(item.pesoTotal || 0)) : acc;
                             if (item.excluido_manualmente === true) return acc;
@@ -9336,7 +9357,17 @@
                     const fatValueEl = document.querySelector('#live-faturamento .live-value');
 
 
-                    animateValue(fatValueEl, fatTotalWeight / 1000, 1500, "", "Ton");
+                    const fatTotalValue = (fatData.success ? fatData.data : []).reduce((acc, item) => {
+                        if (isServiceClient(item)) return acc;
+                        if (item.gera_financeiro === 'N') return acc;
+                        const name = (item.clienteNome || 'Desconhecido').trim();
+                        if (excludedClientsSet.has(name)) return acc;
+                        if (item.excluido_manualmente === true) return acc;
+                        return acc + calculateBillingValue(item);
+                    }, 0);
+
+
+                    animateValue(fatValueEl, fatTotalValue, 1500, "R$ ", "");
 
 
                     // monthly comparison for trend
@@ -10423,6 +10454,17 @@
 
                 }
 
+                function applyClientConcentrationVisibility() {
+                    const card = document.getElementById('card-clientes-concentracao');
+                    if (!card) return;
+                    const user = (localStorage.getItem('erus_user') || '')
+                        .normalize('NFD')
+                        .replace(/[\u0300-\u036f]/g, '')
+                        .trim()
+                        .toLowerCase();
+                    card.style.display = ['geruza', 'elisangela'].includes(user) ? 'none' : '';
+                }
+
 
                 document.addEventListener('DOMContentLoaded', initializeDashboard);
 
@@ -10888,7 +10930,7 @@
                     }
 
                     const isFusao = role === 'fusao';
-                    ['live-carteira-peso', 'live-faturamento', 'card-clientes-concentracao'].forEach(id => {
+                    ['live-carteira-peso', 'live-faturamento'].forEach(id => {
                         const el = document.getElementById(id);
                         if (el) el.style.display = 'none';
                     });
