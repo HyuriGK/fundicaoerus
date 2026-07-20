@@ -433,6 +433,8 @@
             '<div id="eg-acabamento" class="erus-nav-group-wrapper collapsed">' +
                 '<a href="acabamento_externo.html" data-stip="Acabamento Externo" class="erus-nav-link' + isActive('acabamento_externo.html') + '">' +
                     '<i class="fa-solid fa-truck-fast"></i><span>Acabamento Externo</span></a>' +
+                '<a href="usinagem_externa.html" data-stip="Usinagem Externa" class="erus-nav-link' + isActive('usinagem_externa.html') + '">' +
+                    '<i class="fa-solid fa-gears"></i><span>Usinagem Externa</span></a>' +
             '</div>' +
             // ENGENHARIA
             '<div class="erus-nav-group-sep" data-stip="Engenharia" onclick="erusSidebarToggleGroup(\'eg-engenharia\')">' +

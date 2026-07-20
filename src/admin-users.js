@@ -36,7 +36,7 @@ router.get('/', checkDevRole, async (req, res) => {
                     'amostras.html',
                     'producao_apontada.html',
                     'acabamento_externo.html',
-                    'usinagem_externo.html',
+                    'usinagem_externa.html',
                     'faturamentos.html',
                     'faturamento_detalhado.html',
                     'controle_dureza.html',
