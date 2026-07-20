@@ -1240,7 +1240,7 @@
                     </div>
                     <div class="form-group" style="flex: 0.6;"><label>Código</label><input type="text" id="inputCodigo"
                             placeholder="CÓDIGO" class="mono" style="text-transform: uppercase;"
-                            onblur="verificarCodigoParaAutopreenchimento()" autocomplete="off"></div>
+                            oninput="agendarBuscaCodigoUsinagem()" onkeydown="if(event.key==='Enter'){event.preventDefault(); verificarCodigoParaAutopreenchimento();}" onblur="verificarCodigoParaAutopreenchimento()" autocomplete="off"></div>
                     <div class="form-group" style="flex: 2;"><label>Descrição</label><input type="text"
                             id="inputDescricao" placeholder="DESCRIÇÃO DA PEÇA" style="text-transform: uppercase;"
                             autocomplete="off"></div>
@@ -1269,16 +1269,8 @@
                     <div class="form-group" style="flex: 0.5;"><label>&nbsp;</label><button id="novoEnvioAdicionarBtn" class="btn-modern btn-add"
                             onclick="adicionarRegistro()" style="width:100%;"> Adicionar</button></div>
                 </div>
+                <div id="fornecedoresInlineContainer" style="display:none; margin-top:18px;"></div>
             </div>
-        </div>
-    </div>
-    <div id="fornecedoresModal" class="modal-overlay" style="z-index: 10003;">
-        <div class="modal-content" style="max-width: 900px;">
-            <div class="modal-header">
-                <h2 class="modal-title">Fornecimentos do Item</h2>
-                <span class="modal-close" onclick="fecharModalTopo()"><i class="fa-solid fa-xmark"></i></span>
-            </div>
-            <div id="fornecedoresModalBody" class="modal-body table-container" style="border:none; margin:0; border-radius:0;"></div>
         </div>
     </div>
     <div id="registrosModal" class="modal-overlay">
@@ -1628,17 +1620,48 @@
         function escapeHtml(value) {
             return String(value ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
         }
+        let buscaCodigoUsinagemTimer = null;
+        function agendarBuscaCodigoUsinagem() {
+            clearTimeout(buscaCodigoUsinagemTimer);
+            buscaCodigoUsinagemTimer = setTimeout(() => buscarFornecedoresCodigoAtual(), 450);
+        }
+        async function buscarFornecedoresCodigoAtual() {
+            const cod = document.getElementById('inputCodigo').value.trim().toUpperCase();
+            if (!cod) return renderFornecedoresInline('', []);
+            await carregarFornecimentosDoCodigo(cod);
+        }
         async function carregarFornecimentosDoCodigo(codigo) {
+            renderFornecedoresInline(codigo, [], 'loading');
             try {
                 const data = await apiRequest('fornecedores-item', 'GET', { codigo });
                 const fornecedores = Array.isArray(data.fornecedores) ? data.fornecedores : [];
-                if (fornecedores.length) abrirPopupFornecedores(codigo, fornecedores);
+                renderFornecedoresInline(codigo, fornecedores);
             } catch (e) {
                 console.error('Erro ao buscar fornecedores do item:', e);
+                renderFornecedoresInline(codigo, [], 'error');
             }
         }
-        function abrirPopupFornecedores(codigo, fornecedores) {
-            const body = document.getElementById('fornecedoresModalBody');
+        function renderFornecedoresInline(codigo, fornecedores, state = '') {
+            const body = document.getElementById('fornecedoresInlineContainer');
+            if (!body) return;
+            if (!codigo) {
+                body.style.display = 'none';
+                body.innerHTML = '';
+                return;
+            }
+            body.style.display = 'block';
+            if (state === 'loading') {
+                body.innerHTML = `<div style="border:1px solid var(--border-color); border-radius:8px; padding:14px 16px; color:#a1a1aa;">Buscando fornecedores para <strong style="color:#fff;">${escapeHtml(codigo)}</strong>...</div>`;
+                return;
+            }
+            if (state === 'error') {
+                body.innerHTML = `<div style="border:1px solid rgba(239,68,68,.35); border-radius:8px; padding:14px 16px; color:#fca5a5;">Erro ao buscar fornecedores sincronizados.</div>`;
+                return;
+            }
+            if (!fornecedores.length) {
+                body.innerHTML = `<div style="border:1px solid var(--border-color); border-radius:8px; padding:14px 16px; color:#a1a1aa;">Nenhum fornecedor sincronizado para <strong style="color:#fff;">${escapeHtml(codigo)}</strong>.</div>`;
+                return;
+            }
             const rows = fornecedores.map((f, index) => {
                 const fornecedor = String(f.fornecedor ?? '').trim();
                 const valor = parseNumberSafe(f.valor_unitario);
@@ -1651,12 +1674,13 @@
                 </tr>`;
             }).join('');
             window.fornecedoresItemAtuais = fornecedores;
-            body.innerHTML = `<div style="padding:16px 18px;color:#a1a1aa;">CÃ³digo: <strong style="color:#fff;">${escapeHtml(codigo)}</strong></div>
+            body.innerHTML = `<div style="border:1px solid var(--border-color); border-radius:8px; overflow:hidden;">
+                <div style="padding:12px 14px;color:#a1a1aa; border-bottom:1px solid var(--border-color);">Fornecedores sincronizados para <strong style="color:#fff;">${escapeHtml(codigo)}</strong></div>
                 <table>
-                    <thead><tr><th>FORNECEDOR</th><th>VALOR UNIT.</th><th>OBSERVAÃ‡ÃƒO</th><th></th></tr></thead>
+                    <thead><tr><th>FORNECEDOR</th><th>VALOR UNIT.</th><th>OBSERVACAO</th><th></th></tr></thead>
                     <tbody>${rows}</tbody>
-                </table>`;
-            abrirModalPorId('fornecedoresModal');
+                </table>
+            </div>`;
         }
         function selecionarFornecedorItem(index) {
             const item = (window.fornecedoresItemAtuais || [])[index];
@@ -1675,12 +1699,15 @@
             }
             if (valor > 0) document.getElementById('inputValorUnit').value = valor.toFixed(2);
             if (observacao) document.getElementById('inputObservacoes').value = observacao;
-            fecharModalTopo();
+            document.getElementById('inputQuantidade').focus();
         }
         async function carregarItensConhecidos() { return Promise.resolve(); }
         async function verificarCodigoParaAutopreenchimento() {
             const cod = document.getElementById('inputCodigo').value.trim().toUpperCase();
-            if (!cod) return;
+            if (!cod) {
+                renderFornecedoresInline('', []);
+                return;
+            }
             let pesoFromPedidos = false;
             let descFromPedidos = false;
             // 1. Busca peso, descrição e saldo da carteira de pedidos
@@ -3146,5 +3173,7 @@
     <script src="session-guard.js"></script>
 </body>
 </html>
+
+
 
 

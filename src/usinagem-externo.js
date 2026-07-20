@@ -23,6 +23,16 @@ router.get('/', async (req, res) => {
             const codigo = String(req.query.codigo || '').trim().toUpperCase();
             if (!codigo) return res.status(400).json({ error: 'Codigo nao informado' });
 
+            await client.query(`
+                CREATE TABLE IF NOT EXISTS usinagem_externa_fornecedores_sync (
+                    id SERIAL PRIMARY KEY,
+                    produto_codigo VARCHAR(80) NOT NULL,
+                    fornecedor_codigo VARCHAR(80) NOT NULL,
+                    valor_unitario NUMERIC(15,4),
+                    observacao TEXT,
+                    synced_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
             const rows = await client.query(`
                 SELECT fornecedor_codigo, valor_unitario, observacao
                 FROM usinagem_externa_fornecedores_sync

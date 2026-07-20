@@ -12,6 +12,21 @@ async function connectFirebird() {
     });
 }
 
+function readBlob(blob) {
+    return new Promise(resolve => {
+        if (!blob) return resolve(null);
+        if (Buffer.isBuffer(blob)) return resolve(blob.toString('utf-8').trim() || null);
+        if (typeof blob !== 'function') return resolve(String(blob).trim() || null);
+        blob((err, name, stream) => {
+            if (err || !stream) return resolve(null);
+            const chunks = [];
+            stream.on('data', chunk => chunks.push(chunk));
+            stream.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8').trim() || null));
+            stream.on('error', () => resolve(null));
+        });
+    });
+}
+
 async function ensureTable(client) {
     await client.query(`
         CREATE TABLE IF NOT EXISTS usinagem_externa_fornecedores_sync (
@@ -54,16 +69,17 @@ async function syncValorUsinagem() {
             const values = [];
             const params = [];
 
-            chunk.forEach((row, idx) => {
+            for (let idx = 0; idx < chunk.length; idx++) {
+                const row = chunk[idx];
                 const base = idx * 4;
                 values.push(`($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4})`);
                 params.push(
                     String(row.PRO_CODIGO_PPRF || '').trim().toUpperCase(),
                     String(row.FRN_CODIGO_PPRF || '').trim().toUpperCase(),
                     row.VALOR_UNITARIO_PPRF === null || row.VALOR_UNITARIO_PPRF === undefined ? null : Number(row.VALOR_UNITARIO_PPRF),
-                    row.OBSERVACAO_PPRF === null || row.OBSERVACAO_PPRF === undefined ? null : String(row.OBSERVACAO_PPRF).trim()
+                    await readBlob(row.OBSERVACAO_PPRF)
                 );
-            });
+            }
 
             await client.query(`
                 INSERT INTO usinagem_externa_fornecedores_sync
