@@ -33,10 +33,12 @@ async function ensureTable(client) {
             id SERIAL PRIMARY KEY,
             produto_codigo VARCHAR(80) NOT NULL,
             fornecedor_codigo VARCHAR(80) NOT NULL,
+            fornecedor_nome VARCHAR(255),
             valor_unitario NUMERIC(15,4),
             observacao TEXT,
             synced_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         );
+        ALTER TABLE usinagem_externa_fornecedores_sync ADD COLUMN IF NOT EXISTS fornecedor_nome VARCHAR(255);
         CREATE INDEX IF NOT EXISTS idx_usinagem_ext_forn_produto ON usinagem_externa_fornecedores_sync (produto_codigo);
     `);
 }
@@ -51,9 +53,11 @@ async function syncValorUsinagem() {
             SELECT
                 PRO_CODIGO_PPRF,
                 FRN_CODIGO_PPRF,
+                RAZAO_SOCIAL_FRN,
                 VALOR_UNITARIO_PPRF,
                 OBSERVACAO_PPRF
             FROM PRODUTO_PRECO_FORNECEDOR
+            LEFT JOIN FORNECEDOR ON CODIGO_FRN = FRN_CODIGO_PPRF
             WHERE PRO_CODIGO_PPRF IS NOT NULL
             ORDER BY PRO_CODIGO_PPRF, FRN_CODIGO_PPRF
         `);
@@ -71,11 +75,12 @@ async function syncValorUsinagem() {
 
             for (let idx = 0; idx < chunk.length; idx++) {
                 const row = chunk[idx];
-                const base = idx * 4;
-                values.push(`($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4})`);
+                const base = idx * 5;
+                values.push(`($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5})`);
                 params.push(
                     String(row.PRO_CODIGO_PPRF || '').trim().toUpperCase(),
                     String(row.FRN_CODIGO_PPRF || '').trim().toUpperCase(),
+                    String(row.RAZAO_SOCIAL_FRN || '').trim().toUpperCase() || null,
                     row.VALOR_UNITARIO_PPRF === null || row.VALOR_UNITARIO_PPRF === undefined ? null : Number(row.VALOR_UNITARIO_PPRF),
                     await readBlob(row.OBSERVACAO_PPRF)
                 );
@@ -83,7 +88,7 @@ async function syncValorUsinagem() {
 
             await client.query(`
                 INSERT INTO usinagem_externa_fornecedores_sync
-                    (produto_codigo, fornecedor_codigo, valor_unitario, observacao)
+                    (produto_codigo, fornecedor_codigo, fornecedor_nome, valor_unitario, observacao)
                 VALUES ${values.join(',')}
                 ON CONFLICT DO NOTHING
             `, params);

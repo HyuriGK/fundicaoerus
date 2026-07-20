@@ -28,13 +28,15 @@ router.get('/', async (req, res) => {
                     id SERIAL PRIMARY KEY,
                     produto_codigo VARCHAR(80) NOT NULL,
                     fornecedor_codigo VARCHAR(80) NOT NULL,
+                    fornecedor_nome VARCHAR(255),
                     valor_unitario NUMERIC(15,4),
                     observacao TEXT,
                     synced_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
                 )
             `);
+            await client.query(`ALTER TABLE usinagem_externa_fornecedores_sync ADD COLUMN IF NOT EXISTS fornecedor_nome VARCHAR(255)`);
             const rows = await client.query(`
-                SELECT fornecedor_codigo, valor_unitario, observacao
+                SELECT fornecedor_codigo, fornecedor_nome, valor_unitario, observacao
                 FROM usinagem_externa_fornecedores_sync
                 WHERE produto_codigo = $1
                 ORDER BY fornecedor_codigo
@@ -43,6 +45,7 @@ router.get('/', async (req, res) => {
             return res.status(200).json({
                 fornecedores: rows.rows.map(row => ({
                     fornecedor: row.fornecedor_codigo,
+                    fornecedor_nome: row.fornecedor_nome,
                     valor_unitario: row.valor_unitario,
                     observacao: row.observacao
                 }))
