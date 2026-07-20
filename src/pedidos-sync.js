@@ -36,7 +36,7 @@ router.get('/peso-lookup', async (req, res) => {
     if (!codigo) return res.json({ peso: null, descricao: null, saldo: 0, source: null });
     const cod = String(codigo).trim().toUpperCase();
     try {
-        const [cwRes, produtoRes, saldoRes] = await Promise.all([
+        const [cwRes, produtoRes, saldoRes, clienteRes] = await Promise.all([
             pool.query(
                 `SELECT peso FROM pesos_customizados WHERE UPPER(codigo) = $1`,
                 [cod]
@@ -67,23 +67,39 @@ router.get('/peso-lookup', async (req, res) => {
                    AND (data->>'STATUS_PPR') <> 'C'
                    AND UPPER(COALESCE(data->>'FATURADO_PPR', '')) <> 'T'`,
                 [cod]
+            ),
+            pool.query(
+                `SELECT COALESCE(
+                    NULLIF(data->>'CLIENTE_NOME_PPR', ''),
+                    NULLIF(data->>'NOME_CLIENTE_PPR', ''),
+                    NULLIF(data->>'NOME_CLIENTE', ''),
+                    NULLIF(data->>'RAZAO_SOCIAL_CLI', ''),
+                    NULLIF(data->>'CLIENTE_PPR', ''),
+                    NULLIF(data->>'ID_CLIENTE_CORE', '')
+                 ) AS cliente
+                 FROM firebird_sync_emissoes
+                 WHERE UPPER(data->>'PRODUTO_PPR') = $1
+                 ORDER BY updated_at DESC
+                 LIMIT 1`,
+                [cod]
             )
         ]);
 
         const saldo = Number(saldoRes.rows[0].saldo) || 0;
         const produto = produtoRes.rows[0] || null;
         const descricao = produto ? (produto.descricao || null) : null;
+        const cliente = clienteRes.rows[0]?.cliente || null;
 
         if (produto && Number(produto.peso) > 0) {
-            return res.json({ peso: Number(produto.peso), descricao, saldo, source: 'produto' });
+            return res.json({ peso: Number(produto.peso), descricao, cliente, saldo, source: 'produto' });
         }
 
         // Peso: customizado fica como fallback para itens sem peso liquido no ERP
         if (cwRes.rows.length > 0 && Number(cwRes.rows[0].peso) > 0) {
-            return res.json({ peso: Number(cwRes.rows[0].peso), descricao, saldo, source: 'custom' });
+            return res.json({ peso: Number(cwRes.rows[0].peso), descricao, cliente, saldo, source: 'custom' });
         }
 
-        return res.json({ peso: null, descricao, saldo, source: null });
+        return res.json({ peso: null, descricao, cliente, saldo, source: null });
     } catch (err) {
         console.error('Erro ao buscar peso por código:', err);
         res.status(500).json({ error: 'Erro interno' });
