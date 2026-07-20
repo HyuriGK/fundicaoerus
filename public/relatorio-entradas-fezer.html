@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <script src="js/auth-guard.js"></script>
+    <script src="js/sidebar.js?v=20260706-light-sidebar"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Relatório de Entradas FEZER</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: Arial, sans-serif; background: #f3f4f6; color: #111827; }
+        main { padding: 24px 28px 32px 96px; }
+        header { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 18px; }
+        h1 { margin: 0; font-size: 24px; }
+        .sub { color: #6b7280; margin-top: 4px; font-size: 13px; }
+        .filters, .summary, .report { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; box-shadow: 0 8px 24px rgba(15,23,42,.06); }
+        .filters { display: grid; grid-template-columns: repeat(5, minmax(150px, 1fr)); gap: 12px; padding: 14px; margin-bottom: 14px; }
+        label { display: block; font-size: 11px; font-weight: 700; color: #6b7280; text-transform: uppercase; margin-bottom: 6px; }
+        input { width: 100%; height: 36px; border: 1px solid #d1d5db; border-radius: 6px; padding: 0 10px; }
+        button { height: 36px; border: 0; border-radius: 6px; padding: 0 14px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+        .primary { background: #d97706; color: #fff; align-self: end; }
+        .ghost { background: #e5e7eb; color: #111827; }
+        .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; padding: 14px; margin-bottom: 14px; }
+        .metric strong { display: block; font-size: 22px; }
+        .metric span { color: #6b7280; font-size: 12px; }
+        .report { overflow: hidden; }
+        .report-head { display: flex; justify-content: space-between; align-items: center; padding: 13px 14px; border-bottom: 1px solid #e5e7eb; }
+        .report-title { font-weight: 800; }
+        .content { padding: 8px 14px 16px; }
+        details { border-bottom: 1px solid #e5e7eb; padding: 9px 0; }
+        details:last-child { border-bottom: 0; }
+        summary { cursor: pointer; display: grid; grid-template-columns: 140px 120px 120px 1fr 120px; gap: 10px; align-items: center; font-size: 13px; }
+        summary strong { font-size: 15px; }
+        table { width: 100%; border-collapse: collapse; margin: 10px 0 2px; font-size: 12px; }
+        th, td { border: 1px solid #e5e7eb; padding: 7px 8px; text-align: left; }
+        th { background: #f9fafb; color: #374151; }
+        td.num, th.num { text-align: right; }
+        .empty, .error { padding: 28px; text-align: center; color: #6b7280; }
+        .error { color: #b91c1c; }
+        @media (max-width: 900px) {
+            main { padding: 18px; }
+            .filters, .summary { grid-template-columns: 1fr; }
+            summary { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <main>
+        <header>
+            <div>
+                <h1>Notas de entrada por fornecedor</h1>
+                <div class="sub">Consulta somente leitura no Firebird, agrupada por nota e itens.</div>
+            </div>
+            <button class="ghost" onclick="window.print()"><i class="fa-solid fa-print"></i> Imprimir</button>
+        </header>
+
+        <section class="filters">
+            <div>
+                <label>Data inicial</label>
+                <input id="dataInicio" type="date" value="2026-01-01">
+            </div>
+            <div>
+                <label>Data final</label>
+                <input id="dataFim" type="date">
+            </div>
+            <div>
+                <label>Código fornecedor</label>
+                <input id="fornecedor" value="1809">
+            </div>
+            <div>
+                <label>Nome fornecedor</label>
+                <input id="fornecedorNome" value="FEZER">
+            </div>
+            <button class="primary" id="buscar"><i class="fa-solid fa-search"></i> Listar</button>
+        </section>
+
+        <section class="summary">
+            <div class="metric"><strong id="totalNotas">0</strong><span>notas</span></div>
+            <div class="metric"><strong id="totalItens">0</strong><span>itens</span></div>
+            <div class="metric"><strong id="totalGeral">R$ 0,00</strong><span>total</span></div>
+        </section>
+
+        <section class="report">
+            <div class="report-head">
+                <div class="report-title">Resultado</div>
+                <div id="status" class="sub"></div>
+            </div>
+            <div class="content" id="resultado"></div>
+        </section>
+    </main>
+
+    <script>
+        const token = localStorage.getItem('token') || localStorage.getItem('erus_token') || '';
+        const fmtMoney = value => Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        const fmtNum = value => Number(value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 3 });
+        const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+        document.getElementById('dataFim').value = new Date().toISOString().slice(0, 10);
+        document.getElementById('buscar').addEventListener('click', buscar);
+
+        async function buscar() {
+            const qs = new URLSearchParams({
+                dataInicio: document.getElementById('dataInicio').value,
+                dataFim: document.getElementById('dataFim').value,
+                fornecedor: document.getElementById('fornecedor').value,
+                fornecedorNome: document.getElementById('fornecedorNome').value
+            });
+
+            setStatus('Consultando...');
+            document.getElementById('resultado').innerHTML = '';
+
+            try {
+                const res = await fetch(`/api/faturamento-firebird/entradas-fornecedor-itens?${qs}`, {
+                    headers: token ? { Authorization: `Bearer ${token}` } : {}
+                });
+                const json = await res.json();
+                if (!json.success) throw new Error(json.message || json.error || 'Erro na consulta.');
+                render(json.data, json.summary);
+                setStatus(`${json.summary.filtros.dataInicio} até ${json.summary.filtros.dataFim}`);
+            } catch (error) {
+                document.getElementById('resultado').innerHTML = `<div class="error">${esc(error.message)}</div>`;
+                setStatus('Erro');
+            }
+        }
+
+        function render(notas, summary) {
+            document.getElementById('totalNotas').textContent = summary.totalNotas;
+            document.getElementById('totalItens').textContent = summary.totalItens;
+            document.getElementById('totalGeral').textContent = fmtMoney(summary.totalGeral);
+
+            if (!notas.length) {
+                document.getElementById('resultado').innerHTML = '<div class="empty">Nenhuma nota encontrada no período.</div>';
+                return;
+            }
+
+            document.getElementById('resultado').innerHTML = notas.map(nota => `
+                <details open>
+                    <summary>
+                        <strong>Nota ${esc(nota.numero)}</strong>
+                        <span>Série ${esc(nota.serie || '-')}</span>
+                        <span>${esc(nota.entrada || '-')}</span>
+                        <span>${esc(nota.fornecedorCodigo)} - ${esc(nota.fornecedorNome)}</span>
+                        <strong>${fmtMoney(nota.total)}</strong>
+                    </summary>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Item</th>
+                                <th>Código</th>
+                                <th>Descrição</th>
+                                <th class="num">Quantidade</th>
+                                <th class="num">Unitário</th>
+                                <th class="num">Total</th>
+                                <th>CFOP</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${nota.itens.map(item => `
+                                <tr>
+                                    <td>${esc(item.item)}</td>
+                                    <td>${esc(item.codigo)}</td>
+                                    <td>${esc(item.descricao)}</td>
+                                    <td class="num">${fmtNum(item.quantidade)}</td>
+                                    <td class="num">${fmtMoney(item.valorUnitario)}</td>
+                                    <td class="num">${fmtMoney(item.valorTotal)}</td>
+                                    <td>${esc(item.cfop)}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </details>
+            `).join('');
+        }
+
+        function setStatus(text) {
+            document.getElementById('status').textContent = text;
+        }
+
+        buscar();
+    </script>
+    <script src="session-guard.js"></script>
+</body>
+</html>
