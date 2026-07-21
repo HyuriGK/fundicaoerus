@@ -422,6 +422,8 @@
                     '<i class="fa-solid fa-cubes"></i><span>Insumos de Moldagem</span></a>' +
                 '<a href="programacaofusao.html" data-stip="Programação da Fusão" class="erus-nav-link' + isActive('programacaofusao.html') + '">' +
                     '<i class="fa-solid fa-fire-flame-curved"></i><span>Programação da Fusão</span></a>' +
+                '<a href="programacaodesmoldagem.html" data-stip="Programação Desmoldagem" class="erus-nav-link' + isActive('programacaodesmoldagem.html') + '">' +
+                    '<i class="fa-solid fa-calendar-days"></i><span>Programação Desmoldagem</span></a>' +
             '</div>' +
             // TERCEIRIZACAO
             '<div class="erus-nav-group-sep" data-stip="Terceirização" onclick="erusSidebarToggleGroup(\'eg-acabamento\')">' +
