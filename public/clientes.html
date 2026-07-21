@@ -274,9 +274,9 @@
         #statusModal td { padding:11px 14px; border-bottom:1px solid rgba(255,255,255,0.04); white-space:nowrap; }
         #statusModal tr:hover td { background:rgba(255,255,255,0.025); }
         #clientsRecordsModal {
-            display:none; position:fixed; top:0; right:0; bottom:0; left:var(--clients-sidebar-offset);
-            width:calc(100vw - var(--clients-sidebar-offset)); margin-left:0 !important;
-            background:rgba(0,0,0,0.95); z-index:2000;
+            display:none; position:fixed; inset:0;
+            width:100vw; margin-left:0 !important;
+            background:rgba(0,0,0,0.95); z-index:7000;
             align-items:center; justify-content:center;
             backdrop-filter:blur(5px);
         }
@@ -304,7 +304,16 @@
             border-radius:0; padding:4px 0 16px; margin-bottom:16px;
             font-size:0.75rem; color:var(--text-muted); flex-shrink:0;
             font-family:var(--font-mono); text-transform:uppercase; letter-spacing:0.04em;
+            display:flex; align-items:center; justify-content:space-between; gap:12px;
         }
+        #clientsRecordsLimit {
+            height:30px; min-width:92px; background:#18181b; color:#f4f4f5;
+            border:1px solid var(--border-subtle); border-radius:6px;
+            font-family:var(--font-mono); font-size:0.72rem; font-weight:800;
+            text-transform:uppercase; cursor:pointer; outline:none; padding:0 8px;
+        }
+        #clientsRecordsLimit:focus { border-color:var(--color-primary); }
+        #clientsRecordsLimit option { background:#18181b; color:#f4f4f5; }
         #clientsRecordsModal .crm-table-wrap {
             flex:1; overflow:auto;
             background:var(--bg-card); border:1px solid var(--border-subtle);
@@ -437,7 +446,18 @@
             <h2 class="crm-title"><i class="fa-solid fa-address-book" style="margin-right:14px;"></i>Registros de Clientes</h2>
             <span class="crm-close" onclick="closeClientsRecordsModal()" title="Fechar (ESC)">&times;</span>
         </div>
-        <div class="crm-meta" id="clientsRecordsCount">Carregando clientes...</div>
+        <div class="crm-meta">
+            <span id="clientsRecordsCount">Carregando clientes...</span>
+            <label style="display:flex;align-items:center;gap:8px;">
+                <span>Registros</span>
+                <select id="clientsRecordsLimit" onchange="renderClientsRecords()">
+                    <option value="100">100</option>
+                    <option value="200">200</option>
+                    <option value="500">500</option>
+                    <option value="all">Todos</option>
+                </select>
+            </label>
+        </div>
         <div class="crm-table-wrap">
             <table>
                 <thead>
@@ -622,6 +642,7 @@ let activeMonth = 'all';
 let clientRecords = [];
 let clientRecordsLoaded = false;
 let clientRecordsSortDir = null;
+let clientRecordsLimit = 100;
 let clientsMap = null;
 let clientsHeatLayer = null;
 let clientsCityLayer = null;
@@ -631,7 +652,7 @@ const COMMERCIAL_OWNER_OPTIONS = ['GERUZA MENDES', 'GUILHERME FENALI', 'ELISANGE
 
 // ─── SERVICE CLIENT LOGIC (igual faturamentos.html) ──────────────────────────
 const _serviceClients = ['IMEPEL INDUSTRIA MECANICA LTDA','STEELROOL INDUSTRIA METALURGICA','SPILROD FUNDICAO DE FERRO E ACO LTDA'];
-const _serviceCodes   = ['257', '432'];
+const _serviceCodes   = ['257', '432', '2020', '316', '2283', '253'];
 function isServiceClient(item) {
     if (!item) return false;
     const name = (item.clienteNome || '').trim().toUpperCase();
@@ -1498,7 +1519,6 @@ async function openClientsRecordsModal() {
     const modal = document.getElementById('clientsRecordsModal');
     const count = document.getElementById('clientsRecordsCount');
     const tbody = document.getElementById('clientsRecordsBody');
-    applyClientModalSidebarOffset();
     modal.style.display = 'flex';
 
     if (!clientRecordsLoaded) {
@@ -1525,6 +1545,8 @@ function closeClientsRecordsModal() {
 }
 
 function renderClientsRecords() {
+    const limitSelect = document.getElementById('clientsRecordsLimit');
+    clientRecordsLimit = limitSelect && limitSelect.value !== 'all' ? Number(limitSelect.value) : 'all';
     const filters = Array.from(document.querySelectorAll('.client-filter-input')).map(input => ({
         col: Number(input.dataset.col),
         val: input.value.trim().toLowerCase()
@@ -1552,10 +1574,11 @@ function renderClientsRecords() {
     }
 
     document.getElementById('clientsRecordsCount').textContent =
-        `${rows.length.toLocaleString('pt-BR')} de ${clientRecords.length.toLocaleString('pt-BR')} clientes`;
+        `${Math.min(rows.length, clientRecordsLimit === 'all' ? rows.length : clientRecordsLimit).toLocaleString('pt-BR')} exibidos de ${rows.length.toLocaleString('pt-BR')} filtrados · ${clientRecords.length.toLocaleString('pt-BR')} clientes`;
 
     const tbody = document.getElementById('clientsRecordsBody');
-    tbody.innerHTML = rows.map(c => {
+    const visibleRows = clientRecordsLimit === 'all' ? rows : rows.slice(0, clientRecordsLimit);
+    tbody.innerHTML = visibleRows.map(c => {
         const values = getClientRecordValues(c);
         const statusClass = c.bloqueado ? 'blocked' : c.ativo ? 'active' : 'inactive';
         const statusText = c.bloqueado ? 'Bloq.' : c.ativo ? 'Ativo' : 'Inativo';
