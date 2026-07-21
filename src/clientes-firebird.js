@@ -69,11 +69,13 @@ async function ensureDigisacSatisfactionSurveysTable() {
         CREATE TABLE IF NOT EXISTS digisac_satisfaction_surveys (
             contact_id TEXT PRIMARY KEY,
             expires_at TIMESTAMP NOT NULL,
+            answered_at TIMESTAMP,
             expired_notice_sent_at TIMESTAMP,
             created_at TIMESTAMP DEFAULT NOW(),
             updated_at TIMESTAMP DEFAULT NOW()
         )
     `);
+    await pool.query(`ALTER TABLE digisac_satisfaction_surveys ADD COLUMN IF NOT EXISTS answered_at TIMESTAMP`);
 }
 
 function extractDigisacWebhookEventId(value) {
@@ -392,16 +394,34 @@ async function saveDigisacSatisfactionSurvey(contactId, expiresAt) {
 
     await ensureDigisacSatisfactionSurveysTable();
     await pool.query(`
-        INSERT INTO digisac_satisfaction_surveys (contact_id, expires_at, expired_notice_sent_at, updated_at)
-        VALUES ($1, $2, NULL, NOW())
+        INSERT INTO digisac_satisfaction_surveys (contact_id, expires_at, answered_at, expired_notice_sent_at, updated_at)
+        VALUES ($1, $2, NULL, NULL, NOW())
         ON CONFLICT (contact_id)
         DO UPDATE SET
             expires_at = EXCLUDED.expires_at,
+            answered_at = NULL,
             expired_notice_sent_at = NULL,
             updated_at = NOW()
     `, [contactId, expiresAt]);
 
     return { success: true, contactId, expiresAt };
+}
+
+async function markDigisacSatisfactionAnswered(contactId) {
+    if (!contactId) return null;
+
+    await ensureDigisacSatisfactionSurveysTable();
+    const result = await pool.query(`
+        UPDATE digisac_satisfaction_surveys
+        SET answered_at = NOW(), updated_at = NOW()
+        WHERE contact_id = $1
+          AND answered_at IS NULL
+          AND expired_notice_sent_at IS NULL
+          AND expires_at > NOW()
+        RETURNING contact_id
+    `, [contactId]);
+
+    return { success: result.rowCount > 0 };
 }
 
 async function processExpiredDigisacSatisfactionSurveys() {
@@ -410,7 +430,8 @@ async function processExpiredDigisacSatisfactionSurveys() {
     const result = await pool.query(`
         SELECT contact_id
         FROM digisac_satisfaction_surveys
-        WHERE expired_notice_sent_at IS NULL
+        WHERE answered_at IS NULL
+          AND expired_notice_sent_at IS NULL
           AND expires_at <= NOW()
         ORDER BY expires_at ASC
         LIMIT 20
@@ -1269,6 +1290,10 @@ router.all('/digisac/consultor', async (req, res) => {
             const result = await handleDigisacInternalRedirect(contactId, internalRedirectTarget);
             return res.json(result);
         }
+        const satisfactionReplyText = String(getDigisacMessageText(req) || '').trim();
+        if (/^[1-5]$/.test(satisfactionReplyText)) {
+            await markDigisacSatisfactionAnswered(contactId);
+        }
         const session = await getDigisacClienteSession(contactId);
         const incomingOption = extractDigisacUserOption(req);
         if (!commandNormalized && session && incomingOption) {
@@ -2110,7 +2135,5 @@ router.post('/responsavel-comercial', async (req, res) => {
         res.status(500).json({ success: false, error: 'Erro ao salvar responsável comercial', details: err.message });
     }
 });
-
-startDigisacSatisfactionExpiryWorker();
 
 module.exports = router;
