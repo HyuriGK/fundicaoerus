@@ -116,9 +116,14 @@ router.get('/corrida/:numero', async (req, res) => {
                 c.peso_pcp,
                 ft.tipo_modelo_desc,
                 ft.qtde_caixas_macho,
-                ft.qtde_figuras
+                ft.qtde_figuras,
+                COALESCE(ftf.foto_base64, ft.foto_base64) AS foto_base64,
+                fp.data->>'NOME_CLIENTE' AS cliente_nome,
+                COALESCE(fp.data->>'ENTREGA_PED', fp.data->>'OP_ENTREGA') AS data_entrega
             FROM corridas_programadas_sync c
             LEFT JOIN ficha_tecnica ft ON ft.pro_codigo_fic = c.produto_pcp::text
+            LEFT JOIN ficha_tecnica_fusao ftf ON ftf.pro_codigo = c.produto_pcp::text
+            LEFT JOIN firebird_sync_pedidos fp ON fp.sync_key = 'OP-' || c.op_codigo::text
             WHERE TRIM(c.corrida_cor) = $1
             ORDER BY c.codigo_cor DESC, c.sequencia_item
         `, [numero]);
@@ -137,6 +142,9 @@ router.get('/corrida/:numero', async (req, res) => {
                 nome_pro:              r.nome_pro,
                 quantidade_programada: r.quantidade_programada,
                 peso_pcp:              r.peso_pcp,
+                cliente_nome:          r.cliente_nome || '',
+                data_entrega:          r.data_entrega || '',
+                foto_base64:           r.foto_base64 || '',
                 tipo_modelo:           r.tipo_modelo_desc || '',
                 qtde_caixas_macho:     Number(r.qtde_caixas_macho) || 0,
                 qtde_figuras:          Number(r.qtde_figuras) || 0,
