@@ -16,6 +16,7 @@ const DIGISAC_FINANCEIRO_USER_ID = process.env.DIGISAC_FINANCEIRO_USER_ID || 'c1
 const DIGISAC_EM_ATENDIMENTO_TAG_ID = process.env.DIGISAC_EM_ATENDIMENTO_TAG_ID || '';
 const DIGISAC_EM_ATENDIMENTO_TAG_NAME = process.env.DIGISAC_EM_ATENDIMENTO_TAG_NAME || 'em_atendimento';
 const DIGISAC_CNPJ_MAX_RETRIES = 2;
+const DIGISAC_SATISFACTION_TTL_MINUTES = Number(process.env.DIGISAC_SATISFACTION_TTL_MINUTES || 30);
 
 const DIGISAC_USER_IDS = {
     'GERUZA MENDES': process.env.DIGISAC_USER_GERUZA_ID || '2f3518c3-7a5d-42c3-805d-7d33735e8303',
@@ -59,6 +60,18 @@ async function ensureDigisacDedupeTable() {
         CREATE TABLE IF NOT EXISTS digisac_webhook_dedupe (
             fingerprint TEXT PRIMARY KEY,
             created_at TIMESTAMP DEFAULT NOW()
+        )
+    `);
+}
+
+async function ensureDigisacSatisfactionSurveysTable() {
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS digisac_satisfaction_surveys (
+            contact_id TEXT PRIMARY KEY,
+            expires_at TIMESTAMP NOT NULL,
+            expired_notice_sent_at TIMESTAMP,
+            created_at TIMESTAMP DEFAULT NOW(),
+            updated_at TIMESTAMP DEFAULT NOW()
         )
     `);
 }
@@ -354,6 +367,72 @@ function extractDigisacUserOption(req) {
 function extractDigisacInternalRedirect(req) {
     const text = String(getDigisacMessageText(req) || findTextInPayload(req.body) || '').trim().toLowerCase();
     return DIGISAC_INTERNAL_REDIRECTS[text] || '';
+}
+
+function isLikelyExpiredSatisfactionReply(req) {
+    const text = String(getDigisacMessageText(req) || findTextInPayload(req.body) || '').trim();
+    if (!text) return false;
+    if (isDocumentoFormatValid(text)) return false;
+    return /^(?:10|[0-9])$/.test(text);
+}
+
+function buildDigisacExpiredSatisfactionMessage() {
+    return 'O prazo para responder a pesquisa de satisfação expirou.\n\nPor favor, não envie uma nota agora, pois isso pode iniciar um novo atendimento automaticamente.';
+}
+
+async function saveDigisacSatisfactionSurvey(contactId, expiresAt) {
+    if (!contactId || !expiresAt) return null;
+
+    await ensureDigisacSatisfactionSurveysTable();
+    await pool.query(`
+        INSERT INTO digisac_satisfaction_surveys (contact_id, expires_at, expired_notice_sent_at, updated_at)
+        VALUES ($1, $2, NULL, NOW())
+        ON CONFLICT (contact_id)
+        DO UPDATE SET
+            expires_at = EXCLUDED.expires_at,
+            expired_notice_sent_at = NULL,
+            updated_at = NOW()
+    `, [contactId, expiresAt]);
+
+    return { success: true, contactId, expiresAt };
+}
+
+async function processExpiredDigisacSatisfactionSurveys() {
+    await ensureDigisacSatisfactionSurveysTable();
+
+    const result = await pool.query(`
+        SELECT contact_id
+        FROM digisac_satisfaction_surveys
+        WHERE expired_notice_sent_at IS NULL
+          AND expires_at <= NOW()
+        ORDER BY expires_at ASC
+        LIMIT 20
+    `);
+
+    for (const row of result.rows) {
+        const notification = await sendDigisacMessage(row.contact_id, buildDigisacExpiredSatisfactionMessage());
+        await pool.query(`
+            UPDATE digisac_satisfaction_surveys
+            SET expired_notice_sent_at = NOW(), updated_at = NOW()
+            WHERE contact_id = $1
+        `, [row.contact_id]);
+        if (!notification?.success) {
+            console.warn('Aviso de pesquisa expirada Digisac não confirmado:', row.contact_id);
+        }
+    }
+
+    return { success: true, processed: result.rows.length };
+}
+
+function startDigisacSatisfactionExpiryWorker() {
+    if (global.__digisacSatisfactionExpiryWorkerStarted) return;
+    global.__digisacSatisfactionExpiryWorkerStarted = true;
+
+    setInterval(() => {
+        processExpiredDigisacSatisfactionSurveys().catch(err => {
+            console.warn('Erro ao processar pesquisas expiradas Digisac:', err.message);
+        });
+    }, 60000).unref();
 }
 
 async function handleDigisacInternalRedirect(contactId, targetName) {
@@ -1171,6 +1250,16 @@ router.all('/digisac/consultor', async (req, res) => {
             return res.json(result);
         }
         const session = await getDigisacClienteSession(contactId);
+        if (!session && isLikelyExpiredSatisfactionReply(req)) {
+            await saveDigisacDebug(req, 'pesquisa_satisfacao_expirada');
+            const notification = contactId ? await sendDigisacMessage(contactId, buildDigisacExpiredSatisfactionMessage()) : null;
+            return res.json({
+                success: true,
+                ignored: true,
+                action: 'pesquisa_satisfacao_expirada',
+                notification
+            });
+        }
         const incomingOption = extractDigisacUserOption(req);
         if (!commandNormalized && session && incomingOption) {
             commandNormalized = 'opcao_cliente';
@@ -1928,6 +2017,48 @@ router.all('/digisac/consultor', async (req, res) => {
     }
 });
 
+router.all('/digisac/satisfaction/start', async (req, res) => {
+    try {
+        if (!hasValidDigisacToken(req)) {
+            return res.status(401).json({ success: false, error: 'Token Digisac inválido.' });
+        }
+
+        const contactId = req.body?.contactId || req.body?.contact_id || req.query.contactId || req.query.contact_id || findContactIdInPayload(req.body);
+        const minutes = Math.max(1, Number(req.body?.ttlMinutes || req.body?.ttl_minutes || req.query.ttlMinutes || req.query.ttl_minutes || DIGISAC_SATISFACTION_TTL_MINUTES));
+        const expiresAtInput = req.body?.expiresAt || req.body?.expires_at || req.query.expiresAt || req.query.expires_at;
+        const expiresAt = expiresAtInput ? new Date(expiresAtInput) : new Date(Date.now() + minutes * 60000);
+
+        if (!contactId) {
+            return res.status(400).json({ success: false, error: 'contactId obrigatório.' });
+        }
+        if (Number.isNaN(expiresAt.getTime())) {
+            return res.status(400).json({ success: false, error: 'expiresAt inválido.' });
+        }
+
+        const result = await saveDigisacSatisfactionSurvey(contactId, expiresAt);
+        return res.json({
+            ...result,
+            action: 'pesquisa_satisfacao_registrada',
+            ttlMinutes: minutes
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: 'Erro ao registrar pesquisa de satisfação Digisac', details: err.message });
+    }
+});
+
+router.post('/digisac/satisfaction/process-expired', async (req, res) => {
+    try {
+        if (!hasValidDigisacToken(req)) {
+            return res.status(401).json({ success: false, error: 'Token Digisac inválido.' });
+        }
+
+        const result = await processExpiredDigisacSatisfactionSurveys();
+        return res.json(result);
+    } catch (err) {
+        return res.status(500).json({ success: false, error: 'Erro ao processar pesquisas expiradas Digisac', details: err.message });
+    }
+});
+
 router.get('/digisac/debug-last', async (req, res) => {
     try {
         await ensureDigisacDebugTable();
@@ -1969,5 +2100,7 @@ router.post('/responsavel-comercial', async (req, res) => {
         res.status(500).json({ success: false, error: 'Erro ao salvar responsável comercial', details: err.message });
     }
 });
+
+startDigisacSatisfactionExpiryWorker();
 
 module.exports = router;
