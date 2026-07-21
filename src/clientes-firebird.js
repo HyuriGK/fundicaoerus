@@ -369,13 +369,6 @@ function extractDigisacInternalRedirect(req) {
     return DIGISAC_INTERNAL_REDIRECTS[text] || '';
 }
 
-function isLikelyExpiredSatisfactionReply(req) {
-    const text = String(getDigisacMessageText(req) || findTextInPayload(req.body) || '').trim();
-    if (!text) return false;
-    if (isDocumentoFormatValid(text)) return false;
-    return /^(?:10|[0-9])$/.test(text);
-}
-
 function buildDigisacExpiredSatisfactionMessage() {
     return 'O prazo para responder a pesquisa de satisfação expirou.\n\nPor favor, não envie uma nota agora, pois isso pode iniciar um novo atendimento automaticamente.';
 }
@@ -1277,16 +1270,6 @@ router.all('/digisac/consultor', async (req, res) => {
             return res.json(result);
         }
         const session = await getDigisacClienteSession(contactId);
-        if (!session && isLikelyExpiredSatisfactionReply(req)) {
-            await saveDigisacDebug(req, 'pesquisa_satisfacao_expirada');
-            const notification = contactId ? await sendDigisacMessage(contactId, buildDigisacExpiredSatisfactionMessage()) : null;
-            return res.json({
-                success: true,
-                ignored: true,
-                action: 'pesquisa_satisfacao_expirada',
-                notification
-            });
-        }
         const incomingOption = extractDigisacUserOption(req);
         if (!commandNormalized && session && incomingOption) {
             commandNormalized = 'opcao_cliente';
