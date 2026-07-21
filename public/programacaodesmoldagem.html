@@ -1,0 +1,1133 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <script src="js/auth-guard.js"></script>
+    <script src="js/loader.js"></script>
+    <script src="js/sidebar.js?v=20260706-light-sidebar"></script>
+    <link rel="stylesheet" href="css/dashboard-design-system.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Programação da Fusão | Fundição Erus</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="js/activity-logger.js?v=20260605e"></script>
+    <style>
+        :root {
+            --color-primary: #ea580c;
+            --color-primary-hover: #f97316;
+            --color-primary-rgb: 234, 88, 12;
+            --bg-main: #09090b;
+            --bg-card: #18181b;
+            --border-subtle: rgba(255, 255, 255, 0.08);
+            --text-main: #f4f4f5;
+            --text-muted: #a1a1aa;
+            --glass-bg: rgba(24, 24, 27, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.1);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-font-smoothing: antialiased; }
+        body { font-family: 'Inter', sans-serif; background-color: var(--bg-main); color: var(--text-main); line-height: 1.4; min-height: 100vh; }
+        .ambient-bg { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; background: radial-gradient(circle at 20% 20%, rgba(var(--color-primary-rgb), 0.05) 0%, transparent 40%), radial-gradient(circle at 80% 80%, rgba(var(--color-primary-rgb), 0.03) 0%, transparent 40%); }
+        .page-wrapper { min-height: 100vh; overflow-y: auto; }
+        .container { max-width: 1100px; margin: 0 auto; padding: 25px 20px; display: flex; flex-direction: column; align-items: center; }
+        .container > * { width: 100%; max-width: 1100px; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #09090b; }
+        ::-webkit-scrollbar-thumb { background: #27272a; border-radius: 10px; border: 2px solid #09090b; }
+        ::-webkit-scrollbar-thumb:hover { background: #3f3f46; }
+        .top-header { display: none; }
+
+        /* SIDE MENU */
+        .side-menu-trigger { position: fixed; left: 0; top: 0; bottom: 0; width: 45px; z-index: 2000; background: transparent; }
+        .side-menu { position: fixed; left: -320px; top: 20px; bottom: 20px; width: 300px; background: rgba(9, 9, 11, 0.95); backdrop-filter: blur(20px) saturate(2); border: 1px solid var(--border-subtle); border-left: none; border-radius: 0 20px 20px 0; z-index: 2001; transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); display: flex; flex-direction: column; padding: 40px 30px; box-shadow: 10px 0 40px rgba(0,0,0,0.6); }
+        .side-menu-trigger:hover + .side-menu, .side-menu:hover { left: 0; }
+        .side-menu-header { margin-bottom: 40px; }
+        .side-menu-title { font-size: 1.2rem; font-weight: 800; color: #fff; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 5px; }
+        .side-menu-subtitle { font-size: 0.7rem; color: var(--color-primary); font-weight: 700; letter-spacing: 0.1em; }
+        .side-menu-actions { display: flex; flex-direction: column; gap: 15px; flex: 1; }
+        .side-btn { width: 100%; padding: 14px 20px; border-radius: 12px; background: rgba(255,255,255,0.03); border: 1px solid var(--border-subtle); color: var(--text-muted); font-weight: 600; font-size: 0.95rem; display: flex; align-items: center; gap: 15px; cursor: pointer; transition: all 0.3s; text-decoration: none; font-family: 'Inter', sans-serif; }
+        .side-btn:hover { background: rgba(234,88,12,0.1); border-color: var(--color-primary); color: var(--color-primary); transform: translateX(5px); }
+        .side-btn.btn-back-side { margin-top: auto; background: rgba(239,68,68,0.1); border-color: rgba(239,68,68,0.2); color: #ef4444; }
+        .side-btn.btn-back-side:hover { background: rgba(239,68,68,0.2); border-color: #ef4444; color: #fff; transform: translateX(5px); }
+
+        /* MODAL */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); display: none; justify-content: center; align-items: center; z-index: 2000; }
+        .modal-card.fullscreen { width: 100vw; height: 100vh; max-width: none; border-radius: 0; display: flex; flex-direction: column; background: #09090b; border: none; overflow: hidden; }
+        .modal-header { padding: 20px 30px; background: #18181b; border-bottom: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: center; }
+        .modal-title { font-size: 1.8rem; color: var(--color-primary); font-weight: 800; text-transform: uppercase; letter-spacing: 1px; display: flex; align-items: center; gap: 15px; }
+        .modal-close { font-size: 2.2rem; color: #ef4444; cursor: pointer; transition: all 0.2s; line-height: 1; }
+        .modal-close:hover { color: #ff5555; transform: scale(1.15) rotate(90deg); }
+        .modal-toolbar { padding: 20px 30px; background: rgba(17,17,19,0.4); border-bottom: 1px solid var(--border-subtle); display: flex; align-items: center; justify-content: space-between; }
+        .records-counter { font-size: 0.85rem; color: var(--text-muted); }
+        .records-counter strong { color: var(--color-primary); }
+        .table-container { flex: 1; overflow: auto; padding: 0 10px; }
+        table#recordsTable { width: 100%; border-collapse: collapse; font-size: 0.85rem; table-layout: fixed; }
+        #recordsTable thead th { position: sticky; top: 0; background: #18181b; padding: 12px 10px; text-align: left; font-weight: 700; color: var(--text-muted); text-transform: uppercase; font-size: 0.7rem; letter-spacing: 0.05em; border-bottom: 2px solid var(--border-subtle); z-index: 10; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        #recordsTable tbody td { padding: 12px 10px; border-bottom: 1px solid var(--border-subtle); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        #recordsTable tbody tr:hover { background: rgba(255,255,255,0.02); }
+        .filter-input { width: 100%; background: rgba(255,255,255,0.05); border: 1px solid var(--border-subtle); border-radius: 4px; color: #fff; padding: 6px 10px; font-size: 0.75rem; margin-top: 8px; outline: none; }
+        .filter-input:focus { border-color: var(--color-primary); }
+        .btn-view-record { padding: 5px 12px; background: var(--color-primary); color: #000; border: none; border-radius: 5px; font-size: 0.7rem; font-weight: 800; cursor: pointer; text-transform: uppercase; }
+        .btn-view-record:hover { background: var(--color-primary-hover); }
+
+        /* SEARCH */
+        .search-wrapper { max-width: 600px; margin: 0 auto 30px auto; display: flex; gap: 10px; }
+        .search-container { flex: 1; min-width: 0; display: flex; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 14px; padding: 5px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
+        .search-container input { flex: 1; background: transparent; border: none; color: #fff; padding: 12px 18px; font-size: 1.05rem; outline: none; }
+        .btn-search { background: var(--color-primary); border: none; color: #000; width: 44px; height: 44px; border-radius: 10px; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; justify-content: center; font-size: 1rem; }
+        .btn-search:hover { transform: scale(1.05); }
+
+        /* CORRIDA PANEL */
+        .corrida-info-bar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-bottom:14px; }
+        .corrida-chip { font-size:0.72rem; font-weight:600; padding:5px 11px; border-radius:7px; border:1px solid var(--border-subtle); color:var(--text-muted); background:rgba(255,255,255,0.03); display:inline-flex; align-items:center; gap:6px; }
+        .corrida-chip i { font-size:0.65rem; opacity:0.8; }
+        .corrida-chip.num { border-color:rgba(var(--color-primary-rgb),0.3); color:var(--color-primary); background:rgba(var(--color-primary-rgb),0.06); font-family:'JetBrains Mono',monospace; font-weight:700; font-size:0.85rem; }
+        .corrida-actions { display:flex; gap:10px; margin-bottom:14px; flex-wrap:wrap; }
+        .btn-corrida { padding:9px 16px; border-radius:8px; font-size:0.78rem; font-weight:700; cursor:pointer; border:1px solid var(--border-subtle); background:rgba(255,255,255,0.04); color:var(--text-main); display:inline-flex; align-items:center; gap:8px; font-family:'Inter',sans-serif; transition:all 0.2s; }
+        .btn-corrida:hover { border-color:var(--color-primary); color:var(--color-primary); }
+        .btn-corrida.primary { background:var(--color-primary); color:#000; border-color:var(--color-primary); }
+        .btn-corrida.primary:hover { background:var(--color-primary-hover); color:#000; }
+        .btn-corrida.primary:disabled { opacity:0.4; cursor:not-allowed; background:var(--color-primary); color:#000; }
+        .corrida-table { width:100%; border-collapse:collapse; font-size:0.82rem; background:var(--bg-card); border:1px solid var(--border-subtle); border-radius:12px; overflow:hidden; }
+        .corrida-table thead th { background:#18181b; padding:11px 14px; text-align:left; font-size:0.65rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-muted); border-bottom:1px solid var(--border-subtle); }
+        .corrida-table tbody td { padding:11px 14px; border-bottom:1px solid var(--border-subtle); }
+        .corrida-table tbody tr:last-child td { border-bottom:none; }
+        .corrida-table tbody tr:hover { background:rgba(255,255,255,0.02); }
+        .corrida-table input[type=checkbox] { width:16px; height:16px; accent-color:var(--color-primary); cursor:pointer; }
+        .corrida-cod { font-family:'JetBrains Mono', monospace; color:var(--color-primary); font-weight:600; }
+
+        /* SHEET */
+        #sheetContent { display: none; animation: fadeIn 0.4s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        .sheet-container { background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 16px; padding: 35px; box-shadow: 0 30px 70px rgba(0,0,0,0.5); position: relative; }
+        .sheet-header { margin-bottom: 25px; }
+        .item-main-info { display: flex; flex-direction: column; gap: 15px; }
+        .item-main-info h2 { font-size: 2rem; font-weight: 850; color: var(--color-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.1; }
+        .item-code { font-family: 'JetBrains Mono', monospace; font-size: 1.1rem; font-weight: 500; color: var(--text-muted); letter-spacing: 0.05em; }
+        .info-grid { display: grid; gap: 12px; margin-bottom: 20px; }
+        .info-block { padding: 10px 14px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-subtle); border-radius: 8px; overflow: hidden; }
+        .info-label { display: block; font-size: 0.6rem; text-transform: uppercase; font-weight: 800; color: var(--text-muted); margin-bottom: 3px; letter-spacing: 0.1em; }
+        .info-value { display: block; font-size: 0.9rem; font-weight: 600; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .section-divider { height: 1px; background: var(--border-subtle); margin: 25px 0; position: relative; }
+        .section-divider span { position: absolute; top: 50%; left: 20px; transform: translateY(-50%); background: var(--bg-card); padding: 0 12px; font-size: 0.65rem; font-weight: 900; color: var(--color-primary); text-transform: uppercase; letter-spacing: 0.15em; }
+        .notes-area { margin-top: 15px; background: rgba(var(--color-primary-rgb), 0.03); border: 1px solid rgba(var(--color-primary-rgb), 0.1); border-radius: 8px; padding: 15px; }
+        .notes-text { font-size: 0.85rem; color: #ffffff; font-weight: 500; white-space: pre-wrap; line-height: 1.6; }
+        .image-container-large { margin-top: 30px; width: 100%; height: 380px; background: rgba(255,255,255,0.015); border: 1px dashed var(--border-subtle); border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--text-muted); position: relative; overflow: hidden; }
+        .image-container-large i { font-size: 4rem; opacity: 0.15; margin-bottom: 15px; }
+
+        /* MULTI-FICHA (impressão por corrida) — fica fora da tela, mensurável p/ escala */
+        #multiSheetContainer { position: absolute; left: -100000px; top: 0; width: 760px; }
+        #multiSheetContainer .print-sheet { width: 760px; margin: 0 auto; }
+        #multiSheetContainer .print-sheet .sheet-container { margin-bottom: 0; }
+
+        /* CAPA DA CORRIDA (folha deitada) — espelha o relatório do ERP */
+        .print-cover { width: 100%; background: #fff; color: #000; font-family: 'Inter', sans-serif; }
+        .print-cover .cover-top { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 12px; }
+        .print-cover .cover-brand-wrap { display: flex; align-items: center; gap: 14px; }
+        .print-cover .cover-logo { height: 50px; width: auto; object-fit: contain; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        .print-cover .cover-brand { display: flex; flex-direction: column; gap: 2px; }
+        .print-cover .cover-brand .cb-empresa { font-size: 1.15rem; font-weight: 900; }
+        .print-cover .cover-brand .cb-rel { font-size: 0.85rem; font-weight: 700; }
+        .print-cover .cover-brand .cb-emissao { font-size: 0.72rem; color: #333; }
+        .print-cover .cover-meta { font-size: 0.7rem; text-align: left; line-height: 1.5; }
+        .print-cover .cover-meta b { font-weight: 700; }
+        .print-cover .cover-corrida { display: flex; flex-wrap: wrap; gap: 8px 40px; margin-bottom: 12px; font-size: 0.92rem; }
+        .print-cover .cover-corrida .cc-item b { font-weight: 800; }
+        .print-cover .cover-table { width: 100%; border-collapse: collapse; font-size: 0.72rem; }
+        .print-cover .cover-table th, .print-cover .cover-table td { border: 1px solid #000; padding: 5px 6px; }
+        .print-cover .cover-table thead th { background: #eaeaea; font-weight: 700; text-align: center; text-transform: uppercase; letter-spacing: 0.02em; }
+        .print-cover .cover-table td.num { text-align: center; }
+        .print-cover .cover-table td.txt { text-align: left; }
+        .print-cover .cover-table td.cod { font-family: 'JetBrains Mono', monospace; text-align: center; }
+        .print-cover .cover-table tfoot td { font-weight: 800; text-align: center; background: #f4f4f4; }
+        .print-cover .cover-apont { background: #f7f7f7; }
+
+        /* LOADER */
+        .loader, .status-empty { text-align: center; padding: 60px; color: var(--text-muted); }
+        .spinner { width: 40px; height: 40px; border: 3px solid rgba(var(--color-primary-rgb), 0.1); border-left-color: var(--color-primary); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 20px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* PRINT — Programação da Fusão: dois PDFs separados.
+           A orientação (@page size) é definida dinamicamente antes de cada impressão
+           (paisagem p/ a capa, retrato p/ as fichas) via #erus-print-orient. */
+        @media print {
+            @page { size: A4 portrait; margin: 8mm; }
+            html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; color: #000 !important; min-height: 0 !important; height: auto !important; overflow: visible !important; }
+            .ambient-bg, .side-menu, .side-menu-trigger, #erus-sidebar, #erus-sidebar-backdrop, #erus-logout-modal, #erus-pref-modal, #sync-floating-indicator, #sync-overlay, #last-sync-toast, .modal-overlay, .loader, .status-empty, .search-wrapper, header, .tipo-switcher, [data-no-print] { display: none !important; visibility: hidden !important; height: 0 !important; overflow: hidden !important; margin: 0 !important; padding: 0 !important; }
+            body { padding-left: 0 !important; margin-left: 0 !important; }
+            .page-wrapper { margin: 0 !important; min-height: 0 !important; height: auto !important; overflow: visible !important; }
+            .container { max-width: 100% !important; width: 100% !important; min-height: 0 !important; padding: 0 !important; margin: 0 !important; display: block !important; align-items: unset !important; overflow: visible !important; }
+            #sheetContent { display: block !important; width: 100% !important; max-width: 100% !important; margin: 0 !important; page-break-before: auto !important; break-before: auto !important; page-break-after: auto !important; break-after: auto !important; }
+            .sheet-container { border: 1px solid #000 !important; box-shadow: none !important; background: #fff !important; border-radius: 0 !important; page-break-inside: auto !important; break-inside: auto !important; page-break-before: auto !important; break-before: auto !important; }
+            .info-block { background: #fdfdfd !important; border: 1px solid #ccc !important; }
+            .info-label { color: #444 !important; }
+            .info-value { color: #000 !important; }
+            .item-main-info h2 { color: #000 !important; }
+            .section-divider { background: #000 !important; }
+            .section-divider span { background: #fff !important; color: #000 !important; }
+            .notes-area { background: #fdfdfd !important; border: 1px solid #ccc !important; }
+            .notes-text { color: #111 !important; font-weight: 500 !important; }
+            .image-container-large { border: 1px solid #ccc !important; background: #fff !important; min-height: 380px !important; }
+            .image-container-large i { display: none !important; }
+            #notesObservationsPanel { min-height: 380px !important; }
+            .sheet-title-container { border-bottom: 2px solid #000 !important; }
+            .sheet-title-container h1 { color: #000 !important; }
+            table th, table td { border: 1px solid #ccc !important; }
+            table thead { background: #eee !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .print-footer { color: #555 !important; }
+
+            #multiSheetContainer { display: none !important; }
+
+            /* PDF 1 — CAPA (paisagem, definida dinamicamente) */
+            body.printing-cover #sheetContent { display: none !important; }
+            body.printing-cover #multiSheetContainer { display: block !important; position: static !important; left: auto !important; top: auto !important; width: 100% !important; }
+            body.printing-cover #multiSheetContainer .print-cover { display: block !important; width: 100% !important; }
+            .print-cover .cover-table thead th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .print-cover .cover-table tfoot td { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+            /* PDF 2 — FICHAS (retrato, definida dinamicamente) */
+            body.printing-multi #sheetContent { display: none !important; }
+            body.printing-multi #multiSheetContainer { display: block !important; position: static !important; left: auto !important; top: auto !important; width: 100% !important; }
+            body.printing-multi #multiSheetContainer .print-sheet { display: block !important; width: var(--print-sheet-width, 100%) !important; max-width: none !important; margin: 0 auto !important; zoom: var(--print-sheet-zoom, 1) !important; page-break-after: always; break-after: page; }
+            body.printing-multi #multiSheetContainer .print-sheet:last-child { page-break-after: auto; break-after: auto; }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="ambient-bg"></div>
+    <div class="side-menu-trigger"></div>
+    <aside class="side-menu">
+        <div class="side-menu-header">
+            <span class="side-menu-subtitle">MENU DASHBOARD</span>
+            <div class="side-menu-title">Opções</div>
+        </div>
+        <div class="side-menu-actions">
+            <button class="side-btn" onclick="openRecordsModal()"> Registros
+ </button>
+            <button class="side-btn" onclick="window.print()"> Gerar PDF
+ </button>
+            <a href="index.html" class="side-btn btn-back-side">
+                <i class="fa-solid fa-arrow-right-from-bracket"></i> Voltar
+            </a>
+        </div>
+    </aside>
+
+    <div class="page-wrapper">
+    <div class="container">
+        <section class="search-wrapper">
+            <div class="search-container" style="flex:1;" data-no-print="true">
+                <input type="text" id="corridaInput" placeholder="Pesquisar corrida (programação da fusão)..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+                    onkeypress="if(event.key==='Enter') searchCorrida()">
+                <button class="btn-search" onclick="searchCorrida()" title="Buscar corrida"><i class="fa-solid fa-fire-flame-curved"></i></button>
+            </div>
+        </section>
+
+        <!-- PAINEL DA CORRIDA -->
+        <div id="corridaPanel" data-no-print="true" style="display:none; margin-bottom:30px;">
+            <div class="corrida-info-bar" id="corridaInfoBar"></div>
+            <div class="corrida-actions">
+                <button class="btn-corrida" onclick="toggleSelectAllCorrida()"><i class="fa-solid fa-check-double"></i> <span id="selAllLabel">Selecionar todos</span></button>
+                <button class="btn-corrida primary" id="btnGerarCapa" onclick="gerarCapaPDF()" disabled><i class="fa-solid fa-file-pdf"></i> Gerar Capa (<span id="selCount">0</span>)</button>
+                <button class="btn-corrida" id="btnGerarFichas" onclick="gerarFichasPDF()" disabled><i class="fa-solid fa-file-lines"></i> Gerar Fichas (<span id="selCountF">0</span>)</button>
+            </div>
+            <table class="corrida-table">
+                <thead>
+                    <tr>
+                        <th style="width:42px; text-align:center;"><input type="checkbox" id="selAllCheckbox" onchange="toggleSelectAllCorrida(this.checked)"></th>
+                        <th style="width:60px;">SEQ</th>
+                        <th style="width:140px;">CÓDIGO</th>
+                        <th>PRODUTO</th>
+                        <th style="width:110px; text-align:right;">QTD PROG.</th>
+                    </tr>
+                </thead>
+                <tbody id="corridaProductsBody"></tbody>
+            </table>
+        </div>
+
+        <div id="loader" class="loader" style="display:none;">
+            <div class="spinner"></div>
+            <p>Buscando ficha no servidor...</p>
+        </div>
+        <div id="initialStatus" class="status-empty">
+            <i class="fa-solid fa-fire-flame-curved" style="font-size:3rem; opacity:0.1; margin-bottom:20px; display:block;"></i>
+            <h3>Aguardando Consulta</h3>
+            <p>Informe o número da corrida para carregar a programação da fusão.</p>
+        </div>
+
+        <div id="pdf-btn-wrapper" data-no-print="true" style="display:none; justify-content:flex-end; margin-bottom:12px;">
+            <button onclick="window.print()" style="display:flex;align-items:center;gap:8px;padding:9px 18px;background:var(--color-primary);color:#000;border:none;border-radius:8px;font-size:0.8rem;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif;transition:all 0.2s;" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'"> Gerar PDF
+ </button>
+        </div>
+
+        <div id="sheetContent">
+            <div class="sheet-container">
+                <!-- Título -->
+                <div style="text-align:center; margin-bottom:30px; border-bottom:2px solid var(--color-primary); padding-bottom:15px;" class="sheet-title-container">
+                    <h1 style="font-size:2.5rem; font-weight:900; letter-spacing:0.05em; color:#fff; margin:0; text-transform:uppercase;">FICHA TÉCNICA DE FUSÃO</h1>
+                </div>
+
+                <!-- Identificação -->
+                <div class="sheet-header">
+                    <div class="item-main-info">
+                        <div class="item-code" id="valCodigoHeader"># -</div>
+                        <h2 id="valNome">NOME DO PRODUTO</h2>
+                    </div>
+                </div>
+
+                <!-- Info geral -->
+                <div class="info-grid" style="grid-template-columns: 1fr 2fr 1fr 1fr;">
+                    <div class="info-block">
+                        <span class="info-label">Cód. Cliente</span>
+                        <span class="info-value" id="valCodCliente">-</span>
+                    </div>
+                    <div class="info-block">
+                        <span class="info-label">Cliente</span>
+                        <span class="info-value" id="valCliente">-</span>
+                    </div>
+                    <div class="info-block">
+                        <span class="info-label">Cód. Material</span>
+                        <span class="info-value" id="valMatId">-</span>
+                    </div>
+                    <div class="info-block">
+                        <span class="info-label">Material</span>
+                        <span class="info-value" id="valMaterial">-</span>
+                    </div>
+                </div>
+
+                <!-- Pesos do Produto -->
+                <div class="section-divider"><span>Pesos do Produto</span></div>
+                <div class="info-grid" style="grid-template-columns: repeat(5, 1fr);">
+                    <div class="info-block">
+                        <span class="info-label">Peso Usinado</span>
+                        <span class="info-value" id="valPesoLiq">-</span>
+                    </div>
+                    <div class="info-block">
+                        <span class="info-label">Peso Bruto</span>
+                        <span class="info-value" id="valPesoBruto">-</span>
+                    </div>
+                    <div class="info-block">
+                        <span class="info-label">Peso da Penca</span>
+                        <span class="info-value" id="valPesoPenca">-</span>
+                    </div>
+                    <div class="info-block">
+                        <span class="info-label">Peso Unit. C/ Aliment.</span>
+                        <span class="info-value" id="valPesoCAlim">-</span>
+                    </div>
+                    <div class="info-block" style="background: rgba(var(--color-primary-rgb), 0.05);">
+                        <span class="info-label">Rendimento Metálico</span>
+                        <span class="info-value" id="valRendimento" style="color: var(--color-primary); font-weight: 800;">-</span>
+                    </div>
+                </div>
+
+                <!-- Parâmetros de Fusão -->
+                <div class="section-divider"><span>Parâmetros de Fusão</span></div>
+                <div class="info-grid" style="grid-template-columns: repeat(3, 1fr);">
+                    <div class="info-block">
+                        <span class="info-label">Temp. Mín. de Vazamento (°C)</span>
+                        <span class="info-value" id="valTempVazamentoMin">-</span>
+                    </div>
+                    <div class="info-block">
+                        <span class="info-label">Temp. Máx. de Vazamento (°C)</span>
+                        <span class="info-value" id="valTempVazamento">-</span>
+                    </div>
+                    <div class="info-block">
+                        <span class="info-label">Relação Metal / Molde</span>
+                        <span class="info-value" id="valRelacaoMetalMolde">-</span>
+                    </div>
+                    <div class="info-block">
+                        <span class="info-label">Temp. Mín. Forno (°C)</span>
+                        <span class="info-value" id="valTempFornoMin">-</span>
+                    </div>
+                    <div class="info-block">
+                        <span class="info-label">Temp. Máx. Forno (°C)</span>
+                        <span class="info-value" id="valTempSaidaForno">-</span>
+                    </div>
+                    <div class="info-block">
+                        <span class="info-label">Relação Molde / Metal</span>
+                        <span class="info-value" id="valRelacaoMoldeMetal">-</span>
+                    </div>
+                </div>
+
+                <!-- Linha 1: Composição Química | Propriedades Mecânicas -->
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-top:25px;">
+                    <div>
+                        <div class="section-divider" style="margin-top:0;"><span>Composição Química (%)</span></div>
+                        <div id="composicaoContainer">
+                            <div id="noComposicaoMsg" style="font-size:0.8rem; color:var(--text-muted); padding:10px 0;">Nenhuma composição química cadastrada.</div>
+                            <table id="composicaoTable" style="display:none; width:100%; border-collapse:collapse; font-size:0.8rem;">
+                                <thead style="background:rgba(var(--color-primary-rgb),0.1);">
+                                    <tr>
+                                        <th style="padding:10px; border:1px solid rgba(var(--color-primary-rgb),0.2); text-align:left;">ELEMENTO</th>
+                                        <th style="padding:10px; border:1px solid rgba(var(--color-primary-rgb),0.2); text-align:center;">MÍN (%)</th>
+                                        <th style="padding:10px; border:1px solid rgba(var(--color-primary-rgb),0.2); text-align:center;">MÁX (%)</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="composicaoTableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="section-divider" style="margin-top:0;"><span>Propriedades Mecânicas</span></div>
+                        <div class="info-grid" style="grid-template-columns: repeat(2, 1fr); gap:8px;">
+                            <div class="info-block">
+                                <span class="info-label">Contração (%)</span>
+                                <span class="info-value" id="valContracao">-</span>
+                            </div>
+                            <div class="info-block">
+                                <span class="info-label">Limite de Resistência (MPa)</span>
+                                <span class="info-value" id="valLimiteResistencia">-</span>
+                            </div>
+                            <div class="info-block">
+                                <span class="info-label">Limite de Escoamento (MPa)</span>
+                                <span class="info-value" id="valLimiteEscoamento">-</span>
+                            </div>
+                            <div class="info-block">
+                                <span class="info-label">Alongamento (%)</span>
+                                <span class="info-value" id="valAlongamento">-</span>
+                            </div>
+                            <div class="info-block">
+                                <span class="info-label">Estricção (%)</span>
+                                <span class="info-value" id="valEstriccao">-</span>
+                            </div>
+                            <div class="info-block">
+                                <span class="info-label">Redução de Área (%)</span>
+                                <span class="info-value" id="valReducaoArea">-</span>
+                            </div>
+                            <div class="info-block">
+                                <span class="info-label">Dureza Mín. (HB)</span>
+                                <span class="info-value" id="valHbMin">-</span>
+                            </div>
+                            <div class="info-block">
+                                <span class="info-label">Dureza Máx. (HB)</span>
+                                <span class="info-value" id="valHbMax">-</span>
+                            </div>
+                            <div class="info-block">
+                                <span class="info-label">Impacto Charpy (J)</span>
+                                <span class="info-value" id="valImpactoCharpy">-</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Linha 2: Imagem de Referência | Observações de Vazamento -->
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-top:25px; align-items:stretch;">
+                    <div style="display:flex; flex-direction:column;">
+                        <div class="section-divider" style="margin-top:0;"><span>Imagem de Referência</span></div>
+                        <div class="image-container-large" id="imageContainer" style="margin-top:15px; flex:1; min-height:380px;">
+                            <i class="fa-solid fa-image" id="placeholderIcon"></i>
+                            <img id="valFoto" src="" alt="Foto"
+                                style="display:none; width:100%; height:100%; object-fit:contain; border-radius:12px;">
+                            <div id="noPhotoText">
+                                <p style="font-weight:700; font-size:0.8rem;">IMAGEM TÉCNICA</p>
+                                <p style="font-size:0.6rem; opacity:0.6; margin-top:5px;">Referência visual</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="display:flex; flex-direction:column;">
+                        <div class="section-divider" style="margin-top:0;"><span>Observações de Vazamento</span></div>
+                        <div id="notesObservationsPanel" class="notes-area" style="margin-top:15px; flex:1; min-height:380px; overflow-y:auto;">
+                            <div class="notes-text" id="valNotas">-</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Rodapé de impressão -->
+                <div style="margin-top:30px; border-top:1px solid #eee; padding-top:15px; display:flex; justify-content:space-between; font-size:0.65rem; color:#888;" class="print-footer">
+                    <span>Fundição Erus • Processos de Qualidade Assegurada</span>
+                    <span id="printMetadata"></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Container para impressão de múltiplas fichas (corrida) -->
+        <div id="multiSheetContainer"></div>
+    </div>
+
+    <!-- MODAL REGISTROS -->
+    <div id="recordsModal" class="modal-overlay">
+        <div class="modal-card fullscreen">
+            <div class="modal-header">
+                <h2 class="modal-title"><i class="fa-solid fa-list-check"></i> Registros de Fichas de Fusão</h2>
+                <span class="modal-close" onclick="closeRecordsModal()">&times;</span>
+            </div>
+            <div class="modal-toolbar">
+                <div class="records-counter">Total: <strong id="recordsCount">0</strong> fichas encontradas</div>
+                <div style="font-size:0.75rem; color:var(--text-muted);">Pressione <strong>ESC</strong> para fechar</div>
+            </div>
+            <div class="table-container">
+                <table id="recordsTable">
+                    <thead>
+                        <tr>
+                            <th style="width:10%;">CÓDIGO</th>
+                            <th style="width:20%;">PRODUTO</th>
+                            <th style="width:16%;">CLIENTE</th>
+                            <th style="width:12%;">MATERIAL</th>
+                            <th style="width:10%;">LIGA</th>
+                            <th style="width:8%; text-align:center;">NOTAS</th>
+                            <th style="width:8%; text-align:center;">FOTO</th>
+                            <th style="width:10%;">DATA FICHA</th>
+                            <th style="width:6%; text-align:center;">AÇÕES</th>
+                        </tr>
+                        <tr>
+                            <th><input type="text" class="filter-input" data-col="0" placeholder="Filtrar..."></th>
+                            <th><input type="text" class="filter-input" data-col="1" placeholder="Filtrar..."></th>
+                            <th><input type="text" class="filter-input" data-col="2" placeholder="Filtrar..."></th>
+                            <th><input type="text" class="filter-input" data-col="3" placeholder="Filtrar..."></th>
+                            <th><input type="text" class="filter-input" data-col="4" placeholder="Filtrar..."></th>
+                            <th><input type="text" class="filter-input" data-col="5" placeholder="Filtrar..."></th>
+                            <th><input type="text" class="filter-input" data-col="6" placeholder="Filtrar..."></th>
+                            <th><input type="text" class="filter-input" data-col="7" placeholder="Filtrar..."></th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="recordsTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    </div><!-- /.page-wrapper -->
+
+    <script>
+        async function searchSheet() {
+            const codigo = document.getElementById('searchInput').value.trim();
+            if (!codigo) return;
+            document.getElementById('initialStatus').style.display = 'none';
+            document.getElementById('sheetContent').style.display = 'none';
+            document.getElementById('loader').style.display = 'flex';
+            try {
+                const response = await fetch(`/api/fichatecnicafusao/${encodeURIComponent(codigo)}`);
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Erro na consulta');
+                populateData(data);
+                document.getElementById('loader').style.display = 'none';
+                document.getElementById('sheetContent').style.display = 'block';
+                document.getElementById('pdf-btn-wrapper').style.display = 'flex';
+            } catch (err) {
+                document.getElementById('loader').style.display = 'none';
+                document.getElementById('pdf-btn-wrapper').style.display = 'none';
+                document.getElementById('initialStatus').style.display = 'block';
+                document.querySelector('#initialStatus i').className = 'fa-solid fa-circle-exclamation';
+                document.querySelector('#initialStatus i').style.color = '#ef4444';
+                document.querySelector('#initialStatus h3').innerText = 'Não encontrado';
+                document.querySelector('#initialStatus p').innerText = err.message;
+            }
+        }
+
+        function populateData(d, root) {
+            root = root || document;
+            const g = id => (root.getElementById ? root.getElementById(id) : root.querySelector('#' + id));
+            const formatKg = v => v ? parseFloat(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kg' : '-';
+            const formatPct = v => v != null && v !== '' ? parseFloat(v).toLocaleString('pt-BR', { maximumFractionDigits: 2 }) + '%' : '-';
+
+            g('valCodigoHeader').innerText = '# ' + (d.pro_codigo || '-');
+            g('valNome').innerText = d.nome_pro || '-';
+            g('valCliente').innerText = d.cliente_nome || '-';
+            g('valCodCliente').innerText = d.cli_codigo || '-';
+            g('valMaterial').innerText = d.material || '-';
+            g('valMatId').innerText = d.mat_id || '-';
+
+            // Composição Química
+            const composicao = d.composicao_quimica || d.composicao || [];
+            const tbody = g('composicaoTableBody');
+            const noMsg = g('noComposicaoMsg');
+            const table = g('composicaoTable');
+            tbody.innerHTML = '';
+            const lista = typeof composicao === 'string' ? JSON.parse(composicao) : composicao;
+            if (lista && lista.length > 0) {
+                const nomeElemento = {
+                    C:'Carbono', SI:'Silício', MN:'Manganês', P:'Fósforo', S:'Enxofre',
+                    CR:'Cromo', NI:'Níquel', MO:'Molibdênio', AL:'Alumínio', V:'Vanádio',
+                    CU:'Cobre', MG:'Magnésio', W:'Tungstênio', B:'Boro', CO:'Cobalto',
+                    TI:'Titânio', NB:'Nióbio', PB:'Chumbo', SN:'Estanho', ZN:'Zinco',
+                    AS:'Arsênio', BI:'Bismuto', CA:'Cálcio', CE:'Cério', ZR:'Zircônio',
+                    LA:'Lantânio', FE:'Ferro'
+                };
+                lista.forEach(el => {
+                    const tr = document.createElement('tr');
+                    const fmt = v => parseFloat(v).toLocaleString('pt-BR', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+                    const nome = nomeElemento[el.elemento] || el.elemento;
+                    tr.innerHTML = `
+                        <td style="padding:10px; border:1px solid rgba(var(--color-primary-rgb),0.2); font-weight:700; color:var(--color-primary);">${el.elemento} <span style="font-weight:400; color:var(--text-muted); font-size:0.75rem;">— ${nome}</span></td>
+                        <td style="padding:10px; border:1px solid rgba(var(--color-primary-rgb),0.2); text-align:center;">${fmt(el.min)}</td>
+                        <td style="padding:10px; border:1px solid rgba(var(--color-primary-rgb),0.2); text-align:center;">${fmt(el.max)}</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+                table.style.display = 'table';
+                noMsg.style.display = 'none';
+            } else {
+                table.style.display = 'none';
+                noMsg.style.display = 'block';
+            }
+
+            // Pesos (vindos do Firebird via sync)
+            const isBruto = String(d.fornecimento || '').trim().toUpperCase() === 'BRUTO';
+            g('valPesoLiq').innerText = isBruto ? 'BRUTO' : formatKg(d.peso_liquido);
+            g('valPesoBruto').innerText = formatKg(d.peso_bruto);
+            g('valPesoPenca').innerText = formatKg(d.peso_penca);
+            g('valPesoCAlim').innerText = formatKg(d.peso_com_alimentacao);
+            g('valRendimento').innerText = formatPct(d.rendimento_metalico);
+            const formatNum = v => v != null && v !== '' ? parseFloat(v).toLocaleString('pt-BR', { maximumFractionDigits: 3 }) : '-';
+            g('valTempVazamentoMin').innerText = formatNum(d.temperatura_vazamento_min);
+            g('valTempVazamento').innerText = formatNum(d.temperatura_vazamento);
+            g('valTempFornoMin').innerText = formatNum(d.temperatura_forno_min);
+            g('valTempSaidaForno').innerText = formatNum(d.temperatura_forno);
+            g('valRelacaoMetalMolde').innerText = formatNum(d.relacao_metal_molde);
+            g('valRelacaoMoldeMetal').innerText = formatNum(d.relacao_molde_metal);
+            g('valNotas').innerText = d.obs_vazamento || d.notas || 'Nenhuma observação cadastrada.';
+
+            const imgEl = g('valFoto');
+            const iconEl = g('placeholderIcon');
+            const infoEl = g('noPhotoText');
+            if (d.foto_base64) {
+                imgEl.src = `data:image/jpeg;base64,${d.foto_base64}`;
+                imgEl.style.display = 'block';
+                iconEl.style.display = 'none';
+                infoEl.style.display = 'none';
+            } else {
+                imgEl.src = '';
+                imgEl.style.display = 'none';
+                iconEl.style.display = 'block';
+                infoEl.style.display = 'block';
+            }
+
+            const formatMec = v => (v != null && v !== '' && parseFloat(v) !== 0) ? parseFloat(v).toLocaleString('pt-BR', { maximumFractionDigits: 3 }) : '-';
+            g('valContracao').innerText = formatMec(d.contracao_mat);
+            g('valLimiteResistencia').innerText = formatMec(d.limite_resistencia_mat);
+            g('valLimiteEscoamento').innerText = formatMec(d.limite_escoamento_mat);
+            g('valAlongamento').innerText = formatMec(d.alongamento_mat);
+            g('valEstriccao').innerText = formatMec(d.estriccao_mat);
+            g('valReducaoArea').innerText = formatMec(d.reducao_area_mat);
+            g('valImpactoCharpy').innerText = formatMec(d.impacto_teste_charpy_mat);
+            g('valHbMax').innerText = formatMec(d.hb_max_mat);
+            g('valHbMin').innerText = formatMec(d.hb_mat);
+
+            g('printMetadata').innerText = 'Impressão: ' + new Date().toLocaleDateString('pt-BR') + ' ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) + ' | ID: ' + (d.pro_codigo || '-');
+        }
+
+        let allRecords = [];
+
+        async function openRecordsModal() {
+            const modal = document.getElementById('recordsModal');
+            const tbody = document.getElementById('recordsTableBody');
+            modal.style.display = 'flex';
+            tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:40px;"><div class="spinner"></div> Buscando registros...</td></tr>';
+            try {
+                const response = await fetch('/api/fichatecnicafusao/list/all');
+                allRecords = await response.json();
+                renderRecordsTable(allRecords);
+            } catch (err) {
+                tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:40px; color:#ef4444;">Erro: ${err.message}</td></tr>`;
+            }
+        }
+
+        function closeRecordsModal() {
+            document.getElementById('recordsModal').style.display = 'none';
+        }
+
+        function renderRecordsTable(list) {
+            const tbody = document.getElementById('recordsTableBody');
+            document.getElementById('recordsCount').innerText = list.length;
+            if (list.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:40px;">Nenhum registro encontrado.</td></tr>';
+                return;
+            }
+            const badge = v => v === 'Sim'
+                ? '<span style="color:#22c55e; font-weight:700;">✓</span>'
+                : '<span style="color:#6b7280;">✗</span>';
+            tbody.innerHTML = list.map(item => {
+                const data = item.DATA_FICHA ? new Date(item.DATA_FICHA).toLocaleDateString('pt-BR') : '-';
+                return `
+                    <tr>
+                        <td style="font-family:'JetBrains Mono'; font-weight:600; color:var(--color-primary);">${item.PRO_CODIGO}</td>
+                        <td style="font-weight:600;">${item.NOME_PRO || '-'}</td>
+                        <td style="color:var(--text-muted);">${item.CLIENTE_NOME || '-'}</td>
+                        <td>${item.MATERIAL || '-'}</td>
+                        <td>${item.LIGA || '-'}</td>
+                        <td style="text-align:center;">${badge(item.TEM_NOTAS)}</td>
+                        <td style="text-align:center;">${badge(item.TEM_FOTO)}</td>
+                        <td>${data}</td>
+                        <td style="text-align:center;"><button class="btn-view-record" onclick="loadFromList('${item.PRO_CODIGO}')">Ver</button></td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function loadFromList(codigo) {
+            document.getElementById('searchInput').value = codigo;
+            searchSheet();
+            closeRecordsModal();
+        }
+
+        document.querySelectorAll('.filter-input').forEach(input => {
+            input.addEventListener('input', () => {
+                const filters = Array.from(document.querySelectorAll('.filter-input')).map(i => ({
+                    val: i.value.toLowerCase().trim(), col: parseInt(i.dataset.col)
+                }));
+                const filtered = allRecords.filter(item => {
+                    const data = item.DATA_FICHA ? new Date(item.DATA_FICHA).toLocaleDateString('pt-BR') : '-';
+                    const fields = [
+                        item.PRO_CODIGO || '', item.NOME_PRO || '', item.CLIENTE_NOME || '',
+                        item.MATERIAL || '', item.LIGA || '',
+                        item.TEM_NOTAS || '', item.TEM_FOTO || '', data
+                    ];
+                    return filters.every(f => !f.val || String(fields[f.col]).toLowerCase().includes(f.val));
+                });
+                renderRecordsTable(filtered);
+            });
+        });
+
+        window.addEventListener('keydown', e => {
+            if (e.key === 'Escape' && document.getElementById('recordsModal').style.display === 'flex') closeRecordsModal();
+        });
+
+        function switchFicha(tipo) {
+            const URLS = { moldagem: 'fichatecmoldagem.html', acabamento: 'fichatecacabamento.html' };
+            const codigo = document.getElementById('searchInput').value.trim();
+            const url = URLS[tipo];
+            if (!url) return;
+            window.location.href = codigo ? `${url}?codigo=${encodeURIComponent(codigo)}` : url;
+        }
+
+        // ===== PESQUISA POR CORRIDA =====
+        let _corridaItens = [];
+        let _corridaInfo = null;
+
+        function fmtDateCorrida(iso) {
+            if (!iso) return '-';
+            const s = String(iso).split('T')[0];
+            if (s === '2026-12-31') return '-';
+            const [y, m, d] = s.split('-');
+            return `${d}/${m}/${y}`;
+        }
+
+        async function searchCorrida() {
+            const num = document.getElementById('corridaInput').value.trim();
+            if (!num) return;
+            const panel = document.getElementById('corridaPanel');
+            const body = document.getElementById('corridaProductsBody');
+            document.getElementById('initialStatus').style.display = 'none';
+            document.getElementById('sheetContent').style.display = 'none';
+            document.getElementById('pdf-btn-wrapper').style.display = 'none';
+            panel.style.display = 'block';
+            document.getElementById('corridaInfoBar').innerHTML = '';
+            document.getElementById('selAllCheckbox').checked = false;
+            body.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:40px;"><div class="spinner"></div> Buscando corrida...</td></tr>';
+            try {
+                const resp = await fetch(`/api/insumos-moldagem/corrida/${encodeURIComponent(num)}`);
+                const data = await resp.json();
+                if (!data.success) throw new Error(data.error || 'Erro na consulta');
+                _corridaItens = data.itens || [];
+                _corridaInfo = data.corrida || null;
+                renderCorridaPanel(data.corrida, _corridaItens);
+            } catch (err) {
+                _corridaItens = [];
+                _corridaInfo = null;
+                document.getElementById('corridaInfoBar').innerHTML = '';
+                body.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:40px; color:#ef4444;">${err.message}</td></tr>`;
+                updateSelCount();
+            }
+        }
+
+        function renderCorridaPanel(corrida, itens) {
+            const bar = document.getElementById('corridaInfoBar');
+            bar.innerHTML = `
+                <span class="corrida-chip num"><i class="fa-solid fa-fire-flame-curved"></i> #${corrida.corrida_cor}</span>
+                <span class="corrida-chip"><i class="fa-regular fa-calendar"></i> ${fmtDateCorrida(corrida.data_programada) !== '-' ? fmtDateCorrida(corrida.data_programada) : fmtDateCorrida(corrida.data_cor)}</span>
+                <span class="corrida-chip"><i class="fa-solid fa-industry"></i> Forno ${corrida.forno_cor || '?'}</span>
+                ${corrida.material_mat ? `<span class="corrida-chip"><i class="fa-solid fa-flask"></i> ${corrida.material_mat}</span>` : ''}
+                <span class="corrida-chip"><i class="fa-solid fa-list"></i> ${itens.length} ${itens.length === 1 ? 'item' : 'itens'}</span>`;
+
+            const body = document.getElementById('corridaProductsBody');
+            if (!itens.length) {
+                body.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:40px;">Nenhum produto nesta corrida.</td></tr>';
+                updateSelCount();
+                return;
+            }
+            body.innerHTML = itens.map((it, i) => `
+                <tr onclick="if(event.target.tagName!=='INPUT'){const c=this.querySelector('input');c.checked=!c.checked;updateSelCount();}">
+                    <td style="text-align:center;"><input type="checkbox" class="corrida-cb" value="${it.produto_pcp}" checked onchange="updateSelCount()"></td>
+                    <td style="color:var(--text-muted); font-family:'JetBrains Mono',monospace;">${it.sequencia || i + 1}</td>
+                    <td class="corrida-cod">${it.produto_pcp}</td>
+                    <td>${it.nome_pro || '—'}</td>
+                    <td style="text-align:right; font-weight:700;">${it.quantidade_programada || 0}</td>
+                </tr>`).join('');
+            updateSelCount();
+        }
+
+        function toggleSelectAllCorrida(forceState) {
+            const checkboxes = document.querySelectorAll('.corrida-cb');
+            if (!checkboxes.length) return;
+            let target;
+            if (typeof forceState === 'boolean') {
+                target = forceState;
+            } else {
+                target = !Array.from(checkboxes).every(c => c.checked);
+                document.getElementById('selAllCheckbox').checked = target;
+            }
+            checkboxes.forEach(c => c.checked = target);
+            updateSelCount();
+        }
+
+        function updateSelCount() {
+            const checkboxes = Array.from(document.querySelectorAll('.corrida-cb'));
+            const sel = checkboxes.filter(c => c.checked).length;
+            document.getElementById('selCount').innerText = sel;
+            document.getElementById('selCountF').innerText = sel;
+            document.getElementById('btnGerarCapa').disabled = sel === 0;
+            document.getElementById('btnGerarFichas').disabled = sel === 0;
+            const all = document.getElementById('selAllCheckbox');
+            all.checked = checkboxes.length > 0 && sel === checkboxes.length;
+            document.getElementById('selAllLabel').innerText = all.checked ? 'Desmarcar todos' : 'Selecionar todos';
+        }
+
+        // Define a orientação do PDF dinamicamente (paisagem p/ capa, retrato p/ fichas).
+        function setPrintOrientation(orient) {
+            let s = document.getElementById('erus-print-orient');
+            if (!s) { s = document.createElement('style'); s.id = 'erus-print-orient'; document.head.appendChild(s); }
+            const margin = orient === 'landscape' ? '10mm' : '8mm';
+            s.textContent = `@media print { @page { size: A4 ${orient}; margin: ${margin}; } }`;
+        }
+
+        const _selecionados = () => Array.from(document.querySelectorAll('.corrida-cb:checked')).map(c => c.value);
+
+        // PDF 1 — CAPA (folha deitada / paisagem), só a programação da corrida.
+        function gerarCapaPDF() {
+            const codigos = _selecionados();
+            if (!codigos.length) return;
+            const selItens = _corridaItens.filter(it => codigos.includes(String(it.produto_pcp)));
+            const container = document.getElementById('multiSheetContainer');
+            container.innerHTML = '';
+            const cover = buildCorridaCover(_corridaInfo, selItens);
+            if (!cover) return;
+            container.appendChild(cover);
+            setPrintOrientation('landscape');
+            const cleanup = () => {
+                document.body.classList.remove('printing-cover');
+                container.innerHTML = '';
+                window.removeEventListener('afterprint', cleanup);
+            };
+            window.addEventListener('afterprint', cleanup);
+            const waitFonts = (document.fonts && document.fonts.ready) ? document.fonts.ready : Promise.resolve();
+            waitFonts.then(() => {
+                // aguarda o logo (e qualquer imagem) carregar antes de imprimir
+                const imgs = Array.from(container.querySelectorAll('img'));
+                const waitImgs = new Promise(resolve => {
+                    let pending = imgs.filter(i => !i.complete).length;
+                    if (!pending) return resolve();
+                    imgs.forEach(i => {
+                        if (i.complete) return;
+                        const done = () => { if (--pending <= 0) resolve(); };
+                        i.addEventListener('load', done);
+                        i.addEventListener('error', done);
+                    });
+                });
+                waitImgs.then(() => {
+                    document.body.classList.add('printing-cover');
+                    requestAnimationFrame(() => window.print());
+                });
+            });
+        }
+
+        // PDF 2 — FICHAS (em pé / retrato): ficha de fusão individual de cada item selecionado.
+        async function gerarFichasPDF() {
+            const codigos = _selecionados();
+            if (!codigos.length) return;
+            const btn = document.getElementById('btnGerarFichas');
+            const original = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<div class="spinner" style="width:14px;height:14px;border-width:2px;margin:0;"></div> Gerando...';
+            try {
+                const fichas = [];
+                const faltando = [];
+                for (const codigo of codigos) {
+                    try {
+                        const resp = await fetch(`/api/fichatecnicafusao/${encodeURIComponent(codigo)}`);
+                        const d = await resp.json();
+                        if (resp.ok) fichas.push(d);
+                        else faltando.push(codigo);
+                    } catch {
+                        faltando.push(codigo);
+                    }
+                }
+                if (!fichas.length) {
+                    alert('Nenhuma das peças selecionadas possui ficha técnica de fusão cadastrada.');
+                    return;
+                }
+                if (faltando.length) alert('Sem ficha técnica de fusão (ignoradas): ' + faltando.join(', '));
+                setPrintOrientation('portrait');
+                abrirPdfFichas(fichas);
+            } finally {
+                btn.innerHTML = original;
+                btn.disabled = false;
+            }
+        }
+
+        // Mede a ficha (zoom p/ caber em 1 folha A4) NO MESMO contexto do #sheetContent.
+        // Retorna o zoom (<= 1) e deixa imagem/observações com height:auto (estado de impressão),
+        // para o clone capturar exatamente esse estado.
+        const PRINT_W_PX_FT = 734, PRINT_H_PX_FT = 1063;
+        function computeFichaZoom(content, sheet) {
+            const img = content.querySelector('.image-container-large');
+            const notes = content.querySelector('.notes-area');
+            content.style.zoom = '1';
+            if (img) { img.style.flex = '1'; img.style.height = 'auto'; img.style.minHeight = '380px'; }
+            if (notes) { notes.style.flex = '1'; notes.style.height = 'auto'; notes.style.minHeight = '380px'; notes.style.overflow = 'hidden'; }
+            let W = PRINT_W_PX_FT;
+            content.style.width = W + 'px'; content.style.maxWidth = W + 'px';
+            void content.offsetHeight;
+            let H = sheet.getBoundingClientRect().height;
+            content.style.width = ''; content.style.maxWidth = '';
+            computeFichaZoom.lastW = W;
+            if (H <= PRINT_H_PX_FT) { computeFichaZoom.lastH = H; return 1; }
+            let safety = 0;
+            while (H * PRINT_W_PX_FT / W > PRINT_H_PX_FT && safety < 20) {
+                W = Math.ceil(W * 1.08);
+                content.style.width = W + 'px'; content.style.maxWidth = W + 'px';
+                void content.offsetHeight;
+                H = sheet.getBoundingClientRect().height; safety++;
+            }
+            content.style.width = ''; content.style.maxWidth = '';
+            const zFinal = Math.min(1, PRINT_W_PX_FT / W);
+            computeFichaZoom.lastW = W;
+            computeFichaZoom.lastH = H * zFinal;
+            return zFinal;
+        }
+
+        // Gera o PDF reaproveitando EXATAMENTE o layout/CSS da ficha individual.
+        // Cada ficha é medida no PRÓPRIO #sheetContent (o mesmo elemento usado na busca por código),
+        // de forma SÍNCRONA (sem repintar a tela), o zoom é "assado" no clone de impressão e NÃO é
+        // remedido fora da tela — assim a corrida sai sempre igual à ficha gerada por código.
+        // Monta a capa (folha deitada) com o cabeçalho da corrida + tabela item a item.
+        function buildCorridaCover(corrida, itens) {
+            if (!corrida || !itens || !itens.length) return null;
+            const hoje = new Date().toLocaleDateString('pt-BR');
+            const ano = (corrida.data_programada || corrida.data_cor || '').split('-')[0] || new Date().getFullYear();
+            const dataProg = fmtDateCorrida(corrida.data_programada) !== '-' ? fmtDateCorrida(corrida.data_programada) : fmtDateCorrida(corrida.data_cor);
+            const num = v => Number(v) || 0;
+
+            let totProg = 0, totMoldes = 0;
+            const linhas = itens.map((it, i) => {
+                const prog = num(it.quantidade_programada);
+                const figuras = num(it.qtde_figuras);
+                const moldes = figuras > 0 ? Math.round(prog / figuras) : 0;
+                totProg += prog; totMoldes += moldes;
+                return `<tr>
+                    <td class="num">${it.sequencia || i + 1}</td>
+                    <td class="num">${it.op_codigo || '-'}</td>
+                    <td class="cod">${it.produto_pcp}</td>
+                    <td class="txt">${it.nome_pro || '-'}</td>
+                    <td class="num">${prog.toLocaleString('pt-BR')}</td>
+                    <td class="num">${figuras || '-'}</td>
+                    <td class="num">${moldes}</td>
+                </tr>`;
+            }).join('');
+
+            const el = document.createElement('div');
+            el.className = 'print-cover';
+            el.innerHTML = `
+                <div class="cover-top">
+                    <div class="cover-brand-wrap">
+                        <img class="cover-logo" src="logo.png" alt="Fundição Erus">
+                        <div class="cover-brand">
+                            <span class="cb-empresa">FUNDIÇÃO ERUS LTDA</span>
+                            <span class="cb-rel">Relatório Ficha de Apontamento : Fusão</span>
+                            <span class="cb-emissao">Emissão: ${hoje}</span>
+                        </div>
+                    </div>
+                    <div class="cover-meta">
+                        <div><b>Tipo Data:</b> PROGRAMAÇÃO</div>
+                        <div><b>Situação Aciaria:</b> TODOS</div>
+                        <div><b>Situação do Apontamento:</b> TODOS</div>
+                    </div>
+                </div>
+                <div class="cover-corrida">
+                    <span class="cc-item"><b>Nº Corrida:</b> ${corrida.corrida_cor} / ${ano}</span>
+                    <span class="cc-item"><b>Material:</b> ${corrida.material_mat || '-'}</span>
+                    <span class="cc-item"><b>Data programada:</b> ${dataProg}</span>
+                    <span class="cc-item"><b>Forno:</b> ${corrida.forno_cor || '-'}</span>
+                </div>
+                <table class="cover-table">
+                    <thead>
+                        <tr>
+                            <th>Seq</th>
+                            <th>OP</th>
+                            <th>Código</th>
+                            <th>Peça / modelo</th>
+                            <th>Quant.<br>Programada</th>
+                            <th>Quant.<br>Figuras</th>
+                            <th>Quant.<br>Moldes</th>
+                        </tr>
+                    </thead>
+                    <tbody>${linhas}</tbody>
+                    <tfoot>
+                        <tr>
+                            <td colspan="4"></td>
+                            <td>${totProg.toLocaleString('pt-BR')}</td>
+                            <td></td>
+                            <td>${totMoldes}</td>
+                        </tr>
+                    </tfoot>
+                </table>`;
+            return el;
+        }
+
+        function abrirPdfFichas(fichas) {
+            const container = document.getElementById('multiSheetContainer');
+            const sc = document.getElementById('sheetContent');
+            container.innerHTML = '';
+
+            const build = () => {
+                const prevDisplay = sc.style.display;
+                const snapshot = sc.innerHTML; // preserva a ficha atualmente exibida
+
+                sc.style.display = 'block'; // medição no MESMO contexto da busca por código
+                fichas.forEach(d => {
+                    populateData(d, sc);
+                    const scSheet = sc.querySelector('.sheet-container');
+                    const z = computeFichaZoom(sc, scSheet); // deixa img/notes em height:auto
+                    const clone = scSheet.cloneNode(true);   // captura conteúdo + estado de impressão
+                    const wrap = document.createElement('div');
+                    wrap.className = 'print-sheet';
+                    wrap.style.setProperty('--print-sheet-zoom', z);
+                    wrap.style.setProperty('--print-sheet-width', Math.ceil(computeFichaZoom.lastW || PRINT_W_PX_FT) + 'px');
+                    wrap.appendChild(clone);
+                    container.appendChild(wrap);
+                });
+
+                // restaura o #sheetContent exatamente como estava (síncrono -> sem flash visível)
+                sc.innerHTML = snapshot;
+                sc.style.display = prevDisplay;
+                sc.style.zoom = ''; sc.style.width = ''; sc.style.maxWidth = '';
+
+                // espera as imagens dos clones carregarem e imprime
+                const imgs = Array.from(container.querySelectorAll('img')).filter(i => i.getAttribute('src'));
+                const waitImages = new Promise(resolve => {
+                    let pending = imgs.filter(i => !i.complete).length;
+                    if (!pending) return resolve();
+                    imgs.forEach(i => {
+                        if (i.complete) return;
+                        const done = () => { if (--pending <= 0) resolve(); };
+                        i.addEventListener('load', done);
+                        i.addEventListener('error', done);
+                    });
+                });
+                waitImages.then(() => requestAnimationFrame(go));
+            };
+
+            const go = () => {
+                const wrapper = document.querySelector('.page-wrapper');
+                if (wrapper) {
+                    wrapper.dataset.printMarginLeft = wrapper.style.getPropertyValue('margin-left');
+                    wrapper.dataset.printMarginLeftPriority = wrapper.style.getPropertyPriority('margin-left');
+                    wrapper.style.setProperty('margin-left', '0', 'important');
+                }
+                document.body.classList.add('printing-multi');
+                const cleanup = () => {
+                    document.body.classList.remove('printing-multi');
+                    container.innerHTML = '';
+                    if (wrapper) {
+                        const prev = wrapper.dataset.printMarginLeft || '';
+                        const priority = wrapper.dataset.printMarginLeftPriority || '';
+                        if (prev) wrapper.style.setProperty('margin-left', prev, priority);
+                        else wrapper.style.removeProperty('margin-left');
+                        delete wrapper.dataset.printMarginLeft;
+                        delete wrapper.dataset.printMarginLeftPriority;
+                    }
+                    window.removeEventListener('afterprint', cleanup);
+                };
+                window.addEventListener('afterprint', cleanup);
+                window.print();
+            };
+
+            // fontes prontas antes de medir (métricas corretas), depois constrói/imprime
+            const waitFonts = (document.fonts && document.fonts.ready) ? document.fonts.ready : Promise.resolve();
+            waitFonts.then(build);
+        }
+
+        window.onload = () => {
+            const params = new URLSearchParams(window.location.search);
+            const corrida = params.get('corrida');
+            if (corrida) {
+                document.getElementById('corridaInput').value = corrida;
+                searchCorrida();
+            } else {
+                document.getElementById('corridaInput').focus();
+            }
+        };
+
+        // Auto-scale para impressão A4 — reduz a ficha (zoom <= 1) até caber INTEIRA em 1 folha.
+        (function () {
+            const PRINT_W_PX = 734;
+            const PRINT_H_PX = 1063;
+            // content = o "bloco-página" (#sheetContent ou .print-sheet); sheet = a .sheet-container dentro.
+            function scaleEl(content, sheet, img, notes) {
+                content.style.zoom = '1';
+                if (img) { img.style.flex = '1'; img.style.height = 'auto'; img.style.minHeight = '380px'; }
+                if (notes) { notes.style.flex = '1'; notes.style.height = 'auto'; notes.style.minHeight = '380px'; notes.style.overflow = 'hidden'; }
+                let W = PRINT_W_PX;
+                content.style.width = W + 'px';
+                content.style.maxWidth = W + 'px';
+                void content.offsetHeight;
+                let H = sheet.getBoundingClientRect().height;
+                content.style.width = '';
+                content.style.maxWidth = '';
+                if (H <= PRINT_H_PX) { content.style.zoom = '1'; return H; }
+                let safety = 0;
+                while (H * PRINT_W_PX / W > PRINT_H_PX && safety < 20) {
+                    W = Math.ceil(W * 1.08);
+                    content.style.width = W + 'px';
+                    content.style.maxWidth = W + 'px';
+                    void content.offsetHeight;
+                    H = sheet.getBoundingClientRect().height;
+                    safety++;
+                }
+                content.style.width = '';
+                content.style.maxWidth = '';
+                const zFinal = Math.min(1, PRINT_W_PX / W);
+                content.style.zoom = zFinal;
+                return H * zFinal; // altura renderizada (pós-zoom)
+            }
+            function resetEl(content, img, notes) {
+                if (content) { content.style.zoom = ''; content.style.width = ''; content.style.maxWidth = ''; }
+                if (img) { img.style.flex = '1'; img.style.height = ''; img.style.minHeight = '380px'; }
+                if (notes) { notes.style.flex = '1'; notes.style.height = ''; notes.style.overflow = 'auto'; notes.style.minHeight = '380px'; }
+            }
+            function applyScale() {
+                // Capa da programação é impressa em paisagem sem reescala — não mexer.
+                if (document.body.classList.contains('printing-cover')) return;
+                if (document.body.classList.contains('printing-multi') || document.body.classList.contains('printing-cover')) return;
+                const content = document.getElementById('sheetContent');
+                const sheet = document.querySelector('#sheetContent .sheet-container');
+                const wrapper = document.querySelector('.page-wrapper');
+                if (!content || !sheet) return;
+                if (wrapper) {
+                    wrapper.dataset.printMarginLeft = wrapper.style.getPropertyValue('margin-left');
+                    wrapper.dataset.printMarginLeftPriority = wrapper.style.getPropertyPriority('margin-left');
+                    wrapper.style.setProperty('margin-left', '0', 'important');
+                }
+                scaleEl(content, sheet, document.getElementById('imageContainer'), document.getElementById('notesObservationsPanel'));
+            }
+            function resetScale() {
+                if (document.body.classList.contains('printing-cover')) return;
+                if (document.body.classList.contains('printing-multi') || document.body.classList.contains('printing-cover')) return;
+                const content = document.getElementById('sheetContent');
+                const wrapper = document.querySelector('.page-wrapper');
+                resetEl(content, document.getElementById('imageContainer'), document.getElementById('notesObservationsPanel'));
+                if (wrapper) {
+                    const prev = wrapper.dataset.printMarginLeft || '';
+                    const priority = wrapper.dataset.printMarginLeftPriority || '';
+                    if (prev) wrapper.style.setProperty('margin-left', prev, priority);
+                    else wrapper.style.removeProperty('margin-left');
+                    delete wrapper.dataset.printMarginLeft;
+                    delete wrapper.dataset.printMarginLeftPriority;
+                }
+            }
+            window.addEventListener('beforeprint', applyScale);
+            window.addEventListener('afterprint', resetScale);
+        })();
+    </script>
+    <script src="session-guard.js"></script>
+</body>
+</html>
