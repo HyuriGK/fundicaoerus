@@ -119,7 +119,8 @@ router.get('/corrida/:numero', async (req, res) => {
                 ft.qtde_figuras,
                 COALESCE(ftf.foto_base64, ft.foto_base64) AS foto_base64,
                 fp.data->>'NOME_CLIENTE' AS cliente_nome,
-                COALESCE(fp.data->>'ENTREGA_PED', fp.data->>'OP_ENTREGA') AS data_entrega
+                COALESCE(fp.data->>'ENTREGA_PED', fp.data->>'OP_ENTREGA') AS data_entrega,
+                fp.data->>'LOTE_PCS' AS lote_peca
             FROM corridas_programadas_sync c
             LEFT JOIN ficha_tecnica ft ON ft.pro_codigo_fic = c.produto_pcp::text
             LEFT JOIN ficha_tecnica_fusao ftf ON ftf.pro_codigo = c.produto_pcp::text
@@ -144,6 +145,7 @@ router.get('/corrida/:numero', async (req, res) => {
                 peso_pcp:              r.peso_pcp,
                 cliente_nome:          r.cliente_nome || '',
                 data_entrega:          r.data_entrega || '',
+                lote_peca:             r.lote_peca || '',
                 foto_base64:           r.foto_base64 || '',
                 tipo_modelo:           r.tipo_modelo_desc || '',
                 qtde_caixas_macho:     Number(r.qtde_caixas_macho) || 0,
