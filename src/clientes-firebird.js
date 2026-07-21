@@ -361,6 +361,7 @@ async function handleDigisacInternalRedirect(contactId, targetName) {
         return { success: true, ignored: true, action: 'internal_redirect_missing_contact' };
     }
 
+    const notification = await sendDigisacMessage(contactId, `Conversa transferida para ${targetName === 'GERUZA MENDES' ? 'Geruza' : 'Elisangela'}.`);
     const transfer = await transferDigisacTicketTo(
         contactId,
         DIGISAC_COMERCIAL_DEPARTMENT_ID,
@@ -374,6 +375,7 @@ async function handleDigisacInternalRedirect(contactId, targetName) {
         success: true,
         action: 'atalho_interno_digisac',
         target: targetName,
+        notification,
         transfer,
         atendimentoTag
     };
