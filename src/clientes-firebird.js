@@ -417,7 +417,6 @@ async function markDigisacSatisfactionAnswered(contactId) {
         WHERE contact_id = $1
           AND answered_at IS NULL
           AND expired_notice_sent_at IS NULL
-          AND expires_at > NOW()
         RETURNING contact_id
     `, [contactId]);
 
@@ -433,6 +432,7 @@ async function processExpiredDigisacSatisfactionSurveys() {
         WHERE answered_at IS NULL
           AND expired_notice_sent_at IS NULL
           AND expires_at <= NOW()
+          AND expires_at >= NOW() - INTERVAL '10 minutes'
         ORDER BY expires_at ASC
         LIMIT 20
     `);
