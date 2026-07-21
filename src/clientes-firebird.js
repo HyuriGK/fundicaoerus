@@ -23,6 +23,11 @@ const DIGISAC_USER_IDS = {
     'ELISANGELA': process.env.DIGISAC_USER_ELISANGELA_ID || '9cad129c-20bc-4a38-9f14-9d2fa664017c'
 };
 
+const DIGISAC_INTERNAL_REDIRECTS = {
+    '.77': 'ELISANGELA',
+    '.99': 'GERUZA MENDES'
+};
+
 async function ensureResponsaveisTable() {
     await pool.query(`
         CREATE TABLE IF NOT EXISTS clientes_responsavel_comercial (
@@ -344,6 +349,34 @@ function extractDigisacUserOption(req) {
     const trimmed = String(messageText).trim();
     if (/^[1-3]$/.test(trimmed)) return trimmed;
     return '';
+}
+
+function extractDigisacInternalRedirect(req) {
+    const text = String(getDigisacMessageText(req) || findTextInPayload(req.body) || '').trim().toLowerCase();
+    return DIGISAC_INTERNAL_REDIRECTS[text] || '';
+}
+
+async function handleDigisacInternalRedirect(contactId, targetName) {
+    if (!contactId || !targetName) {
+        return { success: true, ignored: true, action: 'internal_redirect_missing_contact' };
+    }
+
+    const transfer = await transferDigisacTicketTo(
+        contactId,
+        DIGISAC_COMERCIAL_DEPARTMENT_ID,
+        DIGISAC_USER_IDS[targetName] || null,
+        `Atalho interno: atendimento redirecionado para ${targetName}.`
+    );
+    const atendimentoTag = await addDigisacEmAtendimentoTag(contactId);
+    await clearDigisacClienteSession(contactId);
+
+    return {
+        success: true,
+        action: 'atalho_interno_digisac',
+        target: targetName,
+        transfer,
+        atendimentoTag
+    };
 }
 
 function findDocumentInPayload(value) {
@@ -1129,6 +1162,12 @@ router.all('/digisac/consultor', async (req, res) => {
         const directCommand = String(req.body?.command || req.body?.comando || req.query.command || req.query.comando || '').trim();
         const command = directCommand || String(findCommandInPayload(req.body) || '').trim();
         let commandNormalized = command.toLowerCase();
+        const internalRedirectTarget = extractDigisacInternalRedirect(req);
+        if (internalRedirectTarget) {
+            await saveDigisacDebug(req, internalRedirectTarget);
+            const result = await handleDigisacInternalRedirect(contactId, internalRedirectTarget);
+            return res.json(result);
+        }
         const session = await getDigisacClienteSession(contactId);
         const incomingOption = extractDigisacUserOption(req);
         if (!commandNormalized && session && incomingOption) {
