@@ -438,6 +438,17 @@ async function processExpiredDigisacSatisfactionSurveys() {
     `);
 
     for (const row of result.rows) {
+        const pending = await pool.query(`
+            SELECT contact_id
+            FROM digisac_satisfaction_surveys
+            WHERE contact_id = $1
+              AND answered_at IS NULL
+              AND expired_notice_sent_at IS NULL
+              AND expires_at <= NOW()
+            LIMIT 1
+        `, [row.contact_id]);
+        if (pending.rowCount === 0) continue;
+
         const notification = await sendDigisacMessage(row.contact_id, buildDigisacExpiredSatisfactionMessage());
         await pool.query(`
             UPDATE digisac_satisfaction_surveys
@@ -1257,6 +1268,10 @@ router.all('/digisac/consultor', async (req, res) => {
         const earlyContactId = req.body?.contactId || req.body?.contact_id || req.query.contactId || req.query.contact_id || findContactIdInPayload(req.body);
         const earlyMessageText = getDigisacMessageText(req) || findTextInPayload(req.body);
         const isFlowWebhookCommand = ['consulta_cliente', 'consulta_cnpj_contato', 'consulta_contato', 'verifica_cnpj_contato', 'opcao_cliente'].includes(earlyCommand);
+        const earlySatisfactionReplyText = String(earlyMessageText || '').trim();
+        if (/^[1-5]$/.test(earlySatisfactionReplyText)) {
+            await markDigisacSatisfactionAnswered(earlyContactId);
+        }
 
         if (isDigisacWebhookFromBot(req) && isLikelyDigisacSatisfactionSurveyText(earlyMessageText)) {
             const expiresAt = new Date(Date.now() + DIGISAC_SATISFACTION_TTL_MINUTES * 60000);
@@ -1289,10 +1304,6 @@ router.all('/digisac/consultor', async (req, res) => {
             await saveDigisacDebug(req, internalRedirectTarget);
             const result = await handleDigisacInternalRedirect(contactId, internalRedirectTarget);
             return res.json(result);
-        }
-        const satisfactionReplyText = String(getDigisacMessageText(req) || '').trim();
-        if (/^[1-5]$/.test(satisfactionReplyText)) {
-            await markDigisacSatisfactionAnswered(contactId);
         }
         const session = await getDigisacClienteSession(contactId);
         const incomingOption = extractDigisacUserOption(req);
