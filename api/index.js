@@ -67,7 +67,7 @@ app.use((req, res, next) => {
 // JWT Authentication middleware
 app.use('/api', function(req, res, next) {
     // Public paths that don't require authentication
-    var publicPaths = ['/auth', '/register', '/health', '/permissions', '/page-locks/sync-lock', '/page-locks/sync-unlock', '/page-locks/sync-progress', '/clientes-firebird/digisac', ''];
+    var publicPaths = ['/auth', '/register', '/health', '/permissions', '/page-locks/sync-lock', '/page-locks/sync-unlock', '/page-locks/sync-progress', '/clientes-firebird/digisac', '/cron', ''];
     var isPublic = publicPaths.some(function(p) {
         return p === '' ? (req.path === '' || req.path === '/') : (req.path === p || req.path.startsWith(p + '/'));
     });

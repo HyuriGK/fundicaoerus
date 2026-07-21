@@ -380,6 +380,20 @@ function buildDigisacExpiredSatisfactionMessage() {
     return 'O prazo para responder a pesquisa de satisfação expirou.\n\nPor favor, não envie uma nota agora, pois isso pode iniciar um novo atendimento automaticamente.';
 }
 
+function isLikelyDigisacSatisfactionSurveyText(text) {
+    const normalized = String(text || '').trim().toLowerCase();
+    if (!normalized) return false;
+    return normalized.includes('como você avalia o atendimento')
+        || normalized.includes('como voce avalia o atendimento')
+        || (
+            normalized.includes('excelente')
+            && normalized.includes('bom')
+            && normalized.includes('regular')
+            && normalized.includes('ruim')
+            && normalized.includes('muito ruim')
+        );
+}
+
 async function saveDigisacSatisfactionSurvey(contactId, expiresAt) {
     if (!contactId || !expiresAt) return null;
 
@@ -1226,7 +1240,20 @@ router.all('/digisac/consultor', async (req, res) => {
         }
 
         const earlyCommand = String(req.body?.command || req.body?.comando || req.query.command || req.query.comando || findCommandInPayload(req.body) || '').trim().toLowerCase();
+        const earlyContactId = req.body?.contactId || req.body?.contact_id || req.query.contactId || req.query.contact_id || findContactIdInPayload(req.body);
+        const earlyMessageText = getDigisacMessageText(req) || findTextInPayload(req.body);
         const isFlowWebhookCommand = ['consulta_cliente', 'consulta_cnpj_contato', 'consulta_contato', 'verifica_cnpj_contato', 'opcao_cliente'].includes(earlyCommand);
+
+        if (isDigisacWebhookFromBot(req) && isLikelyDigisacSatisfactionSurveyText(earlyMessageText)) {
+            const expiresAt = new Date(Date.now() + DIGISAC_SATISFACTION_TTL_MINUTES * 60000);
+            const result = await saveDigisacSatisfactionSurvey(earlyContactId, expiresAt);
+            return res.json({
+                success: true,
+                action: 'pesquisa_satisfacao_detectada',
+                expiresAt,
+                result
+            });
+        }
 
         if (isDigisacWebhookFromBot(req) && !isFlowWebhookCommand) {
             return res.json({ success: true, ignored: true, action: 'bot_message', message: 'Evento Digisac originado pelo bot ignorado.' });
@@ -2046,7 +2073,7 @@ router.all('/digisac/satisfaction/start', async (req, res) => {
     }
 });
 
-router.post('/digisac/satisfaction/process-expired', async (req, res) => {
+router.all('/digisac/satisfaction/process-expired', async (req, res) => {
     try {
         if (!hasValidDigisacToken(req)) {
             return res.status(401).json({ success: false, error: 'Token Digisac inválido.' });
