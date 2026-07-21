@@ -312,7 +312,6 @@
             font-family:var(--font-mono); font-size:0.72rem; font-weight:800;
             text-transform:uppercase; cursor:pointer; outline:none; padding:0 8px;
         }
-        #clientsRecordsLimit:focus { border-color:var(--color-primary); }
         #clientsRecordsLimit option { background:#18181b; color:#f4f4f5; }
         #clientsRecordsModal .crm-table-wrap {
             flex:1; overflow:auto;
@@ -646,6 +645,7 @@ let clientRecordsLimit = 100;
 let clientsMap = null;
 let clientsHeatLayer = null;
 let clientsCityLayer = null;
+let excludedClients = new Set();
 
 const MONTHS = ['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'];
 const COMMERCIAL_OWNER_OPTIONS = ['GERUZA MENDES', 'GUILHERME FENALI', 'ELISANGELA', 'MARIA EDUARDA'];
@@ -694,7 +694,8 @@ window.onload = async function() {
     }
 
     buildMonthBtns();
-    await Promise.all([loadRatings(), loadPreferences(), loadData()]);
+    await Promise.all([loadRatings(), loadPreferences()]);
+    await loadData();
 };
 
 function buildMonthBtns() {
@@ -755,8 +756,12 @@ async function loadRatings() {
 
 async function loadPreferences() {
     try {
-        const res = await (await fetch('/api/preferences/fat_peso_overrides')).json();
-        if (res.success) fatPesoOverrides = new Map(Object.entries(res.data || {}));
+        const [fatPesoRes, excludedRes] = await Promise.all([
+            fetch('/api/preferences/fat_peso_overrides').then(r => r.json()),
+            fetch('/api/preferences/excluded_clients').then(r => r.json())
+        ]);
+        if (fatPesoRes.success) fatPesoOverrides = new Map(Object.entries(fatPesoRes.data || {}));
+        if (excludedRes.success) excludedClients = new Set(excludedRes.data || []);
     } catch(e) {}
 }
 
@@ -767,12 +772,11 @@ async function loadData() {
         if (!json.success) return;
 
         allData = json.data.map(item => {
-            // _exclFat: filtro para faturamento (valor) — exclui sem pedido e modelos além de gera_financeiro/excluido
-            if (item.gera_financeiro === 'N' || item.excluido_manualmente === true) { item._exclFat = true; return item; }
-            const semPedido = !item.pedido || String(item.pedido).trim() === '';
-            const cod  = String(item.codigoItem || '').trim();
-            const desc = String(item.descricao  || '').trim().toUpperCase();
-            item._exclFat = semPedido || (cod.endsWith('1') && desc.startsWith('MODELO'));
+            const isService = isServiceClient(item);
+            const name = (item.clienteNome || 'DESCONHECIDO').trim();
+            item._exclFat = item.gera_financeiro === 'N'
+                || (!isService && item.excluido_manualmente === true)
+                || (!isService && excludedClients.has(name));
             return item;
         });
 
@@ -780,7 +784,9 @@ async function loadData() {
     } catch(e) { console.error(e); toast('Erro', 'Falha ao carregar dados de faturamento.', 'danger'); }
 }
 
-function calcTotal(item) { return (item.valorUnitario || 0) * (item.quantidade || 0); }
+function calcTotal(item) {
+    return item.valorTotalOriginal ?? ((item.valorUnitario || 0) * (item.quantidadeOriginal ?? item.quantidade ?? 0));
+}
 
 function applyFilters() {
     const yr = document.getElementById('yearSelect').value;
