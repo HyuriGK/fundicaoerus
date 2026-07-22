@@ -672,6 +672,9 @@ async function closeDigisacTicket(contactId, comments) {
     const body = {
         ticketTopicIds: [],
         comments: comments || 'Atendimento encerrado manualmente pelo atalho interno .100.',
+        flag: 'manual_close_no_survey',
+        triggerFlag: 'manual_close_no_survey',
+        signalFlag: 'manual_close_no_survey',
         sendSurvey: false,
         sendEvaluation: false,
         sendSatisfactionSurvey: false,
