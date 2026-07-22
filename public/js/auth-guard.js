@@ -15,6 +15,19 @@
         }
 
         return originalFetch.call(this, url, options).then(function(response) {
+            if (response.status === 403 && !window.location.pathname.endsWith('login.html')) {
+                response.clone().json().then(function(data) {
+                    if (data && data.code === 'ACCESS_HOURS_BLOCKED') {
+                        if (data.message) sessionStorage.setItem('erus_login_notice', data.message);
+                        localStorage.removeItem('erus_auth');
+                        localStorage.removeItem('erus_token');
+                        localStorage.removeItem('erus_role');
+                        localStorage.removeItem('erus_user');
+                        localStorage.removeItem('erus_username');
+                        window.location.replace('login.html');
+                    }
+                }).catch(function() {});
+            }
             if (response.status === 401 && !window.location.pathname.endsWith('login.html')) {
                 localStorage.removeItem('erus_auth');
                 localStorage.removeItem('erus_token');

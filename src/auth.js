@@ -3,7 +3,7 @@ const router = express.Router();
 const pool = require('../lib/db'); // Importa o db convertido
 const bcrypt = require('bcryptjs');
 const { logActivity } = require('./lib/logger');
-const { generateToken } = require('../lib/middleware');
+const { generateToken, isAccessExemptRole, isWithinAllowedAccessHours, getAccessHoursMessage } = require('../lib/middleware');
 const rateLimit = require('express-rate-limit');
 
 const loginLimiter = rateLimit({
@@ -54,6 +54,14 @@ router.post('/', loginLimiter, async (req, res) => {
                 });
             }
 
+            if (!isAccessExemptRole(userData.role) && !isWithinAllowedAccessHours()) {
+                return res.status(403).json({
+                    success: false,
+                    code: 'ACCESS_HOURS_BLOCKED',
+                    message: getAccessHoursMessage()
+                });
+            }
+
             // Sucesso!
             // 3. Atualiza o timestamp de último login e reseta force_logout (Fire & Forget)
             const deviceDetails = getDeviceDetails(req);
@@ -87,11 +95,15 @@ router.get('/check', async (req, res) => {
     try {
         const result = await pool.query('SELECT force_logout, role, name, can_view_monetary FROM users WHERE username = $1', [username]);
         if (!result.rows.length) return res.json({ force_logout: true }); // usuário deletado
+        const row = result.rows[0];
+        const outsideHours = !isAccessExemptRole(row.role) && !isWithinAllowedAccessHours();
         return res.json({
-            force_logout: result.rows[0].force_logout || false,
-            role: result.rows[0].role,
-            name: result.rows[0].name,
-            can_view_monetary: result.rows[0].can_view_monetary || false
+            force_logout: row.force_logout || outsideHours,
+            code: outsideHours ? 'ACCESS_HOURS_BLOCKED' : undefined,
+            message: outsideHours ? getAccessHoursMessage() : undefined,
+            role: row.role,
+            name: row.name,
+            can_view_monetary: row.can_view_monetary || false
         });
     } catch {
         return res.json({ force_logout: false });

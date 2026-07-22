@@ -11,6 +11,7 @@
             .then(function (r) { return r.json(); })
             .then(function (data) {
                 if (data.force_logout) {
+                    if (data.message) sessionStorage.setItem('erus_login_notice', data.message);
                     localStorage.clear();
                     window.location.replace('login.html');
                     return;
