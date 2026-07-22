@@ -12,6 +12,8 @@ const RESPONSAVEIS_COMERCIAIS = new Set([
 
 const DIGISAC_COMERCIAL_DEPARTMENT_ID = process.env.DIGISAC_COMERCIAL_DEPARTMENT_ID || 'a0dd4917-91dd-4d33-9dcc-567c3f3ddff2';
 const DIGISAC_FINANCEIRO_DEPARTMENT_ID = process.env.DIGISAC_FINANCEIRO_DEPARTMENT_ID || '6edd21e5-f88a-4e87-94e1-61a3e97f2466';
+const DIGISAC_NO_SURVEY_DEPARTMENT_ID = process.env.DIGISAC_NO_SURVEY_DEPARTMENT_ID || '';
+const DIGISAC_NO_SURVEY_DEPARTMENT_NAME = process.env.DIGISAC_NO_SURVEY_DEPARTMENT_NAME || 'Encerramento sem pesquisa';
 const DIGISAC_FINANCEIRO_USER_ID = process.env.DIGISAC_FINANCEIRO_USER_ID || 'c1d3e230-d249-4406-bbb1-2a9bd0e501f3';
 const DIGISAC_EM_ATENDIMENTO_TAG_ID = process.env.DIGISAC_EM_ATENDIMENTO_TAG_ID || '';
 const DIGISAC_EM_ATENDIMENTO_TAG_NAME = process.env.DIGISAC_EM_ATENDIMENTO_TAG_NAME || 'em_atendimento';
@@ -691,6 +693,20 @@ async function clearDigisacInternalRedirectSession(contactId) {
     return { success: true };
 }
 
+async function transferDigisacTicketToNoSurveyDepartment(contactId) {
+    if (!contactId) return null;
+    const departmentId = await getDigisacNoSurveyDepartmentId();
+    if (!departmentId) {
+        return { success: false, reason: 'no_survey_department_not_found', departmentName: DIGISAC_NO_SURVEY_DEPARTMENT_NAME };
+    }
+    return transferDigisacTicketTo(
+        contactId,
+        departmentId,
+        null,
+        'Atalho interno .100: transferido para Encerramento sem pesquisa antes do fechamento.'
+    );
+}
+
 async function closeDigisacTicket(contactId, comments) {
     if (!contactId) return null;
     const body = {
@@ -741,6 +757,7 @@ async function handleDigisacManualClose(contactId) {
     await clearDigisacClienteSession(contactId);
     await clearDigisacInternalRedirectSession(contactId);
     await markDigisacSatisfactionAnswered(contactId);
+    const noSurveyDepartmentTransfer = await transferDigisacTicketToNoSurveyDepartment(contactId);
     const close = await closeDigisacTicket(contactId, 'Atendimento encerrado manualmente via atalho interno .100. Não enviar pesquisa de satisfação.');
 
     return {
@@ -748,6 +765,7 @@ async function handleDigisacManualClose(contactId) {
         action: 'manual_close_digisac_ticket',
         notification,
         noSurveyTag,
+        noSurveyDepartmentTransfer,
         close
     };
 }
@@ -1065,6 +1083,23 @@ async function getDigisacTagIdByName(tagName, fallbackId) {
         return name === normalizedTagName;
     });
     return tag?.id || '';
+}
+
+async function getDigisacDepartmentIdByName(departmentName, fallbackId) {
+    if (fallbackId) return fallbackId;
+    const normalizedDepartmentName = String(departmentName || '').trim().toLowerCase();
+    if (!normalizedDepartmentName) return '';
+
+    const payload = await fetchDigisacJson('/departments');
+    const department = extractDigisacRows(payload).find(item => {
+        const name = String(item?.name || item?.label || item?.title || '').trim().toLowerCase();
+        return name === normalizedDepartmentName;
+    });
+    return department?.id || '';
+}
+
+async function getDigisacNoSurveyDepartmentId() {
+    return getDigisacDepartmentIdByName(DIGISAC_NO_SURVEY_DEPARTMENT_NAME, DIGISAC_NO_SURVEY_DEPARTMENT_ID);
 }
 
 async function getDigisacEmAtendimentoTagId() {
