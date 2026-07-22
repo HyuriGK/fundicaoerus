@@ -610,7 +610,7 @@
         <div class="crm-panel">
             <div class="crm-panel-head">
                 <div class="crm-panel-title"><i class="fa-solid fa-list-check" style="color:#10b981;margin-right:8px;"></i>Próximas ações</div>
-                <button class="btn-act btn-expand" onclick="openCrmDrawer()" title="Nova ação"><i class="fa-solid fa-plus"></i></button>
+                <button class="btn-act btn-expand" onclick="promptSelectClientForAction()" title="Nova ação"><i class="fa-solid fa-plus"></i></button>
             </div>
             <div class="crm-actions" id="crmActions"></div>
         </div>
@@ -677,6 +677,7 @@
         <div>
             <div class="crm-drawer-name" id="crmDrawerName">Cliente</div>
             <div class="crm-drawer-sub" id="crmDrawerSub">Resumo comercial</div>
+            <div class="crm-drawer-sub" id="crmDrawerPeriod"></div>
         </div>
         <button class="crm-close" onclick="closeCrmDrawer()" title="Fechar"><i class="fa-solid fa-xmark"></i></button>
     </div>
@@ -1115,6 +1116,8 @@ function renderCrm() {
         { key:'negociacao', label:'Negociação' }
     ];
     const pipeline = document.getElementById('crmPipeline');
+    const hint = document.getElementById('crmPipelineHint');
+    if (hint) hint.textContent = (crmStageFilter ? 'Filtro ativo · ' : '') + getSelectedPeriodLabel();
     if (pipeline) {
         pipeline.innerHTML = stages.map(s => {
             const rows = clientList.filter(c => getCrmStage(c).key === s.key);
@@ -1148,19 +1151,18 @@ function renderCrm() {
 
 function toggleCrmStage(stage) {
     crmStageFilter = crmStageFilter === stage ? '' : stage;
-    const hint = document.getElementById('crmPipelineHint');
-    if (hint) hint.textContent = crmStageFilter ? 'Filtro ativo' : 'Clique em uma etapa para filtrar';
     renderCrm();
     renderTable();
 }
 
 function openCrmDrawer(clientName) {
-    const client = clientName ? clientList.find(c => c.name === clientName) : clientList[0];
+    const client = clientName ? clientList.find(c => c.name === clientName) : null;
     if (!client) return;
     currentCrmClient = client.name;
     const saved = crmRecords[client.name] || {};
     document.getElementById('crmDrawerName').textContent = client.name;
     document.getElementById('crmDrawerSub').textContent = getCrmStage(client).label + ' · última compra há ' + client.days + ' dias';
+    document.getElementById('crmDrawerPeriod').textContent = 'Período analisado: ' + getSelectedPeriodLabel();
     document.getElementById('crmStatus').value = saved.status || '';
     document.getElementById('crmNextAction').value = saved.nextAction || '';
     document.getElementById('crmDueDate').value = saved.dueDate || '';
@@ -1173,6 +1175,10 @@ function openCrmDrawer(clientName) {
     ].map(([label, value]) => `<div class="crm-metric"><div class="crm-metric-label">${label}</div><div class="crm-metric-value">${value}</div></div>`).join('');
     applyClientModalSidebarOffset();
     document.getElementById('crmDrawer').classList.add('open');
+}
+
+function promptSelectClientForAction() {
+    toast('Selecione um cliente', 'Clique em um cliente no ranking para cadastrar uma próxima ação.', 'info');
 }
 
 function closeCrmDrawer() {
@@ -1920,6 +1926,12 @@ function fmtDateShort(value) {
     const d = new Date(value);
     if (isNaN(d)) return '-';
     return d.toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit', year:'2-digit' });
+}
+function getSelectedPeriodLabel() {
+    const yr = document.getElementById('yearSelect')?.value || '';
+    if (activeMonth === 'all') return yr ? `Ano ${yr}` : 'Todos os períodos';
+    const month = MONTHS[Number(activeMonth) - 1] || '';
+    return [month, yr].filter(Boolean).join('/');
 }
 function escapeHtml(value) {
     return String(value ?? '').replace(/[&<>"']/g, ch => ({
