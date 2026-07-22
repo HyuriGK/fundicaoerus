@@ -221,6 +221,8 @@
         .btn-contact { height:28px; padding:0 10px; border-radius:6px; border:1px solid rgba(16,185,129,0.28); background:rgba(16,185,129,0.1); color:#10b981; font-size:0.7rem; font-weight:900; cursor:pointer; }
         .btn-contact:hover { background:rgba(16,185,129,0.18); }
         .contact-view-grid { padding:18px 24px 24px; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }
+        .contact-view-section { grid-column:1 / -1; color:var(--color-primary); font-size:0.7rem; font-weight:900; text-transform:uppercase; letter-spacing:0.05em; padding-top:6px; border-top:1px solid rgba(255,255,255,0.07); }
+        .contact-view-section:first-child { border-top:none; padding-top:0; }
         .contact-view-item { border:1px solid rgba(255,255,255,0.08); border-radius:8px; padding:10px; background:rgba(255,255,255,0.02); min-width:0; }
         .contact-view-item.full { grid-column:1 / -1; }
         .contact-view-label { color:var(--text-muted); font-size:0.64rem; font-weight:900; text-transform:uppercase; margin-bottom:6px; }
@@ -2234,24 +2236,51 @@ function openClientContactViewModal(id) {
     const contact = latestContacts.find(c => Number(c.id) === Number(id));
     if (!contact) return;
     document.getElementById('contactViewClientName').textContent = contact.cliente_nome || 'Cliente';
-    const items = [
-        ['Data do contato', contact.contato_em ? fmtDateShort(contact.contato_em) : '-'],
-        ['Canal', contact.canal || '-'],
-        ['Pessoa contatada', contact.pessoa_contatada || '-'],
-        ['Motivo', contact.motivo || '-'],
-        ['Resultado', contact.resultado || '-'],
-        ['Humor do cliente', contact.humor_cliente || '-'],
-        ['Potencial', contact.potencial || '-'],
-        ['Próxima ação', contact.proxima_acao || '-'],
-        ['Data da próxima ação', contact.data_proxima_acao ? fmtDateShort(contact.data_proxima_acao) : '-'],
-        ['Resumo do contato', contact.resumo || '-', 'full']
-    ];
-    document.getElementById('contactViewBody').innerHTML = items.map(([label, value, wide]) => `
-        <div class="contact-view-item ${wide || ''}">
-            <div class="contact-view-label">${escapeHtml(label)}</div>
-            <div class="contact-view-value">${escapeHtml(value)}</div>
-        </div>`).join('');
+    const html = [
+        contactViewSection('Cliente'),
+        contactViewItem('Cliente', contact.cliente_nome, 'wide'),
+        contactViewItem('Empresa', contact.empresa),
+        contactViewItem('Código', contact.codigo),
+        contactViewSection('Contato realizado'),
+        contactViewItem('Data e hora', formatDateTime(contact.contato_em)),
+        contactViewItem('Canal', contact.canal),
+        contactViewItem('Pessoa contatada', contact.pessoa_contatada),
+        contactViewItem('Cargo / setor', contact.cargo),
+        contactViewSection('Dados usados no contato'),
+        contactViewItem('Telefone', contact.telefone),
+        contactViewItem('E-mail', contact.email, 'wide'),
+        contactViewItem('Registrado por', contact.crm_user),
+        contactViewSection('Qualificação'),
+        contactViewItem('Motivo', contact.motivo),
+        contactViewItem('Resultado', contact.resultado),
+        contactViewItem('Humor do cliente', contact.humor_cliente),
+        contactViewItem('Potencial', contact.potencial),
+        contactViewSection('Próximo passo'),
+        contactViewItem('Próxima ação', contact.proxima_acao, 'wide'),
+        contactViewItem('Data da próxima ação', contact.data_proxima_acao ? fmtDateShort(contact.data_proxima_acao) : '-'),
+        contactViewSection('Resumo'),
+        contactViewItem('Resumo do contato', contact.resumo, 'full')
+    ].join('');
+    document.getElementById('contactViewBody').innerHTML = html;
     document.getElementById('clientContactViewModal').style.display = 'flex';
+}
+
+function contactViewSection(title) {
+    return `<div class="contact-view-section">${escapeHtml(title)}</div>`;
+}
+
+function contactViewItem(label, value, cls = '') {
+    return `<div class="contact-view-item ${cls}">
+        <div class="contact-view-label">${escapeHtml(label)}</div>
+        <div class="contact-view-value">${escapeHtml(value || '-')}</div>
+    </div>`;
+}
+
+function formatDateTime(value) {
+    if (!value) return '-';
+    const d = new Date(value);
+    if (isNaN(d)) return '-';
+    return d.toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' });
 }
 
 function closeClientContactViewModal() {
