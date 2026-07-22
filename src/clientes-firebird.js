@@ -104,6 +104,34 @@ async function ensureClientesCrmTable() {
     await pool.query(`ALTER TABLE clientes_crm_historico ADD COLUMN IF NOT EXISTS crm_user TEXT`);
 }
 
+async function ensureClientesContatosTable() {
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS clientes_contatos_crm (
+            id SERIAL PRIMARY KEY,
+            cliente_nome TEXT NOT NULL,
+            empresa INTEGER,
+            codigo INTEGER,
+            crm_user TEXT NOT NULL,
+            contato_em TIMESTAMP DEFAULT NOW(),
+            canal TEXT,
+            pessoa_contatada TEXT,
+            cargo TEXT,
+            telefone TEXT,
+            email TEXT,
+            motivo TEXT,
+            resultado TEXT,
+            humor_cliente TEXT,
+            potencial TEXT,
+            proxima_acao TEXT,
+            data_proxima_acao DATE,
+            resumo TEXT,
+            created_at TIMESTAMP DEFAULT NOW()
+        )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_clientes_contatos_crm_user ON clientes_contatos_crm (crm_user, contato_em DESC)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_clientes_contatos_cliente ON clientes_contatos_crm (cliente_nome, crm_user)`);
+}
+
 async function ensureDigisacDebugTable() {
     await pool.query(`
         CREATE TABLE IF NOT EXISTS digisac_webhook_debug (
@@ -2319,6 +2347,55 @@ router.post('/crm', async (req, res) => {
         });
     } catch (err) {
         res.status(500).json({ success: false, error: 'Erro ao salvar CRM do cliente', details: err.message });
+    }
+});
+
+router.post('/crm/contatos', async (req, res) => {
+    try {
+        await ensureClientesContatosTable();
+        const crmUser = String(req.user?.user || req.user?.name || '').trim();
+        const clienteNome = String(req.body.clienteNome || '').trim();
+        const empresa = req.body.empresa === undefined || req.body.empresa === null || req.body.empresa === '' ? null : Number(req.body.empresa);
+        const codigo = req.body.codigo === undefined || req.body.codigo === null || req.body.codigo === '' ? null : Number(req.body.codigo);
+        const contatoEm = String(req.body.contatoEm || '').trim() || null;
+        const canal = String(req.body.canal || '').trim();
+        const pessoaContatada = String(req.body.pessoaContatada || '').trim();
+        const cargo = String(req.body.cargo || '').trim();
+        const telefone = String(req.body.telefone || '').trim();
+        const email = String(req.body.email || '').trim();
+        const motivo = String(req.body.motivo || '').trim();
+        const resultado = String(req.body.resultado || '').trim();
+        const humorCliente = String(req.body.humorCliente || '').trim();
+        const potencial = String(req.body.potencial || '').trim();
+        const proximaAcao = String(req.body.proximaAcao || '').trim();
+        const dataProximaAcao = String(req.body.dataProximaAcao || '').trim() || null;
+        const resumo = String(req.body.resumo || '').trim();
+
+        if (!crmUser) return res.status(400).json({ success: false, error: 'Usuário inválido.' });
+        if (!clienteNome) return res.status(400).json({ success: false, error: 'Cliente inválido.' });
+        if (!canal) return res.status(400).json({ success: false, error: 'Informe o canal do contato.' });
+        if (!resultado) return res.status(400).json({ success: false, error: 'Informe o resultado do contato.' });
+        if (!resumo) return res.status(400).json({ success: false, error: 'Informe o resumo do contato.' });
+        if (empresa !== null && !Number.isInteger(empresa)) return res.status(400).json({ success: false, error: 'Empresa inválida.' });
+        if (codigo !== null && !Number.isInteger(codigo)) return res.status(400).json({ success: false, error: 'Código inválido.' });
+
+        const result = await pool.query(`
+            INSERT INTO clientes_contatos_crm (
+                cliente_nome, empresa, codigo, crm_user, contato_em, canal, pessoa_contatada, cargo,
+                telefone, email, motivo, resultado, humor_cliente, potencial, proxima_acao,
+                data_proxima_acao, resumo
+            )
+            VALUES ($1,$2,$3,$4,COALESCE($5::timestamp, NOW()),$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+            RETURNING *
+        `, [
+            clienteNome, empresa, codigo, crmUser, contatoEm, canal, pessoaContatada, cargo,
+            telefone, email, motivo, resultado, humorCliente, potencial, proximaAcao,
+            dataProximaAcao, resumo
+        ]);
+
+        res.json({ success: true, data: result.rows[0] });
+    } catch (err) {
+        res.status(500).json({ success: false, error: 'Erro ao registrar contato com cliente', details: err.message });
     }
 });
 
