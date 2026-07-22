@@ -199,6 +199,13 @@
         .crm-drawer-head { padding:20px 22px 14px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; gap:16px; }
         .crm-drawer-name { color:#fff; font-size:1rem; font-weight:900; line-height:1.25; }
         .crm-drawer-sub { color:var(--text-muted); font-size:0.72rem; margin-top:5px; }
+        .crm-client-search-wrap { display:none; padding:14px 22px 0; position:relative; }
+        .crm-client-search-wrap.open { display:block; }
+        .crm-client-search-results { display:none; position:absolute; left:22px; right:22px; top:52px; z-index:3; max-height:260px; overflow:auto; background:#18181b; border:1px solid var(--border-subtle); border-radius:7px; box-shadow:0 14px 34px rgba(0,0,0,0.45); }
+        .crm-client-search-item { padding:9px 11px; border-bottom:1px solid rgba(255,255,255,0.06); color:#fff; font-size:0.76rem; font-weight:800; cursor:pointer; }
+        .crm-client-search-item:last-child { border-bottom:none; }
+        .crm-client-search-item:hover { background:rgba(251,191,36,0.08); }
+        .crm-client-search-meta { color:var(--text-muted); font-size:0.66rem; font-weight:500; margin-top:2px; }
         .crm-close { width:30px; height:30px; border-radius:6px; border:1px solid var(--border-subtle); background:rgba(255,255,255,0.03); color:#fff; cursor:pointer; flex-shrink:0; }
         .crm-drawer-body { padding:16px 22px 22px; overflow:auto; }
         .crm-metrics { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:8px; margin-bottom:14px; }
@@ -725,6 +732,10 @@
         </div>
         <button class="crm-close" onclick="closeCrmDrawer()" title="Fechar"><i class="fa-solid fa-xmark"></i></button>
     </div>
+    <div class="crm-client-search-wrap" id="crmClientSearchWrap">
+        <input class="search-input" id="crmClientSearch" style="width:100%;" placeholder="Pesquisar cliente..." oninput="renderCrmClientSuggestions(this.value)" autocomplete="off">
+        <div class="crm-client-search-results" id="crmClientSearchResults"></div>
+    </div>
     <div class="crm-drawer-body">
         <div class="crm-metrics" id="crmDrawerMetrics"></div>
         <div class="crm-field">
@@ -1232,7 +1243,7 @@ function toggleCrmStage(stage) {
     renderTable();
 }
 
-function openCrmDrawer(clientName) {
+function openCrmDrawer(clientName, options = {}) {
     const client = clientName ? clientList.find(c => c.name === clientName) : null;
     if (!client) return;
     currentCrmClient = client.name;
@@ -1250,21 +1261,68 @@ function openCrmDrawer(clientName) {
         ['Pedidos', client.orders],
         ['Ticket', valorVisible ? fmtMoney(client.ticket) : 'R$ -----']
     ].map(([label, value]) => `<div class="crm-metric"><div class="crm-metric-label">${label}</div><div class="crm-metric-value">${value}</div></div>`).join('');
+    if (!options.keepSearch) document.getElementById('crmClientSearchWrap').classList.remove('open');
     applyClientModalSidebarOffset();
     document.getElementById('crmDrawer').classList.add('open');
 }
 
 function promptSelectClientForAction() {
-    toast('Selecione um cliente', 'Clique em um cliente no ranking para cadastrar uma próxima ação.', 'info');
+    openCrmSearchDrawer();
+}
+
+function openCrmSearchDrawer() {
+    currentCrmClient = null;
+    document.getElementById('crmDrawerName').textContent = 'Nova ação';
+    document.getElementById('crmDrawerSub').textContent = 'Pesquise e selecione um cliente';
+    document.getElementById('crmDrawerPeriod').textContent = 'Período analisado: ' + getSelectedPeriodLabel();
+    document.getElementById('crmDrawerMetrics').innerHTML = '';
+    document.getElementById('crmStatus').value = '';
+    document.getElementById('crmNextAction').value = '';
+    document.getElementById('crmDueDate').value = '';
+    document.getElementById('crmNotes').value = '';
+    document.getElementById('crmClientSearchWrap').classList.add('open');
+    document.getElementById('crmClientSearch').value = '';
+    document.getElementById('crmClientSearchResults').style.display = 'none';
+    applyClientModalSidebarOffset();
+    document.getElementById('crmDrawer').classList.add('open');
+    setTimeout(() => document.getElementById('crmClientSearch').focus(), 50);
+}
+
+function renderCrmClientSuggestions(value) {
+    const term = normalizeClientName(value);
+    const box = document.getElementById('crmClientSearchResults');
+    if (!term) {
+        box.style.display = 'none';
+        box.innerHTML = '';
+        return;
+    }
+    const rows = clientList
+        .filter(c => normalizeClientName(c.name).includes(term))
+        .slice(0, 12);
+    box.innerHTML = rows.map(c => `
+        <div class="crm-client-search-item" onclick="selectCrmClientFromSearch('${escapeJs(c.name)}')">
+            ${escapeHtml(c.name)}
+            <div class="crm-client-search-meta">${c.orders} pedidos · ${c.days >= 9999 ? 'sem compra' : c.days + ' dias sem compra'}</div>
+        </div>`).join('') || '<div class="crm-client-search-item" style="color:var(--text-muted);cursor:default;">Nenhum cliente encontrado.</div>';
+    box.style.display = 'block';
+}
+
+function selectCrmClientFromSearch(clientName) {
+    document.getElementById('crmClientSearchResults').style.display = 'none';
+    openCrmDrawer(clientName, { keepSearch: true });
 }
 
 function closeCrmDrawer() {
     document.getElementById('crmDrawer').classList.remove('open');
+    document.getElementById('crmClientSearchWrap').classList.remove('open');
     currentCrmClient = null;
 }
 
 function saveCrmRecord() {
-    if (!currentCrmClient) return;
+    if (!currentCrmClient) {
+        toast('Selecione um cliente', 'Pesquise e selecione um cliente antes de salvar.', 'info');
+        return;
+    }
     const record = {
         status: document.getElementById('crmStatus').value,
         nextAction: document.getElementById('crmNextAction').value.trim(),
