@@ -45,6 +45,7 @@ async function ensureClientesCrmTable() {
     await pool.query(`
         CREATE TABLE IF NOT EXISTS clientes_crm (
             cliente_nome TEXT PRIMARY KEY,
+            crm_user TEXT,
             empresa INTEGER,
             codigo INTEGER,
             status TEXT,
@@ -56,10 +57,31 @@ async function ensureClientesCrmTable() {
             updated_at TIMESTAMP DEFAULT NOW()
         )
     `);
+    await pool.query(`ALTER TABLE clientes_crm ADD COLUMN IF NOT EXISTS crm_user TEXT`);
+    await pool.query(`UPDATE clientes_crm SET crm_user = COALESCE(NULLIF(updated_by, ''), 'legacy') WHERE crm_user IS NULL`);
+    await pool.query(`ALTER TABLE clientes_crm ALTER COLUMN crm_user SET NOT NULL`);
+    await pool.query(`
+        DO $$
+        DECLARE pk_name TEXT;
+        BEGIN
+            SELECT conname INTO pk_name
+            FROM pg_constraint
+            WHERE conrelid = 'clientes_crm'::regclass
+              AND contype = 'p';
+            IF pk_name IS NOT NULL THEN
+                EXECUTE format('ALTER TABLE clientes_crm DROP CONSTRAINT %I', pk_name);
+            END IF;
+        END $$;
+    `);
+    await pool.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS clientes_crm_cliente_user_uidx
+        ON clientes_crm (cliente_nome, crm_user)
+    `);
     await pool.query(`
         CREATE TABLE IF NOT EXISTS clientes_crm_historico (
             id SERIAL PRIMARY KEY,
             cliente_nome TEXT NOT NULL,
+            crm_user TEXT,
             empresa INTEGER,
             codigo INTEGER,
             status TEXT,
@@ -70,6 +92,7 @@ async function ensureClientesCrmTable() {
             created_at TIMESTAMP DEFAULT NOW()
         )
     `);
+    await pool.query(`ALTER TABLE clientes_crm_historico ADD COLUMN IF NOT EXISTS crm_user TEXT`);
 }
 
 async function ensureDigisacDebugTable() {
@@ -2181,14 +2204,26 @@ router.post('/responsavel-comercial', async (req, res) => {
 router.get('/crm', async (req, res) => {
     try {
         await ensureClientesCrmTable();
+        const crmUser = String(req.user?.user || req.user?.name || '').trim();
+        const role = String(req.user?.role || '').trim().toLowerCase();
+        const scope = String(req.query.scope || 'mine').trim().toLowerCase();
+        const canViewAll = scope === 'all' && ['admin', 'desenvolvedor'].includes(role);
+        if (!crmUser && !canViewAll) {
+            return res.status(400).json({ success: false, error: 'Usuário inválido.' });
+        }
+        const params = canViewAll ? [] : [crmUser];
         const result = await pool.query(`
-            SELECT cliente_nome, empresa, codigo, status, proxima_acao, data_acao, notas, updated_by, created_at, updated_at
+            SELECT cliente_nome, crm_user, empresa, codigo, status, proxima_acao, data_acao, notas, updated_by, created_at, updated_at
             FROM clientes_crm
+            ${canViewAll ? '' : 'WHERE crm_user = $1'}
             ORDER BY updated_at DESC
-        `);
+        `, params);
         const data = {};
         result.rows.forEach(row => {
-            data[row.cliente_nome] = {
+            const key = canViewAll ? `${row.crm_user}::${row.cliente_nome}` : row.cliente_nome;
+            data[key] = {
+                clienteNome: row.cliente_nome,
+                crmUser: row.crm_user,
                 empresa: row.empresa,
                 codigo: row.codigo,
                 status: row.status || '',
@@ -2209,6 +2244,8 @@ router.get('/crm', async (req, res) => {
 router.post('/crm', async (req, res) => {
     try {
         await ensureClientesCrmTable();
+        const crmUser = String(req.user?.user || req.user?.name || '').trim();
+        const userName = String(req.user?.name || req.user?.user || '').trim();
         const clienteNome = String(req.body.clienteNome || '').trim();
         const empresa = req.body.empresa === undefined || req.body.empresa === null || req.body.empresa === '' ? null : Number(req.body.empresa);
         const codigo = req.body.codigo === undefined || req.body.codigo === null || req.body.codigo === '' ? null : Number(req.body.codigo);
@@ -2216,10 +2253,13 @@ router.post('/crm', async (req, res) => {
         const proximaAcao = String(req.body.nextAction || '').trim();
         const dataAcao = String(req.body.dueDate || '').trim() || null;
         const notas = String(req.body.notes || '').trim();
-        const updatedBy = String(req.body.updatedBy || req.headers['x-user-name'] || req.headers['x-username'] || '').trim();
+        const updatedBy = userName || crmUser;
 
         if (!clienteNome) {
             return res.status(400).json({ success: false, error: 'Cliente inválido.' });
+        }
+        if (!crmUser) {
+            return res.status(400).json({ success: false, error: 'Usuário inválido.' });
         }
         if (empresa !== null && !Number.isInteger(empresa)) {
             return res.status(400).json({ success: false, error: 'Empresa inválida.' });
@@ -2229,9 +2269,9 @@ router.post('/crm', async (req, res) => {
         }
 
         const saved = await pool.query(`
-            INSERT INTO clientes_crm (cliente_nome, empresa, codigo, status, proxima_acao, data_acao, notas, updated_by, updated_at)
-            VALUES ($1, $2, $3, NULLIF($4, ''), NULLIF($5, ''), $6, NULLIF($7, ''), NULLIF($8, ''), NOW())
-            ON CONFLICT (cliente_nome)
+            INSERT INTO clientes_crm (cliente_nome, crm_user, empresa, codigo, status, proxima_acao, data_acao, notas, updated_by, updated_at)
+            VALUES ($1, $2, $3, $4, NULLIF($5, ''), NULLIF($6, ''), $7, NULLIF($8, ''), NULLIF($9, ''), NOW())
+            ON CONFLICT (cliente_nome, crm_user)
             DO UPDATE SET
                 empresa = COALESCE(EXCLUDED.empresa, clientes_crm.empresa),
                 codigo = COALESCE(EXCLUDED.codigo, clientes_crm.codigo),
@@ -2241,19 +2281,20 @@ router.post('/crm', async (req, res) => {
                 notas = EXCLUDED.notas,
                 updated_by = EXCLUDED.updated_by,
                 updated_at = NOW()
-            RETURNING cliente_nome, empresa, codigo, status, proxima_acao, data_acao, notas, updated_by, created_at, updated_at
-        `, [clienteNome, empresa, codigo, status, proximaAcao, dataAcao, notas, updatedBy]);
+            RETURNING cliente_nome, crm_user, empresa, codigo, status, proxima_acao, data_acao, notas, updated_by, created_at, updated_at
+        `, [clienteNome, crmUser, empresa, codigo, status, proximaAcao, dataAcao, notas, updatedBy]);
 
         await pool.query(`
-            INSERT INTO clientes_crm_historico (cliente_nome, empresa, codigo, status, proxima_acao, data_acao, notas, updated_by)
-            VALUES ($1, $2, $3, NULLIF($4, ''), NULLIF($5, ''), $6, NULLIF($7, ''), NULLIF($8, ''))
-        `, [clienteNome, empresa, codigo, status, proximaAcao, dataAcao, notas, updatedBy]);
+            INSERT INTO clientes_crm_historico (cliente_nome, crm_user, empresa, codigo, status, proxima_acao, data_acao, notas, updated_by)
+            VALUES ($1, $2, $3, $4, NULLIF($5, ''), NULLIF($6, ''), $7, NULLIF($8, ''), NULLIF($9, ''))
+        `, [clienteNome, crmUser, empresa, codigo, status, proximaAcao, dataAcao, notas, updatedBy]);
 
         const row = saved.rows[0];
         res.json({
             success: true,
             data: {
                 empresa: row.empresa,
+                crmUser: row.crm_user,
                 codigo: row.codigo,
                 status: row.status || '',
                 nextAction: row.proxima_acao || '',
