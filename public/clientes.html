@@ -214,7 +214,6 @@
         .dashboard-card { background:rgba(255,255,255,0.02); border:1px solid var(--border-subtle); border-radius:8px; overflow:hidden; min-height:240px; }
         .dashboard-card-head { height:38px; padding:0 12px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--border-subtle); background:rgba(0,0,0,0.18); }
         .dashboard-card-title { color:#fff; font-size:0.74rem; font-weight:800; text-transform:uppercase; letter-spacing:0.04em; }
-        .dashboard-chart-wrap { height:260px; padding:12px; position:relative; }
         .inactive-list { padding:8px 10px; display:flex; flex-direction:column; gap:6px; max-height:278px; overflow:auto; }
         .inactive-row { display:grid; grid-template-columns:24px 1fr auto; gap:8px; align-items:center; padding:8px; border:1px solid rgba(255,255,255,0.07); border-radius:7px; background:rgba(0,0,0,0.16); cursor:pointer; }
         .inactive-row:hover { border-color:rgba(251,191,36,0.28); background:rgba(255,255,255,0.035); }
@@ -638,7 +637,7 @@
                     <div class="dashboard-card-title"><i class="fa-solid fa-chart-column" style="color:var(--color-primary);margin-right:8px;"></i>Top clientes por faturamento</div>
                     <div style="font-size:0.68rem;color:var(--text-muted);" id="dashFatPeriod">—</div>
                 </div>
-                <div class="dashboard-chart-wrap"><canvas id="dashFatChart"></canvas></div>
+                <div class="inactive-list" id="dashFatList"></div>
             </div>
             <div class="dashboard-card">
                 <div class="dashboard-card-head">
@@ -652,14 +651,14 @@
                     <div class="dashboard-card-title"><i class="fa-solid fa-scale-balanced" style="color:#a855f7;margin-right:8px;"></i>Peso por cliente</div>
                     <div style="font-size:0.68rem;color:var(--text-muted);" id="dashPesoPeriod">—</div>
                 </div>
-                <div class="dashboard-chart-wrap"><canvas id="dashPesoChart"></canvas></div>
+                <div class="inactive-list" id="dashPesoList"></div>
             </div>
             <div class="dashboard-card">
                 <div class="dashboard-card-head">
                     <div class="dashboard-card-title"><i class="fa-solid fa-gauge-high" style="color:#10b981;margin-right:8px;"></i>Preço médio por cliente</div>
                     <div style="font-size:0.68rem;color:var(--text-muted);" id="dashPrecoPeriod">—</div>
                 </div>
-                <div class="dashboard-chart-wrap"><canvas id="dashPrecoChart"></canvas></div>
+                <div class="inactive-list" id="dashPrecoList"></div>
             </div>
         </div>
     </div>
@@ -1302,33 +1301,24 @@ function renderDashboard() {
         const el = document.getElementById(id);
         if (el) el.textContent = period;
     });
-    renderDashboardChart('dashFat', 'dashFatChart', [...clientList].sort((a,b) => b.fat - a.fat).slice(0, 10), 'fat', '#fbbf24');
-    renderDashboardChart('dashPeso', 'dashPesoChart', [...clientList].sort((a,b) => b.peso - a.peso).slice(0, 10), 'peso', '#a855f7');
-    renderDashboardChart('dashPreco', 'dashPrecoChart', [...clientList].filter(c => c.peso > 0).sort((a,b) => b.preco_kg - a.preco_kg).slice(0, 10), 'preco_kg', '#10b981');
+    renderDashboardList('dashFatList', [...clientList].sort((a,b) => b.fat - a.fat).slice(0, 10), 'fat');
+    renderDashboardList('dashPesoList', [...clientList].sort((a,b) => b.peso - a.peso).slice(0, 10), 'peso');
+    renderDashboardList('dashPrecoList', [...clientList].filter(c => c.peso > 0).sort((a,b) => b.preco_kg - a.preco_kg).slice(0, 10), 'preco_kg');
     renderInactiveTopPrice();
 }
 
-function renderDashboardChart(key, canvasId, rows, field, color) {
-    const canvas = document.getElementById(canvasId);
-    if (!canvas) return;
-    if (charts[key]) charts[key].destroy();
-    charts[key] = new Chart(canvas, {
-        type: 'bar',
-        data: {
-            labels: rows.map(c => c.name.length > 22 ? c.name.slice(0, 22) + '...' : c.name),
-            datasets: [{ data: rows.map(c => c[field] || 0), backgroundColor: color, borderRadius: 4, maxBarThickness: 28 }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { legend: { display:false }, tooltip: { callbacks: { label: ctx => formatDashboardValue(ctx.raw, field) } } },
-            scales: {
-                x: { ticks:{ color:'#a1a1aa', font:{ size:10 } }, grid:{ display:false } },
-                y: { ticks:{ color:'#71717a', callback:v => compactValue(v, field) }, grid:{ color:'rgba(255,255,255,0.06)' } }
-            },
-            onClick: (_, items) => { if (items.length) openCrmDrawer(rows[items[0].index].name); }
-        }
-    });
+function renderDashboardList(id, rows, field) {
+    const box = document.getElementById(id);
+    if (!box) return;
+    box.innerHTML = rows.map((c, i) => `
+        <div class="inactive-row" onclick="openCrmDrawer('${escapeJs(c.name)}')">
+            <div class="inactive-rank">${i + 1}</div>
+            <div style="min-width:0;">
+                <div class="inactive-name">${escapeHtml(c.name)}</div>
+                <div class="inactive-meta">${c.orders} pedidos · ${c.days >= 9999 ? 'sem compra' : c.days + ' dias sem compra'}</div>
+            </div>
+            <div class="inactive-price">${formatDashboardValue(c[field], field)}</div>
+        </div>`).join('') || '<div style="color:var(--text-muted);font-size:0.72rem;padding:10px;">Nenhum cliente encontrado.</div>';
 }
 
 function renderInactiveTopPrice() {
@@ -1350,15 +1340,6 @@ function formatDashboardValue(value, field) {
     if (field === 'peso') return fmtNum(value) + ' kg';
     if (field === 'preco_kg') return valorVisible ? fmtMoney(value) + '/kg' : 'R$ -----';
     return valorVisible ? fmtMoney(value) : 'R$ -----';
-}
-
-function compactValue(value, field) {
-    if (field !== 'peso' && !valorVisible) return '';
-    const n = Number(value || 0);
-    if (field === 'peso') return n >= 1000 ? Math.round(n / 1000) + 'k' : Math.round(n);
-    if (n >= 1000000) return 'R$ ' + (n / 1000000).toFixed(1) + 'M';
-    if (n >= 1000) return 'R$ ' + Math.round(n / 1000) + 'k';
-    return Math.round(n);
 }
 
 async function saveCrmToDatabase(clientName, record, options = {}) {
