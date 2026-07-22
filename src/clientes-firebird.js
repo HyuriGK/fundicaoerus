@@ -41,6 +41,37 @@ async function ensureResponsaveisTable() {
     `);
 }
 
+async function ensureClientesCrmTable() {
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS clientes_crm (
+            cliente_nome TEXT PRIMARY KEY,
+            empresa INTEGER,
+            codigo INTEGER,
+            status TEXT,
+            proxima_acao TEXT,
+            data_acao DATE,
+            notas TEXT,
+            updated_by TEXT,
+            created_at TIMESTAMP DEFAULT NOW(),
+            updated_at TIMESTAMP DEFAULT NOW()
+        )
+    `);
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS clientes_crm_historico (
+            id SERIAL PRIMARY KEY,
+            cliente_nome TEXT NOT NULL,
+            empresa INTEGER,
+            codigo INTEGER,
+            status TEXT,
+            proxima_acao TEXT,
+            data_acao DATE,
+            notas TEXT,
+            updated_by TEXT,
+            created_at TIMESTAMP DEFAULT NOW()
+        )
+    `);
+}
+
 async function ensureDigisacDebugTable() {
     await pool.query(`
         CREATE TABLE IF NOT EXISTS digisac_webhook_debug (
@@ -2144,6 +2175,97 @@ router.post('/responsavel-comercial', async (req, res) => {
         res.json({ success: true, responsavelComercial: responsavel || null });
     } catch (err) {
         res.status(500).json({ success: false, error: 'Erro ao salvar responsável comercial', details: err.message });
+    }
+});
+
+router.get('/crm', async (req, res) => {
+    try {
+        await ensureClientesCrmTable();
+        const result = await pool.query(`
+            SELECT cliente_nome, empresa, codigo, status, proxima_acao, data_acao, notas, updated_by, created_at, updated_at
+            FROM clientes_crm
+            ORDER BY updated_at DESC
+        `);
+        const data = {};
+        result.rows.forEach(row => {
+            data[row.cliente_nome] = {
+                empresa: row.empresa,
+                codigo: row.codigo,
+                status: row.status || '',
+                nextAction: row.proxima_acao || '',
+                dueDate: row.data_acao ? row.data_acao.toISOString().slice(0, 10) : '',
+                notes: row.notas || '',
+                updatedBy: row.updated_by || '',
+                createdAt: row.created_at,
+                updatedAt: row.updated_at
+            };
+        });
+        res.json({ success: true, data });
+    } catch (err) {
+        res.status(500).json({ success: false, error: 'Erro ao consultar CRM de clientes', details: err.message });
+    }
+});
+
+router.post('/crm', async (req, res) => {
+    try {
+        await ensureClientesCrmTable();
+        const clienteNome = String(req.body.clienteNome || '').trim();
+        const empresa = req.body.empresa === undefined || req.body.empresa === null || req.body.empresa === '' ? null : Number(req.body.empresa);
+        const codigo = req.body.codigo === undefined || req.body.codigo === null || req.body.codigo === '' ? null : Number(req.body.codigo);
+        const status = String(req.body.status || '').trim();
+        const proximaAcao = String(req.body.nextAction || '').trim();
+        const dataAcao = String(req.body.dueDate || '').trim() || null;
+        const notas = String(req.body.notes || '').trim();
+        const updatedBy = String(req.body.updatedBy || req.headers['x-user-name'] || req.headers['x-username'] || '').trim();
+
+        if (!clienteNome) {
+            return res.status(400).json({ success: false, error: 'Cliente inválido.' });
+        }
+        if (empresa !== null && !Number.isInteger(empresa)) {
+            return res.status(400).json({ success: false, error: 'Empresa inválida.' });
+        }
+        if (codigo !== null && !Number.isInteger(codigo)) {
+            return res.status(400).json({ success: false, error: 'Código inválido.' });
+        }
+
+        const saved = await pool.query(`
+            INSERT INTO clientes_crm (cliente_nome, empresa, codigo, status, proxima_acao, data_acao, notas, updated_by, updated_at)
+            VALUES ($1, $2, $3, NULLIF($4, ''), NULLIF($5, ''), $6, NULLIF($7, ''), NULLIF($8, ''), NOW())
+            ON CONFLICT (cliente_nome)
+            DO UPDATE SET
+                empresa = COALESCE(EXCLUDED.empresa, clientes_crm.empresa),
+                codigo = COALESCE(EXCLUDED.codigo, clientes_crm.codigo),
+                status = EXCLUDED.status,
+                proxima_acao = EXCLUDED.proxima_acao,
+                data_acao = EXCLUDED.data_acao,
+                notas = EXCLUDED.notas,
+                updated_by = EXCLUDED.updated_by,
+                updated_at = NOW()
+            RETURNING cliente_nome, empresa, codigo, status, proxima_acao, data_acao, notas, updated_by, created_at, updated_at
+        `, [clienteNome, empresa, codigo, status, proximaAcao, dataAcao, notas, updatedBy]);
+
+        await pool.query(`
+            INSERT INTO clientes_crm_historico (cliente_nome, empresa, codigo, status, proxima_acao, data_acao, notas, updated_by)
+            VALUES ($1, $2, $3, NULLIF($4, ''), NULLIF($5, ''), $6, NULLIF($7, ''), NULLIF($8, ''))
+        `, [clienteNome, empresa, codigo, status, proximaAcao, dataAcao, notas, updatedBy]);
+
+        const row = saved.rows[0];
+        res.json({
+            success: true,
+            data: {
+                empresa: row.empresa,
+                codigo: row.codigo,
+                status: row.status || '',
+                nextAction: row.proxima_acao || '',
+                dueDate: row.data_acao ? row.data_acao.toISOString().slice(0, 10) : '',
+                notes: row.notas || '',
+                updatedBy: row.updated_by || '',
+                createdAt: row.created_at,
+                updatedAt: row.updated_at
+            }
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, error: 'Erro ao salvar CRM do cliente', details: err.message });
     }
 });
 
