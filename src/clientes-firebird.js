@@ -2407,7 +2407,7 @@ router.get('/crm/contatos', async (req, res) => {
         const result = await pool.query(`
             SELECT id, cliente_nome, empresa, codigo, crm_user, contato_em, canal, pessoa_contatada,
                    cargo, telefone, email, motivo, resultado, humor_cliente, potencial, proxima_acao,
-                   data_proxima_acao, resumo, created_at
+                   TO_CHAR(data_proxima_acao, 'YYYY-MM-DD') AS data_proxima_acao, resumo, created_at
             FROM clientes_contatos_crm
             WHERE crm_user = $1
             ORDER BY contato_em DESC, id DESC
