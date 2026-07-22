@@ -745,7 +745,7 @@ async function handleDigisacManualClose(contactId) {
         return { success: true, ignored: true, action: 'manual_close_missing_contact' };
     }
 
-    const notification = await sendDigisacMessage(contactId, 'Atendimento encerrado manualmente.\n\nVocê encerrou o chamado manualmente.');
+    const notification = await sendDigisacMessage(contactId, 'Este chamado foi finalizado manualmente. Caso queira iniciar uma nova conversa, é só mandar uma nova mensagem.');
     await ensureDigisacManualCloseSuppressionsTable();
     await pool.query(`
         INSERT INTO digisac_manual_close_suppressions (contact_id, created_at)
