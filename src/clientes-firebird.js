@@ -28,6 +28,7 @@ const DIGISAC_INTERNAL_REDIRECTS = {
     '.77': 'ELISANGELA',
     '.99': 'GERUZA MENDES'
 };
+const DIGISAC_INTERNAL_CLOSE_COMMAND = '.100';
 
 function getCommercialOwnerRestriction(req) {
     const role = String(req.user?.role || '').trim().toLowerCase();
@@ -283,6 +284,25 @@ async function ensureDigisacClienteSessionsTable() {
     await pool.query(`ALTER TABLE digisac_cliente_sessions ADD COLUMN IF NOT EXISTS tentativas_cnpj INTEGER DEFAULT 0`);
 }
 
+async function ensureDigisacInternalRedirectsTable() {
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS digisac_internal_redirect_sessions (
+            contact_id TEXT PRIMARY KEY,
+            target_name TEXT NOT NULL,
+            updated_at TIMESTAMP DEFAULT NOW()
+        )
+    `);
+}
+
+async function ensureDigisacManualCloseSuppressionsTable() {
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS digisac_manual_close_suppressions (
+            contact_id TEXT PRIMARY KEY,
+            created_at TIMESTAMP DEFAULT NOW()
+        )
+    `);
+}
+
 function onlyDigits(value) {
     return String(value || '').replace(/\D/g, '');
 }
@@ -462,6 +482,11 @@ function extractDigisacInternalRedirect(req) {
     return DIGISAC_INTERNAL_REDIRECTS[text] || '';
 }
 
+function isDigisacManualCloseCommand(req) {
+    const text = String(getDigisacMessageText(req) || findTextInPayload(req.body) || '').trim().toLowerCase();
+    return text === DIGISAC_INTERNAL_CLOSE_COMMAND;
+}
+
 function buildDigisacExpiredSatisfactionMessage() {
     return 'O prazo para responder a pesquisa de satisfação expirou.\n\nPor favor, não envie uma nota agora, pois isso pode iniciar um novo atendimento automaticamente.';
 }
@@ -570,6 +595,32 @@ async function handleDigisacInternalRedirect(contactId, targetName) {
         return { success: true, ignored: true, action: 'internal_redirect_missing_contact' };
     }
 
+    await ensureDigisacInternalRedirectsTable();
+    const active = await pool.query(`
+        SELECT target_name
+        FROM digisac_internal_redirect_sessions
+        WHERE contact_id = $1
+          AND updated_at >= NOW() - INTERVAL '4 hours'
+        LIMIT 1
+    `, [contactId]);
+
+    const activeTarget = active.rows[0]?.target_name || '';
+    if (activeTarget && activeTarget !== targetName) {
+        const activeDisplay = activeTarget === 'GERUZA MENDES' ? 'Geruza' : 'Elisangela';
+        const blockedNotification = await sendDigisacMessage(
+            contactId,
+            `Seu atendimento já está em andamento com ${activeDisplay}.\n\nPara trocar de atendente, solicite a transferência diretamente na conversa atual.`
+        );
+        return {
+            success: true,
+            ignored: true,
+            action: 'internal_redirect_blocked_active_attendance',
+            currentTarget: activeTarget,
+            requestedTarget: targetName,
+            notification: blockedNotification
+        };
+    }
+
     const notification = await sendDigisacMessage(contactId, `Conversa transferida para ${targetName === 'GERUZA MENDES' ? 'Geruza' : 'Elisangela'}.`);
     const transfer = await transferDigisacTicketTo(
         contactId,
@@ -578,6 +629,12 @@ async function handleDigisacInternalRedirect(contactId, targetName) {
         `Atalho interno: atendimento redirecionado para ${targetName}.`
     );
     const atendimentoTag = await addDigisacEmAtendimentoTag(contactId);
+    await pool.query(`
+        INSERT INTO digisac_internal_redirect_sessions (contact_id, target_name, updated_at)
+        VALUES ($1, $2, NOW())
+        ON CONFLICT (contact_id)
+        DO UPDATE SET target_name = EXCLUDED.target_name, updated_at = NOW()
+    `, [contactId, targetName]);
     await clearDigisacClienteSession(contactId);
 
     return {
@@ -587,6 +644,60 @@ async function handleDigisacInternalRedirect(contactId, targetName) {
         notification,
         transfer,
         atendimentoTag
+    };
+}
+
+async function clearDigisacInternalRedirectSession(contactId) {
+    if (!contactId) return null;
+    await ensureDigisacInternalRedirectsTable();
+    await pool.query('DELETE FROM digisac_internal_redirect_sessions WHERE contact_id = $1', [contactId]);
+    return { success: true };
+}
+
+async function closeDigisacTicket(contactId, comments) {
+    if (!contactId) return null;
+    const body = { comments: comments || 'Atendimento encerrado manualmente pelo atalho interno .100.' };
+    const encoded = encodeURIComponent(contactId);
+    const candidates = [
+        { path: `/contacts/${encoded}/ticket/close`, method: 'POST' },
+        { path: `/contacts/${encoded}/ticket/close`, method: 'PATCH' },
+        { path: `/contacts/${encoded}/ticket/finish`, method: 'POST' }
+    ];
+
+    for (const candidate of candidates) {
+        const result = await requestDigisacJson(candidate.path, {
+            method: candidate.method,
+            body
+        });
+        if (result) return { success: true, path: candidate.path, method: candidate.method };
+    }
+
+    return { success: false, reason: 'ticket_close_endpoint_not_confirmed' };
+}
+
+async function handleDigisacManualClose(contactId) {
+    if (!contactId) {
+        return { success: true, ignored: true, action: 'manual_close_missing_contact' };
+    }
+
+    const notification = await sendDigisacMessage(contactId, 'Atendimento encerrado manualmente.\n\nVocê encerrou o chamado manualmente.');
+    await ensureDigisacManualCloseSuppressionsTable();
+    await pool.query(`
+        INSERT INTO digisac_manual_close_suppressions (contact_id, created_at)
+        VALUES ($1, NOW())
+        ON CONFLICT (contact_id)
+        DO UPDATE SET created_at = NOW()
+    `, [contactId]);
+    await clearDigisacClienteSession(contactId);
+    await clearDigisacInternalRedirectSession(contactId);
+    await markDigisacSatisfactionAnswered(contactId);
+    const close = await closeDigisacTicket(contactId, 'Atendimento encerrado manualmente via atalho interno .100. Não enviar pesquisa de satisfação.');
+
+    return {
+        success: true,
+        action: 'manual_close_digisac_ticket',
+        notification,
+        close
     };
 }
 
@@ -1362,6 +1473,8 @@ router.all('/digisac/consultor', async (req, res) => {
         const earlyContactId = req.body?.contactId || req.body?.contact_id || req.query.contactId || req.query.contact_id || findContactIdInPayload(req.body);
         const earlyMessageText = getDigisacMessageText(req) || findTextInPayload(req.body);
         const isFlowWebhookCommand = ['consulta_cliente', 'consulta_cnpj_contato', 'consulta_contato', 'verifica_cnpj_contato', 'opcao_cliente'].includes(earlyCommand);
+        const earlyTextCommand = String(earlyMessageText || '').trim().toLowerCase();
+        const isInternalShortcutCommand = earlyTextCommand === DIGISAC_INTERNAL_CLOSE_COMMAND || Boolean(DIGISAC_INTERNAL_REDIRECTS[earlyTextCommand]);
         const earlySatisfactionReplyText = String(earlyMessageText || '').trim();
         if (/^[1-5]$/.test(earlySatisfactionReplyText)) {
             await markDigisacSatisfactionAnswered(earlyContactId);
@@ -1378,7 +1491,7 @@ router.all('/digisac/consultor', async (req, res) => {
             });
         }
 
-        if (isDigisacWebhookFromBot(req) && !isFlowWebhookCommand) {
+        if (isDigisacWebhookFromBot(req) && !isFlowWebhookCommand && !isInternalShortcutCommand) {
             return res.json({ success: true, ignored: true, action: 'bot_message', message: 'Evento Digisac originado pelo bot ignorado.' });
         }
 
@@ -1393,6 +1506,11 @@ router.all('/digisac/consultor', async (req, res) => {
         const directCommand = String(req.body?.command || req.body?.comando || req.query.command || req.query.comando || '').trim();
         const command = directCommand || String(findCommandInPayload(req.body) || '').trim();
         let commandNormalized = command.toLowerCase();
+        if (isDigisacManualCloseCommand(req)) {
+            await saveDigisacDebug(req, DIGISAC_INTERNAL_CLOSE_COMMAND);
+            const result = await handleDigisacManualClose(contactId);
+            return res.json(result);
+        }
         const internalRedirectTarget = extractDigisacInternalRedirect(req);
         if (internalRedirectTarget) {
             await saveDigisacDebug(req, internalRedirectTarget);
@@ -2173,6 +2291,22 @@ router.all('/digisac/satisfaction/start', async (req, res) => {
         }
         if (Number.isNaN(expiresAt.getTime())) {
             return res.status(400).json({ success: false, error: 'expiresAt inválido.' });
+        }
+
+        await ensureDigisacManualCloseSuppressionsTable();
+        const suppressed = await pool.query(`
+            SELECT contact_id
+            FROM digisac_manual_close_suppressions
+            WHERE contact_id = $1
+              AND created_at >= NOW() - INTERVAL '30 minutes'
+            LIMIT 1
+        `, [contactId]);
+        if (suppressed.rowCount > 0) {
+            return res.json({
+                success: true,
+                ignored: true,
+                action: 'pesquisa_satisfacao_suprimida_encerramento_manual'
+            });
         }
 
         const result = await saveDigisacSatisfactionSurvey(contactId, expiresAt);
