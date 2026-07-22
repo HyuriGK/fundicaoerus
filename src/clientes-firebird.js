@@ -29,6 +29,15 @@ const DIGISAC_INTERNAL_REDIRECTS = {
     '.99': 'GERUZA MENDES'
 };
 
+function getCommercialOwnerRestriction(req) {
+    const role = String(req.user?.role || '').trim().toLowerCase();
+    const username = String(req.user?.user || '').trim().toLowerCase();
+    const name = String(req.user?.name || '').trim().toLowerCase();
+    if (role === 'comercial' && (username === 'geruza' || name === 'geruza mendes')) return 'GERUZA MENDES';
+    if (role === 'comercial' && (username === 'elisangela' || name === 'elisangela')) return 'ELISANGELA';
+    return null;
+}
+
 async function ensureResponsaveisTable() {
     await pool.query(`
         CREATE TABLE IF NOT EXISTS clientes_responsavel_comercial (
@@ -1258,6 +1267,8 @@ router.get('/list/all', async (req, res) => {
         await pool.query('ALTER TABLE clientes_firebird_sync ADD COLUMN IF NOT EXISTS cidade_latitude NUMERIC');
         await pool.query('ALTER TABLE clientes_firebird_sync ADD COLUMN IF NOT EXISTS cidade_longitude NUMERIC');
 
+        const commercialOwner = getCommercialOwnerRestriction(req);
+        const params = commercialOwner ? [commercialOwner] : [];
         const result = await pool.query(`
         SELECT
             c.empresa, c.codigo, c.razao_social, c.fantasia, c.ativo, c.bloqueado,
@@ -1269,8 +1280,9 @@ router.get('/list/all', async (req, res) => {
         LEFT JOIN clientes_responsavel_comercial rc
             ON rc.empresa = c.empresa
             AND rc.codigo = c.codigo
+        ${commercialOwner ? 'WHERE rc.responsavel_comercial = $1' : ''}
         ORDER BY c.razao_social NULLS LAST, c.codigo
-        `);
+        `, params);
 
         const data = result.rows.map(row => ({
             empresa: row.empresa,
