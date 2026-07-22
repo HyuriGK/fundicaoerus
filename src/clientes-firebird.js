@@ -757,6 +757,7 @@ async function handleDigisacManualClose(contactId) {
     await clearDigisacClienteSession(contactId);
     await clearDigisacInternalRedirectSession(contactId);
     await markDigisacSatisfactionAnswered(contactId);
+    const atendimentoTagRemoval = await removeDigisacEmAtendimentoTag(contactId);
     const noSurveyDepartmentTransfer = await transferDigisacTicketToNoSurveyDepartment(contactId);
     const close = await closeDigisacTicket(contactId, 'Atendimento encerrado manualmente via atalho interno .100. Não enviar pesquisa de satisfação.');
 
@@ -765,6 +766,7 @@ async function handleDigisacManualClose(contactId) {
         action: 'manual_close_digisac_ticket',
         notification,
         noSurveyTag,
+        atendimentoTagRemoval,
         noSurveyDepartmentTransfer,
         close
     };
@@ -1122,6 +1124,31 @@ async function addDigisacEmAtendimentoTag(contactId) {
     });
 
     return { success: !!result, tagId };
+}
+
+async function removeDigisacEmAtendimentoTag(contactId) {
+    if (!contactId) return null;
+
+    const tagId = await getDigisacEmAtendimentoTagId();
+    if (!tagId) return { success: false, reason: 'tag_not_found' };
+
+    const encodedContactId = encodeURIComponent(contactId);
+    const encodedTagId = encodeURIComponent(tagId);
+    const candidates = [
+        { path: `/contacts/${encodedContactId}/tags/${encodedTagId}`, method: 'DELETE' },
+        { path: `/contacts/${encodedContactId}/tags`, method: 'DELETE', body: { tagId } },
+        { path: `/contacts/${encodedContactId}/tags/remove`, method: 'POST', body: { tagId } }
+    ];
+
+    for (const candidate of candidates) {
+        const result = await requestDigisacJson(candidate.path, {
+            method: candidate.method,
+            body: candidate.body
+        });
+        if (result) return { success: true, tagId, path: candidate.path, method: candidate.method };
+    }
+
+    return { success: false, reason: 'tag_remove_endpoint_not_confirmed', tagId };
 }
 
 async function addDigisacManualCloseNoSurveyTag(contactId) {
