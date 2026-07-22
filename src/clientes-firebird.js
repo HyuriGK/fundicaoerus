@@ -1118,12 +1118,24 @@ async function addDigisacEmAtendimentoTag(contactId) {
     const tagId = await getDigisacEmAtendimentoTagId();
     if (!tagId) return { success: false, reason: 'tag_not_found' };
 
-    const result = await requestDigisacJson(`/contacts/${encodeURIComponent(contactId)}/tags`, {
-        method: 'POST',
-        body: { tagId }
-    });
+    const encodedContactId = encodeURIComponent(contactId);
+    const candidates = [
+        { path: `/contacts/${encodedContactId}/tags`, method: 'POST', body: { tagId } },
+        { path: `/contacts/${encodedContactId}/tags`, method: 'POST', body: { tags: [tagId] } },
+        { path: `/contacts/${encodedContactId}/tags`, method: 'POST', body: { tagIds: [tagId] } },
+        { path: `/contacts/${encodedContactId}/tags/${encodeURIComponent(tagId)}`, method: 'POST' },
+        { path: `/contacts/${encodedContactId}`, method: 'PATCH', body: { tagIds: [tagId] } }
+    ];
 
-    return { success: !!result, tagId };
+    for (const candidate of candidates) {
+        const result = await requestDigisacJson(candidate.path, {
+            method: candidate.method,
+            body: candidate.body
+        });
+        if (result) return { success: true, tagId, path: candidate.path, method: candidate.method };
+    }
+
+    return { success: false, reason: 'tag_add_endpoint_not_confirmed', tagId };
 }
 
 async function removeDigisacEmAtendimentoTag(contactId) {
@@ -1157,12 +1169,24 @@ async function addDigisacManualCloseNoSurveyTag(contactId) {
     const tagId = await getDigisacManualCloseNoSurveyTagId();
     if (!tagId) return { success: false, reason: 'tag_not_found', tagName: DIGISAC_MANUAL_CLOSE_NO_SURVEY_TAG_NAME };
 
-    const result = await requestDigisacJson(`/contacts/${encodeURIComponent(contactId)}/tags`, {
-        method: 'POST',
-        body: { tagId }
-    });
+    const encodedContactId = encodeURIComponent(contactId);
+    const candidates = [
+        { path: `/contacts/${encodedContactId}/tags`, method: 'POST', body: { tagId } },
+        { path: `/contacts/${encodedContactId}/tags`, method: 'POST', body: { tags: [tagId] } },
+        { path: `/contacts/${encodedContactId}/tags`, method: 'POST', body: { tagIds: [tagId] } },
+        { path: `/contacts/${encodedContactId}/tags/${encodeURIComponent(tagId)}`, method: 'POST' },
+        { path: `/contacts/${encodedContactId}`, method: 'PATCH', body: { tagIds: [tagId] } }
+    ];
 
-    return { success: !!result, tagId, tagName: DIGISAC_MANUAL_CLOSE_NO_SURVEY_TAG_NAME };
+    for (const candidate of candidates) {
+        const result = await requestDigisacJson(candidate.path, {
+            method: candidate.method,
+            body: candidate.body
+        });
+        if (result) return { success: true, tagId, tagName: DIGISAC_MANUAL_CLOSE_NO_SURVEY_TAG_NAME, path: candidate.path, method: candidate.method };
+    }
+
+    return { success: false, reason: 'tag_add_endpoint_not_confirmed', tagId, tagName: DIGISAC_MANUAL_CLOSE_NO_SURVEY_TAG_NAME };
 }
 
 function findContactIdInPayload(value) {
