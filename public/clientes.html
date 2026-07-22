@@ -220,6 +220,11 @@
         .contact-actions { grid-column:1 / -1; display:flex; justify-content:flex-end; gap:10px; padding-top:4px; }
         .btn-contact { height:28px; padding:0 10px; border-radius:6px; border:1px solid rgba(16,185,129,0.28); background:rgba(16,185,129,0.1); color:#10b981; font-size:0.7rem; font-weight:900; cursor:pointer; }
         .btn-contact:hover { background:rgba(16,185,129,0.18); }
+        .contact-view-grid { padding:18px 24px 24px; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }
+        .contact-view-item { border:1px solid rgba(255,255,255,0.08); border-radius:8px; padding:10px; background:rgba(255,255,255,0.02); min-width:0; }
+        .contact-view-item.full { grid-column:1 / -1; }
+        .contact-view-label { color:var(--text-muted); font-size:0.64rem; font-weight:900; text-transform:uppercase; margin-bottom:6px; }
+        .contact-view-value { color:#fff; font-size:0.8rem; line-height:1.45; white-space:pre-wrap; word-break:break-word; }
         .crm-close { width:30px; height:30px; border-radius:6px; border:1px solid var(--border-subtle); background:rgba(255,255,255,0.03); color:#fff; cursor:pointer; flex-shrink:0; }
         .crm-drawer-body { padding:16px 22px 22px; overflow:auto; }
         .crm-metrics { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:8px; margin-bottom:14px; }
@@ -347,6 +352,13 @@
             backdrop-filter:blur(5px);
         }
         #clientContactModal {
+            display:none; position:fixed; inset:0;
+            width:100vw; margin-left:0 !important;
+            background:rgba(0,0,0,0.78); z-index:8000;
+            align-items:center; justify-content:center;
+            backdrop-filter:blur(6px);
+        }
+        #clientContactViewModal {
             display:none; position:fixed; inset:0;
             width:100vw; margin-left:0 !important;
             background:rgba(0,0,0,0.78); z-index:8000;
@@ -678,6 +690,19 @@
                 <button class="btn-save" onclick="saveClientContact()"><i class="fa-solid fa-check"></i> Salvar contato</button>
             </div>
         </div>
+    </div>
+</div>
+
+<div id="clientContactViewModal" class="modal-overlay">
+    <div class="contact-modal-card">
+        <div class="crm-header">
+            <div>
+                <h2 class="crm-title"><i class="fa-solid fa-eye" style="margin-right:14px;color:#38bdf8;"></i>Detalhes do Contato</h2>
+                <div class="modal-sub" id="contactViewClientName" style="margin-top:4px;">Cliente</div>
+            </div>
+            <span class="crm-close" onclick="closeClientContactViewModal()" title="Fechar (ESC)">&times;</span>
+        </div>
+        <div class="contact-view-grid" id="contactViewBody"></div>
     </div>
 </div>
 
@@ -2192,7 +2217,7 @@ function renderLatestContacts() {
     tbody.innerHTML = latestContacts.map(c => {
         const date = c.contato_em ? fmtDateShort(c.contato_em) : '-';
         const name = c.cliente_nome || 'Cliente';
-        return `<tr onclick="openCrmDrawer('${escapeJs(name)}')" style="cursor:pointer;">
+        return `<tr onclick="openClientContactViewModal(${Number(c.id)})" style="cursor:pointer;">
             <td style="color:#38bdf8;font-weight:800;">${date}</td>
             <td style="font-weight:800;color:#fff;max-width:280px;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(name)}</td>
             <td>${escapeHtml(c.canal || '-')}</td>
@@ -2203,6 +2228,34 @@ function renderLatestContacts() {
             <td>${escapeHtml(c.proxima_acao || '-')}</td>
         </tr>`;
     }).join('') || '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:28px;">Nenhum contato registrado.</td></tr>';
+}
+
+function openClientContactViewModal(id) {
+    const contact = latestContacts.find(c => Number(c.id) === Number(id));
+    if (!contact) return;
+    document.getElementById('contactViewClientName').textContent = contact.cliente_nome || 'Cliente';
+    const items = [
+        ['Data do contato', contact.contato_em ? fmtDateShort(contact.contato_em) : '-'],
+        ['Canal', contact.canal || '-'],
+        ['Pessoa contatada', contact.pessoa_contatada || '-'],
+        ['Motivo', contact.motivo || '-'],
+        ['Resultado', contact.resultado || '-'],
+        ['Humor do cliente', contact.humor_cliente || '-'],
+        ['Potencial', contact.potencial || '-'],
+        ['Próxima ação', contact.proxima_acao || '-'],
+        ['Data da próxima ação', contact.data_proxima_acao ? fmtDateShort(contact.data_proxima_acao) : '-'],
+        ['Resumo do contato', contact.resumo || '-', 'full']
+    ];
+    document.getElementById('contactViewBody').innerHTML = items.map(([label, value, wide]) => `
+        <div class="contact-view-item ${wide || ''}">
+            <div class="contact-view-label">${escapeHtml(label)}</div>
+            <div class="contact-view-value">${escapeHtml(value)}</div>
+        </div>`).join('');
+    document.getElementById('clientContactViewModal').style.display = 'flex';
+}
+
+function closeClientContactViewModal() {
+    document.getElementById('clientContactViewModal').style.display = 'none';
 }
 
 function openClientContactModal(empresa, codigo) {
@@ -2421,6 +2474,7 @@ document.addEventListener('keydown', e => {
         closeStatusModal();
         closeClientsRecordsModal();
         closeClientContactModal();
+        closeClientContactViewModal();
         closeAbcModal();
         closeCrmDrawer();
     }
