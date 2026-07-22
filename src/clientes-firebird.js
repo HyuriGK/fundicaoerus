@@ -541,6 +541,28 @@ async function markDigisacSatisfactionAnswered(contactId) {
     return { success: result.rowCount > 0 };
 }
 
+async function deleteDigisacMessage(messageId) {
+    if (!messageId) return { success: false, reason: 'missing_message_id' };
+    const encoded = encodeURIComponent(messageId);
+    const candidates = [
+        { path: `/messages/${encoded}`, method: 'DELETE' },
+        { path: `/messages/${encoded}/delete`, method: 'POST' },
+        { path: `/messages/${encoded}`, method: 'PATCH', body: { visible: false, deleted: true } }
+    ];
+
+    for (const candidate of candidates) {
+        const result = await requestDigisacJson(candidate.path, {
+            method: candidate.method,
+            body: candidate.body
+        });
+        if (result) {
+            return { success: true, path: candidate.path, method: candidate.method };
+        }
+    }
+
+    return { success: false, reason: 'message_delete_endpoint_not_confirmed', messageId };
+}
+
 async function isDigisacManualCloseSuppressed(contactId) {
     if (!contactId) return false;
     await ensureDigisacManualCloseSuppressionsTable();
@@ -1532,11 +1554,14 @@ router.all('/digisac/consultor', async (req, res) => {
 
         if (isDigisacWebhookFromBot(req) && isLikelyDigisacSatisfactionSurveyText(earlyMessageText)) {
             if (await isDigisacManualCloseSuppressed(earlyContactId)) {
+                const messageId = String(req.body?.data?.message?.id || req.body?.data?.id || extractDigisacWebhookEventId(req.body) || '').trim();
+                const deletedMessage = await deleteDigisacMessage(messageId);
                 await markDigisacSatisfactionAnswered(earlyContactId);
                 return res.json({
                     success: true,
                     ignored: true,
-                    action: 'pesquisa_satisfacao_suprimida_encerramento_manual'
+                    action: 'pesquisa_satisfacao_suprimida_encerramento_manual',
+                    deletedMessage
                 });
             }
             const expiresAt = new Date(Date.now() + DIGISAC_SATISFACTION_TTL_MINUTES * 60000);
