@@ -24,6 +24,8 @@ function findContactId(value) {
         SELECT id, created_at, body
         FROM digisac_webhook_debug
         WHERE body::text ILIKE '%.100%'
+           OR body::text ILIKE '%.77%'
+           OR body::text ILIKE '%.99%'
         ORDER BY id DESC
         LIMIT 5
     `);
