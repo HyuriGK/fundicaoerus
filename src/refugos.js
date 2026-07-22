@@ -3,6 +3,15 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../lib/db');
 
+function getCommercialOwnerRestriction(req) {
+    const role = String(req.user?.role || '').trim().toLowerCase();
+    const username = String(req.user?.user || '').trim().toLowerCase();
+    const name = String(req.user?.name || '').trim().toLowerCase();
+    if (role === 'comercial' && (username === 'geruza' || name === 'geruza mendes')) return 'GERUZA MENDES';
+    if (role === 'comercial' && (username === 'elisangela' || name === 'elisangela')) return 'ELISANGELA';
+    return null;
+}
+
 // --- INIT MAPPING TABLE ---
 (async () => {
     const client = await pool.connect();
@@ -27,6 +36,20 @@ router.get('/', async (req, res) => {
     const client = await pool.connect();
 
     try {
+        const commercialOwner = getCommercialOwnerRestriction(req);
+        const params = commercialOwner ? [commercialOwner] : [];
+        const ownerFilter = commercialOwner ? `
+            WHERE EXISTS (
+                SELECT 1
+                FROM clientes_firebird_sync c
+                JOIN clientes_responsavel_comercial rc
+                  ON rc.empresa = c.empresa
+                 AND rc.codigo = c.codigo
+                 AND rc.responsavel_comercial = $1
+                WHERE UPPER(TRIM(c.razao_social)) = UPPER(TRIM(r.cliente))
+            )
+        ` : '';
+
         // Fetch synchronized scrap data JOINED with manual mapping
         const dados = await client.query(`
             SELECT 
@@ -56,8 +79,9 @@ router.get('/', async (req, res) => {
                 ORDER BY e.updated_at DESC
                 LIMIT 1
             ) vp ON true
+            ${ownerFilter}
             ORDER BY r.data_refugo DESC
-        `);
+        `, params);
 
         let prodMap = {};
 
