@@ -2399,4 +2399,23 @@ router.post('/crm/contatos', async (req, res) => {
     }
 });
 
+router.get('/crm/contatos', async (req, res) => {
+    try {
+        await ensureClientesContatosTable();
+        const crmUser = String(req.user?.user || req.user?.name || '').trim();
+        if (!crmUser) return res.status(400).json({ success: false, error: 'Usuário inválido.' });
+        const result = await pool.query(`
+            SELECT id, cliente_nome, empresa, codigo, crm_user, contato_em, canal, pessoa_contatada,
+                   motivo, resultado, humor_cliente, potencial, proxima_acao, data_proxima_acao, resumo, created_at
+            FROM clientes_contatos_crm
+            WHERE crm_user = $1
+            ORDER BY contato_em DESC, id DESC
+            LIMIT 20
+        `, [crmUser]);
+        res.json({ success: true, data: result.rows });
+    } catch (err) {
+        res.status(500).json({ success: false, error: 'Erro ao consultar contatos de clientes', details: err.message });
+    }
+});
+
 module.exports = router;
