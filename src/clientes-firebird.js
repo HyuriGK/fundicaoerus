@@ -539,6 +539,19 @@ async function markDigisacSatisfactionAnswered(contactId) {
     return { success: result.rowCount > 0 };
 }
 
+async function isDigisacManualCloseSuppressed(contactId) {
+    if (!contactId) return false;
+    await ensureDigisacManualCloseSuppressionsTable();
+    const result = await pool.query(`
+        SELECT contact_id
+        FROM digisac_manual_close_suppressions
+        WHERE contact_id = $1
+          AND created_at >= NOW() - INTERVAL '2 hours'
+        LIMIT 1
+    `, [contactId]);
+    return result.rowCount > 0;
+}
+
 async function processExpiredDigisacSatisfactionSurveys() {
     await ensureDigisacSatisfactionSurveysTable();
 
@@ -656,7 +669,16 @@ async function clearDigisacInternalRedirectSession(contactId) {
 
 async function closeDigisacTicket(contactId, comments) {
     if (!contactId) return null;
-    const body = { comments: comments || 'Atendimento encerrado manualmente pelo atalho interno .100.' };
+    const body = {
+        ticketTopicIds: [],
+        comments: comments || 'Atendimento encerrado manualmente pelo atalho interno .100.',
+        sendSurvey: false,
+        sendEvaluation: false,
+        sendSatisfactionSurvey: false,
+        satisfactionSurvey: false,
+        evaluation: false,
+        survey: false
+    };
     const encoded = encodeURIComponent(contactId);
     const candidates = [
         { path: `/contacts/${encoded}/ticket/close`, method: 'POST' },
@@ -1481,6 +1503,14 @@ router.all('/digisac/consultor', async (req, res) => {
         }
 
         if (isDigisacWebhookFromBot(req) && isLikelyDigisacSatisfactionSurveyText(earlyMessageText)) {
+            if (await isDigisacManualCloseSuppressed(earlyContactId)) {
+                await markDigisacSatisfactionAnswered(earlyContactId);
+                return res.json({
+                    success: true,
+                    ignored: true,
+                    action: 'pesquisa_satisfacao_suprimida_encerramento_manual'
+                });
+            }
             const expiresAt = new Date(Date.now() + DIGISAC_SATISFACTION_TTL_MINUTES * 60000);
             const result = await saveDigisacSatisfactionSurvey(earlyContactId, expiresAt);
             return res.json({
@@ -2293,15 +2323,7 @@ router.all('/digisac/satisfaction/start', async (req, res) => {
             return res.status(400).json({ success: false, error: 'expiresAt inválido.' });
         }
 
-        await ensureDigisacManualCloseSuppressionsTable();
-        const suppressed = await pool.query(`
-            SELECT contact_id
-            FROM digisac_manual_close_suppressions
-            WHERE contact_id = $1
-              AND created_at >= NOW() - INTERVAL '30 minutes'
-            LIMIT 1
-        `, [contactId]);
-        if (suppressed.rowCount > 0) {
+        if (await isDigisacManualCloseSuppressed(contactId)) {
             return res.json({
                 success: true,
                 ignored: true,
