@@ -210,6 +210,18 @@
         .crm-field textarea, .crm-field input, .crm-field select { width:100%; border:1px solid var(--border-subtle); background:rgba(0,0,0,0.24); color:#fff; border-radius:7px; padding:9px 10px; font-family:var(--font-main); font-size:0.78rem; }
         .crm-field textarea { min-height:86px; resize:vertical; }
         .crm-save { width:100%; height:34px; border:0; border-radius:7px; background:var(--color-primary); color:#111; font-weight:900; cursor:pointer; }
+        .dashboard-grid { display:grid; grid-template-columns:1.1fr 0.9fr; gap:10px; min-height:0; overflow:hidden; }
+        .dashboard-card { background:rgba(255,255,255,0.02); border:1px solid var(--border-subtle); border-radius:8px; overflow:hidden; min-height:240px; }
+        .dashboard-card-head { height:38px; padding:0 12px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--border-subtle); background:rgba(0,0,0,0.18); }
+        .dashboard-card-title { color:#fff; font-size:0.74rem; font-weight:800; text-transform:uppercase; letter-spacing:0.04em; }
+        .dashboard-chart-wrap { height:260px; padding:12px; position:relative; }
+        .inactive-list { padding:8px 10px; display:flex; flex-direction:column; gap:6px; max-height:278px; overflow:auto; }
+        .inactive-row { display:grid; grid-template-columns:24px 1fr auto; gap:8px; align-items:center; padding:8px; border:1px solid rgba(255,255,255,0.07); border-radius:7px; background:rgba(0,0,0,0.16); cursor:pointer; }
+        .inactive-row:hover { border-color:rgba(251,191,36,0.28); background:rgba(255,255,255,0.035); }
+        .inactive-rank { color:var(--text-dim,#52525b); font-family:var(--font-mono); font-size:0.68rem; }
+        .inactive-name { color:#fff; font-size:0.74rem; font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .inactive-meta { color:var(--text-muted); font-size:0.66rem; margin-top:2px; }
+        .inactive-price { color:var(--color-primary); font-family:var(--font-mono); font-size:0.72rem; font-weight:900; }
         /* ABC */
         .abc-score { font-weight:800; }
         .abc-a { color:#10b981; }
@@ -590,7 +602,8 @@
         <input type="text" class="search-input" id="searchInput" placeholder="Buscar cliente..." oninput="renderTable()">
         <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
             <select class="chart-pill-select" id="chartSelectDropdown" onchange="selectChartView(this.value)">
-                <option value="">RANKING</option>
+                <option value="dashboard">DASHBOARD</option>
+                <option value="ranking">RANKING DE CLIENTES</option>
                 <option value="fat">FATURAMENTO (R$)</option>
                 <option value="peso">PESO TOTAL (kg)</option>
                 <option value="preco">PREÇO MÉDIO (R$/kg)</option>
@@ -614,6 +627,39 @@
                 <button class="btn-act btn-expand" onclick="promptSelectClientForAction()" title="Nova ação"><i class="fa-solid fa-plus"></i></button>
             </div>
             <div class="crm-actions" id="crmActions"></div>
+        </div>
+    </div>
+
+    <div id="dashboardSection">
+        <div class="dashboard-grid">
+            <div class="dashboard-card">
+                <div class="dashboard-card-head">
+                    <div class="dashboard-card-title"><i class="fa-solid fa-chart-column" style="color:var(--color-primary);margin-right:8px;"></i>Top clientes por faturamento</div>
+                    <div style="font-size:0.68rem;color:var(--text-muted);" id="dashFatPeriod">—</div>
+                </div>
+                <div class="dashboard-chart-wrap"><canvas id="dashFatChart"></canvas></div>
+            </div>
+            <div class="dashboard-card">
+                <div class="dashboard-card-head">
+                    <div class="dashboard-card-title"><i class="fa-solid fa-triangle-exclamation" style="color:#f59e0b;margin-right:8px;"></i>Top 10 inativos por preço/kg</div>
+                    <div style="font-size:0.68rem;color:var(--text-muted);">+90 dias</div>
+                </div>
+                <div class="inactive-list" id="inactiveTopList"></div>
+            </div>
+            <div class="dashboard-card">
+                <div class="dashboard-card-head">
+                    <div class="dashboard-card-title"><i class="fa-solid fa-scale-balanced" style="color:#a855f7;margin-right:8px;"></i>Peso por cliente</div>
+                    <div style="font-size:0.68rem;color:var(--text-muted);" id="dashPesoPeriod">—</div>
+                </div>
+                <div class="dashboard-chart-wrap"><canvas id="dashPesoChart"></canvas></div>
+            </div>
+            <div class="dashboard-card">
+                <div class="dashboard-card-head">
+                    <div class="dashboard-card-title"><i class="fa-solid fa-gauge-high" style="color:#10b981;margin-right:8px;"></i>Preço médio por cliente</div>
+                    <div style="font-size:0.68rem;color:var(--text-muted);" id="dashPrecoPeriod">—</div>
+                </div>
+                <div class="dashboard-chart-wrap"><canvas id="dashPrecoChart"></canvas></div>
+            </div>
         </div>
     </div>
 
@@ -642,7 +688,7 @@
     </div>
 
     <!-- Table (view=ranking) -->
-    <div class="table-container" id="rankingSection" style="margin-bottom:8px;">
+    <div class="table-container" id="rankingSection" style="margin-bottom:8px;display:none;">
         <div class="table-header-bar">
             <div class="table-title-text"><i class="fa-solid fa-ranking-star" style="color:var(--color-primary);margin-right:8px;"></i>Ranking de Clientes</div>
             <div style="font-size:0.7rem;color:var(--text-muted);" id="tableCount">—</div>
@@ -721,8 +767,8 @@ let fatPesoOverrides = new Map();
 let valorVisible = false;
 let currentAbcClient = null;
 let sortState = { col: 'fat', dir: 'desc' };
-let currentView = 'ranking';
-let charts = { active: null };
+let currentView = 'dashboard';
+let charts = { active: null, dashFat: null, dashPeso: null, dashPreco: null };
 let activeChartType = 'fat';
 let chartAllLabels = [];
 let chartBarPx = 40;
@@ -808,7 +854,8 @@ function setMonth(m) {
 
 function setView(v) {
     currentView = v;
-    if (v === 'ranking') document.getElementById('chartSelectDropdown').value = '';
+    document.getElementById('chartSelectDropdown').value = v === 'charts' ? activeChartType : v;
+    document.getElementById('dashboardSection').style.display = v === 'dashboard' ? '' : 'none';
     document.getElementById('rankingSection').style.display = v === 'ranking' ? '' : 'none';
     const cs = document.getElementById('chartsSection');
     if (v === 'charts') {
@@ -821,12 +868,12 @@ function setView(v) {
         cs.style.display = 'none';
         document.body.style.overflow = '';
         document.body.style.paddingBottom = '';
+        if (v === 'dashboard') renderDashboard();
     }
 }
 
 function selectChartView(type) {
-    const dropdown = document.getElementById('chartSelectDropdown');
-    if (!type) { setView('ranking'); dropdown.value = ''; return; }
+    if (type === 'dashboard' || type === 'ranking') { setView(type); return; }
     activeChartType = type;
     setView('charts');
 }
@@ -927,6 +974,7 @@ function applyFilters() {
     updateKPIs();
     renderCrm();
     renderTable();
+    if (currentView === 'dashboard') renderDashboard();
     if (currentView === 'charts') renderCharts();
 }
 
@@ -1058,6 +1106,7 @@ function toggleValorVisibility() {
     updateKPIs();
     renderCrm();
     renderTable();
+    if (currentView === 'dashboard') renderDashboard();
     if (currentView === 'charts') renderCharts();
 }
 
@@ -1242,6 +1291,71 @@ async function completeCrmAction(clientName) {
     if (!ok) return;
     const record = { ...crmRecords[clientName], nextAction: '', dueDate: '' };
     saveCrmToDatabase(clientName, record, { silent: true });
+}
+
+function renderDashboard() {
+    const period = getSelectedPeriodLabel();
+    ['dashFatPeriod','dashPesoPeriod','dashPrecoPeriod'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = period;
+    });
+    renderDashboardChart('dashFat', 'dashFatChart', [...clientList].sort((a,b) => b.fat - a.fat).slice(0, 10), 'fat', '#fbbf24');
+    renderDashboardChart('dashPeso', 'dashPesoChart', [...clientList].sort((a,b) => b.peso - a.peso).slice(0, 10), 'peso', '#a855f7');
+    renderDashboardChart('dashPreco', 'dashPrecoChart', [...clientList].filter(c => c.peso > 0).sort((a,b) => b.preco_kg - a.preco_kg).slice(0, 10), 'preco_kg', '#10b981');
+    renderInactiveTopPrice();
+}
+
+function renderDashboardChart(key, canvasId, rows, field, color) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    if (charts[key]) charts[key].destroy();
+    charts[key] = new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels: rows.map(c => c.name.length > 22 ? c.name.slice(0, 22) + '...' : c.name),
+            datasets: [{ data: rows.map(c => c[field] || 0), backgroundColor: color, borderRadius: 4, maxBarThickness: 28 }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display:false }, tooltip: { callbacks: { label: ctx => formatDashboardValue(ctx.raw, field) } } },
+            scales: {
+                x: { ticks:{ color:'#a1a1aa', font:{ size:10 } }, grid:{ display:false } },
+                y: { ticks:{ color:'#71717a', callback:v => compactValue(v, field) }, grid:{ color:'rgba(255,255,255,0.06)' } }
+            },
+            onClick: (_, items) => { if (items.length) openCrmDrawer(rows[items[0].index].name); }
+        }
+    });
+}
+
+function renderInactiveTopPrice() {
+    const box = document.getElementById('inactiveTopList');
+    if (!box) return;
+    const rows = [...clientList].filter(c => c.days > 90 && c.peso > 0 && c.preco_kg > 0).sort((a,b) => b.preco_kg - a.preco_kg).slice(0, 10);
+    box.innerHTML = rows.map((c, i) => `
+        <div class="inactive-row" onclick="openCrmDrawer('${escapeJs(c.name)}')">
+            <div class="inactive-rank">${i + 1}</div>
+            <div style="min-width:0;">
+                <div class="inactive-name">${escapeHtml(c.name)}</div>
+                <div class="inactive-meta">${c.days} dias sem compra · ${fmtNum(c.peso)} kg</div>
+            </div>
+            <div class="inactive-price">${valorVisible ? fmtMoney(c.preco_kg) + '/kg' : 'R$ -----'}</div>
+        </div>`).join('') || '<div style="color:var(--text-muted);font-size:0.72rem;padding:10px;">Nenhum cliente inativo com preço/kg no período.</div>';
+}
+
+function formatDashboardValue(value, field) {
+    if (field === 'peso') return fmtNum(value) + ' kg';
+    if (field === 'preco_kg') return valorVisible ? fmtMoney(value) + '/kg' : 'R$ -----';
+    return valorVisible ? fmtMoney(value) : 'R$ -----';
+}
+
+function compactValue(value, field) {
+    if (field !== 'peso' && !valorVisible) return '';
+    const n = Number(value || 0);
+    if (field === 'peso') return n >= 1000 ? Math.round(n / 1000) + 'k' : Math.round(n);
+    if (n >= 1000000) return 'R$ ' + (n / 1000000).toFixed(1) + 'M';
+    if (n >= 1000) return 'R$ ' + Math.round(n / 1000) + 'k';
+    return Math.round(n);
 }
 
 async function saveCrmToDatabase(clientName, record, options = {}) {
