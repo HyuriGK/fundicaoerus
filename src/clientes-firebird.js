@@ -15,6 +15,8 @@ const DIGISAC_FINANCEIRO_DEPARTMENT_ID = process.env.DIGISAC_FINANCEIRO_DEPARTME
 const DIGISAC_FINANCEIRO_USER_ID = process.env.DIGISAC_FINANCEIRO_USER_ID || 'c1d3e230-d249-4406-bbb1-2a9bd0e501f3';
 const DIGISAC_EM_ATENDIMENTO_TAG_ID = process.env.DIGISAC_EM_ATENDIMENTO_TAG_ID || '';
 const DIGISAC_EM_ATENDIMENTO_TAG_NAME = process.env.DIGISAC_EM_ATENDIMENTO_TAG_NAME || 'em_atendimento';
+const DIGISAC_MANUAL_CLOSE_NO_SURVEY_TAG_ID = process.env.DIGISAC_MANUAL_CLOSE_NO_SURVEY_TAG_ID || '';
+const DIGISAC_MANUAL_CLOSE_NO_SURVEY_TAG_NAME = process.env.DIGISAC_MANUAL_CLOSE_NO_SURVEY_TAG_NAME || 'manual_close_no_survey';
 const DIGISAC_CNPJ_MAX_RETRIES = 2;
 const DIGISAC_SATISFACTION_TTL_MINUTES = Number(process.env.DIGISAC_SATISFACTION_TTL_MINUTES || 15);
 
@@ -713,6 +715,7 @@ async function handleDigisacManualClose(contactId) {
         ON CONFLICT (contact_id)
         DO UPDATE SET created_at = NOW()
     `, [contactId]);
+    const noSurveyTag = await addDigisacManualCloseNoSurveyTag(contactId);
     await clearDigisacClienteSession(contactId);
     await clearDigisacInternalRedirectSession(contactId);
     await markDigisacSatisfactionAnswered(contactId);
@@ -722,6 +725,7 @@ async function handleDigisacManualClose(contactId) {
         success: true,
         action: 'manual_close_digisac_ticket',
         notification,
+        noSurveyTag,
         close
     };
 }
@@ -1029,17 +1033,24 @@ function extractDigisacRows(payload) {
     return [];
 }
 
-async function getDigisacEmAtendimentoTagId() {
-    if (DIGISAC_EM_ATENDIMENTO_TAG_ID) return DIGISAC_EM_ATENDIMENTO_TAG_ID;
-
+async function getDigisacTagIdByName(tagName, fallbackId) {
+    if (fallbackId) return fallbackId;
+    const normalizedTagName = String(tagName || '').trim().toLowerCase();
+    if (!normalizedTagName) return '';
     const payload = await fetchDigisacJson('/tags');
-    const tagName = DIGISAC_EM_ATENDIMENTO_TAG_NAME.toLowerCase();
     const tag = extractDigisacRows(payload).find(item => {
         const name = String(item?.name || item?.label || item?.title || '').trim().toLowerCase();
-        return name === tagName;
+        return name === normalizedTagName;
     });
-
     return tag?.id || '';
+}
+
+async function getDigisacEmAtendimentoTagId() {
+    return getDigisacTagIdByName(DIGISAC_EM_ATENDIMENTO_TAG_NAME, DIGISAC_EM_ATENDIMENTO_TAG_ID);
+}
+
+async function getDigisacManualCloseNoSurveyTagId() {
+    return getDigisacTagIdByName(DIGISAC_MANUAL_CLOSE_NO_SURVEY_TAG_NAME, DIGISAC_MANUAL_CLOSE_NO_SURVEY_TAG_ID);
 }
 
 async function addDigisacEmAtendimentoTag(contactId) {
@@ -1054,6 +1065,20 @@ async function addDigisacEmAtendimentoTag(contactId) {
     });
 
     return { success: !!result, tagId };
+}
+
+async function addDigisacManualCloseNoSurveyTag(contactId) {
+    if (!contactId) return null;
+
+    const tagId = await getDigisacManualCloseNoSurveyTagId();
+    if (!tagId) return { success: false, reason: 'tag_not_found', tagName: DIGISAC_MANUAL_CLOSE_NO_SURVEY_TAG_NAME };
+
+    const result = await requestDigisacJson(`/contacts/${encodeURIComponent(contactId)}/tags`, {
+        method: 'POST',
+        body: { tagId }
+    });
+
+    return { success: !!result, tagId, tagName: DIGISAC_MANUAL_CLOSE_NO_SURVEY_TAG_NAME };
 }
 
 function findContactIdInPayload(value) {
