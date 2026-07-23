@@ -182,6 +182,8 @@
         .badge-inactive { background:rgba(239,68,68,0.14);   color:#ef4444; }
         .crm-strip { display:grid; grid-template-columns:1fr; gap:10px; margin:0 0 10px; flex-shrink:0; }
         .crm-strip > .crm-panel:nth-child(2) { display:none; }
+        #dashboardSection .crm-dashboard-card:first-child .crm-dashboard-head .btn-act,
+        .crm-strip > .crm-panel:nth-child(2) .btn-act { display:none !important; }
         .crm-panel { background:rgba(255,255,255,0.02); border:1px solid var(--border-subtle); border-radius:8px; overflow:hidden; min-height:132px; }
         .crm-panel-head { height:36px; padding:0 12px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--border-subtle); background:rgba(0,0,0,0.18); }
         .crm-panel-title { color:#fff; font-size:0.76rem; font-weight:800; text-transform:uppercase; letter-spacing:0.04em; }
@@ -837,7 +839,7 @@
             <div class="crm-dashboard-card">
                 <div class="crm-dashboard-head">
                     <div class="crm-dashboard-title"><i class="fa-solid fa-clock-rotate-left" style="color:#38bdf8;margin-right:8px;"></i>Atividade Recente</div>
-                    <div class="crm-dashboard-sub" id="crmDashContactsHint">-</div>
+                    <select class="chart-pill-select" id="crmContactsScope" style="height:26px;font-size:0.66rem;width:auto;" onchange="setCrmContactsScope(this.value)"></select>
                 </div>
                 <div class="crm-feed-list" id="crmDashFeed"></div>
             </div>
@@ -1027,6 +1029,7 @@ let currentCrmClient = null;
 let crmLoaded = false;
 let currentContactClient = null;
 let latestContacts = [];
+let crmContactsScope = 'mine';
 
 const MONTHS = ['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'];
 const COMMERCIAL_OWNER_OPTIONS = ['GERUZA MENDES', 'GUILHERME FENALI', 'ELISANGELA', 'MARIA EDUARDA'];
@@ -1174,13 +1177,52 @@ async function importLegacyCrmRecords() {
 
 async function loadLatestContacts() {
     try {
-        const res = await fetch('/api/clientes-firebird/crm/contatos');
+        setupCrmContactsScopeSelect();
+        const scopeParam = crmContactsScope && crmContactsScope !== 'mine' ? `?user=${encodeURIComponent(crmContactsScope)}` : '';
+        const res = await fetch('/api/clientes-firebird/crm/contatos' + scopeParam);
         const json = await res.json();
         if (!json.success) throw new Error(json.error || 'Erro ao carregar contatos');
         latestContacts = json.data || [];
     } catch (e) {
         latestContacts = [];
     }
+}
+
+function getLoggedCrmUser() {
+    return String(localStorage.getItem('erus_username') || localStorage.getItem('erus_user') || '').trim().toLowerCase();
+}
+
+function canSelectCrmContactScope() {
+    const role = String(localStorage.getItem('erus_role') || '').trim().toLowerCase();
+    return ['admin', 'desenvolvedor'].includes(role);
+}
+
+function setupCrmContactsScopeSelect() {
+    const select = document.getElementById('crmContactsScope');
+    if (!select || select.dataset.ready === '1') return;
+    const user = getLoggedCrmUser();
+    const canSelect = canSelectCrmContactScope();
+    const options = canSelect
+        ? [
+            ['all', 'TODOS'],
+            ['geruza', 'GERUZA'],
+            ['elisangela', 'ELISANGELA']
+        ]
+        : [
+            [user.includes('elis') ? 'elisangela' : 'geruza', user.includes('elis') ? 'ELISANGELA' : 'GERUZA']
+        ];
+    select.innerHTML = options.map(([value, label]) => `<option value="${value}">${label}</option>`).join('');
+    crmContactsScope = options[0]?.[0] || 'mine';
+    select.value = crmContactsScope;
+    select.disabled = !canSelect;
+    select.dataset.ready = '1';
+}
+
+async function setCrmContactsScope(value) {
+    crmContactsScope = value || 'mine';
+    await loadLatestContacts();
+    renderDashboard();
+    if (currentView === 'contatos') renderLatestContacts();
 }
 
 async function loadData() {

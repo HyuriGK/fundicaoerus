@@ -2726,16 +2726,27 @@ router.get('/crm/contatos', async (req, res) => {
     try {
         await ensureClientesContatosTable();
         const crmUser = String(req.user?.user || req.user?.name || '').trim();
+        const role = String(req.user?.role || '').trim().toLowerCase();
+        const requestedUser = String(req.query.user || 'mine').trim().toLowerCase();
         if (!crmUser) return res.status(400).json({ success: false, error: 'Usuário inválido.' });
+        const canViewAll = ['admin', 'desenvolvedor'].includes(role);
+        let whereClause = 'WHERE crm_user = $1';
+        let params = [crmUser];
+        if (canViewAll && requestedUser === 'all') {
+            whereClause = "WHERE LOWER(crm_user) IN ('geruza', 'elisangela')";
+            params = [];
+        } else if (canViewAll && ['geruza', 'elisangela'].includes(requestedUser)) {
+            params = [requestedUser];
+        }
         const result = await pool.query(`
             SELECT id, cliente_nome, empresa, codigo, crm_user, contato_em, canal, pessoa_contatada,
                    cargo, telefone, email, motivo, resultado, humor_cliente, potencial, proxima_acao,
                    TO_CHAR(data_proxima_acao, 'YYYY-MM-DD') AS data_proxima_acao, resumo, created_at
             FROM clientes_contatos_crm
-            WHERE crm_user = $1
+            ${whereClause}
             ORDER BY contato_em DESC, id DESC
             LIMIT 20
-        `, [crmUser]);
+        `, params);
         res.json({ success: true, data: result.rows });
     } catch (err) {
         res.status(500).json({ success: false, error: 'Erro ao consultar contatos de clientes', details: err.message });
