@@ -38,6 +38,12 @@ function fbQuery(db, sql, label) {
     });
 }
 
+function chunkArray(items, size) {
+    const chunks = [];
+    for (let i = 0; i < items.length; i += size) chunks.push(items.slice(i, i + size));
+    return chunks;
+}
+
 async function syncEmissoes() {
     console.log('🚀 Iniciando sincronização de EMISSÕES (Histórico 2025/2026)...');
     const startTime = Date.now();
@@ -175,7 +181,9 @@ async function syncEmissoes() {
             const productOpsMap = {};
             if (uniqueProducts.length > 0) {
                 // Sanitizar e preparar lista de códigos
-                const prodList = uniqueProducts.map(p => `'${p.replace(/'/g, "''")}'`).join(',');
+                const PRODUCT_BATCH_LIMIT = 500;
+                for (const productBatch of chunkArray(uniqueProducts, PRODUCT_BATCH_LIMIT)) {
+                    const prodList = productBatch.map(p => `'${p.replace(/'/g, "''")}'`).join(',');
                 const openOpsQuery = `
                     SELECT 
                         CODIGO_PCP, PRODUTO_PCP, STATUS_PCP, 
@@ -192,6 +200,7 @@ async function syncEmissoes() {
                     if (!productOpsMap[pCode]) productOpsMap[pCode] = [];
                     productOpsMap[pCode].push(op);
                 });
+                }
                 console.log(`✅ Sugestões carregadas para ${Object.keys(productOpsMap).length} produtos.`);
             }
 
