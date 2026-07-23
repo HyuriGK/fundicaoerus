@@ -1205,26 +1205,39 @@ function parseFatDateLocal(str) {
     return isNaN(d) ? null : d;
 }
 
+function getClientGroupKey(item) {
+    const code = String(item.clienteCodigo || '').trim();
+    return code ? `COD:${code}` : `NOME:${(item.clienteNome || 'DESCONHECIDO').trim()}`;
+}
+
 function processClients(rows, rowsPeso) {
     const today = new Date();
     const map = {};
 
     // Acumular peso usando filtro frouxo (igual faturamentos.html)
     rowsPeso.forEach(item => {
+        const key = getClientGroupKey(item);
         const name = (item.clienteNome || 'DESCONHECIDO').trim();
-        if (!map[name]) map[name] = { name, peso: 0, fat: 0, orders: new Set(), dates: [], lastDate: new Date(0) };
-        map[name].peso += (item.pesoTotal || 0);
+        if (!map[key]) map[key] = { key, code: String(item.clienteCodigo || '').trim(), name, peso: 0, fat: 0, orders: new Set(), dates: [], lastDate: new Date(0) };
+        map[key].peso += (item.pesoTotal || 0);
     });
 
     rows.forEach(item => {
+        const key = getClientGroupKey(item);
         const name = (item.clienteNome || 'DESCONHECIDO').trim();
-        if (!map[name]) map[name] = { name, peso: 0, fat: 0, orders: new Set(), dates: [], lastDate: new Date(0) };
-        const c = map[name];
+        if (!map[key]) map[key] = { key, code: String(item.clienteCodigo || '').trim(), name, peso: 0, fat: 0, orders: new Set(), dates: [], lastDate: new Date(0) };
+        const c = map[key];
         c.fat  += calcTotal(item);
         if (item.pedido) c.orders.add(String(item.pedido).trim());
         if (item.data) {
             const d = parseFatDateLocal(item.data);
-            if (d && !isNaN(d)) { c.dates.push(d); if (d > c.lastDate) c.lastDate = d; }
+            if (d && !isNaN(d)) {
+                c.dates.push(d);
+                if (d > c.lastDate) {
+                    c.lastDate = d;
+                    c.name = name;
+                }
+            }
         }
     });
 
@@ -1249,7 +1262,7 @@ function processClients(rows, rowsPeso) {
         const saved = clientRatings[c.name];
         const abcScore = saved ? (saved.billing + saved.weight + saved.price + saved.complex + saved.risk) / 5 : null;
 
-        return { name: c.name, peso: c.peso, fat: c.fat, orders, days, ticket, preco_kg, pct_fat, pct_peso, recAvg, abcScore, lastDate: c.lastDate };
+        return { key: c.key, code: c.code, name: c.name, peso: c.peso, fat: c.fat, orders, days, ticket, preco_kg, pct_fat, pct_peso, recAvg, abcScore, lastDate: c.lastDate };
     });
 
     doSort();
@@ -1351,6 +1364,7 @@ function renderTable() {
         }
 
         const safe    = c.name.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        const safeKey = c.key.replace(/'/g, "\\'").replace(/"/g, '&quot;');
         const lastStr = c.lastDate > new Date(0) ? c.lastDate.toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit', year:'2-digit' }) : '—';
 
         const barPeso = `<div style="height:2px;border-radius:1px;margin-top:2px;background:rgba(168,85,247,0.5);width:${Math.min(c.pct_peso,100)}%;"></div>`;
@@ -1373,7 +1387,7 @@ function renderTable() {
             <td class="text-center"><span class="badge ${badge}">${badgeTxt}</span></td>
             <td class="text-center">${abcHtml}</td>
             <td class="text-center" style="white-space:nowrap;">
-                <button class="btn-act btn-expand" onclick="event.stopPropagation();toggleExpand(this,'${safe}',${idx})" title="Expandir itens"><i class="fa-solid fa-chevron-right"></i></button>
+                <button class="btn-act btn-expand" onclick="event.stopPropagation();toggleExpand(this,'${safeKey}',${idx})" title="Expandir itens"><i class="fa-solid fa-chevron-right"></i></button>
                 <button class="btn-act btn-abc-act" onclick="event.stopPropagation();openAbcModal('${safe}')" title="Avaliar ABC"><i class="fa-solid fa-star"></i></button>
             </td>`;
         tbody.appendChild(tr);
@@ -1666,13 +1680,13 @@ function toggleExpand(btn, clientName, idx) {
     }
 }
 
-function renderExpandContent(clientName, idx) {
+function renderExpandContent(clientKey, idx) {
     const yr   = document.getElementById('yearSelect').value;
     const show = valorVisible;
 
     const rows = allData.filter(item => {
         if (item._exclFat) return false;
-        if ((item.clienteNome || '').trim() !== clientName) return false;
+        if (getClientGroupKey(item) !== clientKey) return false;
         if (!item.data) return false;
         if (yr !== 'all' && !item.data.startsWith(yr)) return false;
         if (activeMonth !== 'all' && parseInt(item.data.split('-')[1], 10) !== activeMonth) return false;
