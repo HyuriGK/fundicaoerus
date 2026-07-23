@@ -251,6 +251,26 @@
         .dashboard-card { background:rgba(255,255,255,0.02); border:1px solid var(--border-subtle); border-radius:8px; overflow:visible; min-height:240px; }
         .dashboard-card-head { height:38px; padding:0 12px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--border-subtle); background:rgba(0,0,0,0.18); }
         .dashboard-card-title { color:#fff; font-size:0.74rem; font-weight:800; text-transform:uppercase; letter-spacing:0.04em; }
+        .crm-dashboard-grid { display:grid; grid-template-columns:1.15fr 0.85fr; gap:12px; min-height:0; }
+        .crm-dashboard-card { background:rgba(255,255,255,0.02); border:1px solid var(--border-subtle); border-radius:8px; overflow:hidden; min-height:154px; }
+        .crm-dashboard-card.wide { grid-column:1 / -1; }
+        .crm-dashboard-head { height:34px; padding:0 11px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--border-subtle); background:rgba(0,0,0,0.2); }
+        .crm-dashboard-title { color:#fff; font-size:0.72rem; font-weight:900; text-transform:uppercase; letter-spacing:0.04em; }
+        .crm-dashboard-sub { color:var(--text-muted); font-family:var(--font-mono); font-size:0.66rem; }
+        .crm-reminder-list, .crm-feed-list { display:flex; flex-direction:column; }
+        .crm-reminder-row, .crm-feed-row, .crm-kpi-row, .crm-funnel-row { display:grid; gap:8px; align-items:center; padding:8px 11px; border-bottom:1px solid rgba(255,255,255,0.045); }
+        .crm-reminder-row { grid-template-columns:22px 1fr auto; cursor:pointer; }
+        .crm-feed-row { grid-template-columns:82px 1fr auto; cursor:pointer; }
+        .crm-kpi-row { grid-template-columns:1.25fr 0.8fr 0.8fr 0.7fr; }
+        .crm-funnel-row { grid-template-columns:1.1fr 0.55fr 0.8fr 0.8fr; cursor:pointer; }
+        .crm-reminder-row:hover, .crm-feed-row:hover, .crm-funnel-row:hover { background:rgba(255,255,255,0.025); }
+        .crm-dash-name { color:#fff; font-weight:800; font-size:0.72rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .crm-dash-meta { color:var(--text-muted); font-size:0.66rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .crm-dash-value { color:var(--color-primary); font-family:var(--font-mono); font-size:0.7rem; font-weight:900; text-align:right; }
+        .crm-dash-bad { color:#ef4444; }
+        .crm-dash-ok { color:#10b981; }
+        .crm-dash-warn { color:#f59e0b; }
+        .crm-dashboard-empty { color:var(--text-muted); font-size:0.72rem; padding:14px 11px; }
         .inactive-list { padding:8px 10px; display:flex; flex-direction:column; gap:6px; max-height:none; overflow:visible; }
         .inactive-row { display:grid; grid-template-columns:24px 1fr auto; gap:8px; align-items:center; padding:8px; border:1px solid rgba(255,255,255,0.07); border-radius:7px; background:rgba(0,0,0,0.16); cursor:pointer; }
         .inactive-row:hover { border-color:rgba(251,191,36,0.28); background:rgba(255,255,255,0.035); }
@@ -807,6 +827,36 @@
     </div>
 
     <div id="dashboardSection">
+        <div class="crm-dashboard-grid">
+            <div class="crm-dashboard-card">
+                <div class="crm-dashboard-head">
+                    <div class="crm-dashboard-title"><i class="fa-solid fa-bell" style="color:#f59e0b;margin-right:8px;"></i>Reminders</div>
+                    <div class="crm-dashboard-sub" id="crmDashReminderHint">-</div>
+                </div>
+                <div class="crm-reminder-list" id="crmDashReminders"></div>
+            </div>
+            <div class="crm-dashboard-card">
+                <div class="crm-dashboard-head">
+                    <div class="crm-dashboard-title"><i class="fa-solid fa-chart-line" style="color:#10b981;margin-right:8px;"></i>KPIs CRM</div>
+                    <div class="crm-dashboard-sub" id="crmDashPeriod">-</div>
+                </div>
+                <div id="crmDashKpis"></div>
+            </div>
+            <div class="crm-dashboard-card">
+                <div class="crm-dashboard-head">
+                    <div class="crm-dashboard-title"><i class="fa-solid fa-filter-circle-dollar" style="color:var(--color-primary);margin-right:8px;"></i>Funil Comercial</div>
+                    <div class="crm-dashboard-sub">clientes / faturamento</div>
+                </div>
+                <div id="crmDashFunnel"></div>
+            </div>
+            <div class="crm-dashboard-card">
+                <div class="crm-dashboard-head">
+                    <div class="crm-dashboard-title"><i class="fa-solid fa-clock-rotate-left" style="color:#38bdf8;margin-right:8px;"></i>Atividade Recente</div>
+                    <div class="crm-dashboard-sub" id="crmDashContactsHint">-</div>
+                </div>
+                <div class="crm-feed-list" id="crmDashFeed"></div>
+            </div>
+        </div>
         <div class="dashboard-grid">
             <div class="dashboard-card">
                 <div class="dashboard-card-head">
@@ -1582,6 +1632,105 @@ async function completeCrmAction(clientName) {
 }
 
 function renderDashboard() {
+    const today = new Date();
+    const records = Object.entries(crmRecords || {});
+    const openActions = records
+        .filter(([, r]) => r.nextAction || r.dueDate)
+        .map(([name, r]) => ({ name, ...r }))
+        .sort((a, b) => String(a.dueDate || '9999-12-31').localeCompare(String(b.dueDate || '9999-12-31')));
+    const overdue = openActions.filter(a => a.dueDate && new Date(a.dueDate + 'T23:59:59') < today);
+    const noContactNames = new Set((latestContacts || []).map(c => normalizeClientName(c.cliente_nome)));
+    const noContact = clientList.filter(c => !noContactNames.has(normalizeClientName(c.name))).slice(0, 8);
+    const risk = clientList.filter(c => getCrmStage(c).key === 'risco' || c.days > 45).sort((a, b) => b.fat - a.fat).slice(0, 8);
+    const reminders = [
+        ...overdue.slice(0, 4).map(a => ({ icon:'fa-calendar-xmark', cls:'crm-dash-bad', name:a.name, meta:a.nextAction || 'Ação vencida', value:a.dueDate ? fmtDateShort(a.dueDate) : '-' })),
+        ...risk.slice(0, 3).map(c => ({ icon:'fa-triangle-exclamation', cls:'crm-dash-warn', name:c.name, meta:`${c.days} dias sem comprar`, value:valorVisible ? fmtMoney(c.fat) : 'R$ -----' })),
+        ...noContact.slice(0, 3).map(c => ({ icon:'fa-user-clock', cls:'', name:c.name, meta:'sem contato registrado', value:`${c.orders} ped.` }))
+    ].slice(0, 8);
+
+    const totalFat = clientList.reduce((sum, c) => sum + c.fat, 0);
+    const active = clientList.filter(c => getCrmStage(c).key === 'ativo').length;
+    const negociacao = clientList.filter(c => getCrmStage(c).key === 'negociacao').length;
+    const coverage = clientList.length ? Math.round(records.length / clientList.length * 100) : 0;
+    const contactsMonth = (latestContacts || []).filter(c => {
+        const d = new Date(c.contato_em);
+        return !isNaN(d) && d.getMonth() === today.getMonth() && d.getFullYear() === today.getFullYear();
+    }).length;
+
+    const kpis = [
+        ['Clientes no período', clientList.length.toLocaleString('pt-BR'), active + ' ativos', 'crm-dash-ok'],
+        ['Ações abertas', openActions.length.toLocaleString('pt-BR'), overdue.length + ' vencidas', overdue.length ? 'crm-dash-bad' : 'crm-dash-ok'],
+        ['Contatos no mês', contactsMonth.toLocaleString('pt-BR'), (latestContacts || []).length + ' total', 'crm-dash-ok'],
+        ['Cobertura CRM', coverage + '%', records.length + ' clientes', coverage < 50 ? 'crm-dash-warn' : 'crm-dash-ok'],
+        ['Em negociação', negociacao.toLocaleString('pt-BR'), valorVisible ? fmtMoney(totalFat) : 'R$ -----', '']
+    ];
+
+    const stages = [
+        { key:'prospeccao', label:'Prospecção' },
+        { key:'cotacao', label:'Cotação' },
+        { key:'negociacao', label:'Negociação' },
+        { key:'ativo', label:'Ativo' },
+        { key:'risco', label:'Em risco' },
+        { key:'inativo', label:'Inativo' }
+    ];
+
+    const reminderBox = document.getElementById('crmDashReminders');
+    if (reminderBox) {
+        reminderBox.innerHTML = reminders.map(r => `
+            <div class="crm-reminder-row" onclick="openCrmDrawer('${escapeJs(r.name)}')">
+                <i class="fa-solid ${r.icon} ${r.cls}"></i>
+                <div style="min-width:0;">
+                    <div class="crm-dash-name">${escapeHtml(r.name)}</div>
+                    <div class="crm-dash-meta">${escapeHtml(r.meta)}</div>
+                </div>
+                <div class="crm-dash-value ${r.cls}">${escapeHtml(r.value)}</div>
+            </div>`).join('') || '<div class="crm-dashboard-empty">Nenhum alerta prioritário.</div>';
+    }
+    const reminderHint = document.getElementById('crmDashReminderHint');
+    if (reminderHint) reminderHint.textContent = `${overdue.length} vencidas`;
+
+    const kpiBox = document.getElementById('crmDashKpis');
+    if (kpiBox) {
+        kpiBox.innerHTML = kpis.map(([label, value, sub, cls]) => `
+            <div class="crm-kpi-row">
+                <div class="crm-dash-name">${label}</div>
+                <div class="crm-dash-value">${value}</div>
+                <div class="crm-dash-meta" style="text-align:right;">${sub}</div>
+                <div class="${cls}" style="text-align:right;"><i class="fa-solid fa-circle"></i></div>
+            </div>`).join('');
+    }
+    const periodEl = document.getElementById('crmDashPeriod');
+    if (periodEl) periodEl.textContent = getSelectedPeriodLabel();
+
+    const funnelBox = document.getElementById('crmDashFunnel');
+    if (funnelBox) {
+        funnelBox.innerHTML = stages.map(s => {
+            const rows = clientList.filter(c => getCrmStage(c).key === s.key);
+            const fat = rows.reduce((sum, c) => sum + c.fat, 0);
+            const ticket = rows.length ? fat / rows.length : 0;
+            return `<div class="crm-funnel-row" onclick="toggleCrmStage('${s.key}')">
+                <div class="crm-dash-name">${s.label}</div>
+                <div class="crm-dash-value">${rows.length}</div>
+                <div class="crm-dash-value">${valorVisible ? fmtMoney(fat) : 'R$ -----'}</div>
+                <div class="crm-dash-meta" style="text-align:right;">${valorVisible ? fmtMoney(ticket) : 'R$ -----'}</div>
+            </div>`;
+        }).join('');
+    }
+
+    const feedBox = document.getElementById('crmDashFeed');
+    if (feedBox) {
+        feedBox.innerHTML = (latestContacts || []).slice(0, 8).map(c => `
+            <div class="crm-feed-row" onclick="openClientContactViewModal(${Number(c.id)})">
+                <div class="crm-dash-value" style="text-align:left;color:#38bdf8;">${c.contato_em ? fmtDateShort(c.contato_em) : '-'}</div>
+                <div style="min-width:0;">
+                    <div class="crm-dash-name">${escapeHtml(c.cliente_nome || 'Cliente')}</div>
+                    <div class="crm-dash-meta">${escapeHtml([c.canal, c.resultado || c.motivo].filter(Boolean).join(' · ') || '-')}</div>
+                </div>
+                <div class="crm-dash-meta" style="text-align:right;">${escapeHtml(c.crm_user || '-')}</div>
+            </div>`).join('') || '<div class="crm-dashboard-empty">Nenhum contato registrado.</div>';
+    }
+    const contactsHint = document.getElementById('crmDashContactsHint');
+    if (contactsHint) contactsHint.textContent = `${(latestContacts || []).length} contatos`;
 }
 
 function renderDashboardList(id, rows, field) {
