@@ -17,6 +17,16 @@ const DIGISAC_NO_SURVEY_DEPARTMENT_NAME = process.env.DIGISAC_NO_SURVEY_DEPARTME
 const DIGISAC_FINANCEIRO_USER_ID = process.env.DIGISAC_FINANCEIRO_USER_ID || 'c1d3e230-d249-4406-bbb1-2a9bd0e501f3';
 const DIGISAC_EM_ATENDIMENTO_TAG_ID = process.env.DIGISAC_EM_ATENDIMENTO_TAG_ID || '';
 const DIGISAC_EM_ATENDIMENTO_TAG_NAME = process.env.DIGISAC_EM_ATENDIMENTO_TAG_NAME || 'em_atendimento';
+const DIGISAC_ATENDIMENTO_USER_TAGS = {
+    'GERUZA MENDES': {
+        id: process.env.DIGISAC_TAG_GERUZA_ID || '',
+        name: process.env.DIGISAC_TAG_GERUZA_NAME || 'em_atendimento_geruza'
+    },
+    'ELISANGELA': {
+        id: process.env.DIGISAC_TAG_ELISANGELA_ID || '',
+        name: process.env.DIGISAC_TAG_ELISANGELA_NAME || 'em_atendimento_elisangela'
+    }
+};
 const DIGISAC_MANUAL_CLOSE_NO_SURVEY_TAG_ID = process.env.DIGISAC_MANUAL_CLOSE_NO_SURVEY_TAG_ID || '';
 const DIGISAC_MANUAL_CLOSE_NO_SURVEY_TAG_NAME = process.env.DIGISAC_MANUAL_CLOSE_NO_SURVEY_TAG_NAME || 'manual_close_no_survey';
 const DIGISAC_CNPJ_MAX_RETRIES = 2;
@@ -668,6 +678,7 @@ async function handleDigisacInternalRedirect(contactId, targetName) {
         `Atalho interno: atendimento redirecionado para ${targetName}.`
     );
     const atendimentoTag = await addDigisacEmAtendimentoTag(contactId);
+    const atendimentoUserTag = await addDigisacAtendimentoUserTag(contactId, targetName);
     await pool.query(`
         INSERT INTO digisac_internal_redirect_sessions (contact_id, target_name, updated_at)
         VALUES ($1, $2, NOW())
@@ -682,7 +693,8 @@ async function handleDigisacInternalRedirect(contactId, targetName) {
         target: targetName,
         notification,
         transfer,
-        atendimentoTag
+        atendimentoTag,
+        atendimentoUserTag
     };
 }
 
@@ -1112,11 +1124,9 @@ async function getDigisacManualCloseNoSurveyTagId() {
     return getDigisacTagIdByName(DIGISAC_MANUAL_CLOSE_NO_SURVEY_TAG_NAME, DIGISAC_MANUAL_CLOSE_NO_SURVEY_TAG_ID);
 }
 
-async function addDigisacEmAtendimentoTag(contactId) {
+async function addDigisacTag(contactId, tagId, tagName) {
     if (!contactId) return null;
-
-    const tagId = await getDigisacEmAtendimentoTagId();
-    if (!tagId) return { success: false, reason: 'tag_not_found' };
+    if (!tagId) return { success: false, reason: 'tag_not_found', tagName };
 
     const encodedContactId = encodeURIComponent(contactId);
     const candidates = [
@@ -1132,10 +1142,23 @@ async function addDigisacEmAtendimentoTag(contactId) {
             method: candidate.method,
             body: candidate.body
         });
-        if (result) return { success: true, tagId, path: candidate.path, method: candidate.method };
+        if (result) return { success: true, tagId, tagName, path: candidate.path, method: candidate.method };
     }
 
-    return { success: false, reason: 'tag_add_endpoint_not_confirmed', tagId };
+    return { success: false, reason: 'tag_add_endpoint_not_confirmed', tagId, tagName };
+}
+
+async function addDigisacEmAtendimentoTag(contactId) {
+    const tagId = await getDigisacEmAtendimentoTagId();
+    return addDigisacTag(contactId, tagId, DIGISAC_EM_ATENDIMENTO_TAG_NAME);
+}
+
+async function addDigisacAtendimentoUserTag(contactId, targetName) {
+    const tagConfig = DIGISAC_ATENDIMENTO_USER_TAGS[targetName];
+    if (!tagConfig) return null;
+
+    const tagId = await getDigisacTagIdByName(tagConfig.name, tagConfig.id);
+    return addDigisacTag(contactId, tagId, tagConfig.name);
 }
 
 async function removeDigisacEmAtendimentoTag(contactId) {
@@ -1929,6 +1952,7 @@ router.all('/digisac/consultor', async (req, res) => {
                     const clienteCnpj = session.documento || getSessionClienteValue(session, 'cnpjCpf') || 'nao informado';
                     const transfer = await transferDigisacTicket(contactId, session.responsavel_comercial, clienteNome, clienteCnpj);
                     const atendimentoTag = await addDigisacEmAtendimentoTag(contactId);
+                    const atendimentoUserTag = await addDigisacAtendimentoUserTag(contactId, session.responsavel_comercial);
                     await clearDigisacClienteSession(contactId);
 
                     return res.json({
@@ -1941,6 +1965,8 @@ router.all('/digisac/consultor', async (req, res) => {
                         sent_by_backend: !!notification,
                         notification,
                         receptionNotification,
+                        atendimentoTag,
+                        atendimentoUserTag,
                         transfer
                     });
                 }
@@ -2246,6 +2272,7 @@ router.all('/digisac/consultor', async (req, res) => {
                 const clienteCnpj = session.documento || getSessionClienteValue(session, 'cnpjCpf') || 'nao informado';
                 const transfer = await transferDigisacTicket(contactId, session.responsavel_comercial, clienteNome, clienteCnpj);
                 const atendimentoTag = await addDigisacEmAtendimentoTag(contactId);
+                const atendimentoUserTag = await addDigisacAtendimentoUserTag(contactId, session.responsavel_comercial);
                 await clearDigisacClienteSession(contactId);
 
                 return res.json({
@@ -2258,6 +2285,7 @@ router.all('/digisac/consultor', async (req, res) => {
                     notification,
                     receptionNotification,
                     atendimentoTag,
+                    atendimentoUserTag,
                     transfer
                 });
             }
