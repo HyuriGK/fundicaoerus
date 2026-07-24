@@ -479,6 +479,45 @@
         .client-status-badge.active { background:rgba(16,185,129,0.14); color:#10b981; }
         .client-status-badge.inactive { background:rgba(239,68,68,0.14); color:#ef4444; }
         .client-status-badge.blocked { background:rgba(245,158,11,0.14); color:#f59e0b; }
+        .client-contact-actions { display:flex; align-items:center; justify-content:center; gap:6px; }
+        .btn-client-view {
+            width:28px; height:28px; border-radius:6px; border:1px solid rgba(56,189,248,0.28);
+            background:rgba(56,189,248,0.08); color:#38bdf8; cursor:pointer;
+            display:inline-flex; align-items:center; justify-content:center;
+        }
+        .btn-client-view:hover { background:rgba(56,189,248,0.16); color:#fff; }
+        #clientSummaryModal {
+            display:none; position:fixed; inset:0; width:100vw; margin-left:0 !important;
+            background:rgba(0,0,0,0.82); z-index:8500; align-items:center; justify-content:center;
+            backdrop-filter:blur(6px);
+        }
+        #clientSummaryModal .summary-card {
+            width:min(1180px, calc(100vw - 36px)); max-height:calc(100vh - 36px);
+            background:#09090b; border:1px solid var(--border-subtle); border-radius:10px;
+            display:flex; flex-direction:column; overflow:hidden; box-shadow:0 24px 70px rgba(0,0,0,0.65);
+        }
+        .summary-head { display:flex; justify-content:space-between; gap:18px; padding:18px 22px 14px; border-bottom:1px solid var(--border-subtle); }
+        .summary-title { color:#fff; font-weight:900; font-size:1.05rem; line-height:1.25; }
+        .summary-sub { color:var(--text-muted); font-size:0.72rem; margin-top:4px; }
+        .summary-body { padding:16px 22px 20px; overflow:auto; }
+        .summary-kpis { display:grid; grid-template-columns:repeat(5, minmax(0, 1fr)); gap:9px; margin-bottom:14px; }
+        .summary-kpi { border:1px solid rgba(255,255,255,0.08); border-radius:7px; padding:10px; background:rgba(255,255,255,0.02); min-width:0; }
+        .summary-kpi span { display:block; color:var(--text-muted); font-size:0.62rem; font-weight:800; text-transform:uppercase; }
+        .summary-kpi strong { display:block; color:#fff; font-size:0.82rem; margin-top:5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .summary-grid { display:grid; grid-template-columns:1fr 1.6fr; gap:14px; }
+        .summary-panel { border:1px solid var(--border-subtle); border-radius:8px; background:rgba(255,255,255,0.02); overflow:hidden; }
+        .summary-panel-head { min-height:36px; padding:8px 11px; display:flex; align-items:center; justify-content:space-between; gap:10px; border-bottom:1px solid var(--border-subtle); background:rgba(0,0,0,0.22); }
+        .summary-panel-title { color:#fff; font-size:0.72rem; font-weight:900; text-transform:uppercase; }
+        .summary-fields { padding:10px 12px; display:grid; grid-template-columns:1fr; gap:9px; }
+        .summary-field span { display:block; color:var(--text-muted); font-size:0.62rem; font-weight:800; text-transform:uppercase; }
+        .summary-field strong { display:block; color:#fff; font-size:0.78rem; margin-top:3px; word-break:break-word; }
+        .summary-chart-wrap { height:300px; padding:12px; }
+        .summary-controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+        .summary-controls select { height:28px; background:#18181b; color:#fff; border:1px solid var(--border-subtle); border-radius:6px; font-family:var(--font-mono); font-size:0.68rem; font-weight:800; outline:none; }
+        @media (max-width: 900px) {
+            .summary-kpis { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+            .summary-grid { grid-template-columns:1fr; }
+        }
         /* Toast */
         #toast-wrap { position:fixed; bottom:24px; right:24px; z-index:9999; display:flex; flex-direction:column; gap:8px; pointer-events:none; }
         .toast-item {
@@ -614,6 +653,39 @@
                 </thead>
                 <tbody id="clientsRecordsBody"></tbody>
             </table>
+        </div>
+    </div>
+</div>
+
+<div id="clientSummaryModal" class="modal-overlay">
+    <div class="summary-card">
+        <div class="summary-head">
+            <div>
+                <div class="summary-title" id="clientSummaryName">Cliente</div>
+                <div class="summary-sub" id="clientSummarySub">Resumo comercial</div>
+            </div>
+            <button class="crm-close" onclick="closeClientSummaryModal()" title="Fechar"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="summary-body">
+            <div class="summary-kpis" id="clientSummaryKpis"></div>
+            <div class="summary-grid">
+                <div class="summary-panel">
+                    <div class="summary-panel-head">
+                        <div class="summary-panel-title"><i class="fa-solid fa-id-card" style="color:#38bdf8;margin-right:8px;"></i>Dados do cliente</div>
+                    </div>
+                    <div class="summary-fields" id="clientSummaryFields"></div>
+                </div>
+                <div class="summary-panel">
+                    <div class="summary-panel-head">
+                        <div class="summary-panel-title"><i class="fa-solid fa-chart-line" style="color:var(--color-primary);margin-right:8px;"></i>Faturamento do cliente</div>
+                        <div class="summary-controls">
+                            <select id="clientSummaryYear" onchange="renderClientSummaryCharts()"></select>
+                            <select id="clientSummaryMonth" onchange="renderClientSummaryCharts()"></select>
+                        </div>
+                    </div>
+                    <div class="summary-chart-wrap"><canvas id="clientSummaryChart"></canvas></div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -1030,6 +1102,8 @@ let crmStageFilter = '';
 let currentCrmClient = null;
 let crmLoaded = false;
 let currentContactClient = null;
+let currentSummaryClient = null;
+let clientSummaryChart = null;
 let latestContacts = [];
 let crmContactsScope = 'mine';
 
@@ -2638,7 +2712,12 @@ function renderClientsRecords() {
         const statusClass = c.bloqueado ? 'blocked' : c.ativo ? 'active' : 'inactive';
         const statusText = c.bloqueado ? 'Bloq.' : c.ativo ? 'Ativo' : 'Inativo';
         return `<tr>
-            <td onclick="event.stopPropagation()"><button class="btn-contact" onclick="openClientContactModal(${Number(c.empresa)},${Number(c.codigo)})"><i class="fa-solid fa-headset"></i></button></td>
+            <td onclick="event.stopPropagation()">
+                <div class="client-contact-actions">
+                    <button class="btn-contact" onclick="openClientContactModal(${Number(c.empresa)},${Number(c.codigo)})" title="Registrar atendimento"><i class="fa-solid fa-headset"></i></button>
+                    <button class="btn-client-view" onclick="openClientSummaryModal(${Number(c.empresa)},${Number(c.codigo)})" title="Visualizar cliente"><i class="fa-solid fa-eye"></i></button>
+                </div>
+            </td>
             ${clientCell(values[0], { style:'color:var(--color-primary);font-weight:800;' })}
             ${clientCell(statusText, { html:`<span class="client-status-badge ${statusClass}">${statusText}</span>` })}
             ${clientCell(values[2], { style:'font-weight:700;color:#fff;max-width:340px;overflow:hidden;text-overflow:ellipsis;' })}
@@ -2715,6 +2794,148 @@ async function saveCommercialOwner(empresa, codigo, select) {
     }
 }
 
+function openClientSummaryModal(empresa, codigo) {
+    const client = clientRecords.find(c => Number(c.empresa) === empresa && Number(c.codigo) === codigo);
+    if (!client) return;
+    currentSummaryClient = client;
+    document.getElementById('clientSummaryName').textContent = client.razaoSocial || client.fantasia || 'Cliente';
+    document.getElementById('clientSummarySub').textContent = `Cód. ${client.codigo || '-'} · ${formatClientCity(client)}`;
+    renderClientSummary(client);
+    document.getElementById('clientSummaryModal').style.display = 'flex';
+}
+
+function closeClientSummaryModal() {
+    document.getElementById('clientSummaryModal').style.display = 'none';
+    currentSummaryClient = null;
+    if (clientSummaryChart) {
+        clientSummaryChart.destroy();
+        clientSummaryChart = null;
+    }
+}
+
+function getClientSummaryRows(client) {
+    const code = String(client.codigo || '').trim();
+    const names = [client.razaoSocial, client.fantasia].filter(Boolean).map(n => normalizeClientName(n));
+    return allData.filter(item => {
+        if (item._exclFat) return false;
+        const itemCode = String(item.clienteCodigo || '').trim();
+        if (code && itemCode === code) return true;
+        return names.includes(normalizeClientName(item.clienteNome || ''));
+    });
+}
+
+function normalizeClientName(value) {
+    return String(value || '').trim().toUpperCase().replace(/\s+/g, ' ');
+}
+
+function renderClientSummary(client) {
+    const rows = getClientSummaryRows(client);
+    const fat = rows.reduce((sum, item) => sum + calcTotal(item), 0);
+    const pesoRows = rows.filter(item => getFatPesoState(item));
+    const peso = pesoRows.reduce((sum, item) => sum + (item.pesoTotal || 0), 0);
+    const orders = new Set(rows.map(item => String(item.pedido || '').trim()).filter(Boolean));
+    const dates = rows.map(item => parseFatDateLocal(item.data)).filter(d => d && !isNaN(d)).sort((a, b) => a - b);
+    const lastDate = dates.length ? dates[dates.length - 1] : null;
+    const firstDate = dates.length ? dates[0] : null;
+
+    document.getElementById('clientSummaryKpis').innerHTML = [
+        ['Faturamento total', fmtMoney(fat)],
+        ['Peso total', fmtNum(peso) + ' kg'],
+        ['Pedidos únicos', (orders.size || 0).toLocaleString('pt-BR')],
+        ['Preço médio/kg', peso > 0 ? fmtMoney(fat / peso) : '-'],
+        ['Última compra', lastDate ? lastDate.toLocaleDateString('pt-BR') : '-']
+    ].map(([label, value]) => `<div class="summary-kpi"><span>${label}</span><strong>${value}</strong></div>`).join('');
+
+    document.getElementById('clientSummaryFields').innerHTML = [
+        ['Fantasia', client.fantasia],
+        ['CNPJ/CPF', client.cnpjCpf],
+        ['Responsável comercial', client.responsavelComercial],
+        ['Contato', client.contato],
+        ['Telefone', client.telefone1 || client.telefone2],
+        ['E-mail', client.email],
+        ['Cidade', formatClientCity(client)],
+        ['Cadastro', fmtDateShort(client.dataCadastro)],
+        ['Primeira compra no histórico', firstDate ? firstDate.toLocaleDateString('pt-BR') : '-']
+    ].map(([label, value]) => `<div class="summary-field"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value || '-')}</strong></div>`).join('');
+
+    setupClientSummarySelectors(rows);
+    renderClientSummaryCharts();
+}
+
+function setupClientSummarySelectors(rows) {
+    const yearSelect = document.getElementById('clientSummaryYear');
+    const monthSelect = document.getElementById('clientSummaryMonth');
+    const years = [...new Set(rows.map(item => String(item.data || '').slice(0, 4)).filter(y => /^\d{4}$/.test(y)))].sort();
+    const selectedYear = years.includes(String(document.getElementById('yearSelect')?.value)) ? String(document.getElementById('yearSelect').value) : (years[years.length - 1] || String(new Date().getFullYear()));
+    yearSelect.innerHTML = years.map(y => `<option value="${y}">${y}</option>`).join('') || `<option value="${selectedYear}">${selectedYear}</option>`;
+    yearSelect.value = selectedYear;
+    monthSelect.innerHTML = '<option value="all">MÊS A MÊS</option>' + MONTHS.map((m, i) => `<option value="${i + 1}">${m}</option>`).join('');
+    monthSelect.value = 'all';
+}
+
+function renderClientSummaryCharts() {
+    if (!currentSummaryClient) return;
+    const rows = getClientSummaryRows(currentSummaryClient);
+    const year = document.getElementById('clientSummaryYear').value;
+    const month = document.getElementById('clientSummaryMonth').value;
+    const buckets = {};
+
+    rows.forEach(item => {
+        const d = parseFatDateLocal(item.data);
+        if (!d || String(d.getFullYear()) !== String(year)) return;
+        const m = d.getMonth() + 1;
+        if (month !== 'all' && m !== Number(month)) return;
+        const key = month === 'all' ? String(m).padStart(2, '0') : String(d.getDate()).padStart(2, '0');
+        buckets[key] = (buckets[key] || 0) + calcTotal(item);
+    });
+
+    const labels = month === 'all'
+        ? MONTHS.map((m, i) => `${m}/${String(year).slice(2)}`)
+        : Array.from({ length: new Date(Number(year), Number(month), 0).getDate() }, (_, i) => String(i + 1).padStart(2, '0'));
+    const data = month === 'all'
+        ? labels.map((_, i) => buckets[String(i + 1).padStart(2, '0')] || 0)
+        : labels.map(day => buckets[day] || 0);
+
+    const ctx = document.getElementById('clientSummaryChart').getContext('2d');
+    if (clientSummaryChart) clientSummaryChart.destroy();
+    clientSummaryChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [{
+                type: 'bar',
+                label: month === 'all' ? 'Faturamento mensal' : 'Faturamento diário',
+                data,
+                backgroundColor: 'rgba(251,191,36,0.72)',
+                borderColor: 'rgba(251,191,36,1)',
+                borderWidth: 1,
+                borderRadius: 4
+            }, {
+                type: 'line',
+                label: 'Evolução',
+                data,
+                borderColor: '#38bdf8',
+                backgroundColor: 'rgba(56,189,248,0.12)',
+                tension: 0.32,
+                pointRadius: 3,
+                fill: false
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { labels: { color:'#d4d4d8', boxWidth:10, font:{ size:11 } } },
+                tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${fmtMoney(ctx.parsed.y || 0)}` } }
+            },
+            scales: {
+                x: { ticks:{ color:'#a1a1aa', maxRotation:0, autoSkip:true }, grid:{ display:false } },
+                y: { ticks:{ color:'#a1a1aa', callback:value => fmtMoney(value) }, grid:{ color:'rgba(255,255,255,0.06)' } }
+            }
+        }
+    });
+}
+
 function formatClientCity(c) {
     if (c.cidadeNome && c.cidadeUf) return `${c.cidadeNome} - ${c.cidadeUf}`;
     if (c.cidadeNome) return c.cidadeNome;
@@ -2750,6 +2971,7 @@ document.addEventListener('keydown', e => {
         closeClientsRecordsModal();
         closeClientContactModal();
         closeClientContactViewModal();
+        closeClientSummaryModal();
         closeAbcModal();
         closeCrmDrawer();
     }
