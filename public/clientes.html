@@ -326,6 +326,25 @@
         }
         #crmFunnelClientsModal td { padding:10px 12px; border-bottom:1px solid rgba(255,255,255,0.05); vertical-align:top; color:#f4f4f5; }
         #crmFunnelClientsModal tr:hover td { background:rgba(255,255,255,0.035); }
+        #crmActionDetailModal {
+            display:none; position:fixed; inset:0; width:100vw; margin-left:0 !important;
+            background:rgba(0,0,0,0.78); z-index:8200; align-items:center; justify-content:center;
+            backdrop-filter:blur(6px);
+        }
+        #crmActionDetailModal .action-detail-card {
+            width:min(760px, calc(100vw - 36px)); background:#131318; border:1px solid rgba(255,255,255,0.12);
+            border-radius:12px; overflow:hidden; box-shadow:0 24px 70px rgba(0,0,0,0.65);
+        }
+        .action-detail-head { padding:18px 20px; display:flex; justify-content:space-between; gap:16px; align-items:flex-start; background:#18181d; border-bottom:1px solid rgba(255,255,255,0.1); }
+        .action-detail-title { color:#fff; font-size:1.1rem; font-weight:900; line-height:1.25; }
+        .action-detail-sub { color:#a1a1aa; font-size:0.76rem; margin-top:5px; }
+        .action-detail-body { padding:18px 20px 20px; }
+        .action-detail-grid { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:10px; margin-bottom:12px; }
+        .action-detail-field { border:1px solid rgba(255,255,255,0.08); border-radius:8px; background:rgba(255,255,255,0.025); padding:10px; }
+        .action-detail-field span { display:block; color:#a1a1aa; font-size:0.6rem; font-weight:900; text-transform:uppercase; }
+        .action-detail-field strong { display:block; color:#fff; font-size:0.82rem; margin-top:5px; word-break:break-word; }
+        .action-detail-note { border:1px solid rgba(251,191,36,0.18); border-radius:9px; background:rgba(251,191,36,0.055); padding:13px; color:#f4f4f5; font-size:0.82rem; line-height:1.45; }
+        .action-detail-actions { display:flex; justify-content:flex-end; gap:10px; padding-top:16px; margin-top:16px; border-top:1px solid rgba(255,255,255,0.08); }
         .crm-close { width:30px; height:30px; border-radius:6px; border:1px solid var(--border-subtle); background:rgba(255,255,255,0.03); color:#fff; cursor:pointer; flex-shrink:0; }
         .crm-drawer-body { padding:16px 22px 22px; overflow:auto; }
         .crm-metrics { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:8px; margin-bottom:14px; }
@@ -969,6 +988,26 @@
                 </thead>
                 <tbody id="crmFunnelClientsBody"></tbody>
             </table>
+        </div>
+    </div>
+</div>
+
+<div id="crmActionDetailModal" class="modal-overlay">
+    <div class="action-detail-card">
+        <div class="action-detail-head">
+            <div>
+                <div class="action-detail-title" id="crmActionDetailClient">Cliente</div>
+                <div class="action-detail-sub" id="crmActionDetailSub">Ação comercial</div>
+            </div>
+            <button class="crm-close" onclick="closeCrmActionDetailModal()" title="Fechar"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="action-detail-body">
+            <div class="action-detail-grid" id="crmActionDetailGrid"></div>
+            <div class="action-detail-note" id="crmActionDetailText"></div>
+            <div class="action-detail-actions">
+                <button class="btn-cancel" onclick="closeCrmActionDetailModal()">Fechar</button>
+                <button class="btn-save" id="crmActionDetailCompleteBtn"><i class="fa-solid fa-check"></i> Concluir ação</button>
+            </div>
         </div>
     </div>
 </div>
@@ -1775,7 +1814,7 @@ function renderCrm() {
             return `
             <div class="crm-action">
                 ${completeButton}
-                <div onclick="openCrmDrawer('${escapeJs(r.clientName)}')" style="cursor:pointer;min-width:0;">
+                <div onclick="openCrmActionDetailModal('${escapeJs(r.key)}')" style="cursor:pointer;min-width:0;">
                     <div class="crm-action-client">${escapeHtml(r.clientName)}</div>
                     ${owner}
                     <div style="color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(r.nextAction || 'Sem descricao')}</div>
@@ -1951,6 +1990,51 @@ function saveCrmRecord() {
         updatedAt: new Date().toISOString()
     };
     saveCrmToDatabase(currentCrmClient, record);
+}
+
+function getCrmActionRecord(actionKey) {
+    const record = crmRecords[actionKey];
+    if (record) return { key: actionKey, clientName: record.clienteNome || String(actionKey).split('::').pop(), ...record };
+    const found = Object.entries(crmRecords || {}).find(([key, r]) => key === actionKey || r.clienteNome === actionKey || key.split('::').pop() === actionKey);
+    return found ? { key: found[0], clientName: found[1].clienteNome || found[0].split('::').pop(), ...found[1] } : null;
+}
+
+function openCrmActionDetailModal(actionKey) {
+    const action = getCrmActionRecord(actionKey);
+    if (!action) return;
+    const client = clientList.find(c => c.name === action.clientName);
+    const stage = client ? getCrmStage(client).label : (action.status || '-');
+    const dueDate = action.dueDate ? fmtDateShort(action.dueDate) : 'Sem data definida';
+    const overdue = action.dueDate && new Date(action.dueDate + 'T23:59:59') < new Date();
+    document.getElementById('crmActionDetailClient').textContent = action.clientName || 'Cliente';
+    document.getElementById('crmActionDetailSub').textContent = overdue ? 'Ação vencida' : 'Próxima ação comercial';
+    document.getElementById('crmActionDetailGrid').innerHTML = [
+        ['Data da ação', dueDate],
+        ['Etapa', stage],
+        ['Responsável', action.crmUser || getLoggedCrmUser() || '-'],
+        ['Atualizado por', action.updatedBy || '-'],
+        ['Criado em', action.createdAt ? formatDateTime(action.createdAt) : '-'],
+        ['Atualizado em', action.updatedAt ? formatDateTime(action.updatedAt) : '-']
+    ].map(([label, value]) => `<div class="action-detail-field"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value || '-')}</strong></div>`).join('');
+    document.getElementById('crmActionDetailText').innerHTML = `
+        <div style="color:#fbbf24;font-size:0.64rem;font-weight:900;text-transform:uppercase;margin-bottom:7px;">Ação a ser feita</div>
+        <div>${escapeHtml(action.nextAction || 'Sem descrição cadastrada.')}</div>
+        ${action.notes ? `<div style="margin-top:12px;color:#a1a1aa;font-size:0.72rem;font-weight:900;text-transform:uppercase;">Notas</div><div style="margin-top:5px;">${escapeHtml(action.notes)}</div>` : ''}
+    `;
+    document.getElementById('crmActionDetailCompleteBtn').onclick = () => completeCrmActionByKey(action.key);
+    document.getElementById('crmActionDetailModal').style.display = 'flex';
+}
+
+function closeCrmActionDetailModal() {
+    document.getElementById('crmActionDetailModal').style.display = 'none';
+}
+
+async function completeCrmActionByKey(actionKey) {
+    const action = getCrmActionRecord(actionKey);
+    if (!action) return;
+    const record = { ...crmRecords[action.key], nextAction: '', dueDate: '' };
+    await saveCrmToDatabase(action.clientName, record, { silent: true });
+    closeCrmActionDetailModal();
 }
 
 async function completeCrmAction(clientName) {
@@ -3246,6 +3330,7 @@ document.addEventListener('keydown', e => {
         if (isVisible('clientContactViewModal')) return closeClientContactViewModal();
         if (isVisible('clientContactsHistoryModal')) return closeClientContactsHistoryModal();
         if (isVisible('clientSummaryModal')) return closeClientSummaryModal();
+        if (isVisible('crmActionDetailModal')) return closeCrmActionDetailModal();
         if (isVisible('crmFunnelClientsModal')) return closeCrmFunnelClientsModal();
         if (isVisible('clientsRecordsModal')) return closeClientsRecordsModal();
         if (isVisible('statusModal')) return closeStatusModal();
