@@ -1409,7 +1409,7 @@
                     <div class="native-admin-actions" style="justify-content:center">
                         <button class="native-btn native-icon-btn ${u.approved ? 'warn' : 'good'}" onclick="nativeToggleUser('${jsAttr(u.username)}',${u.approved ? 'false':'true'})" title="${u.approved ? 'Bloquear acesso':'Liberar acesso'}"><i class="fa-solid fa-user-${u.approved ? 'lock':'check'}"></i></button>
                         <button class="native-btn native-icon-btn purple" onclick="nativeOpenUserLogs('${jsAttr(u.username)}')" title="Ver logs de atividade"><i class="fa-solid fa-clock-rotate-left"></i></button>
-                        <button class="native-btn native-icon-btn ${u.can_view_monetary ? 'good':'gray'}" onclick="nativeOpenMonetaryModal('${jsAttr(u.username)}')" title="Configurar permissão monetária por tela"><i class="fa-solid fa-dollar-sign"></i></button>
+                        <button class="native-btn native-icon-btn ${u.can_view_monetary ? 'good':'gray'}" onclick="nativeOpenMonetaryModal('${jsAttr(u.username)}', this)" title="Configurar permissão monetária por tela"><i class="fa-solid fa-dollar-sign"></i></button>
                         <button class="native-btn native-icon-btn ${u.can_access_after_hours ? 'info':'gray'}" onclick="nativeToggleAfterHours('${jsAttr(u.username)}',${u.can_access_after_hours ? 'false':'true'})" title="${u.can_access_after_hours ? 'Revogar permissão extra-turno':'Conceder permissão extra-turno'}"><i class="fa-solid fa-moon"></i></button>
                         <button class="native-btn native-icon-btn orange" onclick="nativeKickUser('${jsAttr(u.username)}')" title="Forçar logout"><i class="fa-solid fa-right-from-bracket"></i></button>
                         <button class="native-btn native-icon-btn gray" onclick="nativePromptRole('${jsAttr(u.username)}','${jsAttr(u.role || '')}')" title="Alterar role"><i class="fa-solid fa-pen"></i></button>
@@ -1751,6 +1751,45 @@
 
     function nativeCloseMonetaryModal() {
         document.getElementById('nativeMonetaryOverlay')?.remove();
+    }
+
+    function nativeMonetaryPages() {
+        return nativePermPages.flatMap(group => group.pages.map(([key, name]) => ({ cat: group.cat, key, name })));
+    }
+
+    function nativeOpenMonetaryModal(username, anchor) {
+        const user = (window.__nativeUsers || []).find(u => u.username === username) || {};
+        const selected = new Set(user.monetary_pages || []);
+        nativeCloseMonetaryModal();
+        const panel = document.createElement('div');
+        panel.id = 'nativeMonetaryOverlay';
+        panel.style.cssText = 'position:fixed;z-index:7000;width:min(520px,calc(100vw - 28px));max-height:min(640px,calc(100vh - 28px));background:#111114;border:1px solid var(--border-subtle);border-radius:12px;overflow:hidden;box-shadow:0 18px 44px rgba(0,0,0,.5);';
+        const pages = nativeMonetaryPages();
+        panel.innerHTML = `
+            <div style="padding:14px 16px;border-bottom:1px solid var(--border-subtle);display:flex;align-items:center;gap:10px;">
+                <div style="font-size:.88rem;font-weight:900;color:#fff;flex:1;"><i class="fa-solid fa-dollar-sign" style="color:#10b981;margin-right:8px;"></i>Permissao monetaria - ${escapeHtml(username)}</div>
+                <button class="native-btn native-icon-btn gray" onclick="nativeCloseMonetaryModal()" style="width:28px;height:28px;"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div style="padding:12px 14px;display:flex;flex-direction:column;gap:7px;max-height:500px;overflow:auto;">
+                ${pages.map((p, index) => `
+                    ${index === 0 || pages[index - 1].cat !== p.cat ? `<div style="color:#fbbf24;font-size:.66rem;font-weight:900;text-transform:uppercase;margin:8px 0 2px;">${escapeHtml(p.cat)}</div>` : ''}
+                    <label style="display:flex;align-items:center;gap:10px;padding:8px 9px;border:1px solid rgba(255,255,255,.08);border-radius:8px;background:rgba(255,255,255,.025);color:#e5e7eb;font-size:.78rem;cursor:pointer;">
+                        <input type="checkbox" class="native-monetary-page" value="${escapeHtml(p.key)}" ${selected.has(p.key) ? 'checked' : ''}>
+                        <span style="font-weight:800;">${escapeHtml(p.name)}</span>
+                        <span style="margin-left:auto;color:#71717a;font-family:var(--font-mono);font-size:.68rem;">${escapeHtml(p.key)}</span>
+                    </label>
+                `).join('')}
+            </div>
+            <div style="padding:12px 14px;border-top:1px solid var(--border-subtle);display:flex;justify-content:flex-end;gap:8px;">
+                <button class="native-btn" onclick="nativeCloseMonetaryModal()">Cancelar</button>
+                <button class="native-btn good" onclick="nativeSaveMonetaryPages('${jsAttr(username)}')"><i class="fa-solid fa-check"></i> Salvar</button>
+            </div>`;
+        document.body.appendChild(panel);
+        const rect = anchor?.getBoundingClientRect();
+        const top = Math.min((rect?.bottom || 80) + 8, window.innerHeight - panel.offsetHeight - 14);
+        const left = Math.min(Math.max(14, (rect?.right || window.innerWidth - 40) - panel.offsetWidth), window.innerWidth - panel.offsetWidth - 14);
+        panel.style.top = `${Math.max(14, top)}px`;
+        panel.style.left = `${left}px`;
     }
 
     async function nativeSaveMonetaryPages(username) {

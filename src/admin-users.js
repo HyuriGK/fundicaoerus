@@ -7,12 +7,36 @@ const { requireRole } = require('../lib/middleware');
 const checkDevRole = requireRole('desenvolvedor', 'admin');
 
 const MONETARY_PAGES = [
-    ['Produção Apontada', 'apontamentos_produtivos.html'],
-    ['Pedidos', 'pedidos.html'],
-    ['Produção Faturada', 'faturamentos.html'],
+    ['Dashboard', 'index.html'],
+    ['Carteira de Pedidos', 'pedidos.html'],
+    ['Clientes', 'clientes.html'],
+    ['Producao Faturada', 'faturamentos.html'],
+    ['Producao Apontada', 'apontamentos_produtivos.html'],
+    ['Monitoramento OPs', 'monitoramento.html'],
+    ['Ordens de Producao', 'ordemdeproducao.html'],
+    ['Acabamento Interno', 'acabamento_interno.html'],
+    ['Insumos de Moldagem', 'insumosmoldagem.html'],
+    ['Programacao da Fusao', 'programacaofusao.html'],
+    ['Programacao Desmoldagem', 'programacaodesmoldagem.html'],
     ['Acabamento Externo', 'acabamento_externo.html'],
     ['Usinagem Externa', 'usinagem_externa.html'],
-    ['Refugos', 'refugos.html']
+    ['Ficha Moldagem', 'fichatecmoldagem.html'],
+    ['Ficha Fusao', 'fichatecfusao.html'],
+    ['Ficha Acabamento', 'fichatecacabamento.html'],
+    ['Custos Gerais', 'custos.html'],
+    ['Calculadora de Custos', 'custopeca.html'],
+    ['Centro de Custo', 'centrocusto.html'],
+    ['OTIF', 'otif.html'],
+    ['Aderencia', 'aderencia.html'],
+    ['Refugos', 'refugos.html'],
+    ['Devolucoes', 'devolucoes.html'],
+    ['Planner', 'planner.html'],
+    ['Balanco', 'balanco.html'],
+    ['Funcionarios', 'rh.html'],
+    ['Solicitar Chamado', 'solicitarchamados.html'],
+    ['Painel TI', 'chamados.html'],
+    ['Comunicacao', 'comunicacao.html'],
+    ['Relatorios', 'relatorio.html']
 ];
 
 (async () => {
