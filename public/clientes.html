@@ -241,7 +241,7 @@
         #clientContactModal .modal-sub { margin-top:8px !important; color:#d4d4d8; font-size:0.82rem; font-weight:700; }
         #clientContactModal .crm-close { position:absolute; top:24px; right:28px; width:36px; height:36px; display:flex; align-items:center; justify-content:center; line-height:1; border-radius:8px; }
         #clientContactModal .contact-form { padding:18px 56px 32px; }
-        #clientContactModal .contact-modal-card { background:#111114; color:#f4f4f5; }
+        #clientContactModal .contact-modal-card { background:#121216; color:#f4f4f5; }
         #clientContactModal .crm-header { background:#141418; border-bottom:1px solid rgba(255,255,255,0.1); }
         #clientContactModal .contact-section-title {
             color:#fbbf24; background:rgba(251,191,36,0.06); border:1px solid rgba(251,191,36,0.14);
@@ -265,9 +265,32 @@
         }
         #clientContactModal .contact-field input::placeholder,
         #clientContactModal .contact-field textarea::placeholder { color:#9ca3af; opacity:1; }
-        #clientContactsHistoryModal .contact-modal-card { background:#111114; display:flex; flex-direction:column; }
-        #clientContactsHistoryModal .crm-header { background:#141418; border-bottom:1px solid rgba(255,255,255,0.1); }
-        .contacts-history-wrap { margin:18px 56px 32px; flex:1; min-height:0; overflow:auto; padding-right:6px; }
+        #clientContactModal .contact-field {
+            padding:10px; border:1px solid rgba(255,255,255,0.055); border-radius:8px;
+            background:rgba(255,255,255,0.018);
+        }
+        #clientContactsHistoryModal .contact-modal-card { background:#111114; display:flex; flex-direction:column; overflow:hidden; }
+        #clientContactsHistoryModal .crm-header {
+            margin:18px 24px 0; padding:18px 20px; border:1px solid rgba(255,255,255,0.1);
+            border-radius:10px; background:#18181d; display:flex; align-items:center; justify-content:space-between;
+            box-shadow:0 14px 30px rgba(0,0,0,0.25);
+        }
+        .contacts-history-title-wrap { display:flex; align-items:center; gap:13px; min-width:0; }
+        .contacts-history-icon {
+            width:42px; height:42px; border-radius:9px; display:flex; align-items:center; justify-content:center;
+            background:rgba(56,189,248,0.12); border:1px solid rgba(56,189,248,0.28); color:#38bdf8;
+            font-size:1.05rem; flex-shrink:0;
+        }
+        .contacts-history-title { color:#fff; font-size:1.25rem; font-weight:900; line-height:1.15; margin:0; }
+        .contacts-history-sub { color:#a1a1aa; font-size:0.78rem; margin-top:5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:980px; }
+        .contacts-history-count {
+            display:inline-flex; align-items:center; justify-content:center; height:28px; padding:0 11px;
+            border-radius:999px; background:rgba(251,191,36,0.1); border:1px solid rgba(251,191,36,0.22);
+            color:#fbbf24; font-size:0.66rem; font-family:var(--font-mono); font-weight:900; text-transform:uppercase;
+        }
+        .contacts-history-head-actions { display:flex; align-items:center; gap:10px; flex-shrink:0; }
+        #clientContactsHistoryModal .crm-close { width:36px; height:36px; display:flex; align-items:center; justify-content:center; border-radius:9px; }
+        .contacts-history-wrap { margin:16px 24px 24px; flex:1; min-height:0; overflow:auto; padding-right:6px; }
         .contacts-history-list { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:12px; }
         .contact-history-card {
             border:1px solid rgba(255,255,255,0.1); border-radius:9px; background:#17171c;
@@ -775,11 +798,17 @@
 <div id="clientContactsHistoryModal" class="modal-overlay">
     <div class="contact-modal-card">
         <div class="crm-header">
-            <div>
-                <h2 class="crm-title"><i class="fa-solid fa-clock-rotate-left" style="margin-right:14px;color:#38bdf8;"></i>Contatos Registrados</h2>
-                <div class="modal-sub" id="clientContactsHistoryName" style="margin-top:4px;">Cliente</div>
+            <div class="contacts-history-title-wrap">
+                <div class="contacts-history-icon"><i class="fa-solid fa-clock-rotate-left"></i></div>
+                <div style="min-width:0;">
+                    <h2 class="contacts-history-title">Contatos Registrados</h2>
+                    <div class="contacts-history-sub" id="clientContactsHistoryName">Cliente</div>
+                </div>
             </div>
-            <span class="crm-close" onclick="closeClientContactsHistoryModal()" title="Fechar (ESC)">&times;</span>
+            <div class="contacts-history-head-actions">
+                <div class="contacts-history-count" id="clientContactsHistoryCount">0 contatos</div>
+                <span class="crm-close" onclick="closeClientContactsHistoryModal()" title="Fechar (ESC)">&times;</span>
+            </div>
         </div>
         <div class="contacts-history-wrap">
             <div class="contacts-history-list" id="clientContactsHistoryBody"></div>
@@ -2762,6 +2791,7 @@ async function openClientContactsHistoryModal() {
     const modal = document.getElementById('clientContactsHistoryModal');
     const body = document.getElementById('clientContactsHistoryBody');
     document.getElementById('clientContactsHistoryName').textContent = currentSummaryClient.razaoSocial || currentSummaryClient.fantasia || 'Cliente';
+    document.getElementById('clientContactsHistoryCount').textContent = 'Carregando';
     modal.style.display = 'flex';
     body.innerHTML = '<div class="contact-history-empty">Carregando contatos...</div>';
     try {
@@ -2777,12 +2807,15 @@ async function openClientContactsHistoryModal() {
         renderClientContactsHistory();
     } catch (e) {
         clientContactsHistory = [];
+        document.getElementById('clientContactsHistoryCount').textContent = '0 contatos';
         body.innerHTML = `<div class="contact-history-empty" style="color:#ef4444;">${escapeHtml(e.message || 'Falha ao carregar contatos.')}</div>`;
     }
 }
 
 function renderClientContactsHistory() {
     const body = document.getElementById('clientContactsHistoryBody');
+    const total = (clientContactsHistory || []).length;
+    document.getElementById('clientContactsHistoryCount').textContent = `${total.toLocaleString('pt-BR')} contato${total === 1 ? '' : 's'}`;
     body.innerHTML = (clientContactsHistory || []).map(c => `
         <div class="contact-history-card" onclick="openClientContactViewModal(${Number(c.id)})">
             <div class="contact-history-top">

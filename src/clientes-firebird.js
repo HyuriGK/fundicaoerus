@@ -2696,9 +2696,6 @@ router.post('/crm/contatos', async (req, res) => {
 
         if (!crmUser) return res.status(400).json({ success: false, error: 'Usuário inválido.' });
         if (!clienteNome) return res.status(400).json({ success: false, error: 'Cliente inválido.' });
-        if (!canal) return res.status(400).json({ success: false, error: 'Informe o canal do contato.' });
-        if (!resultado) return res.status(400).json({ success: false, error: 'Informe o resultado do contato.' });
-        if (!resumo) return res.status(400).json({ success: false, error: 'Informe o resumo do contato.' });
         if (empresa !== null && !Number.isInteger(empresa)) return res.status(400).json({ success: false, error: 'Empresa inválida.' });
         if (codigo !== null && !Number.isInteger(codigo)) return res.status(400).json({ success: false, error: 'Código inválido.' });
 
@@ -2762,3 +2759,4 @@ router.get('/crm/contatos', async (req, res) => {
 });
 
 module.exports = router;
+
