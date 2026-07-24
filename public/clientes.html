@@ -704,7 +704,6 @@
                         <div class="summary-panel-title"><i class="fa-solid fa-chart-line" style="color:var(--color-primary);margin-right:8px;"></i>Faturamento do cliente</div>
                         <div class="summary-controls">
                             <select id="clientSummaryYear" onchange="renderClientSummaryCharts()"></select>
-                            <select id="clientSummaryMonth" onchange="renderClientSummaryCharts()"></select>
                         </div>
                     </div>
                     <div class="summary-chart-wrap"><canvas id="clientSummaryChart"></canvas></div>
@@ -2884,29 +2883,21 @@ function renderClientSummary(client) {
 
 function setupClientSummarySelectors(rows) {
     const yearSelect = document.getElementById('clientSummaryYear');
-    const monthSelect = document.getElementById('clientSummaryMonth');
     const years = [...new Set(rows.map(item => String(item.data || '').slice(0, 4)).filter(y => /^\d{4}$/.test(y)))].sort((a, b) => Number(b) - Number(a));
     const selectedYear = years.includes(String(document.getElementById('yearSelect')?.value)) ? String(document.getElementById('yearSelect').value) : 'all';
     yearSelect.innerHTML = '<option value="all">TODOS</option>' + years.map(y => `<option value="${y}">${y}</option>`).join('');
     yearSelect.value = selectedYear;
-    monthSelect.innerHTML = '<option value="all">ANO</option>' + MONTHS.map((m, i) => `<option value="${i + 1}">${m}</option>`).join('');
-    monthSelect.value = 'all';
 }
 
 function renderClientSummaryCharts() {
     if (!currentSummaryClient) return;
     const rows = getClientSummaryRows(currentSummaryClient);
     const year = document.getElementById('clientSummaryYear').value;
-    const monthSelect = document.getElementById('clientSummaryMonth');
-    if (year === 'all') monthSelect.value = 'all';
-    monthSelect.disabled = year === 'all';
-    const month = monthSelect.value;
     const buckets = {};
     const periodRows = rows.filter(item => {
         const d = parseFatDateLocal(item.data);
         if (!d) return false;
         if (year !== 'all' && String(d.getFullYear()) !== String(year)) return false;
-        if (month !== 'all' && d.getMonth() + 1 !== Number(month)) return false;
         return true;
     });
 
@@ -2915,18 +2906,12 @@ function renderClientSummaryCharts() {
     periodRows.forEach(item => {
         const d = parseFatDateLocal(item.data);
         const m = d.getMonth() + 1;
-        const key = month === 'all'
-            ? (year === 'all' ? String(d.getFullYear()) : String(m).padStart(2, '0'))
-            : String(d.getDate()).padStart(2, '0');
+        const key = year === 'all' ? String(d.getFullYear()) : String(m).padStart(2, '0');
         buckets[key] = (buckets[key] || 0) + calcTotal(item);
     });
 
-    const labels = month === 'all'
-        ? (year === 'all' ? Object.keys(buckets).sort() : MONTHS.map((m, i) => `${m}/${String(year).slice(2)}`))
-        : Array.from({ length: new Date(Number(year), Number(month), 0).getDate() }, (_, i) => String(i + 1).padStart(2, '0'));
-    const data = month === 'all'
-        ? (year === 'all' ? labels.map(label => buckets[label] || 0) : labels.map((_, i) => buckets[String(i + 1).padStart(2, '0')] || 0))
-        : labels.map(day => buckets[day] || 0);
+    const labels = year === 'all' ? Object.keys(buckets).sort() : MONTHS.map((m, i) => `${m}/${String(year).slice(2)}`);
+    const data = year === 'all' ? labels.map(label => buckets[label] || 0) : labels.map((_, i) => buckets[String(i + 1).padStart(2, '0')] || 0);
 
     const ctx = document.getElementById('clientSummaryChart').getContext('2d');
     if (clientSummaryChart) clientSummaryChart.destroy();
@@ -2935,7 +2920,7 @@ function renderClientSummaryCharts() {
         data: {
             labels,
             datasets: [{
-                label: month === 'all' ? 'Faturamento mensal' : 'Faturamento diário',
+                label: year === 'all' ? 'Faturamento anual' : 'Faturamento mensal',
                 data,
                 backgroundColor: 'rgba(251,191,36,0.72)',
                 borderColor: 'rgba(251,191,36,1)',
