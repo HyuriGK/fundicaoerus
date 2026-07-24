@@ -492,7 +492,7 @@
             backdrop-filter:blur(6px);
         }
         #clientSummaryModal .summary-card {
-            width:min(1180px, calc(100vw - 36px)); max-height:calc(100vh - 36px);
+            width:min(1360px, calc(100vw - 28px)); max-height:calc(100vh - 24px);
             background:#09090b; border:1px solid var(--border-subtle); border-radius:10px;
             display:flex; flex-direction:column; overflow:hidden; box-shadow:0 24px 70px rgba(0,0,0,0.65);
         }
@@ -511,7 +511,7 @@
         .summary-fields { padding:10px 12px; display:grid; grid-template-columns:1fr; gap:9px; }
         .summary-field span { display:block; color:var(--text-muted); font-size:0.62rem; font-weight:800; text-transform:uppercase; }
         .summary-field strong { display:block; color:#fff; font-size:0.78rem; margin-top:3px; word-break:break-word; }
-        .summary-chart-wrap { height:300px; padding:12px; }
+        .summary-chart-wrap { height:380px; padding:12px; }
         .summary-controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
         .summary-controls select { height:28px; background:#18181b; color:#fff; border:1px solid var(--border-subtle); border-radius:6px; font-family:var(--font-mono); font-size:0.68rem; font-weight:800; outline:none; }
         @media (max-width: 900px) {
@@ -2830,21 +2830,8 @@ function normalizeClientName(value) {
 
 function renderClientSummary(client) {
     const rows = getClientSummaryRows(client);
-    const fat = rows.reduce((sum, item) => sum + calcTotal(item), 0);
-    const pesoRows = rows.filter(item => getFatPesoState(item));
-    const peso = pesoRows.reduce((sum, item) => sum + (item.pesoTotal || 0), 0);
-    const orders = new Set(rows.map(item => String(item.pedido || '').trim()).filter(Boolean));
     const dates = rows.map(item => parseFatDateLocal(item.data)).filter(d => d && !isNaN(d)).sort((a, b) => a - b);
-    const lastDate = dates.length ? dates[dates.length - 1] : null;
     const firstDate = dates.length ? dates[0] : null;
-
-    document.getElementById('clientSummaryKpis').innerHTML = [
-        ['Faturamento total', fmtMoney(fat)],
-        ['Peso total', fmtNum(peso) + ' kg'],
-        ['Pedidos únicos', (orders.size || 0).toLocaleString('pt-BR')],
-        ['Preço médio/kg', peso > 0 ? fmtMoney(fat / peso) : '-'],
-        ['Última compra', lastDate ? lastDate.toLocaleDateString('pt-BR') : '-']
-    ].map(([label, value]) => `<div class="summary-kpi"><span>${label}</span><strong>${value}</strong></div>`).join('');
 
     document.getElementById('clientSummaryFields').innerHTML = [
         ['Fantasia', client.fantasia],
@@ -2866,10 +2853,10 @@ function setupClientSummarySelectors(rows) {
     const yearSelect = document.getElementById('clientSummaryYear');
     const monthSelect = document.getElementById('clientSummaryMonth');
     const years = [...new Set(rows.map(item => String(item.data || '').slice(0, 4)).filter(y => /^\d{4}$/.test(y)))].sort();
-    const selectedYear = years.includes(String(document.getElementById('yearSelect')?.value)) ? String(document.getElementById('yearSelect').value) : (years[years.length - 1] || String(new Date().getFullYear()));
-    yearSelect.innerHTML = years.map(y => `<option value="${y}">${y}</option>`).join('') || `<option value="${selectedYear}">${selectedYear}</option>`;
+    const selectedYear = years.includes(String(document.getElementById('yearSelect')?.value)) ? String(document.getElementById('yearSelect').value) : 'all';
+    yearSelect.innerHTML = '<option value="all">TODOS</option>' + years.map(y => `<option value="${y}">${y}</option>`).join('');
     yearSelect.value = selectedYear;
-    monthSelect.innerHTML = '<option value="all">MÊS A MÊS</option>' + MONTHS.map((m, i) => `<option value="${i + 1}">${m}</option>`).join('');
+    monthSelect.innerHTML = '<option value="all">ANO</option>' + MONTHS.map((m, i) => `<option value="${i + 1}">${m}</option>`).join('');
     monthSelect.value = 'all';
 }
 
@@ -2877,23 +2864,35 @@ function renderClientSummaryCharts() {
     if (!currentSummaryClient) return;
     const rows = getClientSummaryRows(currentSummaryClient);
     const year = document.getElementById('clientSummaryYear').value;
-    const month = document.getElementById('clientSummaryMonth').value;
+    const monthSelect = document.getElementById('clientSummaryMonth');
+    if (year === 'all') monthSelect.value = 'all';
+    monthSelect.disabled = year === 'all';
+    const month = monthSelect.value;
     const buckets = {};
-
-    rows.forEach(item => {
+    const periodRows = rows.filter(item => {
         const d = parseFatDateLocal(item.data);
-        if (!d || String(d.getFullYear()) !== String(year)) return;
+        if (!d) return false;
+        if (year !== 'all' && String(d.getFullYear()) !== String(year)) return false;
+        if (month !== 'all' && d.getMonth() + 1 !== Number(month)) return false;
+        return true;
+    });
+
+    renderClientSummaryKpis(periodRows);
+
+    periodRows.forEach(item => {
+        const d = parseFatDateLocal(item.data);
         const m = d.getMonth() + 1;
-        if (month !== 'all' && m !== Number(month)) return;
-        const key = month === 'all' ? String(m).padStart(2, '0') : String(d.getDate()).padStart(2, '0');
+        const key = month === 'all'
+            ? (year === 'all' ? String(d.getFullYear()) : String(m).padStart(2, '0'))
+            : String(d.getDate()).padStart(2, '0');
         buckets[key] = (buckets[key] || 0) + calcTotal(item);
     });
 
     const labels = month === 'all'
-        ? MONTHS.map((m, i) => `${m}/${String(year).slice(2)}`)
+        ? (year === 'all' ? Object.keys(buckets).sort() : MONTHS.map((m, i) => `${m}/${String(year).slice(2)}`))
         : Array.from({ length: new Date(Number(year), Number(month), 0).getDate() }, (_, i) => String(i + 1).padStart(2, '0'));
     const data = month === 'all'
-        ? labels.map((_, i) => buckets[String(i + 1).padStart(2, '0')] || 0)
+        ? (year === 'all' ? labels.map(label => buckets[label] || 0) : labels.map((_, i) => buckets[String(i + 1).padStart(2, '0')] || 0))
         : labels.map(day => buckets[day] || 0);
 
     const ctx = document.getElementById('clientSummaryChart').getContext('2d');
@@ -2934,6 +2933,23 @@ function renderClientSummaryCharts() {
             }
         }
     });
+}
+
+function renderClientSummaryKpis(rows) {
+    const fat = rows.reduce((sum, item) => sum + calcTotal(item), 0);
+    const pesoRows = rows.filter(item => getFatPesoState(item));
+    const peso = pesoRows.reduce((sum, item) => sum + (item.pesoTotal || 0), 0);
+    const orders = new Set(rows.map(item => String(item.pedido || '').trim()).filter(Boolean));
+    const dates = rows.map(item => parseFatDateLocal(item.data)).filter(d => d && !isNaN(d)).sort((a, b) => a - b);
+    const lastDate = dates.length ? dates[dates.length - 1] : null;
+
+    document.getElementById('clientSummaryKpis').innerHTML = [
+        ['Faturamento total', fmtMoney(fat)],
+        ['Peso total', fmtNum(peso) + ' kg'],
+        ['Pedidos únicos', (orders.size || 0).toLocaleString('pt-BR')],
+        ['Preço médio/kg', peso > 0 ? fmtMoney(fat / peso) : '-'],
+        ['Última compra', lastDate ? lastDate.toLocaleDateString('pt-BR') : '-']
+    ].map(([label, value]) => `<div class="summary-kpi"><span>${label}</span><strong>${value}</strong></div>`).join('');
 }
 
 function formatClientCity(c) {
