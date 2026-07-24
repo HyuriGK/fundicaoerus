@@ -2728,7 +2728,11 @@ router.get('/crm/contatos', async (req, res) => {
         const crmUser = String(req.user?.user || req.user?.name || '').trim();
         const role = String(req.user?.role || '').trim().toLowerCase();
         const requestedUser = String(req.query.user || 'mine').trim().toLowerCase();
+        const empresa = req.query.empresa === undefined || req.query.empresa === '' ? null : Number(req.query.empresa);
+        const codigo = req.query.codigo === undefined || req.query.codigo === '' ? null : Number(req.query.codigo);
         if (!crmUser) return res.status(400).json({ success: false, error: 'Usuário inválido.' });
+        if (empresa !== null && !Number.isInteger(empresa)) return res.status(400).json({ success: false, error: 'Empresa inválida.' });
+        if (codigo !== null && !Number.isInteger(codigo)) return res.status(400).json({ success: false, error: 'Código inválido.' });
         const canViewAll = ['admin', 'desenvolvedor'].includes(role);
         let whereClause = 'WHERE crm_user = $1';
         let params = [crmUser];
@@ -2738,6 +2742,10 @@ router.get('/crm/contatos', async (req, res) => {
         } else if (canViewAll && ['geruza', 'elisangela'].includes(requestedUser)) {
             params = [requestedUser];
         }
+        if (empresa !== null && codigo !== null) {
+            params.push(empresa, codigo);
+            whereClause += ` AND empresa = $${params.length - 1} AND codigo = $${params.length}`;
+        }
         const result = await pool.query(`
             SELECT id, cliente_nome, empresa, codigo, crm_user, contato_em, canal, pessoa_contatada,
                    cargo, telefone, email, motivo, resultado, humor_cliente, potencial, proxima_acao,
@@ -2745,7 +2753,7 @@ router.get('/crm/contatos', async (req, res) => {
             FROM clientes_contatos_crm
             ${whereClause}
             ORDER BY contato_em DESC, id DESC
-            LIMIT 20
+            ${empresa !== null && codigo !== null ? '' : 'LIMIT 20'}
         `, params);
         res.json({ success: true, data: result.rows });
     } catch (err) {
