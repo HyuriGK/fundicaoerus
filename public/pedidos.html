@@ -19,6 +19,8 @@
         rel="stylesheet">
     <!-- Bibliotecas Funcionais (XLSX, Charts) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
     <script>
         if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
         if (sessionStorage.getItem('pedidosMobileRefreshTop') === '1') {
@@ -2135,6 +2137,7 @@
                 <div class="toolbar-group" style="margin-left: auto;">
                     <button id="btnGerarEmail" class="btn-modern" onclick="openEmailModal()">Gerar Email</button>
                     <button id="btnExtrairExcel" class="btn-modern" onclick="exportToExcel()">Exportar Excel</button>
+                    <button id="btnGerarPdf" class="btn-modern" onclick="exportToPdf()">Gerar PDF</button>
                 </div>
             </div>
             <div class="block-reason-cards" id="blockReasonCards">
@@ -7185,6 +7188,44 @@ function flashConcentracaoBar(barIndex) {
                 showToast("Erro", "Não foi possível vincular a OP.", "danger");
             }
         }
+        function getVisibleRecordsExportData() {
+            if (!currentFilteredData || currentFilteredData.length === 0) {
+                showToast("Aviso", "Nenhum dado filtrado para exportar.", "info");
+                return [];
+            }
+            return currentFilteredData.map(item => {
+                const metrics = getItemSectorMetrics(item);
+                const saldoReal = item._sectorQty !== undefined ? item._sectorQty : getCommercialBalance(item);
+                const prodCode = String(item.PRODUTO_PPR || '').trim();
+                const qtdOriginal = metrics.originalTarget;
+                const unitWeight = getResolvedUnitWeight(item, customWeights, qtdOriginal);
+                const totalWeightReal = item._sectorWeight !== undefined ? item._sectorWeight : (unitWeight * saldoReal);
+                let unitPrice = parseFloat(item.VALOR_PPR || 0);
+                if (item.PRECO_KG && parseFloat(item.PRECO_KG) > 0 && customWeights[prodCode]) {
+                    unitPrice = parseFloat(item.PRECO_KG) * unitWeight;
+                }
+                const valorTotal = item._sectorValue !== undefined ? item._sectorValue : (unitPrice * saldoReal);
+                const entrega = item.ENTREGA_PETR ? new Date(item.ENTREGA_PETR).toLocaleDateString('pt-BR') :
+                    (item.DATA_ENTREGA_PPR ? new Date(item.DATA_ENTREGA_PPR).toLocaleDateString('pt-BR') : '-');
+                const row = {
+                    "Pedido": item.CODIGO_PPR || '-',
+                    "OP": item.OP_PCS || '-',
+                    "Bloqueio / Sem Data": getPedidoBlockReasons(item).map(r => r.label).join(', ') || '-',
+                    "Ordem Compra (OC)": item.ORDEM_COMPRA_PPR || '-',
+                    "Entrega": entrega,
+                    "Cliente": item.NOME_CLIENTE || '-',
+                    "Codigo": item.PRODUTO_PPR || '-',
+                    "Produto": item.NOME_PRODUTO_PPR || '-',
+                    "Saldo": saldoReal,
+                    "Peso Un. (kg)": parseFloat(unitWeight.toFixed(3)),
+                    "Peso Total (kg)": parseFloat(totalWeightReal.toFixed(2)),
+                    "Modelo": item.modelo_status || ''
+                };
+                if (valorVisible) row["Total (R$)"] = parseFloat(valorTotal.toFixed(2));
+                return row;
+            });
+        }
+
         // --- EXPORT TO EXCEL ---
         function exportToExcel() {
             if (typeof XLSX === 'undefined') {
@@ -7245,6 +7286,51 @@ function flashConcentracaoBar(barIndex) {
             } catch (err) {
                 console.error("Erro exportando excel:", err);
                 showToast("Erro", "Falha ao gerar o arquivo Excel.", "danger");
+            }
+        }
+
+        function exportToPdf() {
+            const jsPdfCtor = window.jspdf && window.jspdf.jsPDF;
+            if (!jsPdfCtor) {
+                showToast("Erro", "Biblioteca PDF nÃ£o carregada.", "danger");
+                return;
+            }
+            const exportData = getVisibleRecordsExportData();
+            if (!exportData.length) return;
+            try {
+                const doc = new jsPdfCtor({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+                if (typeof doc.autoTable !== 'function') {
+                    showToast("Erro", "Biblioteca de tabela PDF nÃ£o carregada.", "danger");
+                    return;
+                }
+                const headers = Object.keys(exportData[0]);
+                const body = exportData.map(row => headers.map(key => row[key] == null ? '' : String(row[key])));
+                const fileDate = new Date().toISOString().split('T')[0];
+                doc.setFontSize(13);
+                doc.text('Pedidos Erus - Registros filtrados', 40, 32);
+                doc.setFontSize(8);
+                doc.text(`Gerado em ${new Date().toLocaleString('pt-BR')} | ${exportData.length} registros`, 40, 46);
+                doc.autoTable({
+                    head: [headers],
+                    body,
+                    startY: 58,
+                    styles: { fontSize: 6, cellPadding: 3, overflow: 'linebreak' },
+                    headStyles: { fillColor: [24, 24, 27], textColor: [255, 255, 255] },
+                    alternateRowStyles: { fillColor: [245, 245, 245] },
+                    columnStyles: {
+                        5: { cellWidth: 105 },
+                        7: { cellWidth: 145 },
+                        11: { cellWidth: 90 }
+                    },
+                    margin: { left: 24, right: 24, top: 24, bottom: 24 }
+                });
+                const fileName = `Pedidos_Erus_${fileDate}.pdf`;
+                doc.save(fileName);
+                if (window.erusAudit) window.erusAudit('EXPORTAR_PDF', { registros: exportData.length, arquivo: fileName });
+                showToast("Sucesso", "Arquivo PDF gerado com sucesso!", "success");
+            } catch (err) {
+                console.error("Erro exportando pdf:", err);
+                showToast("Erro", "Falha ao gerar o arquivo PDF.", "danger");
             }
         }
 
