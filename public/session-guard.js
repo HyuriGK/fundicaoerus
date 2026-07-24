@@ -17,7 +17,10 @@
                     return;
                 }
                 if (typeof data.can_view_monetary !== 'undefined') {
-                    localStorage.setItem('erus_can_view_monetary', data.can_view_monetary ? 'true' : 'false');
+                    var pages = Array.isArray(data.monetary_pages) ? data.monetary_pages : [];
+                    var currentPage = (window.location.pathname.split('/').pop() || 'index.html');
+                    localStorage.setItem('erus_monetary_pages', JSON.stringify(pages));
+                    localStorage.setItem('erus_can_view_monetary', pages.indexOf(currentPage) !== -1 ? 'true' : 'false');
                 }
                 if (data.role) localStorage.setItem('erus_role', data.role);
                 if (data.name) localStorage.setItem('erus_user', data.name);

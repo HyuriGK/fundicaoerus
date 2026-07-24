@@ -24,6 +24,15 @@ function getDeviceDetails(req) {
     };
 }
 
+async function getUserMonetaryPages(username) {
+    try {
+        const result = await pool.query('SELECT page_key FROM user_monetary_permissions WHERE username = $1 AND allowed = TRUE ORDER BY page_key', [username]);
+        return result.rows.map(row => row.page_key);
+    } catch (_) {
+        return [];
+    }
+}
+
 // Rota: POST /api/auth (definido no index.js)
 router.post('/', loginLimiter, async (req, res) => {
     const { user, pass } = req.body;
@@ -69,6 +78,7 @@ router.post('/', loginLimiter, async (req, res) => {
                 .then(() => logActivity(user, 'LOGIN', 'users', { name: userData.name, role: userData.role, ...deviceDetails }))
                 .catch(err => console.error('Erro ao atualizar last_login ou logar atividade:', err));
 
+            const monetaryPages = await getUserMonetaryPages(user);
             // Retorna os dados
 const token = generateToken(userData);
             return res.status(200).json({
@@ -76,7 +86,8 @@ const token = generateToken(userData);
                 token: token,
                 role: userData.role,
                 name: userData.name,
-                can_view_monetary: userData.can_view_monetary || false
+                can_view_monetary: monetaryPages.length > 0 || userData.can_view_monetary || false,
+                monetary_pages: monetaryPages
             });
         } else {
             return res.status(401).json({ success: false, message: "Usuário ou senha incorretos." });
@@ -96,6 +107,7 @@ router.get('/check', async (req, res) => {
         const result = await pool.query('SELECT force_logout, role, name, can_view_monetary, can_access_after_hours FROM users WHERE username = $1', [username]);
         if (!result.rows.length) return res.json({ force_logout: true }); // usuário deletado
         const row = result.rows[0];
+        const monetaryPages = await getUserMonetaryPages(username);
         const outsideHours = !canAccessOutsideHours(row) && !isWithinAllowedAccessHours();
         return res.json({
             force_logout: row.force_logout || outsideHours,
@@ -103,7 +115,8 @@ router.get('/check', async (req, res) => {
             message: outsideHours ? getAccessHoursMessage() : undefined,
             role: row.role,
             name: row.name,
-            can_view_monetary: row.can_view_monetary || false,
+            can_view_monetary: monetaryPages.length > 0 || row.can_view_monetary || false,
+            monetary_pages: monetaryPages,
             can_access_after_hours: row.can_access_after_hours || false
         });
     } catch {

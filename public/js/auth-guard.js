@@ -1,4 +1,11 @@
 (function() {
+    try {
+        var pages = JSON.parse(localStorage.getItem('erus_monetary_pages') || '[]');
+        var currentPage = (window.location.pathname.split('/').pop() || 'index.html');
+        if (Array.isArray(pages)) {
+            localStorage.setItem('erus_can_view_monetary', pages.indexOf(currentPage) !== -1 ? 'true' : 'false');
+        }
+    } catch (_) {}
     var originalFetch = window.fetch;
 
     window.fetch = function(url, options) {

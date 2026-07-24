@@ -6,10 +6,37 @@ const { requireRole } = require('../lib/middleware');
 
 const checkDevRole = requireRole('desenvolvedor', 'admin');
 
+const MONETARY_PAGES = [
+    ['Produção Apontada', 'apontamentos_produtivos.html'],
+    ['Pedidos', 'pedidos.html'],
+    ['Produção Faturada', 'faturamentos.html'],
+    ['Acabamento Externo', 'acabamento_externo.html'],
+    ['Usinagem Externa', 'usinagem_externa.html'],
+    ['Refugos', 'refugos.html']
+];
+
 (async () => {
     try {
         await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS can_view_monetary BOOLEAN NOT NULL DEFAULT FALSE');
         await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS can_access_after_hours BOOLEAN NOT NULL DEFAULT FALSE');
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS user_monetary_permissions (
+                username TEXT NOT NULL,
+                page_key TEXT NOT NULL,
+                allowed BOOLEAN NOT NULL DEFAULT TRUE,
+                updated_at TIMESTAMP DEFAULT NOW(),
+                PRIMARY KEY (username, page_key)
+            )
+        `);
+        for (const [, pageKey] of MONETARY_PAGES) {
+            await pool.query(`
+                INSERT INTO user_monetary_permissions (username, page_key, allowed, updated_at)
+                SELECT username, $1, TRUE, NOW()
+                FROM users
+                WHERE can_view_monetary = TRUE
+                ON CONFLICT (username, page_key) DO NOTHING
+            `, [pageKey]);
+        }
     } catch (error) {
         console.error('Erro ao verificar coluna can_view_monetary:', error);
     }
@@ -23,10 +50,16 @@ router.get('/', checkDevRole, async (req, res) => {
                 u.id, u.username, u.name, u.role, u.last_login, u.created_at, u.approved,
                 u.can_view_monetary,
                 u.can_access_after_hours,
+                COALESCE(mp.pages, ARRAY[]::TEXT[]) AS monetary_pages,
                 la.last_activity_at,
                 la.last_activity_page,
                 la.last_activity_device
             FROM users u
+            LEFT JOIN LATERAL (
+                SELECT ARRAY_AGG(page_key ORDER BY page_key) AS pages
+                FROM user_monetary_permissions
+                WHERE username = u.username AND allowed = TRUE
+            ) mp ON true
             LEFT JOIN LATERAL (
                 SELECT created_at AS last_activity_at, table_name AS last_activity_page, details->>'device_type' AS last_activity_device
                 FROM audit_logs
@@ -154,22 +187,37 @@ router.put('/:username/kick', checkDevRole, async (req, res) => {
 // TOGGLE PERMISSÃO MONETÁRIA
 router.put('/:username/monetary', checkDevRole, async (req, res) => {
     const { username } = req.params;
-    const { can_view_monetary } = req.body;
+    const { can_view_monetary, pages } = req.body;
 
-    if (typeof can_view_monetary !== 'boolean') {
-        return res.status(400).json({ success: false, message: 'can_view_monetary deve ser boolean.' });
+    if (!Array.isArray(pages) && typeof can_view_monetary !== 'boolean') {
+        return res.status(400).json({ success: false, message: 'Informe pages ou can_view_monetary.' });
     }
 
     try {
-        const result = await pool.query('UPDATE users SET can_view_monetary = $1 WHERE username = $2 RETURNING username, can_view_monetary', [can_view_monetary, username]);
+        const userResult = await pool.query('SELECT username FROM users WHERE username = $1', [username]);
+        const selectedPages = Array.isArray(pages)
+            ? pages.filter(page => new Set(MONETARY_PAGES.map(([, key]) => key)).has(page))
+            : (can_view_monetary ? MONETARY_PAGES.map(([, key]) => key) : []);
+        await pool.query('DELETE FROM user_monetary_permissions WHERE username = $1', [username]);
+        for (const page of selectedPages) {
+            await pool.query('INSERT INTO user_monetary_permissions (username, page_key, allowed, updated_at) VALUES ($1, $2, TRUE, NOW()) ON CONFLICT (username, page_key) DO UPDATE SET allowed = TRUE, updated_at = NOW()', [username, page]);
+        }
+        await pool.query('UPDATE users SET can_view_monetary = $1 WHERE username = $2', [selectedPages.length > 0, username]);
+        const result = { rows: userResult.rows };
+        const selectedPagesResponse = selectedPages;
         if (!result.rows.length) return res.status(404).json({ success: false, message: 'Usuário não encontrado.' });
         const adminUser = req.user.name || 'Admin';
-        logActivity(adminUser, 'UPDATE_MONETARY_PERM', 'users', { affected_user: username, can_view_monetary });
+        logActivity(adminUser, 'UPDATE_MONETARY_PERM', 'users', { affected_user: username, pages: selectedPagesResponse });
+        return res.json({ success: true, message: `Permissao monetaria atualizada para ${username}.`, pages: selectedPagesResponse, can_view_monetary: selectedPagesResponse.length > 0 });
         res.json({ success: true, message: `Permissão monetária ${can_view_monetary ? 'habilitada' : 'desabilitada'} para ${username}.` });
     } catch (error) {
         console.error('Erro ao atualizar permissão monetária:', error);
         res.status(500).json({ success: false, message: 'Erro ao atualizar permissão.' });
     }
+});
+
+router.get('/monetary/pages', checkDevRole, async (req, res) => {
+    res.json({ success: true, pages: MONETARY_PAGES.map(([name, key]) => ({ name, key })) });
 });
 
 // TOGGLE PERMISSAO EXTRA-TURNO

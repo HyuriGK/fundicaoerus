@@ -1409,7 +1409,7 @@
                     <div class="native-admin-actions" style="justify-content:center">
                         <button class="native-btn native-icon-btn ${u.approved ? 'warn' : 'good'}" onclick="nativeToggleUser('${jsAttr(u.username)}',${u.approved ? 'false':'true'})" title="${u.approved ? 'Bloquear acesso':'Liberar acesso'}"><i class="fa-solid fa-user-${u.approved ? 'lock':'check'}"></i></button>
                         <button class="native-btn native-icon-btn purple" onclick="nativeOpenUserLogs('${jsAttr(u.username)}')" title="Ver logs de atividade"><i class="fa-solid fa-clock-rotate-left"></i></button>
-                        <button class="native-btn native-icon-btn ${u.can_view_monetary ? 'good':'gray'}" onclick="nativeToggleMonetary('${jsAttr(u.username)}',${u.can_view_monetary ? 'false':'true'})" title="${u.can_view_monetary ? 'Revogar permissão monetária':'Conceder permissão monetária'}"><i class="fa-solid fa-dollar-sign"></i></button>
+                        <button class="native-btn native-icon-btn ${u.can_view_monetary ? 'good':'gray'}" onclick="nativeOpenMonetaryModal('${jsAttr(u.username)}')" title="Configurar permissão monetária por tela"><i class="fa-solid fa-dollar-sign"></i></button>
                         <button class="native-btn native-icon-btn ${u.can_access_after_hours ? 'info':'gray'}" onclick="nativeToggleAfterHours('${jsAttr(u.username)}',${u.can_access_after_hours ? 'false':'true'})" title="${u.can_access_after_hours ? 'Revogar permissão extra-turno':'Conceder permissão extra-turno'}"><i class="fa-solid fa-moon"></i></button>
                         <button class="native-btn native-icon-btn orange" onclick="nativeKickUser('${jsAttr(u.username)}')" title="Forçar logout"><i class="fa-solid fa-right-from-bracket"></i></button>
                         <button class="native-btn native-icon-btn gray" onclick="nativePromptRole('${jsAttr(u.username)}','${jsAttr(u.role || '')}')" title="Alterar role"><i class="fa-solid fa-pen"></i></button>
@@ -1706,6 +1706,65 @@
             if (pages.length) renderDevelopmentDetail(pages[0]);
             else document.getElementById('adminDevelopmentDetail').innerHTML = '<div class="dev-admin-empty">Quando uma tela for marcada como desenvolvimento no bloqueio de telas, ela aparecera aqui com o resumo tecnico.</div>';
         } catch(e) { showToast('Erro', e.message || 'Erro ao carregar desenvolvimentos.', 'danger'); }
+    }
+
+    const NATIVE_MONETARY_PAGES = [
+        { name:'Produção Apontada', key:'apontamentos_produtivos.html' },
+        { name:'Pedidos', key:'pedidos.html' },
+        { name:'Produção Faturada', key:'faturamentos.html' },
+        { name:'Acabamento Externo', key:'acabamento_externo.html' },
+        { name:'Usinagem Externa', key:'usinagem_externa.html' },
+        { name:'Refugos', key:'refugos.html' }
+    ];
+
+    function nativeOpenMonetaryModal(username) {
+        const user = (window.__nativeUsers || []).find(u => u.username === username) || {};
+        const selected = new Set(user.monetary_pages || []);
+        const old = document.getElementById('nativeMonetaryOverlay');
+        if (old) old.remove();
+        const overlay = document.createElement('div');
+        overlay.id = 'nativeMonetaryOverlay';
+        overlay.className = 'modal-overlay open';
+        overlay.style.zIndex = '7000';
+        overlay.innerHTML = `
+            <div class="modal-card" style="max-width:520px;width:92%;background:#111114;border:1px solid var(--border-subtle);border-radius:12px;overflow:hidden;">
+                <div class="modal-header" style="padding:18px 22px;border-bottom:1px solid var(--border-subtle);">
+                    <h3 class="modal-title" style="font-size:1rem;margin:0;"><i class="fa-solid fa-dollar-sign" style="color:#10b981;margin-right:10px;"></i>Permissão monetária - ${escapeHtml(username)}</h3>
+                    <span class="modal-close" onclick="nativeCloseMonetaryModal()">&times;</span>
+                </div>
+                <div style="padding:16px 22px;display:flex;flex-direction:column;gap:8px;">
+                    ${NATIVE_MONETARY_PAGES.map(p => `
+                        <label style="display:flex;align-items:center;gap:10px;padding:10px;border:1px solid rgba(255,255,255,.08);border-radius:8px;background:rgba(255,255,255,.025);color:#e5e7eb;font-size:.82rem;cursor:pointer;">
+                            <input type="checkbox" class="native-monetary-page" value="${escapeHtml(p.key)}" ${selected.has(p.key) ? 'checked' : ''}>
+                            <span style="font-weight:800;">${escapeHtml(p.name)}</span>
+                            <span style="margin-left:auto;color:#71717a;font-family:var(--font-mono);font-size:.72rem;">${escapeHtml(p.key)}</span>
+                        </label>
+                    `).join('')}
+                </div>
+                <div style="padding:14px 22px;border-top:1px solid var(--border-subtle);display:flex;justify-content:flex-end;gap:8px;">
+                    <button class="native-btn" onclick="nativeCloseMonetaryModal()">Cancelar</button>
+                    <button class="native-btn good" onclick="nativeSaveMonetaryPages('${jsAttr(username)}')"><i class="fa-solid fa-check"></i> Salvar</button>
+                </div>
+            </div>`;
+        document.body.appendChild(overlay);
+    }
+
+    function nativeCloseMonetaryModal() {
+        document.getElementById('nativeMonetaryOverlay')?.remove();
+    }
+
+    async function nativeSaveMonetaryPages(username) {
+        const pages = Array.from(document.querySelectorAll('.native-monetary-page:checked')).map(input => input.value);
+        try {
+            const data = await adminRequest(`/api/admin/users/${encodeURIComponent(username)}/monetary`, { method:'PUT', body:JSON.stringify({ pages }) });
+            if (username === localStorage.getItem('erus_username')) {
+                localStorage.setItem('erus_monetary_pages', JSON.stringify(pages));
+                localStorage.setItem('erus_can_view_monetary', pages.includes((location.pathname.split('/').pop() || 'index.html')) ? 'true' : 'false');
+            }
+            showToast('Sucesso', data.message || 'Permissao monetaria atualizada.', 'success');
+            nativeCloseMonetaryModal();
+            await loadNativeUsers();
+        } catch(e) { showToast('Erro', e.message || 'Falha ao atualizar permissao.', 'danger'); await loadNativeUsers(); }
     }
 
     async function nativeToggleMonetary(username, can_view_monetary) {
