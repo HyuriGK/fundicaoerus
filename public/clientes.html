@@ -1762,7 +1762,7 @@ function renderTable() {
 
         const tr = document.createElement('tr');
         tr.style.cursor = 'pointer';
-        tr.onclick = () => openCrmDrawer(c.name);
+        tr.onclick = () => openClientSummaryFromListClient(c);
         tr.innerHTML = `
             <td class="rank-num text-center">${idx + 1}</td>
             <td style="font-weight:600;color:#fff;max-width:220px;overflow:hidden;text-overflow:ellipsis;">${c.name}</td>
@@ -1940,44 +1940,60 @@ function saveFunnelClientObservation(clientName, value) {
     saveCrmToDatabase(clientName, record, { silent: true });
 }
 
-function openCrmDrawer(clientName, options = {}) {
-    const client = clientName ? clientList.find(c => c.name === clientName) : null;
+async function ensureClientRecordsLoaded() {
+    if (clientRecordsLoaded) return true;
+    try {
+        const res = await fetch('/api/clientes-firebird/list/all');
+        const json = await res.json();
+        if (!json.success) throw new Error(json.error || 'Erro ao consultar clientes');
+        clientRecords = json.data || [];
+        clientRecordsLoaded = true;
+        return true;
+    } catch (e) {
+        toast('Erro', 'Falha ao carregar cadastro do cliente.', 'danger');
+        return false;
+    }
+}
+
+function findClientRecordForSummary(client) {
+    if (!client) return null;
+    const code = String(client.code || client.codigo || '').trim();
+    const name = normalizeClientName(client.name || client.razaoSocial || client.fantasia || '');
+    return clientRecords.find(r => code && String(r.codigo || '').trim() === code)
+        || clientRecords.find(r => normalizeClientName(r.razaoSocial || '') === name)
+        || clientRecords.find(r => normalizeClientName(r.fantasia || '') === name)
+        || clientRecords.find(r => {
+            const razao = normalizeClientName(r.razaoSocial || '');
+            const fantasia = normalizeClientName(r.fantasia || '');
+            return name && (razao.includes(name) || name.includes(razao) || fantasia.includes(name) || name.includes(fantasia));
+        });
+}
+
+async function openClientSummaryFromListClient(client) {
     if (!client) return;
-    currentCrmClient = client.name;
-    const saved = crmRecords[client.name] || {};
-    document.getElementById('crmDrawerName').textContent = client.name;
-    document.getElementById('crmDrawerSub').textContent = getCrmStage(client).label + ' · última compra há ' + client.days + ' dias';
-    document.getElementById('crmDrawerPeriod').textContent = 'Período analisado: ' + getSelectedPeriodLabel();
-    document.getElementById('crmStatus').value = saved.status || '';
-    document.getElementById('crmNextAction').value = saved.nextAction || '';
-    document.getElementById('crmDueDate').value = saved.dueDate || '';
-    document.getElementById('crmNotes').value = saved.notes || '';
-    document.getElementById('crmDrawerMetrics').innerHTML = [
-        ['Faturamento', valorVisible ? fmtMoney(client.fat) : 'R$ -----'],
-        ['Peso', fmtNum(client.peso) + ' kg'],
-        ['Pedidos', client.orders],
-        ['Ticket', valorVisible ? fmtMoney(client.ticket) : 'R$ -----']
-    ].map(([label, value]) => `<div class="crm-metric"><div class="crm-metric-label">${label}</div><div class="crm-metric-value">${value}</div></div>`).join('');
-    if (!options.keepSearch) document.getElementById('crmClientSearchWrap').classList.remove('open');
-    applyClientModalSidebarOffset();
-    document.getElementById('crmDrawer').classList.add('open');
+    if (!await ensureClientRecordsLoaded()) return;
+    const record = findClientRecordForSummary(client);
+    if (!record) {
+        toast('Cliente não encontrado', 'Não encontrei o cadastro completo desse cliente.', 'info');
+        return;
+    }
+    openClientSummaryModal(Number(record.empresa), Number(record.codigo));
+}
+
+async function openClientSummaryByName(clientName) {
+    const client = clientList.find(c => c.name === clientName) || { name: clientName };
+    await openClientSummaryFromListClient(client);
+}
+
+function openCrmDrawer(clientName) {
+    openClientSummaryByName(clientName);
 }
 
 function refreshOpenCrmDrawer() {
-    const drawer = document.getElementById('crmDrawer');
-    if (!drawer || !drawer.classList.contains('open') || !currentCrmClient) return;
-    const client = clientList.find(c => c.name === currentCrmClient);
-    if (!client) return;
-    document.getElementById('crmDrawerMetrics').innerHTML = [
-        ['Faturamento', valorVisible ? fmtMoney(client.fat) : 'R$ -----'],
-        ['Peso', fmtNum(client.peso) + ' kg'],
-        ['Pedidos', client.orders],
-        ['Ticket', valorVisible ? fmtMoney(client.ticket) : 'R$ -----']
-    ].map(([label, value]) => `<div class="crm-metric"><div class="crm-metric-label">${label}</div><div class="crm-metric-value">${value}</div></div>`).join('');
 }
 
 function promptSelectClientForAction() {
-    openCrmSearchDrawer();
+    openClientsRecordsModal();
 }
 
 function openCrmSearchDrawer() {
@@ -2023,8 +2039,10 @@ function selectCrmClientFromSearch(clientName) {
 }
 
 function closeCrmDrawer() {
-    document.getElementById('crmDrawer').classList.remove('open');
-    document.getElementById('crmClientSearchWrap').classList.remove('open');
+    const drawer = document.getElementById('crmDrawer');
+    const search = document.getElementById('crmClientSearchWrap');
+    if (drawer) drawer.classList.remove('open');
+    if (search) search.classList.remove('open');
     currentCrmClient = null;
 }
 
