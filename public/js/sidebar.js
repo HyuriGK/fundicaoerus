@@ -240,6 +240,7 @@
         '  margin-left:var(--erus-sidebar-offset) !important;',
         '  box-sizing:border-box !important;',
         '}',
+        '#erus-sidebar.erus-sidebar-pending { visibility:hidden; }',
         'body.erus-shared-sidebar-active .erus-sidebar-content-offset.erus-fill-layout {',
         '  width:calc(100vw - var(--erus-sidebar-offset)) !important;',
         '  max-width:calc(100vw - var(--erus-sidebar-offset)) !important;',
@@ -796,6 +797,8 @@
 
         // Inject sidebar
         document.body.insertAdjacentHTML('afterbegin', sidebarHTML);
+        var pendingSidebarEl = document.getElementById('erus-sidebar');
+        if (pendingSidebarEl) pendingSidebarEl.classList.add('erus-sidebar-pending');
         document.body.insertAdjacentHTML('afterbegin', mobileSidebarHTML);
         // Inject modals at end
         document.body.insertAdjacentHTML('beforeend', logoutModalHTML);
@@ -1055,7 +1058,10 @@
                     if (sep) sep.style.setProperty('display', 'none', 'important');
                 }
             });
-        }).catch(function() {});
+        }).catch(function() {}).then(function() {
+            var sidebarReadyEl = document.getElementById('erus-sidebar');
+            if (sidebarReadyEl) sidebarReadyEl.classList.remove('erus-sidebar-pending');
+        });
     }
 
     // ---- Global sidebar functions ----
