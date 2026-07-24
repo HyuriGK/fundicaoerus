@@ -9,6 +9,7 @@ const checkDevRole = requireRole('desenvolvedor', 'admin');
 (async () => {
     try {
         await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS can_view_monetary BOOLEAN NOT NULL DEFAULT FALSE');
+        await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS can_access_after_hours BOOLEAN NOT NULL DEFAULT FALSE');
     } catch (error) {
         console.error('Erro ao verificar coluna can_view_monetary:', error);
     }
@@ -21,6 +22,7 @@ router.get('/', checkDevRole, async (req, res) => {
             SELECT
                 u.id, u.username, u.name, u.role, u.last_login, u.created_at, u.approved,
                 u.can_view_monetary,
+                u.can_access_after_hours,
                 la.last_activity_at,
                 la.last_activity_page,
                 la.last_activity_device
@@ -167,6 +169,27 @@ router.put('/:username/monetary', checkDevRole, async (req, res) => {
     } catch (error) {
         console.error('Erro ao atualizar permissão monetária:', error);
         res.status(500).json({ success: false, message: 'Erro ao atualizar permissão.' });
+    }
+});
+
+// TOGGLE PERMISSAO EXTRA-TURNO
+router.put('/:username/after-hours', checkDevRole, async (req, res) => {
+    const { username } = req.params;
+    const { can_access_after_hours } = req.body;
+
+    if (typeof can_access_after_hours !== 'boolean') {
+        return res.status(400).json({ success: false, message: 'can_access_after_hours deve ser boolean.' });
+    }
+
+    try {
+        const result = await pool.query('UPDATE users SET can_access_after_hours = $1 WHERE username = $2 RETURNING username, can_access_after_hours', [can_access_after_hours, username]);
+        if (!result.rows.length) return res.status(404).json({ success: false, message: 'UsuÃ¡rio nÃ£o encontrado.' });
+        const adminUser = req.user.name || 'Admin';
+        logActivity(adminUser, 'UPDATE_AFTER_HOURS_PERM', 'users', { affected_user: username, can_access_after_hours });
+        res.json({ success: true, message: `PermissÃ£o extra-turno ${can_access_after_hours ? 'habilitada' : 'desabilitada'} para ${username}.` });
+    } catch (error) {
+        console.error('Erro ao atualizar permissÃ£o extra-turno:', error);
+        res.status(500).json({ success: false, message: 'Erro ao atualizar permissÃ£o extra-turno.' });
     }
 });
 

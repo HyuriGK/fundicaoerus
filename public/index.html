@@ -7553,6 +7553,21 @@
                     `;
 
 
+                        const actionsCell = tr.querySelector('.table-actions');
+                        const kickButton = actionsCell ? actionsCell.querySelector('button[onclick^="kickUser"]') : null;
+                        if (actionsCell && kickButton) {
+                            const afterHoursBtn = document.createElement('button');
+                            afterHoursBtn.className = 'btn-action edit';
+                            afterHoursBtn.title = u.can_access_after_hours ? 'Revogar permissao extra-turno' : 'Conceder permissao extra-turno';
+                            afterHoursBtn.style.color = u.can_access_after_hours ? '#38bdf8' : '#6b7280';
+                            afterHoursBtn.style.borderColor = u.can_access_after_hours ? 'rgba(56,189,248,0.3)' : 'rgba(107,114,128,0.3)';
+                            afterHoursBtn.style.background = u.can_access_after_hours ? 'rgba(56,189,248,0.1)' : 'rgba(107,114,128,0.08)';
+                            afterHoursBtn.innerHTML = '<i class="fa-solid fa-moon"></i>';
+                            afterHoursBtn.onclick = () => toggleAfterHoursPerm(u.username, !!u.can_access_after_hours);
+                            actionsCell.insertBefore(afterHoursBtn, kickButton);
+                        }
+
+
                         tbody.appendChild(tr);
 
 
@@ -7731,6 +7746,33 @@
                             loadAdminUsers();
                         } else {
                             showToast("Erro", data.message || "Falha ao atualizar permissão", "danger");
+                        }
+                    } catch (error) {
+                        console.error(error);
+                        showToast("Erro", "Erro ao conectar com servidor", "danger");
+                    }
+                }
+
+                async function toggleAfterHoursPerm(username, currentValue) {
+                    const newValue = !currentValue;
+                    const label = newValue ? 'conceder' : 'revogar';
+                    if (!await classicConfirm(`Deseja ${label} permissao extra-turno para ${username}?`)) return;
+                    try {
+                        const response = await fetch(`/api/admin/users/${username}/after-hours`, {
+                            method: 'PUT',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'x-role': localStorage.getItem('erus_role'),
+                                'x-user': localStorage.getItem('erus_user')
+                            },
+                            body: JSON.stringify({ can_access_after_hours: newValue })
+                        });
+                        const data = await response.json();
+                        if (data.success) {
+                            showToast("Sucesso", data.message, "success");
+                            loadAdminUsers();
+                        } else {
+                            showToast("Erro", data.message || "Falha ao atualizar permissao extra-turno", "danger");
                         }
                     } catch (error) {
                         console.error(error);

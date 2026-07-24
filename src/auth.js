@@ -3,7 +3,7 @@ const router = express.Router();
 const pool = require('../lib/db'); // Importa o db convertido
 const bcrypt = require('bcryptjs');
 const { logActivity } = require('./lib/logger');
-const { generateToken, isAccessExemptRole, isWithinAllowedAccessHours, getAccessHoursMessage } = require('../lib/middleware');
+const { generateToken, canAccessOutsideHours, isWithinAllowedAccessHours, getAccessHoursMessage } = require('../lib/middleware');
 const rateLimit = require('express-rate-limit');
 
 const loginLimiter = rateLimit({
@@ -54,7 +54,7 @@ router.post('/', loginLimiter, async (req, res) => {
                 });
             }
 
-            if (!isAccessExemptRole(userData.role) && !isWithinAllowedAccessHours()) {
+            if (!canAccessOutsideHours(userData) && !isWithinAllowedAccessHours()) {
                 return res.status(403).json({
                     success: false,
                     code: 'ACCESS_HOURS_BLOCKED',
@@ -93,17 +93,18 @@ router.get('/check', async (req, res) => {
     const { username } = req.query;
     if (!username) return res.json({ force_logout: false });
     try {
-        const result = await pool.query('SELECT force_logout, role, name, can_view_monetary FROM users WHERE username = $1', [username]);
+        const result = await pool.query('SELECT force_logout, role, name, can_view_monetary, can_access_after_hours FROM users WHERE username = $1', [username]);
         if (!result.rows.length) return res.json({ force_logout: true }); // usuário deletado
         const row = result.rows[0];
-        const outsideHours = !isAccessExemptRole(row.role) && !isWithinAllowedAccessHours();
+        const outsideHours = !canAccessOutsideHours(row) && !isWithinAllowedAccessHours();
         return res.json({
             force_logout: row.force_logout || outsideHours,
             code: outsideHours ? 'ACCESS_HOURS_BLOCKED' : undefined,
             message: outsideHours ? getAccessHoursMessage() : undefined,
             role: row.role,
             name: row.name,
-            can_view_monetary: row.can_view_monetary || false
+            can_view_monetary: row.can_view_monetary || false,
+            can_access_after_hours: row.can_access_after_hours || false
         });
     } catch {
         return res.json({ force_logout: false });
