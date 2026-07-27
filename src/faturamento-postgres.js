@@ -356,7 +356,8 @@ router.get('/detalhado', async (req, res) => {
                 (f.peso_un * f.quantidade) AS peso_total_original,
                 f.status,
                 f.pedido,
-                oc.ordem_compra,
+                ped.ano_pedido,
+                ped.ordem_compra,
                 ped.data_emissao_pedido,
                 ped.quantidade_pedido,
                 f.gera_financeiro,
@@ -394,29 +395,24 @@ router.get('/detalhado', async (req, res) => {
             LEFT JOIN faturamento_vendedores_nota v
                 ON v.nota_fiscal = f.nota_fiscal
                 AND v.serie = COALESCE(TRIM(f.serie), '')
-            LEFT JOIN (
+            LEFT JOIN LATERAL (
                 SELECT
+                    data->>'ANO_PPR' AS ano_pedido,
                     data->>'CODIGO_PPR' AS pedido,
                     data->>'PRODUTO_PPR' AS codigo_item,
-                    STRING_AGG(DISTINCT NULLIF(TRIM(data->>'ORDEM_COMPRA_PPR'), ''), ', ') AS ordem_compra
-                FROM firebird_sync_pedidos
-                GROUP BY data->>'CODIGO_PPR', data->>'PRODUTO_PPR'
-            ) oc
-                ON oc.pedido = TRIM(f.pedido)
-                AND oc.codigo_item = TRIM(f.codigo_item)
-            LEFT JOIN (
-                SELECT DISTINCT ON (data->>'CODIGO_PPR', data->>'PRODUTO_PPR')
-                    data->>'CODIGO_PPR' AS pedido,
-                    data->>'PRODUTO_PPR' AS codigo_item,
+                    NULLIF(TRIM(data->>'ORDEM_COMPRA_PPR'), '') AS ordem_compra,
                     (data->>'DATA_EMISSAO_PEDIDO')::date AS data_emissao_pedido,
                     NULLIF(data->>'QUANTIDADE_PPR', '')::numeric AS quantidade_pedido
                 FROM firebird_sync_emissoes
                 WHERE data->>'CODIGO_PPR' IS NOT NULL
                   AND data->>'PRODUTO_PPR' IS NOT NULL
-                ORDER BY data->>'CODIGO_PPR', data->>'PRODUTO_PPR', updated_at DESC
+                  AND data->>'CODIGO_PPR' = TRIM(f.pedido)
+                  AND data->>'PRODUTO_PPR' = TRIM(f.codigo_item)
+                  AND (data->>'DATA_EMISSAO_PEDIDO')::date <= f.data_faturamento
+                ORDER BY (data->>'DATA_EMISSAO_PEDIDO')::date DESC, updated_at DESC
+                LIMIT 1
             ) ped
-                ON ped.pedido = TRIM(f.pedido)
-                AND ped.codigo_item = TRIM(f.codigo_item)
+                ON TRUE
             WHERE 1=1
         `;
 
@@ -485,6 +481,7 @@ router.get('/detalhado', async (req, res) => {
             pesoTotalOriginal: parseFloat(row.peso_total_original || 0),
             status: row.status,
             pedido: row.pedido,
+            pedidoAno: row.ano_pedido,
             ordemCompra: row.ordem_compra,
             dataEmissaoPedido: row.data_emissao_pedido ? row.data_emissao_pedido.toISOString().split('T')[0] : null,
             quantidadePedido: parseFloat(row.quantidade_pedido || 0),
