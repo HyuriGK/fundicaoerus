@@ -144,7 +144,7 @@ function getItemSectorMetrics(item) {
         rawMoldada,
 
         targetTotalQty,
-        originalTarget: Math.max((Number(item.OP_QUANTIDADE) || 0), qtdOrig)
+        originalTarget: qtdOrig
     };
 
     // Total balance = saldo comercial

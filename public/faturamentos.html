@@ -1590,6 +1590,36 @@
                 ESC para fechar</div>
         </div>
     </div>
+    <div id="deliveryTimeModal" class="modal-overlay">
+        <div class="modal-card fullscreen">
+            <div class="modal-header">
+                <h2 class="modal-title" id="deliveryTimeModalTitle" style="color:#fff !important;">DETALHAMENTO DO PRAZO M&Eacute;DIO</h2>
+                <span class="modal-close" onclick="closeDeliveryTimeModal()" title="Fechar (ESC)">&times;</span>
+            </div>
+            <div class="table-container">
+                <table id="deliveryTimeTable">
+                    <thead>
+                        <tr>
+                            <th style="min-width: 110px;">Emiss&atilde;o</th>
+                            <th style="min-width: 110px;">Entrega</th>
+                            <th class="text-right" style="min-width: 90px;">Dias</th>
+                            <th style="min-width: 130px;">OC</th>
+                            <th style="min-width: 80px;">C&oacute;d. Cli</th>
+                            <th style="min-width: 250px;">Cliente</th>
+                            <th style="min-width: 160px;">Vendedor</th>
+                            <th style="min-width: 100px;">C&oacute;d. Item</th>
+                            <th style="min-width: 300px;">Descri&ccedil;&atilde;o</th>
+                            <th class="text-right" style="min-width: 120px;">Quant. Pedido</th>
+                            <th class="text-right" style="min-width: 120px;">Quant. Fat.</th>
+                        </tr>
+                    </thead>
+                    <tbody id="deliveryTimeTableBody"></tbody>
+                </table>
+            </div>
+            <div style="text-align: center; color: var(--text-muted); margin-top: 15px; font-size: 0.8rem;">Pressione
+                ESC para fechar</div>
+        </div>
+    </div>
     <div id="fatContextMenu" class="fat-context-menu">
         <button type="button" onclick="openPedidosCarteiraFromContext()">
             <i class="fa-solid fa-magnifying-glass-chart"></i>
@@ -1807,7 +1837,6 @@
                 <div style="position: relative; flex: 1; width: 100%; min-height: 0;">
                     <canvas id="deliveryTimeChart"></canvas>
                 </div>
-                <div id="deliveryTimeDetails" style="margin-top:14px; max-height:260px; overflow:auto; border-top:1px solid var(--border-subtle); padding-top:12px;"></div>
             </div>
         </div>
     </main>
@@ -3396,22 +3425,25 @@ async function loadRecordsData() {
             const valid = values.filter(v => v !== null && v !== undefined && !isNaN(v));
             return valid.length ? valid.reduce((a, b) => a + b, 0) / valid.length : null;
         }
-        function renderDeliveryTimeDetails(rows, monthIndex) {
-            const box = document.getElementById('deliveryTimeDetails');
-            if (!box) return;
-            if (monthIndex === null || monthIndex === undefined) {
-                box.innerHTML = '<div style="color:var(--text-muted);font-size:0.82rem;font-weight:700;text-transform:uppercase;">Clique em um mês do gráfico para ver os pedidos considerados.</div>';
-                return;
-            }
+        function closeDeliveryTimeModal() {
+            document.getElementById('deliveryTimeModal').style.display = 'none';
+            document.body.style.overflow = '';
+        }
+        function openDeliveryTimeModal(rows, monthIndex) {
+            if (monthIndex === null || monthIndex === undefined) return;
             const monthLabels = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
             const monthRows = [];
             rows.forEach(group => {
                 group.linhas.forEach(item => {
                     const d = new Date(`${item.data}T00:00:00`);
                     if (isNaN(d) || d.getFullYear() !== selectedDashboardYear || d.getMonth() !== monthIndex) return;
+                    const entregaCompleta = group.entregaCompleta && item.data === group.entregaCompleta;
+                    const diasEntrega = diffDays(group.emissao, item.data);
                     monthRows.push({
                         emissao: group.emissao,
                         entregaPedido: item.data,
+                        diasEntrega,
+                        entregaCompleta,
                         oc: item.ordemCompra || '',
                         clienteCodigo: item.clienteCodigo || '',
                         cliente: item.clienteNome || '',
@@ -3423,49 +3455,27 @@ async function loadRecordsData() {
                     });
                 });
             });
-            if (!monthRows.length) {
-                box.innerHTML = `<div style="color:var(--text-muted);font-size:0.82rem;font-weight:700;text-transform:uppercase;">Nenhuma linha considerada em ${monthLabels[monthIndex]}/${selectedDashboardYear}.</div>`;
-                return;
-            }
+            const title = document.getElementById('deliveryTimeModalTitle');
+            if (title) title.textContent = `DETALHAMENTO DO PRAZO MEDIO - ${monthLabels[monthIndex]}/${selectedDashboardYear}`;
+            const tbody = document.getElementById('deliveryTimeTableBody');
             const fmtDateShort = value => value ? formatDate(value) : '';
-            box.innerHTML = `
-                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:12px;">
-                    <div style="color:#fff;font-size:0.86rem;font-weight:800;text-transform:uppercase;">Base considerada - ${monthLabels[monthIndex]}/${selectedDashboardYear}</div>
-                    <div style="color:var(--text-muted);font-size:0.78rem;font-weight:700;">${monthRows.length.toLocaleString('pt-BR')} linhas</div>
-                </div>
-                <table style="width:100%;border-collapse:collapse;font-size:0.76rem;">
-                    <thead>
-                        <tr style="color:var(--text-muted);text-transform:uppercase;border-bottom:1px solid var(--border-subtle);">
-                            <th style="text-align:left;padding:8px;">Emissão</th>
-                            <th style="text-align:left;padding:8px;">Entrega</th>
-                            <th style="text-align:left;padding:8px;">OC</th>
-                            <th style="text-align:left;padding:8px;">Cód. Cli</th>
-                            <th style="text-align:left;padding:8px;min-width:180px;">Cliente</th>
-                            <th style="text-align:left;padding:8px;">Vendedor</th>
-                            <th style="text-align:left;padding:8px;">Cód. Item</th>
-                            <th style="text-align:left;padding:8px;min-width:220px;">Descrição</th>
-                            <th style="text-align:right;padding:8px;">Quant. Pedido</th>
-                            <th style="text-align:right;padding:8px;">Quant. Fat.</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${monthRows.map(row => `
-                            <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
-                                <td style="padding:8px;">${fmtDateShort(row.emissao)}</td>
-                                <td style="padding:8px;color:var(--color-primary);">${fmtDateShort(row.entregaPedido)}</td>
-                                <td style="padding:8px;">${row.oc}</td>
-                                <td style="padding:8px;">${row.clienteCodigo}</td>
-                                <td style="padding:8px;">${row.cliente}</td>
-                                <td style="padding:8px;">${row.vendedor}</td>
-                                <td style="padding:8px;">${row.codigoItem}</td>
-                                <td style="padding:8px;">${row.descricao}</td>
-                                <td style="padding:8px;text-align:right;">${formatNumber(row.qtdPedido, 0)}</td>
-                                <td style="padding:8px;text-align:right;">${formatNumber(row.qtdFaturada, 0)}</td>
-                            </tr>
-                        `).join('')}
-                    </tbody>
-                </table>
-            `;
+            tbody.innerHTML = monthRows.map(row => `
+                <tr>
+                    <td>${fmtDateShort(row.emissao)}</td>
+                    <td style="color:var(--color-primary);">${fmtDateShort(row.entregaPedido)}${row.entregaCompleta ? ' <span style="color:#10b981;font-weight:800;">COMPLETA</span>' : ''}</td>
+                    <td class="text-right">${formatNumber(row.diasEntrega, 0)}</td>
+                    <td>${row.oc}</td>
+                    <td>${row.clienteCodigo}</td>
+                    <td>${row.cliente}</td>
+                    <td>${row.vendedor}</td>
+                    <td>${row.codigoItem}</td>
+                    <td>${row.descricao}</td>
+                    <td class="text-right">${formatNumber(row.qtdPedido, 0)}</td>
+                    <td class="text-right">${formatNumber(row.qtdFaturada, 0)}</td>
+                </tr>
+            `).join('') || '<tr><td colspan="11" style="text-align:center; padding: 20px;">Nenhum registro.</td></tr>';
+            document.getElementById('deliveryTimeModal').style.display = 'flex';
+            document.body.style.overflow = 'hidden';
         }
         function renderDeliveryTimeChart() {
             const rows = getDeliveryTimeRows();
@@ -3509,8 +3519,6 @@ async function loadRecordsData() {
                 const v = avg(b.complete);
                 return v === null ? null : Number(v.toFixed(1));
             });
-            renderDeliveryTimeDetails(rows, selectedDeliveryTimeMonth);
-
             const ctx = document.getElementById('deliveryTimeChart');
             if (!ctx) return;
             if (deliveryTimeChart) deliveryTimeChart.destroy();
@@ -3548,7 +3556,7 @@ async function loadRecordsData() {
                     onClick: (event, elements) => {
                         if (!elements || !elements.length) return;
                         selectedDeliveryTimeMonth = elements[0].index;
-                        renderDeliveryTimeDetails(rows, selectedDeliveryTimeMonth);
+                        openDeliveryTimeModal(rows, selectedDeliveryTimeMonth);
                     },
                     plugins: {
                         legend: { labels: { color: _tc(), font: { weight: '700' } } },
@@ -4098,6 +4106,8 @@ async function loadRecordsData() {
                 if (e.key === 'Escape') {
                     if (document.getElementById('clientModal').style.display === 'flex') {
                         closeClientModal();
+                    } else if (document.getElementById('deliveryTimeModal').style.display === 'flex') {
+                        closeDeliveryTimeModal();
                     } else if (document.getElementById('recordsModal').style.display === 'flex') {
                         if (hasActiveModalFilters()) {
                             const filtered = getModalFilteredData();
