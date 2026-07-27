@@ -9259,6 +9259,13 @@
                 let clientChart = null;
 
 
+                function fetchWithTimeout(url, options = {}, timeoutMs = 20000) {
+                    const controller = new AbortController();
+                    const timer = setTimeout(() => controller.abort(), timeoutMs);
+                    return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(timer));
+                }
+
+
                 // Data Store
 
 
@@ -9390,13 +9397,13 @@
                         const [wRes, pRes, fpRes] = await Promise.all([
 
 
-                            fetch('/api/weights/list'),
+                            fetchWithTimeout('/api/weights/list'),
 
 
-                            fetch('/api/preferences/excluded_clients'),
+                            fetchWithTimeout('/api/preferences/excluded_clients'),
 
 
-                            fetch('/api/preferences/fat_peso_overrides')
+                            fetchWithTimeout('/api/preferences/fat_peso_overrides')
 
 
                         ]);
@@ -9453,15 +9460,9 @@
                         await updateKpis();
 
 
-                        await Promise.all([
-
-
+                        await Promise.allSettled([
                             updateCharts(),
-
-
                             updateSectorProductionTable()
-
-
                         ]);
 
 
@@ -9501,19 +9502,21 @@
                     const endOfMonth = new Date(curYear, curMonth + 1, 0).toISOString().split('T')[0];
 
 
-                    const [metaRes, fatRes] = await Promise.all([
+                    const [metaFetch, fatFetch] = await Promise.allSettled([
 
 
-                        fetch(`/api/metas?mes_ano=${curYear}-${String(curMonth + 1).padStart(2, '0')}`),
+                        fetchWithTimeout(`/api/metas?mes_ano=${curYear}-${String(curMonth + 1).padStart(2, '0')}`),
 
 
-                        fetch(`/api/faturamento-postgres/resumo-periodo?startDate=${startOfMonth}&endDate=${endOfMonth}`)
+                        fetchWithTimeout(`/api/faturamento-postgres/resumo-periodo?startDate=${startOfMonth}&endDate=${endOfMonth}`)
 
 
                     ]);
 
 
-                    const metaData = await metaRes.json();
+                    const metaRes = metaFetch.status === 'fulfilled' ? metaFetch.value : null;
+                    const fatRes = fatFetch.status === 'fulfilled' ? fatFetch.value : null;
+                    const metaData = metaRes && metaRes.ok ? await metaRes.json() : { success: false };
 
 
                     const metaVal = parseFloat(metaData.success ? (metaData.data.meta_peso || metaData.data.valor || 0) : (metaData.meta_peso || 0));
@@ -9521,7 +9524,7 @@
                     window.__metaPesoKg = metaVal;
 
 
-                    const fatData = await fatRes.json();
+                    const fatData = fatRes && fatRes.ok ? await fatRes.json() : { success: false, data: [] };
 
 
                     let fatTotalWeight = 0;
@@ -9564,10 +9567,11 @@
                     const prevEnd = new Date(prevDate.getFullYear(), prevDate.getMonth() + 1, 0).toISOString().split('T')[0];
 
 
-                    const prevFatRes = await fetch(`/api/faturamento-postgres/resumo-periodo?startDate=${prevStart}&endDate=${prevEnd}`);
+                    const prevFatFetch = await Promise.allSettled([fetchWithTimeout(`/api/faturamento-postgres/resumo-periodo?startDate=${prevStart}&endDate=${prevEnd}`)]);
+                    const prevFatRes = prevFatFetch[0].status === 'fulfilled' ? prevFatFetch[0].value : null;
 
 
-                    const prevFatData = await prevFatRes.json();
+                    const prevFatData = prevFatRes && prevFatRes.ok ? await prevFatRes.json() : { success: false, data: [] };
 
 
                     const fatPrev = prevFatData.success ? (prevFatData.data || []).reduce((acc, item) => acc + parseFloat(item.pesoTotal || 0), 0) : 0;
@@ -9612,22 +9616,24 @@
                     // 2. Carteira & Refugo Parallel Fetch
 
 
-                    const [cartRes, refRes] = await Promise.all([
+                    const [cartFetch, refFetch] = await Promise.allSettled([
 
 
-                        fetch('/api/pedidos-sync?carteiraOnly=true'),
+                        fetchWithTimeout('/api/pedidos-sync?carteiraOnly=true'),
 
 
-                        fetch('/api/refugos-new') // Unified endpoint for scrap and production
+                        fetchWithTimeout('/api/refugos-new') // Unified endpoint for scrap and production
 
 
                     ]);
 
 
-                    const cartData = await cartRes.json();
+                    const cartRes = cartFetch.status === 'fulfilled' ? cartFetch.value : null;
+                    const refRes = refFetch.status === 'fulfilled' ? refFetch.value : null;
+                    const cartData = cartRes && cartRes.ok ? await cartRes.json() : [];
 
 
-                    const refJson = await refRes.json();
+                    const refJson = refRes && refRes.ok ? await refRes.json() : {};
 
 
                     const refRawAll = refJson.refugoRawData || [];
@@ -10321,7 +10327,7 @@
                     try {
 
 
-                        const response = await fetch('/api/producao-postgres');
+                        const response = await fetchWithTimeout('/api/producao-postgres');
 
 
                         const result = await response.json();
