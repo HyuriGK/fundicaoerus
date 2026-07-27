@@ -177,6 +177,16 @@ router.get('/', async (req, res) => {
         const linksResult = await pool.query('SELECT sync_key, op, status FROM pedidos_op_links');
         const linksMap = {};
         linksResult.rows.forEach(l => { linksMap[l.sync_key] = l; });
+        const opPesoResult = await pool.query(`
+            SELECT
+                replace(sync_key, 'OP-', '') AS op,
+                data->>'PESO_PRODUTO' AS peso_produto
+            FROM firebird_sync_pedidos
+            WHERE sync_key LIKE 'OP-%'
+              AND NULLIF(data->>'PESO_PRODUTO', '') IS NOT NULL
+        `);
+        const opPesoMap = {};
+        opPesoResult.rows.forEach(row => { opPesoMap[String(row.op).trim()] = row.peso_produto; });
 
         // Extrair o JSONB para o nível raiz para facilitar o frontend
         const pedidos = result.rows.map(row => {
@@ -203,6 +213,10 @@ router.get('/', async (req, res) => {
                     }
                 }
                 // 'removido': apaga o link manual, deixa o JSONB original valer (sugerido volta a aparecer)
+            }
+            const opKey = String(item.OP_PCS || '').trim();
+            if ((!item.PESO_PRODUTO || Number(item.PESO_PRODUTO) <= 0) && opKey && opPesoMap[opKey]) {
+                item.PESO_PRODUTO = Number(opPesoMap[opKey]);
             }
             return item;
         });
