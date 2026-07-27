@@ -395,8 +395,8 @@ router.get('/detalhado', async (req, res) => {
             LEFT JOIN faturamento_vendedores_nota v
                 ON v.nota_fiscal = f.nota_fiscal
                 AND v.serie = COALESCE(TRIM(f.serie), '')
-            LEFT JOIN LATERAL (
-                SELECT
+            LEFT JOIN (
+                SELECT DISTINCT ON (data->>'ANO_PPR', data->>'CODIGO_PPR', data->>'PRODUTO_PPR')
                     data->>'ANO_PPR' AS ano_pedido,
                     data->>'CODIGO_PPR' AS pedido,
                     data->>'PRODUTO_PPR' AS codigo_item,
@@ -404,15 +404,14 @@ router.get('/detalhado', async (req, res) => {
                     (data->>'DATA_EMISSAO_PEDIDO')::date AS data_emissao_pedido,
                     NULLIF(data->>'QUANTIDADE_PPR', '')::numeric AS quantidade_pedido
                 FROM firebird_sync_emissoes
-                WHERE data->>'CODIGO_PPR' IS NOT NULL
+                WHERE data->>'ANO_PPR' IS NOT NULL
+                  AND data->>'CODIGO_PPR' IS NOT NULL
                   AND data->>'PRODUTO_PPR' IS NOT NULL
-                  AND data->>'CODIGO_PPR' = TRIM(f.pedido)
-                  AND data->>'PRODUTO_PPR' = TRIM(f.codigo_item)
-                  AND (data->>'DATA_EMISSAO_PEDIDO')::date <= f.data_faturamento
-                ORDER BY (data->>'DATA_EMISSAO_PEDIDO')::date DESC, updated_at DESC
-                LIMIT 1
+                ORDER BY data->>'ANO_PPR', data->>'CODIGO_PPR', data->>'PRODUTO_PPR', updated_at DESC
             ) ped
-                ON TRUE
+                ON ped.pedido = TRIM(f.pedido)
+                AND ped.codigo_item = TRIM(f.codigo_item)
+                AND ped.ano_pedido = EXTRACT(YEAR FROM f.data_faturamento)::text
             WHERE 1=1
         `;
 
