@@ -2411,6 +2411,33 @@
             color: #fff;
         }
         #filtersModal .toolbar-filter-input:focus { border-color: var(--color-primary) !important; }
+        .material-search-wrap { position: relative; width: 100%; }
+        #materialSuggestions {
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: calc(100% + 6px);
+            width: 100%;
+            max-height: 260px;
+            overflow-y: auto;
+            display: none;
+            z-index: 2600;
+            background: #18181b;
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+            box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+        }
+        #materialSuggestions .material-suggestion {
+            width: 100%;
+            padding: 10px 12px;
+            color: #f4f4f5;
+            font-size: 0.86rem;
+            cursor: pointer;
+        }
+        #materialSuggestions .material-suggestion:hover {
+            background: rgba(251, 191, 36, 0.12);
+            color: #fff;
+        }
         .filter-date-row { display: flex; align-items: center; gap: 10px; }
         .filter-date-row .toolbar-filter-input { flex: 1; }
         .filter-toggle {
@@ -2591,8 +2618,10 @@
                             </div>
                             <div class="filter-field">
                                 <label><i class="fa-solid fa-cube"></i> Material</label>
-                                <input type="text" id="filterMaterial" class="toolbar-filter-input" placeholder="Digite para buscar material..." list="materialSuggestions" oninput="applyColumnFilters()" autocomplete="off">
-                                <datalist id="materialSuggestions"></datalist>
+                                <div class="material-search-wrap">
+                                    <input type="text" id="filterMaterial" class="toolbar-filter-input" placeholder="Digite para buscar material..." oninput="onMaterialSearchInput()" onfocus="showMaterialSuggestions()" autocomplete="off">
+                                    <div id="materialSuggestions"></div>
+                                </div>
                             </div>
                             <div class="filter-field">
                                 <label><i class="fa-solid fa-layer-group"></i> Lote</label>
@@ -3266,11 +3295,13 @@
         }
         function closeFiltersModal() {
             document.getElementById('filtersModal').style.display = 'none';
+            hideMaterialSuggestions();
         }
         function clearAllFilters() {
             // Limpar todos os inputs de filtro
             document.getElementById('filterOC').value = '';
             document.getElementById('filterMaterial').value = '';
+            hideMaterialSuggestions();
             document.getElementById('filterLote').value = '';
             document.getElementById('filterDateStart').value = '';
             document.getElementById('filterDateEnd').value = '';
@@ -3696,24 +3727,74 @@
                 showToast("Erro", "Falha ao carregar dados do servidor.", "danger");
             }
         }
+        let materialOptions = [];
+        function disablePedidosAutocomplete() {
+            document.querySelectorAll('input:not(#filterMaterial), textarea').forEach((el, idx) => {
+                const type = (el.getAttribute('type') || 'text').toLowerCase();
+                const textLike = ['text', 'search', 'number', 'email', 'tel', 'url', 'password'].includes(type) || el.tagName === 'TEXTAREA';
+                el.setAttribute('autocomplete', textLike ? 'new-password' : 'off');
+                el.setAttribute('autocorrect', 'off');
+                el.setAttribute('autocapitalize', 'off');
+                el.setAttribute('spellcheck', 'false');
+                if (!el.name) el.name = `pedidos_no_autofill_${idx}`;
+            });
+            const materialInput = document.getElementById('filterMaterial');
+            if (materialInput) materialInput.setAttribute('autocomplete', 'off');
+        }
+        const pedidosAutocompleteObserver = new MutationObserver(() => disablePedidosAutocomplete());
+        pedidosAutocompleteObserver.observe(document.body, { childList: true, subtree: true });
+        function hideMaterialSuggestions() {
+            const box = document.getElementById('materialSuggestions');
+            if (box) box.style.display = 'none';
+        }
+        function showMaterialSuggestions() {
+            renderMaterialSuggestions();
+        }
+        function selectMaterialSuggestion(value) {
+            const input = document.getElementById('filterMaterial');
+            if (!input) return;
+            input.value = value;
+            hideMaterialSuggestions();
+            applyColumnFilters();
+        }
+        function onMaterialSearchInput() {
+            applyColumnFilters();
+            renderMaterialSuggestions();
+        }
+        function renderMaterialSuggestions() {
+            const input = document.getElementById('filterMaterial');
+            const box = document.getElementById('materialSuggestions');
+            if (!input || !box) return;
+            const q = input.value.trim().toLowerCase();
+            const matches = materialOptions
+                .filter(material => !q || material.toLowerCase().includes(q))
+                .slice(0, 40);
+            if (!matches.length) {
+                hideMaterialSuggestions();
+                return;
+            }
+            box.innerHTML = '';
+            matches.forEach(material => {
+                const option = document.createElement('div');
+                option.className = 'material-suggestion';
+                option.textContent = material;
+                option.addEventListener('mousedown', () => selectMaterialSuggestion(material));
+                box.appendChild(option);
+            });
+            box.style.display = 'block';
+        }
+        document.addEventListener('click', (event) => {
+            if (!event.target.closest('.material-search-wrap')) hideMaterialSuggestions();
+        });
         // Populate material suggestions for autocomplete
         function populateMaterialSuggestions() {
-            const datalist = document.getElementById('materialSuggestions');
-            if (!datalist) return;
             // Get unique materials from allData
-            const uniqueMaterials = [...new Set(
+            materialOptions = [...new Set(
                 allData
                     .map(item => item.NOME_MATERIAL)
                     .filter(mat => mat && mat.trim() !== '')
             )].sort();
-            // Clear existing options
-            datalist.innerHTML = '';
-            // Add options
-            uniqueMaterials.forEach(material => {
-                const option = document.createElement('option');
-                option.value = material;
-                datalist.appendChild(option);
-            });
+            renderMaterialSuggestions();
         }
         // Função para salvar peso customizado
         async function saveWeight(event, prodCode) {
@@ -4344,6 +4425,7 @@
         // FILTROS E GRÁFICOS
         // ==========================================================================
         function setupFilters() {
+            disablePedidosAutocomplete();
             document.querySelectorAll('.filter-input-table').forEach(input => {
                 input.addEventListener('input', applyColumnFilters);
             });
