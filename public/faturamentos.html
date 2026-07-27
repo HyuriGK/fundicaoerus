@@ -1807,6 +1807,7 @@
                 <div style="position: relative; flex: 1; width: 100%; min-height: 0;">
                     <canvas id="deliveryTimeChart"></canvas>
                 </div>
+                <div id="deliveryTimeDetails" style="margin-top:14px; max-height:260px; overflow:auto; border-top:1px solid var(--border-subtle); padding-top:12px;"></div>
             </div>
         </div>
     </main>
@@ -1834,6 +1835,7 @@
         let colFilters = {};
         let currentMeta = 0;
         let dailyChart = null, annualChart = null, abcChart = null, deliveryTimeChart = null;
+        let selectedDeliveryTimeMonth = null;
         let dailyChartMode = 'normal'; // 'normal' | 'servicos'
         let _lastDailyChartArgs = null; // cache para re-render no toggle
         const _ltFat = window.ErusTheme && window.ErusTheme.isLight();
@@ -3312,6 +3314,7 @@ async function loadRecordsData() {
         function showDeliveryTimeCharts() {
             dashboardView = 'prazo';
             syncDashboardViewSelect('prazo');
+            selectedDeliveryTimeMonth = null;
             selectedDashboardMonthIndex = -1;
             updateDashboardMonthButtonsUI();
             syncPeriodInputs();
@@ -3374,7 +3377,7 @@ async function loadRecordsData() {
                 if (!primeiraEntrega) return;
                 const diasPrimeira = diffDays(group.emissao, primeiraEntrega);
                 const diasCompleta = entregaCompleta ? diffDays(group.emissao, entregaCompleta) : null;
-                result.push({ ...group, primeiraEntrega, entregaCompleta, diasPrimeira, diasCompleta });
+                result.push({ ...group, primeiraEntrega, entregaCompleta, diasPrimeira, diasCompleta, linhas: group.rows });
             });
 
             return result.filter(row => {
@@ -3392,6 +3395,77 @@ async function loadRecordsData() {
         function avg(values) {
             const valid = values.filter(v => v !== null && v !== undefined && !isNaN(v));
             return valid.length ? valid.reduce((a, b) => a + b, 0) / valid.length : null;
+        }
+        function renderDeliveryTimeDetails(rows, monthIndex) {
+            const box = document.getElementById('deliveryTimeDetails');
+            if (!box) return;
+            if (monthIndex === null || monthIndex === undefined) {
+                box.innerHTML = '<div style="color:var(--text-muted);font-size:0.82rem;font-weight:700;text-transform:uppercase;">Clique em um mês do gráfico para ver os pedidos considerados.</div>';
+                return;
+            }
+            const monthLabels = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+            const monthRows = [];
+            rows.forEach(group => {
+                group.linhas.forEach(item => {
+                    const d = new Date(`${item.data}T00:00:00`);
+                    if (isNaN(d) || d.getFullYear() !== selectedDashboardYear || d.getMonth() !== monthIndex) return;
+                    monthRows.push({
+                        emissao: group.emissao,
+                        entregaPedido: item.data,
+                        oc: item.ordemCompra || '',
+                        clienteCodigo: item.clienteCodigo || '',
+                        cliente: item.clienteNome || '',
+                        vendedor: item.vendedorNome || item.vendedorCodigo || '',
+                        codigoItem: item.codigoItem || '',
+                        descricao: item.descricao || '',
+                        qtdPedido: group.quantidadePedido,
+                        qtdFaturada: item.quantidadeOriginal ?? item.quantidade ?? 0
+                    });
+                });
+            });
+            if (!monthRows.length) {
+                box.innerHTML = `<div style="color:var(--text-muted);font-size:0.82rem;font-weight:700;text-transform:uppercase;">Nenhuma linha considerada em ${monthLabels[monthIndex]}/${selectedDashboardYear}.</div>`;
+                return;
+            }
+            const fmtDateShort = value => value ? formatDate(value) : '';
+            box.innerHTML = `
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:12px;">
+                    <div style="color:#fff;font-size:0.86rem;font-weight:800;text-transform:uppercase;">Base considerada - ${monthLabels[monthIndex]}/${selectedDashboardYear}</div>
+                    <div style="color:var(--text-muted);font-size:0.78rem;font-weight:700;">${monthRows.length.toLocaleString('pt-BR')} linhas</div>
+                </div>
+                <table style="width:100%;border-collapse:collapse;font-size:0.76rem;">
+                    <thead>
+                        <tr style="color:var(--text-muted);text-transform:uppercase;border-bottom:1px solid var(--border-subtle);">
+                            <th style="text-align:left;padding:8px;">Emissão</th>
+                            <th style="text-align:left;padding:8px;">Entrega</th>
+                            <th style="text-align:left;padding:8px;">OC</th>
+                            <th style="text-align:left;padding:8px;">Cód. Cli</th>
+                            <th style="text-align:left;padding:8px;min-width:180px;">Cliente</th>
+                            <th style="text-align:left;padding:8px;">Vendedor</th>
+                            <th style="text-align:left;padding:8px;">Cód. Item</th>
+                            <th style="text-align:left;padding:8px;min-width:220px;">Descrição</th>
+                            <th style="text-align:right;padding:8px;">Quant. Pedido</th>
+                            <th style="text-align:right;padding:8px;">Quant. Fat.</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${monthRows.map(row => `
+                            <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+                                <td style="padding:8px;">${fmtDateShort(row.emissao)}</td>
+                                <td style="padding:8px;color:var(--color-primary);">${fmtDateShort(row.entregaPedido)}</td>
+                                <td style="padding:8px;">${row.oc}</td>
+                                <td style="padding:8px;">${row.clienteCodigo}</td>
+                                <td style="padding:8px;">${row.cliente}</td>
+                                <td style="padding:8px;">${row.vendedor}</td>
+                                <td style="padding:8px;">${row.codigoItem}</td>
+                                <td style="padding:8px;">${row.descricao}</td>
+                                <td style="padding:8px;text-align:right;">${formatNumber(row.qtdPedido, 0)}</td>
+                                <td style="padding:8px;text-align:right;">${formatNumber(row.qtdFaturada, 0)}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
         }
         function renderDeliveryTimeChart() {
             const rows = getDeliveryTimeRows();
@@ -3435,6 +3509,7 @@ async function loadRecordsData() {
                 const v = avg(b.complete);
                 return v === null ? null : Number(v.toFixed(1));
             });
+            renderDeliveryTimeDetails(rows, selectedDeliveryTimeMonth);
 
             const ctx = document.getElementById('deliveryTimeChart');
             if (!ctx) return;
@@ -3470,6 +3545,11 @@ async function loadRecordsData() {
                     responsive: true,
                     maintainAspectRatio: false,
                     interaction: { mode: 'index', intersect: false },
+                    onClick: (event, elements) => {
+                        if (!elements || !elements.length) return;
+                        selectedDeliveryTimeMonth = elements[0].index;
+                        renderDeliveryTimeDetails(rows, selectedDeliveryTimeMonth);
+                    },
                     plugins: {
                         legend: { labels: { color: _tc(), font: { weight: '700' } } },
                         tooltip: {
