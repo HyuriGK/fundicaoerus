@@ -1673,6 +1673,7 @@
                     <option value="vendedor">FATURAMENTO POR VENDEDOR</option>
                     <option value="abc">CURVA ABC</option>
                     <option value="mapa">MAPA DE CALOR</option>
+                    <option value="prazo">PRAZO M&Eacute;DIO DE ENTREGA</option>
                 </select>
                 <button class="month-btn" onclick="openRecordsModal()">REGISTROS</button>
             </div>
@@ -1790,6 +1791,24 @@
                 </div>
             </div>
         </div>
+        <!-- CHARTS ROW (PRAZO MEDIO) -->
+        <div class="charts-row" id="deliveryTimeChartsRow" style="display:none; grid-template-columns: 1fr;">
+            <div class="chart-panel">
+                <div class="chart-header-row">
+                    <div class="chart-title">Prazo M&eacute;dio de Entrega</div>
+                    <div class="chart-header-kpi">
+                        <span>Primeira entrega:</span> <span class="highlight" id="avgFirstDeliveryDays">-- dias</span>
+                        <span style="width:1px;height:14px;background:var(--border-subtle,#3f3f46);margin:0 8px;display:inline-block;vertical-align:middle;"></span>
+                        <span>Entrega completa:</span> <span class="highlight" id="avgCompleteDeliveryDays">-- dias</span>
+                        <span style="width:1px;height:14px;background:var(--border-subtle,#3f3f46);margin:0 8px;display:inline-block;vertical-align:middle;"></span>
+                        <span>Pedidos completos:</span> <span class="highlight" id="completeDeliveryCount">0</span>
+                    </div>
+                </div>
+                <div style="position: relative; flex: 1; width: 100%; min-height: 0;">
+                    <canvas id="deliveryTimeChart"></canvas>
+                </div>
+            </div>
+        </div>
     </main>
     <script>
         const MONTHS_SHORT = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
@@ -1814,7 +1833,7 @@
         let clientStats = {};
         let colFilters = {};
         let currentMeta = 0;
-        let dailyChart = null, annualChart = null, abcChart = null;
+        let dailyChart = null, annualChart = null, abcChart = null, deliveryTimeChart = null;
         let dailyChartMode = 'normal'; // 'normal' | 'servicos'
         let _lastDailyChartArgs = null; // cache para re-render no toggle
         const _ltFat = window.ErusTheme && window.ErusTheme.isLight();
@@ -2267,6 +2286,9 @@
             // --- VENDOR CHART UPDATE ---
             if (showVendor) {
                 renderVendorChart();
+            }
+            if (dashboardView === 'prazo') {
+                renderDeliveryTimeChart(rangeDataSemServicos);
             }
         }
         function toggleDailyChartMode() {
@@ -3135,11 +3157,12 @@ async function loadRecordsData() {
             else showEvolutionView();
         }
         function handleDashboardViewSelect(value) {
-            const labels = { abc: 'Curva ABC', mapa: 'Mapa de Calor', vendedor: 'Faturamento por Vendedor', faturamento: 'Faturamento' };
+            const labels = { abc: 'Curva ABC', mapa: 'Mapa de Calor', vendedor: 'Faturamento por Vendedor', faturamento: 'Faturamento', prazo: 'Prazo Médio de Entrega' };
             if (window.erusAudit) window.erusAudit('SELECT_DASHBOARD_FAT', { visao: labels[value] || value });
             if (value === 'abc') showABCCharts();
             else if (value === 'mapa') showMapaCalor();
             else if (value === 'vendedor') showVendorCharts();
+            else if (value === 'prazo') showDeliveryTimeCharts();
             else showFaturamentoCharts();
         }
         function selectDailyEvolution() {
@@ -3173,6 +3196,7 @@ async function loadRecordsData() {
             document.getElementById('abcChartsRow').style.display = 'none';
             document.getElementById('vendorChartsRow').style.display = 'none';
             document.getElementById('mapaChartsRow').style.display = 'none';
+            document.getElementById('deliveryTimeChartsRow').style.display = 'none';
             updateEvolutionButtons(true);
             const sideBtn = document.getElementById('btnToggleCharts');
             if (sideBtn) {
@@ -3197,6 +3221,7 @@ async function loadRecordsData() {
             document.getElementById('abcChartsRow').style.display = 'none';
             document.getElementById('vendorChartsRow').style.display = 'none';
             document.getElementById('mapaChartsRow').style.display = 'none';
+            document.getElementById('deliveryTimeChartsRow').style.display = 'none';
             updateEvolutionButtons(false);
             const _d2 = hasActiveModalFilters() ? getModalFilteredData() : allData;
             updateDashboardfromRecords(_d2);
@@ -3212,6 +3237,7 @@ async function loadRecordsData() {
             document.getElementById('abcChartsRow').style.display = 'grid';
             document.getElementById('vendorChartsRow').style.display = 'none';
             document.getElementById('mapaChartsRow').style.display = 'none';
+            document.getElementById('deliveryTimeChartsRow').style.display = 'none';
             updateEvolutionButtons(null);
             // Update side menu button
             const sideBtn = document.getElementById('btnToggleCharts');
@@ -3239,6 +3265,7 @@ async function loadRecordsData() {
             document.getElementById('abcChartsRow').style.display = 'none';
             document.getElementById('vendorChartsRow').style.display = 'none';
             document.getElementById('mapaChartsRow').style.display = 'grid';
+            document.getElementById('deliveryTimeChartsRow').style.display = 'none';
             updateEvolutionButtons(null);
             const sideBtn = document.getElementById('btnToggleCharts');
             if (sideBtn) {
@@ -3274,11 +3301,200 @@ async function loadRecordsData() {
             document.getElementById('abcChartsRow').style.display = 'none';
             document.getElementById('vendorChartsRow').style.display = 'grid';
             document.getElementById('mapaChartsRow').style.display = 'none';
+            document.getElementById('deliveryTimeChartsRow').style.display = 'none';
             updateEvolutionButtons(null);
             document.getElementById('btnVendorPeso').classList.toggle('active', vendorChartMetric === 'peso');
             document.getElementById('btnVendorValor').classList.toggle('active', vendorChartMetric === 'valor');
             const _d = hasActiveModalFilters() ? getModalFilteredData() : allData;
             updateDashboardfromRecords(_d);
+        }
+        function showDeliveryTimeCharts() {
+            dashboardView = 'prazo';
+            syncDashboardViewSelect('prazo');
+            showABC = false;
+            showMapa = false;
+            showVendor = false;
+            document.getElementById('standardChartsRow').style.display = 'none';
+            document.getElementById('annualChartsRow').style.display = 'none';
+            document.getElementById('abcChartsRow').style.display = 'none';
+            document.getElementById('vendorChartsRow').style.display = 'none';
+            document.getElementById('mapaChartsRow').style.display = 'none';
+            document.getElementById('deliveryTimeChartsRow').style.display = 'grid';
+            updateEvolutionButtons(null);
+            const _d = hasActiveModalFilters() ? getModalFilteredData() : allData;
+            updateDashboardfromRecords(_d);
+        }
+        function getDeliveryTimeRows() {
+            const startInput = document.getElementById('startDate')?.value || '';
+            const endInput = document.getElementById('endDate')?.value || '';
+            const vendorFilter = item => !selectedVendor || item.vendedorNome === selectedVendor;
+            const groups = new Map();
+
+            allData.forEach(item => {
+                if (!item || item.gera_financeiro === 'N') return;
+                if (isServiceClient(item)) return;
+                if (!vendorFilter(item)) return;
+                const name = (item.clienteNome || 'Desconhecido').trim();
+                if (excludedClients.has(name) || item.excluido_manualmente === true) return;
+                if (!item.pedido || !item.codigoItem || !item.data || !item.dataEmissaoPedido || !item.quantidadePedido) return;
+                const key = `${String(item.pedido).trim()}|${String(item.codigoItem).trim()}`;
+                if (!groups.has(key)) {
+                    groups.set(key, {
+                        pedido: item.pedido,
+                        codigoItem: item.codigoItem,
+                        descricao: item.descricao || '',
+                        clienteNome: item.clienteNome || '',
+                        emissao: item.dataEmissaoPedido,
+                        quantidadePedido: Number(item.quantidadePedido) || 0,
+                        rows: []
+                    });
+                }
+                groups.get(key).rows.push(item);
+            });
+
+            const result = [];
+            groups.forEach(group => {
+                group.rows.sort((a, b) => String(a.data).localeCompare(String(b.data)));
+                let acumulado = 0;
+                let primeiraEntrega = null;
+                let entregaCompleta = null;
+                group.rows.forEach(row => {
+                    const qtd = Number(row.quantidadeOriginal ?? row.quantidade ?? 0) || 0;
+                    if (qtd <= 0 || !row.data) return;
+                    if (!primeiraEntrega) primeiraEntrega = row.data;
+                    acumulado += qtd;
+                    if (!entregaCompleta && group.quantidadePedido > 0 && acumulado >= group.quantidadePedido) {
+                        entregaCompleta = row.data;
+                    }
+                });
+                if (!primeiraEntrega) return;
+                const diasPrimeira = diffDays(group.emissao, primeiraEntrega);
+                const diasCompleta = entregaCompleta ? diffDays(group.emissao, entregaCompleta) : null;
+                result.push({ ...group, primeiraEntrega, entregaCompleta, diasPrimeira, diasCompleta });
+            });
+
+            return result.filter(row => {
+                const inFirst = (!startInput || row.primeiraEntrega >= startInput) && (!endInput || row.primeiraEntrega <= endInput);
+                const inComplete = row.entregaCompleta && (!startInput || row.entregaCompleta >= startInput) && (!endInput || row.entregaCompleta <= endInput);
+                return inFirst || inComplete;
+            });
+        }
+        function diffDays(start, end) {
+            const s = new Date(`${start}T00:00:00`);
+            const e = new Date(`${end}T00:00:00`);
+            if (isNaN(s) || isNaN(e)) return null;
+            return Math.max(0, Math.round((e - s) / 86400000));
+        }
+        function avg(values) {
+            const valid = values.filter(v => v !== null && v !== undefined && !isNaN(v));
+            return valid.length ? valid.reduce((a, b) => a + b, 0) / valid.length : null;
+        }
+        function renderDeliveryTimeChart() {
+            const rows = getDeliveryTimeRows();
+            const firstRows = rows.filter(r => r.diasPrimeira !== null);
+            const completeRows = rows.filter(r => r.diasCompleta !== null);
+            const avgFirst = avg(firstRows.map(r => r.diasPrimeira));
+            const avgComplete = avg(completeRows.map(r => r.diasCompleta));
+            const setText = (id, value) => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = value;
+            };
+            setText('avgFirstDeliveryDays', avgFirst === null ? '-- dias' : `${avgFirst.toFixed(1).replace('.', ',')} dias`);
+            setText('avgCompleteDeliveryDays', avgComplete === null ? '-- dias' : `${avgComplete.toFixed(1).replace('.', ',')} dias`);
+            setText('completeDeliveryCount', completeRows.length.toLocaleString('pt-BR'));
+
+            const monthLabels = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+            const buckets = monthLabels.map(label => ({ label, first: [], complete: [], firstCount: 0, completeCount: 0 }));
+            rows.forEach(row => {
+                if (row.primeiraEntrega) {
+                    const d = new Date(`${row.primeiraEntrega}T00:00:00`);
+                    if (!isNaN(d) && d.getFullYear() === selectedDashboardYear && row.diasPrimeira !== null) {
+                        buckets[d.getMonth()].first.push(row.diasPrimeira);
+                        buckets[d.getMonth()].firstCount++;
+                    }
+                }
+                if (row.entregaCompleta) {
+                    const d = new Date(`${row.entregaCompleta}T00:00:00`);
+                    if (!isNaN(d) && d.getFullYear() === selectedDashboardYear && row.diasCompleta !== null) {
+                        buckets[d.getMonth()].complete.push(row.diasCompleta);
+                        buckets[d.getMonth()].completeCount++;
+                    }
+                }
+            });
+
+            const labels = buckets.map(b => b.label);
+            const firstData = buckets.map(b => {
+                const v = avg(b.first);
+                return v === null ? null : Number(v.toFixed(1));
+            });
+            const completeData = buckets.map(b => {
+                const v = avg(b.complete);
+                return v === null ? null : Number(v.toFixed(1));
+            });
+
+            const ctx = document.getElementById('deliveryTimeChart');
+            if (!ctx) return;
+            if (deliveryTimeChart) deliveryTimeChart.destroy();
+            deliveryTimeChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            label: 'Primeira entrega',
+                            data: firstData,
+                            borderColor: '#38bdf8',
+                            backgroundColor: 'rgba(56, 189, 248, 0.16)',
+                            borderWidth: 3,
+                            pointRadius: 4,
+                            tension: 0.35,
+                            spanGaps: true
+                        },
+                        {
+                            label: 'Entrega completa',
+                            data: completeData,
+                            borderColor: '#f59e0b',
+                            backgroundColor: 'rgba(245, 158, 11, 0.18)',
+                            borderWidth: 3,
+                            pointRadius: 4,
+                            tension: 0.35,
+                            spanGaps: true
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { labels: { color: _tc(), font: { weight: '700' } } },
+                        tooltip: {
+                            callbacks: {
+                                label: (context) => `${context.dataset.label}: ${context.parsed.y?.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) || '--'} dias`,
+                                afterBody: (items) => {
+                                    const idx = items[0]?.dataIndex ?? 0;
+                                    return [
+                                        `Primeiras entregas: ${buckets[idx].firstCount}`,
+                                        `Pedidos completos: ${buckets[idx].completeCount}`
+                                    ];
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: { display: true, text: 'Dias desde a emissão', color: _tc() },
+                            grid: { color: _gc() },
+                            ticks: { color: _tc() }
+                        },
+                        x: {
+                            grid: { color: _gc() },
+                            ticks: { color: _tc() }
+                        }
+                    }
+                }
+            });
         }
         function setVendorChartMetric(m) {
             vendorChartMetric = m;

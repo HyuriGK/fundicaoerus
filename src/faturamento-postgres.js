@@ -357,6 +357,8 @@ router.get('/detalhado', async (req, res) => {
                 f.status,
                 f.pedido,
                 oc.ordem_compra,
+                ped.data_emissao_pedido,
+                ped.quantidade_pedido,
                 f.gera_financeiro,
                 -- gera_financeiro='N' tem prioridade máxima; senão usa preferência do usuário
                 CASE
@@ -402,6 +404,19 @@ router.get('/detalhado', async (req, res) => {
             ) oc
                 ON oc.pedido = TRIM(f.pedido)
                 AND oc.codigo_item = TRIM(f.codigo_item)
+            LEFT JOIN (
+                SELECT DISTINCT ON (data->>'CODIGO_PPR', data->>'PRODUTO_PPR')
+                    data->>'CODIGO_PPR' AS pedido,
+                    data->>'PRODUTO_PPR' AS codigo_item,
+                    (data->>'DATA_EMISSAO_PEDIDO')::date AS data_emissao_pedido,
+                    NULLIF(data->>'QUANTIDADE_PPR', '')::numeric AS quantidade_pedido
+                FROM firebird_sync_emissoes
+                WHERE data->>'CODIGO_PPR' IS NOT NULL
+                  AND data->>'PRODUTO_PPR' IS NOT NULL
+                ORDER BY data->>'CODIGO_PPR', data->>'PRODUTO_PPR', updated_at DESC
+            ) ped
+                ON ped.pedido = TRIM(f.pedido)
+                AND ped.codigo_item = TRIM(f.codigo_item)
             WHERE 1=1
         `;
 
@@ -471,6 +486,8 @@ router.get('/detalhado', async (req, res) => {
             status: row.status,
             pedido: row.pedido,
             ordemCompra: row.ordem_compra,
+            dataEmissaoPedido: row.data_emissao_pedido ? row.data_emissao_pedido.toISOString().split('T')[0] : null,
+            quantidadePedido: parseFloat(row.quantidade_pedido || 0),
             gera_financeiro: row.gera_financeiro,
             excluido_manualmente: row.excluido_manualmente // Mantemos snake case aqui para compatibilidade com o frontend
         }));
