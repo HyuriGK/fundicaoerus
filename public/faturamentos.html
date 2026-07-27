@@ -1600,6 +1600,8 @@
                 <table id="deliveryTimeTable">
                     <thead>
                         <tr>
+                            <th style="min-width: 80px;"></th>
+                            <th style="min-width: 90px;">Pedido</th>
                             <th style="min-width: 110px;">Emiss&atilde;o</th>
                             <th style="min-width: 110px;">Entrega</th>
                             <th class="text-right" style="min-width: 90px;">Dias</th>
@@ -3439,11 +3441,16 @@ async function loadRecordsData() {
                     if (isNaN(d) || d.getFullYear() !== selectedDashboardYear || d.getMonth() !== monthIndex) return;
                     const entregaCompleta = group.entregaCompleta && item.data === group.entregaCompleta;
                     const diasEntrega = diffDays(group.emissao, item.data);
+                    const detailId = `delivery-detail-${String(group.pedido).replace(/[^a-zA-Z0-9_-]/g, '')}-${String(group.codigoItem).replace(/[^a-zA-Z0-9_-]/g, '')}-${monthRows.length}`;
                     monthRows.push({
+                        detailId,
+                        pedido: group.pedido,
                         emissao: group.emissao,
                         entregaPedido: item.data,
                         diasEntrega,
                         entregaCompleta,
+                        completeDate: group.entregaCompleta,
+                        allFaturamentos: group.linhas,
                         oc: item.ordemCompra || '',
                         clienteCodigo: item.clienteCodigo || '',
                         cliente: item.clienteNome || '',
@@ -3461,6 +3468,10 @@ async function loadRecordsData() {
             const fmtDateShort = value => value ? formatDate(value) : '';
             tbody.innerHTML = monthRows.map(row => `
                 <tr>
+                    <td>
+                        ${row.allFaturamentos.length > 1 ? `<button type="button" class="icon-btn" onclick="toggleDeliveryInvoiceGroup('${row.detailId}')" title="Ver todos os faturamentos" style="width:28px;height:28px;"><i class="fa-solid fa-chevron-down"></i></button>` : ''}
+                    </td>
+                    <td>${row.pedido}</td>
                     <td>${fmtDateShort(row.emissao)}</td>
                     <td style="color:var(--color-primary);">${fmtDateShort(row.entregaPedido)}${row.entregaCompleta ? ' <span style="color:#10b981;font-weight:800;">COMPLETA</span>' : ''}</td>
                     <td class="text-right">${formatNumber(row.diasEntrega, 0)}</td>
@@ -3473,9 +3484,44 @@ async function loadRecordsData() {
                     <td class="text-right">${formatNumber(row.qtdPedido, 0)}</td>
                     <td class="text-right">${formatNumber(row.qtdFaturada, 0)}</td>
                 </tr>
-            `).join('') || '<tr><td colspan="11" style="text-align:center; padding: 20px;">Nenhum registro.</td></tr>';
+                ${row.allFaturamentos.length > 1 ? `
+                    <tr id="${row.detailId}" style="display:none; background:rgba(255,255,255,0.025);">
+                        <td></td>
+                        <td colspan="12" style="padding:14px 18px;">
+                            <div style="font-weight:800; color:var(--text-secondary); margin-bottom:10px;">Todos os faturamentos deste pedido/item</div>
+                            <table style="width:100%; border-collapse:collapse;">
+                                <thead>
+                                    <tr>
+                                        <th style="min-width:110px;">Entrega</th>
+                                        <th class="text-right" style="min-width:90px;">Dias</th>
+                                        <th class="text-right" style="min-width:120px;">Quant. Fat.</th>
+                                        <th style="min-width:130px;">OC</th>
+                                        <th style="min-width:160px;">Vendedor</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${row.allFaturamentos.map(fat => `
+                                        <tr>
+                                            <td style="color:var(--color-primary);">${fmtDateShort(fat.data)}${fat.data === row.completeDate ? ' <span style="color:#10b981;font-weight:800;">COMPLETA</span>' : ''}</td>
+                                            <td class="text-right">${formatNumber(diffDays(row.emissao, fat.data), 0)}</td>
+                                            <td class="text-right">${formatNumber(fat.quantidadeOriginal ?? fat.quantidade ?? 0, 0)}</td>
+                                            <td>${fat.ordemCompra || ''}</td>
+                                            <td>${fat.vendedorNome || fat.vendedorCodigo || ''}</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </td>
+                    </tr>
+                ` : ''}
+            `).join('') || '<tr><td colspan="13" style="text-align:center; padding: 20px;">Nenhum registro.</td></tr>';
             document.getElementById('deliveryTimeModal').style.display = 'flex';
             document.body.style.overflow = 'hidden';
+        }
+        function toggleDeliveryInvoiceGroup(id) {
+            const row = document.getElementById(id);
+            if (!row) return;
+            row.style.display = row.style.display === 'none' ? 'table-row' : 'none';
         }
         function renderDeliveryTimeChart() {
             const rows = getDeliveryTimeRows();
