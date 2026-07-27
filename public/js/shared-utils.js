@@ -166,15 +166,8 @@ function getPositiveNumber(value) {
     return Number.isFinite(num) && num > 0 ? num : 0;
 }
 
-function getErpUnitWeight(item, targetQty) {
-    const qty = getPositiveNumber(targetQty);
-    const erpTotalWeight =
-        getPositiveNumber(item.PESO_LIQUIDO_NPR) ||
-        getPositiveNumber(item.PESO_PRODUTO) ||
-        getPositiveNumber(item.PESO_LIQUIDO_PPR) ||
-        getPositiveNumber(item.PESO_BRUTO_PPR);
-
-    return qty > 0 && erpTotalWeight > 0 ? erpTotalWeight / qty : 0;
+function getErpUnitWeight(item) {
+    return getPositiveNumber(item.PESO_PRODUTO);
 }
 
 function getResolvedUnitWeight(item, weightsMap = {}, targetQty) {
@@ -182,7 +175,7 @@ function getResolvedUnitWeight(item, weightsMap = {}, targetQty) {
     if (fixedUnit > 0) return fixedUnit;
 
     const prodCode = String(item.PRODUTO_PPR || '').trim();
-    const erpUnit = getErpUnitWeight(item, targetQty);
+    const erpUnit = getErpUnitWeight(item);
     if (erpUnit > 0) return erpUnit;
 
     const customUnit = getPositiveNumber(weightsMap[prodCode]);
