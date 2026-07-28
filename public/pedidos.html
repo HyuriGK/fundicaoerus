@@ -2939,6 +2939,10 @@
                 openHistoricalEmissionRecords();
             } else if (chartN === 2) {
                 openPendingEmissionRecords();
+            } else if (chartN === 3) {
+                chartMode = 'client';
+                applyColumnFilters();
+                openModal();
             } else if (currentDeliveryView === 'diaria' && activePillMonth !== null) {
                 // Entrega Diária - Data PCP: os registros devem refletir o MÊS visualizado no seletor
                 chartMode = 'delivery';
@@ -3972,7 +3976,8 @@
             return getPedidoBlockReasons(item).some(r => r.key === reason);
         }
         function isEmissionHistoryModal() {
-            return document.getElementById('recordsModal')?.classList.contains('hide-op-column');
+            const modal = document.getElementById('recordsModal');
+            return modal?.classList.contains('hide-op-column') || chartMode === 'client';
         }
         function setBlockReasonFilter(reason) {
             if (isEmissionHistoryModal()) return;
@@ -5598,6 +5603,7 @@
                         if (shouldWaitSecondMobileChartTap(chartConcentracao, e, els)) return;
                         if (els.length > 0) {
                             const clickedId = ids[els[0].index];
+                            chartMode = 'client';
                             activeChartFilters.client = (activeChartFilters.client == clickedId) ? null : clickedId;
                             applyColumnFilters();
                         }
@@ -7608,10 +7614,8 @@ function flashConcentracaoBar(barIndex) {
                                                     lines.push(`  Var. R$:   -----`);
                                                 }
                                             }
-                                            if (!isTodos) {
-                                                lines.push(`  ──────────────────`);
-                                                lines.push(`  Clique para ver registros`);
-                                            }
+                                            lines.push(`  ──────────────────`);
+                                            lines.push(`  Clique para ver registros`);
                                             return lines;
                                         }
                                         return [];
@@ -7625,14 +7629,13 @@ function flashConcentracaoBar(barIndex) {
                             const idx = elements[0].index;
                             const cd  = clickData[idx];
                             if (isTodos) {
-                                // No modo mensal, não abre detalhe (sem data específica)
-                                // Poderia filtrar para o mês — por ora ignora
+                                openVariacaoDetalheMes(cd.ano, cd.mes);
                             } else {
                                 openVariacaoDetalhe(cd.dia, cd.ano, cd.mes);
                             }
                         },
                         onHover: (e, els) => {
-                            e.native.target.style.cursor = (!isTodos && els.length) ? 'pointer' : 'default';
+                            e.native.target.style.cursor = els.length ? 'pointer' : 'default';
                         },
                         scales: {
                             y: {
@@ -7739,6 +7742,86 @@ function flashConcentracaoBar(barIndex) {
                         <span style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#ef4444;">Saídas — Itens Faturados</span>
                     </div>
                     ${buildTable(saidas, 'Sem faturamento neste dia.')}
+                `;
+            } catch {
+                body.innerHTML = '<div style="color:#ef4444;padding:20px;font-family:var(--font-mono);">Erro ao carregar detalhes.</div>';
+            }
+        }
+
+        async function openVariacaoDetalheMes(ano, mes) {
+            if (window.erusAudit) window.erusAudit('ABRIR_DETALHE_VARIACAO_CARTEIRA_MES', { ano, mes });
+            const modal  = document.getElementById('variacaoDetalheModal');
+            const titulo = document.getElementById('variacaoDetalheTitulo');
+            const body   = document.getElementById('variacaoDetalheBody');
+            const monthNames = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+            titulo.textContent = `Detalhe da Variação — ${monthNames[mes - 1]}/${ano}`;
+            body.innerHTML = '<div style="color:var(--text-muted);padding:20px;font-family:var(--font-mono);">Carregando...</div>';
+            modal.style.display = 'flex';
+
+            try {
+                const dailyRes = await fetch(`/api/emissoes/variacao-diaria?ano=${ano}&mes=${mes}`);
+                if (!dailyRes.ok) throw new Error();
+                const days = (await dailyRes.json()).filter(d => (Number(d.entrada) || 0) > 0 || (Number(d.saida) || 0) > 0);
+                const details = await Promise.all(days.map(d =>
+                    fetch(`/api/emissoes/variacao-detalhe?data=${d.dia}`).then(r => {
+                        if (!r.ok) throw new Error();
+                        return r.json();
+                    })
+                ));
+                const entradas = details.flatMap(d => d.entradas || []);
+                const saidas = details.flatMap(d => d.saidas || []);
+
+                const fmt  = n => Number(n || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                const totE = entradas.reduce((s, r) => s + Number(r.pesoTotal || 0), 0);
+                const totS = saidas.reduce((s, r) => s + Number(r.pesoTotal || 0), 0);
+                const varMes = totE - totS;
+                const varColor = varMes >= 0 ? '#22c55e' : '#ef4444';
+                const varSign = varMes >= 0 ? '+' : '';
+                const buildTable = (rows, emptyMsg) => {
+                    if (!rows.length) return `<div style="color:var(--text-muted);padding:14px 0;font-family:var(--font-mono);font-size:0.8rem;">${emptyMsg}</div>`;
+                    return `<div class="table-container" style="flex-grow:0;">
+                        <table>
+                            <thead><tr>
+                                <th style="width:10%;text-align:center;">PEDIDO</th>
+                                <th style="width:10%;text-align:center;">CÓDIGO</th>
+                                <th style="width:30%;text-align:center;">DESCRIÇÃO</th>
+                                <th style="width:25%;text-align:center;">CLIENTE</th>
+                                <th style="width:10%;text-align:center;">QTD</th>
+                                <th style="width:15%;text-align:center;">PESO (kg)</th>
+                            </tr></thead>
+                            <tbody>${rows.map(r => `<tr>
+                                <td style="text-align:center;">${r.pedido || '-'}</td>
+                                <td style="text-align:center;">${r.codigo || '-'}</td>
+                                <td style="text-align:center;" title="${r.descricao || ''}">${r.descricao || '-'}</td>
+                                <td style="text-align:center;" title="${r.cliente || ''}">${r.cliente || '-'}</td>
+                                <td style="text-align:center;">${fmt(r.quantidade)}</td>
+                                <td style="text-align:center;font-weight:700;color:var(--color-primary);">${fmt(r.pesoTotal)}</td>
+                            </tr>`).join('')}</tbody>
+                        </table>
+                    </div>`;
+                };
+
+                body.innerHTML = `
+                    <div style="display:flex;gap:16px;margin-bottom:24px;flex-wrap:wrap;">
+                        <div style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.3);border-radius:8px;padding:12px 22px;">
+                            <div style="font-size:0.65rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;">Entrada Total</div>
+                            <div style="font-size:1.4rem;font-weight:700;color:#22c55e;font-family:var(--font-mono);">+${fmt(totE)} kg</div>
+                            <div style="font-size:0.7rem;color:var(--text-muted);margin-top:2px;">${entradas.length} pedidos emitidos</div>
+                        </div>
+                        <div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);border-radius:8px;padding:12px 22px;">
+                            <div style="font-size:0.65rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;">Saída Total</div>
+                            <div style="font-size:1.4rem;font-weight:700;color:#ef4444;font-family:var(--font-mono);">${fmt(totS)} kg</div>
+                            <div style="font-size:0.7rem;color:var(--text-muted);margin-top:2px;">${saidas.length} itens faturados</div>
+                        </div>
+                        <div style="background:rgba(255,255,255,0.03);border:1px solid var(--border-subtle);border-radius:8px;padding:12px 22px;">
+                            <div style="font-size:0.65rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;">Variação do Mês</div>
+                            <div style="font-size:1.4rem;font-weight:700;color:${varColor};font-family:var(--font-mono);">${varSign}${fmt(varMes)} kg</div>
+                        </div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;"><i class="fa-solid fa-arrow-trend-up" style="color:#22c55e;"></i><span style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#22c55e;">Entradas — Pedidos Emitidos</span></div>
+                    ${buildTable(entradas, 'Sem entradas neste mês.')}
+                    <div style="display:flex;align-items:center;gap:10px;margin-top:28px;margin-bottom:10px;"><i class="fa-solid fa-arrow-trend-down" style="color:#ef4444;"></i><span style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#ef4444;">Saídas — Itens Faturados</span></div>
+                    ${buildTable(saidas, 'Sem faturamento neste mês.')}
                 `;
             } catch {
                 body.innerHTML = '<div style="color:#ef4444;padding:20px;font-family:var(--font-mono);">Erro ao carregar detalhes.</div>';
