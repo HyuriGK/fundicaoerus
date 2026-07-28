@@ -130,6 +130,7 @@ router.get('/', async (req, res) => {
                     p.updated_at,
                     f.data_fic,
                     f.pro_codigo_fic AS has_ficha,
+                    f.peso_liquido_pro AS ficha_peso_liquido_pro,
                     f.tipo_moldagem_procedimento,
                     obs.observacao,
                     ms.modelo_status
@@ -155,6 +156,7 @@ router.get('/', async (req, res) => {
                     p.updated_at,
                     f.data_fic,
                     f.pro_codigo_fic AS has_ficha,
+                    f.peso_liquido_pro AS ficha_peso_liquido_pro,
                     f.tipo_moldagem_procedimento,
                     obs.observacao,
                     ms.modelo_status
@@ -219,6 +221,9 @@ router.get('/', async (req, res) => {
                 // 'removido': apaga o link manual, deixa o JSONB original valer (sugerido volta a aparecer)
             }
             const produtoKey = String(item.PRODUTO_PPR || '').trim();
+            if (Number(row.ficha_peso_liquido_pro) > 0) {
+                item.PESO_PRODUTO = Number(row.ficha_peso_liquido_pro);
+            }
             if ((!item.PESO_PRODUTO || Number(item.PESO_PRODUTO) <= 0) && produtoKey && produtoPesoMap[produtoKey]) {
                 item.PESO_PRODUTO = produtoPesoMap[produtoKey];
             }
