@@ -43,6 +43,7 @@ const MONETARY_PAGES = [
     try {
         await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS can_view_monetary BOOLEAN NOT NULL DEFAULT FALSE');
         await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS can_access_after_hours BOOLEAN NOT NULL DEFAULT FALSE');
+        await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT');
         await pool.query(`
             CREATE TABLE IF NOT EXISTS user_monetary_permissions (
                 username TEXT NOT NULL,
@@ -76,7 +77,7 @@ router.get('/', checkDevRole, async (req, res) => {
     try {
         const result = await pool.query(`
             SELECT
-                u.id, u.username, u.name, u.role, u.last_login, u.created_at, u.approved,
+                u.id, u.username, u.name, u.email, u.role, u.last_login, u.created_at, u.approved,
                 u.can_access_after_hours,
                 COALESCE(mp.pages, ARRAY[]::TEXT[]) AS monetary_pages,
                 COALESCE(ARRAY_LENGTH(mp.pages, 1), 0) > 0 AS can_view_monetary,
@@ -145,6 +146,25 @@ router.put('/:username/role', checkDevRole, async (req, res) => {
     } catch (error) {
         console.error('Erro ao atualizar role:', error);
         res.status(500).json({ success: false, message: 'Erro ao atualizar permissão.' });
+    }
+});
+
+router.put('/:username/email', checkDevRole, async (req, res) => {
+    const { username } = req.params;
+    const email = String(req.body.email || '').trim().toLowerCase();
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return res.status(400).json({ success: false, message: 'Email inválido.' });
+    }
+
+    try {
+        const result = await pool.query('UPDATE users SET email = $1 WHERE username = $2 RETURNING username, email', [email || null, username]);
+        if (!result.rows.length) return res.status(404).json({ success: false, message: 'Usuário não encontrado.' });
+        const adminUser = req.user.name || 'Admin';
+        logActivity(adminUser, 'UPDATE_USER_EMAIL', 'users', { affected_user: username, email: email || null });
+        res.json({ success: true, message: 'Email atualizado com sucesso.', email: email || null });
+    } catch (error) {
+        console.error('Erro ao atualizar email:', error);
+        res.status(500).json({ success: false, message: 'Erro ao atualizar email.' });
     }
 });
 
