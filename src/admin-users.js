@@ -58,6 +58,11 @@ const MONETARY_PAGES = [
                 SELECT username, $1, TRUE, NOW()
                 FROM users
                 WHERE can_view_monetary = TRUE
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM user_monetary_permissions ump
+                      WHERE ump.username = users.username
+                  )
                 ON CONFLICT (username, page_key) DO NOTHING
             `, [pageKey]);
         }
@@ -72,9 +77,9 @@ router.get('/', checkDevRole, async (req, res) => {
         const result = await pool.query(`
             SELECT
                 u.id, u.username, u.name, u.role, u.last_login, u.created_at, u.approved,
-                u.can_view_monetary,
                 u.can_access_after_hours,
                 COALESCE(mp.pages, ARRAY[]::TEXT[]) AS monetary_pages,
+                COALESCE(ARRAY_LENGTH(mp.pages, 1), 0) > 0 AS can_view_monetary,
                 la.last_activity_at,
                 la.last_activity_page,
                 la.last_activity_device
@@ -226,7 +231,7 @@ router.put('/:username/monetary', checkDevRole, async (req, res) => {
         for (const page of selectedPages) {
             await pool.query('INSERT INTO user_monetary_permissions (username, page_key, allowed, updated_at) VALUES ($1, $2, TRUE, NOW()) ON CONFLICT (username, page_key) DO UPDATE SET allowed = TRUE, updated_at = NOW()', [username, page]);
         }
-        await pool.query('UPDATE users SET can_view_monetary = $1 WHERE username = $2', [selectedPages.length > 0, username]);
+        await pool.query('UPDATE users SET can_view_monetary = FALSE WHERE username = $1', [username]);
         const result = { rows: userResult.rows };
         const selectedPagesResponse = selectedPages;
         if (!result.rows.length) return res.status(404).json({ success: false, message: 'Usuário não encontrado.' });

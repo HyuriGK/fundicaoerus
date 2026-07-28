@@ -86,7 +86,7 @@ const token = generateToken(userData);
                 token: token,
                 role: userData.role,
                 name: userData.name,
-                can_view_monetary: monetaryPages.length > 0 || userData.can_view_monetary || false,
+                can_view_monetary: monetaryPages.length > 0,
                 monetary_pages: monetaryPages
             });
         } else {
@@ -104,7 +104,7 @@ router.get('/check', async (req, res) => {
     const { username } = req.query;
     if (!username) return res.json({ force_logout: false });
     try {
-        const result = await pool.query('SELECT force_logout, role, name, can_view_monetary, can_access_after_hours FROM users WHERE username = $1', [username]);
+        const result = await pool.query('SELECT force_logout, role, name, can_access_after_hours FROM users WHERE username = $1', [username]);
         if (!result.rows.length) return res.json({ force_logout: true }); // usuário deletado
         const row = result.rows[0];
         const monetaryPages = await getUserMonetaryPages(username);
@@ -115,7 +115,7 @@ router.get('/check', async (req, res) => {
             message: outsideHours ? getAccessHoursMessage() : undefined,
             role: row.role,
             name: row.name,
-            can_view_monetary: monetaryPages.length > 0 || row.can_view_monetary || false,
+            can_view_monetary: monetaryPages.length > 0,
             monetary_pages: monetaryPages,
             can_access_after_hours: row.can_access_after_hours || false
         });
