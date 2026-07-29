@@ -356,6 +356,7 @@
     document.head.appendChild(style);
 
     var currentPage = window.location.pathname.split('/').pop() || 'index.html';
+    var hideMobileMenuButton = /^fichatec.*\.html$/i.test(currentPage);
     var lastMobileState = null;
 
     function isActive(page) {
@@ -799,7 +800,7 @@
         document.body.insertAdjacentHTML('afterbegin', sidebarHTML);
         var pendingSidebarEl = document.getElementById('erus-sidebar');
         if (pendingSidebarEl) pendingSidebarEl.classList.add('erus-sidebar-pending');
-        document.body.insertAdjacentHTML('afterbegin', mobileSidebarHTML);
+        if (!hideMobileMenuButton) document.body.insertAdjacentHTML('afterbegin', mobileSidebarHTML);
         // Inject modals at end
         document.body.insertAdjacentHTML('beforeend', logoutModalHTML);
         document.body.insertAdjacentHTML('beforeend', prefsModalHTML);
