@@ -3455,9 +3455,14 @@ async function loadRecordsData() {
             const monthLabels = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
             const monthRows = [];
             rows.forEach(group => {
-                group.linhas.forEach(item => {
-                    const d = new Date(`${item.data}T00:00:00`);
-                    if (isNaN(d) || d.getFullYear() !== selectedDashboardYear || d.getMonth() !== monthIndex) return;
+                const targetDate = deliveryTimeMetric === 'complete' ? group.entregaCompleta : group.primeiraEntrega;
+                if (!targetDate) return;
+                const targetDateObj = new Date(`${targetDate}T00:00:00`);
+                if (isNaN(targetDateObj) || targetDateObj.getFullYear() !== selectedDashboardYear || targetDateObj.getMonth() !== monthIndex) return;
+                const visibleFaturamentos = deliveryTimeMetric === 'complete'
+                    ? group.linhas.filter(fat => fat.data && fat.data <= targetDate)
+                    : group.linhas.filter(fat => fat.data === targetDate);
+                visibleFaturamentos.filter(item => item.data === targetDate).forEach(item => {
                     const entregaCompleta = group.entregaCompleta && item.data === group.entregaCompleta;
                     const diasEntrega = diffDays(group.emissao, item.data);
                     const detailId = `delivery-detail-${String(group.pedidoAno).replace(/[^a-zA-Z0-9_-]/g, '')}-${String(group.pedido).replace(/[^a-zA-Z0-9_-]/g, '')}-${String(group.codigoItem).replace(/[^a-zA-Z0-9_-]/g, '')}-${monthRows.length}`;
@@ -3469,7 +3474,7 @@ async function loadRecordsData() {
                         diasEntrega,
                         entregaCompleta,
                         completeDate: group.entregaCompleta,
-                        allFaturamentos: group.linhas,
+                        allFaturamentos: visibleFaturamentos,
                         oc: item.ordemCompra || '',
                         clienteCodigo: item.clienteCodigo || '',
                         cliente: item.clienteNome || '',
@@ -3487,7 +3492,7 @@ async function loadRecordsData() {
                 return String(b.pedido || '').localeCompare(String(a.pedido || ''), undefined, { numeric: true });
             });
             const title = document.getElementById('deliveryTimeModalTitle');
-            if (title) title.textContent = `DETALHAMENTO DO PRAZO MEDIO - ${monthLabels[monthIndex]}/${selectedDashboardYear}`;
+            if (title) title.textContent = `DETALHAMENTO DO PRAZO MEDIO - ${deliveryTimeMetric === 'complete' ? 'ENTREGA COMPLETA' : 'PRIMEIRA ENTREGA'} - ${monthLabels[monthIndex]}/${selectedDashboardYear}`;
             const tbody = document.getElementById('deliveryTimeTableBody');
             const fmtDateShort = value => value ? formatDate(value) : '';
             tbody.innerHTML = monthRows.map(row => `
@@ -3509,7 +3514,7 @@ async function loadRecordsData() {
                 <tr id="${row.detailId}" style="display:none; background:rgba(255,255,255,0.025);">
                     <td></td>
                     <td colspan="10" style="padding:14px 18px;">
-                            <div style="font-weight:800; color:var(--text-secondary); margin-bottom:10px;">Todos os faturamentos deste pedido/item</div>
+                            <div style="font-weight:800; color:var(--text-secondary); margin-bottom:10px;">Faturamentos considerados neste prazo</div>
                             <table style="width:auto; max-width:720px; border-collapse:collapse; table-layout:auto;">
                                 <thead>
                                     <tr>
@@ -3525,7 +3530,7 @@ async function loadRecordsData() {
                                 <tbody>
                                     ${(() => {
                                         let acumulado = 0;
-                                        return [...row.allFaturamentos].sort((a, b) => String(b.data || '').localeCompare(String(a.data || ''))).map(fat => {
+                                        return [...row.allFaturamentos].sort((a, b) => String(a.data || '').localeCompare(String(b.data || ''))).map(fat => {
                                             const qtdFat = Number(fat.quantidadeOriginal ?? fat.quantidade ?? 0) || 0;
                                             acumulado += qtdFat;
                                             return `
