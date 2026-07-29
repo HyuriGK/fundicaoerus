@@ -214,7 +214,7 @@ function buildFrame(cycleStart) {
                '    ' + C.muted+'TEMPO '+reset + elapsV;
     const s2 = '  ' + C.muted+'HORA  '+reset + timeV +
                '    ' + C.dim+'LOG  scripts/sync/sync-errors.log'+reset;
-    const s3 = '  ' + C.muted+'HORARIO COMERCIAL  '+reset + bold + C.green + 'Seg-Sex  06:30 - 17:30' + reset;
+    const s3 = '  ' + C.muted+'HORARIO COMERCIAL  '+reset + bold + C.green + 'Seg-Sex  06:30 - 18:00' + reset;
 
     out.push(B.row(s1, W));
     out.push(B.row(s2, W));
@@ -391,7 +391,7 @@ function isWithinSchedule() {
     const day = now.getDay(); // 0=Dom, 1=Seg ... 5=Sex, 6=Sab
     if (day === 0 || day === 6) return false;
     const minutes = now.getHours() * 60 + now.getMinutes();
-    return minutes >= 6 * 60 + 30 && minutes < 17 * 60 + 30;
+    return minutes >= 6 * 60 + 30 && minutes < 18 * 60;
 }
 
 function drawOffSchedule() {
