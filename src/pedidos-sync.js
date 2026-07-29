@@ -29,6 +29,22 @@ function getCommercialOwnerRestriction(req) {
     return null;
 }
 
+async function getOpsAbertas() {
+    const result = await pool.query(`
+        SELECT data, updated_at
+        FROM firebird_sync_pedidos
+        WHERE sync_key LIKE 'OP-%'
+          AND data->>'STATUS_PCP' NOT IN ('C', 'E', 'F')
+          AND data->>'OP_PCS' ~ '^[0-9]{4}$'
+        ORDER BY (data->>'OP_PCS')::int DESC
+    `);
+
+    return result.rows.map(row => ({
+        ...row.data,
+        _sync_updated_at: row.updated_at
+    }));
+}
+
 // Rota para buscar peso unitário, descrição e saldo em aberto por código (usado por acabamento_externo)
 // Prioridade peso: PRODUTO.PESO_LIQUIDO_PRO sincronizado > pesos_customizados (fallback manual)
 router.get('/peso-lookup', async (req, res) => {
@@ -108,19 +124,8 @@ router.get('/peso-lookup', async (req, res) => {
 
 router.get('/ops-abertas', async (req, res) => {
     try {
-        const result = await pool.query(`
-            SELECT data, updated_at
-            FROM firebird_sync_pedidos
-            WHERE sync_key LIKE 'OP-%'
-              AND data->>'STATUS_PCP' NOT IN ('C', 'E', 'F')
-              AND data->>'OP_PCS' ~ '^[0-9]{4}$'
-            ORDER BY (data->>'OP_PCS')::int DESC
-        `);
-
-        res.json(result.rows.map(row => ({
-            ...row.data,
-            _sync_updated_at: row.updated_at
-        })));
+        res.set('Cache-Control', 'no-store');
+        res.json(await getOpsAbertas());
     } catch (error) {
         console.error('Erro ao buscar OPs abertas:', error);
         res.status(500).json({ error: 'Erro interno ao buscar OPs abertas.' });
@@ -131,6 +136,11 @@ router.get('/ops-abertas', async (req, res) => {
 router.get('/', async (req, res) => {
     const { carteiraOnly } = req.query;
     try {
+        if (String(req.get('referer') || '').includes('ordemdeproducao.html')) {
+            res.set('Cache-Control', 'no-store');
+            return res.json(await getOpsAbertas());
+        }
+
         await ensureModeloStatusTable();
         const commercialOwner = getCommercialOwnerRestriction(req);
         const ownerJoin = commercialOwner ? `
