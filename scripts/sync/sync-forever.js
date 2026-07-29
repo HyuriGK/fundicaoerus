@@ -109,6 +109,7 @@ const SYNC_BATS = [
     { name: 'DEVOLUCOES',  file: path.join('sync', 'sincronizar_adevolucoes.bat'),   icon: '[<<]', pageId: 'devolucoes.html' },
     { name: 'EMISSOES',    file: path.join('sync', 'sincronizar_aemissoes.bat'),     icon: '[>>]', pageId: 'pedidos.html' },
     { name: 'FATURAMENTO', file: path.join('sync', 'sincronizar_afaturamento.bat'),  icon: '[NF]', pageId: 'faturamentos.html' },
+    { name: 'CLIENTES',    file: path.join('sync', 'sincronizar_aclientes.bat'),     icon: '[CL]', pageId: 'clientes.html' },
     { name: 'PEDIDOS',     file: path.join('sync', 'sincronizar_apedidos.bat'),      icon: '[PD]', pageId: 'pedidos.html' },
     { name: 'PRODUCAO',    file: path.join('sync', 'sincronizar_aproducao.bat'),     icon: '[PR]', pageId: 'pedidos.html' },
     { name: 'REFUGOS',     file: path.join('sync', 'sincronizar_arefugo.bat'),       icon: '[RF]', pageId: 'refugos.html' },
