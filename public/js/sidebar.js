@@ -356,7 +356,7 @@
     document.head.appendChild(style);
 
     var currentPage = window.location.pathname.split('/').pop() || 'index.html';
-    var hideMobileMenuButton = /^fichatec.*\.html$/i.test(currentPage);
+    var hideMobileMenuButton = /^fichatec.*\.html$/i.test(currentPage) || currentPage === 'ordemdeproducao.html';
     var lastMobileState = null;
 
     function isActive(page) {
