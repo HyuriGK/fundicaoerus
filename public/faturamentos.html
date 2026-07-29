@@ -964,28 +964,56 @@
             padding: 0 12px !important;
             text-transform: uppercase;
         }
-        .delivery-material-select {
-            width: auto !important;
-            height: 30px !important;
-            min-width: 190px !important;
-            padding: 0 14px !important;
-            text-align: center !important;
-            text-align-last: center !important;
-            border-radius: 6px !important;
-            background: rgba(255,255,255,0.04) !important;
-            border-color: rgba(255,255,255,0.12) !important;
-            color: var(--text-secondary) !important;
-            font-size: 0.7rem !important;
-            letter-spacing: 0 !important;
-            text-transform: none !important;
+        .delivery-filter-wrap {
+            position: relative;
         }
-        .delivery-material-select.wide {
-            min-width: 215px !important;
+        .delivery-filter-button {
+            height: 30px;
+            min-width: 112px;
+            padding: 0 12px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 6px;
+            background: rgba(255,255,255,0.04);
+            color: var(--text-secondary);
+            font-family: var(--font-mono);
+            font-size: 0.7rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
         }
-        .delivery-material-select:hover {
-            background: rgba(255,255,255,0.08) !important;
-            border-color: rgba(255,255,255,0.2) !important;
-            color: #fff !important;
+        .delivery-filter-button:hover,
+        .delivery-filter-button.active {
+            background: rgba(255,255,255,0.08);
+            border-color: rgba(255,255,255,0.2);
+            color: #fff;
+        }
+        .delivery-filter-menu {
+            display: none;
+            position: absolute;
+            top: calc(100% + 8px);
+            right: 0;
+            z-index: 30;
+            min-width: 310px;
+            padding: 10px;
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+            background: #111113;
+            box-shadow: 0 14px 32px rgba(0,0,0,0.42);
+        }
+        .delivery-filter-menu.open {
+            display: grid;
+            gap: 8px;
+        }
+        .delivery-filter-select {
+            width: 100% !important;
+            height: 32px !important;
+            padding: 0 12px !important;
+            text-align: left !important;
+            text-align-last: left !important;
         }
         #dashboardVendorSelect {
             width: 320px !important;
@@ -1866,13 +1894,19 @@
                             <button class="btn-mini-chart active" id="btnDeliveryFirst" onclick="setDeliveryTimeMetric('first')">Primeira Entrega</button>
                             <button class="btn-mini-chart" id="btnDeliveryComplete" onclick="setDeliveryTimeMetric('complete')">Entrega Completa</button>
                         </div>
-                        <div style="display:flex;align-items:center;gap:6px;flex-wrap:nowrap;justify-content:flex-end;">
-                            <select id="deliveryGroupSelect" class="year-select delivery-material-select" onchange="setDeliveryMaterialFilters()">
-                                <option value="">Todos os grupos</option>
-                            </select>
-                            <select id="deliveryMaterialSelect" class="year-select delivery-material-select wide" onchange="setDeliveryMaterialFilters()">
-                                <option value="">Todos os materiais</option>
-                            </select>
+                        <div class="delivery-filter-wrap">
+                            <button type="button" id="deliveryFilterButton" class="delivery-filter-button" onclick="toggleDeliveryFilterMenu(event)" title="Filtrar por grupo ou material">
+                                <i class="fa-solid fa-filter"></i>
+                                <span id="deliveryFilterLabel">Filtro</span>
+                            </button>
+                            <div id="deliveryFilterMenu" class="delivery-filter-menu">
+                                <select id="deliveryGroupSelect" class="year-select delivery-filter-select" onchange="setDeliveryMaterialFilters()">
+                                    <option value="">Todos os grupos</option>
+                                </select>
+                                <select id="deliveryMaterialSelect" class="year-select delivery-filter-select" onchange="setDeliveryMaterialFilters()">
+                                    <option value="">Todos os materiais</option>
+                                </select>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -3654,10 +3688,31 @@ async function loadRecordsData() {
             materialSelect.innerHTML = '<option value="">Todos os materiais</option>' + materials.map(m => `<option value="${m.replace(/"/g, '&quot;')}">${m}</option>`).join('');
             groupSelect.value = deliveryGroupFilter;
             materialSelect.value = deliveryMaterialFilter;
+            updateDeliveryFilterButton();
         }
+        function updateDeliveryFilterButton() {
+            const button = document.getElementById('deliveryFilterButton');
+            const label = document.getElementById('deliveryFilterLabel');
+            if (!button || !label) return;
+            const count = [deliveryGroupFilter, deliveryMaterialFilter].filter(Boolean).length;
+            label.textContent = count ? `${count} filtro${count > 1 ? 's' : ''}` : 'Filtro';
+            button.classList.toggle('active', count > 0);
+        }
+        function toggleDeliveryFilterMenu(event) {
+            event?.stopPropagation();
+            const menu = document.getElementById('deliveryFilterMenu');
+            if (!menu) return;
+            menu.classList.toggle('open');
+        }
+        document.addEventListener('click', (event) => {
+            const wrap = document.querySelector('.delivery-filter-wrap');
+            const menu = document.getElementById('deliveryFilterMenu');
+            if (wrap && menu && !wrap.contains(event.target)) menu.classList.remove('open');
+        });
         function setDeliveryMaterialFilters() {
             deliveryGroupFilter = document.getElementById('deliveryGroupSelect')?.value || '';
             deliveryMaterialFilter = document.getElementById('deliveryMaterialSelect')?.value || '';
+            updateDeliveryFilterButton();
             if (window.erusAudit) window.erusAudit('SELECT_FILTRO_MATERIAL_PRAZO_FAT', { grupo: deliveryGroupFilter || null, material: deliveryMaterialFilter || null });
             renderDeliveryTimeChart();
         }
