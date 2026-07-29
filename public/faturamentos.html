@@ -1836,6 +1836,9 @@
                         <span>Entrega completa:</span> <span class="highlight" id="avgCompleteDeliveryDays">-- dias</span>
                         <span style="width:1px;height:14px;background:var(--border-subtle,#3f3f46);margin:0 8px;display:inline-block;vertical-align:middle;"></span>
                         <span>Pedidos completos:</span> <span class="highlight" id="completeDeliveryCount">0</span>
+                        <span style="width:1px;height:14px;background:var(--border-subtle,#3f3f46);margin:0 8px;display:inline-block;vertical-align:middle;"></span>
+                        <button class="btn-mini-chart active" id="btnDeliveryFirst" onclick="setDeliveryTimeMetric('first')">Primeira Entrega</button>
+                        <button class="btn-mini-chart" id="btnDeliveryComplete" onclick="setDeliveryTimeMetric('complete')">Entrega Completa</button>
                     </div>
                 </div>
                 <div style="position: relative; flex: 1; width: 100%; min-height: 0;">
@@ -1869,6 +1872,7 @@
         let currentMeta = 0;
         let dailyChart = null, annualChart = null, abcChart = null, deliveryTimeChart = null;
         let selectedDeliveryTimeMonth = null;
+        let deliveryTimeMetric = 'first';
         let dailyChartMode = 'normal'; // 'normal' | 'servicos'
         let _lastDailyChartArgs = null; // cache para re-render no toggle
         const _ltFat = window.ErusTheme && window.ErusTheme.isLight();
@@ -3550,7 +3554,16 @@ async function loadRecordsData() {
             if (!row) return;
             row.style.display = row.style.display === 'none' ? 'table-row' : 'none';
         }
+        function setDeliveryTimeMetric(metric) {
+            deliveryTimeMetric = metric === 'complete' ? 'complete' : 'first';
+            document.getElementById('btnDeliveryFirst')?.classList.toggle('active', deliveryTimeMetric === 'first');
+            document.getElementById('btnDeliveryComplete')?.classList.toggle('active', deliveryTimeMetric === 'complete');
+            if (window.erusAudit) window.erusAudit('SELECT_METRICA_PRAZO_ENTREGA_FAT', { metrica: deliveryTimeMetric });
+            renderDeliveryTimeChart();
+        }
         function renderDeliveryTimeChart() {
+            document.getElementById('btnDeliveryFirst')?.classList.toggle('active', deliveryTimeMetric === 'first');
+            document.getElementById('btnDeliveryComplete')?.classList.toggle('active', deliveryTimeMetric === 'complete');
             const rows = getDeliveryTimeRows();
             const firstRows = rows.filter(r => r.diasPrimeira !== null);
             const completeRows = rows.filter(r => r.diasCompleta !== null);
@@ -3592,7 +3605,11 @@ async function loadRecordsData() {
                 const v = avg(b.complete);
                 return v === null ? null : Number(v.toFixed(1));
             });
-            const deliveryMaxValue = Math.max(...firstData.filter(v => v !== null), ...completeData.filter(v => v !== null), 0);
+            const activeDeliveryData = deliveryTimeMetric === 'complete' ? completeData : firstData;
+            const activeDeliveryColor = deliveryTimeMetric === 'complete' ? '#f59e0b' : '#38bdf8';
+            const activeDeliveryBg = deliveryTimeMetric === 'complete' ? 'rgba(245, 158, 11, 0.18)' : 'rgba(56, 189, 248, 0.16)';
+            const activeDeliveryLabel = deliveryTimeMetric === 'complete' ? 'Entrega completa' : 'Primeira entrega';
+            const deliveryMaxValue = Math.max(...activeDeliveryData.filter(v => v !== null), 0);
             const deliveryYAxisMax = Math.max(10, Math.ceil((deliveryMaxValue + 8) / 5) * 5);
             const ctx = document.getElementById('deliveryTimeChart');
             if (!ctx) return;
@@ -3603,20 +3620,10 @@ async function loadRecordsData() {
                     labels,
                     datasets: [
                         {
-                            label: 'Primeira entrega',
-                            data: firstData,
-                            borderColor: '#38bdf8',
-                            backgroundColor: 'rgba(56, 189, 248, 0.16)',
-                            borderWidth: 3,
-                            pointRadius: 4,
-                            tension: 0.35,
-                            spanGaps: true
-                        },
-                        {
-                            label: 'Entrega completa',
-                            data: completeData,
-                            borderColor: '#f59e0b',
-                            backgroundColor: 'rgba(245, 158, 11, 0.18)',
+                            label: activeDeliveryLabel,
+                            data: activeDeliveryData,
+                            borderColor: activeDeliveryColor,
+                            backgroundColor: activeDeliveryBg,
                             borderWidth: 3,
                             pointRadius: 4,
                             tension: 0.35,
@@ -3638,13 +3645,13 @@ async function loadRecordsData() {
                         datalabels: {
                             display: (context) => context.dataset.data[context.dataIndex] !== null,
                             color: '#ffffff',
-                            backgroundColor: (context) => context.datasetIndex === 0 ? 'rgba(56, 189, 248, 0.28)' : 'rgba(245, 158, 11, 0.30)',
+                            backgroundColor: deliveryTimeMetric === 'complete' ? 'rgba(245, 158, 11, 0.30)' : 'rgba(56, 189, 248, 0.28)',
                             borderColor: (context) => context.dataset.borderColor,
                             borderWidth: 1,
                             borderRadius: 5,
                             padding: { top: 3, right: 6, bottom: 3, left: 6 },
                             anchor: 'center',
-                            align: (context) => context.datasetIndex === 0 ? 'bottom' : 'top',
+                            align: 'top',
                             offset: 8,
                             font: { size: 12, weight: '900', family: "'JetBrains Mono', monospace" },
                             textStrokeColor: 'rgba(0,0,0,0.75)',
