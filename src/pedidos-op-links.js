@@ -5,6 +5,11 @@ const { logActivity } = require('./lib/logger');
 
 // Rota para confirmar ou rejeitar um vínculo sugerido
 router.post('/confirm', async (req, res) => {
+    const role = String(req.user?.role || req.headers['x-role'] || '').trim().toLowerCase();
+    if (role !== 'desenvolvedor') {
+        return res.status(403).json({ error: 'Apenas desenvolvedor pode confirmar ou ignorar vínculos sugeridos.' });
+    }
+
     const { sync_key, op, status, user } = req.body;
 
     if (!sync_key || !op || !status) {

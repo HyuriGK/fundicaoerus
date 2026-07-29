@@ -7013,6 +7013,7 @@ function flashConcentracaoBar(barIndex) {
             if (existingHeader) existingHeader.remove();
 
             if (linkStatus === 'sugerido') {
+                const isDev = localStorage.getItem('erus_role') === 'desenvolvedor';
                 const header = document.createElement('div');
                 header.id = 'opConfirmationHeader';
                 header.style = 'background: rgba(245, 158, 11, 0.1); border-bottom: 2px solid #f59e0b; padding: 15px 40px; display: flex; align-items: center; justify-content: space-between; gap: 20px;';
@@ -7024,10 +7025,10 @@ function flashConcentracaoBar(barIndex) {
                             <span style="font-size: 0.75rem; color: var(--text-muted);">Esta OP foi identificada automaticamente por possuir o mesmo produto deste pedido.</span>
                         </div>
                     </div>
-                    <div style="display: flex; gap: 10px;">
+                    ${isDev ? `<div style="display: flex; gap: 10px;">
                         <button class="btn-modern" onclick="confirmOPLink('${syncKey}', '${op}', 'confirmado')" style="background: #10b981; color: #fff; border: none; font-size: 0.8rem; height: 32px; padding: 0 15px;">Confirmar Vínculo</button>
                         <button class="btn-modern" onclick="confirmOPLink('${syncKey}', '${op}', 'rejeitado')" style="background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2); font-size: 0.8rem; height: 32px; padding: 0 15px;">Ignorar</button>
-                    </div>
+                    </div>` : ''}
                 `;
                 document.getElementById('opOrderInfo').prepend(header);
             } else if (linkStatus === 'confirmado') {
@@ -7256,10 +7257,14 @@ function flashConcentracaoBar(barIndex) {
         };
 
         async function confirmOPLink(syncKey, op, status) {
+            if (localStorage.getItem('erus_role') !== 'desenvolvedor') {
+                showToast("Acesso Negado", "Apenas desenvolvedor pode confirmar ou ignorar vínculos sugeridos.", "danger");
+                return;
+            }
             try {
                 const res = await fetch('/api/pedidos-op-links/confirm', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/json', 'x-role': localStorage.getItem('erus_role') || '' },
                     body: JSON.stringify({
                         sync_key: syncKey,
                         op: op,
@@ -7305,7 +7310,7 @@ function flashConcentracaoBar(barIndex) {
             try {
                 const res = await fetch('/api/pedidos-op-links/confirm', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/json', 'x-role': localStorage.getItem('erus_role') || '' },
                     body: JSON.stringify({ sync_key: syncKey, op, status: 'confirmado', user: localStorage.getItem('erus_user') || 'Desconhecido' })
                 });
                 if (!res.ok) throw new Error('Erro ao salvar vínculo');
