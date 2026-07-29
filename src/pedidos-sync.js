@@ -106,6 +106,27 @@ router.get('/peso-lookup', async (req, res) => {
     }
 });
 
+router.get('/ops-abertas', async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT data, updated_at
+            FROM firebird_sync_pedidos
+            WHERE sync_key LIKE 'OP-%'
+              AND data->>'STATUS_PCP' NOT IN ('C', 'E', 'F')
+              AND data->>'OP_PCS' ~ '^[0-9]{4}$'
+            ORDER BY (data->>'OP_PCS')::int DESC
+        `);
+
+        res.json(result.rows.map(row => ({
+            ...row.data,
+            _sync_updated_at: row.updated_at
+        })));
+    } catch (error) {
+        console.error('Erro ao buscar OPs abertas:', error);
+        res.status(500).json({ error: 'Erro interno ao buscar OPs abertas.' });
+    }
+});
+
 // Rota para buscar os pedidos sincronizados
 router.get('/', async (req, res) => {
     const { carteiraOnly } = req.query;
