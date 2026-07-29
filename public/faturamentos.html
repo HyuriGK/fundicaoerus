@@ -1837,6 +1837,12 @@
                         <span style="width:1px;height:14px;background:var(--border-subtle,#3f3f46);margin:0 8px;display:inline-block;vertical-align:middle;"></span>
                         <button class="btn-mini-chart active" id="btnDeliveryFirst" onclick="setDeliveryTimeMetric('first')">Primeira Entrega</button>
                         <button class="btn-mini-chart" id="btnDeliveryComplete" onclick="setDeliveryTimeMetric('complete')">Entrega Completa</button>
+                        <select id="deliveryGroupSelect" class="year-select" onchange="setDeliveryMaterialFilters()" style="height:32px;max-width:190px;">
+                            <option value="">Todos os grupos</option>
+                        </select>
+                        <select id="deliveryMaterialSelect" class="year-select" onchange="setDeliveryMaterialFilters()" style="height:32px;max-width:230px;">
+                            <option value="">Todos os materiais</option>
+                        </select>
                     </div>
                 </div>
                 <div style="position: relative; flex: 1; width: 100%; min-height: 0;">
@@ -1871,6 +1877,8 @@
         let dailyChart = null, annualChart = null, abcChart = null, deliveryTimeChart = null;
         let selectedDeliveryTimeMonth = null;
         let deliveryTimeMetric = 'first';
+        let deliveryGroupFilter = '';
+        let deliveryMaterialFilter = '';
         let dailyChartMode = 'normal'; // 'normal' | 'servicos'
         let _lastDailyChartArgs = null; // cache para re-render no toggle
         const _ltFat = window.ErusTheme && window.ErusTheme.isLight();
@@ -3452,14 +3460,15 @@ async function loadRecordsData() {
             if (monthIndex === null || monthIndex === undefined) return;
             const monthLabels = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
             const monthRows = [];
-            rows.forEach(group => {
+            rows.filter(group => group.linhas.some(deliveryMaterialPasses)).forEach(group => {
                 const targetDate = deliveryTimeMetric === 'complete' ? group.entregaCompleta : group.primeiraEntrega;
                 if (!targetDate) return;
                 const targetDateObj = new Date(`${targetDate}T00:00:00`);
                 if (isNaN(targetDateObj) || targetDateObj.getFullYear() !== selectedDashboardYear || targetDateObj.getMonth() !== monthIndex) return;
-                const visibleFaturamentos = deliveryTimeMetric === 'complete'
+                const visibleFaturamentos = (deliveryTimeMetric === 'complete'
                     ? group.linhas.filter(fat => fat.data && fat.data <= targetDate)
-                    : group.linhas.filter(fat => fat.data === targetDate);
+                    : group.linhas.filter(fat => fat.data === targetDate)
+                ).filter(deliveryMaterialPasses);
                 visibleFaturamentos.filter(item => item.data === targetDate).forEach(item => {
                     const entregaCompleta = group.entregaCompleta && item.data === group.entregaCompleta;
                     const diasEntrega = diffDays(group.emissao, item.data);
@@ -3564,12 +3573,56 @@ async function loadRecordsData() {
             if (window.erusAudit) window.erusAudit('SELECT_METRICA_PRAZO_ENTREGA_FAT', { metrica: deliveryTimeMetric });
             renderDeliveryTimeChart();
         }
+        function normalizeDeliveryMaterial(value) {
+            return String(value || '').trim();
+        }
+        function getDeliveryMaterialGroup(material) {
+            const text = normalizeDeliveryMaterial(material).toUpperCase();
+            if (!text) return '';
+            if (text.includes('ASTM A')) return (text.match(/ASTM\s+A\s*\d+/) || ['ASTM A'])[0];
+            if (text.includes('DIN')) return 'DIN';
+            if (text.includes('SAE')) return 'SAE';
+            if (text.includes('NODULAR')) return 'NODULAR';
+            if (text.includes('CINZENTO')) return 'CINZENTO';
+            return text.split(/\s+/).slice(0, 2).join(' ');
+        }
+        function deliveryMaterialPasses(item) {
+            const material = normalizeDeliveryMaterial(item.material);
+            const group = getDeliveryMaterialGroup(material);
+            if (deliveryMaterialFilter && material !== deliveryMaterialFilter) return false;
+            if (deliveryGroupFilter && group !== deliveryGroupFilter) return false;
+            return true;
+        }
+        function populateDeliveryMaterialFilters(rows) {
+            const groupSelect = document.getElementById('deliveryGroupSelect');
+            const materialSelect = document.getElementById('deliveryMaterialSelect');
+            if (!groupSelect || !materialSelect) return;
+            const allMaterials = [...new Set(rows.flatMap(r => (r.linhas || []).map(item => normalizeDeliveryMaterial(item.material))).filter(Boolean))].sort();
+            const groups = [...new Set(allMaterials.map(getDeliveryMaterialGroup).filter(Boolean))].sort();
+            const materials = deliveryGroupFilter
+                ? allMaterials.filter(material => getDeliveryMaterialGroup(material) === deliveryGroupFilter)
+                : allMaterials;
+            if (deliveryGroupFilter && !groups.includes(deliveryGroupFilter)) deliveryGroupFilter = '';
+            if (deliveryMaterialFilter && !materials.includes(deliveryMaterialFilter)) deliveryMaterialFilter = '';
+            groupSelect.innerHTML = '<option value="">Todos os grupos</option>' + groups.map(g => `<option value="${g.replace(/"/g, '&quot;')}">${g}</option>`).join('');
+            materialSelect.innerHTML = '<option value="">Todos os materiais</option>' + materials.map(m => `<option value="${m.replace(/"/g, '&quot;')}">${m}</option>`).join('');
+            groupSelect.value = deliveryGroupFilter;
+            materialSelect.value = deliveryMaterialFilter;
+        }
+        function setDeliveryMaterialFilters() {
+            deliveryGroupFilter = document.getElementById('deliveryGroupSelect')?.value || '';
+            deliveryMaterialFilter = document.getElementById('deliveryMaterialSelect')?.value || '';
+            if (window.erusAudit) window.erusAudit('SELECT_FILTRO_MATERIAL_PRAZO_FAT', { grupo: deliveryGroupFilter || null, material: deliveryMaterialFilter || null });
+            renderDeliveryTimeChart();
+        }
         function renderDeliveryTimeChart() {
             document.getElementById('btnDeliveryFirst')?.classList.toggle('active', deliveryTimeMetric === 'first');
             document.getElementById('btnDeliveryComplete')?.classList.toggle('active', deliveryTimeMetric === 'complete');
             const rows = getDeliveryTimeRows();
-            const firstRows = rows.filter(r => r.diasPrimeira !== null);
-            const completeRows = rows.filter(r => r.diasCompleta !== null);
+            populateDeliveryMaterialFilters(rows);
+            const filteredRows = rows.filter(group => group.linhas.some(deliveryMaterialPasses));
+            const firstRows = filteredRows.filter(r => r.diasPrimeira !== null);
+            const completeRows = filteredRows.filter(r => r.diasCompleta !== null);
             const avgFirst = avg(firstRows.map(r => r.diasPrimeira));
             const avgComplete = avg(completeRows.map(r => r.diasCompleta));
             const setText = (id, value) => {
@@ -3582,7 +3635,7 @@ async function loadRecordsData() {
 
             const monthLabels = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
             const buckets = monthLabels.map(label => ({ label, first: [], complete: [], firstCount: 0, completeCount: 0 }));
-            rows.forEach(row => {
+            filteredRows.forEach(row => {
                 if (row.primeiraEntrega) {
                     const d = new Date(`${row.primeiraEntrega}T00:00:00`);
                     if (!isNaN(d) && d.getFullYear() === selectedDashboardYear && row.diasPrimeira !== null) {
@@ -3641,7 +3694,7 @@ async function loadRecordsData() {
                     onClick: (event, elements) => {
                         if (!elements || !elements.length) return;
                         selectedDeliveryTimeMonth = elements[0].index;
-                        openDeliveryTimeModal(rows, selectedDeliveryTimeMonth);
+                        openDeliveryTimeModal(filteredRows, selectedDeliveryTimeMonth);
                     },
                     plugins: {
                         legend: { labels: { color: _tc(), font: { weight: '700' } } },
