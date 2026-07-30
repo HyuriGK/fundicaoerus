@@ -457,6 +457,8 @@
         .native-badge.good{color:#10b981;border-color:rgba(16,185,129,.28);background:rgba(16,185,129,.08)}
         .native-badge.bad{color:#ef4444;border-color:rgba(239,68,68,.25);background:rgba(239,68,68,.07)}
         .native-badge.pending{color:#fbbf24;border-color:rgba(251,191,36,.3);background:rgba(251,191,36,.08)}
+        .button-tooltip{position:fixed;z-index:2147483001;max-width:260px;padding:8px 10px;border-radius:8px;background:#050505;border:1px solid rgba(251,191,36,.3);box-shadow:0 14px 35px rgba(0,0,0,.48);color:#f4f4f5;font-size:.72rem;font-weight:700;line-height:1.35;pointer-events:none;opacity:0;visibility:hidden;transform:translate(-50%,-100%);transition:opacity .12s ease,visibility .12s ease}
+        .button-tooltip.open{opacity:1;visibility:visible}
         .activity-tooltip{position:relative;display:inline-flex;align-items:center;gap:6px;cursor:help;color:#e4e4e7}
         .activity-tooltip::after{content:attr(data-tooltip);position:absolute;left:50%;bottom:calc(100% + 9px);transform:translateX(-50%);width:max-content;max-width:280px;background:#050505;border:1px solid rgba(251,191,36,.3);border-radius:8px;box-shadow:0 14px 35px rgba(0,0,0,.48);color:#f4f4f5;font-size:.72rem;font-weight:700;line-height:1.35;padding:9px 11px;text-align:left;white-space:normal;opacity:0;visibility:hidden;pointer-events:none;z-index:30}
         .activity-tooltip::before{content:"";position:absolute;left:50%;bottom:calc(100% + 4px);transform:translateX(-50%) rotate(45deg);width:9px;height:9px;background:#050505;border-right:1px solid rgba(251,191,36,.3);border-bottom:1px solid rgba(251,191,36,.3);opacity:0;visibility:hidden;pointer-events:none;z-index:31}
@@ -1466,6 +1468,49 @@
         }, 3600);
     }
 
+    function tooltipTextFor(el) {
+        if (!el) return '';
+        if (el.getAttribute('title')) {
+            el.dataset.tooltip = el.getAttribute('title');
+            el.removeAttribute('title');
+        }
+        if (el.dataset.tooltip) return el.dataset.tooltip;
+        const cardTitle = el.querySelector('.ti-panel-title, .dev-admin-item-title');
+        const text = (cardTitle ? cardTitle.textContent : el.textContent || '').trim().replace(/\s+/g, ' ');
+        return text || el.getAttribute('aria-label') || '';
+    }
+
+    function initButtonTooltips() {
+        let tooltip = document.getElementById('buttonTooltip');
+        if (!tooltip) {
+            tooltip = document.createElement('div');
+            tooltip.id = 'buttonTooltip';
+            tooltip.className = 'button-tooltip';
+            document.body.appendChild(tooltip);
+        }
+        const selector = 'button, a.native-btn, .ti-panel-card, .dev-admin-item';
+        document.addEventListener('mouseover', event => {
+            const target = event.target.closest(selector);
+            if (!target) return;
+            const text = tooltipTextFor(target);
+            if (!text) return;
+            tooltip.textContent = text;
+            tooltip.classList.add('open');
+        });
+        document.addEventListener('mousemove', event => {
+            if (!tooltip.classList.contains('open')) return;
+            const margin = 14;
+            const x = Math.min(Math.max(event.clientX, 132), window.innerWidth - 132);
+            const y = Math.max(event.clientY - margin, 36);
+            tooltip.style.left = x + 'px';
+            tooltip.style.top = y + 'px';
+        });
+        document.addEventListener('mouseout', event => {
+            const target = event.target.closest(selector);
+            if (target && !target.contains(event.relatedTarget)) tooltip.classList.remove('open');
+        });
+    }
+
     const ADMIN_LOCKABLE_PAGES = [
         { id:'pedidos.html', name:'Carteira de Pedidos' },
         { id:'apontamentos_produtivos.html', name:'Producao Apontada' },
@@ -1953,6 +1998,7 @@
     lbCanvas.addEventListener('touchend', () => { lbDragging = false; lbLastDist = null; });
 
     switchTiView('dashboard');
+    initButtonTooltips();
     loadChamados();
     loadPasswords();
 </script>
