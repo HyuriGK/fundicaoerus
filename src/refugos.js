@@ -116,6 +116,78 @@ router.get('/', async (req, res) => {
 });
 
 // --- ROTA GET: Listar Motivos Únicos ---
+router.get('/resumo-dashboard', async (req, res) => {
+    try {
+        const year = parseInt(req.query.year, 10);
+        const month = parseInt(req.query.month, 10);
+        if (!year || !month || month < 1 || month > 12) {
+            return res.status(400).json({ success: false, message: 'year e month sao obrigatorios' });
+        }
+
+        const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+        const endDate = new Date(year, month, 0).toISOString().split('T')[0];
+        const prodKey = `${year}-${String(month).padStart(2, '0')}`;
+
+        const commercialOwner = getCommercialOwnerRestriction(req);
+        const params = [startDate, endDate];
+        let ownerFilter = '';
+        if (commercialOwner) {
+            params.push(commercialOwner);
+            ownerFilter = `
+                AND EXISTS (
+                    SELECT 1
+                    FROM clientes_firebird_sync c
+                    JOIN clientes_responsavel_comercial rc
+                      ON rc.empresa = c.empresa
+                     AND rc.codigo = c.codigo
+                     AND rc.responsavel_comercial = $3
+                    WHERE UPPER(TRIM(c.razao_social)) = UPPER(TRIM(r.cliente))
+                )
+            `;
+        }
+
+        const [scrapResult, productionResult] = await Promise.all([
+            pool.query(`
+                SELECT
+                    UPPER(TRIM(COALESCE(r.motivo, 'NAO INFORMADO'))) AS motivo,
+                    SUM(r.quantidade * COALESCE(pc.peso, r.peso_un, 0)) AS peso_total
+                FROM refugo_apontado_sincronizado r
+                LEFT JOIN pesos_customizados pc ON r.codigo_peca = pc.codigo
+                WHERE r.data_refugo >= $1
+                  AND r.data_refugo <= $2
+                  ${ownerFilter}
+                GROUP BY 1
+                ORDER BY peso_total DESC
+            `, params),
+            pool.query(`
+                SELECT SUM(t.quantidade * COALESCE(NULLIF(t.peso_un, 0), pc.peso, p.peso, 0)) AS total_peso
+                FROM producao_apontada_sincronizada t
+                LEFT JOIN pesos_customizados pc ON t.codigo_peca = pc.codigo
+                LEFT JOIN produto_pesos_producao p ON t.codigo_peca = p.codigo_peca
+                WHERE to_char(t.data_producao, 'YYYY-MM') = $1
+                  AND UPPER(TRIM(t.setor)) = 'FUSAO'
+                  AND TRIM(t.codigo_peca) NOT IN ('18358', '801032102')
+            `, [prodKey])
+        ]);
+
+        const byMotive = {};
+        let totalKg = 0;
+        scrapResult.rows.forEach(row => {
+            const peso = parseFloat(row.peso_total || 0);
+            totalKg += peso;
+            byMotive[row.motivo] = peso;
+        });
+
+        const productionKg = parseFloat(productionResult.rows[0]?.total_peso || 0);
+        const scrapPct = productionKg > 0 ? (totalKg / productionKg) * 100 : 0;
+
+        res.json({ success: true, totalKg, productionKg, scrapPct, byMotive });
+    } catch (error) {
+        console.error('Erro resumo-dashboard refugos:', error);
+        res.status(500).json({ success: false, message: 'Erro ao buscar resumo de refugo do dashboard', error: error.message });
+    }
+});
+
 router.get('/motivos', async (req, res) => {
     try {
         const result = await pool.query(`

@@ -9394,10 +9394,7 @@
                     try {
 
 
-                        const [wRes, pRes, fpRes] = await Promise.all([
-
-
-                            fetchWithTimeout('/api/weights/list'),
+                        const [pRes, fpRes] = await Promise.all([
 
 
                             fetchWithTimeout('/api/preferences/excluded_clients'),
@@ -9407,9 +9404,6 @@
 
 
                         ]);
-
-
-                        if (wRes.ok) customWeightsMap = await wRes.json();
 
 
                         const prefs = await pRes.json();
@@ -9604,7 +9598,7 @@
                         fetchWithTimeout('/api/pedidos-sync/resumo-carteira'),
 
 
-                        fetchWithTimeout('/api/refugos-new') // Unified endpoint for scrap and production
+                        fetchWithTimeout(`/api/refugos-new/resumo-dashboard?year=${curYear}&month=${curMonth + 1}`)
 
 
                     ]);
@@ -9615,31 +9609,9 @@
                     const cartData = cartRes && cartRes.ok ? await cartRes.json() : { success: false, totalKg: 0, topClientes: [] };
 
 
-                    const refJson = refRes && refRes.ok ? await refRes.json() : {};
-
-
-                    const refRawAll = refJson.refugoRawData || [];
-
-
-                    const monthlyProdData = refJson.refugoMonthlyProduction || {};
-
-
-                    // Filter scrap for current month
-
-
-                    const refRaw = refRawAll.filter(r => {
-
-
-                        if (!r.data) return false;
-
-
-                        const [y, m] = r.data.split('-').map(Number);
-
-
-                        return y === curYear && m === (curMonth + 1);
-
-
-                    });
+                    const refJson = refRes && refRes.ok ? await refRes.json() : { success: false, totalKg: 0, scrapPct: 0, byMotive: {} };
+                    const refRaw = [];
+                    const monthlyProdData = {};
 
 
                     const cartKg = cartData.success ? Number(cartData.totalKg || 0) : 0;
@@ -9660,10 +9632,10 @@
                     // 3. Scrap Calculation (Refugo) - Parity with refugos.html
 
 
-                    let totalRefWeight = 0;
+                    let totalRefWeight = refJson.success ? Number(refJson.totalKg || 0) : 0;
 
 
-                    const motives = {};
+                    const motives = refJson.success ? { ...(refJson.byMotive || {}) } : {};
 
 
                     refRaw.forEach(r => {
@@ -9708,7 +9680,7 @@
                     const monthProd = monthlyProdData[prodKey] || 0;
 
 
-                    const scrapPct = monthProd > 0 ? (totalRefWeight / monthProd * 100) : 0;
+                    const scrapPct = refJson.success ? Number(refJson.scrapPct || 0) : (monthProd > 0 ? (totalRefWeight / monthProd * 100) : 0);
 
 
                     dashboardData.totalScrapKg = totalRefWeight;
