@@ -19,6 +19,8 @@
             '.erus-confirm-copy{min-width:0;padding-top:1px;}',
             '.erus-confirm-title{margin:0 0 8px;font-size:1.12rem;line-height:1.25;font-weight:800;letter-spacing:0;color:#fafafa;}',
             '.erus-confirm-message{margin:0;color:#a1a1aa;font-size:.91rem;line-height:1.55;white-space:pre-wrap;word-break:break-word;}',
+            '.erus-confirm-input{width:100%;height:42px;margin-top:16px;padding:0 12px;border-radius:10px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.06);color:#fafafa;font:inherit;font-size:.9rem;outline:none;box-shadow:0 0 0 1px transparent inset;transition:border-color .14s ease,box-shadow .14s ease,background .14s ease;}',
+            '.erus-confirm-input:focus{border-color:rgba(251,191,36,.55);box-shadow:0 0 0 3px rgba(251,191,36,.14);background:rgba(255,255,255,.08);}',
             '.erus-confirm-actions{display:flex;gap:10px;padding:0 30px 26px;}',
             '.erus-confirm-btn{height:42px;flex:1;border-radius:10px;border:1px solid rgba(255,255,255,.1);font-family:inherit;font-size:.86rem;font-weight:750;cursor:pointer;transition:transform .14s ease,background .14s ease,border-color .14s ease,box-shadow .14s ease;color:#f4f4f5;}',
             '.erus-confirm-btn:hover{transform:translateY(-1px)}',
@@ -117,6 +119,78 @@
             cancelBtn.addEventListener('click', function () { closeActive(false); });
             okBtn.addEventListener('click', function () { closeActive(true); });
             setTimeout(function () { okBtn.focus({ preventScroll: true }); }, 30);
+        });
+    };
+
+    window.erusPrompt = function (message, defaultValue, options) {
+        var opts = options || {};
+        injectStyles();
+        if (active) closeActive(null);
+        previousFocus = document.activeElement;
+
+        return new Promise(function (resolve) {
+            var variant = opts.variant || 'default';
+            var overlay = document.createElement('div');
+            overlay.className = 'erus-confirm-overlay';
+            overlay.setAttribute('role', 'dialog');
+            overlay.setAttribute('aria-modal', 'true');
+
+            var card = document.createElement('div');
+            card.className = 'erus-confirm-card is-' + variant;
+            card.innerHTML = [
+                '<div class="erus-confirm-top"></div>',
+                '<div class="erus-confirm-body">',
+                '  <div class="erus-confirm-icon"><i></i></div>',
+                '  <div class="erus-confirm-copy">',
+                '    <h2 class="erus-confirm-title"></h2>',
+                '    <p class="erus-confirm-message"></p>',
+                '    <input class="erus-confirm-input" type="text">',
+                '  </div>',
+                '</div>',
+                '<div class="erus-confirm-actions">',
+                '  <button type="button" class="erus-confirm-btn erus-confirm-cancel"></button>',
+                '  <button type="button" class="erus-confirm-btn erus-confirm-ok"></button>',
+                '</div>'
+            ].join('');
+
+            card.querySelector('i').className = opts.icon || 'fa-solid fa-pen';
+            card.querySelector('.erus-confirm-title').textContent = opts.title || 'Editar informacao';
+            card.querySelector('.erus-confirm-message').textContent = String(message || '');
+            var input = card.querySelector('.erus-confirm-input');
+            var cancelBtn = card.querySelector('.erus-confirm-cancel');
+            var okBtn = card.querySelector('.erus-confirm-ok');
+            input.value = defaultValue !== undefined && defaultValue !== null ? String(defaultValue) : '';
+            input.placeholder = opts.placeholder || '';
+            cancelBtn.textContent = opts.cancelText || 'Cancelar';
+            okBtn.textContent = opts.okText || 'Salvar';
+
+            overlay.appendChild(card);
+            document.body.appendChild(overlay);
+
+            var onKey = function (event) {
+                if (event.key === 'Escape') {
+                    event.preventDefault();
+                    closeActive(null);
+                }
+            };
+
+            active = { overlay: overlay, resolve: resolve, onKey: onKey };
+            document.addEventListener('keydown', onKey, true);
+            overlay.addEventListener('click', function (event) {
+                if (event.target === overlay) closeActive(null);
+            });
+            cancelBtn.addEventListener('click', function () { closeActive(null); });
+            okBtn.addEventListener('click', function () { closeActive(input.value); });
+            input.addEventListener('keydown', function (event) {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    closeActive(input.value);
+                }
+            });
+            setTimeout(function () {
+                input.focus({ preventScroll: true });
+                input.select();
+            }, 30);
         });
     };
 
