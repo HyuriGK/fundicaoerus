@@ -326,10 +326,9 @@ router.get('/resumo-dashboard', async (req, res) => {
         const endDate = new Date(year, month, 0).toISOString().split('T')[0];
         const prevDate = new Date(year, month - 2, 1);
         const prevStart = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}-01`;
-        const prevEnd = new Date(prevDate.getFullYear(), prevDate.getMonth() + 1, 0).toISOString().split('T')[0];
 
         const commercialOwner = getCommercialOwnerRestriction(req);
-        const params = [startDate, endDate, prevStart, prevEnd];
+        const params = [startDate, endDate, prevStart];
         let ownerFilter = '';
         if (commercialOwner) {
             params.push(commercialOwner);
@@ -341,7 +340,7 @@ router.get('/resumo-dashboard', async (req, res) => {
                         ON rc.empresa = c.empresa
                         AND rc.codigo = c.codigo
                     WHERE c.codigo::text = f.cliente_codigo::text
-                      AND rc.responsavel_comercial = $5
+                      AND rc.responsavel_comercial = $4
                 )
             `;
         }
