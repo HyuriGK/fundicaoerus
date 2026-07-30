@@ -626,6 +626,48 @@
             align-items: center !important;
             min-width: min-content;
         }
+        .material-filter-wrap {
+            position: relative;
+        }
+        .material-filter-button {
+            min-width: 112px;
+            display: inline-flex !important;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            box-sizing: border-box;
+        }
+        .material-filter-button:hover,
+        .material-filter-button.active {
+            background: rgba(255,255,255,0.08) !important;
+            border-color: rgba(255,255,255,0.2) !important;
+            color: #fff !important;
+        }
+        .material-filter-menu {
+            display: none;
+            position: absolute;
+            top: calc(100% + 8px);
+            right: 0;
+            z-index: 30;
+            min-width: 310px;
+            padding: 10px;
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+            background: #111113;
+            box-shadow: 0 14px 32px rgba(0,0,0,0.42);
+        }
+        .material-filter-menu.open {
+            display: grid;
+            gap: 8px;
+        }
+        .material-filter-select {
+            width: 100% !important;
+            max-width: none !important;
+            height: 32px !important;
+            padding: 0 12px !important;
+            text-align: left !important;
+            text-align-last: left !important;
+        }
 
         #liga-filter-select.month-btn,
         #grupo-filter-select.month-btn,
@@ -1193,8 +1235,16 @@
                 
                 <!-- Categories (Pushed to Right) -->
                 <div class="filter-group-categories">
-                    <select id="grupo-filter-select" class="month-btn" style="cursor:pointer;" title="Filtrar por grupo de material"></select>
-                    <select id="liga-filter-select" class="month-btn" style="cursor:pointer;"></select>
+                    <div class="material-filter-wrap">
+                        <button type="button" id="materialFilterButton" class="month-btn material-filter-button" onclick="toggleMaterialFilterMenu(event)" title="Filtrar por grupo ou material">
+                            <i class="fa-solid fa-filter"></i>
+                            <span id="materialFilterLabel">Filtro</span>
+                        </button>
+                        <div id="materialFilterMenu" class="material-filter-menu">
+                            <select id="grupo-filter-select" class="month-btn material-filter-select" style="cursor:pointer;" title="Filtrar por grupo de material"></select>
+                            <select id="liga-filter-select" class="month-btn material-filter-select" style="cursor:pointer;" title="Filtrar por material"></select>
+                        </div>
+                    </div>
                     <select id="sector-chart-select" class="month-btn" style="cursor:pointer;"></select>
                     <button onclick="generateCompleteReport()" class="month-btn">PDF</button>
                     <button onclick="openRecordsModal()" class="month-btn">REGISTROS</button>
@@ -2084,8 +2134,10 @@
             select.onchange = (e) => {
                 currentLigaFilter = e.target.value;
                 if (window.erusAudit) window.erusAudit('SELECT_LIGA_APONTAMENTOS', { liga: currentLigaFilter });
+                updateMaterialFilterButton();
                 applyFilters();
             };
+            updateMaterialFilterButton();
         }
 
         function renderGrupoButtons(grupos) {
@@ -2116,9 +2168,31 @@
                     : [...new Set(periodData.filter(d => d.grupoMaterial === currentGrupoFilter).map(d => d.liga).filter(l => l))].sort();
                 
                 renderLigaButtons(ligasFiltradas);
+                updateMaterialFilterButton();
                 applyFilters();
             };
+            updateMaterialFilterButton();
         }
+
+        function updateMaterialFilterButton() {
+            const button = document.getElementById('materialFilterButton');
+            const label = document.getElementById('materialFilterLabel');
+            if (!button || !label) return;
+            const count = [currentGrupoFilter !== 'TODOS', currentLigaFilter !== 'TODAS'].filter(Boolean).length;
+            label.textContent = count ? `${count} filtro${count > 1 ? 's' : ''}` : 'Filtro';
+            button.classList.toggle('active', count > 0);
+        }
+
+        function toggleMaterialFilterMenu(event) {
+            event?.stopPropagation();
+            document.getElementById('materialFilterMenu')?.classList.toggle('open');
+        }
+
+        document.addEventListener('click', event => {
+            const wrap = document.querySelector('.material-filter-wrap');
+            const menu = document.getElementById('materialFilterMenu');
+            if (wrap && menu && !wrap.contains(event.target)) menu.classList.remove('open');
+        });
 
         function setupEventListeners() {
 
