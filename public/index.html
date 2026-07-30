@@ -9508,7 +9508,7 @@
                         fetchWithTimeout(`/api/metas?mes_ano=${curYear}-${String(curMonth + 1).padStart(2, '0')}`),
 
 
-                        fetchWithTimeout(`/api/faturamento-postgres/resumo-periodo?startDate=${startOfMonth}&endDate=${endOfMonth}`)
+                        fetchWithTimeout(`/api/faturamento-postgres/resumo-dashboard?year=${curYear}&month=${curMonth + 1}`)
 
 
                     ]);
@@ -9524,7 +9524,7 @@
                     window.__metaPesoKg = metaVal;
 
 
-                    const fatData = fatRes && fatRes.ok ? await fatRes.json() : { success: false, data: [] };
+                    const fatData = fatRes && fatRes.ok ? await fatRes.json() : { success: false, totalKg: 0, previousTotalKg: 0, daily: [] };
 
 
                     let fatTotalWeight = 0;
@@ -9533,14 +9533,12 @@
                     if (fatData.success) {
 
 
-                        dashboardData.billingDaily = fatData.data || [];
+                        dashboardData.billingDaily = fatData.daily || [];
 
 
                         // Mesma lógica de getFatPesoState do faturamentos.html
                         // O API já computa excluido_manualmente (gera_financeiro='N', sem_pedido, MODELO, preferências)
-                        fatTotalWeight = dashboardData.billingDaily.reduce((acc, item) => {
-                            return acc + (parseFloat(item.pesoTotal || 0));
-                        }, 0);
+                        fatTotalWeight = Number(fatData.totalKg || 0);
 
 
                     }
@@ -9558,23 +9556,7 @@
                     // monthly comparison for trend
 
 
-                    const prevDate = new Date(curYear, curMonth - 1, 1);
-
-
-                    const prevStart = new Date(prevDate.getFullYear(), prevDate.getMonth(), 1).toISOString().split('T')[0];
-
-
-                    const prevEnd = new Date(prevDate.getFullYear(), prevDate.getMonth() + 1, 0).toISOString().split('T')[0];
-
-
-                    const prevFatFetch = await Promise.allSettled([fetchWithTimeout(`/api/faturamento-postgres/resumo-periodo?startDate=${prevStart}&endDate=${prevEnd}`)]);
-                    const prevFatRes = prevFatFetch[0].status === 'fulfilled' ? prevFatFetch[0].value : null;
-
-
-                    const prevFatData = prevFatRes && prevFatRes.ok ? await prevFatRes.json() : { success: false, data: [] };
-
-
-                    const fatPrev = prevFatData.success ? (prevFatData.data || []).reduce((acc, item) => acc + parseFloat(item.pesoTotal || 0), 0) : 0;
+                    const fatPrev = fatData.success ? Number(fatData.previousTotalKg || 0) : 0;
 
 
                     const fatDiff = fatPrev > 0 ? (((fatTotalWeight) - fatPrev) / fatPrev * 100) : 0;
