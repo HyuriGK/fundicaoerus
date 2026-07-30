@@ -64,6 +64,145 @@ async function ensureParadasTable() {
 
 // GET /api/producao-postgres
 // Returns filtered productio records from the synced table
+router.get('/resumo-setores', async (req, res) => {
+    try {
+        const year = parseInt(req.query.year, 10);
+        const month = parseInt(req.query.month, 10);
+        if (!year || !month || month < 1 || month > 12) {
+            return res.status(400).json({ success: false, message: 'year e month sao obrigatorios' });
+        }
+
+        const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+        const endDate = new Date(year, month, 0).toISOString().split('T')[0];
+        const commercialOwner = getCommercialOwnerRestriction(req);
+
+        const params = [startDate, endDate];
+        let ownerFilter = '';
+        if (commercialOwner) {
+            params.push(commercialOwner);
+            ownerFilter = `
+                AND EXISTS (
+                    SELECT 1
+                    FROM clientes_firebird_sync c
+                    JOIN clientes_responsavel_comercial rc
+                        ON rc.empresa = c.empresa
+                        AND rc.codigo = c.codigo
+                    WHERE rc.responsavel_comercial = $3
+                      AND (
+                          UPPER(TRIM(c.razao_social)) = UPPER(TRIM(COALESCE(NULLIF(t.cliente, ''), cliente_op.cliente, cliente_codigo.cliente, '')))
+                          OR UPPER(TRIM(c.fantasia)) = UPPER(TRIM(COALESCE(NULLIF(t.cliente, ''), cliente_op.cliente, cliente_codigo.cliente, '')))
+                      )
+                )
+            `;
+        }
+
+        const result = await pool.query(`
+            WITH base AS (
+                SELECT
+                    CASE
+                        WHEN setor_norm IN ('FUSAO', 'FUNDICAO') THEN 'FUSAO'
+                        WHEN setor_norm IN ('TRATAMENTO TERMICO', 'TT') THEN 'TRATAMENTO TERMICO'
+                        WHEN setor_norm IN ('INSPECAO DE QUALIDADE', 'QUALIDADE') THEN 'INSPECAO DE QUALIDADE'
+                        WHEN setor_norm IN ('USINAGEM EXPEDICAO', 'USINAGEM', '50') THEN 'USINAGEM EXPEDICAO'
+                        WHEN setor_norm = 'EXPEDICAO' THEN 'EXPEDICAO'
+                        WHEN setor_norm IN ('ACABAMENTO', 'REBARBACAO') THEN 'ACABAMENTO'
+                        ELSE setor_norm
+                    END AS setor,
+                    TRIM(t.codigo_peca) AS codigo_peca,
+                    t.quantidade * COALESCE(NULLIF(t.peso_un, 0), pc.peso, p.peso, 0) AS peso_total
+                FROM producao_apontada_sincronizada t
+                LEFT JOIN pesos_customizados pc ON t.codigo_peca = pc.codigo
+                LEFT JOIN produto_pesos_producao p ON t.codigo_peca = p.codigo_peca
+                LEFT JOIN (
+                    SELECT DISTINCT ON (op) op, cliente
+                    FROM (
+                        SELECT REPLACE(p.sync_key, 'OP-', '') as op, p.data->>'NOME_CLIENTE' as cliente, p.updated_at
+                        FROM firebird_sync_pedidos p
+                        WHERE p.sync_key LIKE 'OP-%'
+                          AND COALESCE(p.data->>'NOME_CLIENTE', '') <> ''
+
+                        UNION ALL
+
+                        SELECT TRIM(e.data->>'OP_PCS') as op, e.data->>'NOME_CLIENTE' as cliente, e.updated_at
+                        FROM firebird_sync_emissoes e
+                        WHERE COALESCE(e.data->>'OP_PCS', '') <> ''
+                          AND COALESCE(e.data->>'NOME_CLIENTE', '') <> ''
+                    ) origem_op
+                    WHERE op <> '' AND cliente <> ''
+                    ORDER BY op, updated_at DESC
+                ) cliente_op ON cliente_op.op = TRIM(t.op)
+                LEFT JOIN (
+                    SELECT DISTINCT ON (codigo_peca) codigo_peca, cliente
+                    FROM (
+                        SELECT
+                            codigo_peca,
+                            cliente,
+                            COUNT(*) OVER (PARTITION BY codigo_peca, cliente) as ocorrencias,
+                            MAX(updated_at) OVER (PARTITION BY codigo_peca, cliente) as ultima_atualizacao
+                        FROM (
+                            SELECT TRIM(p.data->>'PRODUTO_PPR') as codigo_peca, p.data->>'NOME_CLIENTE' as cliente, p.updated_at
+                            FROM firebird_sync_pedidos p
+                            WHERE COALESCE(p.data->>'PRODUTO_PPR', '') <> ''
+                              AND COALESCE(p.data->>'NOME_CLIENTE', '') <> ''
+
+                            UNION ALL
+
+                            SELECT TRIM(e.data->>'PRODUTO_PPR') as codigo_peca, e.data->>'NOME_CLIENTE' as cliente, e.updated_at
+                            FROM firebird_sync_emissoes e
+                            WHERE COALESCE(e.data->>'PRODUTO_PPR', '') <> ''
+                              AND COALESCE(e.data->>'NOME_CLIENTE', '') <> ''
+                        ) origem_codigo
+                        WHERE codigo_peca <> '' AND cliente <> ''
+                    ) ranking_codigo
+                    ORDER BY codigo_peca, ocorrencias DESC, ultima_atualizacao DESC
+                ) cliente_codigo ON cliente_codigo.codigo_peca = TRIM(t.codigo_peca)
+                CROSS JOIN LATERAL (
+                    SELECT UPPER(TRANSLATE(TRIM(COALESCE(t.setor, '')), 'ÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇáàâãäéèêëíìîïóòôõöúùûüç', 'AAAAAEEEEIIIIOOOOOUUUUCaaaaaeeeeiiiiooooouuuuc')) AS setor_norm
+                ) norm
+                WHERE t.data_producao >= $1
+                  AND t.data_producao <= $2
+                  ${ownerFilter}
+            )
+            SELECT setor, SUM(peso_total) AS peso_total
+            FROM base
+            WHERE NOT (
+                setor IN ('FUSAO', 'MOLDAGEM GERAL', 'MOLDAGEM LEVE', 'MOLDAGEM MANUAL', 'MOLDAGEM PESADA', 'MOLDAGEM ROLLOVER', 'MOLDAGEM')
+                AND codigo_peca IN ('18358', '801032102')
+            )
+            GROUP BY setor
+        `, params);
+
+        const totals = {
+            'MOLDAGEM GERAL': 0,
+            'FUSAO': 0,
+            'ACABAMENTO': 0,
+            'TRATAMENTO TERMICO': 0,
+            'USINAGEM EXPEDICAO': 0,
+            'INSPECAO DE QUALIDADE': 0,
+            'EXPEDICAO': 0,
+            'MOLDAGEM LEVE': 0,
+            'MOLDAGEM MANUAL': 0,
+            'MOLDAGEM PESADA': 0
+        };
+
+        result.rows.forEach(row => {
+            const setor = row.setor;
+            const peso = parseFloat(row.peso_total || 0);
+            if (['MOLDAGEM LEVE', 'MOLDAGEM MANUAL', 'MOLDAGEM PESADA'].includes(setor)) {
+                totals[setor] += peso;
+                totals['MOLDAGEM GERAL'] += peso;
+            } else if (Object.prototype.hasOwnProperty.call(totals, setor)) {
+                totals[setor] += peso;
+            }
+        });
+
+        res.json({ success: true, totals });
+    } catch (error) {
+        console.error('Erro resumo-setores producao:', error);
+        res.status(500).json({ success: false, message: 'Erro ao buscar resumo de producao por setor', error: error.message });
+    }
+});
+
 router.get('/', async (req, res) => {
     try {
         // 2. Verificar tarefas (registros com peso zero na tabela sincronizada - Agrupado por Setor)
