@@ -3656,9 +3656,12 @@ async function loadRecordsData() {
             if (text.includes('CINZENTO')) return 'CINZENTO';
             return text.split(/\s+/).slice(0, 2).join(' ');
         }
+        function getDeliveryItemGroup(item) {
+            return String(item?.grupoMaterial || item?.grupo_material || item?.grupo || '').trim() || getDeliveryMaterialGroup(item?.material);
+        }
         function deliveryMaterialPasses(item) {
             const material = normalizeDeliveryMaterial(item.material);
-            const group = getDeliveryMaterialGroup(material);
+            const group = getDeliveryItemGroup(item);
             if (deliveryMaterialFilter && material !== deliveryMaterialFilter) return false;
             if (deliveryGroupFilter && group !== deliveryGroupFilter) return false;
             return true;
@@ -3667,10 +3670,11 @@ async function loadRecordsData() {
             const groupSelect = document.getElementById('deliveryGroupSelect');
             const materialSelect = document.getElementById('deliveryMaterialSelect');
             if (!groupSelect || !materialSelect) return;
-            const allMaterials = [...new Set(rows.flatMap(r => (r.linhas || []).map(item => normalizeDeliveryMaterial(item.material))).filter(Boolean))].sort();
-            const groups = [...new Set(allMaterials.map(getDeliveryMaterialGroup).filter(Boolean))].sort();
+            const allItems = rows.flatMap(r => r.linhas || []);
+            const allMaterials = [...new Set(allItems.map(item => normalizeDeliveryMaterial(item.material)).filter(Boolean))].sort();
+            const groups = [...new Set(allItems.map(getDeliveryItemGroup).filter(Boolean))].sort();
             const materials = deliveryGroupFilter
-                ? allMaterials.filter(material => getDeliveryMaterialGroup(material) === deliveryGroupFilter)
+                ? [...new Set(allItems.filter(item => getDeliveryItemGroup(item) === deliveryGroupFilter).map(item => normalizeDeliveryMaterial(item.material)).filter(Boolean))].sort()
                 : allMaterials;
             if (deliveryGroupFilter && !groups.includes(deliveryGroupFilter)) deliveryGroupFilter = '';
             if (deliveryMaterialFilter && !materials.includes(deliveryMaterialFilter)) deliveryMaterialFilter = '';

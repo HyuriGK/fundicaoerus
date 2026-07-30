@@ -353,6 +353,7 @@ router.get('/detalhado', async (req, res) => {
                 COALESCE(NULLIF(f.valor_total, 0), f.valor_unitario * f.quantidade) AS valor_total_original,
                 f.peso_un,
                 COALESCE(NULLIF(ft.nome_material, ''), NULLIF(ft.material_fic, '')) AS material,
+                pg.grupo_material,
                 (f.peso_un * GREATEST(f.quantidade - COALESCE(dev.quantidade_devolvida, 0), 0)) AS peso_total,
                 (f.peso_un * f.quantidade) AS peso_total_original,
                 f.status,
@@ -398,6 +399,18 @@ router.get('/detalhado', async (req, res) => {
                 AND v.serie = COALESCE(TRIM(f.serie), '')
             LEFT JOIN ficha_tecnica ft
                 ON ft.pro_codigo_fic = TRIM(f.codigo_item)
+            LEFT JOIN (
+                SELECT DISTINCT ON (TRIM(codigo_peca))
+                    TRIM(codigo_peca) AS codigo_peca,
+                    grupo_material
+                FROM producao_apontada_sincronizada
+                WHERE grupo_material IS NOT NULL
+                  AND grupo_material <> ''
+                  AND codigo_peca IS NOT NULL
+                  AND TRIM(codigo_peca) <> ''
+                ORDER BY TRIM(codigo_peca), data_producao DESC
+            ) pg
+                ON pg.codigo_peca = TRIM(f.codigo_item)
             LEFT JOIN (
                 SELECT DISTINCT ON (data->>'ANO_PPR', data->>'CODIGO_PPR', data->>'PRODUTO_PPR')
                     data->>'ANO_PPR' AS ano_pedido,
@@ -480,6 +493,7 @@ router.get('/detalhado', async (req, res) => {
             valorTotalOriginal: parseFloat(row.valor_total_original || 0),
             pesoUn: parseFloat(row.peso_un || 0),
             material: row.material || '',
+            grupoMaterial: row.grupo_material || '',
             pesoTotal: parseFloat(row.peso_total || 0),
             pesoTotalOriginal: parseFloat(row.peso_total_original || 0),
             status: row.status,
