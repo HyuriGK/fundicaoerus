@@ -196,15 +196,21 @@ router.get('/resumo-carteira', async (req, res) => {
             if (num(row.ficha_peso_liquido_pro) > 0) item.PESO_PRODUTO = num(row.ficha_peso_liquido_pro);
             const peso = getItemWeight(item, weightsMap);
             const cliente = String(item.NOME_CLIENTE || 'Desconhecido').trim().toUpperCase();
-            byClient[cliente] = (byClient[cliente] || 0) + peso;
+            if (!byClient[cliente]) byClient[cliente] = { pesoKg: 0, pedidos: new Set() };
+            byClient[cliente].pesoKg += peso;
+            byClient[cliente].pedidos.add(String(item.CODIGO_PPR || item.PEDIDO_PPR || item.NUMERO_PEDIDO || '').trim());
             totalKg += peso;
             totalItens++;
         });
 
         const topClientes = Object.entries(byClient)
-            .sort((a, b) => b[1] - a[1])
+            .sort((a, b) => b[1].pesoKg - a[1].pesoKg)
             .slice(0, 10)
-            .map(([cliente, pesoKg]) => ({ cliente, pesoKg }));
+            .map(([cliente, data]) => ({
+                cliente,
+                pesoKg: data.pesoKg,
+                pedidosUnicos: Array.from(data.pedidos).filter(Boolean).length
+            }));
 
         res.json({ success: true, totalKg, totalItens, topClientes });
     } catch (error) {
