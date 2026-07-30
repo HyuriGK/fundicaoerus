@@ -345,6 +345,11 @@ router.get('/', async (req, res) => {
             if ((!item.PESO_PRODUTO || Number(item.PESO_PRODUTO) <= 0) && produtoKey && produtoPesoMap[produtoKey]) {
                 item.PESO_PRODUTO = produtoPesoMap[produtoKey];
             }
+            const opValue = String(item.OP_PCS || '').trim();
+            if (item.LINK_STATUS === 'sugerido' && !/^\d{1,4}$/.test(opValue)) {
+                item.LINK_STATUS = null;
+                item.OP_PCS = null;
+            }
             return item;
         });
 
