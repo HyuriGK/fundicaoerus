@@ -347,37 +347,40 @@ router.get('/resumo-dashboard', async (req, res) => {
         }
 
         const result = await pool.query(`
-            WITH devolucoes AS (
-                SELECT
-                    nota_original,
-                    COALESCE(TRIM(serie_original), '') AS serie_original,
-                    item_original,
-                    TRIM(codigo_item) AS codigo_item,
-                    SUM(quantidade) AS quantidade_devolvida
-                FROM firebird_sync_devolucoes
-                WHERE nota_original IS NOT NULL
-                GROUP BY nota_original, COALESCE(TRIM(serie_original), ''), item_original, TRIM(codigo_item)
+            WITH fat_peso_overrides AS (
+                SELECT fp.item_key, fp.item_value::boolean AS fat_peso
+                FROM app_preferences p
+                CROSS JOIN LATERAL jsonb_each_text(COALESCE(p.value, '{}'::jsonb)) AS fp(item_key, item_value)
+                WHERE p.key = 'fat_peso_overrides'
             ),
             base AS (
                 SELECT
                     f.data_faturamento::date AS data,
                     CASE
-                        WHEN f.gera_financeiro = 'N' THEN true
-                        ELSE COALESCE(p.excluido, f.excluido_manualmente)
-                    END AS excluido_manualmente,
-                    COALESCE(f.peso_un, 0) * GREATEST(f.quantidade - COALESCE(d.quantidade_devolvida, 0), 0) AS peso_total
+                        WHEN o.fat_peso IS NOT NULL THEN o.fat_peso
+                        WHEN f.gera_financeiro = 'N' THEN false
+                        ELSE NOT COALESCE(p.excluido, f.excluido_manualmente, false)
+                    END AS fat_peso,
+                    COALESCE(f.peso_un, 0) * COALESCE(f.quantidade, 0) AS peso_total
                 FROM faturamento_firebird f
-                LEFT JOIN devolucoes d
-                    ON d.nota_original = f.nota_fiscal
-                    AND d.serie_original = COALESCE(TRIM(f.serie), '')
-                    AND d.item_original = f.item_nota
-                    AND d.codigo_item = TRIM(f.codigo_item)
                 LEFT JOIN faturamento_firebird_preferencias p
                     ON p.nota_fiscal = f.nota_fiscal
                     AND p.codigo_item IS NOT DISTINCT FROM CAST(TRIM(f.codigo_item) AS VARCHAR)
                     AND COALESCE(p.pedido, '') = COALESCE(TRIM(f.pedido), '')
                     AND p.data_faturamento = f.data_faturamento
                     AND p.quantidade = f.quantidade
+                LEFT JOIN fat_peso_overrides o
+                    ON o.item_key = CONCAT(
+                        f.nota_fiscal,
+                        '-',
+                        COALESCE(TRIM(f.codigo_item), ''),
+                        '-',
+                        COALESCE(TRIM(f.pedido), ''),
+                        '-',
+                        f.data_faturamento::date,
+                        '-',
+                        COALESCE(f.quantidade, 0)
+                    )
                 WHERE f.data_faturamento >= $3
                   AND f.data_faturamento <= $2
                   ${ownerFilter}
@@ -387,7 +390,7 @@ router.get('/resumo-dashboard', async (req, res) => {
                   AND UPPER(TRIM(COALESCE(f.cliente_nome, ''))) NOT LIKE '%SPILROD FUNDICAO DE FERRO E ACO LTDA%'
             ),
             clean AS (
-                SELECT data, CASE WHEN excluido_manualmente THEN 0 ELSE peso_total END AS peso_total
+                SELECT data, CASE WHEN fat_peso THEN peso_total ELSE 0 END AS peso_total
                 FROM base
             )
             SELECT
