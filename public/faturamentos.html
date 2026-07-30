@@ -1786,8 +1786,11 @@
         <div class="charts-row" id="annualChartsRow" style="display:none; grid-template-columns: 1fr;">
             <div class="chart-panel">
                 <div class="chart-header-row">
-                    <div class="chart-title">Evolução Mensal (Peso)</div>
-                    <div class="chart-header-kpi">
+                    <div class="chart-title" id="annualChartTitle">Evolução Mensal (Peso)</div>
+                    <div class="chart-header-kpi" style="gap:5px;">
+                        <button id="btnAnnualPeso" class="btn-mini-chart active" onclick="setAnnualChartMode('peso')" style="font-size:0.7rem;">Peso</button>
+                        <button id="btnAnnualServicos" class="btn-mini-chart" onclick="setAnnualChartMode('servicos')" style="font-size:0.7rem;">Prest. Servi&ccedil;os</button>
+                        <span style="width:1px;height:14px;background:var(--border-subtle,#3f3f46);margin:0 8px;display:inline-block;vertical-align:middle;"></span>
                         <span>Média Dia:</span> <span class="highlight" id="avgDailyWeightAnnual">0,00 kg</span>
                         <span style="width:1px;height:14px;background:var(--border-subtle,#3f3f46);margin:0 8px;display:inline-block;vertical-align:middle;"></span>
                         <span>Peso Médio/Peça:</span> <span class="highlight" id="avgWeightPerPieceAnnual">0,00 kg</span>
@@ -1935,6 +1938,8 @@
         let deliveryGroupFilter = '';
         let deliveryMaterialFilter = '';
         let dailyChartMode = 'normal'; // 'normal' | 'servicos'
+        let annualChartMode = 'peso'; // 'peso' | 'servicos'
+        let _lastAnnualChartArgs = null;
         let _lastDailyChartArgs = null; // cache para re-render no toggle
         const _ltFat = window.ErusTheme && window.ErusTheme.isLight();
         const _gc = () => (window.ErusTheme && window.ErusTheme.isLight()) ? 'rgba(0,0,0,0.07)' : 'rgba(255,255,255,0.05)';
@@ -2198,6 +2203,12 @@
                 const countsValue = !excludedClients.has(name) && item.excluido_manualmente !== true;
                 return (countsValue || getFatPesoState(item)) && vendorFilter(item);
             });
+            const annualServicesData = data.filter(item => {
+                if (!item.data || !item.data.startsWith(selectedYear)) return false;
+                if (!isServiceClient(item)) return false;
+                if (item.gera_financeiro === 'N') return false;
+                return vendorFilter(item);
+            });
             // 2. Filter for Range (Drivers Table & KPIs)
             const rangeData = dataToSum.filter(item => {
                 if (startInput && item.data < startInput) return false;
@@ -2313,7 +2324,7 @@
             const highlightedMonthIndex = isSingleMonth ? startMonth : null;
             // --- ANNUAL CHART UPDATE ---
             // Show selected year data, highlight selected month if applicable
-            updateAnnualEvolutionDynamic(annualFilteredData, highlightedMonthIndex);
+            updateAnnualEvolutionDynamic(annualFilteredData, highlightedMonthIndex, annualServicesData);
             // KPIs do gráfico mensal: média dia e peso médio/peça sobre o ano
             // KPIs gráfico mensal: usa o período filtrado (rangeData), não o ano inteiro
             const annualKpiData = rangeDataComServicos; // já filtrado por startInput/endInput
@@ -2456,9 +2467,25 @@
             document.getElementById('avgDiasUteis').textContent = diasUteis;
             renderDailyChart(activeData, highlightedDay, monthStartStr, monthEndStr);
         }
-        function updateAnnualEvolutionDynamic(filteredData, highlightIndex) {
+        function updateAnnualChartModeUI() {
+            const isServices = annualChartMode === 'servicos';
+            document.getElementById('btnAnnualPeso')?.classList.toggle('active', !isServices);
+            document.getElementById('btnAnnualServicos')?.classList.toggle('active', isServices);
+            const title = document.getElementById('annualChartTitle');
+            if (title) title.textContent = isServices ? 'Evolu' + '\u00e7' + '\u00e3o Mensal - Prest. Servi' + '\u00e7' + 'os (Peso)' : 'Evolu' + '\u00e7' + '\u00e3o Mensal (Peso)';
+        }
+        function setAnnualChartMode(mode) {
+            annualChartMode = mode === 'servicos' ? 'servicos' : 'peso';
+            updateAnnualChartModeUI();
+            if (!_lastAnnualChartArgs) return;
+            const active = annualChartMode === 'servicos' ? _lastAnnualChartArgs.servicos : _lastAnnualChartArgs.peso;
+            renderAnnualChart(active.dataValues, active.valorValues, _lastAnnualChartArgs.highlightIndex);
+        }
+        function updateAnnualEvolutionDynamic(filteredData, highlightIndex, servicesData = []) {
             const monthlyData = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0, 11: 0 };
             const monthlyValor = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0, 11: 0 };
+            const monthlyServices = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0, 11: 0 };
+            const monthlyServicesValor = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0, 11: 0 };
             filteredData.forEach(item => {
                 if (!item.data) return;
                 const [y, m, d] = item.data.split('-').map(Number);
@@ -2471,10 +2498,30 @@
                     }
                 }
             });
+            servicesData.forEach(item => {
+                if (!item.data) return;
+                const [y, m] = item.data.split('-').map(Number);
+                const monthKey = m - 1;
+                if (monthlyServices[monthKey] !== undefined) {
+                    monthlyServices[monthKey] += calculateCalculatedWeight(item);
+                    monthlyServicesValor[monthKey] += calculateCalculatedTotal(item);
+                }
+            });
             const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-            const dataValues = months.map((_, idx) => monthlyData[idx] || 0);
-            const valorValues = months.map((_, idx) => monthlyValor[idx] || 0);
-            renderAnnualChart(dataValues, valorValues, highlightIndex);
+            _lastAnnualChartArgs = {
+                highlightIndex,
+                peso: {
+                    dataValues: months.map((_, idx) => monthlyData[idx] || 0),
+                    valorValues: months.map((_, idx) => monthlyValor[idx] || 0)
+                },
+                servicos: {
+                    dataValues: months.map((_, idx) => monthlyServices[idx] || 0),
+                    valorValues: months.map((_, idx) => monthlyServicesValor[idx] || 0)
+                }
+            };
+            const active = annualChartMode === 'servicos' ? _lastAnnualChartArgs.servicos : _lastAnnualChartArgs.peso;
+            updateAnnualChartModeUI();
+            renderAnnualChart(active.dataValues, active.valorValues, highlightIndex);
         }
         function getBrazilianHolidays(year) {
             // Feriados nacionais fixos
@@ -2766,6 +2813,10 @@
             const ctx = document.getElementById('annualChart').getContext('2d');
             if (annualChart) annualChart.destroy();
             const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+            const isServices = annualChartMode === 'servicos';
+            const barLabel = isServices ? 'Prest. Servi' + '\u00e7' + 'os Mensal (kg)' : 'Peso Mensal (kg)';
+            const lineLabel = isServices ? 'Prest. Servi' + '\u00e7' + 'os (kg)' : 'Peso Faturado (kg)';
+            const valueLabel = isServices ? 'Valor Servi' + '\u00e7' + 'os' : 'Total Faturado';
             // Always show all 12 months
             const fullData = months.map((_, i) => dataValues[i] || 0);
             const fullValor = months.map((_, i) => (valorValues || [])[i] || 0);
@@ -2784,7 +2835,7 @@
                     labels: months,
                     datasets: [
                         {
-                            label: 'Peso Mensal (kg)',
+                            label: barLabel,
                             data: fullData,
                             backgroundColor: bgColors,
                             borderRadius: 4,
@@ -2802,7 +2853,7 @@
                         },
                         {
                             type: 'line',
-                            label: 'Peso Faturado (kg)',
+                            label: lineLabel,
                             data: fullData,
                             borderColor: '#10b981',
                             backgroundColor: 'rgba(16,185,129,0.1)',
@@ -2828,20 +2879,20 @@
                                     const v = ctx2.parsed.y;
                                     const label = ctx2.dataset.label;
                                     const idx = ctx2.dataIndex;
-                                    if (label === 'Peso Faturado (kg)') return null;
+                                    if (label === lineLabel) return null;
                                     const isVisible = document.getElementById('cardValorTotal')?.getAttribute('data-visible') === 'true';
                                     const valorMensalStr = isVisible ? formatCurrency(fullValor[idx]) : 'R$ ---';
                                     const accValStr = isVisible ? formatCurrency(accumulatedValor[idx]) : 'R$ ---';
                                     return [
                                         `  Peso: ${v.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} kg`,
                                         `  Acumulado: ${accumulated[idx].toLocaleString('pt-BR', { maximumFractionDigits: 0 })} kg`,
-                                        `  Total Faturado: ${valorMensalStr}`,
+                                        `  ${valueLabel}: ${valorMensalStr}`,
                                         `  Acumulado R$: ${accValStr}`
                                     ];
                                 }
                             },
                             itemSort: (a, b) => {
-                                const order = { 'Peso Mensal (kg)': 0, 'Peso Faturado (kg)': 1 };
+                                const order = { [barLabel]: 0, [lineLabel]: 1 };
                                 return (order[a.dataset.label] ?? 99) - (order[b.dataset.label] ?? 99);
                             }
                         }
@@ -4399,3 +4450,4 @@ async function loadRecordsData() {
     <script src="session-guard.js"></script>
 </body>
 </html>
+
