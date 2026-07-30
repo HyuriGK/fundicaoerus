@@ -3702,14 +3702,18 @@
                     if (wRes.ok) customWeights = await wRes.json();
                 } catch (err) { console.warn('Falha ao carregar pesos customizados', err); }
                 // 2. Fetch Pedidos AND Carteira in parallel
-                const [resPedidos, resCarteira] = await Promise.all([
+                const [pedidosFetch, carteiraFetch] = await Promise.allSettled([
                     fetch('/api/pedidos-sync?carteiraOnly=true'),
                     fetch('/api/carteira')
                 ]);
-                if (!resPedidos.ok) throw new Error('Erro na API Pedidos');
+                const resPedidos = pedidosFetch.status === 'fulfilled' ? pedidosFetch.value : null;
+                const resCarteira = carteiraFetch.status === 'fulfilled' ? carteiraFetch.value : null;
+                if (!resPedidos || !resPedidos.ok) throw new Error('Erro na API Pedidos');
                 allData = await resPedidos.json();
-                if (resCarteira.ok) {
+                if (resCarteira && resCarteira.ok) {
                     carteiraData = await resCarteira.json();
+                } else {
+                    carteiraData = [];
                 }
                 // Apply filters after a short delay to ensure Grid layout is stable
                 setTimeout(() => {

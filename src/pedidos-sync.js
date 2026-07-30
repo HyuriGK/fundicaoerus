@@ -45,6 +45,27 @@ async function getOpsAbertas() {
     }));
 }
 
+function num(value) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function getCommercialBalance(item) {
+    const saldoLiberado = num(item.SALDO_LIBERADO_FATURAR_PPR);
+    if (saldoLiberado > 0) return saldoLiberado;
+    return Math.max(0,
+        num(item.QUANTIDADE_PPR) -
+        num(item.QUANTIDADE_FATURADA_PPR) -
+        num(item.QUANTIDADE_DESISTENCIA_PPR)
+    );
+}
+
+function getItemWeight(item, weightsMap) {
+    const produto = String(item.PRODUTO_PPR || '').trim();
+    const unitWeight = num(item.PESO_UNIT) || num(item.PESO_PRODUTO) || num(weightsMap[produto]);
+    return unitWeight * getCommercialBalance(item);
+}
+
 // Rota para buscar peso unitário, descrição e saldo em aberto por código (usado por acabamento_externo)
 // Prioridade peso: PRODUTO.PESO_LIQUIDO_PRO sincronizado > pesos_customizados (fallback manual)
 router.get('/peso-lookup', async (req, res) => {
@@ -129,6 +150,66 @@ router.get('/ops-abertas', async (req, res) => {
     } catch (error) {
         console.error('Erro ao buscar OPs abertas:', error);
         res.status(500).json({ error: 'Erro interno ao buscar OPs abertas.' });
+    }
+});
+
+router.get('/resumo-carteira', async (req, res) => {
+    try {
+        res.set('Cache-Control', 'no-store');
+        await ensureModeloStatusTable();
+        const commercialOwner = getCommercialOwnerRestriction(req);
+        const ownerJoin = commercialOwner ? `
+                JOIN clientes_firebird_sync c
+                    ON c.codigo::text = p.data->>'ID_CLIENTE_CORE'
+                JOIN clientes_responsavel_comercial rc
+                    ON rc.empresa = c.empresa
+                    AND rc.codigo = c.codigo
+                    AND rc.responsavel_comercial = $1
+        ` : '';
+        const ownerParams = commercialOwner ? [commercialOwner] : [];
+        const [pedidosResult, pesosResult] = await Promise.all([
+            pool.query(`
+                SELECT
+                    p.data,
+                    f.peso_liquido_pro AS ficha_peso_liquido_pro
+                FROM firebird_sync_emissoes p
+                LEFT JOIN ficha_tecnica f ON f.pro_codigo_fic = (p.data->>'PRODUTO_PPR')
+                ${ownerJoin}
+                WHERE
+                    ((p.data->>'QUANTIDADE_PPR')::numeric - COALESCE((p.data->>'QUANTIDADE_FATURADA_PPR')::numeric, 0) - COALESCE((p.data->>'QUANTIDADE_DESISTENCIA_PPR')::numeric, 0)) > 0
+                    AND (p.data->>'STATUS_PPR') <> 'C'
+            `, ownerParams),
+            pool.query('SELECT codigo, peso FROM pesos_customizados')
+        ]);
+        const weightsMap = {};
+        pesosResult.rows.forEach(row => { weightsMap[String(row.codigo || '').trim()] = num(row.peso); });
+
+        const byClient = {};
+        let totalKg = 0;
+        let totalItens = 0;
+        pedidosResult.rows.forEach(row => {
+            const item = { ...row.data };
+            const produto = String(item.PRODUTO_PPR || '').trim();
+            const isModelo = produto.endsWith('1');
+            const isFaturado = String(item.FATURADO_PPR || '').trim().toUpperCase() === 'T';
+            if (isModelo || isFaturado) return;
+            if (num(row.ficha_peso_liquido_pro) > 0) item.PESO_PRODUTO = num(row.ficha_peso_liquido_pro);
+            const peso = getItemWeight(item, weightsMap);
+            const cliente = String(item.NOME_CLIENTE || 'Desconhecido').trim().toUpperCase();
+            byClient[cliente] = (byClient[cliente] || 0) + peso;
+            totalKg += peso;
+            totalItens++;
+        });
+
+        const topClientes = Object.entries(byClient)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 10)
+            .map(([cliente, pesoKg]) => ({ cliente, pesoKg }));
+
+        res.json({ success: true, totalKg, totalItens, topClientes });
+    } catch (error) {
+        console.error('Erro ao buscar resumo da carteira:', error);
+        res.status(500).json({ success: false, error: 'Erro interno ao buscar resumo da carteira.' });
     }
 });
 

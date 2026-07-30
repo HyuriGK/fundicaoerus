@@ -9619,7 +9619,7 @@
                     const [cartFetch, refFetch] = await Promise.allSettled([
 
 
-                        fetchWithTimeout('/api/pedidos-sync?carteiraOnly=true'),
+                        fetchWithTimeout('/api/pedidos-sync/resumo-carteira'),
 
 
                         fetchWithTimeout('/api/refugos-new') // Unified endpoint for scrap and production
@@ -9630,7 +9630,7 @@
 
                     const cartRes = cartFetch.status === 'fulfilled' ? cartFetch.value : null;
                     const refRes = refFetch.status === 'fulfilled' ? refFetch.value : null;
-                    const cartData = cartRes && cartRes.ok ? await cartRes.json() : [];
+                    const cartData = cartRes && cartRes.ok ? await cartRes.json() : { success: false, totalKg: 0, topClientes: [] };
 
 
                     const refJson = refRes && refRes.ok ? await refRes.json() : {};
@@ -9660,31 +9660,7 @@
                     });
 
 
-                    // Filter logic from pedidos.html: Omit models (prod ends in 1) and billed items ('T')
-
-
-                    const validC = cartData.filter(item => {
-
-
-                        const prodCode = String(item.PRODUTO_PPR || '').trim();
-
-
-                        const isModelo = prodCode.endsWith('1');
-
-
-                        const isFaturado = String(item.FATURADO_PPR || '').trim().toUpperCase() === 'T';
-
-
-                        return !isModelo && !isFaturado;
-
-
-                    });
-
-
-                    // Weight calculation parity: uses shared-utils.js logic
-
-
-                    const cartKg = validC.reduce((acc, i) => acc + getCorrectedWeight(i, customWeightsMap), 0);
+                    const cartKg = cartData.success ? Number(cartData.totalKg || 0) : 0;
 
 
                     // Show in Ton as requested
@@ -9693,7 +9669,7 @@
                     animateValue(document.querySelector('#live-carteira-peso .live-value'), cartKg / 1000, 1500, "", "Ton");
 
 
-                    dashboardData.carteira = validC;
+                    dashboardData.carteira = cartData.success ? (cartData.topClientes || []) : [];
 
 
                     dashboardData.totalKg = cartKg;
@@ -9861,26 +9837,11 @@
                     // C. Client Concentration
 
 
-                    const clients = {};
+                    const sortedClients = dashboardData.carteira || [];
+                    const totalCarteira = dashboardData.totalKg || 0;
 
 
-                    dashboardData.carteira.forEach(item => {
-
-
-                        const name = (item.NOME_CLIENTE || 'Desconhecido').trim().toUpperCase();
-
-
-                        clients[name] = (clients[name] || 0) + getCorrectedWeight(item, customWeightsMap);
-
-
-                    });
-
-
-                    const totalCarteira = Object.values(clients).reduce((a, b) => a + b, 0);
-                    const sortedClients = Object.entries(clients).sort((a,b) => b[1] - a[1]).slice(0, 10);
-
-
-                    renderClientChart(sortedClients.map(c => c[0]), sortedClients.map(c => c[1]), totalCarteira);
+                    renderClientChart(sortedClients.map(c => c.cliente), sortedClients.map(c => c.pesoKg), totalCarteira);
 
 
                 }
