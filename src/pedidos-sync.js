@@ -167,50 +167,65 @@ router.get('/resumo-carteira', async (req, res) => {
                     AND rc.responsavel_comercial = $1
         ` : '';
         const ownerParams = commercialOwner ? [commercialOwner] : [];
-        const [pedidosResult, pesosResult] = await Promise.all([
-            pool.query(`
+        const result = await pool.query(`
+            WITH base AS (
                 SELECT
-                    p.data,
-                    f.peso_liquido_pro AS ficha_peso_liquido_pro
+                    UPPER(TRIM(COALESCE(p.data->>'NOME_CLIENTE', 'Desconhecido'))) AS cliente,
+                    NULLIF(TRIM(COALESCE(p.data->>'CODIGO_PPR', p.data->>'PEDIDO_PPR', p.data->>'NUMERO_PEDIDO', '')), '') AS pedido,
+                    GREATEST(
+                        0,
+                        COALESCE(CASE WHEN p.data->>'SALDO_LIBERADO_FATURAR_PPR' ~ '^-?[0-9]+([.,][0-9]+)?$' THEN REPLACE(p.data->>'SALDO_LIBERADO_FATURAR_PPR', ',', '.')::numeric END, 0),
+                        COALESCE(CASE WHEN p.data->>'QUANTIDADE_PPR' ~ '^-?[0-9]+([.,][0-9]+)?$' THEN REPLACE(p.data->>'QUANTIDADE_PPR', ',', '.')::numeric END, 0)
+                        - COALESCE(CASE WHEN p.data->>'QUANTIDADE_FATURADA_PPR' ~ '^-?[0-9]+([.,][0-9]+)?$' THEN REPLACE(p.data->>'QUANTIDADE_FATURADA_PPR', ',', '.')::numeric END, 0)
+                        - COALESCE(CASE WHEN p.data->>'QUANTIDADE_DESISTENCIA_PPR' ~ '^-?[0-9]+([.,][0-9]+)?$' THEN REPLACE(p.data->>'QUANTIDADE_DESISTENCIA_PPR', ',', '.')::numeric END, 0)
+                    ) AS saldo,
+                    COALESCE(
+                        NULLIF(f.peso_liquido_pro, 0),
+                        NULLIF(CASE WHEN p.data->>'PESO_UNIT' ~ '^-?[0-9]+([.,][0-9]+)?$' THEN REPLACE(p.data->>'PESO_UNIT', ',', '.')::numeric END, 0),
+                        NULLIF(CASE WHEN p.data->>'PESO_PRODUTO' ~ '^-?[0-9]+([.,][0-9]+)?$' THEN REPLACE(p.data->>'PESO_PRODUTO', ',', '.')::numeric END, 0),
+                        pc.peso,
+                        0
+                    ) AS peso_unit
                 FROM firebird_sync_emissoes p
                 LEFT JOIN ficha_tecnica f ON f.pro_codigo_fic = (p.data->>'PRODUTO_PPR')
+                LEFT JOIN pesos_customizados pc ON pc.codigo = TRIM(p.data->>'PRODUTO_PPR')
                 ${ownerJoin}
                 WHERE
-                    ((p.data->>'QUANTIDADE_PPR')::numeric - COALESCE((p.data->>'QUANTIDADE_FATURADA_PPR')::numeric, 0) - COALESCE((p.data->>'QUANTIDADE_DESISTENCIA_PPR')::numeric, 0)) > 0
+                    (COALESCE(CASE WHEN p.data->>'QUANTIDADE_PPR' ~ '^-?[0-9]+([.,][0-9]+)?$' THEN REPLACE(p.data->>'QUANTIDADE_PPR', ',', '.')::numeric END, 0)
+                    - COALESCE(CASE WHEN p.data->>'QUANTIDADE_FATURADA_PPR' ~ '^-?[0-9]+([.,][0-9]+)?$' THEN REPLACE(p.data->>'QUANTIDADE_FATURADA_PPR', ',', '.')::numeric END, 0)
+                    - COALESCE(CASE WHEN p.data->>'QUANTIDADE_DESISTENCIA_PPR' ~ '^-?[0-9]+([.,][0-9]+)?$' THEN REPLACE(p.data->>'QUANTIDADE_DESISTENCIA_PPR', ',', '.')::numeric END, 0)) > 0
                     AND (p.data->>'STATUS_PPR') <> 'C'
-            `, ownerParams),
-            pool.query('SELECT codigo, peso FROM pesos_customizados')
-        ]);
-        const weightsMap = {};
-        pesosResult.rows.forEach(row => { weightsMap[String(row.codigo || '').trim()] = num(row.peso); });
-
-        const byClient = {};
-        let totalKg = 0;
-        let totalItens = 0;
-        pedidosResult.rows.forEach(row => {
-            const item = { ...row.data };
-            const produto = String(item.PRODUTO_PPR || '').trim();
-            const isModelo = produto.endsWith('1');
-            const isFaturado = String(item.FATURADO_PPR || '').trim().toUpperCase() === 'T';
-            if (isModelo || isFaturado) return;
-            if (num(row.ficha_peso_liquido_pro) > 0) item.PESO_PRODUTO = num(row.ficha_peso_liquido_pro);
-            const peso = getItemWeight(item, weightsMap);
-            const cliente = String(item.NOME_CLIENTE || 'Desconhecido').trim().toUpperCase();
-            if (!byClient[cliente]) byClient[cliente] = { pesoKg: 0, pedidos: new Set() };
-            byClient[cliente].pesoKg += peso;
-            byClient[cliente].pedidos.add(String(item.CODIGO_PPR || item.PEDIDO_PPR || item.NUMERO_PEDIDO || '').trim());
-            totalKg += peso;
-            totalItens++;
-        });
-
-        const topClientes = Object.entries(byClient)
-            .sort((a, b) => b[1].pesoKg - a[1].pesoKg)
-            .slice(0, 10)
-            .map(([cliente, data]) => ({
+                    AND RIGHT(TRIM(p.data->>'PRODUTO_PPR'), 1) <> '1'
+                    AND UPPER(TRIM(COALESCE(p.data->>'FATURADO_PPR', ''))) <> 'T'
+            ),
+            por_cliente AS (
+                SELECT
+                    cliente,
+                    SUM(saldo * peso_unit) AS peso_kg,
+                    COUNT(*) AS total_itens,
+                    COUNT(DISTINCT pedido) FILTER (WHERE pedido IS NOT NULL) AS pedidos_unicos
+                FROM base
+                GROUP BY cliente
+            )
+            SELECT
                 cliente,
-                pesoKg: data.pesoKg,
-                pedidosUnicos: Array.from(data.pedidos).filter(Boolean).length
-            }));
+                peso_kg,
+                total_itens,
+                pedidos_unicos,
+                SUM(peso_kg) OVER () AS total_kg,
+                SUM(total_itens) OVER () AS total_itens_geral
+            FROM por_cliente
+            ORDER BY peso_kg DESC
+            LIMIT 10
+        `, ownerParams);
+
+        const totalKg = parseFloat(result.rows[0]?.total_kg || 0);
+        const totalItens = parseInt(result.rows[0]?.total_itens_geral || 0, 10);
+        const topClientes = result.rows.map(row => ({
+            cliente: row.cliente,
+            pesoKg: parseFloat(row.peso_kg || 0),
+            pedidosUnicos: parseInt(row.pedidos_unicos || 0, 10)
+        }));
 
         res.json({ success: true, totalKg, totalItens, topClientes });
     } catch (error) {
