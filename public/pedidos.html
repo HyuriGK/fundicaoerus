@@ -3006,14 +3006,15 @@
             applyColumnFilters();
             openModal();
         }
-        function openRegistrosFromToolbar() {
+        async function openRegistrosFromToolbar() {
             const chartN = parseInt(document.getElementById('chartSelectDropdown').value);
             if (chartN === 5) {
-                openHistoricalEmissionRecords();
+                await openHistoricalEmissionRecords();
             } else if (chartN === 2) {
-                openPendingEmissionRecords();
+                await openPendingEmissionRecords();
             } else if (chartN === 3) {
                 chartMode = 'client';
+                await openRecordsLoading('Carregando registros', true);
                 applyColumnFilters();
                 openModal(true);
             } else if (currentDeliveryView === 'diaria' && activePillMonth !== null) {
@@ -3031,21 +3032,25 @@
                     : (parseInt(document.getElementById('yearPillSelect')?.value) || new Date().getFullYear());
                 const yEl = document.getElementById('yearFilterPCP');
                 if (yEl) yEl.value = yr;
+                await openRecordsLoading('Carregando registros');
                 applyColumnFilters();
                 openModal();
                 const titleEl = document.getElementById('recordsModalTitle');
                 const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
                 if (titleEl && !selectedDay) titleEl.innerHTML = `<i class="fa-solid fa-calendar-day" style="margin-right:15px;"></i>Registros: Entrega em ${monthNames[activePillMonth]}/${yr}`;
             } else {
+                await openRecordsLoading('Carregando registros');
                 openModal();
             }
+            setInlineLoading('recordsLoadingOverlay', false);
         }
-        function openPendingEmissionRecords() {
+        async function openPendingEmissionRecords() {
             chartMode = 'emission_pending';
             // Filtra os registros do modal pelo mês/ano selecionado na barra do gráfico
             activeChartFilters.month = (activePillMonth !== null && activePillMonth !== undefined) ? activePillMonth : null;
             const pillYear = parseInt(document.getElementById('yearPillSelect')?.value) || new Date().getFullYear();
             syncEmissionYear(pillYear);
+            await openRecordsLoading('Carregando registros');
             applyColumnFilters();
             const modal = document.getElementById('recordsModal');
             const titleEl = document.getElementById('recordsModalTitle');
@@ -3076,7 +3081,7 @@
                 : null;
             chartMode = 'emission_total';
             if (window.erusAudit) window.erusAudit('ABRIR_REGISTROS_EMISSAO_PEDIDOS', { ano: selectedYear, mes: selectedMonth, dia: day });
-            showHistoricalRecords(selectedYear, selectedMonth, day);
+            return showHistoricalRecords(selectedYear, selectedMonth, day);
         }
         let isModelosHidden = true; // Inicia OCULTO por padrão
         let backlogDataState = null; // Backup for commercial backlog when viewing history
@@ -5995,6 +6000,35 @@ function flashConcentracaoBar(barIndex) {
                 }));
             });
         }
+        function setChartLoading(canvasId, active, text = 'Carregando grafico') {
+            const canvas = document.getElementById(canvasId);
+            const wrapper = canvas?.closest('.chart-canvas-wrapper') || canvas?.parentElement;
+            if (!wrapper) return;
+            if (getComputedStyle(wrapper).position === 'static') wrapper.style.position = 'relative';
+            let overlay = wrapper.querySelector('.inline-loading-overlay[data-chart-loader="true"]');
+            if (!overlay) {
+                overlay = document.createElement('div');
+                overlay.id = `${canvasId}Loading`;
+                overlay.className = 'inline-loading-overlay';
+                overlay.dataset.chartLoader = 'true';
+                overlay.innerHTML = `<i class="fa-solid fa-layer-group inline-loading-icon"></i><div class="inline-loading-text">${text}</div><div class="inline-loading-bar"></div>`;
+                wrapper.appendChild(overlay);
+            }
+            const label = overlay.querySelector('.inline-loading-text');
+            if (label) label.textContent = text;
+            setInlineLoading(overlay.id, active);
+        }
+        async function openRecordsLoading(title = 'Carregando registros', hideOP = false) {
+            const modal = document.getElementById('recordsModal');
+            const titleEl = document.getElementById('recordsModalTitle');
+            if (!modal) return;
+            modal.classList.toggle('client-records-modal', chartMode === 'client');
+            modal.classList.toggle('hide-op-column', !!hideOP);
+            if (titleEl) titleEl.innerHTML = `<i class="fa-solid fa-list-check" style="margin-right: 15px;"></i>${title}`;
+            modal.style.display = 'flex';
+            setInlineLoading('recordsLoadingOverlay', true);
+            await waitForPaint();
+        }
         async function updateHistoricalChart() {
             setInlineLoading('historicalChartLoading', true);
             try {
@@ -6540,8 +6574,8 @@ function flashConcentracaoBar(barIndex) {
             }, 4000);
         }
         // ── SELECT GRÁFICOS ───────────────────────────────────────────────────────
-        function selectChartFromDropdown(n) {
-            showChartRow(n);
+        async function selectChartFromDropdown(n) {
+            await showChartRow(n);
             try {
                 const sel = document.getElementById('chartSelectDropdown');
                 const nome = (sel && sel.options[sel.selectedIndex]) ? sel.options[sel.selectedIndex].text : ('Gráfico ' + n);
@@ -6870,7 +6904,18 @@ function flashConcentracaoBar(barIndex) {
             if (sel) sel.value = activePillMonth === null ? '' : activePillMonth;
         }
 
-        function showChartRow(n) {
+        async function showChartRow(n) {
+            const chartLoaderMap = {
+                1: currentDeliveryView === 'diaria' ? ['chartDaily', 'Carregando entregas'] : ['chartPCP', 'Carregando entregas'],
+                2: ['chartPending', 'Carregando emissao pendente'],
+                3: ['chartConcentracao', 'Carregando concentracao'],
+                4: ['chartVariacao', 'Carregando variacao']
+            };
+            const loaderInfo = chartLoaderMap[n];
+            if (loaderInfo) {
+                setChartLoading(loaderInfo[0], true, loaderInfo[1]);
+                await waitForPaint();
+            }
             const btnMap = { 1: 'btn-chart-entrega', 2: 'btn-chart-emissao', 3: 'btn-chart-concentracao' };
             const activeStyle = 'background: rgba(251,191,36,0.15); color: var(--color-primary); border: 1px solid var(--color-primary);';
             const idleStyle   = 'background: rgba(255,255,255,0.05); color: var(--text-main); border: 1px solid var(--border-subtle);';
@@ -6957,6 +7002,9 @@ function flashConcentracaoBar(barIndex) {
                 if (n === 4) setTimeout(() => { if (chartVariacao) chartVariacao.resize(); }, 50);
                 if (n === 5) setTimeout(() => { if (chartHistorical) chartHistorical.resize(); }, 50);
             });
+            if (loaderInfo && n !== 4 && n !== 5) {
+                setTimeout(() => setChartLoading(loaderInfo[0], false), 180);
+            }
         }
         function toggleIndustrialPosition() {
             const container = document.getElementById('industrialProgressContainer');
@@ -7629,6 +7677,8 @@ function flashConcentracaoBar(barIndex) {
             const canvas = document.getElementById('chartVariacao');
             if (!canvas) return;
             if (document.getElementById('chartRow4').style.display === 'none') return;
+            setChartLoading('chartVariacao', true, 'Carregando variacao');
+            await waitForPaint();
 
             const ano     = parseInt(document.getElementById('yearPillSelect')?.value || new Date().getFullYear());
             const mesIdx  = activePillMonth; // null = todos, 0-11 = mês específico
@@ -7795,8 +7845,10 @@ function flashConcentracaoBar(barIndex) {
                         }
                     }
                 });
+                setChartLoading('chartVariacao', false);
             } catch (err) {
                 console.error('[chartVariacao]', err);
+                setChartLoading('chartVariacao', false);
                 showToast('Erro', 'Falha ao carregar dados de variação da carteira.', 'danger');
             }
         }
