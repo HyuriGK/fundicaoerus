@@ -5980,15 +5980,25 @@ function flashConcentracaoBar(barIndex) {
         let selectedHistoricalDay = null;
         function setInlineLoading(id, active) {
             const el = document.getElementById(id);
-            if (el) el.classList.toggle('active', !!active);
+            if (!el) return;
+            if (el._loadingTimer) clearTimeout(el._loadingTimer);
+            el.classList.toggle('active', !!active);
+            if (active) el._loadingTimer = setTimeout(() => el.classList.remove('active'), 15000);
         }
         function waitForPaint() {
-            return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+            return new Promise(resolve => {
+                if (typeof requestAnimationFrame !== 'function') return setTimeout(resolve, 0);
+                const fallback = setTimeout(resolve, 120);
+                requestAnimationFrame(() => requestAnimationFrame(() => {
+                    clearTimeout(fallback);
+                    resolve();
+                }));
+            });
         }
         async function updateHistoricalChart() {
             setInlineLoading('historicalChartLoading', true);
-            await waitForPaint();
             try {
+                await waitForPaint();
                 const yearEl = document.getElementById('yearFilterHistorical');
                 const monthEl = document.getElementById('monthFilterHistorical');
                 const modeEl = document.getElementById('modeFilterHistorical');
