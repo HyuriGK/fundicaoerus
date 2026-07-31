@@ -232,6 +232,7 @@ router.get('/list', async (req, res) => {
                 p.data,
                 p.sync_key,
                 pc.peso as peso_customizado,
+                ${emissionUnitWeightSql} AS peso_resolvido_unit,
                 f.peso_liquido_pro AS ficha_peso,
                 pp.peso_produto AS pedido_peso_produto,
                 f.data_fic,
@@ -258,6 +259,7 @@ router.get('/list', async (req, res) => {
                 ...row.data,
                 sync_key: row.sync_key,
                 observacao: row.observacao || '',
+                _peso_resolvido_unit: row.peso_resolvido_unit,
                 _data_fic: row.data_fic,
                 _has_ficha: !!row.has_ficha,
                 _tipo_moldagem_procedimento: row.tipo_moldagem_procedimento || null
@@ -359,6 +361,7 @@ router.get('/pending-list', async (req, res) => {
             SELECT 
                 p.data,
                 pc.peso as peso_customizado,
+                ${emissionUnitWeightSql} AS peso_resolvido_unit,
                 f.peso_liquido_pro AS ficha_peso,
                 pp.peso_produto AS pedido_peso_produto
             FROM firebird_sync_emissoes p
@@ -376,6 +379,7 @@ router.get('/pending-list', async (req, res) => {
         const result = await pool.query(query, [ano, mes]);
         const records = result.rows.map(row => {
             const data = row.data;
+            data._peso_resolvido_unit = row.peso_resolvido_unit;
             if (row.ficha_peso !== null && Number(row.ficha_peso) > 0 && !(parseFloat(data.PESO_UNIT) > 0) && !(parseFloat(data.PESO_PRODUTO) > 0)) {
                 data.PESO_PRODUTO = row.ficha_peso;
             }

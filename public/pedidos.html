@@ -5885,7 +5885,13 @@ function flashConcentracaoBar(barIndex) {
         function _calcEmissaoWeight(r) {
             const qOriginal = parseFloat(r.QUANTIDADE_PPR) || 0;
             const prodCode = String(r.PRODUTO_PPR || '').trim();
-            const wUn = getResolvedUnitWeight(r, customWeights, qOriginal);
+            const resolvedUnit = parseFloat(r._peso_resolvido_unit) || 0;
+            const totalErpWeight = parseFloat(r.PESO_LIQUIDO_NPR) || 0;
+            const wUn = resolvedUnit > 0
+                ? resolvedUnit
+                : totalErpWeight > 0 && qOriginal > 0
+                ? totalErpWeight / qOriginal
+                : getResolvedUnitWeight(r, customWeights, qOriginal);
             let vUn = parseFloat(r.VALOR_PPR || 0);
             if (r.PRECO_KG && parseFloat(r.PRECO_KG) > 0 && customWeights[prodCode]) vUn = parseFloat(r.PRECO_KG) * wUn;
             return { peso: wUn * qOriginal, valor: vUn * qOriginal };
@@ -6231,17 +6237,7 @@ function flashConcentracaoBar(barIndex) {
                             const d = toLocalDate(r.DATA_EMISSAO_PEDIDO);
                             const dayNum = d.getDate();
                             if (!dailyMap[dayNum]) dailyMap[dayNum] = { peso: 0, valor: 0 };
-                            // Peso Logic (Correction if available)
-                            const qOriginal = parseFloat(r.QUANTIDADE_PPR) || 0;
-                            const prodCode = String(r.PRODUTO_PPR || '').trim();
-                            let wUn = getResolvedUnitWeight(r, customWeights, qOriginal);
-                            const itemWeight = wUn * qOriginal;
-                            // Valor Logic
-                            let vUn = parseFloat(r.VALOR_PPR || 0);
-                            if (r.PRECO_KG && parseFloat(r.PRECO_KG) > 0 && customWeights[prodCode]) {
-                                vUn = parseFloat(r.PRECO_KG) * wUn;
-                            }
-                            const itemValue = vUn * qOriginal;
+                            const { peso: itemWeight, valor: itemValue } = _calcEmissaoWeight(r);
                             dailyMap[dayNum].peso += itemWeight;
                             dailyMap[dayNum].valor += itemValue;
                             totalMonthWeight += itemWeight;
