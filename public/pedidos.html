@@ -5891,6 +5891,36 @@ function flashConcentracaoBar(barIndex) {
             return { peso: wUn * qOriginal, valor: vUn * qOriginal };
         }
 
+        function buildEmissionMonthlySummaryFromLocal(year) {
+            const weightData = Array(12).fill(0);
+            const valueData = Array(12).fill(0);
+            getChartOrders(allData).forEach(item => {
+                const d = toLocalDate(item.DATA_EMISSAO_PEDIDO || item.OP_EMISSAO);
+                if (!d || d.getFullYear() !== year) return;
+                const { peso, valor } = _calcEmissaoWeight(item);
+                weightData[d.getMonth()] += peso;
+                valueData[d.getMonth()] += valor;
+            });
+            return { weightData, valueData };
+        }
+
+        function buildEmissionClientSummaryFromLocal(year, month) {
+            const clientMap = {};
+            getChartOrders(allData).forEach(item => {
+                const d = toLocalDate(item.DATA_EMISSAO_PEDIDO || item.OP_EMISSAO);
+                if (!d || d.getFullYear() !== year) return;
+                if (month !== 'Todos' && d.getMonth() + 1 !== parseInt(month)) return;
+                const name = String(item.NOME_CLIENTE || 'Cliente nao identificado').trim();
+                const id = String(item.ID_CLIENTE_CORE || name).trim();
+                const key = `${id}|${name}`;
+                if (!clientMap[key]) clientMap[key] = { id, name, totalPeso: 0, totalValor: 0 };
+                const { peso, valor } = _calcEmissaoWeight(item);
+                clientMap[key].totalPeso += peso;
+                clientMap[key].totalValor += valor;
+            });
+            return Object.values(clientMap).filter(row => row.totalPeso > 0);
+        }
+
         function renderClientChart() {
             if (!emissaoClientView) return;
             const yearEl = document.getElementById('yearFilterHistorical');
@@ -6064,6 +6094,7 @@ function flashConcentracaoBar(barIndex) {
         }
         async function updateHistoricalChart() {
             const requestSeq = ++historicalChartRequestSeq;
+            let chartReady = false;
             setInlineLoading('historicalChartLoading', true);
             try {
                 await waitForPaint();
@@ -6159,6 +6190,11 @@ function flashConcentracaoBar(barIndex) {
                                 valueData[row.mes - 1] = row.totalValor;
                             }
                         });
+                        if (!weightData.some(v => Number(v) > 0)) {
+                            const localSummary = buildEmissionMonthlySummaryFromLocal(selectedYear);
+                            weightData.splice(0, weightData.length, ...localSummary.weightData);
+                            valueData.splice(0, valueData.length, ...localSummary.valueData);
+                        }
                         const monthlyBgColors = monthLabels.map((_, i) =>
                             (activePillMonth !== null && i === activePillMonth) ? '#ffffff' : chartColorAmber
                         );
@@ -6178,6 +6214,7 @@ function flashConcentracaoBar(barIndex) {
                             },
                             options: getHistoricalOptions('kg', false)
                         });
+                        chartReady = true;
                     } else {
                         // SELECTED A SPECIFIC MONTH -> SHOW DAILY VIEW
                         const mIdx = parseInt(selectedMonth);
@@ -6246,6 +6283,7 @@ function flashConcentracaoBar(barIndex) {
                             },
                             options: getHistoricalOptions('kg', false)
                         });
+                        chartReady = true;
                     }
                 } else {
                     if (titleEl) titleEl.innerText = 'Pareto - Emissão por Cliente';
@@ -6259,6 +6297,9 @@ function flashConcentracaoBar(barIndex) {
                         if (Array.isArray(data) && data.length) emissionClientCache[cacheKey] = data;
                     }
                     if (requestSeq !== historicalChartRequestSeq) return;
+                    if (!Array.isArray(data) || !data.length) {
+                        data = buildEmissionClientSummaryFromLocal(selectedYear, selectedMonth);
+                    }
                     if (!Array.isArray(data) || !data.length) {
                         console.warn('Resumo de emissao por cliente retornou vazio', { selectedYear, selectedMonth });
                         return;
@@ -6317,6 +6358,7 @@ function flashConcentracaoBar(barIndex) {
                         },
                         options: getHistoricalOptions('kg', true)
                     });
+                    chartReady = true;
                     requestAnimationFrame(() => requestAnimationFrame(() => {
                         if (requestSeq !== historicalChartRequestSeq || !chartHistorical) return;
                         chartHistorical.resize();
@@ -6327,7 +6369,12 @@ function flashConcentracaoBar(barIndex) {
                 console.error('Erro no gráfico histórico:', error);
             }
             finally {
-                setInlineLoading('historicalChartLoading', false);
+                if (requestSeq !== historicalChartRequestSeq) return;
+                if (chartReady) {
+                    requestAnimationFrame(() => setInlineLoading('historicalChartLoading', false));
+                } else {
+                    setInlineLoading('historicalChartLoading', false);
+                }
             }
         }
         function getHistoricalOptions(unit, isPareto) {
