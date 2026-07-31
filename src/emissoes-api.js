@@ -27,6 +27,44 @@ function addCommercialOwnerScope(req, params) {
     };
 }
 
+const emissionNumberSql = field => `
+    COALESCE(
+        CASE
+            WHEN REPLACE(NULLIF(TRIM(p.data->>'${field}'), ''), ',', '.') ~ '^-?[0-9]+(\\.[0-9]+)?$'
+                THEN REPLACE(NULLIF(TRIM(p.data->>'${field}'), ''), ',', '.')::numeric
+            ELSE NULL
+        END,
+        0
+    )
+`;
+const emissionQtySql = emissionNumberSql('QUANTIDADE_PPR');
+const emissionUnitWeightSql = `
+    COALESCE(
+        NULLIF(f.peso_liquido_pro, 0),
+        NULLIF(${emissionNumberSql('PESO_UNIT')}, 0),
+        NULLIF(${emissionNumberSql('PESO_PRODUTO')}, 0),
+        CASE
+            WHEN ${emissionNumberSql('PESO_LIQUIDO_NPR')} > 0
+                 AND ${emissionQtySql} > 0
+                THEN ${emissionNumberSql('PESO_LIQUIDO_NPR')} / ${emissionQtySql}
+            ELSE NULL
+        END,
+        pc.peso,
+        0
+    )
+`;
+const emissionTotalWeightSql = `(${emissionUnitWeightSql} * ${emissionQtySql})`;
+const emissionFichaJoinSql = `
+            LEFT JOIN LATERAL (
+                SELECT peso_liquido_pro, data_fic, pro_codigo_fic, tipo_moldagem_procedimento
+                FROM ficha_tecnica
+                WHERE pro_codigo_fic = (p.data->>'PRODUTO_PPR')
+                  AND peso_liquido_pro > 0
+                ORDER BY updated_at DESC
+                LIMIT 1
+            ) f ON true
+`;
+
 // GET /api/emissoes/monthly-summary
 router.get('/monthly-summary', async (req, res) => {
     try {
@@ -36,14 +74,7 @@ router.get('/monthly-summary', async (req, res) => {
             SELECT 
                 EXTRACT(YEAR FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) as ano,
                 EXTRACT(MONTH FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) as mes,
-                SUM(
-                    CASE
-                        WHEN CAST(COALESCE(p.data->>'PESO_LIQUIDO_NPR', '0') AS NUMERIC) > 0
-                            THEN CAST(COALESCE(p.data->>'PESO_LIQUIDO_NPR', '0') AS NUMERIC)
-                        ELSE
-                            COALESCE(pc.peso * CAST(COALESCE(p.data->>'QUANTIDADE_PPR', '0') AS NUMERIC), 0)
-                    END
-                ) as total_peso,
+                SUM(${emissionTotalWeightSql}) as total_peso,
                 SUM(
                     CASE
                         WHEN pc.peso IS NOT NULL AND CAST(COALESCE(p.data->>'PRECO_KG', '0') AS NUMERIC) > 0
@@ -54,6 +85,7 @@ router.get('/monthly-summary', async (req, res) => {
                 ) as total_valor
             FROM firebird_sync_emissoes p
             LEFT JOIN pesos_customizados pc ON TRIM(p.data->>'PRODUTO_PPR') = pc.codigo
+            ${emissionFichaJoinSql}
             ${ownerScope.join}
             WHERE p.data->>'DATA_EMISSAO_PEDIDO' IS NOT NULL
             ${ownerScope.condition}
@@ -98,14 +130,7 @@ router.get('/client-summary', async (req, res) => {
             SELECT 
                 p.data->>'NOME_CLIENTE' as cliente,
                 p.data->>'ID_CLIENTE_CORE' as id_cliente,
-                SUM(
-                    CASE
-                        WHEN CAST(COALESCE(p.data->>'PESO_LIQUIDO_NPR', '0') AS NUMERIC) > 0
-                            THEN CAST(COALESCE(p.data->>'PESO_LIQUIDO_NPR', '0') AS NUMERIC)
-                        ELSE
-                            COALESCE(pc.peso * CAST(COALESCE(p.data->>'QUANTIDADE_PPR', '0') AS NUMERIC), 0)
-                    END
-                ) as total_peso,
+                SUM(${emissionTotalWeightSql}) as total_peso,
                 SUM(
                     CASE
                         WHEN pc.peso IS NOT NULL AND CAST(COALESCE(p.data->>'PRECO_KG', '0') AS NUMERIC) > 0
@@ -116,6 +141,7 @@ router.get('/client-summary', async (req, res) => {
                 ) as total_valor
             FROM firebird_sync_emissoes p
             LEFT JOIN pesos_customizados pc ON TRIM(p.data->>'PRODUTO_PPR') = pc.codigo
+            ${emissionFichaJoinSql}
             ${ownerScope.join}
             ${whereClause}
             ${ownerScope.condition}
@@ -166,13 +192,14 @@ router.get('/list', async (req, res) => {
                 p.data,
                 p.sync_key,
                 pc.peso as peso_customizado,
+                f.peso_liquido_pro AS ficha_peso,
                 f.data_fic,
                 f.pro_codigo_fic AS has_ficha,
                 f.tipo_moldagem_procedimento,
                 obs.observacao
             FROM firebird_sync_emissoes p
             LEFT JOIN pesos_customizados pc ON TRIM(p.data->>'PRODUTO_PPR') = pc.codigo
-            LEFT JOIN ficha_tecnica f ON f.pro_codigo_fic = (p.data->>'PRODUTO_PPR')
+            ${emissionFichaJoinSql}
             LEFT JOIN pedidos_observacoes obs ON obs.sync_key = p.sync_key
             ${ownerScope.join}
             ${whereClause}
@@ -201,7 +228,15 @@ router.get('/list', async (req, res) => {
                 data.LINK_STATUS = 'rejeitado';
                 data.OP_PCS = null;
             }
-            if (row.peso_customizado !== null && !(parseFloat(data.PESO_LIQUIDO_NPR) > 0)) {
+            if (row.ficha_peso !== null && Number(row.ficha_peso) > 0 && !(parseFloat(data.PESO_UNIT) > 0) && !(parseFloat(data.PESO_PRODUTO) > 0)) {
+                data.PESO_PRODUTO = row.ficha_peso;
+            }
+            if (
+                row.peso_customizado !== null &&
+                !(parseFloat(data.PESO_UNIT) > 0) &&
+                !(parseFloat(data.PESO_PRODUTO) > 0) &&
+                !(parseFloat(data.PESO_LIQUIDO_NPR) > 0)
+            ) {
                 // Return corrected weight in the data object
                 data.PESO_LIQUIDO_NPR = row.peso_customizado * (parseFloat(data.QUANTIDADE_PPR) || 0);
                 data.PESO_UNIT_ORIGINAL = data.PESO_UNIT; // Preserve original for debug if needed
@@ -226,12 +261,7 @@ router.get('/pending-summary', async (req, res) => {
                 EXTRACT(YEAR FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) as ano,
                 EXTRACT(MONTH FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) as mes,
                 SUM(
-                    CASE
-                        WHEN CAST(COALESCE(p.data->>'PESO_LIQUIDO_NPR','0') AS NUMERIC) > 0
-                             AND CAST(COALESCE(p.data->>'QUANTIDADE_PPR','0') AS NUMERIC) > 0
-                            THEN CAST(COALESCE(p.data->>'PESO_LIQUIDO_NPR','0') AS NUMERIC) / CAST(p.data->>'QUANTIDADE_PPR' AS NUMERIC)
-                        ELSE COALESCE(pc.peso, 0)
-                    END * (
+                    ${emissionUnitWeightSql} * (
                         CAST(COALESCE(p.data->>'QUANTIDADE_PPR','0') AS NUMERIC) 
                         - COALESCE(CAST(COALESCE(p.data->>'QUANTIDADE_FATURADA_PPR','0') AS NUMERIC), 0)
                     )
@@ -245,6 +275,7 @@ router.get('/pending-summary', async (req, res) => {
                 ) as total_valor
             FROM firebird_sync_emissoes p
             LEFT JOIN pesos_customizados pc ON TRIM(p.data->>'PRODUTO_PPR') = pc.codigo
+            ${emissionFichaJoinSql}
             WHERE p.data->>'DATA_EMISSAO_PEDIDO' IS NOT NULL
               AND TRIM(COALESCE(p.data->>'FATURADO_PPR','')) <> 'T'
               AND (CAST(COALESCE(p.data->>'QUANTIDADE_PPR','0') AS NUMERIC) - COALESCE(CAST(COALESCE(p.data->>'QUANTIDADE_FATURADA_PPR','0') AS NUMERIC), 0)) > 0
@@ -280,9 +311,11 @@ router.get('/pending-list', async (req, res) => {
         const query = `
             SELECT 
                 p.data,
-                pc.peso as peso_customizado
+                pc.peso as peso_customizado,
+                f.peso_liquido_pro AS ficha_peso
             FROM firebird_sync_emissoes p
             LEFT JOIN pesos_customizados pc ON TRIM(p.data->>'PRODUTO_PPR') = pc.codigo
+            ${emissionFichaJoinSql}
             WHERE EXTRACT(YEAR FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) = $1
               AND EXTRACT(MONTH FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) = $2
               AND TRIM(COALESCE(p.data->>'FATURADO_PPR','')) <> 'T'
@@ -293,7 +326,15 @@ router.get('/pending-list', async (req, res) => {
         const result = await pool.query(query, [ano, mes]);
         const records = result.rows.map(row => {
             const data = row.data;
-            if (row.peso_customizado !== null && !(parseFloat(data.PESO_LIQUIDO_NPR) > 0)) {
+            if (row.ficha_peso !== null && Number(row.ficha_peso) > 0 && !(parseFloat(data.PESO_UNIT) > 0) && !(parseFloat(data.PESO_PRODUTO) > 0)) {
+                data.PESO_PRODUTO = row.ficha_peso;
+            }
+            if (
+                row.peso_customizado !== null &&
+                !(parseFloat(data.PESO_UNIT) > 0) &&
+                !(parseFloat(data.PESO_PRODUTO) > 0) &&
+                !(parseFloat(data.PESO_LIQUIDO_NPR) > 0)
+            ) {
                 data.PESO_LIQUIDO_NPR = row.peso_customizado * (parseFloat(data.QUANTIDADE_PPR) || 0);
                 data.PESO_UNIT = row.peso_customizado;
             }
@@ -322,21 +363,14 @@ router.get('/variacao-diaria', async (req, res) => {
         const emissoesQuery = `
             SELECT
                 (p.data->>'DATA_EMISSAO_PEDIDO')::date AS dia,
-                SUM(
-                    CASE
-                        WHEN CAST(COALESCE(p.data->>'PESO_LIQUIDO_NPR','0') AS NUMERIC) > 0
-                            THEN CAST(COALESCE(p.data->>'PESO_LIQUIDO_NPR','0') AS NUMERIC)
-                        WHEN pc.peso IS NOT NULL
-                            THEN pc.peso * CAST(COALESCE(p.data->>'QUANTIDADE_PPR','0') AS NUMERIC)
-                        ELSE 0
-                    END
-                ) AS peso_entrada,
+                SUM(${emissionTotalWeightSql}) AS peso_entrada,
                 SUM(
                     CAST(COALESCE(p.data->>'VALOR_PPR','0') AS NUMERIC) *
                     CAST(COALESCE(p.data->>'QUANTIDADE_PPR','0') AS NUMERIC)
                 ) AS valor_entrada
             FROM firebird_sync_emissoes p
             LEFT JOIN pesos_customizados pc ON TRIM(p.data->>'PRODUTO_PPR') = pc.codigo
+            ${emissionFichaJoinSql}
             WHERE EXTRACT(YEAR  FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) = $1
               AND EXTRACT(MONTH FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) = $2
               AND p.data->>'DATA_EMISSAO_PEDIDO' IS NOT NULL
@@ -414,21 +448,14 @@ router.get('/variacao-mensal', async (req, res) => {
         const emissoesQuery = `
             SELECT
                 EXTRACT(MONTH FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date)::int AS mes,
-                SUM(
-                    CASE
-                        WHEN CAST(COALESCE(p.data->>'PESO_LIQUIDO_NPR','0') AS NUMERIC) > 0
-                            THEN CAST(COALESCE(p.data->>'PESO_LIQUIDO_NPR','0') AS NUMERIC)
-                        WHEN pc.peso IS NOT NULL
-                            THEN pc.peso * CAST(COALESCE(p.data->>'QUANTIDADE_PPR','0') AS NUMERIC)
-                        ELSE 0
-                    END
-                ) AS peso_entrada,
+                SUM(${emissionTotalWeightSql}) AS peso_entrada,
                 SUM(
                     CAST(COALESCE(p.data->>'VALOR_PPR','0') AS NUMERIC) *
                     CAST(COALESCE(p.data->>'QUANTIDADE_PPR','0') AS NUMERIC)
                 ) AS valor_entrada
             FROM firebird_sync_emissoes p
             LEFT JOIN pesos_customizados pc ON TRIM(p.data->>'PRODUTO_PPR') = pc.codigo
+            ${emissionFichaJoinSql}
             WHERE EXTRACT(YEAR FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) = $1
               AND p.data->>'DATA_EMISSAO_PEDIDO' IS NOT NULL
             GROUP BY 1 ORDER BY 1
@@ -494,15 +521,10 @@ router.get('/variacao-detalhe', async (req, res) => {
                 p.data->>'NOME_PRODUTO_PPR'  AS descricao,
                 p.data->>'NOME_CLIENTE'      AS cliente,
                 CAST(COALESCE(p.data->>'QUANTIDADE_PPR','0') AS NUMERIC) AS quantidade,
-                CASE
-                    WHEN CAST(COALESCE(p.data->>'PESO_LIQUIDO_NPR','0') AS NUMERIC) > 0
-                        THEN CAST(COALESCE(p.data->>'PESO_LIQUIDO_NPR','0') AS NUMERIC)
-                    WHEN pc.peso IS NOT NULL
-                        THEN pc.peso * CAST(COALESCE(p.data->>'QUANTIDADE_PPR','0') AS NUMERIC)
-                    ELSE 0
-                END AS peso_total
+                ${emissionTotalWeightSql} AS peso_total
             FROM firebird_sync_emissoes p
             LEFT JOIN pesos_customizados pc ON TRIM(p.data->>'PRODUTO_PPR') = pc.codigo
+            ${emissionFichaJoinSql}
             WHERE (p.data->>'DATA_EMISSAO_PEDIDO')::date = $1
             ORDER BY cliente, codigo
         `;

@@ -1769,7 +1769,7 @@
                         <span>Peso Médio/Peça:</span> <span class="highlight" id="avgWeightPerPiece">0,00 kg</span>
                         <span style="width:1px;height:14px;background:var(--border-subtle,#3f3f46);margin:0 8px;display:inline-block;vertical-align:middle;"></span>
                         <button id="btnToggleDailyMode" onclick="toggleDailyChartMetric()" class="btn-mini-chart active" style="font-size:0.7rem;">Faturamento (PESO)</button>
-                        <button id="btnToggleDailyModeServ" onclick="setDailyChartMode('servicos')" class="btn-mini-chart" style="font-size:0.7rem;">Prest. Serviços</button>
+                        <button id="btnToggleDailyModeServ" onclick="toggleDailyServicesChartMetric()" class="btn-mini-chart" style="font-size:0.7rem;">Prest. Serviços (PESO)</button>
                     </div>
                 </div>
                 <div style="position: relative; flex: 1; width: 100%; min-height: 0;">
@@ -1793,7 +1793,7 @@
                         <span>Peso Médio/Peça:</span> <span class="highlight" id="avgWeightPerPieceAnnual">0,00 kg</span>
                         <span style="width:1px;height:14px;background:var(--border-subtle,#3f3f46);margin:0 8px;display:inline-block;vertical-align:middle;"></span>
                         <button id="btnAnnualPeso" class="btn-mini-chart active" onclick="toggleAnnualChartMetric()" style="font-size:0.7rem;">Faturamento (PESO)</button>
-                        <button id="btnAnnualServicos" class="btn-mini-chart" onclick="setAnnualChartMode('servicos')" style="font-size:0.7rem;">Prest. Servi&ccedil;os</button>
+                        <button id="btnAnnualServicos" class="btn-mini-chart" onclick="toggleAnnualServicesChartMetric()" style="font-size:0.7rem;">Prest. Servi&ccedil;os (PESO)</button>
                     </div>
                 </div>
                 <div style="position: relative; flex: 1; width: 100%; min-height: 0;"><canvas id="annualChart"></canvas>
@@ -1939,8 +1939,10 @@
         let deliveryMaterialFilter = '';
         let dailyChartMode = 'normal'; // 'normal' | 'servicos'
         let dailyChartMetric = 'peso'; // 'peso' | 'valor'
+        let dailyServicesChartMetric = 'peso'; // 'peso' | 'valor'
         let annualChartMode = 'peso'; // 'peso' | 'servicos'
         let annualChartMetric = 'peso'; // 'peso' | 'valor'
+        let annualServicesChartMetric = 'peso'; // 'peso' | 'valor'
         let _lastAnnualChartArgs = null;
         let _lastDailyChartArgs = null; // cache para re-render no toggle
         const _ltFat = window.ErusTheme && window.ErusTheme.isLight();
@@ -2440,15 +2442,22 @@
             updateDailyChartModeUI();
             rerenderDailyChartFromCache();
         }
+        function toggleDailyServicesChartMetric() {
+            dailyChartMode = 'servicos';
+            dailyServicesChartMetric = dailyServicesChartMetric === 'peso' ? 'valor' : 'peso';
+            updateDailyChartModeUI();
+            rerenderDailyChartFromCache();
+        }
         function updateDailyChartModeUI() {
             const btnNorm = document.getElementById('btnToggleDailyMode');
             const btnServ = document.getElementById('btnToggleDailyModeServ');
             const title = document.getElementById('dailyChartTitle');
             if (btnNorm) btnNorm.textContent = `Faturamento (${dailyChartMetric === 'valor' ? 'VALOR' : 'PESO'})`;
+            if (btnServ) btnServ.textContent = `Prest. Serviços (${dailyServicesChartMetric === 'valor' ? 'VALOR' : 'PESO'})`;
             if (dailyChartMode === 'servicos') {
                 btnNorm?.classList.remove('active');
                 btnServ?.classList.add('active');
-                if (title) title.textContent = 'Faturamento Diário — Prest. Serviços (Peso)';
+                if (title) title.textContent = `Faturamento Diário — Prest. Serviços (${dailyServicesChartMetric === 'valor' ? 'Valor' : 'Peso'})`;
             } else {
                 btnServ?.classList.remove('active');
                 btnNorm?.classList.add('active');
@@ -2489,9 +2498,13 @@
                 btnAnnual.textContent = `Faturamento (${annualChartMetric === 'valor' ? 'VALOR' : 'PESO'})`;
                 btnAnnual.classList.toggle('active', !isServices);
             }
-            document.getElementById('btnAnnualServicos')?.classList.toggle('active', isServices);
+            const btnAnnualServices = document.getElementById('btnAnnualServicos');
+            if (btnAnnualServices) {
+                btnAnnualServices.textContent = `Prest. Serviços (${annualServicesChartMetric === 'valor' ? 'VALOR' : 'PESO'})`;
+                btnAnnualServices.classList.toggle('active', isServices);
+            }
             const title = document.getElementById('annualChartTitle');
-            if (title) title.textContent = isServices ? 'Evolu' + '\u00e7' + '\u00e3o Mensal - Prest. Servi' + '\u00e7' + 'os (Peso)' : `Evolu\u00e7\u00e3o Mensal (${annualChartMetric === 'valor' ? 'Valor' : 'Peso'})`;
+            if (title) title.textContent = isServices ? `Evolu\u00e7\u00e3o Mensal - Prest. Servi\u00e7os (${annualServicesChartMetric === 'valor' ? 'Valor' : 'Peso'})` : `Evolu\u00e7\u00e3o Mensal (${annualChartMetric === 'valor' ? 'Valor' : 'Peso'})`;
         }
         function toggleAnnualChartMetric() {
             annualChartMode = 'peso';
@@ -2499,6 +2512,14 @@
             updateAnnualChartModeUI();
             if (!_lastAnnualChartArgs) return;
             const active = _lastAnnualChartArgs.peso;
+            renderAnnualChart(active.dataValues, active.valorValues, _lastAnnualChartArgs.highlightIndex);
+        }
+        function toggleAnnualServicesChartMetric() {
+            annualChartMode = 'servicos';
+            annualServicesChartMetric = annualServicesChartMetric === 'peso' ? 'valor' : 'peso';
+            updateAnnualChartModeUI();
+            if (!_lastAnnualChartArgs) return;
+            const active = _lastAnnualChartArgs.servicos;
             renderAnnualChart(active.dataValues, active.valorValues, _lastAnnualChartArgs.highlightIndex);
         }
         function setAnnualChartMode(mode) {
@@ -2654,7 +2675,8 @@
             const dowNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
             const labels = allDays.map(ds => String(Number(ds.split('-')[2])));
             const valorValues = allDays.map(ds => valorMap[ds] || 0);
-            const isValueMetric = dailyChartMode !== 'servicos' && dailyChartMetric === 'valor';
+            const activeDailyMetric = dailyChartMode === 'servicos' ? dailyServicesChartMetric : dailyChartMetric;
+            const isValueMetric = activeDailyMetric === 'valor';
             const values = isValueMetric ? valorValues : allDays.map(ds => dataMap[ds] || 0);
 
             const bgColors = allDays.map(ds => {
@@ -2849,9 +2871,14 @@
             if (annualChart) annualChart.destroy();
             const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
             const isServices = annualChartMode === 'servicos';
-            const isValueMetric = !isServices && annualChartMetric === 'valor';
-            const barLabel = isServices ? 'Prest. Servi' + '\u00e7' + 'os Mensal (kg)' : (isValueMetric ? 'Valor Mensal (R$)' : 'Peso Mensal (kg)');
-            const lineLabel = isServices ? 'Prest. Servi' + '\u00e7' + 'os (kg)' : (isValueMetric ? 'Valor Faturado (R$)' : 'Peso Faturado (kg)');
+            const activeAnnualMetric = isServices ? annualServicesChartMetric : annualChartMetric;
+            const isValueMetric = activeAnnualMetric === 'valor';
+            const barLabel = isServices
+                ? (isValueMetric ? 'Prest. Serviços Mensal (R$)' : 'Prest. Servi' + '\u00e7' + 'os Mensal (kg)')
+                : (isValueMetric ? 'Valor Mensal (R$)' : 'Peso Mensal (kg)');
+            const lineLabel = isServices
+                ? (isValueMetric ? 'Prest. Serviços (R$)' : 'Prest. Servi' + '\u00e7' + 'os (kg)')
+                : (isValueMetric ? 'Valor Faturado (R$)' : 'Peso Faturado (kg)');
             const valueLabel = isServices ? 'Valor Servi' + '\u00e7' + 'os' : 'Total Faturado';
             // Always show all 12 months
             const fullValor = months.map((_, i) => (valorValues || [])[i] || 0);
