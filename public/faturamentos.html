@@ -1768,8 +1768,8 @@
                         <span style="width:1px;height:14px;background:var(--border-subtle,#3f3f46);margin:0 8px;display:inline-block;vertical-align:middle;"></span>
                         <span>Peso Médio/Peça:</span> <span class="highlight" id="avgWeightPerPiece">0,00 kg</span>
                         <span style="width:1px;height:14px;background:var(--border-subtle,#3f3f46);margin:0 8px;display:inline-block;vertical-align:middle;"></span>
-                        <button id="btnToggleDailyMode" onclick="toggleDailyChartMode()" class="btn-mini-chart active" style="font-size:0.7rem;">Faturamento</button>
-                        <button id="btnToggleDailyModeServ" onclick="toggleDailyChartMode()" class="btn-mini-chart" style="font-size:0.7rem;">Prest. Serviços</button>
+                        <button id="btnToggleDailyMode" onclick="toggleDailyChartMetric()" class="btn-mini-chart active" style="font-size:0.7rem;">Faturamento (PESO)</button>
+                        <button id="btnToggleDailyModeServ" onclick="setDailyChartMode('servicos')" class="btn-mini-chart" style="font-size:0.7rem;">Prest. Serviços</button>
                     </div>
                 </div>
                 <div style="position: relative; flex: 1; width: 100%; min-height: 0;">
@@ -1792,7 +1792,7 @@
                         <span style="width:1px;height:14px;background:var(--border-subtle,#3f3f46);margin:0 8px;display:inline-block;vertical-align:middle;"></span>
                         <span>Peso Médio/Peça:</span> <span class="highlight" id="avgWeightPerPieceAnnual">0,00 kg</span>
                         <span style="width:1px;height:14px;background:var(--border-subtle,#3f3f46);margin:0 8px;display:inline-block;vertical-align:middle;"></span>
-                        <button id="btnAnnualPeso" class="btn-mini-chart active" onclick="setAnnualChartMode('peso')" style="font-size:0.7rem;">Faturamento</button>
+                        <button id="btnAnnualPeso" class="btn-mini-chart active" onclick="toggleAnnualChartMetric()" style="font-size:0.7rem;">Faturamento (PESO)</button>
                         <button id="btnAnnualServicos" class="btn-mini-chart" onclick="setAnnualChartMode('servicos')" style="font-size:0.7rem;">Prest. Servi&ccedil;os</button>
                     </div>
                 </div>
@@ -1938,7 +1938,9 @@
         let deliveryGroupFilter = '';
         let deliveryMaterialFilter = '';
         let dailyChartMode = 'normal'; // 'normal' | 'servicos'
+        let dailyChartMetric = 'peso'; // 'peso' | 'valor'
         let annualChartMode = 'peso'; // 'peso' | 'servicos'
+        let annualChartMetric = 'peso'; // 'peso' | 'valor'
         let _lastAnnualChartArgs = null;
         let _lastDailyChartArgs = null; // cache para re-render no toggle
         const _ltFat = window.ErusTheme && window.ErusTheme.isLight();
@@ -2427,20 +2429,33 @@
                 maskTopKpis();
             }
         }
-        function toggleDailyChartMode() {
-            dailyChartMode = dailyChartMode === 'normal' ? 'servicos' : 'normal';
+        function toggleDailyChartMetric() {
+            dailyChartMode = 'normal';
+            dailyChartMetric = dailyChartMetric === 'peso' ? 'valor' : 'peso';
+            updateDailyChartModeUI();
+            rerenderDailyChartFromCache();
+        }
+        function setDailyChartMode(mode) {
+            dailyChartMode = mode === 'servicos' ? 'servicos' : 'normal';
+            updateDailyChartModeUI();
+            rerenderDailyChartFromCache();
+        }
+        function updateDailyChartModeUI() {
             const btnNorm = document.getElementById('btnToggleDailyMode');
             const btnServ = document.getElementById('btnToggleDailyModeServ');
             const title = document.getElementById('dailyChartTitle');
+            if (btnNorm) btnNorm.textContent = `Faturamento (${dailyChartMetric === 'valor' ? 'VALOR' : 'PESO'})`;
             if (dailyChartMode === 'servicos') {
-                btnNorm.classList.remove('active');
-                btnServ.classList.add('active');
+                btnNorm?.classList.remove('active');
+                btnServ?.classList.add('active');
                 if (title) title.textContent = 'Faturamento Diário — Prest. Serviços (Peso)';
             } else {
-                btnServ.classList.remove('active');
-                btnNorm.classList.add('active');
-                if (title) title.textContent = 'Faturamento Diário (Peso)';
+                btnServ?.classList.remove('active');
+                btnNorm?.classList.add('active');
+                if (title) title.textContent = `Faturamento Diário (${dailyChartMetric === 'valor' ? 'Valor' : 'Peso'})`;
             }
+        }
+        function rerenderDailyChartFromCache() {
             if (!_lastDailyChartArgs) return;
             const { normal, servicos, highlightedDay, monthStartStr, monthEndStr } = _lastDailyChartArgs;
             const activeData = dailyChartMode === 'servicos' ? servicos : normal;
@@ -2469,10 +2484,22 @@
         }
         function updateAnnualChartModeUI() {
             const isServices = annualChartMode === 'servicos';
-            document.getElementById('btnAnnualPeso')?.classList.toggle('active', !isServices);
+            const btnAnnual = document.getElementById('btnAnnualPeso');
+            if (btnAnnual) {
+                btnAnnual.textContent = `Faturamento (${annualChartMetric === 'valor' ? 'VALOR' : 'PESO'})`;
+                btnAnnual.classList.toggle('active', !isServices);
+            }
             document.getElementById('btnAnnualServicos')?.classList.toggle('active', isServices);
             const title = document.getElementById('annualChartTitle');
-            if (title) title.textContent = isServices ? 'Evolu' + '\u00e7' + '\u00e3o Mensal - Prest. Servi' + '\u00e7' + 'os (Peso)' : 'Evolu' + '\u00e7' + '\u00e3o Mensal (Peso)';
+            if (title) title.textContent = isServices ? 'Evolu' + '\u00e7' + '\u00e3o Mensal - Prest. Servi' + '\u00e7' + 'os (Peso)' : `Evolu\u00e7\u00e3o Mensal (${annualChartMetric === 'valor' ? 'Valor' : 'Peso'})`;
+        }
+        function toggleAnnualChartMetric() {
+            annualChartMode = 'peso';
+            annualChartMetric = annualChartMetric === 'peso' ? 'valor' : 'peso';
+            updateAnnualChartModeUI();
+            if (!_lastAnnualChartArgs) return;
+            const active = _lastAnnualChartArgs.peso;
+            renderAnnualChart(active.dataValues, active.valorValues, _lastAnnualChartArgs.highlightIndex);
         }
         function setAnnualChartMode(mode) {
             annualChartMode = mode === 'servicos' ? 'servicos' : 'peso';
@@ -2626,7 +2653,9 @@
 
             const dowNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
             const labels = allDays.map(ds => String(Number(ds.split('-')[2])));
-            const values = allDays.map(ds => dataMap[ds] || 0);
+            const valorValues = allDays.map(ds => valorMap[ds] || 0);
+            const isValueMetric = dailyChartMode !== 'servicos' && dailyChartMetric === 'valor';
+            const values = isValueMetric ? valorValues : allDays.map(ds => dataMap[ds] || 0);
 
             const bgColors = allDays.map(ds => {
                 if (ds === highlightedDay) return '#ea580c';
@@ -2649,9 +2678,10 @@
 
             let accDay = 0;
             const accValues = values.map(v => { accDay += v; return accDay; });
-            const valorValues = allDays.map(ds => valorMap[ds] || 0);
             let accValDay = 0;
             const accValorValues = valorValues.map(v => { accValDay += v; return accValDay; });
+            const barLabel = isValueMetric ? 'Valor (R$)' : 'Peso (kg)';
+            const lineLabel = isValueMetric ? 'Acumulado (R$)' : 'Acumulado (kg)';
 
             dailyChart = new Chart(ctx, {
                 type: 'bar',
@@ -2659,7 +2689,7 @@
                     labels,
                     datasets: [
                         {
-                            label: 'Peso (kg)',
+                            label: barLabel,
                             data: values,
                             backgroundColor: bgColors,
                             borderColor: borderColors,
@@ -2680,12 +2710,12 @@
                                 offset: 2,
                                 color: _tc(),
                                 font: { size: isMobileChart ? 8 : 10, weight: 'bold' },
-                                formatter: (v) => Math.round(v).toLocaleString('pt-BR')
+                                formatter: (v) => isValueMetric ? formatCurrency(v) : Math.round(v).toLocaleString('pt-BR')
                             }
                         },
                         {
                             type: 'line',
-                            label: 'Acumulado (kg)',
+                            label: lineLabel,
                             data: accValues,
                             borderColor: '#10b981',
                             backgroundColor: 'rgba(16,185,129,0.1)',
@@ -2723,13 +2753,18 @@
                                     const v = item.parsed.y;
                                     const label = item.dataset.label;
                                     const idx = item.dataIndex;
-                                    if (label === 'Acumulado (kg)') {
+                                    if (label === lineLabel) {
                                         const isVisible = document.getElementById('cardValorTotal')?.getAttribute('data-visible') === 'true';
                                         const accValStr = isVisible ? formatCurrency(accValorValues[idx]) : 'R$ ---';
+                                        if (isValueMetric) return `  Acumulado: ${isVisible ? formatCurrency(v) : 'R$ ---'}`;
                                         return [
                                             `  Acumulado: ${v.toLocaleString('pt-BR', {maximumFractionDigits:0})} kg`,
                                             `  Acumulado: ${accValStr}`
                                         ];
+                                    }
+                                    if (isValueMetric) {
+                                        const isVisible = document.getElementById('cardValorTotal')?.getAttribute('data-visible') === 'true';
+                                        return `  Faturado: ${isVisible ? formatCurrency(v) : 'R$ ---'}`;
                                     }
                                     return `  Faturado: ${v > 0 ? v.toLocaleString('pt-BR', {maximumFractionDigits:0}) + ' kg' : '0 kg'}`;
                                 },
@@ -2753,7 +2788,7 @@
                                 }
                             },
                             itemSort: (a, b) => {
-                                const order = { 'Peso (kg)': 0, 'Acumulado (kg)': 1 };
+                                const order = { [barLabel]: 0, [lineLabel]: 1 };
                                 return (order[a.dataset.label] ?? 99) - (order[b.dataset.label] ?? 99);
                             }
                         }
@@ -2814,12 +2849,14 @@
             if (annualChart) annualChart.destroy();
             const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
             const isServices = annualChartMode === 'servicos';
-            const barLabel = isServices ? 'Prest. Servi' + '\u00e7' + 'os Mensal (kg)' : 'Peso Mensal (kg)';
-            const lineLabel = isServices ? 'Prest. Servi' + '\u00e7' + 'os (kg)' : 'Peso Faturado (kg)';
+            const isValueMetric = !isServices && annualChartMetric === 'valor';
+            const barLabel = isServices ? 'Prest. Servi' + '\u00e7' + 'os Mensal (kg)' : (isValueMetric ? 'Valor Mensal (R$)' : 'Peso Mensal (kg)');
+            const lineLabel = isServices ? 'Prest. Servi' + '\u00e7' + 'os (kg)' : (isValueMetric ? 'Valor Faturado (R$)' : 'Peso Faturado (kg)');
             const valueLabel = isServices ? 'Valor Servi' + '\u00e7' + 'os' : 'Total Faturado';
             // Always show all 12 months
-            const fullData = months.map((_, i) => dataValues[i] || 0);
             const fullValor = months.map((_, i) => (valorValues || [])[i] || 0);
+            const fullPeso = months.map((_, i) => dataValues[i] || 0);
+            const fullData = isValueMetric ? fullValor : fullPeso;
             const bgColors = fullData.map((_, idx) => {
                 if (highlightIndex === null) return '#ea580c';
                 return idx === highlightIndex ? '#ea580c' : 'rgba(234, 88, 12, 0.3)';
@@ -2848,7 +2885,7 @@
                                 offset: 2,
                                 color: _tc(),
                                 font: { size: 11, weight: 'bold' },
-                                formatter: (v) => Math.round(v).toLocaleString('pt-BR')
+                                formatter: (v) => isValueMetric ? formatCurrency(v) : Math.round(v).toLocaleString('pt-BR')
                             }
                         },
                         {
@@ -2883,6 +2920,13 @@
                                     const isVisible = document.getElementById('cardValorTotal')?.getAttribute('data-visible') === 'true';
                                     const valorMensalStr = isVisible ? formatCurrency(fullValor[idx]) : 'R$ ---';
                                     const accValStr = isVisible ? formatCurrency(accumulatedValor[idx]) : 'R$ ---';
+                                    if (isValueMetric) {
+                                        return [
+                                            `  Valor: ${isVisible ? formatCurrency(v) : 'R$ ---'}`,
+                                            `  Acumulado: ${isVisible ? formatCurrency(accumulated[idx]) : 'R$ ---'}`,
+                                            `  Peso: ${fullPeso[idx].toLocaleString('pt-BR', { maximumFractionDigits: 0 })} kg`
+                                        ];
+                                    }
                                     return [
                                         `  Peso: ${v.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} kg`,
                                         `  Acumulado: ${accumulated[idx].toLocaleString('pt-BR', { maximumFractionDigits: 0 })} kg`,
@@ -3383,10 +3427,7 @@ async function loadRecordsData() {
             monthlyBtn?.classList.toggle('evolution-locked', locked);
         }
         function restoreDailyChartModeUI() {
-            document.getElementById('btnToggleDailyMode')?.classList.toggle('active', dailyChartMode !== 'servicos');
-            document.getElementById('btnToggleDailyModeServ')?.classList.toggle('active', dailyChartMode === 'servicos');
-            const title = document.getElementById('dailyChartTitle');
-            if (title) title.textContent = dailyChartMode === 'servicos' ? 'Faturamento Diário - Prest. Serviços (Peso)' : 'Faturamento Diário (Peso)';
+            updateDailyChartModeUI();
         }
         function showEvolutionView() {
             dashboardView = 'faturamento';
