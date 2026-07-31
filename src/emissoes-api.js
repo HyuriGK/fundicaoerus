@@ -37,6 +37,25 @@ const emissionNumberSql = field => `
         0
     )
 `;
+const SERVICE_CLIENT_CODES = ['253', '257', '316', '432', '2020', '2283'];
+const SERVICE_CLIENT_NAMES = [
+    'MONFERRATO INDUSTRIA E COMERCIO DE PECAS',
+    'SPILROD FUNDICAO DE FERRO E ACO',
+    'STEELROOL INDUSTRIA METALURGICA',
+    'ACO NOBRE',
+    'IMEPEL INDUSTRIA MECANICA',
+    'USITH USINAGEM E AJUSTAGEM'
+];
+const serviceCodeListSql = SERVICE_CLIENT_CODES.map(c => `'${c}'`).join(', ');
+const serviceNameFilterSql = alias => SERVICE_CLIENT_NAMES.map(name => `AND UPPER(TRIM(COALESCE(${alias}, ''))) NOT LIKE '%${name}%'`).join('\n              ');
+const emissionServiceFilterSql = `
+              AND COALESCE(TRIM(p.data->>'ID_CLIENTE_CORE'), '') NOT IN (${serviceCodeListSql})
+              ${serviceNameFilterSql(`p.data->>'NOME_CLIENTE'`)}
+`;
+const faturamentoServiceFilterSql = `
+              AND COALESCE(TRIM(CAST(f.cliente_codigo AS TEXT)), '') NOT IN (${serviceCodeListSql})
+              ${serviceNameFilterSql('f.cliente_nome')}
+`;
 const emissionQtySql = emissionNumberSql('QUANTIDADE_PPR');
 const emissionUnitWeightSql = `
     COALESCE(
@@ -105,6 +124,7 @@ router.get('/monthly-summary', async (req, res) => {
             ${emissionPedidoPesoJoinSql}
             ${ownerScope.join}
             WHERE p.data->>'DATA_EMISSAO_PEDIDO' IS NOT NULL
+            ${emissionServiceFilterSql}
             ${ownerScope.condition}
             GROUP BY 1, 2
             ORDER BY 1 DESC, 2 DESC
@@ -141,6 +161,7 @@ router.get('/client-summary', async (req, res) => {
             whereClause += " AND EXTRACT(MONTH FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) = $2";
             params.push(mes);
         }
+        whereClause += emissionServiceFilterSql;
         const ownerScope = addCommercialOwnerScope(req, params);
 
         const query = `
@@ -203,6 +224,7 @@ router.get('/list', async (req, res) => {
             whereClause += ` AND EXTRACT(DAY FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) = $${params.length + 1}`;
             params.push(dia);
         }
+        whereClause += emissionServiceFilterSql;
         const ownerScope = addCommercialOwnerScope(req, params);
 
         const query = `
@@ -301,6 +323,7 @@ router.get('/pending-summary', async (req, res) => {
             ${emissionFichaJoinSql}
             ${emissionPedidoPesoJoinSql}
             WHERE p.data->>'DATA_EMISSAO_PEDIDO' IS NOT NULL
+              ${emissionServiceFilterSql}
               AND TRIM(COALESCE(p.data->>'FATURADO_PPR','')) <> 'T'
               AND (CAST(COALESCE(p.data->>'QUANTIDADE_PPR','0') AS NUMERIC) - COALESCE(CAST(COALESCE(p.data->>'QUANTIDADE_FATURADA_PPR','0') AS NUMERIC), 0)) > 0
             GROUP BY 1, 2
@@ -344,6 +367,7 @@ router.get('/pending-list', async (req, res) => {
             ${emissionPedidoPesoJoinSql}
             WHERE EXTRACT(YEAR FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) = $1
               AND EXTRACT(MONTH FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) = $2
+              ${emissionServiceFilterSql}
               AND TRIM(COALESCE(p.data->>'FATURADO_PPR','')) <> 'T'
               AND (CAST(COALESCE(p.data->>'QUANTIDADE_PPR','0') AS NUMERIC) - COALESCE(CAST(COALESCE(p.data->>'QUANTIDADE_FATURADA_PPR','0') AS NUMERIC), 0)) > 0
             ORDER BY (p.data->>'DATA_EMISSAO_PEDIDO')::date DESC
@@ -404,6 +428,7 @@ router.get('/variacao-diaria', async (req, res) => {
             WHERE EXTRACT(YEAR  FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) = $1
               AND EXTRACT(MONTH FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) = $2
               AND p.data->>'DATA_EMISSAO_PEDIDO' IS NOT NULL
+              ${emissionServiceFilterSql}
             GROUP BY 1
             ORDER BY 1
         `;
@@ -424,10 +449,7 @@ router.get('/variacao-diaria', async (req, res) => {
               AND EXTRACT(MONTH FROM f.data_faturamento) = $2
               AND f.data_faturamento IS NOT NULL
               AND COALESCE(p.excluido, f.excluido_manualmente OR f.pedido IS NULL OR TRIM(COALESCE(f.pedido,'')) = '') = FALSE
-              AND TRIM(CAST(f.cliente_codigo AS TEXT)) <> '257'
-              AND UPPER(TRIM(f.cliente_nome)) NOT LIKE '%IMEPEL INDUSTRIA MECANICA%'
-              AND UPPER(TRIM(f.cliente_nome)) NOT LIKE '%STEELROOL INDUSTRIA METALURGICA%'
-              AND UPPER(TRIM(f.cliente_nome)) NOT LIKE '%SPILROD FUNDICAO DE FERRO E ACO%'
+              ${faturamentoServiceFilterSql}
               AND NOT (TRIM(CAST(f.codigo_item AS TEXT)) LIKE '%1' AND UPPER(TRIM(f.descricao)) LIKE 'MODELO%')
             GROUP BY 1
             ORDER BY 1
@@ -489,6 +511,7 @@ router.get('/variacao-mensal', async (req, res) => {
             ${emissionPedidoPesoJoinSql}
             WHERE EXTRACT(YEAR FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) = $1
               AND p.data->>'DATA_EMISSAO_PEDIDO' IS NOT NULL
+              ${emissionServiceFilterSql}
             GROUP BY 1 ORDER BY 1
         `;
 
@@ -507,10 +530,7 @@ router.get('/variacao-mensal', async (req, res) => {
             WHERE EXTRACT(YEAR FROM f.data_faturamento) = $1
               AND f.data_faturamento IS NOT NULL
               AND COALESCE(p.excluido, f.excluido_manualmente OR f.pedido IS NULL OR TRIM(COALESCE(f.pedido,'')) = '') = FALSE
-              AND TRIM(CAST(f.cliente_codigo AS TEXT)) <> '257'
-              AND UPPER(TRIM(f.cliente_nome)) NOT LIKE '%IMEPEL INDUSTRIA MECANICA%'
-              AND UPPER(TRIM(f.cliente_nome)) NOT LIKE '%STEELROOL INDUSTRIA METALURGICA%'
-              AND UPPER(TRIM(f.cliente_nome)) NOT LIKE '%SPILROD FUNDICAO DE FERRO E ACO%'
+              ${faturamentoServiceFilterSql}
               AND NOT (TRIM(CAST(f.codigo_item AS TEXT)) LIKE '%1' AND UPPER(TRIM(f.descricao)) LIKE 'MODELO%')
             GROUP BY 1 ORDER BY 1
         `;
@@ -558,6 +578,7 @@ router.get('/variacao-detalhe', async (req, res) => {
             ${emissionFichaJoinSql}
             ${emissionPedidoPesoJoinSql}
             WHERE (p.data->>'DATA_EMISSAO_PEDIDO')::date = $1
+              ${emissionServiceFilterSql}
             ORDER BY cliente, codigo
         `;
 
@@ -578,10 +599,7 @@ router.get('/variacao-detalhe', async (req, res) => {
                 AND p.quantidade = f.quantidade
             WHERE f.data_faturamento = $1
               AND COALESCE(p.excluido, f.excluido_manualmente OR f.pedido IS NULL OR TRIM(COALESCE(f.pedido,'')) = '') = FALSE
-              AND TRIM(CAST(f.cliente_codigo AS TEXT)) <> '257'
-              AND UPPER(TRIM(f.cliente_nome)) NOT LIKE '%IMEPEL INDUSTRIA MECANICA%'
-              AND UPPER(TRIM(f.cliente_nome)) NOT LIKE '%STEELROOL INDUSTRIA METALURGICA%'
-              AND UPPER(TRIM(f.cliente_nome)) NOT LIKE '%SPILROD FUNDICAO DE FERRO E ACO%'
+              ${faturamentoServiceFilterSql}
               AND NOT (TRIM(CAST(f.codigo_item AS TEXT)) LIKE '%1' AND UPPER(TRIM(f.descricao)) LIKE 'MODELO%')
             ORDER BY f.cliente_nome, f.codigo_item
         `;
