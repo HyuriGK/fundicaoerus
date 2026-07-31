@@ -434,9 +434,15 @@ router.get('/variacao-diaria', async (req, res) => {
         `;
 
         const faturamentosQuery = `
+            WITH fat_peso_overrides AS (
+                SELECT fp.item_key, fp.item_value::boolean AS fat_peso
+                FROM app_preferences p
+                CROSS JOIN LATERAL jsonb_each_text(COALESCE(p.value, '{}'::jsonb)) AS fp(item_key, item_value)
+                WHERE p.key = 'fat_peso_overrides'
+            )
             SELECT
                 f.data_faturamento AS dia,
-                SUM(f.peso_total) AS peso_saida,
+                SUM(COALESCE(f.peso_un, 0) * COALESCE(f.quantidade, 0)) AS peso_saida,
                 SUM(f.valor_unitario * f.quantidade) AS valor_saida
             FROM faturamento_firebird f
             LEFT JOIN faturamento_firebird_preferencias p
@@ -445,12 +451,23 @@ router.get('/variacao-diaria', async (req, res) => {
                 AND COALESCE(p.pedido, '') = COALESCE(TRIM(f.pedido), '')
                 AND p.data_faturamento = f.data_faturamento
                 AND p.quantidade = f.quantidade
+            LEFT JOIN fat_peso_overrides o
+                ON o.item_key = CONCAT(
+                    f.nota_fiscal,
+                    '-',
+                    COALESCE(TRIM(f.codigo_item), ''),
+                    '-',
+                    COALESCE(TRIM(f.pedido), ''),
+                    '-',
+                    f.data_faturamento::date,
+                    '-',
+                    COALESCE(f.quantidade, 0)
+                )
             WHERE EXTRACT(YEAR  FROM f.data_faturamento) = $1
               AND EXTRACT(MONTH FROM f.data_faturamento) = $2
               AND f.data_faturamento IS NOT NULL
-              AND COALESCE(p.excluido, f.excluido_manualmente OR f.pedido IS NULL OR TRIM(COALESCE(f.pedido,'')) = '') = FALSE
+              AND COALESCE(o.fat_peso, CASE WHEN f.gera_financeiro = 'N' THEN false ELSE NOT COALESCE(p.excluido, f.excluido_manualmente, false) END) = TRUE
               ${faturamentoServiceFilterSql}
-              AND NOT (TRIM(CAST(f.codigo_item AS TEXT)) LIKE '%1' AND UPPER(TRIM(f.descricao)) LIKE 'MODELO%')
             GROUP BY 1
             ORDER BY 1
         `;
@@ -516,9 +533,15 @@ router.get('/variacao-mensal', async (req, res) => {
         `;
 
         const faturamentosQuery = `
+            WITH fat_peso_overrides AS (
+                SELECT fp.item_key, fp.item_value::boolean AS fat_peso
+                FROM app_preferences p
+                CROSS JOIN LATERAL jsonb_each_text(COALESCE(p.value, '{}'::jsonb)) AS fp(item_key, item_value)
+                WHERE p.key = 'fat_peso_overrides'
+            )
             SELECT
                 EXTRACT(MONTH FROM f.data_faturamento)::int AS mes,
-                SUM(f.peso_total) AS peso_saida,
+                SUM(COALESCE(f.peso_un, 0) * COALESCE(f.quantidade, 0)) AS peso_saida,
                 SUM(f.valor_unitario * f.quantidade) AS valor_saida
             FROM faturamento_firebird f
             LEFT JOIN faturamento_firebird_preferencias p
@@ -527,11 +550,22 @@ router.get('/variacao-mensal', async (req, res) => {
                 AND COALESCE(p.pedido, '') = COALESCE(TRIM(f.pedido), '')
                 AND p.data_faturamento = f.data_faturamento
                 AND p.quantidade = f.quantidade
+            LEFT JOIN fat_peso_overrides o
+                ON o.item_key = CONCAT(
+                    f.nota_fiscal,
+                    '-',
+                    COALESCE(TRIM(f.codigo_item), ''),
+                    '-',
+                    COALESCE(TRIM(f.pedido), ''),
+                    '-',
+                    f.data_faturamento::date,
+                    '-',
+                    COALESCE(f.quantidade, 0)
+                )
             WHERE EXTRACT(YEAR FROM f.data_faturamento) = $1
               AND f.data_faturamento IS NOT NULL
-              AND COALESCE(p.excluido, f.excluido_manualmente OR f.pedido IS NULL OR TRIM(COALESCE(f.pedido,'')) = '') = FALSE
+              AND COALESCE(o.fat_peso, CASE WHEN f.gera_financeiro = 'N' THEN false ELSE NOT COALESCE(p.excluido, f.excluido_manualmente, false) END) = TRUE
               ${faturamentoServiceFilterSql}
-              AND NOT (TRIM(CAST(f.codigo_item AS TEXT)) LIKE '%1' AND UPPER(TRIM(f.descricao)) LIKE 'MODELO%')
             GROUP BY 1 ORDER BY 1
         `;
 
@@ -583,13 +617,19 @@ router.get('/variacao-detalhe', async (req, res) => {
         `;
 
         const faturamentosQuery = `
+            WITH fat_peso_overrides AS (
+                SELECT fp.item_key, fp.item_value::boolean AS fat_peso
+                FROM app_preferences p
+                CROSS JOIN LATERAL jsonb_each_text(COALESCE(p.value, '{}'::jsonb)) AS fp(item_key, item_value)
+                WHERE p.key = 'fat_peso_overrides'
+            )
             SELECT
                 TRIM(COALESCE(f.pedido,''))  AS pedido,
                 CAST(f.codigo_item AS TEXT)  AS codigo,
                 f.descricao,
                 f.cliente_nome               AS cliente,
                 f.quantidade,
-                f.peso_total
+                COALESCE(f.peso_un, 0) * COALESCE(f.quantidade, 0) AS peso_total
             FROM faturamento_firebird f
             LEFT JOIN faturamento_firebird_preferencias p
                 ON p.nota_fiscal = f.nota_fiscal
@@ -597,10 +637,21 @@ router.get('/variacao-detalhe', async (req, res) => {
                 AND COALESCE(p.pedido, '') = COALESCE(TRIM(f.pedido), '')
                 AND p.data_faturamento = f.data_faturamento
                 AND p.quantidade = f.quantidade
+            LEFT JOIN fat_peso_overrides o
+                ON o.item_key = CONCAT(
+                    f.nota_fiscal,
+                    '-',
+                    COALESCE(TRIM(f.codigo_item), ''),
+                    '-',
+                    COALESCE(TRIM(f.pedido), ''),
+                    '-',
+                    f.data_faturamento::date,
+                    '-',
+                    COALESCE(f.quantidade, 0)
+                )
             WHERE f.data_faturamento = $1
-              AND COALESCE(p.excluido, f.excluido_manualmente OR f.pedido IS NULL OR TRIM(COALESCE(f.pedido,'')) = '') = FALSE
+              AND COALESCE(o.fat_peso, CASE WHEN f.gera_financeiro = 'N' THEN false ELSE NOT COALESCE(p.excluido, f.excluido_manualmente, false) END) = TRUE
               ${faturamentoServiceFilterSql}
-              AND NOT (TRIM(CAST(f.codigo_item AS TEXT)) LIKE '%1' AND UPPER(TRIM(f.descricao)) LIKE 'MODELO%')
             ORDER BY f.cliente_nome, f.codigo_item
         `;
 
