@@ -43,6 +43,7 @@ const emissionUnitWeightSql = `
         NULLIF(f.peso_liquido_pro, 0),
         NULLIF(${emissionNumberSql('PESO_UNIT')}, 0),
         NULLIF(${emissionNumberSql('PESO_PRODUTO')}, 0),
+        NULLIF(pp.peso_produto, 0),
         CASE
             WHEN ${emissionNumberSql('PESO_LIQUIDO_NPR')} > 0
                  AND ${emissionQtySql} > 0
@@ -63,6 +64,21 @@ const emissionFichaJoinSql = `
                 ORDER BY updated_at DESC
                 LIMIT 1
             ) f ON true
+`;
+const emissionPedidoPesoJoinSql = `
+            LEFT JOIN LATERAL (
+                SELECT
+                    CASE
+                        WHEN REPLACE(NULLIF(TRIM(fp.data->>'PESO_PRODUTO'), ''), ',', '.') ~ '^-?[0-9]+(\\.[0-9]+)?$'
+                            THEN REPLACE(NULLIF(TRIM(fp.data->>'PESO_PRODUTO'), ''), ',', '.')::numeric
+                        ELSE NULL
+                    END AS peso_produto
+                FROM firebird_sync_pedidos fp
+                WHERE TRIM(fp.data->>'PRODUTO_PPR') = TRIM(p.data->>'PRODUTO_PPR')
+                  AND NULLIF(TRIM(fp.data->>'PESO_PRODUTO'), '') IS NOT NULL
+                ORDER BY fp.updated_at DESC
+                LIMIT 1
+            ) pp ON true
 `;
 
 // GET /api/emissoes/monthly-summary
@@ -86,6 +102,7 @@ router.get('/monthly-summary', async (req, res) => {
             FROM firebird_sync_emissoes p
             LEFT JOIN pesos_customizados pc ON TRIM(p.data->>'PRODUTO_PPR') = pc.codigo
             ${emissionFichaJoinSql}
+            ${emissionPedidoPesoJoinSql}
             ${ownerScope.join}
             WHERE p.data->>'DATA_EMISSAO_PEDIDO' IS NOT NULL
             ${ownerScope.condition}
@@ -142,6 +159,7 @@ router.get('/client-summary', async (req, res) => {
             FROM firebird_sync_emissoes p
             LEFT JOIN pesos_customizados pc ON TRIM(p.data->>'PRODUTO_PPR') = pc.codigo
             ${emissionFichaJoinSql}
+            ${emissionPedidoPesoJoinSql}
             ${ownerScope.join}
             ${whereClause}
             ${ownerScope.condition}
@@ -193,6 +211,7 @@ router.get('/list', async (req, res) => {
                 p.sync_key,
                 pc.peso as peso_customizado,
                 f.peso_liquido_pro AS ficha_peso,
+                pp.peso_produto AS pedido_peso_produto,
                 f.data_fic,
                 f.pro_codigo_fic AS has_ficha,
                 f.tipo_moldagem_procedimento,
@@ -200,6 +219,7 @@ router.get('/list', async (req, res) => {
             FROM firebird_sync_emissoes p
             LEFT JOIN pesos_customizados pc ON TRIM(p.data->>'PRODUTO_PPR') = pc.codigo
             ${emissionFichaJoinSql}
+            ${emissionPedidoPesoJoinSql}
             LEFT JOIN pedidos_observacoes obs ON obs.sync_key = p.sync_key
             ${ownerScope.join}
             ${whereClause}
@@ -230,6 +250,9 @@ router.get('/list', async (req, res) => {
             }
             if (row.ficha_peso !== null && Number(row.ficha_peso) > 0 && !(parseFloat(data.PESO_UNIT) > 0) && !(parseFloat(data.PESO_PRODUTO) > 0)) {
                 data.PESO_PRODUTO = row.ficha_peso;
+            }
+            if (row.pedido_peso_produto !== null && Number(row.pedido_peso_produto) > 0 && !(parseFloat(data.PESO_UNIT) > 0) && !(parseFloat(data.PESO_PRODUTO) > 0)) {
+                data.PESO_PRODUTO = row.pedido_peso_produto;
             }
             if (
                 row.peso_customizado !== null &&
@@ -276,6 +299,7 @@ router.get('/pending-summary', async (req, res) => {
             FROM firebird_sync_emissoes p
             LEFT JOIN pesos_customizados pc ON TRIM(p.data->>'PRODUTO_PPR') = pc.codigo
             ${emissionFichaJoinSql}
+            ${emissionPedidoPesoJoinSql}
             WHERE p.data->>'DATA_EMISSAO_PEDIDO' IS NOT NULL
               AND TRIM(COALESCE(p.data->>'FATURADO_PPR','')) <> 'T'
               AND (CAST(COALESCE(p.data->>'QUANTIDADE_PPR','0') AS NUMERIC) - COALESCE(CAST(COALESCE(p.data->>'QUANTIDADE_FATURADA_PPR','0') AS NUMERIC), 0)) > 0
@@ -312,10 +336,12 @@ router.get('/pending-list', async (req, res) => {
             SELECT 
                 p.data,
                 pc.peso as peso_customizado,
-                f.peso_liquido_pro AS ficha_peso
+                f.peso_liquido_pro AS ficha_peso,
+                pp.peso_produto AS pedido_peso_produto
             FROM firebird_sync_emissoes p
             LEFT JOIN pesos_customizados pc ON TRIM(p.data->>'PRODUTO_PPR') = pc.codigo
             ${emissionFichaJoinSql}
+            ${emissionPedidoPesoJoinSql}
             WHERE EXTRACT(YEAR FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) = $1
               AND EXTRACT(MONTH FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) = $2
               AND TRIM(COALESCE(p.data->>'FATURADO_PPR','')) <> 'T'
@@ -328,6 +354,9 @@ router.get('/pending-list', async (req, res) => {
             const data = row.data;
             if (row.ficha_peso !== null && Number(row.ficha_peso) > 0 && !(parseFloat(data.PESO_UNIT) > 0) && !(parseFloat(data.PESO_PRODUTO) > 0)) {
                 data.PESO_PRODUTO = row.ficha_peso;
+            }
+            if (row.pedido_peso_produto !== null && Number(row.pedido_peso_produto) > 0 && !(parseFloat(data.PESO_UNIT) > 0) && !(parseFloat(data.PESO_PRODUTO) > 0)) {
+                data.PESO_PRODUTO = row.pedido_peso_produto;
             }
             if (
                 row.peso_customizado !== null &&
@@ -371,6 +400,7 @@ router.get('/variacao-diaria', async (req, res) => {
             FROM firebird_sync_emissoes p
             LEFT JOIN pesos_customizados pc ON TRIM(p.data->>'PRODUTO_PPR') = pc.codigo
             ${emissionFichaJoinSql}
+            ${emissionPedidoPesoJoinSql}
             WHERE EXTRACT(YEAR  FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) = $1
               AND EXTRACT(MONTH FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) = $2
               AND p.data->>'DATA_EMISSAO_PEDIDO' IS NOT NULL
@@ -456,6 +486,7 @@ router.get('/variacao-mensal', async (req, res) => {
             FROM firebird_sync_emissoes p
             LEFT JOIN pesos_customizados pc ON TRIM(p.data->>'PRODUTO_PPR') = pc.codigo
             ${emissionFichaJoinSql}
+            ${emissionPedidoPesoJoinSql}
             WHERE EXTRACT(YEAR FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) = $1
               AND p.data->>'DATA_EMISSAO_PEDIDO' IS NOT NULL
             GROUP BY 1 ORDER BY 1
@@ -525,6 +556,7 @@ router.get('/variacao-detalhe', async (req, res) => {
             FROM firebird_sync_emissoes p
             LEFT JOIN pesos_customizados pc ON TRIM(p.data->>'PRODUTO_PPR') = pc.codigo
             ${emissionFichaJoinSql}
+            ${emissionPedidoPesoJoinSql}
             WHERE (p.data->>'DATA_EMISSAO_PEDIDO')::date = $1
             ORDER BY cliente, codigo
         `;
