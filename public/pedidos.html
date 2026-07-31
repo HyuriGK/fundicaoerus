@@ -491,6 +491,59 @@
             width: 100% !important;
             height: 100% !important;
         }
+        .inline-loading-overlay {
+            position: absolute;
+            inset: 0;
+            z-index: 25;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            gap: 16px;
+            background: rgba(9, 9, 11, 0.72);
+            backdrop-filter: blur(7px);
+            -webkit-backdrop-filter: blur(7px);
+            border-radius: 8px;
+            color: #fafafa;
+            text-align: center;
+        }
+        .inline-loading-overlay.active { display: flex; }
+        .inline-loading-icon {
+            color: var(--color-primary);
+            font-size: 2rem;
+            filter: drop-shadow(0 0 15px rgba(251, 191, 36, 0.3));
+            animation: loader-pulse 1.8s ease-in-out infinite;
+        }
+        .inline-loading-text {
+            font-family: 'Outfit', 'Inter', sans-serif;
+            font-size: 0.78rem;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: rgba(250, 250, 250, 0.86);
+        }
+        .inline-loading-bar {
+            width: min(280px, 70%);
+            height: 4px;
+            background: rgba(255,255,255,0.07);
+            border-radius: 10px;
+            overflow: hidden;
+            position: relative;
+        }
+        .inline-loading-bar::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            width: 45%;
+            border-radius: 10px;
+            background: linear-gradient(90deg, var(--color-primary), #f59e0b);
+            box-shadow: 0 0 20px rgba(251, 191, 36, 0.45);
+            animation: inline-loader-sweep 1.15s ease-in-out infinite;
+        }
+        @keyframes inline-loader-sweep {
+            0% { transform: translateX(-120%); }
+            100% { transform: translateX(240%); }
+        }
         .chart-title-flex {
             font-size: 0.85rem; /* Smaller titles for scaling */
             font-weight: 700;
@@ -2097,6 +2150,11 @@
                             <span id="historicalOverlayTitle" style="color:#f4f4f5; font-size:0.85rem; font-weight:600; max-width:420px; line-height:1.5; text-align:center;">A visualização neste gráfico não está disponível para o filtro do período aplicado.</span>
                             <span id="historicalOverlaySubtitle" style="color:#a1a1aa; font-size:0.75rem;">Selecione um mês específico para ver a emissão diária.</span>
                         </div>
+                        <div id="historicalChartLoading" class="inline-loading-overlay">
+                            <i class="fa-solid fa-layer-group inline-loading-icon"></i>
+                            <div class="inline-loading-text">Carregando emissão de pedidos</div>
+                            <div class="inline-loading-bar"></div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -2153,7 +2211,12 @@
     </div>
     <!-- MODAL DE REGISTROS (FULLSCREEN) -->
     <div id="recordsModal" class="modal-overlay">
-        <div class="modal-card fullscreen">
+        <div class="modal-card fullscreen" style="position:relative;">
+            <div id="recordsLoadingOverlay" class="inline-loading-overlay">
+                <i class="fa-solid fa-layer-group inline-loading-icon"></i>
+                <div class="inline-loading-text">Carregando registros</div>
+                <div class="inline-loading-bar"></div>
+            </div>
             <div class="modal-header">
                 <h2 class="modal-title" id="recordsModalTitle" style="color:#fff !important;"><i class="fa-solid fa-list-check"
                         style="margin-right: 15px;"></i>Registros de Pedidos</h2>
@@ -5915,7 +5978,16 @@ function flashConcentracaoBar(barIndex) {
         let emissionDataCache = null;
         let emissionClientCache = {}; // Cache by "year-month"
         let selectedHistoricalDay = null;
+        function setInlineLoading(id, active) {
+            const el = document.getElementById(id);
+            if (el) el.classList.toggle('active', !!active);
+        }
+        function waitForPaint() {
+            return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        }
         async function updateHistoricalChart() {
+            setInlineLoading('historicalChartLoading', true);
+            await waitForPaint();
             try {
                 const yearEl = document.getElementById('yearFilterHistorical');
                 const monthEl = document.getElementById('monthFilterHistorical');
@@ -6163,6 +6235,9 @@ function flashConcentracaoBar(barIndex) {
             } catch (error) {
                 console.error('Erro no gráfico histórico:', error);
             }
+            finally {
+                setInlineLoading('historicalChartLoading', false);
+            }
         }
         function getHistoricalOptions(unit, isPareto) {
             return {
@@ -6310,23 +6385,37 @@ function flashConcentracaoBar(barIndex) {
                         const mlbls = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
                         const mes = activePillMonth !== null ? activePillMonth + 1 : 'Todos';
                         try {
+                            const loadingTitle = document.querySelector('#recordsModal .modal-title');
+                            if (loadingTitle) loadingTitle.innerHTML = '<i class="fa-solid fa-history" style="margin-right: 15px;"></i>Carregando registros';
+                            openModal(true);
+                            setInlineLoading('recordsLoadingOverlay', true);
+                            await waitForPaint();
                             const res = await fetch(`/api/emissoes/list?ano=${selectedYear}&mes=${mes}`);
-                            if (!res.ok) return;
+                            if (!res.ok) {
+                                setInlineLoading('recordsLoadingOverlay', false);
+                                return;
+                            }
                             const allRecs = await res.json();
                             const clientRecs = allRecs.filter(r =>
                                 (r.NOME_CLIENTE || '').trim().toUpperCase() === clientName
                             );
                             const periodoStr = mes !== 'Todos' ? `${mlbls[mes - 1]}/${selectedYear}` : String(selectedYear);
                             await showHistoricalDetails(clientRecs, `Emissão ${clientName} — ${periodoStr}`);
-                        } catch (err) { console.error('Erro ao buscar registros do cliente:', err); }
+                        } catch (err) {
+                            setInlineLoading('recordsLoadingOverlay', false);
+                            console.error('Erro ao buscar registros do cliente:', err);
+                        }
                     }
                 }
             };
         }
         async function showHistoricalDetails(records, title) {
+            setInlineLoading('recordsLoadingOverlay', true);
             const titleEl = document.querySelector('#recordsModal .modal-title');
             const headerDate = document.querySelector('#dataTable thead tr:first-child th:nth-child(4)');
             if (titleEl) titleEl.innerHTML = `<i class="fa-solid fa-history" style="margin-right: 15px;"></i>${title}`;
+            openModal(true);
+            await waitForPaint();
             if (headerDate) headerDate.innerText = 'EMISSÃO';
             // Normalizar registros para o formato da tabela
             const normalized = records.map(r => ({
@@ -6345,9 +6434,9 @@ function flashConcentracaoBar(barIndex) {
             activeChartFilters.day = null;
             activeBlockReasonFilter = null;
             // Abrir modal e renderizar
-            openModal(true);
             applyColumnFilters(); // This will call renderTable(normalized) via flow
             if (typeof updateTotals === 'function') updateTotals(normalized);
+            setInlineLoading('recordsLoadingOverlay', false);
             // Override close modal logic once to restore title and cleanup
             const originalClose = window.closeModal;
             window.closeModal = function () {
