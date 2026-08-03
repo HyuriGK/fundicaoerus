@@ -2493,6 +2493,32 @@
             ];
         }
 
+        function getStagesFromErpRoute(rawRoute) {
+            const routeNames = String(rawRoute || '')
+                .split(',')
+                .map(s => s.trim().toUpperCase())
+                .filter(Boolean);
+
+            if (!routeNames.length) return [];
+
+            const stages = [];
+            const addStage = (stage) => {
+                if (stage && !stages.includes(stage)) stages.push(stage);
+            };
+
+            routeNames.forEach(name => {
+                if (name.includes('MOLDAGEM')) addStage('MOLDAGEM GERAL');
+                else if (name.includes('FUSAO') || name.includes('FUSÃO')) addStage('FUSÃO');
+                else if (name.includes('ACABAMENTO') || name.includes('REBARBA') || name.includes('GRALHA')) addStage('ACABAMENTO');
+                else if (name.includes('TRATAMENTO')) addStage('TRATAMENTO TÉRMICO');
+                else if (name.includes('USINAGEM') || name.includes('TORNEARIA')) addStage('AGUARDANDO USINAGEM EXTERNA');
+                else if (name.includes('QUALIDADE') || name.includes('INSPECAO') || name.includes('INSPEÇÃO') || name.includes('REVISAO') || name.includes('REVISÃO')) addStage('AGUARDANDO EXPEDIÇÃO');
+                else if (name.includes('EXPEDICAO') || name.includes('EXPEDIÇÃO') || name.includes('LOGISTICA') || name.includes('LOGÍSTICA')) addStage('AGUARDANDO FATURAMENTO');
+            });
+
+            return stages;
+        }
+
         function calculateBackwardMetaDates(stages, deliveryDate, keyMap = stageLeadTimeKeyMap) {
             if (!deliveryDate) return null;
             const metaDates = {};
@@ -2741,20 +2767,10 @@
             const now = toLocalDate(new Date());
 
             // --- 1. Filter stages that belong to this OP's technical route ---
-            const routeExists = opRoute !== null && opRoute !== undefined;
-            const thisOpStages = orderedStages.filter(stage => {
-                const pointedInStage = groupStatus[stage].qty;
-                if (!routeExists) return true;
-                if (opRoute.length === 0) return pointedInStage > 0;
-                
-                // Route is a comma-separated string of NAMES from Postgres
-                const routeNames = String(opRoute).split(',').map(s => s.trim().toUpperCase());
-                const aliases = (sectorGroups[stage] || []).map(a => a.toUpperCase());
-                const inRoute = routeNames.some(name => 
-                    name.length > 0 && aliases.some(alias => name.includes(alias) || alias.includes(name))
-                );
-                return stage === 'AGUARDANDO FATURAMENTO' || inRoute || pointedInStage > 0;
-            });
+            const routeStages = getStagesFromErpRoute(opRoute);
+            const thisOpStages = routeStages.length
+                ? routeStages
+                : orderedStages.filter(stage => groupStatus[stage].qty > 0);
 
             // --- 2. Calculate Meta Dates sequentially for these stages only ---
             const metaDates = {};
@@ -3329,7 +3345,6 @@
                 
                 // --- DYNAMIC ROUTE FILTERING (MODAL) ---
                 const rawRoute = opData.ROTEIRO_PRODUCAO;
-                const routeExists = rawRoute !== null && rawRoute !== undefined;
                 
                 // Aggregated sectors based on pointing data
                 const aggregated = {};
@@ -3359,20 +3374,10 @@
                     }
                 });
                 
-                // Define the sequence of sectors for this specific OP
-                let ordered = allGroups;
-                if (routeExists) {
-                    const routeNames = String(rawRoute).split(',').map(s => s.trim().toUpperCase());
-                    ordered = allGroups.filter(stage => {
-                        // Check if stage matches any name in technical route
-                        const aliases = sectorGroups[stage].map(a => a.toUpperCase());
-                        const inRoute = routeNames.some(name => 
-                            name.length > 0 && aliases.some(alias => name.includes(alias) || alias.includes(name))
-                        );
-                        // Also show if there is already pointing data
-                        const hasPointing = aggregated[stage] > 0;
-                        return stage === 'EXPEDIÇÃO' || inRoute || hasPointing;
-                    });
+                // Define the sequence of sectors for this OP from the ERP route only
+                let ordered = getStagesFromErpRoute(rawRoute);
+                if (!ordered.length) {
+                    ordered = orderedStages.filter(stage => aggregated[stage] > 0);
                 }
 
                 const deliveryDate = opData.ENTREGA_PETR || opData.DATA_ENTREGA_PPR;
@@ -3397,10 +3402,10 @@
 
                 // --- 3. Robust Flow Logic (Modal) ---
                 const maxForwardModal = {};
-                for (let i = allGroups.length - 1; i >= 0; i--) {
-                    const st = allGroups[i];
+                for (let i = ordered.length - 1; i >= 0; i--) {
+                    const st = ordered[i];
                     const currentQty = aggregated[st] || 0;
-                    const nextSt = allGroups[i + 1];
+                    const nextSt = ordered[i + 1];
                     const nextMax = nextSt ? maxForwardModal[nextSt] : 0;
                     maxForwardModal[st] = Math.max(currentQty, nextMax);
                 }
