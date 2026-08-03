@@ -260,7 +260,7 @@ async function syncEmissoes() {
                     
                     let linkedOps = linksMap[key] || [];
                     let suggestedOp = null;
-                    let linkStatus = 'oficial'; // 'oficial', 'confirmado', 'sugerido', 'rejeitado'
+                    let linkStatus = 'oficial'; // 'oficial', 'confirmado', 'sugerido', 'rejeitado', 'removido'
 
                     // Lógica de Vínculo:
                     // 1. Se tem OP oficial, usa ela.
@@ -273,14 +273,13 @@ async function syncEmissoes() {
                             if (mLink.status === 'confirmado') {
                                 linkedOps = [Number(mLink.op)];
                                 linkStatus = 'confirmado';
-                            } else if (mLink.status === 'rejeitado') {
-                                linkStatus = 'rejeitado';
+                            } else if (mLink.status === 'rejeitado' || mLink.status === 'removido') {
+                                linkStatus = mLink.status;
                             }
-                            // 'removido': ignora o link manual, permite sugestão automática
                         }
                     }
 
-                    if (linkedOps.length === 0 && linkStatus !== 'rejeitado') {
+                    if (linkedOps.length === 0 && linkStatus !== 'rejeitado' && linkStatus !== 'removido') {
                         const suggestions = productOpsMap[String(r.PRODUTO_PPR || '').trim()] || [];
                         if (suggestions.length > 0) {
                             // Pega a OP mais recente

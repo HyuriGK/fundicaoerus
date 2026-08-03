@@ -45,9 +45,9 @@ function getItemSectorMetrics(item) {
     const saldoLib = Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0;
     const qtdOrig = Number(item.QUANTIDADE_PPR) || 0;
     const erpFat = Number(item.QUANTIDADE_FATURADO_PPR || item.QUANTIDADE_FATURADA_PPR) || 0;
-    
-    // Target Total Quantity
     const linkStatus = String(item.LINK_STATUS || '').trim().toLowerCase();
+
+    // Target Total Quantity
     const linkedOp = linkStatus === 'sugerido' ? '' : String(item.OP_PCS || '').trim();
     const opQty = Number(item.OP_QUANTIDADE) || 0;
     let targetTotalQty = (linkedOp && linkedOp !== '-' && opQty > 0)

@@ -268,8 +268,8 @@ router.get('/list', async (req, res) => {
             if (manualLink?.status === 'confirmado') {
                 data.LINK_STATUS = 'confirmado';
                 data.OP_PCS = manualLink.op;
-            } else if (manualLink?.status === 'rejeitado' && data.LINK_STATUS !== 'oficial') {
-                data.LINK_STATUS = 'rejeitado';
+            } else if ((manualLink?.status === 'rejeitado' || manualLink?.status === 'removido') && data.LINK_STATUS !== 'oficial') {
+                data.LINK_STATUS = manualLink.status;
                 data.OP_PCS = null;
             }
             if (row.ficha_peso !== null && Number(row.ficha_peso) > 0 && !(parseFloat(data.PESO_UNIT) > 0) && !(parseFloat(data.PESO_PRODUTO) > 0)) {

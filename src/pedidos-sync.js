@@ -352,14 +352,13 @@ router.get('/', async (req, res) => {
                 if (manualLink.status === 'confirmado') {
                     item.LINK_STATUS = 'confirmado';
                     item.OP_PCS = manualLink.op;
-                } else if (manualLink.status === 'rejeitado') {
+                } else if (manualLink.status === 'rejeitado' || manualLink.status === 'removido') {
                     // Só aplica rejeição se não houver vínculo oficial do ERP
                     if (item.LINK_STATUS !== 'oficial') {
-                        item.LINK_STATUS = 'rejeitado';
+                        item.LINK_STATUS = manualLink.status;
                         item.OP_PCS = null;
                     }
                 }
-                // 'removido': apaga o link manual, deixa o JSONB original valer (sugerido volta a aparecer)
             }
             const produtoKey = String(item.PRODUTO_PPR || '').trim();
             if (Number(row.ficha_peso_liquido_pro) > 0) {

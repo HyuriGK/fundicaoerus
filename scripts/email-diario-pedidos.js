@@ -121,8 +121,8 @@ async function fetchPedidos() {
         const link = linksMap[row.sync_key];
         if (link) {
             if (link.status === 'confirmado') { item.LINK_STATUS = 'confirmado'; item.OP_PCS = link.op; }
-            else if (link.status === 'rejeitado' && item.LINK_STATUS !== 'oficial') {
-                item.LINK_STATUS = 'rejeitado'; item.OP_PCS = null;
+            else if ((link.status === 'rejeitado' || link.status === 'removido') && item.LINK_STATUS !== 'oficial') {
+                item.LINK_STATUS = link.status; item.OP_PCS = null;
             }
         }
         return item;
