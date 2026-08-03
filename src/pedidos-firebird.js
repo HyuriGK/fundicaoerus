@@ -373,6 +373,7 @@ router.get('/op-roteiro-operacional', async (req, res) => {
             FROM producao_roteiro_operacional_sync
             WHERE op = $1
             ORDER BY
+                CASE WHEN UPPER(setor) IN ('FATURAMENTO', 'FATURADO') THEN 1 ELSE 0 END,
                 COALESCE(sequencia, 999),
                 CASE WHEN setor_codigo = 101 THEN 999 ELSE setor_codigo END
         `, [String(op).trim()]);

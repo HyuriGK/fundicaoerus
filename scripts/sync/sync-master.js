@@ -235,7 +235,7 @@ async function syncMaster() {
                             const key = `${row.CODIGO_PCS}|${row.SETOR_PCS}`;
                             const current = routeRowsByOpSector.get(key) || {
                                 op: String(row.CODIGO_PCS).trim(),
-                                sequencia: Number(row.SEQUENCIA_PCS) || 999,
+                                sequencia: String(row.NOME_SET || '').trim().toUpperCase().match(/FATURAMENTO|FATURADO/) ? 999 : (Number(row.SEQUENCIA_PCS) || 999),
                                 setor_codigo: Number(row.SETOR_PCS),
                                 setor: String(row.NOME_SET || '').trim().toUpperCase(),
                                 produzido: 0,
@@ -244,9 +244,9 @@ async function syncMaster() {
                             };
 
                             if (producedQty === 0 && rejectedQty === 0 && !row.DATA_PCS) {
-                                current.sequencia = Number(row.SEQUENCIA_PCS) || current.sequencia;
+                                current.sequencia = current.setor.match(/FATURAMENTO|FATURADO/) ? 999 : (Number(row.SEQUENCIA_PCS) || current.sequencia);
                             } else if (!current.sequencia || current.sequencia === 999) {
-                                current.sequencia = Number(row.SEQUENCIA_PCS) || current.sequencia;
+                                current.sequencia = current.setor.match(/FATURAMENTO|FATURADO/) ? 999 : (Number(row.SEQUENCIA_PCS) || current.sequencia);
                             }
                             current.produzido += producedQty;
                             current.refugado += rejectedQty;
