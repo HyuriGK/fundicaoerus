@@ -2991,12 +2991,6 @@
         }
 
         function getCarteiraStages(op) {
-            const opNumber = String(op.OP_PCS || '').trim();
-            if (opNumber && opNumber !== '-' && pointingSummary[opNumber]) {
-                const totalQty = parseInt(op.OP_QUANTIDADE) || parseInt(op.QUANTIDADE_PPR) || 0;
-                return getOpStages(opNumber, totalQty, op.OP_EMISSAO || op.DATA_EMISSAO_PEDIDO, op.ROTEIRO_PRODUCAO);
-            }
-
             if (typeof getItemSectorMetrics !== 'function') {
                 const totalQty = parseInt(op.OP_QUANTIDADE) || parseInt(op.QUANTIDADE_PPR) || 0;
                 return getOpStages(op.OP_PCS, totalQty, op.OP_EMISSAO || op.DATA_EMISSAO_PEDIDO, op.ROTEIRO_PRODUCAO);
@@ -3031,6 +3025,7 @@
                 return qty > 0 ? [{
                     stage,
                     qty,
+                    totalQty: metrics.targetTotalQty,
                     statusText: diff > 0 ? `ATRASADO HÁ ${diff} D` : (diff < 0 ? `ADIANTADO HÁ ${Math.abs(diff)} D` : 'NO PRAZO'),
                     isDelayed: diff > 0,
                     statusColor: diff > 0 ? 'var(--status-danger)' : 'var(--status-success)',
@@ -3075,6 +3070,7 @@
                     return {
                         stage,
                         qty,
+                        totalQty: metrics.targetTotalQty,
                         statusText: diff > 0 ? `ATRASADO HÁ ${diff} D` : (diff < 0 ? `ADIANTADO HÁ ${Math.abs(diff)} D` : 'NO PRAZO'),
                         isDelayed: diff > 0,
                         statusColor: diff > 0 ? 'var(--status-danger)' : 'var(--status-success)',
@@ -3115,12 +3111,12 @@
             orderedStages.forEach(s => processedOpsByStage[s] = new Set());
  
             allOps.forEach(op => {
-                const totalQtyAll = parseInt(op.OP_QUANTIDADE) || parseInt(op.QUANTIDADE_PPR) || parseInt(op.SALDO_LIBERADO_FATURAR_PPR) || 0;
                 const statusList = getCarteiraStages(op);
                 const unitWeight = getUnitWeight(op);
 
                 statusList.forEach(status => {
                     const { stage, qty, statusText, isDelayed, statusColor, qtyExpedited } = status;
+                    const totalQtyAll = Math.round(Number(status.totalQty) || Number(qty) || 0);
                     const columnKey = configKeyMap[stage];
                     const list = document.getElementById(`list-${columnKey}`);
                     if (!list) return;
