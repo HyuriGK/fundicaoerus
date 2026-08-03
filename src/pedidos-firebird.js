@@ -353,4 +353,49 @@ router.get('/op-roteiro', async (req, res) => {
     }
 });
 
+// GET /api/pedidos-firebird/op-roteiro-operacional
+// Espelha o roteiro operacional mostrado no Controle de Produção do ERP.
+router.get('/op-roteiro-operacional', async (req, res) => {
+    try {
+        const { op } = req.query;
+        if (!op) {
+            return res.status(400).json({ error: 'Número da OP é obrigatório' });
+        }
+
+        const rows = await executeQuery(`
+            SELECT
+                PCS.SETOR_PCS AS setor_codigo,
+                S.NOME_SET AS setor,
+                SUM(PCS.DQUANTIDADE_PCS) AS produzido,
+                SUM(PCS.DQUANTIDADE_REFUGO_PCS) AS refugado,
+                MAX(PCS.DATA_PCS) AS ultima_data
+            FROM PRODUCAO_SETOR PCS
+            JOIN SETOR S
+              ON S.EMPRESA_SET = PCS.SET_EMPRESA_PCS
+             AND S.CODIGO_SET = PCS.SETOR_PCS
+            WHERE PCS.EMPRESA_PCS = 10
+              AND PCS.CODIGO_PCS = ?
+              AND COALESCE(S.NOME_SET, '') NOT LIKE 'NAO USAR%'
+              AND COALESCE(S.NOME_SET, '') NOT LIKE 'NÃO USAR%'
+            GROUP BY PCS.SETOR_PCS, S.NOME_SET
+            ORDER BY
+                CASE
+                    WHEN PCS.SETOR_PCS = 101 THEN 999
+                    ELSE PCS.SETOR_PCS
+                END
+        `, [parseInt(op, 10)]);
+
+        res.json(rows.map(row => ({
+            setor_codigo: row.SETOR_CODIGO,
+            setor: String(row.SETOR || '').trim().toUpperCase(),
+            produzido: Number(row.PRODUZIDO || 0),
+            refugado: Number(row.REFUGADO || 0),
+            ultima_data: row.ULTIMA_DATA
+        })));
+    } catch (error) {
+        console.error('❌ [Firebird] Erro no roteiro operacional:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 module.exports = router;

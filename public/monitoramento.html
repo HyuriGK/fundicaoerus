@@ -2387,6 +2387,9 @@
         const sectorGroups = {
             'MOLDAGEM GERAL': ['MOLDAGEM', 'MOLDAGEM MANUAL', 'MOLDAGEM PESADA', 'MOLDAGEM LEVE', 'MOLDAGEM MECANIZADA', 'MOLDAGEM AUTOMÁTICA', 'MOLDAGEM EM AREIA'],
             'MOLDAGEM': ['MOLDAGEM', 'MOLDAGEM MANUAL', 'MOLDAGEM PESADA', 'MOLDAGEM LEVE', 'MOLDAGEM MECANIZADA', 'MOLDAGEM AUTOMÁTICA', 'MOLDAGEM EM AREIA'],
+            'MOLDAGEM LEVE': ['MOLDAGEM LEVE', 'MOLDAGEM'],
+            'MOLDAGEM PESADA': ['MOLDAGEM PESADA', 'MOLDAGEM'],
+            'MOLDAGEM MANUAL': ['MOLDAGEM MANUAL', 'MOLDAGEM'],
             'FUSÃO': ['FUSÃO', 'FUSAO'],
             'ACABAMENTO': ['ACABAMENTO', 'REBARBAÇÃO', 'GRALHA'],
             'TRATAMENTO TÉRMICO': ['TRATAMENTO TÉRMICO', 'TRATAMENTO TERMICO'],
@@ -2397,7 +2400,8 @@
             'AGUARDANDO FATURAMENTO': ['EXPEDIÇÃO', 'EXPEDICAO', 'LOGÍSTICA'],
             'USINAGEM': ['USINAGEM', 'TORNEARIA'],
             'INSP. QUALIDADE': ['INSPEÇÃO DE QUALIDADE', 'INSPECAO DE QUALIDADE', 'QUALIDADE', 'REVISÃO'],
-            'EXPEDIÇÃO': ['EXPEDIÇÃO', 'EXPEDICAO', 'LOGÍSTICA']
+            'EXPEDIÇÃO': ['EXPEDIÇÃO', 'EXPEDICAO', 'LOGÍSTICA'],
+            'FATURAMENTO': ['FATURAMENTO', 'FATURADO', 'NF', 'SAÍDA']
         };
 
         const stageSectorIds = {
@@ -2433,9 +2437,13 @@
             'AGUARDANDO EXPEDIÇÃO': 'qualidade',
             'AGUARDANDO FATURAMENTO': 'expedicao',
             'MOLDAGEM': 'moldagem',
+            'MOLDAGEM LEVE': 'moldagem',
+            'MOLDAGEM PESADA': 'moldagem',
+            'MOLDAGEM MANUAL': 'moldagem',
             'USINAGEM': 'emUsinagem',
             'INSP. QUALIDADE': 'aguardandoExpedicao',
-            'EXPEDIÇÃO': 'aguardandoFaturamento'
+            'EXPEDIÇÃO': 'aguardandoFaturamento',
+            'FATURAMENTO': 'aguardandoFaturamento'
         };
 
         const columnIdMap = {
@@ -3362,8 +3370,12 @@
             `;
 
             try {
-                const res = await fetch(`/api/pedidos-firebird/op-apontamentos?op=${op}`);
+                const [res, routeRes] = await Promise.all([
+                    fetch(`/api/pedidos-firebird/op-apontamentos?op=${op}`),
+                    fetch(`/api/pedidos-firebird/op-roteiro-operacional?op=${op}`)
+                ]);
                 const data = await res.json();
+                const operationalRoute = routeRes.ok ? await routeRes.json() : [];
 
                 if (data.error) throw new Error(data.error);
 
@@ -3376,7 +3388,7 @@
                 const aggregated = {};
                 const aggregatedRefugo = {};
                 const lastPointingDate = {};
-                const modalGroups = ['MOLDAGEM GERAL', 'FUSÃO', 'ACABAMENTO', 'TRATAMENTO TÉRMICO', 'USINAGEM', 'INSP. QUALIDADE', 'EXPEDIÇÃO'];
+                const modalGroups = ['MOLDAGEM GERAL', 'MOLDAGEM LEVE', 'MOLDAGEM PESADA', 'MOLDAGEM MANUAL', 'FUSÃO', 'ACABAMENTO', 'TRATAMENTO TÉRMICO', 'USINAGEM', 'INSP. QUALIDADE', 'EXPEDIÇÃO', 'FATURAMENTO'];
                 const nativeStageLabelMap = {
                     'INSP. QUALIDADE': 'INSPEÇÃO DE QUALIDADE'
                 };
@@ -3389,23 +3401,44 @@
                     lastPointingDate[s] = null;
                 });
                 
-                // Map pointing data to groups
-                data.forEach(row => {
-                    const category = modalGroups.find(cat =>
-                        sectorGroups[cat].some(sub => row.setor.toUpperCase().includes(sub.toUpperCase())) || row.setor.toUpperCase() === cat.toUpperCase()
-                    );
-                    if (category) {
-                        aggregated[category] += row.quantidade;
-                        aggregatedRefugo[category] += Number(row.refugo) || 0;
-                        const date = toLocalDate(row.data);
-                        if (!lastPointingDate[category] || date > lastPointingDate[category]) {
+                if (Array.isArray(operationalRoute) && operationalRoute.length) {
+                    operationalRoute.forEach(row => {
+                        const category = String(row.setor || '').trim().toUpperCase();
+                        if (!category) return;
+                        aggregated[category] = (aggregated[category] || 0) + Number(row.produzido || 0);
+                        aggregatedRefugo[category] = (aggregatedRefugo[category] || 0) + Number(row.refugado || 0);
+                        const date = toLocalDate(row.ultima_data);
+                        if (row.ultima_data && (!lastPointingDate[category] || date > lastPointingDate[category])) {
                             lastPointingDate[category] = date;
                         }
-                    }
-                });
+                    });
+                } else {
+                    // Map pointing data to groups
+                    data.forEach(row => {
+                        const category = modalGroups.find(cat =>
+                            (sectorGroups[cat] || []).some(sub => row.setor.toUpperCase().includes(sub.toUpperCase())) || row.setor.toUpperCase() === cat.toUpperCase()
+                        );
+                        if (category) {
+                            aggregated[category] += row.quantidade;
+                            aggregatedRefugo[category] += Number(row.refugo) || 0;
+                            const date = toLocalDate(row.data);
+                            if (!lastPointingDate[category] || date > lastPointingDate[category]) {
+                                lastPointingDate[category] = date;
+                            }
+                        }
+                    });
+                }
                 
                 // Define the sequence of sectors for this OP from the ERP route only
-                let ordered = getNativeStagesFromErpRoute(rawRoute);
+                let ordered = Array.isArray(operationalRoute)
+                    ? operationalRoute
+                        .map(row => String(row.setor || '').trim().toUpperCase())
+                        .filter(Boolean)
+                    : [];
+                ordered = ordered.filter((stage, index) => ordered.indexOf(stage) === index);
+                if (!ordered.length) {
+                    ordered = getNativeStagesFromErpRoute(rawRoute);
+                }
                 if (!ordered.length) {
                     ordered = modalGroups.filter(stage => aggregated[stage] > 0);
                 }
@@ -3461,12 +3494,13 @@
                 let prevFlowQty = totalQty;
                 ordered.forEach(sector => {
                     const sectorLabel = nativeStageLabelMap[sector] || sector;
+                    const isLastStage = ordered.indexOf(sector) === ordered.length - 1;
                     const qtyMovedOut = Math.max(aggregated[sector] || 0, maxForwardModal[sector] || 0);
                     const qtyPointed = aggregated[sector] || 0;
                     const qtyRefugo = aggregatedRefugo[sector] || 0;
                     const qtyExpected = totalQty;
                     const qtyBalance = Math.max(0, qtyExpected - qtyPointed);
-                    const qtyInStage = Math.max(0, prevFlowQty - qtyMovedOut);
+                    const qtyInStage = isLastStage ? qtyPointed : Math.max(0, prevFlowQty - qtyMovedOut);
                     const meta = metaDates[sector];
                     const metaMidnight = toLocalDate(meta);
                     const hasPointing = qtyPointed > 0;
@@ -3591,6 +3625,9 @@
 
             const sectorMapping = {
                 'MOLDAGEM GERAL': ['MOLDAGEM', 'MOLDAGEM MANUAL', 'MOLDAGEM PESADA', 'MOLDAGEM LEVE', 'MOLDAGEM MECANIZADA', 'MOLDAGEM AUTOMÁTICA', 'MOLDAGEM EM AREIA'],
+                'MOLDAGEM LEVE': ['MOLDAGEM LEVE'],
+                'MOLDAGEM PESADA': ['MOLDAGEM PESADA'],
+                'MOLDAGEM MANUAL': ['MOLDAGEM MANUAL'],
                 'MOLDAGEM': ['MOLDAGEM', 'MOLDAGEM MANUAL', 'MOLDAGEM PESADA', 'MOLDAGEM LEVE', 'MOLDAGEM MECANIZADA', 'MOLDAGEM AUTOMÁTICA', 'MOLDAGEM EM AREIA'],
                 'FUSÃO': ['FUSÃO', 'FUSAO'],
                 'ACABAMENTO': ['ACABAMENTO', 'REBARBAÇÃO', 'GRALHA'],
@@ -3598,7 +3635,8 @@
                 'USINAGEM': ['USINAGEM', 'TORNEARIA'],
                 'INSP. QUALIDADE': ['INSPEÇÃO DE QUALIDADE', 'INSPECAO DE QUALIDADE', 'QUALIDADE', 'REVISÃO'],
                 'INSPEÇÃO DE QUALIDADE': ['INSPEÇÃO DE QUALIDADE', 'INSPECAO DE QUALIDADE', 'QUALIDADE', 'REVISÃO'],
-                'EXPEDIÇÃO': ['EXPEDIÇÃO', 'EXPEDICAO', 'LOGÍSTICA']
+                'EXPEDIÇÃO': ['EXPEDIÇÃO', 'EXPEDICAO', 'LOGÍSTICA'],
+                'FATURAMENTO': ['FATURAMENTO', 'FATURADO', 'NF', 'SAÍDA']
             };
 
             const sectors = sectorMapping[category] || [category];
