@@ -362,38 +362,37 @@ router.get('/op-roteiro-operacional', async (req, res) => {
             return res.status(400).json({ error: 'Número da OP é obrigatório' });
         }
 
-        const rows = await executeQuery(`
+        const result = await pool.query(`
             SELECT
-                PCS.SETOR_PCS AS setor_codigo,
-                S.NOME_SET AS setor,
-                SUM(PCS.DQUANTIDADE_PCS) AS produzido,
-                SUM(PCS.DQUANTIDADE_REFUGO_PCS) AS refugado,
-                MAX(PCS.DATA_PCS) AS ultima_data
-            FROM PRODUCAO_SETOR PCS
-            JOIN SETOR S
-              ON S.EMPRESA_SET = PCS.SET_EMPRESA_PCS
-             AND S.CODIGO_SET = PCS.SETOR_PCS
-            WHERE PCS.EMPRESA_PCS = 10
-              AND PCS.CODIGO_PCS = ?
-              AND COALESCE(S.NOME_SET, '') NOT LIKE 'NAO USAR%'
-              AND COALESCE(S.NOME_SET, '') NOT LIKE 'NÃO USAR%'
-            GROUP BY PCS.SETOR_PCS, S.NOME_SET
+                setor,
+                SUM(quantidade) AS produzido,
+                SUM(COALESCE(refugo, 0)) AS refugado,
+                MAX(data_producao) AS ultima_data
+            FROM producao_apontada_sincronizada
+            WHERE op = $1
+            GROUP BY setor
             ORDER BY
                 CASE
-                    WHEN PCS.SETOR_PCS = 101 THEN 999
-                    ELSE PCS.SETOR_PCS
+                    WHEN UPPER(setor) LIKE 'MOLDAGEM%' THEN 1
+                    WHEN UPPER(setor) IN ('FUSAO', 'FUSÃO', 'FUNDICAO', 'FUNDIÇÃO') THEN 2
+                    WHEN UPPER(setor) IN ('ACABAMENTO', 'REBARBAÇÃO', 'REBARBACAO', 'GRALHA') THEN 3
+                    WHEN UPPER(setor) IN ('TRATAMENTO TERMICO', 'TRATAMENTO TÉRMICO', 'NORMALIZACAO', 'NORMALIZAÇÃO') THEN 4
+                    WHEN UPPER(setor) IN ('USINAGEM', 'TORNEARIA', 'USINAGEM EXPEDICAO') THEN 5
+                    WHEN UPPER(setor) IN ('INSPECAO DE QUALIDADE', 'INSPEÇÃO DE QUALIDADE', 'QUALIDADE', 'REVISÃO', 'REVISAO', 'PRODUZIDA / INSPECIONADO') THEN 6
+                    WHEN UPPER(setor) IN ('EXPEDICAO', 'EXPEDIÇÃO', 'LOGÍSTICA', 'LOGISTICA') THEN 7
+                    WHEN UPPER(setor) IN ('FATURAMENTO', 'FATURADO') THEN 8
+                    ELSE 90
                 END
-        `, [parseInt(op, 10)]);
+        `, [String(op).trim()]);
 
-        res.json(rows.map(row => ({
-            setor_codigo: row.SETOR_CODIGO,
-            setor: String(row.SETOR || '').trim().toUpperCase(),
-            produzido: Number(row.PRODUZIDO || 0),
-            refugado: Number(row.REFUGADO || 0),
-            ultima_data: row.ULTIMA_DATA
+        res.json(result.rows.map(row => ({
+            setor: String(row.setor || '').trim().toUpperCase(),
+            produzido: Number(row.produzido || 0),
+            refugado: Number(row.refugado || 0),
+            ultima_data: row.ultima_data
         })));
     } catch (error) {
-        console.error('❌ [Firebird] Erro no roteiro operacional:', error);
+        console.error('❌ [Postgres] Erro no roteiro operacional:', error);
         res.status(500).json({ error: error.message });
     }
 });
