@@ -1397,6 +1397,120 @@
             100% { box-shadow: 0 0 0 0 rgba(var(--color-primary-rgb), 0); }
         }
 
+        .monitor-context-menu {
+            position: fixed;
+            display: none;
+            min-width: 260px;
+            padding: 8px;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.12);
+            background: rgba(13,13,16,0.96);
+            box-shadow: 0 24px 70px rgba(0,0,0,0.46);
+            z-index: 1000005;
+            backdrop-filter: blur(12px);
+        }
+
+        .monitor-context-menu.open {
+            display: block;
+            animation: contextMenuIn 0.12s ease both;
+        }
+
+        .monitor-context-title {
+            padding: 8px 10px 9px;
+            color: var(--text-muted);
+            font-size: 0.68rem;
+            font-weight: 800;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            border-bottom: 1px solid rgba(255,255,255,0.07);
+            margin-bottom: 6px;
+        }
+
+        .monitor-context-item {
+            width: 100%;
+            min-height: 38px;
+            border: 0;
+            border-radius: 8px;
+            background: transparent;
+            color: #e5e7eb;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 9px 10px;
+            font-family: var(--font-main);
+            font-size: 0.82rem;
+            font-weight: 700;
+            text-align: left;
+            cursor: pointer;
+            transition: background 0.16s, color 0.16s;
+        }
+
+        .monitor-context-item i {
+            width: 16px;
+            color: var(--color-primary);
+            text-align: center;
+        }
+
+        .monitor-context-item:hover {
+            background: rgba(255,255,255,0.07);
+            color: #fff;
+        }
+
+        .monitor-context-item.danger i {
+            color: var(--status-danger);
+        }
+
+        .monitor-op-filter-chip {
+            position: fixed;
+            right: 30px;
+            top: 74px;
+            display: none;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 10px 8px 12px;
+            border-radius: 999px;
+            border: 1px solid rgba(var(--color-primary-rgb), 0.28);
+            background: rgba(13,13,16,0.92);
+            color: #fff;
+            box-shadow: 0 12px 30px rgba(0,0,0,0.28);
+            z-index: 1001;
+            font-size: 0.76rem;
+            font-weight: 800;
+            letter-spacing: 0.02em;
+        }
+
+        .monitor-op-filter-chip.active {
+            display: inline-flex;
+        }
+
+        .monitor-op-filter-chip span {
+            color: var(--color-primary);
+            font-family: var(--font-mono);
+        }
+
+        .monitor-op-filter-chip button {
+            width: 24px;
+            height: 24px;
+            border: 0;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.08);
+            color: #fff;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .monitor-op-filter-chip button:hover {
+            background: rgba(239,68,68,0.16);
+            color: #fca5a5;
+        }
+
+        @keyframes contextMenuIn {
+            from { opacity: 0; transform: translateY(4px) scale(0.98); }
+            to { opacity: 1; transform: none; }
+        }
+
         body:not(.presentation-mode) #kanban-container {
             display: none;
         }
@@ -1533,6 +1647,25 @@
                 aria-label="Abrir informações e auditoria"><i class="fa-solid fa-info"></i></button>
         </div>
     </header>
+
+    <div id="monitorOpFilterChip" class="monitor-op-filter-chip">
+        Filtro OP <span id="monitorOpFilterValue">-</span>
+        <button type="button" onclick="clearMonitorOpFilter()" title="Limpar filtro de OP" aria-label="Limpar filtro de OP">
+            <i class="fa-solid fa-xmark"></i>
+        </button>
+    </div>
+
+    <div id="monitorContextMenu" class="monitor-context-menu" role="menu" aria-hidden="true">
+        <div class="monitor-context-title">Monitoramento</div>
+        <button type="button" class="monitor-context-item" onclick="promptMonitorOpFilter()" role="menuitem">
+            <i class="fa-solid fa-filter"></i>
+            Filtrar por uma OP
+        </button>
+        <button type="button" class="monitor-context-item danger" onclick="clearMonitorOpFilter()" role="menuitem">
+            <i class="fa-solid fa-filter-circle-xmark"></i>
+            Limpar filtros
+        </button>
+    </div>
 
     <div class="kanban-container" id="kanban-container">
         <!-- Coluna: MOLDAGEM -->
@@ -2121,6 +2254,68 @@
         };
 
         let customWeights = {}; // Memory for manual weights set in pedidos.html
+        let monitorOpFilter = '';
+
+        function normalizeMonitorOp(value) {
+            return String(value || '').replace(/\D/g, '').trim();
+        }
+
+        function updateMonitorOpFilterChip() {
+            const chip = document.getElementById('monitorOpFilterChip');
+            const value = document.getElementById('monitorOpFilterValue');
+            if (!chip || !value) return;
+            value.textContent = monitorOpFilter || '-';
+            chip.classList.toggle('active', !!monitorOpFilter);
+        }
+
+        function hideMonitorContextMenu() {
+            const menu = document.getElementById('monitorContextMenu');
+            if (!menu) return;
+            menu.classList.remove('open');
+            menu.setAttribute('aria-hidden', 'true');
+        }
+
+        function showMonitorContextMenu(event) {
+            event.preventDefault();
+            const menu = document.getElementById('monitorContextMenu');
+            if (!menu) return;
+            const margin = 10;
+            menu.classList.add('open');
+            menu.setAttribute('aria-hidden', 'false');
+            const rect = menu.getBoundingClientRect();
+            const left = Math.min(event.clientX, window.innerWidth - rect.width - margin);
+            const top = Math.min(event.clientY, window.innerHeight - rect.height - margin);
+            menu.style.left = `${Math.max(margin, left)}px`;
+            menu.style.top = `${Math.max(margin, top)}px`;
+        }
+
+        async function promptMonitorOpFilter() {
+            hideMonitorContextMenu();
+            const current = monitorOpFilter || '';
+            const value = typeof classicPrompt === 'function'
+                ? await classicPrompt('Digite o número da OP para filtrar:', current)
+                : window.prompt('Digite o número da OP para filtrar:', current);
+            if (value === null) return;
+            const op = normalizeMonitorOp(value);
+            if (!op) return;
+            monitorOpFilter = op;
+            localStorage.setItem('erus_monitoramento_op_filter', monitorOpFilter);
+            updateMonitorOpFilterChip();
+            renderBoard();
+            document.querySelectorAll('.cards-list').forEach(list => { list.scrollTop = 0; });
+            showToast('Filtro aplicado', `Mostrando apenas a OP ${monitorOpFilter}.`);
+        }
+
+        function clearMonitorOpFilter() {
+            hideMonitorContextMenu();
+            monitorOpFilter = '';
+            localStorage.removeItem('erus_monitoramento_op_filter');
+            document.querySelectorAll('.column-search input').forEach(input => { input.value = ''; });
+            updateMonitorOpFilterChip();
+            renderBoard();
+            document.querySelectorAll('.cards-list').forEach(list => { list.scrollTop = 0; });
+            showToast('Filtros limpos', 'Monitoramento voltou a mostrar todas as OPs.');
+        }
 
         function isClosedMonitoringOp(op) {
             const statusPcp = String(op.STATUS_PCP || '').trim().toUpperCase();
@@ -2869,6 +3064,8 @@
                     if (!list) return;
 
                     const cleanedOP = String(op.OP_PCS || '').trim();
+                    if (monitorOpFilter && normalizeMonitorOp(cleanedOP) !== monitorOpFilter) return;
+
                     if (cleanedOP && cleanedOP !== '-') {
                         if (processedOpsByStage[stage].has(cleanedOP)) return;
                         processedOpsByStage[stage].add(cleanedOP);
@@ -3453,6 +3650,16 @@
 
         document.addEventListener('DOMContentLoaded', () => {
             console.info('Monitoramento build:', MONITORAMENTO_BUILD_VERSION);
+            monitorOpFilter = normalizeMonitorOp(localStorage.getItem('erus_monitoramento_op_filter'));
+            updateMonitorOpFilterChip();
+
+            document.addEventListener('contextmenu', showMonitorContextMenu);
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest('#monitorContextMenu')) hideMonitorContextMenu();
+            });
+            window.addEventListener('resize', hideMonitorContextMenu);
+            window.addEventListener('scroll', hideMonitorContextMenu, true);
+
             const savedLT = localStorage.getItem('erus_monitoramento_lt');
             if (savedLT) {
                 const parsedLT = JSON.parse(savedLT);
@@ -3512,6 +3719,7 @@
                     } else if (document.body.classList.contains('presentation-mode')) {
                         togglePresentationMode();
                     }
+                    hideMonitorContextMenu();
                 }
             });
         });
@@ -3591,9 +3799,5 @@
     </script>
     <script src="js/notifications.js"></script>
     <script src="session-guard.js"></script>
-    <script id="no-native-context-menu">
-        document.addEventListener('contextmenu', (e) => {
-            e.preventDefault();
-        });
-    </script></body>
+</body>
 </html>
