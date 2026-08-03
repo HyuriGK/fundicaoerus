@@ -275,6 +275,7 @@ router.get('/', async (req, res) => {
                 WHERE
                     ((p.data->>'QUANTIDADE_PPR')::numeric - COALESCE((p.data->>'QUANTIDADE_FATURADA_PPR')::numeric, 0) - COALESCE((p.data->>'QUANTIDADE_DESISTENCIA_PPR')::numeric, 0)) > 0
                     AND (p.data->>'STATUS_PPR') <> 'C'
+                    AND COALESCE(p.data->>'STATUS_PCP', '') NOT IN ('C', 'E', 'F')
                 ORDER BY
                     (f.pro_codigo_fic IS NOT NULL) DESC,
                     f.data_fic DESC NULLS LAST,
@@ -312,6 +313,13 @@ router.get('/', async (req, res) => {
         const linksResult = await pool.query('SELECT sync_key, op, status FROM pedidos_op_links');
         const linksMap = {};
         linksResult.rows.forEach(l => { linksMap[l.sync_key] = l; });
+        const closedOpsResult = await pool.query(`
+            SELECT data->>'OP_PCS' AS op
+            FROM firebird_sync_pedidos
+            WHERE sync_key LIKE 'OP-%'
+              AND COALESCE(data->>'STATUS_PCP', '') IN ('C', 'E', 'F')
+        `);
+        const closedOps = new Set(closedOpsResult.rows.map(row => String(row.op || '').trim()).filter(Boolean));
         const produtoPesoResult = await pool.query(`
             SELECT
                 data->>'PRODUTO_PPR' AS produto,
@@ -366,6 +374,9 @@ router.get('/', async (req, res) => {
                 item.OP_PCS = null;
             }
             return item;
+        }).filter(item => {
+            const opValue = String(item.OP_PCS || '').trim();
+            return !opValue || !closedOps.has(opValue);
         });
 
         res.json(pedidos);
