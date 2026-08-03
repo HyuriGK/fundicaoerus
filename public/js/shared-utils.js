@@ -47,7 +47,8 @@ function getItemSectorMetrics(item) {
     const erpFat = Number(item.QUANTIDADE_FATURADO_PPR || item.QUANTIDADE_FATURADA_PPR) || 0;
     
     // Target Total Quantity
-    const linkedOp = String(item.OP_PCS || '').trim();
+    const linkStatus = String(item.LINK_STATUS || '').trim().toLowerCase();
+    const linkedOp = linkStatus === 'sugerido' ? '' : String(item.OP_PCS || '').trim();
     const opQty = Number(item.OP_QUANTIDADE) || 0;
     let targetTotalQty = (linkedOp && linkedOp !== '-' && opQty > 0)
         ? opQty
@@ -56,33 +57,34 @@ function getItemSectorMetrics(item) {
             (saldoLib + erpFat),
             qtdOrig
         );
+    const ignoreSuggestedOp = linkStatus === 'sugerido';
 
     // REFUGOS POR SETOR (peças que morreram em cada etapa)
-    const refugoMoldagem  = Math.max(0, Number(item.REFUGO_MOLDAGEM)  || 0);
-    const refugoFusao     = Math.max(0, Number(item.REFUGO_FUSAO)     || 0);
-    const refugoAcabamento= Math.max(0, Number(item.REFUGO_ACABAMENTO)|| 0);
-    const refugoTT        = Math.max(0, Number(item.REFUGO_TT)        || 0);
-    const refugoUsinagem  = Math.max(0, Number(item.REFUGO_USINAGEM)  || 0);
-    const refugoQualidade = Math.max(0, Number(item.REFUGO_QUALIDADE) || 0);
-    const refugoExpedicao = Math.max(0, Number(item.REFUGO_EXPEDICAO) || 0);
+    const refugoMoldagem  = ignoreSuggestedOp ? 0 : Math.max(0, Number(item.REFUGO_MOLDAGEM)  || 0);
+    const refugoFusao     = ignoreSuggestedOp ? 0 : Math.max(0, Number(item.REFUGO_FUSAO)     || 0);
+    const refugoAcabamento= ignoreSuggestedOp ? 0 : Math.max(0, Number(item.REFUGO_ACABAMENTO)|| 0);
+    const refugoTT        = ignoreSuggestedOp ? 0 : Math.max(0, Number(item.REFUGO_TT)        || 0);
+    const refugoUsinagem  = ignoreSuggestedOp ? 0 : Math.max(0, Number(item.REFUGO_USINAGEM)  || 0);
+    const refugoQualidade = ignoreSuggestedOp ? 0 : Math.max(0, Number(item.REFUGO_QUALIDADE) || 0);
+    const refugoExpedicao = ignoreSuggestedOp ? 0 : Math.max(0, Number(item.REFUGO_EXPEDICAO) || 0);
 
     // PRODUZIDO por setor (líquido de refugo — o que pode avançar para o próximo setor)
-    const rawFaturamento = Math.max(0, Number(item.QTY_FATURAMENTO) || 0);
-    const rawExpedicao   = Math.max(0, Number(item.QTY_EXPEDICAO)   || 0);
-    const rawQualidade   = Math.max(0, (Number(item.QTY_QUALIDADE)   || 0) - refugoQualidade);
-    const rawUsinagem    = Math.max(0, (Number(item.QTY_USINAGEM)    || 0) - refugoUsinagem);
-    const rawTT          = Math.max(0, (Number(item.QTY_TT)          || 0) - refugoTT);
-    const rawAcabamento  = Math.max(0, (Number(item.QTY_ACABAMENTO)  || 0) - refugoAcabamento);
-    const rawFusao       = Math.max(0, (Number(item.QTY_FUSAO)       || 0) - refugoFusao);
-    const rawMoldada     = Math.max(0, (Number(item.QTY_MOLDADA)     || 0) - refugoMoldagem);
+    const rawFaturamento = ignoreSuggestedOp ? 0 : Math.max(0, Number(item.QTY_FATURAMENTO) || 0);
+    const rawExpedicao   = ignoreSuggestedOp ? 0 : Math.max(0, Number(item.QTY_EXPEDICAO)   || 0);
+    const rawQualidade   = ignoreSuggestedOp ? 0 : Math.max(0, (Number(item.QTY_QUALIDADE)   || 0) - refugoQualidade);
+    const rawUsinagem    = ignoreSuggestedOp ? 0 : Math.max(0, (Number(item.QTY_USINAGEM)    || 0) - refugoUsinagem);
+    const rawTT          = ignoreSuggestedOp ? 0 : Math.max(0, (Number(item.QTY_TT)          || 0) - refugoTT);
+    const rawAcabamento  = ignoreSuggestedOp ? 0 : Math.max(0, (Number(item.QTY_ACABAMENTO)  || 0) - refugoAcabamento);
+    const rawFusao       = ignoreSuggestedOp ? 0 : Math.max(0, (Number(item.QTY_FUSAO)       || 0) - refugoFusao);
+    const rawMoldada     = ignoreSuggestedOp ? 0 : Math.max(0, (Number(item.QTY_MOLDADA)     || 0) - refugoMoldagem);
 
     // APONTADO por setor (bruto, sem deduzir refugo — barreira de entrada no setor)
     // Peça apontada em X já saiu da fila do setor anterior, independente do resultado
-    const apontadoFusao      = Math.max(0, Number(item.QTY_FUSAO)      || 0);
-    const apontadoAcabamento = Math.max(0, Number(item.QTY_ACABAMENTO) || 0);
-    const apontadoTT         = Math.max(0, Number(item.QTY_TT)         || 0);
-    const apontadoUsinagem   = Math.max(0, Number(item.QTY_USINAGEM)   || 0);
-    const apontadoQualidade  = Math.max(0, Number(item.QTY_QUALIDADE)  || 0);
+    const apontadoFusao      = ignoreSuggestedOp ? 0 : Math.max(0, Number(item.QTY_FUSAO)      || 0);
+    const apontadoAcabamento = ignoreSuggestedOp ? 0 : Math.max(0, Number(item.QTY_ACABAMENTO) || 0);
+    const apontadoTT         = ignoreSuggestedOp ? 0 : Math.max(0, Number(item.QTY_TT)         || 0);
+    const apontadoUsinagem   = ignoreSuggestedOp ? 0 : Math.max(0, Number(item.QTY_USINAGEM)   || 0);
+    const apontadoQualidade  = ignoreSuggestedOp ? 0 : Math.max(0, Number(item.QTY_QUALIDADE)  || 0);
 
     const maxInd = Math.max(rawMoldada, rawFusao, rawAcabamento, rawTT, rawUsinagem, rawQualidade, rawExpedicao);
 
