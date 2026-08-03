@@ -180,22 +180,19 @@ async function syncMaster() {
                         const batchIds = allOpIds.slice(j, j + OP_BATCH_LIMIT);
                         const routeQuery = `
                             SELECT
-                                P.CODIGO_PCP AS CODIGO_PCS,
-                                PS.SEQUENCIA_PDS AS SEQUENCIA_PCS,
-                                PS.SET_CODIGO_PDS AS SETOR_PCS,
+                                PP.PCP_CODIGO_PPCD AS CODIGO_PCS,
+                                PP.SEQUENCIA_PPCD AS SEQUENCIA_PCS,
+                                PP.SET_CODIGO_PPCD AS SETOR_PCS,
                                 S.NOME_SET,
                                 0 AS DQUANTIDADE_PCS,
                                 0 AS DQUANTIDADE_REFUGO_PCS,
                                 CAST(NULL AS DATE) AS DATA_PCS
-                            FROM PRODUCAO P
-                            JOIN FICHA_TECNICA FT ON FT.CODIGO_FIC = P.FIC_CODIGO_PCP
-                            JOIN PROCEDIMENTO_SETOR PS ON PS.PDT_CODIGO_PDS = FT.PDT_CODIGO_FIC
+                            FROM PRODUCAO_PROCEDIMENTO PP
                             JOIN SETOR S
-                              ON S.EMPRESA_SET = PS.SET_EMPRESA_PDS
-                             AND S.CODIGO_SET = PS.SET_CODIGO_PDS
-                            WHERE P.EMPRESA_PCP = 10
-                              AND P.CODIGO_PCP IN (${batchIds.join(',')})
-                              AND PS.SET_EMPRESA_PDS = 10
+                              ON S.EMPRESA_SET = PP.SET_EMPRESA_PPCD
+                             AND S.CODIGO_SET = PP.SET_CODIGO_PPCD
+                            WHERE PP.PCP_EMPRESA_PPCD = 10
+                              AND PP.PCP_CODIGO_PPCD IN (${batchIds.join(',')})
                               AND COALESCE(S.NOME_SET, '') NOT LIKE 'NAO USAR%'
                               AND COALESCE(S.NOME_SET, '') NOT LIKE 'NÃO USAR%'
 
