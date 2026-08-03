@@ -3379,16 +3379,37 @@
             `;
 
             try {
-                const [res, routeRes] = await Promise.all([
-                    fetch(`/api/pedidos-firebird/op-apontamentos?op=${op}`),
-                    fetch(`/api/pedidos-firebird/op-roteiro-operacional?op=${op}`)
-                ]);
-                const data = await res.json();
-                const operationalRoute = routeRes.ok ? await routeRes.json() : [];
+                const fetchJsonWithTimeout = async (url, ms = 10000) => {
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), ms);
+                    try {
+                        const response = await fetch(url, { signal: controller.signal });
+                        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                        return await response.json();
+                    } finally {
+                        clearTimeout(timeoutId);
+                    }
+                };
 
-                if (data.error) throw new Error(data.error);
+                let data = [];
+                let operationalRoute = [];
 
-                if (data.error) throw new Error(data.error);
+                try {
+                    const routeData = await fetchJsonWithTimeout(`/api/pedidos-firebird/op-roteiro-operacional?op=${op}`, 10000);
+                    operationalRoute = Array.isArray(routeData) ? routeData : [];
+                } catch (routeErr) {
+                    console.warn('Falha ao buscar roteiro operacional da OP:', routeErr);
+                }
+
+                if (!operationalRoute.length) {
+                    try {
+                        const pointingData = await fetchJsonWithTimeout(`/api/pedidos-firebird/op-apontamentos?op=${op}`, 8000);
+                        if (pointingData?.error) throw new Error(pointingData.error);
+                        data = Array.isArray(pointingData) ? pointingData : [];
+                    } catch (pointErr) {
+                        console.warn('Falha ao buscar apontamentos da OP:', pointErr);
+                    }
+                }
                 
                 // --- DYNAMIC ROUTE FILTERING (MODAL) ---
                 const rawRoute = opData.ROTEIRO_PRODUCAO;
@@ -3447,6 +3468,16 @@
                 ordered = ordered.filter((stage, index) => ordered.indexOf(stage) === index);
                 if (!ordered.length) {
                     ordered = modalGroups.filter(stage => aggregated[stage] > 0);
+                }
+
+                if (!ordered.length) {
+                    content.innerHTML = `
+                        <div style="text-align:center; padding:40px; color:var(--text-muted);">
+                            <i class="fa-solid fa-circle-info" style="font-size:2rem; color:var(--color-primary); margin-bottom:12px;"></i>
+                            <p>Nenhum roteiro ou apontamento sincronizado encontrado para esta OP.</p>
+                        </div>
+                    `;
+                    return;
                 }
 
                 const deliveryDate = opData.ENTREGA_PETR || opData.DATA_ENTREGA_PPR;
