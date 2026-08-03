@@ -50,13 +50,10 @@ function getItemSectorMetrics(item) {
     // Target Total Quantity
     const linkedOp = linkStatus === 'sugerido' ? '' : String(item.OP_PCS || '').trim();
     const opQty = Number(item.OP_QUANTIDADE) || 0;
+    const commercialBalance = getCommercialBalance(item);
     let targetTotalQty = (linkedOp && linkedOp !== '-' && opQty > 0)
         ? opQty
-        : Math.max(
-            opQty,
-            (saldoLib + erpFat),
-            qtdOrig
-        );
+        : commercialBalance;
     const ignoreSuggestedOp = linkStatus === 'sugerido';
 
     // REFUGOS POR SETOR (peças que morreram em cada etapa)
