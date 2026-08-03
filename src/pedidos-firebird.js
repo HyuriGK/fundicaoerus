@@ -378,6 +378,19 @@ router.get('/op-roteiro-operacional', async (req, res) => {
                 CASE WHEN setor_codigo = 101 THEN 999 ELSE setor_codigo END
         `, [String(op).trim()]);
 
+        const opInfoResult = await pool.query(`
+            SELECT
+                data->>'PRODUTO_PPR' AS produto,
+                data->>'NOME_CLIENTE' AS cliente
+            FROM firebird_sync_emissoes
+            WHERE data->>'OP_PCS' = $1
+            LIMIT 1
+        `, [String(op).trim()]);
+        const opInfo = opInfoResult.rows[0] || {};
+        const produto = String(opInfo.produto || '').trim();
+        const cliente = String(opInfo.cliente || '').trim().toUpperCase();
+        const hideZeroQuality = produto.startsWith('71') || cliente.includes('GRANACO');
+
         const rows = result.rows.map(row => ({
             setor_codigo: Number(row.setor_codigo),
             sequencia: Number(row.sequencia),
@@ -393,6 +406,7 @@ router.get('/op-roteiro-operacional', async (req, res) => {
 
         res.json(rows.filter(row => {
             const qty = Number(row.produzido || 0) + Number(row.refugado || 0);
+            if (hideZeroQuality && Number(row.setor_codigo) === 60 && qty <= 0) return false;
             return qty > 0 || Number(row.sequencia || 0) > lastProducedSeq;
         }));
     } catch (error) {

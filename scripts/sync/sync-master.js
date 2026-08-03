@@ -186,8 +186,7 @@ async function syncMaster() {
                                 S.NOME_SET,
                                 0 AS DQUANTIDADE_PCS,
                                 0 AS DQUANTIDADE_REFUGO_PCS,
-                                CAST(NULL AS DATE) AS DATA_PCS,
-                                0 AS ORIGEM_PCS
+                                CAST(NULL AS DATE) AS DATA_PCS
                             FROM PRODUCAO P
                             JOIN FICHA_TECNICA FT ON FT.CODIGO_FIC = P.FIC_CODIGO_PCP
                             JOIN PROCEDIMENTO_SETOR PS ON PS.PDT_CODIGO_PDS = FT.PDT_CODIGO_FIC
@@ -209,8 +208,7 @@ async function syncMaster() {
                                 S.NOME_SET,
                                 PCS.DQUANTIDADE_PCS,
                                 PCS.DQUANTIDADE_REFUGO_PCS,
-                                PCS.DATA_PCS,
-                                1 AS ORIGEM_PCS
+                                PCS.DATA_PCS
                             FROM PRODUCAO_SETOR PCS
                             JOIN SETOR S
                               ON S.EMPRESA_SET = PCS.SET_EMPRESA_PCS
@@ -228,15 +226,7 @@ async function syncMaster() {
                             });
                         });
 
-                        const opsWithProductionRoute = new Set(
-                            routeRows
-                                .filter(row => Number(row.ORIGEM_PCS) === 1)
-                                .map(row => String(row.CODIGO_PCS).trim())
-                        );
-
                         routeRows.forEach(row => {
-                            if (Number(row.ORIGEM_PCS) === 0 && opsWithProductionRoute.has(String(row.CODIGO_PCS).trim())) return;
-
                             const opEmissao = opEmissaoMap[row.CODIGO_PCS];
                             const producedQty = Number(row.DQUANTIDADE_PCS) || 0;
                             const rejectedQty = Number(row.DQUANTIDADE_REFUGO_PCS) || 0;
