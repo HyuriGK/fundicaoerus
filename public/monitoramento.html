@@ -2385,10 +2385,16 @@
         }
 
         const sectorGroups = {
+            'MOLDAGEM GERAL': ['MOLDAGEM', 'MOLDAGEM MANUAL', 'MOLDAGEM PESADA', 'MOLDAGEM LEVE', 'MOLDAGEM MECANIZADA', 'MOLDAGEM AUTOMÁTICA', 'MOLDAGEM EM AREIA'],
             'MOLDAGEM': ['MOLDAGEM', 'MOLDAGEM MANUAL', 'MOLDAGEM PESADA', 'MOLDAGEM LEVE', 'MOLDAGEM MECANIZADA', 'MOLDAGEM AUTOMÁTICA', 'MOLDAGEM EM AREIA'],
             'FUSÃO': ['FUSÃO', 'FUSAO'],
             'ACABAMENTO': ['ACABAMENTO', 'REBARBAÇÃO', 'GRALHA'],
             'TRATAMENTO TÉRMICO': ['TRATAMENTO TÉRMICO', 'TRATAMENTO TERMICO'],
+            'AGUARDANDO USINAGEM EXTERNA': ['TRATAMENTO TÉRMICO', 'TRATAMENTO TERMICO'],
+            'AGUARDANDO QUALIDADE': ['TRATAMENTO TÉRMICO', 'TRATAMENTO TERMICO', 'USINAGEM', 'TORNEARIA'],
+            'EM USINAGEM EXTERNA': ['USINAGEM', 'TORNEARIA'],
+            'AGUARDANDO EXPEDIÇÃO': ['INSPEÇÃO DE QUALIDADE', 'INSPECAO DE QUALIDADE', 'QUALIDADE', 'REVISÃO'],
+            'AGUARDANDO FATURAMENTO': ['EXPEDIÇÃO', 'EXPEDICAO', 'LOGÍSTICA'],
             'USINAGEM': ['USINAGEM', 'TORNEARIA'],
             'INSP. QUALIDADE': ['INSPEÇÃO DE QUALIDADE', 'INSPECAO DE QUALIDADE', 'QUALIDADE', 'REVISÃO'],
             'EXPEDIÇÃO': ['EXPEDIÇÃO', 'EXPEDICAO', 'LOGÍSTICA']
@@ -2720,7 +2726,7 @@
 
             Object.entries(opPoints).forEach(([sectorName, data]) => {
                 const group = orderedStages.find(stage =>
-                    sectorGroups[stage].some(sub => sectorName.toUpperCase().includes(sub))
+                    (sectorGroups[stage] || []).some(sub => sectorName.toUpperCase().includes(sub))
                 );
                 if (group) {
                     groupStatus[group].qty += data.quantidade;
@@ -2731,7 +2737,7 @@
                 }
             });
 
-            const qtyExpedited = groupStatus['EXPEDIÇÃO'].qty;
+            const qtyExpedited = groupStatus['AGUARDANDO FATURAMENTO']?.qty || 0;
             const now = toLocalDate(new Date());
 
             // --- 1. Filter stages that belong to this OP's technical route ---
@@ -2743,11 +2749,11 @@
                 
                 // Route is a comma-separated string of NAMES from Postgres
                 const routeNames = String(opRoute).split(',').map(s => s.trim().toUpperCase());
-                const aliases = sectorGroups[stage].map(a => a.toUpperCase());
+                const aliases = (sectorGroups[stage] || []).map(a => a.toUpperCase());
                 const inRoute = routeNames.some(name => 
                     name.length > 0 && aliases.some(alias => name.includes(alias) || alias.includes(name))
                 );
-                return stage === 'EXPEDIÇÃO' || inRoute || pointedInStage > 0;
+                return stage === 'AGUARDANDO FATURAMENTO' || inRoute || pointedInStage > 0;
             });
 
             // --- 2. Calculate Meta Dates sequentially for these stages only ---
@@ -2935,6 +2941,12 @@
         }
 
         function getCarteiraStages(op) {
+            const opNumber = String(op.OP_PCS || '').trim();
+            if (opNumber && opNumber !== '-' && pointingSummary[opNumber]) {
+                const totalQty = parseInt(op.OP_QUANTIDADE) || parseInt(op.QUANTIDADE_PPR) || 0;
+                return getOpStages(opNumber, totalQty, op.OP_EMISSAO || op.DATA_EMISSAO_PEDIDO, op.ROTEIRO_PRODUCAO);
+            }
+
             if (typeof getItemSectorMetrics !== 'function') {
                 const totalQty = parseInt(op.OP_QUANTIDADE) || parseInt(op.QUANTIDADE_PPR) || 0;
                 return getOpStages(op.OP_PCS, totalQty, op.OP_EMISSAO || op.DATA_EMISSAO_PEDIDO, op.ROTEIRO_PRODUCAO);
