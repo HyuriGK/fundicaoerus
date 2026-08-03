@@ -378,14 +378,23 @@ router.get('/op-roteiro-operacional', async (req, res) => {
                 CASE WHEN setor_codigo = 101 THEN 999 ELSE setor_codigo END
         `, [String(op).trim()]);
 
-        res.json(result.rows.map(row => ({
+        const rows = result.rows.map(row => ({
             setor_codigo: Number(row.setor_codigo),
             sequencia: Number(row.sequencia),
             setor: String(row.setor || '').trim().toUpperCase(),
             produzido: Number(row.produzido || 0),
             refugado: Number(row.refugado || 0),
             ultima_data: row.ultima_data
-        })));
+        }));
+        const lastProducedSeq = rows.reduce((maxSeq, row) => {
+            const qty = Number(row.produzido || 0) + Number(row.refugado || 0);
+            return qty > 0 ? Math.max(maxSeq, Number(row.sequencia || 0)) : maxSeq;
+        }, 0);
+
+        res.json(rows.filter(row => {
+            const qty = Number(row.produzido || 0) + Number(row.refugado || 0);
+            return qty > 0 || Number(row.sequencia || 0) > lastProducedSeq;
+        }));
     } catch (error) {
         console.error('❌ [Postgres] Erro no roteiro operacional:', error);
         res.status(500).json({ error: error.message });
