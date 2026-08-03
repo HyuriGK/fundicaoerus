@@ -180,6 +180,28 @@ async function syncMaster() {
                         const batchIds = allOpIds.slice(j, j + OP_BATCH_LIMIT);
                         const routeQuery = `
                             SELECT
+                                P.CODIGO_PCP AS CODIGO_PCS,
+                                PS.SEQUENCIA_PDS AS SEQUENCIA_PCS,
+                                PS.SET_CODIGO_PDS AS SETOR_PCS,
+                                S.NOME_SET,
+                                0 AS DQUANTIDADE_PCS,
+                                0 AS DQUANTIDADE_REFUGO_PCS,
+                                CAST(NULL AS DATE) AS DATA_PCS
+                            FROM PRODUCAO P
+                            JOIN FICHA_TECNICA FT ON FT.CODIGO_FIC = P.FIC_CODIGO_PCP
+                            JOIN PROCEDIMENTO_SETOR PS ON PS.PDT_CODIGO_PDS = FT.PDT_CODIGO_FIC
+                            JOIN SETOR S
+                              ON S.EMPRESA_SET = PS.SET_EMPRESA_PDS
+                             AND S.CODIGO_SET = PS.SET_CODIGO_PDS
+                            WHERE P.EMPRESA_PCP = 10
+                              AND P.CODIGO_PCP IN (${batchIds.join(',')})
+                              AND PS.SET_EMPRESA_PDS = 10
+                              AND COALESCE(S.NOME_SET, '') NOT LIKE 'NAO USAR%'
+                              AND COALESCE(S.NOME_SET, '') NOT LIKE 'NÃO USAR%'
+
+                            UNION ALL
+
+                            SELECT
                                 PCS.CODIGO_PCS,
                                 PCS.SEQUENCIA_PCS,
                                 PCS.SETOR_PCS,
@@ -206,7 +228,9 @@ async function syncMaster() {
 
                         routeRows.forEach(row => {
                             const opEmissao = opEmissaoMap[row.CODIGO_PCS];
-                            if (opEmissao && row.DATA_PCS && new Date(row.DATA_PCS) < new Date(opEmissao)) return;
+                            const producedQty = Number(row.DQUANTIDADE_PCS) || 0;
+                            const rejectedQty = Number(row.DQUANTIDADE_REFUGO_PCS) || 0;
+                            if ((producedQty > 0 || rejectedQty > 0) && opEmissao && row.DATA_PCS && new Date(row.DATA_PCS) < new Date(opEmissao)) return;
 
                             const key = `${row.CODIGO_PCS}|${row.SETOR_PCS}`;
                             const current = routeRowsByOpSector.get(key) || {
@@ -219,9 +243,13 @@ async function syncMaster() {
                                 ultima_data: null
                             };
 
-                            current.sequencia = Math.min(current.sequencia, Number(row.SEQUENCIA_PCS) || current.sequencia);
-                            current.produzido += Number(row.DQUANTIDADE_PCS) || 0;
-                            current.refugado += Number(row.DQUANTIDADE_REFUGO_PCS) || 0;
+                            if (producedQty === 0 && rejectedQty === 0 && !row.DATA_PCS) {
+                                current.sequencia = Number(row.SEQUENCIA_PCS) || current.sequencia;
+                            } else if (!current.sequencia || current.sequencia === 999) {
+                                current.sequencia = Number(row.SEQUENCIA_PCS) || current.sequencia;
+                            }
+                            current.produzido += producedQty;
+                            current.refugado += rejectedQty;
                             if (row.DATA_PCS && (!current.ultima_data || new Date(row.DATA_PCS) > new Date(current.ultima_data))) {
                                 current.ultima_data = row.DATA_PCS;
                             }
