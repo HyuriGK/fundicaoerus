@@ -47,11 +47,15 @@ function getItemSectorMetrics(item) {
     const erpFat = Number(item.QUANTIDADE_FATURADO_PPR || item.QUANTIDADE_FATURADA_PPR) || 0;
     
     // Target Total Quantity
-    let targetTotalQty = Math.max(
-        (Number(item.OP_QUANTIDADE) || 0),
-        (saldoLib + erpFat),
-        qtdOrig
-    );
+    const linkedOp = String(item.OP_PCS || '').trim();
+    const opQty = Number(item.OP_QUANTIDADE) || 0;
+    let targetTotalQty = (linkedOp && linkedOp !== '-' && opQty > 0)
+        ? opQty
+        : Math.max(
+            opQty,
+            (saldoLib + erpFat),
+            qtdOrig
+        );
 
     // REFUGOS POR SETOR (peças que morreram em cada etapa)
     const refugoMoldagem  = Math.max(0, Number(item.REFUGO_MOLDAGEM)  || 0);

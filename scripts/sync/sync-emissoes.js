@@ -310,10 +310,20 @@ async function syncEmissoes() {
                         });
                     });
 
+                    let selectedOpInfo = null;
+                    if (linkedOps.length > 0) {
+                        const suggestions = productOpsMap[String(r.PRODUTO_PPR || '').trim()] || [];
+                        selectedOpInfo = suggestions.find(op => Number(op.CODIGO_PCP) === Number(linkedOps[0])) || null;
+                    }
+
                     return {
                         ...r,
                         ROTEIRO_PRODUCAO: roteiro,
                         OP_PCS: linkedOps.length > 0 ? String(linkedOps[0]) : null,
+                        OP_EMISSAO: selectedOpInfo?.DATA_PCP || r.OP_EMISSAO || null,
+                        OP_ENTREGA: selectedOpInfo?.ENTREGA_PCP || r.OP_ENTREGA || null,
+                        OP_QUANTIDADE: selectedOpInfo?.QUANTIDADE_PCP || r.OP_QUANTIDADE || null,
+                        STATUS_PCP: selectedOpInfo?.STATUS_PCP || r.STATUS_PCP || null,
                         LINK_STATUS: linkStatus,
                         OP_SUGERIDA_INFO: suggestedOp,
                         QTY_MOLDADA: totals[10] + totals[11] + totals[12],
