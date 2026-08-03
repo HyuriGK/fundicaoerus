@@ -52,7 +52,7 @@ function getItemSectorMetrics(item) {
     const opQty = Number(item.OP_QUANTIDADE) || 0;
     const commercialBalance = getCommercialBalance(item);
     let targetTotalQty = (linkedOp && linkedOp !== '-' && opQty > 0)
-        ? opQty
+        ? Math.max(opQty, commercialBalance)
         : commercialBalance;
     const ignoreSuggestedOp = linkStatus === 'sugerido';
 
