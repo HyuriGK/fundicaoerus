@@ -364,28 +364,22 @@ router.get('/op-roteiro-operacional', async (req, res) => {
 
         const result = await pool.query(`
             SELECT
+                setor_codigo,
+                sequencia,
                 setor,
-                SUM(quantidade) AS produzido,
-                SUM(COALESCE(refugo, 0)) AS refugado,
-                MAX(data_producao) AS ultima_data
-            FROM producao_apontada_sincronizada
+                produzido,
+                refugado,
+                ultima_data
+            FROM producao_roteiro_operacional_sync
             WHERE op = $1
-            GROUP BY setor
             ORDER BY
-                CASE
-                    WHEN UPPER(setor) LIKE 'MOLDAGEM%' THEN 1
-                    WHEN UPPER(setor) IN ('FUSAO', 'FUSÃO', 'FUNDICAO', 'FUNDIÇÃO') THEN 2
-                    WHEN UPPER(setor) IN ('ACABAMENTO', 'REBARBAÇÃO', 'REBARBACAO', 'GRALHA') THEN 3
-                    WHEN UPPER(setor) IN ('TRATAMENTO TERMICO', 'TRATAMENTO TÉRMICO', 'NORMALIZACAO', 'NORMALIZAÇÃO') THEN 4
-                    WHEN UPPER(setor) IN ('USINAGEM', 'TORNEARIA', 'USINAGEM EXPEDICAO') THEN 5
-                    WHEN UPPER(setor) IN ('INSPECAO DE QUALIDADE', 'INSPEÇÃO DE QUALIDADE', 'QUALIDADE', 'REVISÃO', 'REVISAO', 'PRODUZIDA / INSPECIONADO') THEN 6
-                    WHEN UPPER(setor) IN ('EXPEDICAO', 'EXPEDIÇÃO', 'LOGÍSTICA', 'LOGISTICA') THEN 7
-                    WHEN UPPER(setor) IN ('FATURAMENTO', 'FATURADO') THEN 8
-                    ELSE 90
-                END
+                COALESCE(sequencia, 999),
+                CASE WHEN setor_codigo = 101 THEN 999 ELSE setor_codigo END
         `, [String(op).trim()]);
 
         res.json(result.rows.map(row => ({
+            setor_codigo: Number(row.setor_codigo),
+            sequencia: Number(row.sequencia),
             setor: String(row.setor || '').trim().toUpperCase(),
             produzido: Number(row.produzido || 0),
             refugado: Number(row.refugado || 0),

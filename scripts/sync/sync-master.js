@@ -156,6 +156,97 @@ async function syncMaster() {
                 let processed = 0;
 
                 await pgClient.query('BEGIN');
+                await pgClient.query(`
+                    CREATE TABLE IF NOT EXISTS producao_roteiro_operacional_sync (
+                        op TEXT NOT NULL,
+                        sequencia INTEGER,
+                        setor_codigo INTEGER NOT NULL,
+                        setor TEXT NOT NULL,
+                        produzido NUMERIC(12,3) DEFAULT 0,
+                        refugado NUMERIC(12,3) DEFAULT 0,
+                        ultima_data DATE,
+                        atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        PRIMARY KEY (op, setor_codigo)
+                    )
+                `);
+                await pgClient.query('TRUNCATE TABLE producao_roteiro_operacional_sync');
+
+                if (allOpIds.length > 0) {
+                    console.log(`🧭 [2.1/4] Sincronizando roteiro operacional completo de ${allOpIds.length} OPs...`);
+                    const routeRowsByOpSector = new Map();
+                    const OP_BATCH_LIMIT = 500;
+
+                    for (let j = 0; j < allOpIds.length; j += OP_BATCH_LIMIT) {
+                        const batchIds = allOpIds.slice(j, j + OP_BATCH_LIMIT);
+                        const routeQuery = `
+                            SELECT
+                                PCS.CODIGO_PCS,
+                                PCS.SEQUENCIA_PCS,
+                                PCS.SETOR_PCS,
+                                S.NOME_SET,
+                                PCS.DQUANTIDADE_PCS,
+                                PCS.DQUANTIDADE_REFUGO_PCS,
+                                PCS.DATA_PCS
+                            FROM PRODUCAO_SETOR PCS
+                            JOIN SETOR S
+                              ON S.EMPRESA_SET = PCS.SET_EMPRESA_PCS
+                             AND S.CODIGO_SET = PCS.SETOR_PCS
+                            WHERE PCS.EMPRESA_PCS = 10
+                              AND PCS.CODIGO_PCS IN (${batchIds.join(',')})
+                              AND COALESCE(S.NOME_SET, '') NOT LIKE 'NAO USAR%'
+                              AND COALESCE(S.NOME_SET, '') NOT LIKE 'NÃO USAR%'
+                        `;
+
+                        const routeRows = await new Promise((resolve, reject) => {
+                            db.query(routeQuery, (err, res) => {
+                                if (err) reject(err);
+                                else resolve(res || []);
+                            });
+                        });
+
+                        routeRows.forEach(row => {
+                            const opEmissao = opEmissaoMap[row.CODIGO_PCS];
+                            if (opEmissao && row.DATA_PCS && new Date(row.DATA_PCS) < new Date(opEmissao)) return;
+
+                            const key = `${row.CODIGO_PCS}|${row.SETOR_PCS}`;
+                            const current = routeRowsByOpSector.get(key) || {
+                                op: String(row.CODIGO_PCS).trim(),
+                                sequencia: Number(row.SEQUENCIA_PCS) || 999,
+                                setor_codigo: Number(row.SETOR_PCS),
+                                setor: String(row.NOME_SET || '').trim().toUpperCase(),
+                                produzido: 0,
+                                refugado: 0,
+                                ultima_data: null
+                            };
+
+                            current.sequencia = Math.min(current.sequencia, Number(row.SEQUENCIA_PCS) || current.sequencia);
+                            current.produzido += Number(row.DQUANTIDADE_PCS) || 0;
+                            current.refugado += Number(row.DQUANTIDADE_REFUGO_PCS) || 0;
+                            if (row.DATA_PCS && (!current.ultima_data || new Date(row.DATA_PCS) > new Date(current.ultima_data))) {
+                                current.ultima_data = row.DATA_PCS;
+                            }
+                            routeRowsByOpSector.set(key, current);
+                        });
+                    }
+
+                    for (const row of routeRowsByOpSector.values()) {
+                        await pgClient.query(`
+                            INSERT INTO producao_roteiro_operacional_sync
+                                (op, sequencia, setor_codigo, setor, produzido, refugado, ultima_data, atualizado_em)
+                            VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
+                            ON CONFLICT (op, setor_codigo) DO UPDATE SET
+                                sequencia = EXCLUDED.sequencia,
+                                setor = EXCLUDED.setor,
+                                produzido = EXCLUDED.produzido,
+                                refugado = EXCLUDED.refugado,
+                                ultima_data = EXCLUDED.ultima_data,
+                                atualizado_em = CURRENT_TIMESTAMP
+                        `, [row.op, row.sequencia, row.setor_codigo, row.setor, row.produzido, row.refugado, row.ultima_data]);
+                    }
+
+                    console.log(`✅ [2.1/4] Roteiro operacional sincronizado: ${routeRowsByOpSector.size} linhas.`);
+                }
+
                 for (const op of opsResults) {
                     const syncKey = `OP-${op.OP_PCS}`;
                     op.OP_QUANTIDADE = op.OP_QUANTIDADE || 0;
