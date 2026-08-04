@@ -16,6 +16,21 @@ async function ensureModeloStatusTable() {
     modeloStatusTableReady = true;
 }
 
+let conferenciaTableReady = false;
+async function ensureConferenciaTable() {
+    if (conferenciaTableReady) return;
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS pedidos_conferencia (
+            sync_key TEXT PRIMARY KEY,
+            conferido BOOLEAN NOT NULL DEFAULT false,
+            updated_at TIMESTAMP DEFAULT NOW(),
+            updated_by TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_pedidos_conferencia_sync_key ON pedidos_conferencia(sync_key);
+    `);
+    conferenciaTableReady = true;
+}
+
 function getCommercialOwnerRestriction(req) {
     const role = String(req.user?.role || '').trim().toLowerCase();
     const username = String(req.user?.user || '').trim().toLowerCase();
@@ -157,6 +172,7 @@ router.get('/resumo-carteira', async (req, res) => {
     try {
         res.set('Cache-Control', 'no-store');
         await ensureModeloStatusTable();
+        await ensureConferenciaTable();
         const commercialOwner = getCommercialOwnerRestriction(req);
         const ownerJoin = commercialOwner ? `
                 JOIN clientes_firebird_sync c
@@ -244,6 +260,7 @@ router.get('/', async (req, res) => {
         }
 
         await ensureModeloStatusTable();
+        await ensureConferenciaTable();
         const commercialOwner = getCommercialOwnerRestriction(req);
         const ownerJoin = commercialOwner ? `
                 JOIN clientes_firebird_sync c
@@ -266,11 +283,13 @@ router.get('/', async (req, res) => {
                     f.peso_liquido_pro AS ficha_peso_liquido_pro,
                     f.tipo_moldagem_procedimento,
                     obs.observacao,
-                    ms.modelo_status
+                    ms.modelo_status,
+                    COALESCE(pc.conferido, false) AS conferido
                 FROM firebird_sync_emissoes p
                 LEFT JOIN ficha_tecnica f ON f.pro_codigo_fic = (p.data->>'PRODUTO_PPR')
                 LEFT JOIN pedidos_observacoes obs ON obs.sync_key = p.sync_key
                 LEFT JOIN pedidos_modelo_status ms ON ms.sync_key = p.sync_key
+                LEFT JOIN pedidos_conferencia pc ON pc.sync_key = p.sync_key
                 ${ownerJoin}
                 WHERE
                     ((p.data->>'QUANTIDADE_PPR')::numeric - COALESCE((p.data->>'QUANTIDADE_FATURADA_PPR')::numeric, 0) - COALESCE((p.data->>'QUANTIDADE_DESISTENCIA_PPR')::numeric, 0)) > 0
@@ -293,11 +312,13 @@ router.get('/', async (req, res) => {
                     f.peso_liquido_pro AS ficha_peso_liquido_pro,
                     f.tipo_moldagem_procedimento,
                     obs.observacao,
-                    ms.modelo_status
+                    ms.modelo_status,
+                    COALESCE(pc.conferido, false) AS conferido
                 FROM firebird_sync_emissoes p
                 LEFT JOIN ficha_tecnica f ON f.pro_codigo_fic = (p.data->>'PRODUTO_PPR')
                 LEFT JOIN pedidos_observacoes obs ON obs.sync_key = p.sync_key
                 LEFT JOIN pedidos_modelo_status ms ON ms.sync_key = p.sync_key
+                LEFT JOIN pedidos_conferencia pc ON pc.sync_key = p.sync_key
                 ${ownerJoin}
                 ORDER BY
                     (f.pro_codigo_fic IS NOT NULL) DESC,
@@ -342,6 +363,7 @@ router.get('/', async (req, res) => {
                 sync_key: row.sync_key,
                 observacao: row.observacao || '',
                 modelo_status: row.modelo_status || '',
+                conferido: row.conferido === true,
                 _sync_updated_at: row.updated_at,
                 _data_fic: row.data_fic,
                 _has_ficha: !!row.has_ficha,

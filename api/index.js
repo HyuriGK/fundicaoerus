@@ -102,6 +102,7 @@ const devolucoes = require('../src/devolucoes'); // NOVA: Devoluções Sincroniz
 const emissoes = require('../src/emissoes-api'); // NOVO: Histórico de Emissões
 const pedidosObservacoes = require('../src/pedidos-observacoes'); // NOVO: Observações de Pedidos
 const pedidosModeloStatus = require('../src/pedidos-modelo-status');
+const pedidosConferencia = require('../src/pedidos-conferencia');
 const balanco = require('../src/balanco');
 
 
@@ -132,6 +133,7 @@ app.use('/api/register', registerLimiter, register);
 app.use('/api/custos', custosRoutes);
 app.use('/api/pedidos-sync', require('../src/pedidos-sync'));
 app.use('/api/pedidos-modelo-status', pedidosModeloStatus);
+app.use('/api/pedidos-conferencia', pedidosConferencia);
 app.use('/api/assertividade', assertividade); // NOVA: Assertividade Sincronizada
 app.use('/api/usinagem-externo', usinagemExterno); // NOVO: Usinagem Externa
 app.use('/api/devolucoes', devolucoes); // NOVA: Devoluções Sincronizadas

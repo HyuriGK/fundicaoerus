@@ -1506,6 +1506,8 @@
         .modelo-status-select option { background: #18181b; color: #f4f4f5; }
         .modelo-status-select:focus { border-color: var(--color-primary); background: rgba(251,191,36,0.08); }
         .modelo-status-readonly { display:block; color:var(--text-muted); font-size:0.72rem; font-weight:700; text-transform:uppercase; line-height:1.25; }
+        .conferencia-col { width: 44px; min-width: 44px; text-align: center; }
+        .conferencia-check { width: 16px; height: 16px; accent-color: var(--color-primary); cursor: pointer; }
         .clickable-op:hover {
             background: rgba(234, 88, 12, 0.1);
             transform: scale(1.1);
@@ -2243,6 +2245,7 @@
                 <table id="dataTable">
                     <thead>
                         <tr>
+                            <th class="conferencia-col dev-conferencia-col" style="display:none;" title="Conferido"></th>
                             <th class="sortable-th" id="th-pedido" onclick="toggleSort('pedido')" style="width: 110px;">PEDIDO</th>
                             <th class="sortable-th" id="th-op" onclick="toggleSort('op')" style="width: 105px;">OP</th>
                             <th class="sortable-th" id="th-bloqueio" onclick="toggleSort('bloqueio')" style="width: 175px;">BLOCK / SEM DATA</th>
@@ -2258,6 +2261,7 @@
                             <th style="width: 18%; min-width: 300px;">OBSERVAÇÕES</th>
                         </tr>
                         <tr id="filterRow">
+                            <th class="conferencia-col dev-conferencia-col" style="display:none;"></th>
                             <th><input class="filter-input-table" data-col="0" placeholder="..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></th>
                             <th><input class="filter-input-table" data-col="1" placeholder="..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></th>
                             <th><input class="filter-input-table" data-col="2" placeholder="..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></th>
@@ -4031,6 +4035,34 @@
                 ${MODELO_STATUS_OPTIONS.map(opt => `<option value="${opt}" ${current === opt ? 'selected' : ''}>${opt}</option>`).join('')}
             </select>`;
         }
+        function shouldShowConferenciaColumn() {
+            return String(localStorage.getItem('erus_role') || '').toLowerCase() === 'desenvolvedor' && !isEmissionHistoryModal();
+        }
+        function updateConferenciaColumnVisibility(show) {
+            document.querySelectorAll('.dev-conferencia-col').forEach(el => {
+                el.style.display = show ? 'table-cell' : 'none';
+            });
+        }
+        async function savePedidoConferencia(syncKey, checkbox) {
+            const checked = checkbox.checked;
+            checkbox.disabled = true;
+            try {
+                const res = await fetch('/api/pedidos-conferencia/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'x-role': localStorage.getItem('erus_role') || '' },
+                    body: JSON.stringify({ sync_key: syncKey, conferido: checked })
+                });
+                if (!res.ok) throw new Error('Falha ao salvar conferencia');
+                const item = allData.find(d => d.sync_key === syncKey);
+                if (item) item.conferido = checked;
+            } catch (err) {
+                console.error(err);
+                checkbox.checked = !checked;
+                showToast("Erro", "Erro ao salvar conferência.", "danger");
+            } finally {
+                checkbox.disabled = false;
+            }
+        }
         async function saveModeloStatus(syncKey, select) {
             const modeloStatus = normalizeModeloStatus(select.value);
             const original = select.getAttribute('data-original') || '';
@@ -4108,8 +4140,10 @@
         }
         function renderTable(list) {
             const tbody = document.getElementById('table-body');
+            const showConferencia = shouldShowConferenciaColumn();
+            updateConferenciaColumnVisibility(showConferencia);
             if (list.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="13" style="text-align:center; padding:20px;">Nenhum registro encontrado.</td></tr>';
+                tbody.innerHTML = `<tr><td colspan="${showConferencia ? 14 : 13}" style="text-align:center; padding:20px;">Nenhum registro encontrado.</td></tr>`;
                 return;
             }
             tbody.innerHTML = list.map((item, index) => {
@@ -4169,6 +4203,11 @@
                 }
                 // Preparing JSON data for modal (escape quotes)
                 const jsonData = JSON.stringify(item).replace(/'/g, "&#39;");
+                const conferenciaHtml = showConferencia ? `
+                    <td class="conferencia-col" onclick="event.stopPropagation()">
+                        <input class="conferencia-check" type="checkbox" ${item.conferido ? 'checked' : ''} title="Conferido" onchange="savePedidoConferencia('${item.sync_key}', this)">
+                    </td>
+                ` : '';
                 const opDetailsPayload = JSON.stringify({
                     op: item.OP_PCS,
                     desc: item.NOME_PRODUTO_PPR || item.PRODUTO_PPR,
@@ -4201,6 +4240,7 @@
                 ` : '<span style="color:var(--text-muted);opacity:.55;">-</span>';
                 return `
                 <tr style="">
+                    ${conferenciaHtml}
                     <td style="text-align:center;">
                         <span class="clickable-id" onclick="showItemDetails(this)" data-json='${jsonData}'>
                             ${item.CODIGO_PPR || item.sync_key || '-'}
