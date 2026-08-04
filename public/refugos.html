@@ -888,7 +888,18 @@
             </div>
             <!-- Novo Container de Gráfico para Drilldown de Pareto -->
             <div id="drilldownChartContainer" style="flex: 1; padding: 10px 10px 0 10px; display: none; margin-bottom: 25px;">
+                <div class="chart-title" id="drilldownChartTitle" style="margin-bottom:8px;"></div>
                 <canvas id="drilldownParetoChart"></canvas>
+            </div>
+        </div>
+    </div>
+    <div id="clientParetoChoiceModal" class="modal-overlay" style="z-index: 2500;">
+        <div class="modal-card" style="max-width:420px;width:92%;padding:26px;background:#18181b;border:1px solid var(--border-subtle);">
+            <div class="modal-title" style="font-size:1rem;margin-bottom:8px;">Escolha o gráfico</div>
+            <div id="clientParetoChoiceTitle" style="color:var(--text-muted);font-size:0.85rem;margin-bottom:22px;"></div>
+            <div style="display:flex;gap:10px;">
+                <button class="btn-modern" onclick="chooseClientPareto('motivo')" style="flex:1;background:#3f3f46;">Motivos</button>
+                <button class="btn-modern" onclick="chooseClientPareto('item')" style="flex:1;background:var(--color-primary);color:#000;">Peças</button>
             </div>
         </div>
     </div>
@@ -2218,7 +2229,7 @@
                         if (points.length > 0) {
                             const index = points[0].index;
                             const label = labels[index];
-                            openDetailModal(label, 'Cliente');
+                            openClientParetoChoice(label);
                         }
                     },
                     plugins: {
@@ -2382,20 +2393,38 @@
                 }
             });
         }
-        function renderDrilldownPareto(details, clientName) {
+        let pendingClientParetoValue = null;
+        function openClientParetoChoice(clientName) {
+            pendingClientParetoValue = clientName;
+            const title = document.getElementById('clientParetoChoiceTitle');
+            if (title) title.textContent = clientName;
+            document.getElementById('clientParetoChoiceModal').style.display = 'flex';
+        }
+        function chooseClientPareto(mode) {
+            document.getElementById('clientParetoChoiceModal').style.display = 'none';
+            if (!pendingClientParetoValue) return;
+            openDetailModal(pendingClientParetoValue, 'Cliente', mode === 'item' ? 'item' : 'motivo');
+            pendingClientParetoValue = null;
+        }
+        function renderDrilldownPareto(details, clientName, mode = 'motivo') {
             const ctx = document.getElementById('drilldownParetoChart').getContext('2d');
             if (drilldownChartInstance) drilldownChartInstance.destroy();
-            // Aggregate by Reason (motivo)
-            // Variable to keep track of current motivo filter for toggle behavior
-            let currentMotivoFilter = null;
+            const chartTitle = document.getElementById('drilldownChartTitle');
+            if (chartTitle) chartTitle.textContent = mode === 'item' ? 'PEÇAS QUE MAIS REFUGARAM DO CLIENTE' : 'MOTIVOS QUE MAIS FIZERAM REFUGAR PEÇAS DESSE CLIENTE';
+            const field = mode === 'item' ? 'codigo_peca' : 'motivo';
+            const filterInputId = mode === 'item' ? 'filter-codigo_peca' : 'filter-motivo';
+            const defaultLabel = mode === 'item' ? 'N/I' : 'N/I';
+            let currentDrilldownFilter = null;
             const agg = {};
             details.forEach(r => {
-                const key = r.motivo || 'N/I';
-                agg[key] = (agg[key] || 0) + parseFloat(r.weight_total || r.peso_total || 0);
+                const key = String(r[field] || defaultLabel).trim() || defaultLabel;
+                if (!agg[key]) agg[key] = { peso: 0, descricao: r.descricao || '' };
+                agg[key].peso += parseFloat(r.weight_total || r.peso_total || 0);
             });
-            const sorted = Object.entries(agg).sort((a, b) => b[1] - a[1]);
+            const sorted = Object.entries(agg).sort((a, b) => b[1].peso - a[1].peso);
             const labels = sorted.map(i => i[0]);
-            const rawValues = sorted.map(i => i[1]);
+            const rawValues = sorted.map(i => i[1].peso);
+            const descriptions = sorted.map(i => i[1].descricao);
             const total = rawValues.reduce((a, b) => a + b, 0);
             let runningSum = 0;
             const accumulatedPct = rawValues.map(v => {
@@ -2432,22 +2461,24 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
                     onClick: (evt, elements) => {
-                        if (elements.length > 0) {
-                            const index = elements[0].index;
+                        const points = drilldownChartInstance.getElementsAtEventForMode(evt, 'index', { intersect: false }, true);
+                        if (points.length > 0) {
+                            const index = points[0].index;
                             const label = labels[index];
-                            const filterInput = document.getElementById('filter-motivo');
+                            const filterInput = document.getElementById(filterInputId);
                             if (filterInput) {
-                                if (currentMotivoFilter === label) {
+                                if (currentDrilldownFilter === label) {
                                     filterInput.value = '';
-                                    currentMotivoFilter = null;
+                                    currentDrilldownFilter = null;
                                 } else {
                                     filterInput.value = label;
-                                    currentMotivoFilter = label;
+                                    currentDrilldownFilter = label;
                                 }
                                 // Visual selection update
                                 drilldownChartInstance.data.datasets[0].backgroundColor = labels.map(l => 
-                                    l === currentMotivoFilter ? highlightColor : defaultColor
+                                    l === currentDrilldownFilter ? highlightColor : defaultColor
                                 );
                                 drilldownChartInstance.update();
                                 filterDetailTable();
@@ -2457,7 +2488,14 @@
                     plugins: {
                         legend: { display: true, labels: { color: '#e4e4e7' } },
                         tooltip: {
+                            mode: 'index',
+                            intersect: false,
                             callbacks: {
+                                title: (items) => {
+                                    const idx = items[0]?.dataIndex ?? 0;
+                                    if (mode !== 'item') return labels[idx];
+                                    return `${labels[idx]} - ${descriptions[idx] || 'Sem descrição'}`;
+                                },
                                 label: (ctx) => {
                                     if (ctx.datasetIndex === 0) return ` ${ctx.parsed.y.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} kg`;
                                     return ` ${ctx.parsed.y.toFixed(1)}% Acumulado`;
@@ -2490,7 +2528,7 @@
             });
         }
         // --- DETAIL MODAL ---
-        function openDetailModal(filterValue, filterType) {
+        function openDetailModal(filterValue, filterType, drilldownMode = 'motivo') {
             if (window.erusAudit) window.erusAudit('ABRIR_DETALHE_REFUGOS', { tipo: filterType, valor: filterValue });
             const modal = document.getElementById('detailModalOverlay');
             const title = document.getElementById('detailModalTitle');
@@ -2576,7 +2614,7 @@
                 const lowerType = filterType.toLowerCase();
                 if (lowerType === 'cliente' || lowerType === 'setor_responsavel' || lowerType === 'setor') {
                     chartContainer.style.display = 'block';
-                    renderDrilldownPareto(details, filterValue);
+                    renderDrilldownPareto(details, filterValue, drilldownMode);
                     modal.classList.add('active');
                 } else {
                     chartContainer.style.display = 'none';
