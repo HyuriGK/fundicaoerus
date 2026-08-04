@@ -1820,11 +1820,18 @@
         const refugoBarColor = '#ea580c';
         const refugoMaxBarThickness = 86;
         function getRefugoBarLayout(labels) {
-            const count = Array.isArray(labels) ? labels.length : 0;
-            if (count > 6) return { padding: { right: 0 } };
-            const chartWidth = Math.max(900, (window.innerWidth || 1400) - 120);
-            const targetWidth = Math.min(chartWidth, Math.max(260, count * 185 + 120));
-            return { padding: { right: Math.max(0, chartWidth - targetWidth) } };
+            return { padding: { right: 0 } };
+        }
+        function addRefugoVirtualColumns(labels, datasets, minColumns = 10) {
+            const realCount = labels.length;
+            if (realCount >= minColumns) return { labels, datasets, realCount };
+            const paddedLabels = [...labels];
+            const paddedDatasets = datasets.map(ds => ({ ...ds, data: [...ds.data] }));
+            for (let i = realCount; i < minColumns; i++) {
+                paddedLabels.push('');
+                paddedDatasets.forEach(ds => ds.data.push(null));
+            }
+            return { labels: paddedLabels, datasets: paddedDatasets, realCount };
         }
         const refugoBarSpacing = {
             categoryPercentage: 0.72,
@@ -2219,34 +2226,35 @@
                 runningSum += v;
                 return total > 0 ? (runningSum / total) * 100 : 0;
             });
+            const padded = addRefugoVirtualColumns(labels, [
+                {
+                    label: 'Refugo (kg)',
+                    data: rawValues,
+                    backgroundColor: refugoBarColor,
+                    maxBarThickness: refugoMaxBarThickness,
+                    ...refugoBarSpacing,
+                    borderRadius: 4,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'Acumulado (%)',
+                    data: accumulatedPct,
+                    type: 'line',
+                    borderColor: '#fbbf24',
+                    borderWidth: 3,
+                    fill: false,
+                    tension: 0.1,
+                    pointStyle: 'circle',
+                    pointRadius: 4,
+                    pointBackgroundColor: '#fbbf24',
+                    yAxisID: 'y1'
+                }
+            ]);
             paretoChartInstance = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: labels,
-                    datasets: [
-                        {
-                            label: 'Refugo (kg)',
-                            data: rawValues,
-                            backgroundColor: refugoBarColor,
-                            maxBarThickness: refugoMaxBarThickness,
-                            ...refugoBarSpacing,
-                            borderRadius: 4,
-                            yAxisID: 'y'
-                        },
-                        {
-                            label: 'Acumulado (%)',
-                            data: accumulatedPct,
-                            type: 'line',
-                            borderColor: '#fbbf24',
-                            borderWidth: 3,
-                            fill: false,
-                            tension: 0.1,
-                            pointStyle: 'circle',
-                            pointRadius: 4,
-                            pointBackgroundColor: '#fbbf24',
-                            yAxisID: 'y1'
-                        }
-                    ]
+                    labels: padded.labels,
+                    datasets: padded.datasets
                 },
                 options: {
                     responsive: true,
@@ -2257,6 +2265,7 @@
                         const points = paretoChartInstance.getElementsAtEventForMode(evt, 'index', { intersect: false }, true);
                         if (points.length > 0) {
                             const index = points[0].index;
+                            if (index >= padded.realCount) return;
                             const label = labels[index];
                             openClientParetoChoice(label);
                         }
@@ -2305,6 +2314,7 @@
                                 minRotation: 45,
                                 callback: function (value, index) {
                                     const label = this.getLabelForValue(value);
+                                    if (!label) return '';
                                     return label.split(' ')[0];
                                 }
                             }
@@ -2332,34 +2342,35 @@
                 runningSum += v;
                 return total > 0 ? (runningSum / total) * 100 : 0;
             });
+            const padded = addRefugoVirtualColumns(labels, [
+                {
+                    label: 'Refugo (kg)',
+                    data: rawValues,
+                    backgroundColor: refugoBarColor,
+                    maxBarThickness: refugoMaxBarThickness,
+                    ...refugoBarSpacing,
+                    borderRadius: 4,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'Acumulado (%)',
+                    data: accumulatedPct,
+                    type: 'line',
+                    borderColor: '#fbbf24',
+                    borderWidth: 3,
+                    fill: false,
+                    tension: 0.1,
+                    pointStyle: 'circle',
+                    pointRadius: 4,
+                    pointBackgroundColor: '#fbbf24',
+                    yAxisID: 'y1'
+                }
+            ]);
             itemParetoChartInstance = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels,
-                    datasets: [
-                        {
-                            label: 'Refugo (kg)',
-                            data: rawValues,
-                            backgroundColor: refugoBarColor,
-                            maxBarThickness: refugoMaxBarThickness,
-                            ...refugoBarSpacing,
-                            borderRadius: 4,
-                            yAxisID: 'y'
-                        },
-                        {
-                            label: 'Acumulado (%)',
-                            data: accumulatedPct,
-                            type: 'line',
-                            borderColor: '#fbbf24',
-                            borderWidth: 3,
-                            fill: false,
-                            tension: 0.1,
-                            pointStyle: 'circle',
-                            pointRadius: 4,
-                            pointBackgroundColor: '#fbbf24',
-                            yAxisID: 'y1'
-                        }
-                    ]
+                    labels: padded.labels,
+                    datasets: padded.datasets
                 },
                 options: {
                     responsive: true,
@@ -2370,6 +2381,7 @@
                         const points = itemParetoChartInstance.getElementsAtEventForMode(evt, 'index', { intersect: false }, true);
                         if (points.length > 0) {
                             const index = points[0].index;
+                            if (index >= padded.realCount) return;
                             openDetailModal(labels[index], 'codigo_peca');
                         }
                     },
@@ -2465,32 +2477,33 @@
             });
             const defaultColor = refugoBarColor;
             const highlightColor = '#fbbf24'; // Amber/Gold color for selection
+            const padded = addRefugoVirtualColumns(labels, [
+                {
+                    label: 'Refugo (kg)',
+                    data: rawValues,
+                    backgroundColor: labels.map(() => defaultColor),
+                    maxBarThickness: refugoMaxBarThickness,
+                    ...refugoBarSpacing,
+                    borderRadius: 4,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'Acumulado (%)',
+                    data: accumulatedPct,
+                    type: 'line',
+                    borderColor: '#fbbf24',
+                    borderWidth: 3,
+                    fill: false,
+                    tension: 0.1,
+                    pointStyle: 'circle',
+                    yAxisID: 'y1'
+                }
+            ]);
             drilldownChartInstance = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: labels,
-                    datasets: [
-                        {
-                            label: 'Refugo (kg)',
-                            data: rawValues,
-                            backgroundColor: labels.map(() => defaultColor),
-                            maxBarThickness: refugoMaxBarThickness,
-                            ...refugoBarSpacing,
-                            borderRadius: 4,
-                            yAxisID: 'y'
-                        },
-                        {
-                            label: 'Acumulado (%)',
-                            data: accumulatedPct,
-                            type: 'line',
-                            borderColor: '#fbbf24',
-                            borderWidth: 3,
-                            fill: false,
-                            tension: 0.1,
-                            pointStyle: 'circle',
-                            yAxisID: 'y1'
-                        }
-                    ]
+                    labels: padded.labels,
+                    datasets: padded.datasets
                 },
                 options: {
                     responsive: true,
@@ -2501,12 +2514,13 @@
                         const points = drilldownChartInstance.getElementsAtEventForMode(evt, 'index', { intersect: false }, true);
                         if (points.length > 0) {
                             const index = points[0].index;
+                            if (index >= padded.realCount) return;
                             const label = labels[index];
                             const filterInput = document.getElementById(filterInputId);
                             if (filterInput) {
                                 filterInput.value = label;
                                 currentDrilldownFilter = label;
-                                drilldownChartInstance.data.datasets[0].backgroundColor = labels.map(l => 
+                                drilldownChartInstance.data.datasets[0].backgroundColor = padded.labels.map(l => 
                                     l === currentDrilldownFilter ? highlightColor : defaultColor
                                 );
                                 drilldownChartInstance.update();
@@ -2523,6 +2537,7 @@
                             callbacks: {
                                 title: (items) => {
                                     const idx = items[0]?.dataIndex ?? 0;
+                                    if (idx >= padded.realCount) return '';
                                     if (mode !== 'item') return labels[idx];
                                     return `${labels[idx]} - ${descriptions[idx] || 'Sem descrição'}`;
                                 },
@@ -2549,6 +2564,7 @@
                                 color: _tc(),
                                 callback: function (value, index) {
                                     const label = this.getLabelForValue(value);
+                                    if (!label) return '';
                                     return label.length > 20 ? label.substring(0, 17) + '...' : label;
                                 }
                             }
