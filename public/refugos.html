@@ -804,6 +804,7 @@
                         <option value="apontamentos">APONTAMENTOS</option>
                         <option value="reasonSector">POR MOTIVO / SETOR / MATERIAL</option>
                         <option value="client">POR CLIENTE</option>
+                        <option value="item">POR ITEM</option>
                     </select>
                     <button class="month-btn" onclick="openTableModal()">REGISTROS</button>
                     <button class="month-btn" onclick="exportToExcel('dataTable', 'Refugos')">EXCEL</button>
@@ -848,6 +849,11 @@
                     <div id="viewClient" style="flex:1; display:none; flex-direction:column; min-height:0;">
                         <div class="chart-title">REFUGO POR CLIENTE (PARETO)</div>
                         <div class="chart-wrapper" style="flex:1; min-height:0;"><canvas id="paretoChart"></canvas></div>
+                    </div>
+                    <!-- Item -->
+                    <div id="viewItem" style="flex:1; display:none; flex-direction:column; min-height:0;">
+                        <div class="chart-title">REFUGO POR ITEM (PARETO)</div>
+                        <div class="chart-wrapper" style="flex:1; min-height:0;"><canvas id="itemParetoChart"></canvas></div>
                     </div>
                 </div>
             </div>
@@ -1218,6 +1224,7 @@
             document.getElementById('viewDay-day').style.display = 'none';
             document.getElementById('viewReasonSector').style.display = 'none';
             document.getElementById('viewClient').style.display = 'none';
+            document.getElementById('viewItem').style.display = 'none';
             if (period === 'mensal') {
                 document.getElementById('viewDay-month').style.display = '';
             } else {
@@ -1227,7 +1234,7 @@
         }
         function switchView(view) {
             currentView = view;
-            const labels = { apontamentos: 'Apontamentos', reasonSector: 'Motivo / Setor / Material', client: 'Cliente' };
+            const labels = { apontamentos: 'Apontamentos', reasonSector: 'Motivo / Setor / Material', client: 'Cliente', item: 'Item' };
             if (window.erusAudit) window.erusAudit('SELECT_GRAFICO_REFUGOS', { grafico: labels[view] || view, ano: selectedYear, mes: selectedMonthIndex });
             document.getElementById('btnRefugoDiario').classList.toggle('active', view === 'apontamentos' && currentPeriod === 'diario');
             document.getElementById('btnRefugoMensal').classList.toggle('active', view === 'apontamentos' && currentPeriod === 'mensal');
@@ -1237,6 +1244,7 @@
             document.getElementById('viewDay-day').style.display = 'none';
             document.getElementById('viewReasonSector').style.display = 'none';
             document.getElementById('viewClient').style.display = 'none';
+            document.getElementById('viewItem').style.display = 'none';
             if (view === 'apontamentos') {
                 if (currentPeriod === 'mensal') {
                     document.getElementById('viewDay-month').style.display = '';
@@ -1253,6 +1261,9 @@
             } else if (view === 'client') {
                 document.getElementById('viewClient').style.display = 'flex';
                 renderParetoChart(currentFilteredData);
+            } else if (view === 'item') {
+                document.getElementById('viewItem').style.display = 'flex';
+                renderItemParetoChart(currentFilteredData);
             }
         }
         function renderDailyBarChart(data) {
@@ -1700,6 +1711,7 @@
                 renderPieChart('materialChart', getDataForTop5(filteredData, 'material'), 'Material');
             }
             else if (currentView === 'client') renderParetoChart(filteredData);
+            else if (currentView === 'item') renderItemParetoChart(filteredData);
             // Populate Table
             const tbody = document.querySelector('#dataTable tbody');
             const currentUserRole = localStorage.getItem('erus_role');
@@ -2148,6 +2160,7 @@
         }
         // --- PARETO CHART ---
         let paretoChartInstance = null;
+        let itemParetoChartInstance = null;
         let drilldownChartInstance = null;
         function renderParetoChart(data) {
             const ctx = document.getElementById('paretoChart').getContext('2d');
@@ -2250,6 +2263,111 @@
                                     const label = this.getLabelForValue(value);
                                     return label.split(' ')[0];
                                 }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        function renderItemParetoChart(data) {
+            const ctx = document.getElementById('itemParetoChart').getContext('2d');
+            if (itemParetoChartInstance) itemParetoChartInstance.destroy();
+            const agg = {};
+            data.forEach(r => {
+                const key = String(r.codigo_peca || 'N/I').trim() || 'N/I';
+                if (!agg[key]) agg[key] = { peso: 0, descricao: r.descricao || '' };
+                agg[key].peso += parseFloat(r.peso_total || 0);
+            });
+            const sorted = Object.entries(agg).sort((a, b) => b[1].peso - a[1].peso);
+            const labels = sorted.map(i => i[0]);
+            const rawValues = sorted.map(i => i[1].peso);
+            const descriptions = sorted.map(i => i[1].descricao);
+            const total = rawValues.reduce((a, b) => a + b, 0);
+            let runningSum = 0;
+            const accumulatedPct = rawValues.map(v => {
+                runningSum += v;
+                return total > 0 ? (runningSum / total) * 100 : 0;
+            });
+            itemParetoChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            label: 'Refugo (kg)',
+                            data: rawValues,
+                            backgroundColor: '#ef4444',
+                            borderRadius: 4,
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: 'Acumulado (%)',
+                            data: accumulatedPct,
+                            type: 'line',
+                            borderColor: '#fbbf24',
+                            borderWidth: 3,
+                            fill: false,
+                            tension: 0.1,
+                            pointStyle: 'circle',
+                            pointRadius: 4,
+                            pointBackgroundColor: '#fbbf24',
+                            yAxisID: 'y1'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    onClick: (evt, elements) => {
+                        if (elements.length > 0) {
+                            const index = elements[0].index;
+                            openDetailModal(labels[index], 'codigo_peca');
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: true,
+                            labels: { color: '#e4e4e7' }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                title: (items) => {
+                                    const idx = items[0]?.dataIndex ?? 0;
+                                    return `${labels[idx]} - ${descriptions[idx] || 'Sem descrição'}`;
+                                },
+                                label: (ctx) => {
+                                    if (ctx.datasetIndex === 0) return ` ${ctx.parsed.y.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} kg`;
+                                    return ` ${ctx.parsed.y.toFixed(1)}% Acumulado`;
+                                },
+                                afterBody: () => ['', 'Clique na barra para ver os registros.']
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            position: 'left',
+                            beginAtZero: true,
+                            grid: { color: _gc() },
+                            ticks: { color: _tc() },
+                            title: { display: true, text: 'Refugo (kg)', color: _tc() }
+                        },
+                        y1: {
+                            position: 'right',
+                            beginAtZero: true,
+                            max: 100,
+                            grid: { display: false },
+                            ticks: {
+                                color: '#fbbf24',
+                                callback: (v) => v + '%'
+                            },
+                            title: { display: true, text: '% Acumulado', color: '#fbbf24' }
+                        },
+                        x: {
+                            grid: { display: false },
+                            ticks: {
+                                color: _tc(),
+                                maxRotation: 45,
+                                minRotation: 45
                             }
                         }
                     }
