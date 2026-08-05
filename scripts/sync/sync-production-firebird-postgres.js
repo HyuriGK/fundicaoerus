@@ -373,7 +373,7 @@ function chunkArray(myArray, chunk_size) {
                             if (!dataProd || isNaN(dataProd.getTime())) return;
 
                             const chaveOrigem = `PCS-${pcs.ID_PCS}`;
-                            const setor = cleanString(set.NOME_SET) || 'DESCONHECIDO';
+                            const setor = Number(pcs.SETOR_PCS) === 116 ? 'FECHAMENTO MANUAL' : (cleanString(set.NOME_SET) || 'DESCONHECIDO');
 
                             // Product Details from Joined Tables
                             let produtoName = 'PRODUTO INDEFINIDO';

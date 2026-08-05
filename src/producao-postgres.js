@@ -104,6 +104,7 @@ router.get('/resumo-setores', async (req, res) => {
                         WHEN setor_norm IN ('TRATAMENTO TERMICO', 'TT') THEN 'TRATAMENTO TERMICO'
                         WHEN setor_norm IN ('INSPECAO DE QUALIDADE', 'QUALIDADE') THEN 'INSPECAO DE QUALIDADE'
                         WHEN setor_norm IN ('USINAGEM EXPEDICAO', 'USINAGEM', '50') THEN 'USINAGEM EXPEDICAO'
+                        WHEN setor_norm IN ('FECHAMENTO MANUAL', '116') THEN 'FECHAMENTO MANUAL'
                         WHEN setor_norm = 'EXPEDICAO' THEN 'EXPEDICAO'
                         WHEN setor_norm IN ('ACABAMENTO', 'REBARBACAO') THEN 'ACABAMENTO'
                         ELSE setor_norm
@@ -182,7 +183,8 @@ router.get('/resumo-setores', async (req, res) => {
             'EXPEDICAO': 0,
             'MOLDAGEM LEVE': 0,
             'MOLDAGEM MANUAL': 0,
-            'MOLDAGEM PESADA': 0
+            'MOLDAGEM PESADA': 0,
+            'FECHAMENTO MANUAL': 0
         };
 
         result.rows.forEach(row => {
