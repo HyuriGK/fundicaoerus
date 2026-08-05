@@ -175,7 +175,7 @@
             padding: 0;
             background-image: radial-gradient(circle at 50% 50%, rgba(251, 191, 36, 0.02), transparent 50%);
             height: 100vh;
-            overflow: hidden;
+            overflow: visible;
         }
 
         body.presentation-mode .header-brand,
@@ -1001,9 +1001,11 @@
         }
 
         .op-observation-tooltip {
-            position: absolute;
-            top: 28px;
-            right: 0;
+            display: none;
+        }
+
+        .op-observation-floating-tooltip {
+            position: fixed;
             width: min(280px, 70vw);
             max-height: 180px;
             overflow-y: auto;
@@ -1017,17 +1019,8 @@
             line-height: 1.35;
             font-weight: 500;
             white-space: pre-wrap;
-            opacity: 0;
-            visibility: hidden;
             pointer-events: none;
-            transform: translateY(-4px);
-            transition: opacity 0.16s ease, transform 0.16s ease, visibility 0.16s ease;
-        }
-
-        .op-observation-info:hover .op-observation-tooltip {
-            opacity: 1;
-            visibility: visible;
-            transform: translateY(0);
+            z-index: 9999;
         }
 
         .op-number {
@@ -2773,6 +2766,10 @@
             }[char]));
         }
 
+        function escapeAttr(value) {
+            return escapeHtml(value).replace(/\n/g, '&#10;');
+        }
+
         function getOpObservations(opNumber) {
             const normalizedOp = String(opNumber || '').trim();
             if (!normalizedOp) return '';
@@ -2794,11 +2791,54 @@
             const observations = getOpObservations(opNumber);
             if (!observations) return '';
             return `
-                <span class="op-observation-info" onclick="event.stopPropagation()" aria-label="Observações da OP">
+                <span class="op-observation-info" data-observation="${escapeAttr(observations)}" onclick="event.stopPropagation()" onmouseenter="showObservationTooltip(event, this)" onmousemove="positionObservationTooltip(event)" onmouseleave="hideObservationTooltip()" aria-label="Observações da OP">
                     <i class="fa-solid fa-info"></i>
-                    <span class="op-observation-tooltip">${escapeHtml(observations)}</span>
                 </span>
             `;
+        }
+
+        function getObservationTooltipEl() {
+            let tooltip = document.getElementById('opObservationFloatingTooltip');
+            if (!tooltip) {
+                tooltip = document.createElement('div');
+                tooltip.id = 'opObservationFloatingTooltip';
+                tooltip.className = 'op-observation-floating-tooltip';
+                tooltip.style.display = 'none';
+                document.body.appendChild(tooltip);
+            }
+            return tooltip;
+        }
+
+        function positionObservationTooltip(event) {
+            const tooltip = document.getElementById('opObservationFloatingTooltip');
+            if (!tooltip || tooltip.style.display === 'none') return;
+
+            const margin = 12;
+            const rect = tooltip.getBoundingClientRect();
+            let left = event.clientX + margin;
+            let top = event.clientY + margin;
+
+            if (left + rect.width > window.innerWidth - margin) {
+                left = Math.max(margin, event.clientX - rect.width - margin);
+            }
+            if (top + rect.height > window.innerHeight - margin) {
+                top = Math.max(margin, event.clientY - rect.height - margin);
+            }
+
+            tooltip.style.left = `${left}px`;
+            tooltip.style.top = `${top}px`;
+        }
+
+        function showObservationTooltip(event, el) {
+            const tooltip = getObservationTooltipEl();
+            tooltip.textContent = el.dataset.observation || '';
+            tooltip.style.display = tooltip.textContent.trim() ? 'block' : 'none';
+            positionObservationTooltip(event);
+        }
+
+        function hideObservationTooltip() {
+            const tooltip = document.getElementById('opObservationFloatingTooltip');
+            if (tooltip) tooltip.style.display = 'none';
         }
 
         function saveConfig() {
