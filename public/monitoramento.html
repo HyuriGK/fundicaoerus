@@ -965,7 +965,7 @@
             transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
             cursor: pointer;
             position: relative;
-            overflow: hidden;
+            overflow: visible;
             flex-shrink: 0;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
         }
@@ -2797,6 +2797,11 @@
             `;
         }
 
+        function renderObservationIcon(observations) {
+            if (!String(observations || '').trim()) return '';
+            return '<span class="op-observation-info" aria-label="Observacoes da OP"><i class="fa-solid fa-info"></i></span>';
+        }
+
         function getObservationTooltipEl() {
             let tooltip = document.getElementById('opObservationFloatingTooltip');
             if (!tooltip) {
@@ -2829,9 +2834,9 @@
             tooltip.style.top = `${top}px`;
         }
 
-        function showObservationTooltip(event, el) {
+        function showObservationTooltip(event, value) {
             const tooltip = getObservationTooltipEl();
-            tooltip.textContent = el.dataset.observation || '';
+            tooltip.textContent = typeof value === 'string' ? value : (value?.dataset?.observation || '');
             tooltip.style.display = tooltip.textContent.trim() ? 'block' : 'none';
             positionObservationTooltip(event);
         }
@@ -3358,7 +3363,8 @@
                     const prodName = op.NOME_PRODUTO_PPR || '';
                     const clientName = (op.NOME_CLIENTE || 'N/A');
                     const cardTitle = op.OP_PCS ? `OP ${op.OP_PCS}` : `PED ${op.CODIGO_PPR || 'SEM OP'}`;
-                    const observationInfoHtml = renderObservationInfo(op.OP_PCS);
+                    const observationText = getOpObservations(op.OP_PCS);
+                    const observationInfoHtml = renderObservationIcon(observationText);
 
                     const isPartial = qty < totalQtyAll;
                     const qtyBaseDisplay = (isPartial ? `${Math.round(qty)} DE ${totalQtyAll}` : `${totalQtyAll}`) + ' PÇS';
@@ -3450,6 +3456,13 @@
                         card.onclick = () => showOPDetails(op);
                     } else {
                         card.style.cursor = 'default';
+                    }
+                    const observationIcon = card.querySelector('.op-observation-info');
+                    if (observationIcon) {
+                        observationIcon.addEventListener('click', event => event.stopPropagation());
+                        observationIcon.addEventListener('mouseenter', event => showObservationTooltip(event, observationText));
+                        observationIcon.addEventListener('mousemove', positionObservationTooltip);
+                        observationIcon.addEventListener('mouseleave', hideObservationTooltip);
                     }
                     list.appendChild(card);
                 });
