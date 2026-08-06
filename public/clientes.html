@@ -134,6 +134,40 @@
             display:none !important;
         }
         #crmStrip { display:none; }
+        .ranking-filter-row th {
+            padding:6px 5px 8px !important;
+            background:#101014;
+            position:sticky;
+            top:30px;
+            z-index:3;
+        }
+        .ranking-col-filter {
+            width:100%;
+            height:28px;
+            border:1px solid rgba(255,255,255,0.08);
+            border-radius:6px;
+            background:rgba(255,255,255,0.025);
+            color:#e4e4e7;
+            padding:0 8px;
+            font-family:var(--font-mono);
+            font-size:0.68rem;
+            font-weight:700;
+            letter-spacing:0;
+            outline:none !important;
+            box-shadow:none !important;
+        }
+        .ranking-col-filter::placeholder {
+            color:#52525b;
+            text-transform:uppercase;
+        }
+        .ranking-col-filter:hover,
+        .ranking-col-filter:focus,
+        .ranking-col-filter:focus-visible {
+            border-color:rgba(255,255,255,0.08);
+            background:rgba(255,255,255,0.025);
+            outline:none !important;
+            box-shadow:none !important;
+        }
         .crm-page-header {
             padding:12px 0 14px;
             display:flex;
@@ -1670,6 +1704,21 @@
                         <th class="text-center" onclick="doSortBy('abc')" style="width:60px;">ABC</th>
                         <th class="text-center" style="width:68px;">AÇÕES</th>
                     </tr>
+                    <tr class="ranking-filter-row">
+                        <th><input class="ranking-col-filter" data-rank-filter="rank" placeholder="#"></th>
+                        <th><input class="ranking-col-filter" data-rank-filter="name" placeholder="cliente"></th>
+                        <th><input class="ranking-col-filter" data-rank-filter="orders" placeholder="ped."></th>
+                        <th><input class="ranking-col-filter" data-rank-filter="peso" placeholder="peso"></th>
+                        <th><input class="ranking-col-filter" data-rank-filter="pct_peso" placeholder="%"></th>
+                        <th><input class="ranking-col-filter" data-rank-filter="preco_kg" placeholder="preco"></th>
+                        <th><input class="ranking-col-filter" data-rank-filter="fat" placeholder="fat."></th>
+                        <th><input class="ranking-col-filter" data-rank-filter="pct_fat" placeholder="%"></th>
+                        <th><input class="ranking-col-filter" data-rank-filter="ticket" placeholder="ticket"></th>
+                        <th><input class="ranking-col-filter" data-rank-filter="lastDate" placeholder="data"></th>
+                        <th><input class="ranking-col-filter" data-rank-filter="status" placeholder="status"></th>
+                        <th><input class="ranking-col-filter" data-rank-filter="abc" placeholder="abc"></th>
+                        <th></th>
+                    </tr>
                 </thead>
                 <tbody id="tableBody"></tbody>
             </table>
@@ -1814,7 +1863,7 @@ function initCrmHeaderLayout() {
 
     titleWrap.appendChild(titleBlock);
     walletBtn.classList.add('crm-nav-btn');
-    walletBtn.textContent = 'Minha carteira de clientes';
+    walletBtn.textContent = 'Carteira de Clientes';
     viewSelect.classList.add('crm-nav-source');
     nav.appendChild(viewSelect);
     [
@@ -1835,7 +1884,7 @@ function initCrmHeaderLayout() {
         });
         nav.appendChild(btn);
     });
-    nav.appendChild(walletBtn);
+    if (isDeveloperRole()) nav.appendChild(walletBtn);
     nav.appendChild(yearSelect);
     nav.appendChild(monthSelect);
     header.appendChild(spacer);
@@ -2222,24 +2271,76 @@ function toggleValorVisibility() {
 }
 
 // ─── TABLE ────────────────────────────────────────────────────────────────────
+function getRankingColumnFilters() {
+    const filters = {};
+    document.querySelectorAll('.ranking-col-filter').forEach(input => {
+        const key = input.dataset.rankFilter;
+        const value = (input.value || '').trim().toLowerCase();
+        if (key && value) filters[key] = value;
+    });
+    return filters;
+}
+
+function getRankingStatus(c) {
+    if (c.days <= 45) return { cls: 'badge-active', text: 'Ativo' };
+    if (c.days <= 90) return { cls: 'badge-alert', text: 'Alerta' };
+    return { cls: 'badge-inactive', text: 'Inativo' };
+}
+
+function getRankingColumnValue(c, key, rank, show) {
+    const lastStr = c.lastDate > new Date(0) ? c.lastDate.toLocaleDateString('pt-BR') : '-';
+    const status = getRankingStatus(c).text;
+    const abc = c.abcScore !== null ? c.abcScore.toFixed(1) : '-';
+    const values = {
+        rank: String(rank),
+        name: c.name,
+        orders: String(c.orders),
+        peso: `${fmtNum(c.peso)} kg`,
+        pct_peso: `${c.pct_peso.toFixed(1)}%`,
+        preco_kg: show ? `${fmtMoney(c.preco_kg)}/kg` : '',
+        fat: show ? fmtMoney(c.fat) : '',
+        pct_fat: show ? `${c.pct_fat.toFixed(1)}%` : '',
+        ticket: show ? fmtMoney(c.ticket) : '',
+        lastDate: lastStr,
+        status,
+        abc
+    };
+    return String(values[key] ?? '').toLowerCase();
+}
+
+function initRankingColumnFilters() {
+    document.querySelectorAll('.ranking-col-filter').forEach(input => {
+        if (input.dataset.bound === '1') return;
+        input.dataset.bound = '1';
+        input.addEventListener('click', ev => ev.stopPropagation());
+        input.addEventListener('keydown', ev => ev.stopPropagation());
+        input.addEventListener('input', renderTable);
+    });
+}
+
 function renderTable() {
     const tbody = document.getElementById('tableBody');
     const term  = (document.getElementById('searchInput')?.value || '').toLowerCase();
     const show  = valorVisible;
+    initRankingColumnFilters();
+    const columnFilters = getRankingColumnFilters();
 
-    const filtered = clientList.filter(c => {
+    const filtered = clientList.filter((c, originalIdx) => {
         if (term && !c.name.toLowerCase().includes(term)) return false;
         if (crmStageFilter && getCrmStage(c).key !== crmStageFilter) return false;
+        const rank = originalIdx + 1;
+        for (const [key, value] of Object.entries(columnFilters)) {
+            if (!getRankingColumnValue(c, key, rank, show).includes(value)) return false;
+        }
         return true;
     });
     document.getElementById('tableCount').textContent = filtered.length + ' clientes';
 
     tbody.innerHTML = '';
     filtered.forEach((c, idx) => {
-        let badge, badgeTxt;
-        if      (c.days <= 45) { badge = 'badge-active';   badgeTxt = 'Ativo';   }
-        else if (c.days <= 90) { badge = 'badge-alert';    badgeTxt = 'Alerta';  }
-        else                   { badge = 'badge-inactive'; badgeTxt = 'Inativo'; }
+        const status = getRankingStatus(c);
+        const badge = status.cls;
+        const badgeTxt = status.text;
 
         let abcHtml = '<span style="color:var(--text-dim,#52525b);">—</span>';
         if (c.abcScore !== null) {
