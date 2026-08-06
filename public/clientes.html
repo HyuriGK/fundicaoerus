@@ -33,28 +33,32 @@
             overflow-y: auto;
         }
         /* Layout */
-        body .dashboard-content { padding:20px 32px 4px 32px !important; gap:0 !important; display:flex !important; flex-direction:column !important; }
+        body .dashboard-content { padding:0 18px 4px 18px !important; gap:0 !important; display:flex !important; flex-direction:column !important; }
         /* Toolbar */
         .toolbar-row {
             padding:0;
             display:flex;
             flex-direction:column;
-            gap:10px;
+            gap:0;
             align-items:stretch;
-            margin:0 0 12px !important;
+            margin:0 0 14px !important;
             border-bottom:none !important;
             flex-shrink:0;
+            width:100%;
         }
         .crm-app-header {
-            min-height:82px;
+            width:100%;
+            min-height:88px;
             display:grid;
-            grid-template-columns:1fr auto 1fr;
+            grid-template-columns:minmax(220px,1fr) minmax(320px,auto) minmax(220px,1fr);
             align-items:center;
             gap:18px;
-            padding:16px 18px;
+            padding:18px 24px;
             border:1px solid rgba(255,255,255,0.08);
-            border-radius:10px;
-            background:#111114;
+            border-bottom:none;
+            border-radius:8px 8px 0 0;
+            background:linear-gradient(180deg, #16161a 0%, #111114 100%);
+            box-shadow:0 14px 34px rgba(0,0,0,0.22);
         }
         .crm-app-title-wrap {
             grid-column:2;
@@ -81,12 +85,53 @@
         .crm-view-navbar {
             display:flex;
             align-items:center;
-            justify-content:center;
-            gap:8px;
-            padding:8px 12px;
+            justify-content:flex-start;
+            gap:10px;
+            width:100%;
+            padding:0 24px 16px;
             border:1px solid rgba(255,255,255,0.07);
-            border-radius:9px;
-            background:rgba(255,255,255,0.018);
+            border-top:none;
+            border-radius:0 0 8px 8px;
+            background:#111114;
+            overflow-x:auto;
+            scrollbar-width:none;
+        }
+        .crm-view-navbar::-webkit-scrollbar { display:none; }
+        .crm-nav-btn {
+            height:38px;
+            min-width:150px;
+            padding:0 18px;
+            border:1px solid rgba(255,255,255,0.11);
+            border-radius:7px;
+            background:rgba(255,255,255,0.025);
+            color:#c7c7cf;
+            display:inline-flex;
+            align-items:center;
+            justify-content:center;
+            white-space:nowrap;
+            font-family:var(--font-mono);
+            font-size:0.72rem;
+            font-weight:900;
+            letter-spacing:0.06em;
+            text-transform:uppercase;
+            cursor:pointer;
+            transition:background 0.18s ease, color 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+            flex:1 1 0;
+        }
+        .crm-nav-btn:hover {
+            color:#fff;
+            border-color:rgba(255,193,7,0.38);
+            background:rgba(255,193,7,0.08);
+            transform:translateY(-1px);
+        }
+        .crm-nav-btn.active {
+            color:#08080a;
+            border-color:var(--color-primary);
+            background:var(--color-primary);
+            box-shadow:0 10px 22px rgba(255,193,7,0.18);
+        }
+        .crm-view-navbar .chart-pill-select {
+            display:none !important;
         }
         .crm-page-header {
             padding:12px 0 14px;
@@ -127,6 +172,11 @@
             .crm-view-navbar {
                 justify-content:flex-start;
                 overflow-x:auto;
+                padding:0 14px 14px;
+            }
+            .crm-nav-btn {
+                min-width:170px;
+                flex:0 0 auto;
             }
         }
         .crm-page-actions {
@@ -1753,14 +1803,35 @@ function initCrmHeaderLayout() {
     menu.innerHTML = '<span class="crm-header-menu-label">Opções</span>';
     const nav = document.createElement('div');
     nav.className = 'crm-view-navbar';
+    menu.querySelector('.crm-header-menu-label').textContent = 'Opções';
 
     titleBlock.querySelector('.crm-page-title').textContent = 'Painel CRM';
     const sub = titleBlock.querySelector('.crm-page-subtitle');
+    if (sub) sub.textContent = 'Fundição Erus · carteira, contatos e próximas ações.';
     if (sub) sub.innerHTML = 'Fundi&ccedil;&atilde;o Erus · carteira, contatos e pr&oacute;ximas a&ccedil;&otilde;es.';
 
     titleWrap.appendChild(titleBlock);
     menu.appendChild(walletBtn);
+    viewSelect.classList.add('crm-nav-source');
     nav.appendChild(viewSelect);
+    [
+        ['dashboard', 'Dashboard'],
+        ['ranking', 'Ranking de clientes'],
+        ['contatos', 'Últimos contatos'],
+        ['mapa', 'Mapa de calor']
+    ].forEach(([value, label]) => {
+        if (value === 'contatos') label = 'Últimos contatos';
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'crm-nav-btn';
+        btn.dataset.view = value;
+        btn.textContent = label;
+        btn.addEventListener('click', () => {
+            selectChartView(value);
+            syncCrmNavButtons();
+        });
+        nav.appendChild(btn);
+    });
     nav.appendChild(yearSelect);
     nav.appendChild(monthSelect);
     header.appendChild(spacer);
@@ -1771,6 +1842,15 @@ function initCrmHeaderLayout() {
     toolbar.appendChild(header);
     toolbar.appendChild(nav);
     toolbar.dataset.crmLayoutReady = '1';
+    syncCrmNavButtons();
+}
+
+function syncCrmNavButtons() {
+    const viewSelect = document.getElementById('chartSelectDropdown');
+    const active = viewSelect?.value || 'dashboard';
+    document.querySelectorAll('.crm-nav-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.view === active);
+    });
 }
 
 window.onload = async function() {
@@ -1811,6 +1891,7 @@ function setMonth(m) {
 function setView(v) {
     currentView = v;
     document.getElementById('chartSelectDropdown').value = v === 'charts' ? activeChartType : v;
+    syncCrmNavButtons();
     document.getElementById('dashboardSection').style.display = v === 'dashboard' ? '' : 'none';
     document.getElementById('rankingSection').style.display = v === 'ranking' ? '' : 'none';
     document.getElementById('contactsSection').style.display = v === 'contatos' ? '' : 'none';
