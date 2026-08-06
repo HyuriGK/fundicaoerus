@@ -145,6 +145,7 @@ async function ensureClientesContatosTable() {
             contato_em TIMESTAMP DEFAULT NOW(),
             canal TEXT,
             pessoa_contatada TEXT,
+            pedido TEXT,
             cargo TEXT,
             telefone TEXT,
             email TEXT,
@@ -158,6 +159,7 @@ async function ensureClientesContatosTable() {
             created_at TIMESTAMP DEFAULT NOW()
         )
     `);
+    await pool.query(`ALTER TABLE clientes_contatos_crm ADD COLUMN IF NOT EXISTS pedido TEXT`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_clientes_contatos_crm_user ON clientes_contatos_crm (crm_user, contato_em DESC)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_clientes_contatos_cliente ON clientes_contatos_crm (cliente_nome, crm_user)`);
 }
@@ -2745,6 +2747,7 @@ router.post('/crm/contatos', async (req, res) => {
         const contatoEm = String(req.body.contatoEm || '').trim() || null;
         const canal = String(req.body.canal || '').trim();
         const pessoaContatada = String(req.body.pessoaContatada || '').trim();
+        const pedido = String(req.body.pedido || '').trim();
         const cargo = String(req.body.cargo || '').trim();
         const telefone = String(req.body.telefone || '').trim();
         const email = String(req.body.email || '').trim();
@@ -2763,14 +2766,14 @@ router.post('/crm/contatos', async (req, res) => {
 
         const result = await pool.query(`
             INSERT INTO clientes_contatos_crm (
-                cliente_nome, empresa, codigo, crm_user, contato_em, canal, pessoa_contatada, cargo,
+                cliente_nome, empresa, codigo, crm_user, contato_em, canal, pessoa_contatada, pedido, cargo,
                 telefone, email, motivo, resultado, humor_cliente, potencial, proxima_acao,
                 data_proxima_acao, resumo
             )
-            VALUES ($1,$2,$3,$4,COALESCE($5::timestamp, NOW()),$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+            VALUES ($1,$2,$3,$4,COALESCE($5::timestamp, NOW()),$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
             RETURNING *
         `, [
-            clienteNome, empresa, codigo, crmUser, contatoEm, canal, pessoaContatada, cargo,
+            clienteNome, empresa, codigo, crmUser, contatoEm, canal, pessoaContatada, pedido, cargo,
             telefone, email, motivo, resultado, humorCliente, potencial, proximaAcao,
             dataProximaAcao, resumo
         ]);
@@ -2806,7 +2809,7 @@ router.get('/crm/contatos', async (req, res) => {
             whereClause += ` AND empresa = $${params.length - 1} AND codigo = $${params.length}`;
         }
         const result = await pool.query(`
-            SELECT id, cliente_nome, empresa, codigo, crm_user, contato_em, canal, pessoa_contatada,
+            SELECT id, cliente_nome, empresa, codigo, crm_user, contato_em, canal, pessoa_contatada, pedido,
                    cargo, telefone, email, motivo, resultado, humor_cliente, potencial, proxima_acao,
                    TO_CHAR(data_proxima_acao, 'YYYY-MM-DD') AS data_proxima_acao, resumo, created_at
             FROM clientes_contatos_crm

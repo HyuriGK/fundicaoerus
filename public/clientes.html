@@ -146,7 +146,8 @@
             display:none !important;
         }
         #crmStrip { display:none; }
-        .ranking-filter-row th {
+        .ranking-filter-row th,
+        .contacts-filter-row th {
             padding:6px 5px 8px !important;
             background:#101014;
             position:static;
@@ -154,7 +155,8 @@
             z-index:auto;
         }
         .ranking-filter-control { position:relative; width:100%; }
-        .ranking-col-filter {
+        .ranking-col-filter,
+        .contacts-col-filter {
             width:100%;
             height:28px;
             border:1px solid rgba(255,255,255,0.08);
@@ -169,13 +171,17 @@
             outline:none !important;
             box-shadow:none !important;
         }
-        .ranking-col-filter::placeholder {
+        .ranking-col-filter::placeholder,
+        .contacts-col-filter::placeholder {
             color:#52525b;
             text-transform:uppercase;
         }
         .ranking-col-filter:hover,
         .ranking-col-filter:focus,
-        .ranking-col-filter:focus-visible {
+        .ranking-col-filter:focus-visible,
+        .contacts-col-filter:hover,
+        .contacts-col-filter:focus,
+        .contacts-col-filter:focus-visible {
             border-color:rgba(255,255,255,0.08);
             background:rgba(255,255,255,0.025);
             outline:none !important;
@@ -1586,6 +1592,10 @@
                 <input id="contactPerson" placeholder="Nome do contato" autocomplete="new-password" data-no-autofill>
             </div>
             <div class="contact-field wide">
+                <label>Pedido</label>
+                <input id="contactOrder" placeholder="Nº do pedido relacionado" autocomplete="new-password" data-no-autofill>
+            </div>
+            <div class="contact-field wide">
                 <label>Cargo / setor</label>
                 <input id="contactRole" placeholder="Compras, engenharia, financeiro..." autocomplete="new-password" data-no-autofill>
             </div>
@@ -1911,6 +1921,15 @@
                         <th>Pessoa</th>
                         <th>Motivo</th>
                         <th>Resultado</th>
+                    </tr>
+                    <tr class="contacts-filter-row">
+                        <th><input class="contacts-col-filter" data-contact-filter="date" placeholder="data"></th>
+                        <th><input class="contacts-col-filter" data-contact-filter="user" placeholder="responsável"></th>
+                        <th><input class="contacts-col-filter" data-contact-filter="client" placeholder="cliente"></th>
+                        <th><input class="contacts-col-filter" data-contact-filter="channel" placeholder="canal"></th>
+                        <th><input class="contacts-col-filter" data-contact-filter="person" placeholder="pessoa"></th>
+                        <th><input class="contacts-col-filter" data-contact-filter="reason" placeholder="motivo"></th>
+                        <th><input class="contacts-col-filter" data-contact-filter="result" placeholder="resultado"></th>
                     </tr>
                 </thead>
                 <tbody id="latestContactsBody"></tbody>
@@ -3888,8 +3907,18 @@ function renderLatestContacts() {
     const tbody = document.getElementById('latestContactsBody');
     const count = document.getElementById('contactsCount');
     if (!tbody) return;
-    if (count) count.textContent = `${latestContacts.length.toLocaleString('pt-BR')} contatos`;
-    tbody.innerHTML = latestContacts.map(c => {
+    initContactsColumnFilters();
+    const filters = Object.fromEntries(Array.from(document.querySelectorAll('.contacts-col-filter'))
+        .map(input => [input.dataset.contactFilter, input.value.trim().toLowerCase()])
+        .filter(([, value]) => value));
+    const filteredContacts = latestContacts.filter(contact => Object.entries(filters)
+        .every(([key, value]) => getLatestContactFilterValue(contact, key).includes(value)));
+    if (count) {
+        count.textContent = filteredContacts.length === latestContacts.length
+            ? `${latestContacts.length.toLocaleString('pt-BR')} contatos`
+            : `${filteredContacts.length.toLocaleString('pt-BR')} de ${latestContacts.length.toLocaleString('pt-BR')} contatos`;
+    }
+    tbody.innerHTML = filteredContacts.map(c => {
         const date = c.contato_em ? formatDateBRFull(c.contato_em) : '-';
         const name = c.cliente_nome || 'Cliente';
         return `<tr onclick="openClientContactViewModal(${Number(c.id)})" style="cursor:pointer;">
@@ -3901,7 +3930,50 @@ function renderLatestContacts() {
             <td>${escapeHtml(c.motivo || '-')}</td>
             <td>${escapeHtml(c.resultado || '-')}</td>
         </tr>`;
-    }).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:28px;">Nenhum contato registrado.</td></tr>';
+    }).join('') || `<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:28px;">${latestContacts.length ? 'Nenhum contato corresponde aos filtros.' : 'Nenhum contato registrado.'}</td></tr>`;
+}
+
+function getLatestContactFilterValue(contact, key) {
+    const values = {
+        date: contact.contato_em ? formatDateBRFull(contact.contato_em) : '-',
+        user: contact.crm_user || '-',
+        client: contact.cliente_nome || '-',
+        channel: contact.canal || '-',
+        person: contact.pessoa_contatada || '-',
+        reason: contact.motivo || '-',
+        result: contact.resultado || '-'
+    };
+    return String(values[key] || '').toLowerCase();
+}
+
+function initContactsColumnFilters() {
+    document.querySelectorAll('.contacts-col-filter').forEach(input => {
+        if (input.dataset.bound === '1') return;
+        input.dataset.bound = '1';
+        const wrapper = document.createElement('div');
+        wrapper.className = 'ranking-filter-control';
+        input.parentNode.insertBefore(wrapper, input);
+        wrapper.appendChild(input);
+        const clearButton = document.createElement('button');
+        clearButton.type = 'button';
+        clearButton.className = 'ranking-filter-clear';
+        clearButton.title = 'Limpar filtro';
+        clearButton.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+        wrapper.appendChild(clearButton);
+        input.addEventListener('click', event => event.stopPropagation());
+        input.addEventListener('keydown', event => event.stopPropagation());
+        input.addEventListener('input', () => {
+            wrapper.classList.toggle('has-value', Boolean(input.value));
+            renderLatestContacts();
+        });
+        clearButton.addEventListener('click', event => {
+            event.stopPropagation();
+            input.value = '';
+            wrapper.classList.remove('has-value');
+            input.blur();
+            renderLatestContacts();
+        });
+    });
 }
 
 function openClientContactViewModal(id) {
@@ -3917,8 +3989,9 @@ function openClientContactViewModal(id) {
         contactViewGroup('Contato realizado', 'fa-comments', [
             contactViewItem('Data e hora', formatDateTime(contact.contato_em)),
             contactViewItem('Canal', contact.canal),
+            contactViewItem('Pedido', contact.pedido),
             contactViewItem('Pessoa contatada', contact.pessoa_contatada),
-            contactViewItem('Cargo / setor', contact.cargo)
+            contactViewItem('Cargo / setor', contact.cargo, 'full')
         ]),
         contactViewGroup('Dados usados no contato', 'fa-address-book', [
             contactViewItem('Telefone', contact.telefone),
@@ -4003,7 +4076,7 @@ function renderClientContactsHistory() {
             <div class="contact-history-top">
                 <div>
                     <div class="contact-history-date">${formatDateTime(c.contato_em)}</div>
-                    <div class="contact-history-channel">${escapeHtml([c.canal, c.pessoa_contatada].filter(Boolean).join(' · ') || 'Contato registrado')}</div>
+                    <div class="contact-history-channel">${escapeHtml([c.canal, c.pessoa_contatada, c.pedido ? `Pedido ${c.pedido}` : ''].filter(Boolean).join(' · ') || 'Contato registrado')}</div>
                 </div>
                 <div class="contact-history-user" title="Registrado por ${escapeHtml(c.crm_user || '-')}">
                     <i class="fa-solid fa-user-check"></i>${escapeHtml(c.crm_user || '-')}
@@ -4038,6 +4111,7 @@ function openClientContactModal(empresa, codigo) {
     document.getElementById('contactDateTime').value = now.toISOString().slice(0, 16);
     document.getElementById('contactChannel').value = '';
     document.getElementById('contactPerson').value = client.contato || '';
+    document.getElementById('contactOrder').value = '';
     document.getElementById('contactRole').value = '';
     document.getElementById('contactPhone').value = '';
     document.getElementById('contactEmail').value = client.email || '';
@@ -4052,7 +4126,7 @@ function openClientContactModal(empresa, codigo) {
 }
 
 function disableContactFieldSuggestions() {
-    ['contactPerson','contactRole','contactPhone','contactEmail','contactNextAction','contactSummary'].forEach(id => {
+    ['contactPerson','contactOrder','contactRole','contactPhone','contactEmail','contactNextAction','contactSummary'].forEach(id => {
         const el = document.getElementById(id);
         if (!el) return;
         el.setAttribute('autocomplete', 'new-password');
@@ -4081,6 +4155,7 @@ async function saveClientContact() {
         contatoEm: document.getElementById('contactDateTime').value,
         canal: document.getElementById('contactChannel').value,
         pessoaContatada: document.getElementById('contactPerson').value,
+        pedido: document.getElementById('contactOrder').value,
         cargo: document.getElementById('contactRole').value,
         telefone: document.getElementById('contactPhone').value,
         email: document.getElementById('contactEmail').value,
