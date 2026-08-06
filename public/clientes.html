@@ -378,6 +378,18 @@
             background:rgba(0,0,0,0.25);
         }
         .table-title-text { font-size:0.88rem; font-weight:700; color:#fff; }
+        .ranking-table-meta { display:flex; align-items:center; justify-content:flex-end; gap:10px; min-width:0; }
+        .ranking-city-filter {
+            height:28px; max-width:320px; padding:0 9px; border:1px solid rgba(56,189,248,0.28);
+            border-radius:6px; background:rgba(56,189,248,0.08); color:#dff6ff; display:none;
+            align-items:center; gap:7px; font-family:var(--font-mono); font-size:0.66rem; font-weight:800;
+            cursor:pointer; white-space:nowrap;
+        }
+        .ranking-city-filter.visible { display:inline-flex; }
+        .ranking-city-filter span { overflow:hidden; text-overflow:ellipsis; }
+        .ranking-city-filter .fa-location-dot { color:#38bdf8; }
+        .ranking-city-filter .fa-xmark { color:#a1a1aa; }
+        .ranking-city-filter:hover { border-color:rgba(56,189,248,0.45); background:rgba(56,189,248,0.14); }
         .table-scroll { overflow-x:auto; height:calc(100vh - 280px); overflow-y:auto; }
         #rankingSection { height:calc(100vh - 250px); display:flex; flex-direction:column; min-height:0; margin-bottom:0 !important; }
         #rankingSection .table-header-bar { flex-shrink:0; }
@@ -1787,7 +1799,14 @@
     <div class="table-container" id="rankingSection" style="margin-bottom:24px;display:none;">
         <div class="table-header-bar">
             <div class="table-title-text"><i class="fa-solid fa-ranking-star" style="color:var(--color-primary);margin-right:8px;"></i>Ranking de Clientes</div>
-            <div style="font-size:0.7rem;color:var(--text-muted);" id="tableCount">—</div>
+            <div class="ranking-table-meta">
+                <button type="button" class="ranking-city-filter" id="rankingCityFilter" onclick="clearRankingCityFilter()" title="Remover filtro de cidade">
+                    <i class="fa-solid fa-location-dot"></i>
+                    <span id="rankingCityFilterLabel"></span>
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+                <div style="font-size:0.7rem;color:var(--text-muted);" id="tableCount">—</div>
+            </div>
         </div>
         <div class="table-scroll">
             <table>
@@ -1899,6 +1918,7 @@ let excludedClients = new Set();
 let crmRecords = {};
 let crmLegacyRecords = JSON.parse(localStorage.getItem('erus_clientes_crm') || '{}');
 let crmStageFilter = '';
+let rankingCityFilter = null;
 let currentCrmClient = null;
 let crmLoaded = false;
 let currentContactClient = null;
@@ -2445,16 +2465,40 @@ function initRankingColumnFilters() {
     });
 }
 
+function matchesRankingCityFilter(client) {
+    if (!rankingCityFilter) return true;
+    const record = getRankingClientRecord(client);
+    if (!record) return false;
+    const city = normalizeClientName(record.cidadeNome || '');
+    const uf = String(record.cidadeUf || '').trim().toUpperCase();
+    return city === rankingCityFilter.city && (!rankingCityFilter.uf || uf === rankingCityFilter.uf);
+}
+
+function renderRankingCityFilter() {
+    const button = document.getElementById('rankingCityFilter');
+    const label = document.getElementById('rankingCityFilterLabel');
+    if (!button || !label) return;
+    button.classList.toggle('visible', Boolean(rankingCityFilter));
+    label.textContent = rankingCityFilter?.label || '';
+}
+
+function clearRankingCityFilter() {
+    rankingCityFilter = null;
+    renderTable();
+}
+
 function renderTable() {
     const tbody = document.getElementById('tableBody');
     const term  = (document.getElementById('searchInput')?.value || '').toLowerCase();
     const show  = valorVisible;
     initRankingColumnFilters();
+    renderRankingCityFilter();
     const columnFilters = getRankingColumnFilters();
 
     const filtered = clientList.filter((c, originalIdx) => {
         if (term && !c.name.toLowerCase().includes(term)) return false;
         if (crmStageFilter && getCrmStage(c).key !== crmStageFilter) return false;
+        if (!matchesRankingCityFilter(c)) return false;
         const rank = originalIdx + 1;
         for (const [key, value] of Object.entries(columnFilters)) {
             if (!getRankingColumnValue(c, key, rank, show).includes(value)) return false;
@@ -3370,10 +3414,22 @@ async function renderCityHeatmap() {
 }
 
 function openCityClients(nome, uf) {
-    document.querySelectorAll('.client-filter-input').forEach(i => { i.value = ''; });
-    const cityInput = document.querySelector('.client-filter-input[data-col="9"]');
-    if (cityInput) cityInput.value = uf ? `${nome} - ${uf}` : String(nome);
-    openClientsRecordsModal();
+    rankingCityFilter = {
+        city: normalizeClientName(nome),
+        uf: String(uf || '').trim().toUpperCase(),
+        label: uf ? `${nome} - ${uf}` : String(nome)
+    };
+    crmStageFilter = '';
+    const searchInput = document.getElementById('searchInput');
+    if (searchInput) searchInput.value = '';
+    document.querySelectorAll('.ranking-col-filter').forEach(input => {
+        input.value = '';
+        input.closest('.ranking-filter-control')?.classList.remove('has-value');
+    });
+    selectChartView('ranking');
+    renderCrm();
+    renderTable();
+    document.querySelector('#rankingSection .table-scroll')?.scrollTo({ top: 0, left: 0 });
 }
 
 // ─── CHART SEARCH ─────────────────────────────────────────────────────────────
