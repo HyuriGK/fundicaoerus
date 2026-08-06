@@ -36,8 +36,57 @@
         body .dashboard-content { padding:20px 32px 4px 32px !important; gap:0 !important; display:flex !important; flex-direction:column !important; }
         /* Toolbar */
         .toolbar-row {
-            padding:10px 0; display:flex; gap:10px; align-items:center; flex-wrap:wrap;
-            margin:5px 0 !important; border-bottom:none !important; flex-shrink:0;
+            padding:0;
+            display:flex;
+            flex-direction:column;
+            gap:10px;
+            align-items:stretch;
+            margin:0 0 12px !important;
+            border-bottom:none !important;
+            flex-shrink:0;
+        }
+        .crm-app-header {
+            min-height:82px;
+            display:grid;
+            grid-template-columns:1fr auto 1fr;
+            align-items:center;
+            gap:18px;
+            padding:16px 18px;
+            border:1px solid rgba(255,255,255,0.08);
+            border-radius:10px;
+            background:#111114;
+        }
+        .crm-app-title-wrap {
+            grid-column:2;
+            text-align:center;
+            min-width:0;
+        }
+        .crm-header-menu {
+            grid-column:3;
+            display:flex;
+            align-items:center;
+            justify-content:flex-end;
+            gap:8px;
+            min-width:0;
+        }
+        .crm-header-menu-label {
+            color:#a1a1aa;
+            font-family:var(--font-mono);
+            font-size:0.66rem;
+            font-weight:900;
+            text-transform:uppercase;
+            letter-spacing:0.07em;
+            white-space:nowrap;
+        }
+        .crm-view-navbar {
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            gap:8px;
+            padding:8px 12px;
+            border:1px solid rgba(255,255,255,0.07);
+            border-radius:9px;
+            background:rgba(255,255,255,0.018);
         }
         .crm-page-header {
             padding:12px 0 14px;
@@ -51,7 +100,7 @@
         .crm-page-title {
             margin:0;
             color:#fff;
-            font-size:1.08rem;
+            font-size:1.22rem;
             line-height:1.2;
             font-weight:900;
             letter-spacing:0.02em;
@@ -63,6 +112,22 @@
             font-size:0.76rem;
             line-height:1.35;
             font-family:var(--font-mono);
+        }
+        @media (max-width:900px) {
+            .crm-app-header {
+                grid-template-columns:1fr;
+            }
+            .crm-app-title-wrap,
+            .crm-header-menu {
+                grid-column:auto;
+                justify-content:center;
+                text-align:center;
+                flex-wrap:wrap;
+            }
+            .crm-view-navbar {
+                justify-content:flex-start;
+                overflow-x:auto;
+            }
         }
         .crm-page-actions {
             display:flex;
@@ -1121,6 +1186,8 @@
                             <thead>
                                 <tr>
                                     <th style="width:96px;">Data</th>
+                                    <th style="width:95px;">Pedido</th>
+                                    <th style="width:130px;">OC</th>
                                     <th style="width:110px;">Código</th>
                                     <th>Descrição</th>
                                     <th class="text-right" style="width:105px;">Qtd</th>
@@ -1666,7 +1733,48 @@ function getFatPesoState(item) {
 }
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
+function initCrmHeaderLayout() {
+    const toolbar = document.querySelector('.toolbar-row');
+    if (!toolbar || toolbar.dataset.crmLayoutReady === '1') return;
+    const titleBlock = toolbar.querySelector('.crm-page-title')?.parentElement;
+    const yearSelect = document.getElementById('yearSelect');
+    const monthSelect = document.getElementById('monthSelect');
+    const viewSelect = document.getElementById('chartSelectDropdown');
+    const walletBtn = Array.from(toolbar.querySelectorAll('button')).find(btn => (btn.textContent || '').includes('MINHA CARTEIRA'));
+    if (!titleBlock || !yearSelect || !monthSelect || !viewSelect || !walletBtn) return;
+
+    const header = document.createElement('div');
+    header.className = 'crm-app-header';
+    const spacer = document.createElement('div');
+    const titleWrap = document.createElement('div');
+    titleWrap.className = 'crm-app-title-wrap';
+    const menu = document.createElement('div');
+    menu.className = 'crm-header-menu';
+    menu.innerHTML = '<span class="crm-header-menu-label">Opções</span>';
+    const nav = document.createElement('div');
+    nav.className = 'crm-view-navbar';
+
+    titleBlock.querySelector('.crm-page-title').textContent = 'Painel CRM';
+    const sub = titleBlock.querySelector('.crm-page-subtitle');
+    if (sub) sub.innerHTML = 'Fundi&ccedil;&atilde;o Erus · carteira, contatos e pr&oacute;ximas a&ccedil;&otilde;es.';
+
+    titleWrap.appendChild(titleBlock);
+    menu.appendChild(walletBtn);
+    nav.appendChild(viewSelect);
+    nav.appendChild(yearSelect);
+    nav.appendChild(monthSelect);
+    header.appendChild(spacer);
+    header.appendChild(titleWrap);
+    header.appendChild(menu);
+
+    toolbar.innerHTML = '';
+    toolbar.appendChild(header);
+    toolbar.appendChild(nav);
+    toolbar.dataset.crmLayoutReady = '1';
+}
+
 window.onload = async function() {
+    initCrmHeaderLayout();
     // Pré-selecionar ano e mês vigentes
     const now = new Date();
     const curYear  = String(now.getFullYear());
@@ -3722,10 +3830,14 @@ function openClientPurchasesModal(rows, period) {
     rows.forEach(item => {
         const code = String(item.codigoItem || '').trim() || '-';
         const dateKey = String(item.data || '').slice(0, 10) || '-';
-        const key = dateKey + '::' + code + '::' + normalizeClientName(item.descricao || '');
+        const pedidoKey = String(item.pedido || '').trim() || '-';
+        const ocKey = String(item.ordemCompra || '').trim() || '-';
+        const key = dateKey + '::' + pedidoKey + '::' + ocKey + '::' + code + '::' + normalizeClientName(item.descricao || '');
         if (!productMap[key]) {
             productMap[key] = {
                 date: dateKey,
+                pedido: pedidoKey,
+                ordemCompra: ocKey,
                 code,
                 desc: item.descricao || '-',
                 qtd: 0,
@@ -3743,7 +3855,9 @@ function openClientPurchasesModal(rows, period) {
 
     document.getElementById('clientPurchasesProductsBody').innerHTML = products.length ? products.map(p => `
         <tr>
-            <td>${fmtDateShort(p.date)}</td>
+            <td>${formatDateBRFull(p.date)}</td>
+            <td>${escapeHtml(p.pedido)}</td>
+            <td>${escapeHtml(p.ordemCompra)}</td>
             <td class="client-purchases-code">${escapeHtml(p.code)}</td>
             <td class="desc-cell">${escapeHtml(p.desc)}</td>
             <td class="text-right">${fmtNum(p.qtd)}</td>
@@ -3751,7 +3865,7 @@ function openClientPurchasesModal(rows, period) {
             <td class="text-right" style="font-weight:900;color:#fff;">${valorVisible ? fmtMoney(p.valor) : 'R$ -----'}</td>
             <td class="text-right">${p.peso > 0 && valorVisible ? fmtMoney(p.valor / p.peso) : '-'}</td>
         </tr>
-    `).join('') : `<tr><td colspan="7"><div class="client-purchases-empty">Nenhuma compra encontrada neste período.</div></td></tr>`;
+    `).join('') : `<tr><td colspan="9"><div class="client-purchases-empty">Nenhuma compra encontrada neste período.</div></td></tr>`;
 
     document.getElementById('clientPurchasesModal').style.display = 'flex';
 }
@@ -3845,6 +3959,17 @@ function fmtDateShort(value) {
     const d = new Date(value);
     if (isNaN(d)) return '-';
     return d.toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit', year:'2-digit' });
+}
+function formatDateBRFull(value) {
+    if (!value) return '-';
+    const s = String(value).slice(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+        const [y, m, d] = s.split('-');
+        return `${d}/${m}/${y}`;
+    }
+    const d = new Date(value);
+    if (isNaN(d)) return '-';
+    return d.toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric' });
 }
 function getSelectedPeriodLabel() {
     const yr = document.getElementById('yearSelect')?.value || '';
