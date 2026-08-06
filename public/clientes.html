@@ -3707,23 +3707,25 @@ function openClientPurchasesModal(rows, period) {
     const peso = rows.filter(item => getFatPesoState(item)).reduce((sum, item) => sum + (item.pesoTotal || 0), 0);
     const qtd = rows.reduce((sum, item) => sum + (Number(item.quantidadeOriginal || item.quantidade || 0)), 0);
     const orders = new Set(rows.map(item => String(item.pedido || '').trim()).filter(Boolean));
-    const invoices = new Set(rows.map(item => String(item.notaFiscal || '').trim()).filter(Boolean));
+    const ticketMedio = orders.size > 0 ? fat / orders.size : 0;
 
     document.getElementById('clientPurchasesSub').textContent = `${clientName} · ${periodLabel}`;
     document.getElementById('clientPurchasesSummary').innerHTML = [
         ['Faturamento', valorVisible ? fmtMoney(fat) : 'R$ -----', 'is-money'],
         ['Peso total', fmtNum(peso) + ' kg', ''],
         ['Quantidade', fmtNum(qtd), ''],
-        ['Pedidos', orders.size.toLocaleString('pt-BR'), ''],
-        ['Notas fiscais', invoices.size.toLocaleString('pt-BR'), '']
+        ['Pedidos únicos', orders.size.toLocaleString('pt-BR'), ''],
+        ['Ticket médio', valorVisible && orders.size > 0 ? fmtMoney(ticketMedio) : '-', 'is-money']
     ].map(([label, value, cls]) => `<div class="client-purchases-kpi ${cls}"><span>${label}</span><strong>${value}</strong></div>`).join('');
 
     const productMap = {};
     rows.forEach(item => {
         const code = String(item.codigoItem || '').trim() || '-';
-        const key = code + '::' + normalizeClientName(item.descricao || '');
+        const dateKey = String(item.data || '').slice(0, 10) || '-';
+        const key = dateKey + '::' + code + '::' + normalizeClientName(item.descricao || '');
         if (!productMap[key]) {
             productMap[key] = {
+                date: dateKey,
                 code,
                 desc: item.descricao || '-',
                 qtd: 0,
@@ -3736,11 +3738,12 @@ function openClientPurchasesModal(rows, period) {
         productMap[key].valor += calcTotal(item);
     });
 
-    const products = Object.values(productMap).sort((a, b) => b.valor - a.valor);
-    document.getElementById('clientPurchasesProductsCount').textContent = `${products.length.toLocaleString('pt-BR')} produto${products.length === 1 ? '' : 's'}`;
+    const products = Object.values(productMap).sort((a, b) => String(b.date).localeCompare(String(a.date)) || b.valor - a.valor);
+    document.getElementById('clientPurchasesProductsCount').textContent = `${products.length.toLocaleString('pt-BR')} item${products.length === 1 ? '' : 's'}`;
 
     document.getElementById('clientPurchasesProductsBody').innerHTML = products.length ? products.map(p => `
         <tr>
+            <td>${fmtDateShort(p.date)}</td>
             <td class="client-purchases-code">${escapeHtml(p.code)}</td>
             <td class="desc-cell">${escapeHtml(p.desc)}</td>
             <td class="text-right">${fmtNum(p.qtd)}</td>
@@ -3748,7 +3751,7 @@ function openClientPurchasesModal(rows, period) {
             <td class="text-right" style="font-weight:900;color:#fff;">${valorVisible ? fmtMoney(p.valor) : 'R$ -----'}</td>
             <td class="text-right">${p.peso > 0 && valorVisible ? fmtMoney(p.valor / p.peso) : '-'}</td>
         </tr>
-    `).join('') : `<tr><td colspan="6"><div class="client-purchases-empty">Nenhuma compra encontrada neste período.</div></td></tr>`;
+    `).join('') : `<tr><td colspan="7"><div class="client-purchases-empty">Nenhuma compra encontrada neste período.</div></td></tr>`;
 
     document.getElementById('clientPurchasesModal').style.display = 'flex';
 }
