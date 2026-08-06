@@ -65,6 +65,21 @@ async function ensureResponsaveisTable() {
     `);
 }
 
+async function ensureClientesBloqueioTable() {
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS clientes_bloqueio_crm (
+            empresa INTEGER NOT NULL,
+            codigo INTEGER NOT NULL,
+            bloqueado BOOLEAN NOT NULL DEFAULT FALSE,
+            motivo_bloqueio TEXT,
+            updated_by TEXT,
+            created_at TIMESTAMP DEFAULT NOW(),
+            updated_at TIMESTAMP DEFAULT NOW(),
+            PRIMARY KEY (empresa, codigo)
+        )
+    `);
+}
+
 async function ensureClientesCrmTable() {
     await pool.query(`
         CREATE TABLE IF NOT EXISTS clientes_crm (
@@ -1551,6 +1566,7 @@ async function handleDigisacInvalidManualCnpj(contactId, session) {
 router.get('/list/all', async (req, res) => {
     try {
         await ensureResponsaveisTable();
+        await ensureClientesBloqueioTable();
         await pool.query(`
             CREATE TABLE IF NOT EXISTS clientes_firebird_sync (
                 empresa INTEGER NOT NULL,
@@ -1591,15 +1607,20 @@ router.get('/list/all', async (req, res) => {
         const params = commercialOwner ? [commercialOwner] : [];
         const result = await pool.query(`
         SELECT
-            c.empresa, c.codigo, c.razao_social, c.fantasia, c.ativo, c.bloqueado,
+            c.empresa, c.codigo, c.razao_social, c.fantasia, c.ativo,
             c.cnpj_cpf, c.ie_rg, c.contato, c.telefone1, c.telefone2, c.email,
             c.cidade_codigo, c.cidade_nome, c.cidade_uf, c.cidade_latitude, c.cidade_longitude, c.cep, c.logradouro, c.numero, c.bairro,
-            c.data_cadastro, c.data_inativacao, c.motivo_bloqueio, c.observacao, c.synced_at,
-            rc.responsavel_comercial
+            c.data_cadastro, c.data_inativacao, c.observacao, c.synced_at,
+            rc.responsavel_comercial,
+            COALESCE(cb.bloqueado, FALSE) AS bloqueado_crm,
+            cb.motivo_bloqueio AS motivo_bloqueio_crm
         FROM clientes_firebird_sync c
         LEFT JOIN clientes_responsavel_comercial rc
             ON rc.empresa = c.empresa
             AND rc.codigo = c.codigo
+        LEFT JOIN clientes_bloqueio_crm cb
+            ON cb.empresa = c.empresa
+            AND cb.codigo = c.codigo
         ${commercialOwner ? 'WHERE rc.responsavel_comercial = $1' : ''}
         ORDER BY c.razao_social NULLS LAST, c.codigo
         `, params);
@@ -1610,7 +1631,7 @@ router.get('/list/all', async (req, res) => {
             razaoSocial: row.razao_social,
             fantasia: row.fantasia,
             ativo: row.ativo,
-            bloqueado: row.bloqueado,
+            bloqueado: row.bloqueado_crm,
             cnpjCpf: row.cnpj_cpf,
             ieRg: row.ie_rg,
             contato: row.contato,
@@ -1628,7 +1649,7 @@ router.get('/list/all', async (req, res) => {
             bairro: row.bairro,
             dataCadastro: row.data_cadastro,
             dataInativacao: row.data_inativacao,
-            motivoBloqueio: row.motivo_bloqueio,
+            motivoBloqueio: row.motivo_bloqueio_crm,
             observacao: row.observacao,
             responsavelComercial: row.responsavel_comercial,
             syncedAt: row.synced_at
@@ -2561,6 +2582,47 @@ router.post('/responsavel-comercial', async (req, res) => {
         res.json({ success: true, responsavelComercial: responsavel || null });
     } catch (err) {
         res.status(500).json({ success: false, error: 'Erro ao salvar responsável comercial', details: err.message });
+    }
+});
+
+router.post('/bloqueio', async (req, res) => {
+    try {
+        await ensureClientesBloqueioTable();
+        const empresa = Number(req.body.empresa);
+        const codigo = Number(req.body.codigo);
+        const bloqueado = req.body.bloqueado === true;
+        const motivoBloqueio = String(req.body.motivoBloqueio || '').trim();
+        const updatedBy = String(req.user?.name || req.user?.user || '').trim();
+
+        if (!Number.isInteger(empresa) || !Number.isInteger(codigo)) {
+            return res.status(400).json({ success: false, error: 'Cliente inv\u00e1lido.' });
+        }
+        if (bloqueado && !motivoBloqueio) {
+            return res.status(400).json({ success: false, error: 'Informe o motivo do bloqueio.' });
+        }
+
+        const result = await pool.query(`
+            INSERT INTO clientes_bloqueio_crm
+                (empresa, codigo, bloqueado, motivo_bloqueio, updated_by, updated_at)
+            VALUES ($1, $2, $3, NULLIF($4, ''), NULLIF($5, ''), NOW())
+            ON CONFLICT (empresa, codigo)
+            DO UPDATE SET
+                bloqueado = EXCLUDED.bloqueado,
+                motivo_bloqueio = EXCLUDED.motivo_bloqueio,
+                updated_by = EXCLUDED.updated_by,
+                updated_at = NOW()
+            RETURNING bloqueado, motivo_bloqueio, updated_by, updated_at
+        `, [empresa, codigo, bloqueado, bloqueado ? motivoBloqueio : '', updatedBy]);
+
+        res.json({
+            success: true,
+            bloqueado: result.rows[0].bloqueado,
+            motivoBloqueio: result.rows[0].motivo_bloqueio || '',
+            updatedBy: result.rows[0].updated_by || '',
+            updatedAt: result.rows[0].updated_at
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, error: 'Erro ao salvar bloqueio do cliente', details: err.message });
     }
 });
 
