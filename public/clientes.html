@@ -424,6 +424,7 @@
         .badge-alert    { background:rgba(245,158,11,0.14);  color:#f59e0b; }
         .badge-inactive { background:rgba(239,68,68,0.14);   color:#ef4444; }
         .badge-blocked  { background:rgba(239,68,68,0.2); color:#ff5252; border:1px solid rgba(239,68,68,0.28); }
+        .badge-no-purchases { background:rgba(56,189,248,0.09); color:#7dd3fc; border:1px solid rgba(56,189,248,0.2); }
         .crm-strip { display:grid; grid-template-columns:1fr; gap:10px; margin:0 0 10px; flex-shrink:0; }
         .crm-strip > .crm-panel:nth-child(2) { display:none; }
         .crm-strip > .crm-panel:nth-child(2) .btn-act { display:none !important; }
@@ -1882,7 +1883,7 @@
             <table>
                 <thead>
                     <tr>
-                        <th class="text-center" style="width:34px;">#</th>
+                        <th class="text-center" style="width:78px;">Código</th>
                         <th onclick="doSortBy('name')">CLIENTE</th>
                         <th class="text-center" onclick="doSortBy('orders')" style="width:68px;">PEDIDOS</th>
                         <th class="text-right" onclick="doSortBy('peso')">PESO TOTAL</th>
@@ -1897,7 +1898,7 @@
                         <th class="text-center" style="width:68px;">AÇÕES</th>
                     </tr>
                     <tr class="ranking-filter-row">
-                        <th><input class="ranking-col-filter" data-rank-filter="rank" placeholder="#"></th>
+                        <th><input class="ranking-col-filter" data-rank-filter="code" placeholder="código"></th>
                         <th><input class="ranking-col-filter" data-rank-filter="name" placeholder="cliente"></th>
                         <th><input class="ranking-col-filter" data-rank-filter="orders" placeholder="ped."></th>
                         <th><input class="ranking-col-filter" data-rank-filter="peso" placeholder="peso"></th>
@@ -2476,9 +2477,66 @@ function getRankingClientRecord(client) {
     return findClientRecordForSummary(client);
 }
 
+function getPortfolioClients() {
+    const existingCodes = new Set(clientList.map(client => String(client.code || '').trim()).filter(Boolean));
+    const existingNames = new Set(clientList.map(client => normalizeClientName(client.name)));
+    const extras = clientRecords
+        .filter(record => record.ativo || record.bloqueado)
+        .filter(record => {
+            const code = String(record.codigo || '').trim();
+            const name = normalizeClientName(record.razaoSocial || record.fantasia || '');
+            return !existingCodes.has(code) && !existingNames.has(name);
+        })
+        .map(record => {
+            const name = record.razaoSocial || record.fantasia || `Cliente ${record.codigo || ''}`;
+            const saved = clientRatings[name];
+            const abcScore = saved ? (saved.billing + saved.weight + saved.price + saved.complex + saved.risk) / 5 : null;
+            return {
+                key: `CAD:${record.empresa || 0}:${record.codigo || name}`,
+                code: String(record.codigo || '').trim(),
+                name,
+                peso:0,
+                fat:0,
+                orders:0,
+                days:Number.MAX_SAFE_INTEGER,
+                ticket:0,
+                preco_kg:0,
+                pct_fat:0,
+                pct_peso:0,
+                recAvg:0,
+                abcScore,
+                lastDate:new Date(0),
+                noPurchases:true
+            };
+        });
+
+    return [...clientList, ...extras].sort((a, b) => {
+        const values = client => {
+            switch (sortState.col) {
+                case 'name': return client.name.toLowerCase();
+                case 'orders': return client.orders;
+                case 'peso': return client.peso;
+                case 'ticket': return client.ticket;
+                case 'preco_kg': return client.preco_kg;
+                case 'pct_fat': return client.pct_fat;
+                case 'pct_peso': return client.pct_peso;
+                case 'lastDate': return client.lastDate.getTime();
+                case 'days': return client.days;
+                case 'abc': return client.abcScore ?? -1;
+                default: return client.fat;
+            }
+        };
+        const valueA = values(a);
+        const valueB = values(b);
+        if (sortState.dir === 'asc') return valueA > valueB ? 1 : valueA < valueB ? -1 : 0;
+        return valueA < valueB ? 1 : valueA > valueB ? -1 : 0;
+    });
+}
+
 function getRankingStatus(c) {
     const record = getRankingClientRecord(c);
     if (record?.bloqueado) return { cls: 'badge-blocked', text: 'Bloqueado' };
+    if (c.noPurchases) return { cls: 'badge-no-purchases', text: 'Sem compras' };
     if (c.days <= 45) return { cls: 'badge-active', text: 'Ativo' };
     if (c.days <= 90) return { cls: 'badge-alert', text: 'Alerta' };
     return { cls: 'badge-inactive', text: 'Inativo' };
@@ -2489,8 +2547,8 @@ function getRankingColumnValue(c, key, rank, show) {
     const status = getRankingStatus(c).text;
     const abc = c.abcScore !== null ? c.abcScore.toFixed(1) : '-';
     const values = {
-        rank: String(rank),
-        name: c.name,
+        code: String(c.code || ''),
+        name: `${c.code || ''} ${c.name}`.trim(),
         orders: String(c.orders),
         peso: `${fmtNum(c.peso)} kg`,
         pct_peso: `${c.pct_peso.toFixed(1)}%`,
@@ -2564,9 +2622,10 @@ function renderTable() {
     initRankingColumnFilters();
     renderRankingCityFilter();
     const columnFilters = getRankingColumnFilters();
+    const portfolioClients = getPortfolioClients();
 
-    const filtered = clientList.filter((c, originalIdx) => {
-        if (term && !c.name.toLowerCase().includes(term)) return false;
+    const filtered = portfolioClients.filter((c, originalIdx) => {
+        if (term && !c.name.toLowerCase().includes(term) && !String(c.code || '').includes(term)) return false;
         if (crmStageFilter && getCrmStage(c).key !== crmStageFilter) return false;
         if (!matchesRankingCityFilter(c)) return false;
         const rank = originalIdx + 1;
@@ -2600,8 +2659,8 @@ function renderTable() {
         tr.style.cursor = 'pointer';
         tr.onclick = () => openClientSummaryFromListClient(c);
         tr.innerHTML = `
-            <td class="rank-num text-center">${idx + 1}</td>
-            <td style="font-weight:600;color:#fff;max-width:220px;overflow:hidden;text-overflow:ellipsis;">${c.name}</td>
+            <td class="rank-num text-center">${escapeHtml(c.code || '-')}</td>
+            <td style="font-weight:600;color:#fff;max-width:260px;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(c.name)}</td>
             <td class="text-center" style="color:var(--text-muted);">${c.orders}</td>
             <td class="text-right" style="color:var(--status-purple);font-weight:700;">${fmtNum(c.peso)} kg${barPeso}</td>
             <td class="text-right" style="color:var(--text-muted);font-size:0.7rem;">${c.pct_peso.toFixed(1)}%</td>
