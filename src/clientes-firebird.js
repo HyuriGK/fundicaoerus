@@ -2632,7 +2632,7 @@ router.get('/crm', async (req, res) => {
         const crmUser = String(req.user?.user || req.user?.name || '').trim();
         const role = String(req.user?.role || '').trim().toLowerCase();
         const scope = String(req.query.scope || 'mine').trim().toLowerCase();
-        const canViewAll = scope === 'all' && ['admin', 'desenvolvedor'].includes(role);
+        const canViewAll = scope === 'all' && ['admin', 'desenvolvedor', 'gerente comercial', 'diretor'].includes(role);
         if (!crmUser && !canViewAll) {
             return res.status(400).json({ success: false, error: 'Usuário inválido.' });
         }
@@ -2792,7 +2792,7 @@ router.get('/crm/contatos', async (req, res) => {
         if (!crmUser) return res.status(400).json({ success: false, error: 'Usuário inválido.' });
         if (empresa !== null && !Number.isInteger(empresa)) return res.status(400).json({ success: false, error: 'Empresa inválida.' });
         if (codigo !== null && !Number.isInteger(codigo)) return res.status(400).json({ success: false, error: 'Código inválido.' });
-        const canViewAll = ['admin', 'desenvolvedor'].includes(role);
+        const canViewAll = ['admin', 'desenvolvedor', 'gerente comercial', 'diretor'].includes(role);
         let whereClause = 'WHERE crm_user = $1';
         let params = [crmUser];
         if (canViewAll && requestedUser === 'all') {
