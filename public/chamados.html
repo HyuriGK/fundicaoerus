@@ -1490,16 +1490,35 @@
             document.body.appendChild(tooltip);
         }
         const selector = '#nativeUsersBody .native-admin-actions button';
+        let activeTarget = null;
+        const hideTooltip = () => {
+            activeTarget = null;
+            tooltip.classList.remove('open');
+            tooltip.textContent = '';
+            tooltip.style.left = '';
+            tooltip.style.top = '';
+        };
         document.addEventListener('mouseover', event => {
             const target = event.target.closest(selector);
-            if (!target) return;
+            if (!target) {
+                hideTooltip();
+                return;
+            }
             const text = tooltipTextFor(target);
-            if (!text) return;
+            if (!text) {
+                hideTooltip();
+                return;
+            }
+            activeTarget = target;
             tooltip.textContent = text;
             tooltip.classList.add('open');
         });
         document.addEventListener('mousemove', event => {
             if (!tooltip.classList.contains('open')) return;
+            if (!activeTarget || !activeTarget.isConnected || !activeTarget.matches(':hover')) {
+                hideTooltip();
+                return;
+            }
             const margin = 14;
             const x = Math.min(Math.max(event.clientX, 132), window.innerWidth - 132);
             const y = Math.max(event.clientY - margin, 36);
@@ -1508,7 +1527,14 @@
         });
         document.addEventListener('mouseout', event => {
             const target = event.target.closest(selector);
-            if (target && !target.contains(event.relatedTarget)) tooltip.classList.remove('open');
+            if (target && !target.contains(event.relatedTarget)) hideTooltip();
+        });
+        document.addEventListener('click', hideTooltip, true);
+        document.addEventListener('scroll', hideTooltip, true);
+        document.addEventListener('keydown', hideTooltip);
+        window.addEventListener('blur', hideTooltip);
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) hideTooltip();
         });
     }
 
