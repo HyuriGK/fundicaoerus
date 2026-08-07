@@ -9022,6 +9022,10 @@
 
                 let clientChart = null;
 
+                const DASHBOARD_REFRESH_INTERVAL_MS = 15 * 60 * 1000;
+                let dashboardRefreshTimer = null;
+                let dashboardRefreshPromise = null;
+
 
                 function fetchWithTimeout(url, options = {}, timeoutMs = 20000) {
                     const controller = new AbortController();
@@ -9191,16 +9195,25 @@
                     await refreshDashboard();
 
 
-                    // Refresh cycle (5 minutes)
-
-
-                    setInterval(refreshDashboard, 5 * 60 * 1000);
+                    scheduleDashboardRefresh();
 
 
                 }
 
+                function scheduleDashboardRefresh() {
+                    clearTimeout(dashboardRefreshTimer);
+                    dashboardRefreshTimer = setTimeout(async () => {
+                        if (!document.hidden) await refreshDashboard();
+                        scheduleDashboardRefresh();
+                    }, DASHBOARD_REFRESH_INTERVAL_MS);
+                }
+
 
                 async function refreshDashboard() {
+
+                    if (dashboardRefreshPromise) return dashboardRefreshPromise;
+
+                    dashboardRefreshPromise = (async () => {
 
 
                     try {
@@ -9233,6 +9246,14 @@
                         console.error('Error refreshing dashboard:', e);
 
 
+                    }
+
+                    })();
+
+                    try {
+                        return await dashboardRefreshPromise;
+                    } finally {
+                        dashboardRefreshPromise = null;
                     }
 
 
