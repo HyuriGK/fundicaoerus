@@ -197,6 +197,151 @@
             }
             .nhm-footer-close:hover { background: rgba(255,255,255,0.08); color: #fff; }
 
+            /* Central alinhada ao dashboard */
+            #notificationsHistoryModal {
+                --nhm-surface-1: #1b1d23;
+                --nhm-surface-2: #17191e;
+                --nhm-surface-3: #121419;
+                --nhm-surface-4: #24272e;
+                --nhm-text: #f4f4f5;
+                --nhm-muted: #b6b7bd;
+                --nhm-dim: #858892;
+                --nhm-border: rgba(255,255,255,.11);
+                --nhm-accent: #fbbf24;
+                background: #101217;
+                backdrop-filter: none;
+                -webkit-backdrop-filter: none;
+                color: var(--nhm-text);
+            }
+            #notificationsHistoryModal.visible .nhm-header { animation: nhmHeaderIn .28s ease both; }
+            #notificationsHistoryModal.visible .nhm-sidebar { animation: nhmSidebarIn .34s .04s cubic-bezier(.16,1,.3,1) both; }
+            #notificationsHistoryModal.visible .nhm-content { animation: nhmContentIn .34s .08s cubic-bezier(.16,1,.3,1) both; }
+            @keyframes nhmHeaderIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+            @keyframes nhmSidebarIn { from { opacity: 0; transform: translateX(-12px); } to { opacity: 1; transform: translateX(0); } }
+            @keyframes nhmContentIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+            .nhm-header {
+                min-height: 82px; padding: 16px 28px;
+                background: var(--nhm-surface-1);
+                border-bottom-color: var(--nhm-border);
+                box-shadow: inset 0 -2px 0 rgba(251,191,36,.12);
+            }
+            .nhm-brand { gap: 14px; min-width: 0; }
+            .nhm-brand-icon {
+                width: 46px; height: 46px; border-radius: 8px;
+                background: rgba(251,191,36,.12); border: 1px solid rgba(251,191,36,.35);
+                box-shadow: none; color: #fbbf24; font-size: 1.05rem;
+            }
+            .nhm-brand-text h2 { color: var(--nhm-text); font-size: 1.18rem; letter-spacing: 0; }
+            .nhm-brand-text p { color: var(--nhm-dim); font-size: .76rem; }
+            .nhm-badge-count { border-radius: 8px; letter-spacing: 0; }
+            .nhm-close-btn {
+                width: 38px; height: 38px; border-radius: 8px;
+                background: var(--nhm-surface-4); border-color: var(--nhm-border); color: var(--nhm-muted);
+            }
+            .nhm-body { background: var(--nhm-surface-3); }
+            .nhm-sidebar {
+                width: clamp(300px, 21vw, 370px); padding: 18px 14px;
+                background: var(--nhm-surface-2); border-right-color: var(--nhm-border); gap: 5px;
+            }
+            .nhm-sidebar-label {
+                padding: 12px 10px 7px; color: var(--nhm-dim);
+                font-size: .66rem; letter-spacing: 0; font-weight: 800;
+            }
+            .nhm-list-item {
+                position: relative; min-height: 66px; padding: 12px 14px;
+                border-radius: 8px; background: transparent; border-color: transparent;
+                justify-content: center; gap: 6px;
+            }
+            .nhm-list-item:hover { background: var(--nhm-surface-4); border-color: var(--nhm-border); }
+            .nhm-list-item.active {
+                background: rgba(251,191,36,.11); border-color: rgba(251,191,36,.38);
+                box-shadow: inset 3px 0 0 #fbbf24;
+            }
+            .nhm-list-item .nhm-item-subject { color: var(--nhm-text); font-size: .84rem; }
+            .nhm-list-item.unread .nhm-item-subject { color: var(--nhm-text); }
+            .nhm-list-item .nhm-item-meta { color: var(--nhm-dim); gap: 7px; font-size: .69rem; }
+            .nhm-unread-dot { width: 7px; height: 7px; box-shadow: 0 0 0 3px rgba(251,191,36,.12); }
+            .nhm-content {
+                min-width: 0; padding: clamp(28px, 4vw, 54px);
+                background: var(--nhm-surface-3); color: var(--nhm-text);
+            }
+            .nhm-msg-header {
+                max-width: 1120px; margin: 0 auto 26px; padding-bottom: 22px;
+                border-bottom-color: var(--nhm-border);
+            }
+            .nhm-msg-subject { color: var(--nhm-text); font-size: clamp(1.3rem, 2vw, 1.7rem); letter-spacing: 0; }
+            .nhm-msg-meta { color: var(--nhm-dim); flex-wrap: wrap; gap: 10px 18px; }
+            .nhm-msg-meta i { color: var(--nhm-muted); }
+            .nhm-msg-body {
+                max-width: 1120px; min-height: 180px; margin: 0 auto 22px;
+                padding: clamp(24px, 3vw, 36px); border-radius: 8px;
+                background: var(--nhm-surface-1); border-color: var(--nhm-border);
+                color: var(--nhm-muted); font-size: .96rem; line-height: 1.8;
+                box-shadow: 0 14px 34px rgba(0,0,0,.2), inset 3px 0 0 rgba(251,191,36,.38);
+            }
+            .nhm-mark-read-btn {
+                margin-left: max(0px, calc((100% - 1120px) / 2));
+                padding: 10px 16px; border-radius: 8px;
+            }
+            .nhm-empty-state { color: var(--nhm-dim); }
+            .nhm-footer {
+                min-height: 58px; padding: 10px 28px;
+                background: var(--nhm-surface-1); border-top-color: var(--nhm-border);
+            }
+            .nhm-footer-info { color: var(--nhm-dim); }
+            .nhm-footer-close {
+                padding: 9px 20px; border-radius: 8px;
+                background: var(--nhm-surface-4); border-color: var(--nhm-border); color: var(--nhm-muted);
+            }
+            .nhm-footer-close:hover { background: rgba(251,191,36,.1); border-color: rgba(251,191,36,.3); color: #fbbf24; }
+            .nhm-read-state,
+            .nhm-unread-state {
+                display: inline-flex; align-items: center; gap: 7px;
+                font-size: .78rem; font-weight: 700;
+            }
+            .nhm-read-state {
+                max-width: 1120px; margin-left: max(0px, calc((100% - 1120px) / 2));
+                color: var(--nhm-dim);
+            }
+            .nhm-unread-state { color: var(--nhm-accent); }
+            html[data-theme="light"] #notificationsHistoryModal {
+                --nhm-surface-1: #ffffff;
+                --nhm-surface-2: #f6f9fe;
+                --nhm-surface-3: #edf3fb;
+                --nhm-surface-4: #e8eef8;
+                --nhm-text: #0f172a;
+                --nhm-muted: #334155;
+                --nhm-dim: #667899;
+                --nhm-border: rgba(29,78,216,.15);
+                --nhm-accent: #0b63e5;
+                background: #edf3fb;
+            }
+            html[data-theme="light"] .nhm-header { box-shadow: inset 0 -2px 0 rgba(11,99,229,.12); }
+            html[data-theme="light"] .nhm-list-item.active {
+                background: rgba(11,99,229,.09); border-color: rgba(11,99,229,.24);
+                box-shadow: inset 3px 0 0 #0b63e5;
+            }
+            html[data-theme="light"] .nhm-unread-dot { background: #0b63e5; box-shadow: 0 0 0 3px rgba(11,99,229,.12); }
+            html[data-theme="light"] .nhm-brand-icon {
+                color: #0b63e5; background: rgba(11,99,229,.08); border-color: rgba(11,99,229,.22);
+            }
+            html[data-theme="light"] .nhm-badge-count { color: #0b63e5; background: rgba(11,99,229,.08); border-color: rgba(11,99,229,.2); }
+            html[data-theme="light"] .nhm-msg-body { box-shadow: 0 12px 28px rgba(23,61,112,.08), inset 3px 0 0 rgba(11,99,229,.28); }
+            html[data-theme="light"] .nhm-footer-close:hover { color: #0b63e5; background: rgba(11,99,229,.07); border-color: rgba(11,99,229,.2); }
+            @media (max-width: 760px) {
+                .nhm-header { min-height: 70px; padding: 12px 14px; }
+                .nhm-brand-icon { width: 40px; height: 40px; }
+                .nhm-brand-text h2 { font-size: 1rem; }
+                .nhm-brand-text p { display: none; }
+                .nhm-body { flex-direction: column; }
+                .nhm-sidebar { width: 100%; max-height: 38vh; border-right: 0; border-bottom: 1px solid var(--nhm-border); }
+                .nhm-content { padding: 22px 18px; }
+                .nhm-msg-header { margin-bottom: 18px; }
+                .nhm-msg-body { min-height: 130px; padding: 22px; }
+                .nhm-footer { padding: 9px 14px; }
+                .nhm-mark-read-btn, .nhm-read-state, .nhm-unread-state { margin-left: 0; }
+            }
+
             /* ── POPUP OVERRIDE ── */
             @keyframes commFadeIn { from { opacity: 0; backdrop-filter: blur(0); } to { opacity: 1; backdrop-filter: blur(10px); } }
             @keyframes commFadeOut { from { opacity: 1; } to { opacity: 0; } }
@@ -302,7 +447,7 @@
             </div>
 
             <div class="nhm-body">
-                <div class="nhm-sidebar" id="nhm-sidebar">
+                <div class="nhm-sidebar" id="nhm-sidebar" role="listbox" aria-label="Notificações">
                     <div class="nhm-empty-state" id="nhm-sidebar-loading" style="height:auto; padding:40px 0;">
                         <i class="fa-solid fa-circle-notch fa-spin" style="font-size:1.5rem;"></i>
                     </div>
@@ -379,12 +524,20 @@
 
             // Click handlers
             sidebar.querySelectorAll('.nhm-list-item').forEach(el => {
-                el.addEventListener('click', () => {
+                const selectNotification = () => {
                     sidebar.querySelectorAll('.nhm-list-item').forEach(x => x.classList.remove('active'));
                     el.classList.add('active');
+                    sidebar.querySelectorAll('.nhm-list-item').forEach(x => x.setAttribute('aria-selected', String(x === el)));
                     const id = parseInt(el.dataset.id);
                     const msg = msgs.find(m => m.id === id);
                     if (msg) renderContent(msg, unread);
+                };
+                el.addEventListener('click', selectNotification);
+                el.addEventListener('keydown', event => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        selectNotification();
+                    }
                 });
             });
 
@@ -401,14 +554,15 @@
     function listItem(m) {
         const date = new Date(m.created_at).toLocaleDateString('pt-BR', { day:'2-digit', month:'short' });
         const time = new Date(m.created_at).toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' });
+        const id = Number.parseInt(m.id, 10);
         return `
-            <div class="nhm-list-item ${m.is_read ? '' : 'unread'}" data-id="${m.id}">
-                <div class="nhm-item-subject">${m.subject || 'Sem Assunto'}</div>
+            <div class="nhm-list-item ${m.is_read ? '' : 'unread'}" data-id="${Number.isFinite(id) ? id : ''}" role="option" tabindex="0" aria-selected="false">
+                <div class="nhm-item-subject">${escapeHtml(m.subject || 'Sem Assunto')}</div>
                 <div class="nhm-item-meta">
                     ${!m.is_read ? '<span class="nhm-unread-dot"></span>' : ''}
-                    <span>${m.sender_name || 'Admin'}</span>
+                    <span>${escapeHtml(m.sender_name || 'Admin')}</span>
                     <span>•</span>
-                    <span>${date}, ${time}</span>
+                    <span>${escapeHtml(date)}, ${escapeHtml(time)}</span>
                 </div>
             </div>`;
     }
@@ -421,21 +575,21 @@
         content.innerHTML = `
             <div class="nhm-msg-header">
                 <div style="flex:1;">
-                    <div class="nhm-msg-subject">${msg.subject || 'Sem Assunto'}</div>
+                    <div class="nhm-msg-subject">${escapeHtml(msg.subject || 'Sem Assunto')}</div>
                     <div class="nhm-msg-meta">
-                        <span><i class="fa-solid fa-user"></i> ${msg.sender_name || 'Admin'}</span>
-                        <span><i class="fa-solid fa-calendar"></i> ${date}</span>
-                        <span><i class="fa-regular fa-clock"></i> ${time}</span>
-                        ${!msg.is_read ? '<span style="color:#fbbf24; font-weight:700;"><i class="fa-solid fa-circle" style="font-size:0.5rem;"></i> Não lida</span>' : ''}
+                        <span><i class="fa-solid fa-user"></i> ${escapeHtml(msg.sender_name || 'Admin')}</span>
+                        <span><i class="fa-solid fa-calendar"></i> ${escapeHtml(date)}</span>
+                        <span><i class="fa-regular fa-clock"></i> ${escapeHtml(time)}</span>
+                        ${!msg.is_read ? '<span class="nhm-unread-state"><i class="fa-solid fa-circle" style="font-size:0.5rem;"></i> Não lida</span>' : ''}
                     </div>
                 </div>
             </div>
-            <div class="nhm-msg-body">${msg.message}</div>
+            <div class="nhm-msg-body">${escapeHtml(msg.message || '')}</div>
             ${!msg.is_read ? `
                 <button class="nhm-mark-read-btn" onclick="markNotificationRead(${msg.id}, this)">
                     <i class="fa-solid fa-check"></i> Marcar como lida
                 </button>
-            ` : '<span style="font-size:0.8rem;color:#3f3f46;"><i class="fa-solid fa-check-double"></i> Lida</span>'}
+            ` : '<span class="nhm-read-state"><i class="fa-solid fa-check-double"></i> Lida</span>'}
         `;
     }
 
@@ -462,7 +616,7 @@
                 if (dot) dot.remove();
             }
             if (btn) {
-                btn.outerHTML = '<span style="font-size:0.8rem;color:#3f3f46;"><i class="fa-solid fa-check-double"></i> Lida</span>';
+                btn.outerHTML = '<span class="nhm-read-state"><i class="fa-solid fa-check-double"></i> Lida</span>';
             }
             checkNotifications();
         } catch(e) { console.error(e); }
