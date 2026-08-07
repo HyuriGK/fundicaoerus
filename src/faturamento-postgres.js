@@ -458,11 +458,11 @@ router.get('/detalhado', async (req, res) => {
                     ELSE 0
                 END AS valor_total,
                 COALESCE(NULLIF(f.valor_total, 0), f.valor_unitario * f.quantidade) AS valor_total_original,
-                f.peso_un,
+                COALESCE(NULLIF(f.peso_un, 0), pc.peso, 0) AS peso_un,
                 COALESCE(NULLIF(ft.nome_material, ''), NULLIF(ft.material_fic, '')) AS material,
                 pg.grupo_material,
-                (f.peso_un * GREATEST(f.quantidade - COALESCE(dev.quantidade_devolvida, 0), 0)) AS peso_total,
-                (f.peso_un * f.quantidade) AS peso_total_original,
+                (COALESCE(NULLIF(f.peso_un, 0), pc.peso, 0) * GREATEST(f.quantidade - COALESCE(dev.quantidade_devolvida, 0), 0)) AS peso_total,
+                (COALESCE(NULLIF(f.peso_un, 0), pc.peso, 0) * f.quantidade) AS peso_total_original,
                 f.status,
                 f.pedido,
                 ped.ano_pedido,
@@ -506,6 +506,8 @@ router.get('/detalhado', async (req, res) => {
                 AND v.serie = COALESCE(TRIM(f.serie), '')
             LEFT JOIN ficha_tecnica ft
                 ON ft.pro_codigo_fic = TRIM(f.codigo_item)
+            LEFT JOIN pesos_customizados pc
+                ON pc.codigo = TRIM(f.codigo_item)
             LEFT JOIN (
                 SELECT DISTINCT ON (TRIM(codigo_peca))
                     TRIM(codigo_peca) AS codigo_peca,
