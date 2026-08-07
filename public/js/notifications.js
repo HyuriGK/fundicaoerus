@@ -5,6 +5,12 @@
     const role = (localStorage.getItem('erus_role') || '').toLowerCase();
     if (!user) return;
 
+    function escapeHtml(value) {
+        return String(value ?? '').replace(/[&<>'"]/g, char => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+        })[char]);
+    }
+
     // ─── INJECT UI ────────────────────────────────────────────────────────────
     function injectNotificationUI() {
         if (document.getElementById('notificationsHistoryModal')) return;
@@ -191,7 +197,78 @@
 
             /* ── POPUP OVERRIDE ── */
             @keyframes commFadeIn { from { opacity: 0; } to { opacity: 1; } }
-            @keyframes commSlideUp { from { opacity: 0; transform: translateY(32px) scale(0.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
+            @keyframes commSlideUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+            #comm-popup-modal {
+                position: fixed; inset: 0; z-index: 10006;
+                display: none; align-items: center; justify-content: center;
+                padding: 24px; background: rgba(0,0,0,.82);
+                backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+                animation: commFadeIn .18s ease;
+            }
+            .comm-popup-shell {
+                width: min(720px, 100%); max-height: min(760px, calc(100vh - 48px));
+                display: flex; flex-direction: column; overflow: hidden;
+                background: #111114; border: 1px solid rgba(255,255,255,.12);
+                border-radius: 8px; box-shadow: 0 28px 80px rgba(0,0,0,.65);
+                animation: commSlideUp .25s cubic-bezier(.2,.8,.2,1);
+            }
+            .comm-popup-header {
+                display: grid; grid-template-columns: 44px minmax(0,1fr) 36px;
+                align-items: center; gap: 14px; padding: 20px 22px;
+                border-bottom: 1px solid rgba(255,255,255,.08); background: #151518;
+            }
+            .comm-popup-icon {
+                width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center;
+                border: 1px solid rgba(251,191,36,.35); border-radius: 8px;
+                background: rgba(251,191,36,.1); color: #fbbf24; font-size: 1rem;
+            }
+            .comm-popup-heading { min-width: 0; }
+            .comm-popup-kicker { color: #fbbf24; font-size: .68rem; font-weight: 800; text-transform: uppercase; }
+            .comm-popup-title {
+                margin-top: 4px; color: #f4f4f5; font-size: 1.18rem; font-weight: 750;
+                line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+            }
+            .comm-popup-close {
+                width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center;
+                border: 1px solid rgba(255,255,255,.09); border-radius: 8px;
+                background: rgba(255,255,255,.025); color: #a1a1aa; cursor: pointer;
+            }
+            .comm-popup-close:hover { color: #fff; border-color: rgba(255,255,255,.2); background: rgba(255,255,255,.06); }
+            .comm-popup-body { min-height: 0; padding: 24px 26px; overflow-y: auto; }
+            .comm-popup-meta {
+                display: flex; align-items: center; flex-wrap: wrap; gap: 10px 18px;
+                margin-bottom: 20px; color: #71717a; font-size: .78rem;
+            }
+            .comm-popup-meta span { display: inline-flex; align-items: center; gap: 7px; }
+            .comm-popup-meta i { color: #a1a1aa; }
+            .comm-popup-sender { color: #d4d4d8; font-weight: 700; }
+            .comm-popup-message {
+                color: #e4e4e7; font-size: .98rem; line-height: 1.75;
+                white-space: pre-wrap; overflow-wrap: anywhere;
+            }
+            .comm-popup-footer {
+                display: flex; justify-content: flex-end; gap: 10px; padding: 16px 22px;
+                border-top: 1px solid rgba(255,255,255,.08); background: #0f0f12;
+            }
+            .comm-popup-btn {
+                min-height: 40px; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+                padding: 10px 18px; border-radius: 8px; font: 700 .82rem Inter, sans-serif; cursor: pointer;
+            }
+            .comm-popup-btn.secondary { border: 1px solid rgba(255,255,255,.1); background: transparent; color: #a1a1aa; }
+            .comm-popup-btn.secondary:hover { border-color: rgba(255,255,255,.2); color: #f4f4f5; background: rgba(255,255,255,.04); }
+            .comm-popup-btn.primary { border: 1px solid #fbbf24; background: #fbbf24; color: #111; }
+            .comm-popup-btn.primary:hover { background: #f59e0b; border-color: #f59e0b; }
+            .comm-popup-btn:disabled { opacity: .55; cursor: wait; }
+            @media (max-width: 600px) {
+                #comm-popup-modal { padding: 12px; align-items: flex-end; }
+                .comm-popup-shell { max-height: calc(100vh - 24px); }
+                .comm-popup-header { grid-template-columns: 40px minmax(0,1fr) 34px; padding: 16px; gap: 11px; }
+                .comm-popup-icon { width: 40px; height: 40px; }
+                .comm-popup-title { font-size: 1rem; }
+                .comm-popup-body { padding: 20px 18px; }
+                .comm-popup-footer { display: grid; grid-template-columns: 1fr 1fr; padding: 14px 16px; }
+                .comm-popup-btn { width: 100%; padding-inline: 10px; }
+            }
         `;
         document.head.appendChild(style);
 
@@ -415,42 +492,63 @@
         if (!modal) {
             modal = document.createElement('div');
             modal.id = 'comm-popup-modal';
-            modal.style.cssText = `position:fixed;inset:0;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;z-index:10006;backdrop-filter:blur(12px);animation:commFadeIn 0.4s ease;`;
             document.body.appendChild(modal);
         }
+        const createdAt = msg.created_at ? new Date(msg.created_at) : null;
+        const validDate = createdAt && !Number.isNaN(createdAt.getTime());
+        const dateLabel = validDate
+            ? createdAt.toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' })
+            : '';
         modal.innerHTML = `
-            <div style="background:#09090b;border:1px solid rgba(251,191,36,0.2);border-radius:28px;width:95%;max-width:880px;overflow:hidden;box-shadow:0 40px 80px rgba(0,0,0,0.9);animation:commSlideUp 0.5s cubic-bezier(0.16,1,0.3,1);">
-                <div style="background:linear-gradient(to right,rgba(251,191,36,0.1),transparent);padding:38px 44px;border-bottom:1px solid rgba(255,255,255,0.05);display:flex;align-items:center;gap:24px;">
-                    <div style="width:74px;height:74px;background:linear-gradient(135deg,#fbbf24,#d97706);border-radius:18px;display:flex;align-items:center;justify-content:center;color:#000;font-size:2.1rem;box-shadow:0 8px 20px rgba(251,191,36,0.3);flex-shrink:0;">
-                        <i class="fa-solid fa-bell"></i>
+            <section class="comm-popup-shell" role="dialog" aria-modal="true" aria-labelledby="comm-popup-title">
+                <header class="comm-popup-header">
+                    <div class="comm-popup-icon" aria-hidden="true"><i class="fa-solid fa-bell"></i></div>
+                    <div class="comm-popup-heading">
+                        <div class="comm-popup-kicker">Comunicado do sistema</div>
+                        <div class="comm-popup-title" id="comm-popup-title" title="${escapeHtml(msg.subject || 'Novo comunicado')}">${escapeHtml(msg.subject || 'Novo comunicado')}</div>
                     </div>
-                    <div>
-                        <div style="font-size:1.65rem;font-weight:800;color:#fff;margin-bottom:6px;">${msg.subject || 'Novo Comunicado'}</div>
-                        <div style="font-size:1rem;color:#71717a;">De: <span style="color:#fbbf24;font-weight:700;">${msg.sender_name || 'Admin'}</span></div>
+                    <button type="button" class="comm-popup-close" id="close-comm-popup" title="Ler mais tarde" aria-label="Fechar comunicado">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </header>
+                <div class="comm-popup-body">
+                    <div class="comm-popup-meta">
+                        <span><i class="fa-solid fa-user"></i> Enviado por <strong class="comm-popup-sender">${escapeHtml(msg.sender_name || 'Administração')}</strong></span>
+                        ${dateLabel ? `<span><i class="fa-regular fa-clock"></i> ${escapeHtml(dateLabel)}</span>` : ''}
                     </div>
+                    <div class="comm-popup-message">${escapeHtml(msg.message || '')}</div>
                 </div>
-                <div style="padding:38px 44px;">
-                    <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:18px;padding:32px;color:#a1a1aa;line-height:1.8;font-size:1.18rem;max-height:460px;overflow-y:auto;white-space:pre-wrap;margin-bottom:32px;">${msg.message}</div>
-                    <div style="display:grid;grid-template-columns:1fr 1.4fr;gap:18px;">
-                        <button id="read-later-comm" style="background:rgba(255,255,255,0.04);color:#71717a;border:1px solid rgba(255,255,255,0.08);padding:18px;border-radius:14px;font-weight:600;cursor:pointer;transition:0.2s;font-size:1.05rem;">Ler mais tarde</button>
-                        <button id="mark-read-comm" style="background:linear-gradient(135deg,#fbbf24,#d97706);color:#000;border:none;padding:18px;border-radius:14px;font-weight:800;cursor:pointer;font-size:1.05rem;box-shadow:0 4px 14px rgba(251,191,36,0.25);">Entendido ✓</button>
-                    </div>
-                </div>
-            </div>
-            <style>
-                @keyframes commFadeIn { from{opacity:0} to{opacity:1} }
-                @keyframes commSlideUp { from{opacity:0;transform:translateY(32px) scale(0.97)} to{opacity:1;transform:translateY(0) scale(1)} }
-            </style>
+                <footer class="comm-popup-footer">
+                    <button type="button" id="read-later-comm" class="comm-popup-btn secondary"><i class="fa-regular fa-clock"></i> Ler mais tarde</button>
+                    <button type="button" id="mark-read-comm" class="comm-popup-btn primary"><i class="fa-solid fa-check"></i> Entendido</button>
+                </footer>
+            </section>
         `;
         modal.style.display = 'flex';
-        document.getElementById('read-later-comm').onclick = () => {
+        const postpone = () => {
             modal.style.display = 'none';
             sessionStorage.setItem('last_comm_popup_id', String(msg.id));
         };
-        document.getElementById('mark-read-comm').onclick = async () => {
-            await markNotificationRead(msg.id);
-            modal.style.display = 'none';
+        document.getElementById('read-later-comm').onclick = postpone;
+        document.getElementById('close-comm-popup').onclick = postpone;
+        modal.onclick = event => {
+            if (event.target === modal) postpone();
         };
+        modal.onkeydown = event => {
+            if (event.key === 'Escape') postpone();
+        };
+        document.getElementById('mark-read-comm').onclick = async () => {
+            const button = document.getElementById('mark-read-comm');
+            button.disabled = true;
+            button.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Confirmando';
+            try {
+                await markNotificationRead(msg.id);
+                modal.style.display = 'none';
+            } finally {
+                button.disabled = false;
+            }
+        };
+        document.getElementById('mark-read-comm').focus({ preventScroll: true });
     }
 
     // ─── BELL CLICK ───────────────────────────────────────────────────────────
