@@ -199,16 +199,16 @@
 
             /* Central alinhada ao dashboard */
             #notificationsHistoryModal {
-                --nhm-surface-1: #1b1d23;
-                --nhm-surface-2: #17191e;
-                --nhm-surface-3: #121419;
-                --nhm-surface-4: #24272e;
+                --nhm-surface-1: #20232a;
+                --nhm-surface-2: #191c22;
+                --nhm-surface-3: #15171c;
+                --nhm-surface-4: #292d35;
                 --nhm-text: #f4f4f5;
-                --nhm-muted: #b6b7bd;
-                --nhm-dim: #858892;
-                --nhm-border: rgba(255,255,255,.11);
+                --nhm-muted: #c3c5cb;
+                --nhm-dim: #92959e;
+                --nhm-border: rgba(255,255,255,.13);
                 --nhm-accent: #fbbf24;
-                background: #101217;
+                background: #13151a;
                 backdrop-filter: none;
                 -webkit-backdrop-filter: none;
                 color: var(--nhm-text);
@@ -223,7 +223,7 @@
                 min-height: 82px; padding: 16px 28px;
                 background: var(--nhm-surface-1);
                 border-bottom-color: var(--nhm-border);
-                box-shadow: inset 0 -2px 0 rgba(251,191,36,.12);
+                box-shadow: 0 8px 24px rgba(0,0,0,.18), inset 0 -2px 0 rgba(251,191,36,.14);
             }
             .nhm-brand { gap: 14px; min-width: 0; }
             .nhm-brand-icon {
@@ -241,7 +241,7 @@
             .nhm-body { background: var(--nhm-surface-3); }
             .nhm-sidebar {
                 width: clamp(300px, 21vw, 370px); padding: 18px 14px;
-                background: var(--nhm-surface-2); border-right-color: var(--nhm-border); gap: 5px;
+                background: var(--nhm-surface-2); border-right-color: var(--nhm-border); gap: 7px;
             }
             .nhm-sidebar-label {
                 padding: 12px 10px 7px; color: var(--nhm-dim);
@@ -249,7 +249,7 @@
             }
             .nhm-list-item {
                 position: relative; min-height: 66px; padding: 12px 14px;
-                border-radius: 8px; background: transparent; border-color: transparent;
+                border-radius: 8px; background: rgba(255,255,255,.025); border-color: rgba(255,255,255,.07);
                 justify-content: center; gap: 6px;
             }
             .nhm-list-item:hover { background: var(--nhm-surface-4); border-color: var(--nhm-border); }
@@ -277,7 +277,7 @@
                 padding: clamp(24px, 3vw, 36px); border-radius: 8px;
                 background: var(--nhm-surface-1); border-color: var(--nhm-border);
                 color: var(--nhm-muted); font-size: .96rem; line-height: 1.8;
-                box-shadow: 0 14px 34px rgba(0,0,0,.2), inset 3px 0 0 rgba(251,191,36,.38);
+                box-shadow: 0 16px 38px rgba(0,0,0,.24), inset 3px 0 0 rgba(251,191,36,.38);
             }
             .nhm-mark-read-btn {
                 margin-left: max(0px, calc((100% - 1120px) / 2));
@@ -304,30 +304,6 @@
                 color: var(--nhm-dim);
             }
             .nhm-unread-state { color: var(--nhm-accent); }
-            html[data-theme="light"] #notificationsHistoryModal {
-                --nhm-surface-1: #ffffff;
-                --nhm-surface-2: #f6f9fe;
-                --nhm-surface-3: #edf3fb;
-                --nhm-surface-4: #e8eef8;
-                --nhm-text: #0f172a;
-                --nhm-muted: #334155;
-                --nhm-dim: #667899;
-                --nhm-border: rgba(29,78,216,.15);
-                --nhm-accent: #0b63e5;
-                background: #edf3fb;
-            }
-            html[data-theme="light"] .nhm-header { box-shadow: inset 0 -2px 0 rgba(11,99,229,.12); }
-            html[data-theme="light"] .nhm-list-item.active {
-                background: rgba(11,99,229,.09); border-color: rgba(11,99,229,.24);
-                box-shadow: inset 3px 0 0 #0b63e5;
-            }
-            html[data-theme="light"] .nhm-unread-dot { background: #0b63e5; box-shadow: 0 0 0 3px rgba(11,99,229,.12); }
-            html[data-theme="light"] .nhm-brand-icon {
-                color: #0b63e5; background: rgba(11,99,229,.08); border-color: rgba(11,99,229,.22);
-            }
-            html[data-theme="light"] .nhm-badge-count { color: #0b63e5; background: rgba(11,99,229,.08); border-color: rgba(11,99,229,.2); }
-            html[data-theme="light"] .nhm-msg-body { box-shadow: 0 12px 28px rgba(23,61,112,.08), inset 3px 0 0 rgba(11,99,229,.28); }
-            html[data-theme="light"] .nhm-footer-close:hover { color: #0b63e5; background: rgba(11,99,229,.07); border-color: rgba(11,99,229,.2); }
             @media (max-width: 760px) {
                 .nhm-header { min-height: 70px; padding: 12px 14px; }
                 .nhm-brand-icon { width: 40px; height: 40px; }
