@@ -5,6 +5,7 @@
     const role = (localStorage.getItem('erus_role') || '').toLowerCase();
     if (!user) return;
     let popupShownThisLoad = false;
+    let suppressCentralUntil = 0;
 
     function escapeHtml(value) {
         return String(value ?? '').replace(/[&<>'"]/g, char => ({
@@ -197,22 +198,28 @@
             .nhm-footer-close:hover { background: rgba(255,255,255,0.08); color: #fff; }
 
             /* ── POPUP OVERRIDE ── */
-            @keyframes commFadeIn { from { opacity: 0; } to { opacity: 1; } }
-            @keyframes commSlideUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+            @keyframes commFadeIn { from { opacity: 0; backdrop-filter: blur(0); } to { opacity: 1; backdrop-filter: blur(10px); } }
+            @keyframes commFadeOut { from { opacity: 1; } to { opacity: 0; } }
+            @keyframes commSlideUp { from { opacity: 0; transform: translateY(26px) scale(.965); } to { opacity: 1; transform: translateY(0) scale(1); } }
+            @keyframes commSlideDown { from { opacity: 1; transform: translateY(0) scale(1); } to { opacity: 0; transform: translateY(14px) scale(.98); } }
+            @keyframes commIconIn { 0% { opacity: 0; transform: scale(.55) rotate(-14deg); } 70% { opacity: 1; transform: scale(1.08) rotate(3deg); } 100% { transform: scale(1) rotate(0); } }
+            @keyframes commContentIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
             #comm-popup-modal {
                 position: fixed; inset: 0; z-index: 10006;
                 display: none; align-items: center; justify-content: center;
                 padding: 24px; background: rgba(0,0,0,.82);
                 backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-                animation: commFadeIn .18s ease;
             }
+            #comm-popup-modal.open { display: flex; animation: commFadeIn .28s ease both; }
+            #comm-popup-modal.closing { display: flex; pointer-events: none; animation: commFadeOut .2s ease both; }
             .comm-popup-shell {
                 width: min(720px, 100%); max-height: min(760px, calc(100vh - 48px));
                 display: flex; flex-direction: column; overflow: hidden;
                 background: #111114; border: 1px solid rgba(255,255,255,.12);
                 border-radius: 8px; box-shadow: 0 28px 80px rgba(0,0,0,.65);
-                animation: commSlideUp .25s cubic-bezier(.2,.8,.2,1);
             }
+            #comm-popup-modal.open .comm-popup-shell { animation: commSlideUp .42s cubic-bezier(.16,1,.3,1) both; }
+            #comm-popup-modal.closing .comm-popup-shell { animation: commSlideDown .2s ease both; }
             .comm-popup-header {
                 display: grid; grid-template-columns: 44px minmax(0,1fr) 36px;
                 align-items: center; gap: 14px; padding: 20px 22px;
@@ -223,6 +230,7 @@
                 border: 1px solid rgba(251,191,36,.35); border-radius: 8px;
                 background: rgba(251,191,36,.1); color: #fbbf24; font-size: 1rem;
             }
+            #comm-popup-modal.open .comm-popup-icon { animation: commIconIn .5s .08s cubic-bezier(.16,1,.3,1) both; }
             .comm-popup-heading { min-width: 0; }
             .comm-popup-kicker { color: #fbbf24; font-size: .68rem; font-weight: 800; text-transform: uppercase; }
             .comm-popup-title {
@@ -236,6 +244,7 @@
             }
             .comm-popup-close:hover { color: #fff; border-color: rgba(255,255,255,.2); background: rgba(255,255,255,.06); }
             .comm-popup-body { min-height: 0; padding: 24px 26px; overflow-y: auto; }
+            #comm-popup-modal.open .comm-popup-body { animation: commContentIn .32s .12s ease both; }
             .comm-popup-meta {
                 display: flex; align-items: center; flex-wrap: wrap; gap: 10px 18px;
                 margin-bottom: 20px; color: #71717a; font-size: .78rem;
@@ -491,6 +500,7 @@
     }
 
     function showMessagePopup(msg) {
+        injectNotificationUI();
         let modal = document.getElementById('comm-popup-modal');
         if (!modal) {
             modal = document.createElement('div');
@@ -527,9 +537,17 @@
                 </footer>
             </section>
         `;
-        modal.style.display = 'flex';
+        modal.classList.remove('open', 'closing');
+        void modal.offsetWidth;
+        modal.classList.add('open');
+        const closePopup = () => {
+            if (modal.classList.contains('closing')) return;
+            modal.classList.remove('open');
+            modal.classList.add('closing');
+            window.setTimeout(() => modal.classList.remove('closing'), 210);
+        };
         const postpone = () => {
-            modal.style.display = 'none';
+            closePopup();
         };
         document.getElementById('read-later-comm').onclick = postpone;
         document.getElementById('close-comm-popup').onclick = postpone;
@@ -542,10 +560,13 @@
         document.getElementById('mark-read-comm').onclick = async event => {
             event.preventDefault();
             event.stopPropagation();
+            event.stopImmediatePropagation();
+            suppressCentralUntil = Date.now() + 1000;
+            closeNotificationsModal();
             const button = document.getElementById('mark-read-comm');
             button.disabled = true;
             button.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Confirmando';
-            modal.style.display = 'none';
+            closePopup();
             try {
                 const response = await fetch('/api/communications/mark-read', {
                     method: 'POST',
@@ -563,6 +584,8 @@
 
     // ─── BELL CLICK ───────────────────────────────────────────────────────────
     document.addEventListener('click', e => {
+        if (e.target.closest('#comm-popup-modal')) return;
+        if (Date.now() < suppressCentralUntil) return;
         if (e.target.closest('#notification-bell')) openNotificationsModal();
     });
 
