@@ -16,6 +16,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
     <script src="js/shared-utils.js"></script>
+    <script src="js/activity-logger.js?v=20260605e"></script>
     <style>
         * { user-select:none; -webkit-user-select:none; box-sizing:border-box; outline:none; }
         input, textarea, .selectable-text { user-select:text!important; -webkit-user-select:text!important; }
@@ -392,6 +393,7 @@ function toggleValor(){
     valorOculto=!valorOculto;
     document.getElementById('kpiEyeIcon').className=valorOculto?'fas fa-eye-slash':'fas fa-eye';
     applyVisibility();
+    if(window.erusAudit) window.erusAudit(valorOculto?'OCULTAR_VALORES_BALANCO':'VISUALIZAR_VALORES_BALANCO',{});
 }
 function applyVisibility(){
     const mask='-----';
@@ -426,11 +428,11 @@ async function loadData(){
 }
 
 // --- Filtros ---
-function onYearChange(){ selectedBarFilter=null; activeYear=document.getElementById('yearSelect').value; resetMonth(); applyFilters(); }
-function onMonthSelectChange(){ selectedBarFilter=null; activeMonth=document.getElementById('monthSelect').value; applyFilters(); }
+function onYearChange(){ selectedBarFilter=null; activeYear=document.getElementById('yearSelect').value; resetMonth(); applyFilters(); if(window.erusAudit)window.erusAudit('SELECT_PERIODO_BALANCO',{ano:activeYear,mes:'ANO'}); }
+function onMonthSelectChange(){ selectedBarFilter=null; activeMonth=document.getElementById('monthSelect').value; applyFilters(); if(window.erusAudit)window.erusAudit('SELECT_PERIODO_BALANCO',{ano:activeYear,mes:activeMonth}); }
 function setMonthValue(month){ activeMonth=String(month); document.getElementById('monthSelect').value=activeMonth; }
 function resetMonth(){ setMonthValue('all'); }
-function setBalanceChartView(view){
+function setBalanceChartView(view,audit=true){
     selectedBarFilter=null;
     activeChartView=view;
     if(view==='mensal') setMonthValue('all');
@@ -438,6 +440,7 @@ function setBalanceChartView(view){
     document.getElementById('btnViewDiaria').classList.toggle('active', view==='diaria');
     document.getElementById('btnViewMensal').classList.toggle('active', view==='mensal');
     updateChartVisibility();
+    if(audit&&window.erusAudit)window.erusAudit('SELECT_VISAO_BALANCO',{visao:view,ano:activeYear,mes:activeMonth});
 }
 function updateChartVisibility(){
     const isVariacao = activeView === 'variacao';
@@ -462,6 +465,7 @@ function onChartSelectChange(){
     selectedBarFilter=null;
     activeView = document.getElementById('chartSelect').value;
     applyFilters();
+    if(window.erusAudit)window.erusAudit('SELECT_GRAFICO_BALANCO',{grafico:activeView,ano:activeYear,mes:activeMonth});
 }
 
 function getCurrentData(){
@@ -852,6 +856,7 @@ function openModal(){
     updateChartLabels();
     renderModalTable();
     document.getElementById('recordsModal').classList.add('open');
+    if(window.erusAudit)window.erusAudit('ABRIR_REGISTROS_BALANCO',{tipo:activeView,ano:activeYear,mes:activeMonth,registros:modalData.length});
 }
 function closeModal(){ document.getElementById('recordsModal').classList.remove('open'); }
 document.addEventListener('keydown',e=>{ if(e.key==='Escape')closeModal(); });
@@ -915,6 +920,7 @@ function exportarCSV(){
     const url=URL.createObjectURL(blob);
     const a=document.createElement('a'); a.href=url; a.download=`${activeView}_${new Date().toISOString().split('T')[0]}.csv`; a.click(); URL.revokeObjectURL(url);
     showToast('Exportado',`${filteredData.length} registros`,'success');
+    if(window.erusAudit)window.erusAudit('EXPORTAR_CSV_BALANCO',{tipo:activeView,ano:activeYear,mes:activeMonth,registros:filteredData.length,arquivo:a.download});
 }
 
 // --- Init ---
@@ -928,7 +934,7 @@ window.addEventListener('DOMContentLoaded',()=>{
     else{ys.value='2026';activeYear='2026';}
     const ms=document.getElementById('monthSelect');
     if(ms) ms.value=activeMonth;
-    setBalanceChartView('diaria');
+    setBalanceChartView('diaria',false);
     loadData();
 });
 </script>

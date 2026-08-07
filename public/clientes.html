@@ -3084,7 +3084,7 @@ function saveFunnelClientObservation(clientName, value) {
         notes: String(value || '').trim(),
         updatedAt: new Date().toISOString()
     };
-    saveCrmToDatabase(clientName, record, { silent: true });
+    saveCrmToDatabase(clientName, record, { silent: true, auditAction: 'UPDATE_OBSERVACAO_CRM' });
 }
 
 async function ensureClientRecordsLoaded() {
@@ -3252,7 +3252,7 @@ async function completeCrmActionByKey(actionKey) {
     const action = getCrmActionRecord(actionKey);
     if (!action) return;
     const record = { ...crmRecords[action.key], nextAction: '', dueDate: '' };
-    await saveCrmToDatabase(action.clientName, record, { silent: true });
+    await saveCrmToDatabase(action.clientName, record, { silent: true, auditAction: 'CONCLUIR_ACAO_CRM' });
     closeCrmActionDetailModal();
 }
 
@@ -3446,6 +3446,13 @@ async function saveCrmToDatabase(clientName, record, options = {}) {
         crmRecords[clientName] = json.data || record;
         renderCrm();
         renderTable();
+        if (!options.skipAudit && window.erusAudit) window.erusAudit(options.auditAction || 'SALVAR_CRM_CLIENTE', {
+            cliente: clientName,
+            codigo: cadastro?.codigo || null,
+            etapa: record.status || null,
+            proxima_acao: record.nextAction || null,
+            data_proxima_acao: record.dueDate || null
+        });
         if (!options.silent) toast('Salvo', 'CRM do cliente gravado no Neon.', 'success');
     } catch (e) {
         toast('Erro', e.message || 'Falha ao salvar CRM no Neon.', 'danger');
@@ -3952,6 +3959,7 @@ async function saveAbcRating() {
         clientRatings[currentAbcClient] = r;
         const c = clientList.find(x => x.name === currentAbcClient);
         if (c) c.abcScore = (r.billing + r.weight + r.price + r.complex + r.risk) / 5;
+        if (window.erusAudit) window.erusAudit('UPDATE_CLASSIFICACAO_ABC_CLIENTE', { cliente: currentAbcClient, notas: r, media: c?.abcScore || 0 });
         renderTable();
         closeAbcModal();
         toast('Salvo', 'Avaliação ABC atualizada.', 'success');
@@ -4327,9 +4335,19 @@ async function saveClientContact() {
                 nextAction: payload.proximaAcao || currentRecord.nextAction || '',
                 dueDate: payload.dataProximaAcao || currentRecord.dueDate || '',
                 updatedAt: new Date().toISOString()
-            }, { silent: true });
+            }, { silent: true, skipAudit: true });
         }
         await loadLatestContacts();
+        if (window.erusAudit) window.erusAudit('REGISTRAR_ATENDIMENTO_CLIENTE', {
+            cliente: payload.clienteNome,
+            codigo: payload.codigo,
+            canal: payload.canal,
+            pessoa_contatada: payload.pessoaContatada || null,
+            pedido: payload.pedido || null,
+            resultado: payload.resultado || null,
+            proxima_acao: payload.proximaAcao || null,
+            data_proxima_acao: payload.dataProximaAcao || null
+        });
         if (currentView === 'dashboard') renderDashboard();
         if (currentView === 'contatos') renderLatestContacts();
         closeClientContactModal();
@@ -4502,6 +4520,12 @@ async function saveCommercialOwner(empresa, codigo, select) {
         const client = clientRecords.find(c => Number(c.empresa) === empresa && Number(c.codigo) === codigo);
         if (client) client.responsavelComercial = json.responsavelComercial || '';
         select.setAttribute('data-previous', responsavelComercial);
+        if (window.erusAudit) window.erusAudit('UPDATE_RESPONSAVEL_COMERCIAL_CLIENTE', {
+            cliente: client?.razaoSocial || client?.fantasia || null,
+            codigo,
+            responsavel_anterior: previous || null,
+            responsavel_novo: responsavelComercial || null
+        });
         renderCommercialOwnerOverview();
         toast('Salvo', 'Responsável comercial atualizado.', 'success');
     } catch (err) {
@@ -4633,6 +4657,11 @@ async function saveClientBlockStatus() {
 
         currentSummaryClient.bloqueado = Boolean(json.bloqueado);
         currentSummaryClient.motivoBloqueio = json.motivoBloqueio || '';
+        if (window.erusAudit) window.erusAudit(bloqueado ? 'BLOQUEAR_CLIENTE_CRM' : 'DESBLOQUEAR_CLIENTE_CRM', {
+            cliente: currentSummaryClient.razaoSocial || currentSummaryClient.fantasia || null,
+            codigo: currentSummaryClient.codigo,
+            motivo: motivoBloqueio || null
+        });
         openClientSummaryModal(Number(currentSummaryClient.empresa), Number(currentSummaryClient.codigo));
         renderTable();
         if (document.getElementById('clientsRecordsModal')?.style.display === 'flex') renderClientsRecords();

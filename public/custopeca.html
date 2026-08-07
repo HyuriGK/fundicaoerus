@@ -414,12 +414,20 @@
 
         document.getElementById('saveBtn').addEventListener('click', () => {
             const s = SECTORS[activeSector];
+            const sectorId = activeSector;
             s.labor = JSON.parse(JSON.stringify(tempLabor));
             s.prod = parseFloat(document.getElementById('prodInput').value) || 0;
             s.enc = parseFloat(document.getElementById('chargesInput').value) || 0;
             const matInputs = document.querySelectorAll('.mat-item-input');
             matInputs.forEach(inp => s.mats[inp.dataset.idx].v = parseFloat(inp.value) || 0);
             save(); calculate(); hideModal();
+            if (window.erusAudit) window.erusAudit('SALVAR_CONFIGURACAO_CUSTO_PECA', {
+                setor: s.name || sectorId,
+                producao: s.prod,
+                encargos_percentual: s.enc,
+                materiais: (s.mats || []).length,
+                mao_de_obra: (s.labor || []).length
+            });
         });
 
         document.getElementById('cancelBtn').addEventListener('click', hideModal);
@@ -441,9 +449,20 @@
             }
         }
 
-        document.getElementById('resetBtn').addEventListener('click', async () => { if(await classicConfirm('Resetar todas as configurações?')) { localStorage.clear(); location.reload(); }});
+        document.getElementById('resetBtn').addEventListener('click', async () => {
+            if (await classicConfirm('Resetar todas as configurações?')) {
+                if (window.erusAudit) window.erusAudit('RESETAR_CONFIGURACAO_CUSTO_PECA');
+                localStorage.clear();
+                location.reload();
+            }
+        });
         document.getElementById('printBtn').addEventListener('click', () => { 
             document.getElementById('printDate').textContent = new Date().toLocaleString();
+            if (window.erusAudit) window.erusAudit('GERAR_PDF_CUSTO_PECA', {
+                peca: document.getElementById('pieceName').value.trim() || '-',
+                peso_kg: parseFloat(document.getElementById('pieceWeight').value) || 0,
+                custo_total: document.getElementById('grandTotalLabel').textContent
+            });
             window.print(); 
         });
 

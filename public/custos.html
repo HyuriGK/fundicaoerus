@@ -1273,6 +1273,7 @@
                 const real = el.getAttribute('data-real-value') || '—';
                 el.textContent = valoresVisiveis ? real : 'R$ ···';
             });
+            if (window.erusAudit) window.erusAudit(valoresVisiveis ? 'VISUALIZAR_VALORES_CUSTOS' : 'OCULTAR_VALORES_CUSTOS', {});
         }
 
         // ========================
@@ -1572,11 +1573,14 @@
             try {
                 const key = `${fornecedor}|${produto || ''}`;
                 mapeamentosCentro[key] = centroCusto;
-                await fetch('/api/centro-custos', {
+                const response = await fetch('/api/centro-custos', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ fornecedor, produto, centro_custo: centroCusto })
                 });
+                const result = await response.json();
+                if (!response.ok || !result.success) throw new Error(result.error || 'Erro ao salvar centro de custo');
+                if (window.erusAudit) window.erusAudit('UPDATE_CENTRO_CUSTO', { fornecedor, produto: produto || null, centro_custo: centroCusto });
             } catch (e) {
                 console.error('Erro ao salvar centro de custo:', e);
             }
@@ -1807,6 +1811,8 @@
                 const json = await res.json();
                 if (!json.success) throw new Error(json.error);
 
+                if (window.erusAudit) window.erusAudit('ABRIR_DETALHE_CENTRO_CUSTO', { centro_custo: ccCode, nome: ccName, ano: currentYear, mes: currentMonth || 'ANO' });
+
                 const ccData = json.data.find(c => c.codigo === ccCode);
                 if (!ccData || !ccData.fornecedores.length) {
                     body.innerHTML = '<div style="text-align:center; color:var(--text-muted); padding:40px;">Nenhum fornecedor neste centro.</div>';
@@ -1887,6 +1893,8 @@
                 const json = await res.json();
 
                 if (!json.success) throw new Error(json.error);
+
+                if (window.erusAudit) window.erusAudit('ABRIR_COMPOSICAO_CUSTOS', { categoria: category, nome: name || null, centro_custo: ccFilter || null, ano: currentYear, mes: currentMonth || 'ANO' });
 
                 if (json.data.length === 0) {
                     body.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 20px;">Nenhum documento emitido neste mês.</div>';
@@ -2028,6 +2036,8 @@
                 const json = await res.json();
 
                 if (!json.success) throw new Error(json.error);
+
+                if (window.erusAudit) window.erusAudit('ABRIR_OCORRENCIAS_CUSTOS', { categoria: category, nome: name || null, produto: product_cod || null, fornecedor: fornecedor || null, ano: currentYear, mes: currentMonth || 'ANO' });
 
                 let rows = json.data.map(r => `
                     <tr>

@@ -205,7 +205,7 @@
         <div class="side-menu-actions">
             <button class="side-btn" onclick="openRecordsModal()"> Registros
  </button>
-            <button class="side-btn" onclick="window.print()"> Gerar PDF
+            <button class="side-btn" onclick="gerarFichaFusaoPDF()"> Gerar PDF
  </button>
             <a href="index.html" class="side-btn btn-back-side">
                 <i class="fa-solid fa-arrow-right-from-bracket"></i> Voltar
@@ -269,7 +269,7 @@
         </div>
 
         <div id="pdf-btn-wrapper" data-no-print="true" style="display:none; justify-content:flex-end; margin-bottom:12px;">
-            <button onclick="window.print()" style="display:flex;align-items:center;gap:8px;padding:9px 18px;background:var(--color-primary);color:#000;border:none;border-radius:8px;font-size:0.8rem;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif;transition:all 0.2s;" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'"> Gerar PDF
+            <button onclick="gerarFichaFusaoPDF()" style="display:flex;align-items:center;gap:8px;padding:9px 18px;background:var(--color-primary);color:#000;border:none;border-radius:8px;font-size:0.8rem;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif;transition:all 0.2s;" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'"> Gerar PDF
  </button>
         </div>
 
@@ -518,6 +518,11 @@
                 document.getElementById('loader').style.display = 'none';
                 document.getElementById('sheetContent').style.display = 'block';
                 document.getElementById('pdf-btn-wrapper').style.display = 'flex';
+                if (window.erusAudit) window.erusAudit('ABRIR_FICHA_TECNICA_FUSAO', {
+                    codigo: data.pro_codigo || codigo,
+                    produto: data.nome_pro || '-',
+                    cliente: data.cliente_nome || '-'
+                });
             } catch (err) {
                 document.getElementById('loader').style.display = 'none';
                 document.getElementById('pdf-btn-wrapper').style.display = 'none';
@@ -632,6 +637,9 @@
                 const response = await fetch('/api/fichatecnicafusao/list/all');
                 allRecords = await response.json();
                 renderRecordsTable(allRecords);
+                if (window.erusAudit) window.erusAudit('ABRIR_REGISTROS_FICHA_TECNICA_FUSAO', {
+                    registros: allRecords.length
+                });
             } catch (err) {
                 tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:40px; color:#ef4444;">Erro: ${err.message}</td></tr>`;
             }
@@ -752,6 +760,10 @@
                 _corridaItens = data.itens || [];
                 _corridaInfo = data.corrida || null;
                 renderCorridaPanel(data.corrida, _corridaItens);
+                if (window.erusAudit) window.erusAudit('CONSULTAR_CORRIDA_FICHA_TECNICA_FUSAO', {
+                    corrida: data.corrida?.corrida_cor || num,
+                    itens: _corridaItens.length
+                });
             } catch (err) {
                 _corridaItens = [];
                 _corridaInfo = null;
@@ -837,6 +849,12 @@
                 }
                 if (faltando.length) alert('Sem ficha técnica de fusão (ignoradas): ' + faltando.join(', '));
                 const selItens = _corridaItens.filter(it => codigos.includes(String(it.produto_pcp)));
+                if (window.erusAudit) window.erusAudit('GERAR_PDF_FICHAS_TECNICAS_FUSAO', {
+                    corrida: _corridaInfo?.corrida_cor || '-',
+                    fichas: fichas.length,
+                    produtos: codigos.join(', '),
+                    ignorados: faltando.join(', ')
+                });
                 abrirPdfFichas(fichas, selItens);
             } finally {
                 btn.innerHTML = original;
@@ -1007,6 +1025,15 @@
             // fontes prontas antes de medir (métricas corretas), depois constrói/imprime
             const waitFonts = (document.fonts && document.fonts.ready) ? document.fonts.ready : Promise.resolve();
             waitFonts.then(build);
+        }
+
+        function gerarFichaFusaoPDF() {
+            const codigo = (document.getElementById('valCodigoHeader')?.innerText || '').replace(/^#\s*/, '').trim();
+            const produto = (document.getElementById('valNome')?.innerText || '').trim();
+            if (window.erusAudit && codigo && codigo !== '-') {
+                window.erusAudit('GERAR_PDF_FICHA_TECNICA_FUSAO', { codigo, produto });
+            }
+            window.print();
         }
 
         window.onload = () => {

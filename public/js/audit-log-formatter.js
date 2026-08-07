@@ -14,7 +14,7 @@
         'acabamneto_interno.html': 'Acabamento Interno', 'usinagem_externa.html': 'Usinagem Externa',
         'usinagem_externo.html': 'Usinagem Externa', usinagem_externo: 'Usinagem Externa',
         'programacaofusao.html': 'Programacao da Fusao', 'programacaodesmoldagem.html': 'Programacao da Desmoldagem',
-        'aderencia.html': 'Aderencia', 'otif.html': 'OTIF', 'centrocusto.html': 'Centro de Custo',
+        'aderencia.html': 'Aderencia', 'balanco.html': 'Balanco', 'otif.html': 'OTIF', 'centrocusto.html': 'Centro de Custo',
         'custos.html': 'Custos Gerais', 'custopeca.html': 'Custo por Peca', 'devolucoes.html': 'Devolucoes',
         'fichatecmoldagem.html': 'Ficha Tecnica de Moldagem', 'fichatecfusao.html': 'Ficha Tecnica de Fusao',
         'fichatecacabamento.html': 'Ficha Tecnica de Acabamento', 'fichatecnica.html': 'Ficha Tecnica',
@@ -78,14 +78,16 @@
 
     const PT_WORDS = {
         grafico:'gr\u00e1fico', graficos:'gr\u00e1ficos', emissao:'emiss\u00e3o', emissoes:'emiss\u00f5es', producao:'produ\u00e7\u00e3o',
-        programacao:'programa\u00e7\u00e3o', funcionarios:'funcion\u00e1rios', funcionario:'funcion\u00e1rio', tecnica:'t\u00e9cnica',
+        programacao:'programa\u00e7\u00e3o', funcionarios:'funcion\u00e1rios', funcionario:'funcion\u00e1rio', tecnica:'t\u00e9cnica', tecnicas:'t\u00e9cnicas',
         pecas:'pe\u00e7as', peca:'pe\u00e7a', aderencia:'ader\u00eancia', comunicacao:'comunica\u00e7\u00e3o', usuarios:'usu\u00e1rios',
         usuario:'usu\u00e1rio', sessao:'sess\u00e3o', observacao:'observa\u00e7\u00e3o', previsao:'previs\u00e3o', vinculo:'v\u00ednculo',
         codigo:'c\u00f3digo', maquina:'m\u00e1quina', periodo:'per\u00edodo', metrica:'m\u00e9trica', visao:'vis\u00e3o',
         opcao:'op\u00e7\u00e3o', acoes:'a\u00e7\u00f5es', acao:'a\u00e7\u00e3o', relatorio:'relat\u00f3rio', alteracao:'altera\u00e7\u00e3o',
         monetaria:'monet\u00e1ria', monetarios:'monet\u00e1rios', permissoes:'permiss\u00f5es', permissao:'permiss\u00e3o',
         horario:'hor\u00e1rio', apos:'ap\u00f3s', preco:'pre\u00e7o', mes:'m\u00eas', nao:'n\u00e3o', posicao:'posi\u00e7\u00e3o',
-        fusao:'fus\u00e3o', administracao:'administra\u00e7\u00e3o'
+        fusao:'fus\u00e3o', administracao:'administra\u00e7\u00e3o', responsavel:'respons\u00e1vel', avaliacao:'avalia\u00e7\u00e3o',
+        configuracao:'configura\u00e7\u00e3o', configuracoes:'configura\u00e7\u00f5es', calculo:'c\u00e1lculo', proxima:'pr\u00f3xima',
+        advertencia:'advert\u00eancia', balanco:'balan\u00e7o', medio:'m\u00e9dio'
     };
 
     function portuguese(text) {
@@ -123,7 +125,12 @@
             [/^LIMPAR_/, 'Limpou ', /^limpar /, 'fa-eraser', '#ef4444'], [/^(ADD_|CRIAR_)/, 'Adicionou ', /^(add|criar) /, 'fa-plus', '#10b981'],
             [/^(DELETE_|EXCLUIR_|REMOVE_)/, 'Removeu ', /^(delete|excluir|remove) /, 'fa-trash', '#ef4444'],
             [/^INCLUIR_/, 'Incluiu ', /^incluir /, 'fa-plus', '#10b981'], [/^VISUALIZAR_/, 'Exibiu ', /^visualizar /, 'fa-eye', '#38bdf8'],
-            [/^OCULTAR_/, 'Ocultou ', /^ocultar /, 'fa-eye-slash', '#a1a1aa'], [/^NEGAR_/, 'Acao nao autorizada', /^negar .*/, 'fa-ban', '#ef4444']
+            [/^OCULTAR_/, 'Ocultou ', /^ocultar /, 'fa-eye-slash', '#a1a1aa'], [/^NEGAR_/, 'Acao nao autorizada', /^negar .*/, 'fa-ban', '#ef4444'],
+            [/^CONSULTAR_/, 'Consultou ', /^consultar /, 'fa-magnifying-glass', '#38bdf8'], [/^IMPRIMIR_/, 'Imprimiu ', /^imprimir /, 'fa-print', '#10b981'],
+            [/^EXPORTAR_/, 'Exportou ', /^exportar /, 'fa-file-export', '#10b981'],
+            [/^BLOQUEAR_/, 'Bloqueou ', /^bloquear /, 'fa-lock', '#ef4444'], [/^DESBLOQUEAR_/, 'Desbloqueou ', /^desbloquear /, 'fa-lock-open', '#10b981'],
+            [/^CONCLUIR_/, 'Concluiu ', /^concluir /, 'fa-circle-check', '#10b981'], [/^RESETAR_/, 'Restaurou ', /^resetar /, 'fa-rotate-left', '#f59e0b'],
+            [/^ATIVAR_/, 'Ativou ', /^ativar /, 'fa-toggle-on', '#10b981'], [/^DESATIVAR_/, 'Desativou ', /^desativar /, 'fa-toggle-off', '#a1a1aa']
         ];
         for (const [test, prefix, remove, icon, color] of patterns) {
             if (test.test(action)) return { label:prefix + text.replace(remove, ''), icon, color };
@@ -135,7 +142,7 @@
         const year = d.ano || d.year;
         const month = d.mes ?? d.month;
         if (!year && month === undefined) return '';
-        if (month === undefined || month === null || String(month).toUpperCase() === 'ANO') return `todo o ano de ${year}`;
+        if (month === undefined || month === null || ['ANO', 'ALL', 'TODOS'].includes(String(month).toUpperCase())) return `todo o ano de ${year}`;
         if (/APONTAMENTOS/.test(action) && Number(month) === 0) return `todo o ano de ${year}`;
         if (/REFUGOS/.test(action) && Number(month) === -1) return `todo o ano de ${year}`;
         const number = Number(month) + (/REFUGOS/.test(action) ? 1 : 0);
@@ -162,6 +169,7 @@
         if (action === 'SELECT_VISAO_PEDIDOS') return `Alterou para a visao ${value('visao','modo') || 'selecionada'} no grafico ${value('grafico_nome','grafico_codigo','grafico') || 'de pedidos'}.`;
         if (/^SELECT_GRAFICO_/.test(action)) return `Alterou para o grafico ${value('grafico','modo') || 'selecionado'}${selectedPeriod ? ` em ${selectedPeriod}` : ''}.`;
         if (/^SELECT_DASHBOARD_/.test(action)) return `Alterou para o painel ${value('visao') || 'selecionado'}.`;
+        if (/^SELECT_VISAO_/.test(action)) return `Alterou para a visao ${value('visao','modo') || 'selecionada'} na tela ${tela}.`;
         if (/^SELECT_PERIODO_/.test(action)) return `Filtrou a tela ${tela} por ${selectedPeriod || value('periodo') || 'outro periodo'}.`;
         if (/^SELECT_ANO_/.test(action)) return `Filtrou a tela ${tela} pelo ano de ${d.ano || '?'}.`;
         if (/^SELECT_MES_REFUGOS/.test(action)) return `Filtrou a tela ${tela} por ${selectedPeriod || 'outro mes'}.`;
@@ -175,6 +183,36 @@
         }
         if (action === 'SELECT_FILTRO_MATERIAL_PRAZO_FAT') return `Filtrou o prazo de entrega por grupo ${d.grupo || 'todos'} e material ${d.material || 'todos'}.`;
         if (/^ABRIR_REGISTROS_/.test(action)) return `Visualizou os registros de ${tela}${selectedPeriod ? ` de ${selectedPeriod}` : ''}.`;
+        if (action === 'REGISTRAR_ATENDIMENTO_CLIENTE') return `Registrou atendimento para ${d.cliente || 'o cliente'}${d.canal ? ` pelo canal ${d.canal}` : ''}${d.pedido ? `, referente ao pedido ${d.pedido}` : ''}.`;
+        if (action === 'UPDATE_RESPONSAVEL_COMERCIAL_CLIENTE') return `Alterou o responsavel comercial de ${d.cliente || 'um cliente'}${d.responsavel_anterior ? ` de ${d.responsavel_anterior}` : ''} para ${d.responsavel_novo || '?'}.`;
+        if (action === 'BLOQUEAR_CLIENTE_CRM') return `Bloqueou o cliente ${d.cliente || d.codigo || '?'}${d.motivo ? `. Motivo: ${d.motivo}` : ''}.`;
+        if (action === 'DESBLOQUEAR_CLIENTE_CRM') return `Desbloqueou o cliente ${d.cliente || d.codigo || '?'}.`;
+        if (action === 'SALVAR_CRM_CLIENTE') return `Atualizou o CRM do cliente ${d.cliente || d.codigo || '?'}.`;
+        if (action === 'UPDATE_OBSERVACAO_CRM') return `Alterou a observacao comercial do cliente ${d.cliente || d.codigo || '?'}.`;
+        if (action === 'CONCLUIR_ACAO_CRM') return `Concluiu a proxima acao do cliente ${d.cliente || d.codigo || '?'}.`;
+        if (action === 'UPDATE_CLASSIFICACAO_ABC_CLIENTE') return `Atualizou a avaliacao ABC do cliente ${d.cliente || d.codigo || '?'}${d.media !== undefined ? `, com media ${d.media}` : ''}.`;
+        if (action === 'ADD_FUNCIONARIO_RH') return `Cadastrou o funcionario ${d.funcionario || d.nome || '?'}.`;
+        if (action === 'UPDATE_FUNCIONARIO_RH') return `Alterou o cadastro do funcionario ${d.funcionario || d.nome || '?'}.`;
+        if (action === 'DELETE_FUNCIONARIO_RH') return `Excluiu o funcionario ${d.funcionario || d.nome || '?'}.`;
+        if (action === 'ADD_ADVERTENCIA_FUNCIONARIO') return `Registrou uma advertencia para ${d.funcionario || d.nome || '?'}.`;
+        if (action === 'UPDATE_CENTRO_CUSTO') return `Alterou o centro de custo ${d.centro_custo || d.codigo || d.nome || '?'}.`;
+        if (action === 'ADD_REGISTRO_ADERENCIA') return `Incluiu um registro de aderencia${d.setor ? ` no setor ${d.setor}` : ''}${d.data ? ` em ${datePt(d.data)}` : ''}.`;
+        if (action === 'UPDATE_REAL_ADERENCIA') return `Alterou o valor realizado de aderencia${d.setor ? ` no setor ${d.setor}` : ''}${d.data ? ` em ${datePt(d.data)}` : ''}.`;
+        if (action === 'DELETE_REGISTRO_ADERENCIA') return `Excluiu um registro de aderencia${d.setor ? ` do setor ${d.setor}` : ''}${d.data ? ` de ${datePt(d.data)}` : ''}.`;
+        if (action === 'UPDATE_CONFIG_MONITORAMENTO') return 'Alterou as configuracoes do monitoramento.';
+        if (/^(ATIVAR|DESATIVAR)_MODO_TV_MONITORAMENTO$/.test(action)) return `${action.startsWith('ATIVAR') ? 'Ativou' : 'Desativou'} o modo TV do monitoramento.`;
+        if (action === 'ABRIR_DETALHE_ORDEM_PRODUCAO') return `Abriu os detalhes da OP ${d.op || '?'}${d.cliente ? ` do cliente ${d.cliente}` : ''}.`;
+        if (action === 'IMPRIMIR_ORDEM_PRODUCAO') return `Imprimiu a OP ${d.op || '?'}${d.cliente ? ` do cliente ${d.cliente}` : ''}.`;
+        if (/^CONSULTAR_CORRIDA_/.test(action)) return `Consultou a corrida ${d.corrida || '?'}${d.itens !== undefined ? ` com ${d.itens} itens` : ''}.`;
+        if (action === 'ABRIR_CORRIDA_INSUMOS_MOLDAGEM') return `Abriu os insumos da corrida ${d.corrida || '?'}${d.itens !== undefined ? ` com ${d.itens} itens` : ''}.`;
+        if (/^GERAR_(CAPA|FICHA|FICHAS|PDF).*PROGRAMACAO_/.test(action)) return `Gerou ${d.fichas || d.itens || 1} ${Number(d.fichas || d.itens || 1) === 1 ? 'documento' : 'documentos'} da corrida ${d.corrida || '?'}.`;
+        if (action === 'GERAR_PDF_INSUMOS_MOLDAGEM') return `Gerou o PDF de insumos da corrida ${d.corrida || '?'}.`;
+        if (action === 'GERAR_PDF_FICHAS_TECNICAS_FUSAO') return `Gerou ${d.fichas || 0} fichas tecnicas de fusao da corrida ${d.corrida || '?'}.`;
+        if (/^ABRIR_FICHA_TECNICA_/.test(action)) return `Abriu a ficha tecnica do produto ${d.codigo || '?'}${d.produto ? ` - ${d.produto}` : ''}.`;
+        if (/^GERAR_PDF_FICHA/.test(action)) return `Gerou o PDF da ficha tecnica do produto ${d.codigo || '?'}${d.produto || d.nome ? ` - ${d.produto || d.nome}` : ''}.`;
+        if (action === 'SALVAR_CONFIGURACAO_CUSTO_PECA') return `Alterou a configuracao de custo do setor ${d.setor || '?'}.`;
+        if (action === 'RESETAR_CONFIGURACAO_CUSTO_PECA') return 'Restaurou todas as configuracoes do calculo de custo por peca.';
+        if (action === 'GERAR_PDF_CUSTO_PECA') return `Gerou o PDF do calculo de custo${d.peca && d.peca !== '-' ? ` da peca ${d.peca}` : ''}.`;
         if (/^ABRIR_DETALHE_/.test(action)) return `Abriu os detalhes em ${tela}${target ? ` de ${target}` : ''}.`;
         if (/^ABRIR_/.test(action)) return `${actionMeta.label}${target ? `: ${target}` : ''}.`;
         if (action === 'VINCULO_OP') {
