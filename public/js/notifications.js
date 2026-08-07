@@ -4,6 +4,7 @@
     const user = localStorage.getItem('erus_user');
     const role = (localStorage.getItem('erus_role') || '').toLowerCase();
     if (!user) return;
+    let popupShownThisLoad = false;
 
     function escapeHtml(value) {
         return String(value ?? '').replace(/[&<>'"]/g, char => ({
@@ -459,15 +460,17 @@
     };
 
     // ─── BELL / CHECK ─────────────────────────────────────────────────────────
-    async function checkNotifications() {
+    async function checkNotifications(options = {}) {
         try {
             const res  = await fetch('/api/communications/unread', { headers: { 'x-user': user } });
             const data = await res.json();
             if (data.success && data.unread.length > 0) {
                 updateBell(data.unread.length);
-                const isIndex = ['index.html','/','/processos.html'].some(p => window.location.pathname.endsWith(p));
-                const lastId  = sessionStorage.getItem('last_comm_popup_id');
-                if (isIndex && lastId !== String(data.unread[0].id)) showMessagePopup(data.unread[0]);
+                const isIndex = window.location.pathname === '/' || window.location.pathname.endsWith('/index.html');
+                if (isIndex && !options.suppressPopup && !popupShownThisLoad) {
+                    popupShownThisLoad = true;
+                    showMessagePopup(data.unread[0]);
+                }
             } else {
                 updateBell(0);
             }
@@ -527,7 +530,6 @@
         modal.style.display = 'flex';
         const postpone = () => {
             modal.style.display = 'none';
-            sessionStorage.setItem('last_comm_popup_id', String(msg.id));
         };
         document.getElementById('read-later-comm').onclick = postpone;
         document.getElementById('close-comm-popup').onclick = postpone;
@@ -537,15 +539,23 @@
         modal.onkeydown = event => {
             if (event.key === 'Escape') postpone();
         };
-        document.getElementById('mark-read-comm').onclick = async () => {
+        document.getElementById('mark-read-comm').onclick = async event => {
+            event.preventDefault();
+            event.stopPropagation();
             const button = document.getElementById('mark-read-comm');
             button.disabled = true;
             button.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Confirmando';
+            modal.style.display = 'none';
             try {
-                await markNotificationRead(msg.id);
-                modal.style.display = 'none';
-            } finally {
-                button.disabled = false;
+                const response = await fetch('/api/communications/mark-read', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'x-user': user },
+                    body: JSON.stringify({ message_id: msg.id })
+                });
+                if (!response.ok) throw new Error('Falha ao marcar comunicado como lido.');
+                await checkNotifications({ suppressPopup: true });
+            } catch (error) {
+                console.error(error);
             }
         };
         document.getElementById('mark-read-comm').focus({ preventScroll: true });
