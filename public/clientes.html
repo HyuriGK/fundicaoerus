@@ -396,6 +396,27 @@
         .ranking-city-filter .fa-location-dot { color:#38bdf8; }
         .ranking-city-filter .fa-xmark { color:#a1a1aa; }
         .ranking-city-filter:hover { border-color:rgba(56,189,248,0.45); background:rgba(56,189,248,0.14); }
+        .ranking-filters-toggle {
+            height:28px; padding:0 10px; border:1px solid rgba(251,191,36,0.28);
+            border-radius:6px; background:rgba(251,191,36,0.08); color:#fbbf24;
+            font-family:var(--font-mono); font-size:0.64rem; font-weight:900;
+            text-transform:uppercase; cursor:pointer;
+        }
+        .ranking-filters-toggle.active,
+        .ranking-filters-toggle:hover { background:var(--color-primary); color:#111; border-color:var(--color-primary); }
+        .ranking-filter-panel {
+            display:none; grid-template-columns:1.4fr repeat(4, minmax(130px, 1fr)) auto;
+            gap:8px; align-items:end; padding:10px 18px; border-bottom:1px solid var(--border-subtle);
+            background:#101014;
+        }
+        .ranking-filter-panel.open { display:grid; }
+        .ranking-filter-panel label { display:block; color:#a1a1aa; font-size:0.58rem; font-weight:900; text-transform:uppercase; margin-bottom:5px; }
+        .ranking-filter-panel input,
+        .ranking-filter-panel select {
+            width:100%; height:30px; border:1px solid rgba(255,255,255,0.1); border-radius:6px;
+            background:#18181c; color:#f4f4f5; padding:0 8px; font-family:var(--font-mono); font-size:0.68rem;
+        }
+        .ranking-filter-panel button { height:30px; padding:0 12px; white-space:nowrap; }
         .table-scroll { overflow-x:auto; height:calc(100vh - 280px); overflow-y:auto; }
         #rankingSection { height:calc(100dvh - 215px); display:flex; flex-direction:column; min-height:0; margin-bottom:0 !important; }
         #rankingSection .table-header-bar { flex-shrink:0; }
@@ -2176,7 +2197,48 @@
                     <i class="fa-solid fa-xmark"></i>
                 </button>
                 <div style="font-size:0.7rem;color:var(--text-muted);" id="tableCount">—</div>
+                <button type="button" class="ranking-filters-toggle" id="rankingFiltersToggle" onclick="toggleRankingFilters()">Filtros</button>
             </div>
+        </div>
+        <div class="ranking-filter-panel" id="rankingFilterPanel">
+            <div>
+                <label>Busca</label>
+                <input id="portfolioSearchInput" placeholder="Cliente ou c&oacute;digo" oninput="renderTable()">
+            </div>
+            <div>
+                <label>Vendedor</label>
+                <select id="portfolioVendorFilter" onchange="renderTable()"><option value="">Todos</option></select>
+            </div>
+            <div>
+                <label>Status</label>
+                <select id="portfolioStatusFilter" onchange="renderTable()">
+                    <option value="">Todos</option>
+                    <option value="ativo">Ativo</option>
+                    <option value="alerta">Alerta</option>
+                    <option value="inativo">Inativo</option>
+                    <option value="bloqueado">Bloqueado</option>
+                    <option value="sem compras">Sem compras</option>
+                </select>
+            </div>
+            <div>
+                <label>ABC</label>
+                <select id="portfolioAbcFilter" onchange="renderTable()">
+                    <option value="">Todos</option>
+                    <option value="a">A</option>
+                    <option value="b">B</option>
+                    <option value="c">C</option>
+                    <option value="sem abc">Sem ABC</option>
+                </select>
+            </div>
+            <div>
+                <label>Compras</label>
+                <select id="portfolioPurchaseFilter" onchange="renderTable()">
+                    <option value="">Todos</option>
+                    <option value="com compras">Com compras</option>
+                    <option value="sem compras">Sem compras</option>
+                </select>
+            </div>
+            <button type="button" class="month-btn" onclick="clearPortfolioFilters()">Limpar</button>
         </div>
         <div class="table-scroll">
             <table>
@@ -2645,14 +2707,14 @@ function processClients(rows, rowsPeso) {
     rowsPeso.forEach(item => {
         const key = getClientGroupKey(item);
         const name = (item.clienteNome || 'DESCONHECIDO').trim();
-        if (!map[key]) map[key] = { key, code: String(item.clienteCodigo || '').trim(), name, peso: 0, fat: 0, orders: new Set(), dates: [], lastDate: new Date(0) };
+        if (!map[key]) map[key] = { key, code: String(item.clienteCodigo || '').trim(), name, peso: 0, fat: 0, orders: new Set(), dates: [], lastDate: new Date(0), vendedor: 'SEM VENDEDOR' };
         map[key].peso += (item.pesoTotal || 0);
     });
 
     rows.forEach(item => {
         const key = getClientGroupKey(item);
         const name = (item.clienteNome || 'DESCONHECIDO').trim();
-        if (!map[key]) map[key] = { key, code: String(item.clienteCodigo || '').trim(), name, peso: 0, fat: 0, orders: new Set(), dates: [], lastDate: new Date(0) };
+        if (!map[key]) map[key] = { key, code: String(item.clienteCodigo || '').trim(), name, peso: 0, fat: 0, orders: new Set(), dates: [], lastDate: new Date(0), vendedor: 'SEM VENDEDOR' };
         const c = map[key];
         c.fat  += calcTotal(item);
         if (item.pedido) c.orders.add(String(item.pedido).trim());
@@ -2663,6 +2725,7 @@ function processClients(rows, rowsPeso) {
                 if (d > c.lastDate) {
                     c.lastDate = d;
                     c.name = name;
+                    c.vendedor = String(item.vendedorNome || '').trim().toUpperCase() || 'SEM VENDEDOR';
                 }
             }
         }
@@ -2689,7 +2752,7 @@ function processClients(rows, rowsPeso) {
         const saved = clientRatings[c.name];
         const abcScore = saved ? (saved.billing + saved.weight + saved.price + saved.complex + saved.risk) / 5 : null;
 
-        return { key: c.key, code: c.code, name: c.name, peso: c.peso, fat: c.fat, orders, days, ticket, preco_kg, pct_fat, pct_peso, recAvg, abcScore, lastDate: c.lastDate };
+        return { key: c.key, code: c.code, name: c.name, vendedor: c.vendedor || 'SEM VENDEDOR', peso: c.peso, fat: c.fat, orders, days, ticket, preco_kg, pct_fat, pct_peso, recAvg, abcScore, lastDate: c.lastDate };
     });
 
     doSort();
@@ -2808,6 +2871,7 @@ function getPortfolioClients() {
                 recAvg:0,
                 abcScore,
                 lastDate:new Date(0),
+                vendedor:'SEM VENDEDOR',
                 noPurchases:true
             };
         });
@@ -2917,17 +2981,79 @@ function clearRankingCityFilter() {
     renderTable();
 }
 
+function toggleRankingFilters() {
+    const panel = document.getElementById('rankingFilterPanel');
+    const btn = document.getElementById('rankingFiltersToggle');
+    if (!panel || !btn) return;
+    const open = !panel.classList.contains('open');
+    panel.classList.toggle('open', open);
+    btn.classList.toggle('active', open);
+    if (open) {
+        populatePortfolioVendorFilter(getPortfolioClients());
+        setTimeout(() => document.getElementById('portfolioSearchInput')?.focus(), 30);
+    }
+}
+
+function getPortfolioQuickFilters() {
+    return {
+        search: String(document.getElementById('portfolioSearchInput')?.value || '').trim().toLowerCase(),
+        vendedor: String(document.getElementById('portfolioVendorFilter')?.value || '').trim().toUpperCase(),
+        status: String(document.getElementById('portfolioStatusFilter')?.value || '').trim().toLowerCase(),
+        abc: String(document.getElementById('portfolioAbcFilter')?.value || '').trim().toLowerCase(),
+        compras: String(document.getElementById('portfolioPurchaseFilter')?.value || '').trim().toLowerCase()
+    };
+}
+
+function populatePortfolioVendorFilter(rows) {
+    const select = document.getElementById('portfolioVendorFilter');
+    if (!select) return;
+    const current = select.value;
+    const vendors = [...new Set((rows || []).map(c => String(c.vendedor || 'SEM VENDEDOR').trim().toUpperCase() || 'SEM VENDEDOR'))].sort();
+    select.innerHTML = '<option value="">Todos</option>' + vendors.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
+    if (vendors.includes(current)) select.value = current;
+}
+
+function getPortfolioAbcClass(c) {
+    if (c.abcScore === null || c.abcScore === undefined) return 'sem abc';
+    if (c.abcScore >= 8) return 'a';
+    if (c.abcScore >= 5) return 'b';
+    return 'c';
+}
+
+function clearPortfolioFilters() {
+    ['portfolioSearchInput', 'portfolioVendorFilter', 'portfolioStatusFilter', 'portfolioAbcFilter', 'portfolioPurchaseFilter'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+    document.querySelectorAll('.ranking-col-filter').forEach(input => {
+        input.value = '';
+        input.closest('.ranking-filter-control')?.classList.remove('has-value');
+    });
+    rankingCityFilter = null;
+    renderTable();
+}
+
 function renderTable() {
     const tbody = document.getElementById('tableBody');
-    const term  = (document.getElementById('searchInput')?.value || '').toLowerCase();
+    const quickFilters = getPortfolioQuickFilters();
+    const term  = quickFilters.search || (document.getElementById('searchInput')?.value || '').toLowerCase();
     const show  = valorVisible;
     initRankingColumnFilters();
     renderRankingCityFilter();
     const columnFilters = getRankingColumnFilters();
     const portfolioClients = getPortfolioClients();
+    populatePortfolioVendorFilter(portfolioClients);
 
     const filtered = portfolioClients.filter((c, originalIdx) => {
+        const vendedor = String(c.vendedor || 'SEM VENDEDOR').trim().toUpperCase() || 'SEM VENDEDOR';
+        const statusText = getRankingStatus(c).text.toLowerCase();
+        const abcClass = getPortfolioAbcClass(c);
         if (term && !c.name.toLowerCase().includes(term) && !String(c.code || '').includes(term)) return false;
+        if (quickFilters.vendedor && vendedor !== quickFilters.vendedor) return false;
+        if (quickFilters.status && statusText !== quickFilters.status) return false;
+        if (quickFilters.abc && abcClass !== quickFilters.abc) return false;
+        if (quickFilters.compras === 'com compras' && c.noPurchases) return false;
+        if (quickFilters.compras === 'sem compras' && !c.noPurchases) return false;
         if (crmStageFilter && getCrmStage(c).key !== crmStageFilter) return false;
         if (!matchesRankingCityFilter(c)) return false;
         const rank = originalIdx + 1;
@@ -4772,7 +4898,6 @@ function renderClientSummary(client) {
     const rows = getClientSummaryRows(client);
     const dates = rows.map(item => parseFatDateLocal(item.data)).filter(d => d && !isNaN(d)).sort((a, b) => a - b);
     const firstDate = dates.length ? dates[0] : null;
-    const vendedorFaturamento = getClientBillingVendor(rows);
 
     document.getElementById('clientSummaryFields').innerHTML = [
         ['Razão social', client.razaoSocial],
@@ -4780,7 +4905,6 @@ function renderClientSummary(client) {
         ['Código', client.codigo],
         ['Status', client.bloqueado ? 'Bloqueado' : client.ativo ? 'Ativo' : 'Inativo'],
         ['CNPJ', client.cnpjCpf],
-        ['Vendedor faturamento', vendedorFaturamento],
         ['Responsável comercial', client.responsavelComercial],
         ['Contato', client.contato],
         ['Telefone principal', client.telefone1],
@@ -4803,16 +4927,6 @@ function renderClientSummary(client) {
 
     setupClientSummarySelectors(rows);
     renderClientSummaryCharts();
-}
-
-function getClientBillingVendor(rows) {
-    const sorted = [...(rows || [])].sort((a, b) => {
-        const da = parseFatDateLocal(a.data);
-        const db = parseFatDateLocal(b.data);
-        return (db?.getTime() || 0) - (da?.getTime() || 0);
-    });
-    const row = sorted.find(item => String(item.vendedorNome || '').trim());
-    return row ? String(row.vendedorNome).trim().toUpperCase() : 'SEM VENDEDOR';
 }
 
 function updateClientBlockEditorState() {
