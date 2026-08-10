@@ -1831,7 +1831,12 @@
                     <div class="modal-sub" id="contactViewClientName">Cliente</div>
                 </div>
             </div>
-            <button class="crm-close" onclick="closeClientContactViewModal()" title="Fechar (ESC)"><i class="fa-solid fa-xmark"></i></button>
+            <div style="display:flex;align-items:center;gap:8px;">
+                <button class="btn-save" id="contactViewEditBtn" onclick="enableClientContactEdit()" title="Editar atendimento" style="height:32px;padding:0 12px;"><i class="fa-solid fa-pen"></i> Editar</button>
+                <button class="btn-save" id="contactViewSaveBtn" onclick="saveClientContactEdit()" title="Salvar atendimento" style="display:none;height:32px;padding:0 12px;"><i class="fa-solid fa-check"></i> Salvar</button>
+                <button class="btn-cancel" id="contactViewCancelBtn" onclick="cancelClientContactEdit()" title="Cancelar ediÃ§Ã£o" style="display:none;height:32px;padding:0 12px;">Cancelar</button>
+                <button class="crm-close" onclick="closeClientContactViewModal()" title="Fechar (ESC)"><i class="fa-solid fa-xmark"></i></button>
+            </div>
         </div>
         <div class="contact-view-grid" id="contactViewBody"></div>
     </div>
@@ -2235,6 +2240,8 @@ let currentCrmClient = null;
 let crmLoaded = false;
 let currentContactClient = null;
 let currentSummaryClient = null;
+let currentContactView = null;
+let contactViewEditing = false;
 let clientSummaryChart = null;
 let latestContacts = [];
 let clientContactsHistory = [];
@@ -4133,7 +4140,23 @@ function initContactsColumnFilters() {
 function openClientContactViewModal(id) {
     const contact = [...(clientContactsHistory || []), ...(latestContacts || [])].find(c => Number(c.id) === Number(id));
     if (!contact) return;
+    currentContactView = { ...contact };
+    contactViewEditing = false;
+    renderClientContactView();
+    document.getElementById('clientContactViewModal').style.display = 'flex';
+}
+
+function renderClientContactView() {
+    const contact = currentContactView;
+    if (!contact) return;
     document.getElementById('contactViewClientName').textContent = contact.cliente_nome || 'Cliente';
+    document.getElementById('contactViewEditBtn').style.display = contactViewEditing ? 'none' : '';
+    document.getElementById('contactViewSaveBtn').style.display = contactViewEditing ? '' : 'none';
+    document.getElementById('contactViewCancelBtn').style.display = contactViewEditing ? '' : 'none';
+    if (contactViewEditing) {
+        document.getElementById('contactViewBody').innerHTML = renderClientContactEditForm(contact);
+        return;
+    }
     const html = [
         contactViewGroup('Dados do atendimento', 'fa-file-lines', [
             contactViewItem('Cliente', contact.cliente_nome, 'span-6'),
@@ -4165,7 +4188,119 @@ function openClientContactViewModal(id) {
         ], 'wide summary')
     ].join('');
     document.getElementById('contactViewBody').innerHTML = html;
-    document.getElementById('clientContactViewModal').style.display = 'flex';
+}
+
+function renderClientContactEditForm(contact) {
+    return `<div class="contact-form" style="grid-column:1/-1;">
+        <div class="contact-section-title">Contato realizado</div>
+        ${contactEditField('Data e hora', 'contactEditDateTime', 'datetime-local', toDateTimeLocal(contact.contato_em), 'contact-span-2')}
+        ${contactEditSelect('Canal', 'contactEditChannel', ['', 'Telefone', 'WhatsApp', 'E-mail', 'Visita', 'ReuniÃ£o online', 'Outro'], contact.canal, 'contact-span-2')}
+        ${contactEditField('Pessoa contatada', 'contactEditPerson', 'text', contact.pessoa_contatada, 'contact-span-3')}
+        ${contactEditField('Pedido', 'contactEditOrder', 'text', contact.pedido, 'contact-span-2')}
+        ${contactEditField('Cargo / setor', 'contactEditRole', 'text', contact.cargo, 'contact-span-3')}
+        <div class="contact-section-title">Dados usados no contato</div>
+        ${contactEditField('Telefone', 'contactEditPhone', 'text', contact.telefone, 'contact-span-6')}
+        ${contactEditField('E-mail', 'contactEditEmail', 'email', contact.email, 'contact-span-6')}
+        <div class="contact-section-title">QualificaÃ§Ã£o</div>
+        ${contactEditSelect('Motivo', 'contactEditReason', ['Follow-up comercial', 'CotaÃ§Ã£o', 'PÃ³s-venda', 'ReativaÃ§Ã£o', 'CobranÃ§a de retorno', 'AtualizaÃ§Ã£o cadastral', 'Outro'], contact.motivo, 'contact-span-3')}
+        ${contactEditSelect('Resultado', 'contactEditResult', ['', 'Conseguiu falar', 'NÃ£o atendeu', 'Retornar depois', 'CotaÃ§Ã£o solicitada', 'Pedido em negociaÃ§Ã£o', 'Sem demanda no momento', 'Cliente inativo confirmado'], contact.resultado, 'contact-span-3')}
+        ${contactEditSelect('Humor do cliente', 'contactEditMood', ['Neutro', 'Positivo', 'Insatisfeito', 'Urgente', 'Indefinido'], contact.humor_cliente, 'contact-span-3')}
+        ${contactEditSelect('Potencial', 'contactEditPotential', ['NÃ£o avaliado', 'Alto', 'MÃ©dio', 'Baixo', 'Sem potencial atual'], contact.potencial, 'contact-span-3')}
+        <div class="contact-section-title">PrÃ³ximo passo</div>
+        ${contactEditField('PrÃ³xima aÃ§Ã£o', 'contactEditNextAction', 'text', contact.proxima_acao, 'contact-span-8')}
+        ${contactEditField('Data da prÃ³xima aÃ§Ã£o', 'contactEditNextDate', 'date', contact.data_proxima_acao, 'contact-span-4')}
+        <div class="contact-field contact-span-12">
+            <label>Resumo do contato</label>
+            <textarea id="contactEditSummary">${escapeHtml(contact.resumo || '')}</textarea>
+        </div>
+    </div>`;
+}
+
+function contactEditField(label, id, type, value, cls) {
+    return `<div class="contact-field ${cls || ''}">
+        <label>${escapeHtml(label)}</label>
+        <input id="${id}" type="${type}" value="${escapeHtml(value || '')}" autocomplete="new-password">
+    </div>`;
+}
+
+function contactEditSelect(label, id, options, value, cls) {
+    const current = String(value || '');
+    return `<div class="contact-field ${cls || ''}">
+        <label>${escapeHtml(label)}</label>
+        <select id="${id}">
+            ${options.map(opt => `<option value="${escapeHtml(opt)}"${String(opt) === current ? ' selected' : ''}>${escapeHtml(opt || 'Selecione')}</option>`).join('')}
+        </select>
+    </div>`;
+}
+
+function toDateTimeLocal(value) {
+    if (!value) return '';
+    const d = new Date(value);
+    if (isNaN(d)) return '';
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0, 16);
+}
+
+function enableClientContactEdit() {
+    if (!currentContactView) return;
+    contactViewEditing = true;
+    renderClientContactView();
+}
+
+function cancelClientContactEdit() {
+    contactViewEditing = false;
+    renderClientContactView();
+}
+
+async function saveClientContactEdit() {
+    if (!currentContactView) return;
+    const payload = {
+        clienteNome: currentContactView.cliente_nome || '',
+        empresa: currentContactView.empresa,
+        codigo: currentContactView.codigo,
+        contatoEm: document.getElementById('contactEditDateTime').value,
+        canal: document.getElementById('contactEditChannel').value,
+        pessoaContatada: document.getElementById('contactEditPerson').value,
+        pedido: document.getElementById('contactEditOrder').value,
+        cargo: document.getElementById('contactEditRole').value,
+        telefone: document.getElementById('contactEditPhone').value,
+        email: document.getElementById('contactEditEmail').value,
+        motivo: document.getElementById('contactEditReason').value,
+        resultado: document.getElementById('contactEditResult').value,
+        humorCliente: document.getElementById('contactEditMood').value,
+        potencial: document.getElementById('contactEditPotential').value,
+        proximaAcao: document.getElementById('contactEditNextAction').value,
+        dataProximaAcao: document.getElementById('contactEditNextDate').value,
+        resumo: document.getElementById('contactEditSummary').value
+    };
+    try {
+        const res = await fetch(`/api/clientes-firebird/crm/contatos/${Number(currentContactView.id)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const json = await res.json();
+        if (!res.ok || !json.success) throw new Error(json.error || 'Erro ao salvar atendimento');
+        currentContactView = json.data;
+        replaceContactInLists(json.data);
+        contactViewEditing = false;
+        renderClientContactView();
+        renderLatestContacts();
+        renderClientContactsHistory();
+        if (window.erusAudit) window.erusAudit('EDITAR_ATENDIMENTO_CLIENTE', {
+            id: json.data.id,
+            cliente: json.data.cliente_nome,
+            codigo: json.data.codigo
+        });
+        toast('Salvo', 'Atendimento atualizado.', 'success');
+    } catch (e) {
+        toast('Erro', e.message || 'Falha ao editar atendimento.', 'danger');
+    }
+}
+
+function replaceContactInLists(contact) {
+    latestContacts = (latestContacts || []).map(c => Number(c.id) === Number(contact.id) ? contact : c);
+    clientContactsHistory = (clientContactsHistory || []).map(c => Number(c.id) === Number(contact.id) ? contact : c);
 }
 
 function contactViewGroup(title, icon, items, cls = '') {

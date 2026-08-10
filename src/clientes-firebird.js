@@ -2784,6 +2784,80 @@ router.post('/crm/contatos', async (req, res) => {
     }
 });
 
+router.put('/crm/contatos/:id', async (req, res) => {
+    try {
+        await ensureClientesContatosTable();
+        const crmUser = String(req.user?.user || req.user?.name || '').trim();
+        const role = String(req.user?.role || '').trim().toLowerCase();
+        const id = Number(req.params.id);
+        const clienteNome = String(req.body.clienteNome || '').trim();
+        const empresa = req.body.empresa === undefined || req.body.empresa === null || req.body.empresa === '' ? null : Number(req.body.empresa);
+        const codigo = req.body.codigo === undefined || req.body.codigo === null || req.body.codigo === '' ? null : Number(req.body.codigo);
+        const contatoEm = String(req.body.contatoEm || '').trim() || null;
+        const canal = String(req.body.canal || '').trim();
+        const pessoaContatada = String(req.body.pessoaContatada || '').trim();
+        const pedido = String(req.body.pedido || '').trim();
+        const cargo = String(req.body.cargo || '').trim();
+        const telefone = String(req.body.telefone || '').trim();
+        const email = String(req.body.email || '').trim();
+        const motivo = String(req.body.motivo || '').trim();
+        const resultado = String(req.body.resultado || '').trim();
+        const humorCliente = String(req.body.humorCliente || '').trim();
+        const potencial = String(req.body.potencial || '').trim();
+        const proximaAcao = String(req.body.proximaAcao || '').trim();
+        const dataProximaAcao = String(req.body.dataProximaAcao || '').trim() || null;
+        const resumo = String(req.body.resumo || '').trim();
+
+        if (!crmUser) return res.status(400).json({ success: false, error: 'UsuÃ¡rio invÃ¡lido.' });
+        if (!Number.isInteger(id)) return res.status(400).json({ success: false, error: 'Atendimento invÃ¡lido.' });
+        if (!clienteNome) return res.status(400).json({ success: false, error: 'Cliente invÃ¡lido.' });
+        if (empresa !== null && !Number.isInteger(empresa)) return res.status(400).json({ success: false, error: 'Empresa invÃ¡lida.' });
+        if (codigo !== null && !Number.isInteger(codigo)) return res.status(400).json({ success: false, error: 'CÃ³digo invÃ¡lido.' });
+
+        const canEditAll = ['admin', 'desenvolvedor', 'gerente comercial', 'diretor'].includes(role);
+        const params = [
+            clienteNome, empresa, codigo, contatoEm, canal, pessoaContatada, pedido, cargo,
+            telefone, email, motivo, resultado, humorCliente, potencial, proximaAcao,
+            dataProximaAcao, resumo, id
+        ];
+        let ownerFilter = '';
+        if (!canEditAll) {
+            params.push(crmUser);
+            ownerFilter = ` AND crm_user = $${params.length}`;
+        }
+
+        const result = await pool.query(`
+            UPDATE clientes_contatos_crm
+            SET cliente_nome = $1,
+                empresa = $2,
+                codigo = $3,
+                contato_em = COALESCE($4::timestamp, contato_em),
+                canal = $5,
+                pessoa_contatada = $6,
+                pedido = $7,
+                cargo = $8,
+                telefone = $9,
+                email = $10,
+                motivo = $11,
+                resultado = $12,
+                humor_cliente = $13,
+                potencial = $14,
+                proxima_acao = $15,
+                data_proxima_acao = $16,
+                resumo = $17
+            WHERE id = $18${ownerFilter}
+            RETURNING id, cliente_nome, empresa, codigo, crm_user, contato_em, canal, pessoa_contatada, pedido,
+                      cargo, telefone, email, motivo, resultado, humor_cliente, potencial, proxima_acao,
+                      TO_CHAR(data_proxima_acao, 'YYYY-MM-DD') AS data_proxima_acao, resumo, created_at
+        `, params);
+
+        if (!result.rows.length) return res.status(404).json({ success: false, error: 'Atendimento nÃ£o encontrado ou sem permissÃ£o para editar.' });
+        res.json({ success: true, data: result.rows[0] });
+    } catch (err) {
+        res.status(500).json({ success: false, error: 'Erro ao editar contato com cliente', details: err.message });
+    }
+});
+
 router.get('/crm/contatos', async (req, res) => {
     try {
         await ensureClientesContatosTable();
