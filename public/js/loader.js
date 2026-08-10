@@ -4,7 +4,7 @@
     let pendingRequests = 0;
     let loaderEl = null;
     let domReady = document.readyState !== 'loading';
-    let progress = 8;
+    let progress = 0;
     let hideTimer = null;
     let forcedDone = false;
     let slowProgressTimer = null;
@@ -54,7 +54,7 @@
         window.__erusLoaderFetchPatched = true;
         window.fetch = function(...args) {
             pendingRequests++;
-            updateLoader('dados', 'Carregando dados', Math.max(progress, 44));
+            if (loaderEl && progress >= 24) updateLoader('dados', 'Carregando dados', progress);
             const done = () => {
                 pendingRequests = Math.max(0, pendingRequests - 1);
                 scheduleHideCheck();
@@ -84,6 +84,7 @@
         document.body.prepend(loaderEl);
         document.body.style.overflow = 'hidden';
 
+        updateLoader('estrutura', 'Preparando estrutura', 0);
         startLoading(loaderEl);
         scheduleHideCheck();
     };
@@ -168,7 +169,7 @@
             const target = loading ? 70 : 94;
             const next = progress + Math.max(0.12, (target - progress) * 0.045);
             progress = loading ? Math.max(progress, Math.min(70, next)) : Math.max(progress, Math.min(94, next));
-            if (pendingRequests > 0) updateLoader('dados', 'Carregando dados', progress);
+            if (pendingRequests > 0 && progress >= 24) updateLoader('dados', 'Carregando dados', progress);
             else if (domReady) {
                 updateLoader('painel', progress >= 70 ? 'Finalizando painel' : 'Montando painel', progress);
                 if (progress >= 70) startSlowProgress();
