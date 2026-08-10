@@ -1,6 +1,16 @@
 /* public/js/loader.js */
 
 (function() {
+    let pendingRequests = 0;
+    let loaderEl = null;
+    let domReady = document.readyState !== 'loading';
+    let progress = 8;
+    let hideTimer = null;
+    let forcedDone = false;
+    const startedAt = Date.now();
+    const minVisibleMs = 650;
+    const maxVisibleMs = 9000;
+
     if (!document.getElementById('loader-css')) {
         const link = document.createElement('link');
         link.id = 'loader-css';
@@ -36,6 +46,26 @@
         </div>
     `;
 
+    const originalFetch = window.fetch;
+    if (typeof originalFetch === 'function' && !window.__erusLoaderFetchPatched) {
+        window.__erusLoaderFetchPatched = true;
+        window.fetch = function(...args) {
+            pendingRequests++;
+            updateLoader('dados', 'Carregando dados', Math.max(progress, 44));
+            const done = () => {
+                pendingRequests = Math.max(0, pendingRequests - 1);
+                scheduleHideCheck();
+            };
+            try {
+                const request = originalFetch.apply(this, args);
+                return Promise.resolve(request).finally(done);
+            } catch (err) {
+                done();
+                throw err;
+            }
+        };
+    }
+
     const injectLoader = () => {
         const path = window.location.pathname;
         const isExcluded = path.endsWith('login.html');
@@ -47,11 +77,12 @@
 
         const wrapper = document.createElement('div');
         wrapper.innerHTML = loaderHTML();
-        const loaderEl = wrapper.firstElementChild;
+        loaderEl = wrapper.firstElementChild;
         document.body.prepend(loaderEl);
         document.body.style.overflow = 'hidden';
 
         startLoading(loaderEl);
+        scheduleHideCheck();
     };
 
     const setStepState = (progress) => {
@@ -63,41 +94,82 @@
         });
     };
 
-    const startLoading = (loaderEl) => {
+    const updateLoader = (step, textValue, nextProgress) => {
+        if (!loaderEl || loaderEl.classList.contains('fade-out')) return;
+        progress = Math.max(progress, Math.min(100, nextProgress || progress));
         const fill = document.getElementById('loader-progress-fill');
         const text = document.getElementById('loader-text');
-        const duration = 900;
-        const startTime = Date.now();
+        if (fill) fill.style.width = progress + '%';
+        if (text && textValue) text.innerText = textValue;
+        const stepProgress = step === 'estrutura' ? 18 : step === 'dados' ? 50 : 84;
+        setStepState(Math.max(progress, stepProgress));
+    };
 
-        const update = () => {
-            const elapsed = Date.now() - startTime;
-            const progress = Math.min((elapsed / duration) * 100, 100);
+    const hideLoader = () => {
+        if (!loaderEl || loaderEl.classList.contains('fade-out')) return;
+        updateLoader('painel', 'Painel pronto', 100);
+        setTimeout(() => {
+            if (!loaderEl) return;
+            loaderEl.classList.add('fade-out');
+            document.body.style.overflow = '';
+            setTimeout(() => {
+                if (loaderEl) loaderEl.remove();
+                loaderEl = null;
+            }, 350);
+        }, 180);
+    };
 
-            if (fill) fill.style.width = progress + '%';
-            if (text) {
-                if (progress < 38) text.innerText = 'Preparando estrutura';
-                else if (progress < 78) text.innerText = 'Carregando dados';
-                else text.innerText = 'Montando painel';
+    const scheduleHideCheck = () => {
+        if (hideTimer) clearTimeout(hideTimer);
+        hideTimer = setTimeout(() => {
+            const elapsed = Date.now() - startedAt;
+            if (elapsed >= maxVisibleMs) {
+                hideLoader();
+                return;
             }
-            setStepState(progress);
+            if (!domReady || pendingRequests > 0 || elapsed < minVisibleMs) {
+                scheduleHideCheck();
+                return;
+            }
+            hideLoader();
+        }, forcedDone ? 80 : 350);
+    };
 
-            if (progress < 100) {
+    const startLoading = (loaderEl) => {
+        const update = () => {
+            if (!loaderEl || loaderEl.classList.contains('fade-out')) return;
+            const target = pendingRequests > 0 ? 82 : domReady ? 94 : 34;
+            progress += Math.max(0.15, (target - progress) * 0.045);
+            if (pendingRequests > 0) updateLoader('dados', 'Carregando dados', progress);
+            else if (domReady) updateLoader('painel', 'Montando painel', progress);
+            else updateLoader('estrutura', 'Preparando estrutura', progress);
+
+            if (progress < 99) {
                 requestAnimationFrame(update);
-            } else {
-                setTimeout(() => {
-                    loaderEl.classList.add('fade-out');
-                    document.body.style.overflow = '';
-                    setTimeout(() => loaderEl.remove(), 350);
-                }, 80);
             }
         };
 
         requestAnimationFrame(update);
     };
 
+    window.erusPageLoaderDone = () => {
+        forcedDone = true;
+        pendingRequests = 0;
+        domReady = true;
+        scheduleHideCheck();
+    };
+
     if (document.body) {
         injectLoader();
     } else {
         document.addEventListener('DOMContentLoaded', injectLoader);
+    }
+
+    if (!domReady) {
+        document.addEventListener('DOMContentLoaded', () => {
+            domReady = true;
+            updateLoader('painel', 'Montando painel', Math.max(progress, 84));
+            scheduleHideCheck();
+        }, { once: true });
     }
 })();
