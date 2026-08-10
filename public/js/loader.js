@@ -10,6 +10,8 @@
     const startedAt = Date.now();
     const minVisibleMs = 650;
     const maxVisibleMs = 9000;
+    const currentPage = (window.location.pathname.split('/').pop() || 'index.html');
+    const postLoginIndexLoader = currentPage === 'index.html' && sessionStorage.getItem('erus_post_login_loader') === '1';
 
     if (!document.getElementById('loader-css')) {
         const link = document.createElement('link');
@@ -123,6 +125,10 @@
         if (hideTimer) clearTimeout(hideTimer);
         hideTimer = setTimeout(() => {
             const elapsed = Date.now() - startedAt;
+            if (postLoginIndexLoader && !forcedDone) {
+                scheduleHideCheck();
+                return;
+            }
             if (elapsed >= maxVisibleMs) {
                 hideLoader();
                 return;
@@ -156,6 +162,7 @@
         forcedDone = true;
         pendingRequests = 0;
         domReady = true;
+        sessionStorage.removeItem('erus_post_login_loader');
         scheduleHideCheck();
     };
 
