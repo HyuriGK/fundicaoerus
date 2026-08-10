@@ -2220,14 +2220,8 @@
                 </select>
             </div>
             <div>
-                <label>ABC</label>
-                <select id="portfolioAbcFilter" onchange="renderTable()">
-                    <option value="">Todos</option>
-                    <option value="a">A</option>
-                    <option value="b">B</option>
-                    <option value="c">C</option>
-                    <option value="sem abc">Sem ABC</option>
-                </select>
+                <label>Respons&aacute;vel Comercial</label>
+                <select id="portfolioOwnerFilter" onchange="renderTable()"><option value="">Todos</option></select>
             </div>
             <div>
                 <label>Compras</label>
@@ -2989,6 +2983,7 @@ function toggleRankingFilters() {
     btn.classList.toggle('active', open);
     if (open) {
         populatePortfolioVendorFilter(getPortfolioClients());
+        populatePortfolioOwnerFilter(getPortfolioClients());
         setTimeout(() => document.getElementById('portfolioSearchInput')?.focus(), 30);
     }
 }
@@ -2998,7 +2993,7 @@ function getPortfolioQuickFilters() {
         search: String(document.getElementById('portfolioSearchInput')?.value || '').trim().toLowerCase(),
         vendedor: String(document.getElementById('portfolioVendorFilter')?.value || '').trim().toUpperCase(),
         status: String(document.getElementById('portfolioStatusFilter')?.value || '').trim().toLowerCase(),
-        abc: String(document.getElementById('portfolioAbcFilter')?.value || '').trim().toLowerCase(),
+        responsavel: String(document.getElementById('portfolioOwnerFilter')?.value || '').trim().toUpperCase(),
         compras: String(document.getElementById('portfolioPurchaseFilter')?.value || '').trim().toLowerCase()
     };
 }
@@ -3012,6 +3007,30 @@ function populatePortfolioVendorFilter(rows) {
     if (vendors.includes(current)) select.value = current;
 }
 
+function getPortfolioClientRecord(client) {
+    const code = String(client.code || '').trim();
+    const normalizedName = normalizeClientName(client.name || '');
+    return clientRecords.find(record => {
+        const recordCode = String(record.codigo || '').trim();
+        const recordName = normalizeClientName(record.razaoSocial || record.fantasia || '');
+        return (code && recordCode === code) || (normalizedName && recordName === normalizedName);
+    }) || null;
+}
+
+function getPortfolioOwner(client) {
+    const record = getPortfolioClientRecord(client);
+    return String(record?.responsavelComercial || '').trim().toUpperCase() || 'SEM RESPONSAVEL';
+}
+
+function populatePortfolioOwnerFilter(rows) {
+    const select = document.getElementById('portfolioOwnerFilter');
+    if (!select) return;
+    const current = select.value;
+    const owners = [...new Set((rows || []).map(getPortfolioOwner))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    select.innerHTML = '<option value="">Todos</option>' + owners.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
+    if (owners.includes(current)) select.value = current;
+}
+
 function getPortfolioAbcClass(c) {
     if (c.abcScore === null || c.abcScore === undefined) return 'sem abc';
     if (c.abcScore >= 8) return 'a';
@@ -3020,7 +3039,7 @@ function getPortfolioAbcClass(c) {
 }
 
 function clearPortfolioFilters() {
-    ['portfolioSearchInput', 'portfolioVendorFilter', 'portfolioStatusFilter', 'portfolioAbcFilter', 'portfolioPurchaseFilter'].forEach(id => {
+    ['portfolioSearchInput', 'portfolioVendorFilter', 'portfolioStatusFilter', 'portfolioOwnerFilter', 'portfolioPurchaseFilter'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.value = '';
     });
@@ -3042,15 +3061,16 @@ function renderTable() {
     const columnFilters = getRankingColumnFilters();
     const portfolioClients = getPortfolioClients();
     populatePortfolioVendorFilter(portfolioClients);
+    populatePortfolioOwnerFilter(portfolioClients);
 
     const filtered = portfolioClients.filter((c, originalIdx) => {
         const vendedor = String(c.vendedor || 'SEM VENDEDOR').trim().toUpperCase() || 'SEM VENDEDOR';
+        const responsavel = getPortfolioOwner(c);
         const statusText = getRankingStatus(c).text.toLowerCase();
-        const abcClass = getPortfolioAbcClass(c);
         if (term && !c.name.toLowerCase().includes(term) && !String(c.code || '').includes(term)) return false;
         if (quickFilters.vendedor && vendedor !== quickFilters.vendedor) return false;
+        if (quickFilters.responsavel && responsavel !== quickFilters.responsavel) return false;
         if (quickFilters.status && statusText !== quickFilters.status) return false;
-        if (quickFilters.abc && abcClass !== quickFilters.abc) return false;
         if (quickFilters.compras === 'com compras' && c.noPurchases) return false;
         if (quickFilters.compras === 'sem compras' && !c.noPurchases) return false;
         if (crmStageFilter && getCrmStage(c).key !== crmStageFilter) return false;
