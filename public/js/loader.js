@@ -9,7 +9,7 @@
     let forcedDone = false;
     let slowProgressTimer = null;
     const startedAt = Date.now();
-    const minVisibleMs = 650;
+    const minVisibleMs = 1700;
     const maxVisibleMs = 9000;
     const currentPage = (window.location.pathname.split('/').pop() || 'index.html');
     const postLoginIndexLoader = currentPage === 'index.html' && sessionStorage.getItem('erus_post_login_loader') === '1';
@@ -166,10 +166,15 @@
         const update = () => {
             if (!loaderEl || loaderEl.classList.contains('fade-out')) return;
             const loading = !domReady || pendingRequests > 0;
-            const target = loading ? 70 : 94;
+            const elapsed = Date.now() - startedAt;
+            let target = 25;
+            if (elapsed >= 450) target = 50;
+            if (elapsed >= 1000) target = 70;
+            if (elapsed >= 1700 && !loading) target = 94;
             const next = progress + Math.max(0.12, (target - progress) * 0.045);
-            progress = loading ? Math.max(progress, Math.min(70, next)) : Math.max(progress, Math.min(94, next));
-            if (pendingRequests > 0 && progress >= 24) updateLoader('dados', 'Carregando dados', progress);
+            progress = Math.max(progress, Math.min(target, next));
+            if (progress < 25) updateLoader('estrutura', 'Preparando estrutura', progress);
+            else if (progress < 50 || pendingRequests > 0) updateLoader('dados', 'Carregando dados', progress);
             else if (domReady) {
                 updateLoader('painel', progress >= 70 ? 'Finalizando painel' : 'Montando painel', progress);
                 if (progress >= 70) startSlowProgress();
@@ -199,7 +204,7 @@
     if (!domReady) {
         document.addEventListener('DOMContentLoaded', () => {
             domReady = true;
-            updateLoader('painel', 'Montando painel', Math.max(progress, 84));
+            updateLoader('painel', 'Montando painel', progress);
             scheduleHideCheck();
         }, { once: true });
     }
