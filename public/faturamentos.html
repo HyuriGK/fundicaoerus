@@ -1842,6 +1842,8 @@
  (R$)</button>
                             <button class="btn-mini-chart" id="btnAbcPreco" onclick="setABCType('preco')">Preço
  (R$/kg)</button>
+                            <button class="btn-mini-chart" id="btnAbcTicket" onclick="setABCType('ticket')">Ticket
+ (R$)</button>
                         </div>
                     </div>
                 </div>
@@ -4329,11 +4331,13 @@ async function loadRecordsData() {
             const label = document.getElementById('abcTypeLabel');
             if (type === 'peso') label.textContent = 'Peso (kg)';
             else if (type === 'valor') label.textContent = 'Valor (R$)';
+            else if (type === 'ticket') label.textContent = 'Ticket m\u00e9dio (R$)';
             else if (type === 'preco') label.textContent = 'Preço (R$/kg)';
             document.querySelectorAll('#abcChartsRow .btn-mini-chart').forEach(b => b.classList.remove('active'));
             if (type === 'peso') document.getElementById('btnAbcPeso').classList.add('active');
             else if (type === 'valor') document.getElementById('btnAbcValor').classList.add('active');
             else if (type === 'preco') document.getElementById('btnAbcPreco').classList.add('active');
+            else if (type === 'ticket') document.getElementById('btnAbcTicket').classList.add('active');
             if (window.erusAudit) window.erusAudit('SELECT_METRICA_ABC_FAT', { metrica: type });
             updateDashboardfromRecords(allData);
         }
@@ -4344,17 +4348,20 @@ async function loadRecordsData() {
             const clientGroups = {};
             data.forEach(item => {
                 const name = (item.clienteNome || 'Desconhecido').trim();
-                if (!clientGroups[name]) clientGroups[name] = { peso: 0, valor: 0 };
+                if (!clientGroups[name]) clientGroups[name] = { peso: 0, valor: 0, notas: new Set() };
                 clientGroups[name].peso += calculateCalculatedWeight(item);
                 clientGroups[name].valor += calculateCalculatedTotal(item);
+                if (item.notaFiscal) clientGroups[name].notas.add(String(item.notaFiscal).trim());
             });
             const clientList = Object.keys(clientGroups).map(name => {
                 const g = clientGroups[name];
+                const notasCount = g.notas.size || 1;
                 return {
                     name,
                     peso: g.peso,
                     valor: g.valor,
-                    preco: g.peso > 0 ? g.valor / g.peso : 0
+                    preco: g.peso > 0 ? g.valor / g.peso : 0,
+                    ticket: g.valor / notasCount
                 };
             });
             // Sort by active metric
@@ -4386,7 +4393,7 @@ async function loadRecordsData() {
                 data: {
                     labels: topClients.map(c => `[${c.abc}] ${c.name}`),
                     datasets: [{
-                        label: abcType === 'preco' ? 'R$/kg' : (abcType === 'valor' ? 'R$' : 'kg'),
+                        label: abcType === 'preco' ? 'R$/kg' : (abcType === 'valor' || abcType === 'ticket' ? 'R$' : 'kg'),
                         data: topClients.map(c => c[abcType]),
                         backgroundColor: topClients.map(c => {
                             if (c.abc === 'A') return '#f59e0b';
@@ -4412,6 +4419,7 @@ async function loadRecordsData() {
                                     const val = context.raw;
                                     if (abcType === 'valor') return canViewAbcSensitive() ? formatCurrency(val) : 'R$ -----';
                                     if (abcType === 'preco') return canViewAbcSensitive() ? 'R$ ' + formatNumber(val, 2) + ' / kg' : 'R$ ----- / kg';
+                                    if (abcType === 'ticket') return canViewAbcSensitive() ? formatCurrency(val) : 'R$ -----';
                                     return formatNumber(val, 2) + ' kg';
                                 }
                             }
