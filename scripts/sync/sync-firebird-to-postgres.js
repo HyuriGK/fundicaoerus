@@ -103,6 +103,10 @@ async function sincronizarFaturamentoDiario() {
     // Isso é ordens de magnitude mais rápido que buscar tudo no Firebird toda vez
     try {
         await pool.query(`
+            DELETE FROM faturamento_diario
+            WHERE data >= '2026-01-01' AND data < '2027-01-01'
+        `);
+        await pool.query(`
             WITH agregados AS (
                 SELECT 
                     data_faturamento as data,
@@ -209,7 +213,8 @@ async function sincronizarDetalhado(fbDb) {
 
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_fat_fb_data ON faturamento_firebird(data_faturamento DESC)`);
 
-    const dataInicio = new Date('2025-01-01');
+    const dataInicio = new Date('2026-01-01');
+    const dataFim = '2027-01-01';
     console.log(`📅 Janela de Sincronização: ${dataInicio.toISOString().split('T')[0]} até hoje.`);
 
     const query = `
@@ -248,6 +253,7 @@ async function sincronizarDetalhado(fbDb) {
             ON v.EMPRESA_VEN = nf.EMPRESA_NOT
             AND v.CODIGO_VEN = nf.VENDEDOR_NOT
         WHERE nf.EMISSAO_NOT >= ?
+        AND nf.EMISSAO_NOT < ?
         AND nf.TIPO_NOT = 'S'
             AND nf.STATUS_NOT = 'A'
             AND nfp.STATUS_NPR = 'A'
@@ -255,7 +261,7 @@ async function sincronizarDetalhado(fbDb) {
     `;
 
     return new Promise((resolve, reject) => {
-        fbDb.query(query, [dataInicio], async (err, result) => {
+        fbDb.query(query, [dataInicio, dataFim], async (err, result) => {
             if (err) {
                 console.error('❌ Erro ao buscar detalhado do Firebird:', err);
                 return reject(err);
@@ -287,12 +293,13 @@ async function sincronizarDetalhado(fbDb) {
                 `, [vendedor.notaFiscal, vendedor.serie, vendedor.vendedorCodigo, vendedor.vendedorNome]);
             }
 
-            // TRUNCATE + reinserção total: o Neon espelha exatamente o que o Firebird retorna
-            // (itens cancelados/alterados somem). Exclusões manuais são preservadas via
-            // faturamento_firebird_preferencias e reaplicadas na inserção abaixo.
-            // Só trunca DEPOIS que o resultado do Firebird chegou — se a busca falhar, o Neon fica intacto.
-            console.log('  🗑️ Limpando tabela faturamento_firebird (truncate)...');
-            await pool.query('TRUNCATE TABLE faturamento_firebird RESTART IDENTITY');
+            // DELETE de 2026 + reinsercao: preserva 2025 congelado e reespelha o ano corrente.
+            // Se a busca no Firebird falhar, esta limpeza nao roda e o Neon fica intacto.
+            console.log('  Limpando faturamento_firebird apenas de 2026...');
+            await pool.query(`
+                DELETE FROM faturamento_firebird
+                WHERE data_faturamento >= '2026-01-01' AND data_faturamento < '2027-01-01'
+            `);
 
 
             // BUSCAR PREFERÊNCIAS DE EXCLUSÃO (Tabela correta: faturamento_firebird_preferencias)
