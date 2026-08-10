@@ -544,6 +544,39 @@
             0% { transform: translateX(-120%); }
             100% { transform: translateX(240%); }
         }
+        .page-loader-pedidos{
+            position:fixed;inset:0;z-index:99999;background:
+                radial-gradient(circle at 50% 18%,rgba(251,191,36,0.08),transparent 34%),
+                linear-gradient(180deg,#09090b 0%,#111113 100%);
+            display:flex;align-items:center;justify-content:center;padding:24px;
+            opacity:1;visibility:visible;transition:opacity .35s ease,visibility .35s ease;
+        }
+        .page-loader-pedidos.done{opacity:0;visibility:hidden;pointer-events:none}
+        .page-loader-card{
+            width:min(520px,100%);border:1px solid rgba(251,191,36,0.18);border-radius:16px;
+            background:rgba(16,16,19,0.92);box-shadow:0 24px 80px rgba(0,0,0,0.45);
+            padding:28px;display:flex;flex-direction:column;gap:18px;
+        }
+        .page-loader-top{display:flex;align-items:center;gap:14px}
+        .page-loader-icon{
+            width:44px;height:44px;border-radius:12px;border:1px solid rgba(251,191,36,0.28);
+            background:rgba(251,191,36,0.09);color:#fbbf24;display:flex;align-items:center;justify-content:center;font-size:1rem;
+        }
+        .page-loader-title{font-family:var(--font-main);font-size:1rem;font-weight:850;color:#fff}
+        .page-loader-subtitle{margin-top:4px;font-family:var(--font-mono);font-size:.72rem;color:#a1a1aa}
+        .page-loader-track{height:8px;border-radius:999px;background:rgba(255,255,255,0.07);overflow:hidden;border:1px solid rgba(255,255,255,0.06)}
+        .page-loader-fill{height:100%;width:18%;border-radius:inherit;background:linear-gradient(90deg,#f59e0b,#fbbf24,#fde68a);box-shadow:0 0 18px rgba(251,191,36,0.35);transition:width .35s ease}
+        .page-loader-steps{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+        .page-loader-step{
+            min-height:44px;border:1px solid rgba(255,255,255,0.08);border-radius:10px;background:rgba(255,255,255,0.035);
+            display:flex;align-items:center;gap:8px;padding:9px 10px;color:#71717a;font-size:.68rem;font-weight:800;text-transform:uppercase;
+        }
+        .page-loader-step.active{color:#fbbf24;border-color:rgba(251,191,36,0.28);background:rgba(251,191,36,0.07)}
+        .page-loader-step.done{color:#22c55e;border-color:rgba(34,197,94,0.24);background:rgba(34,197,94,0.07)}
+        @media(max-width:700px){
+            .page-loader-card{padding:22px}
+            .page-loader-steps{grid-template-columns:1fr}
+        }
         .chart-title-flex {
             font-size: 0.85rem; /* Smaller titles for scaling */
             font-weight: 700;
@@ -2204,6 +2237,23 @@
     </style>
 </head>
 <body>
+    <div id="pedidosPageLoader" class="page-loader-pedidos" aria-live="polite">
+        <div class="page-loader-card">
+            <div class="page-loader-top">
+                <div class="page-loader-icon"><i class="fa-solid fa-layer-group"></i></div>
+                <div>
+                    <div class="page-loader-title">Carteira de Pedidos</div>
+                    <div class="page-loader-subtitle" id="pedidosLoaderText">Preparando painel</div>
+                </div>
+            </div>
+            <div class="page-loader-track"><div class="page-loader-fill" id="pedidosLoaderFill"></div></div>
+            <div class="page-loader-steps">
+                <div class="page-loader-step active" data-loader-step="estrutura"><i class="fa-solid fa-cube"></i> Estrutura</div>
+                <div class="page-loader-step" data-loader-step="dados"><i class="fa-solid fa-database"></i> Dados</div>
+                <div class="page-loader-step" data-loader-step="graficos"><i class="fa-solid fa-chart-column"></i> Graficos</div>
+            </div>
+        </div>
+    </div>
     <!-- Container para Toasts -->
     <div id="toast-container" class="toast-container"></div>
     <div id="concentracaoSuggestions"></div>
@@ -4037,11 +4087,34 @@
             // Chave composta: Pedido_Produto_OC
             return `${p}_${c}_${o}`;
         }
+        function updatePedidosPageLoader(step, text, progress) {
+            const loader = document.getElementById('pedidosPageLoader');
+            if (!loader || loader.classList.contains('done')) return;
+            const fill = document.getElementById('pedidosLoaderFill');
+            const label = document.getElementById('pedidosLoaderText');
+            if (label && text) label.textContent = text;
+            if (fill && Number.isFinite(progress)) fill.style.width = `${Math.max(8, Math.min(100, progress))}%`;
+            const order = ['estrutura', 'dados', 'graficos'];
+            const currentIndex = order.indexOf(step);
+            document.querySelectorAll('[data-loader-step]').forEach(el => {
+                const idx = order.indexOf(el.dataset.loaderStep);
+                el.classList.toggle('done', currentIndex > idx);
+                el.classList.toggle('active', currentIndex === idx);
+            });
+        }
+        function hidePedidosPageLoader() {
+            updatePedidosPageLoader('graficos', 'Painel pronto', 100);
+            setTimeout(() => {
+                const loader = document.getElementById('pedidosPageLoader');
+                if (loader) loader.classList.add('done');
+            }, 250);
+        }
         // ==========================================================================
         // DADOS E SERVIDOR
         // ==========================================================================
         let carteiraData = []; // Store carteira data for comparison
         async function loadDataFromServer() {
+            updatePedidosPageLoader('dados', 'Buscando pedidos e carteira', 42);
             try {
                 // 1. Fetch Custom Weights
                 try {
@@ -4057,6 +4130,7 @@
                 const resCarteira = carteiraFetch.status === 'fulfilled' ? carteiraFetch.value : null;
                 if (!resPedidos || !resPedidos.ok) throw new Error('Erro na API Pedidos');
                 allData = await resPedidos.json();
+                updatePedidosPageLoader('graficos', 'Montando indicadores e graficos', 78);
                 if (resCarteira && resCarteira.ok) {
                     carteiraData = await resCarteira.json();
                 } else {
@@ -4072,6 +4146,7 @@
                         if (chartDaily) chartDaily.resize();
                         if (chartPending) chartPending.resize();
                         if (chartHistorical) chartHistorical.resize();
+                        hidePedidosPageLoader();
                     });
                 }, 150);
                 // Populate material suggestions for autocomplete
@@ -4112,6 +4187,7 @@
                 }
             } catch (e) {
                 console.error(e);
+                hidePedidosPageLoader();
                 showToast("Erro", "Falha ao carregar dados do servidor.", "danger");
             }
         }
@@ -7498,6 +7574,7 @@ function flashConcentracaoBar(barIndex) {
             }
         });
         document.addEventListener('DOMContentLoaded', async () => {
+            updatePedidosPageLoader('estrutura', 'Preparando estrutura da tela', 20);
             document.addEventListener('contextmenu', (e) => {
                 e.preventDefault();
             });
