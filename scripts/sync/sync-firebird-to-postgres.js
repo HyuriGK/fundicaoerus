@@ -31,6 +31,29 @@ function formatarData(data) {
     return d.toISOString().split('T')[0];
 }
 
+function obterJanelaMovelFaturamento() {
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+
+    const fim = new Date(hoje);
+    fim.setDate(fim.getDate() + 1);
+
+    const inicio = new Date(hoje);
+    inicio.setDate(inicio.getDate() - 60);
+
+    const limiteInicial = new Date('2026-01-01T00:00:00');
+    if (inicio < limiteInicial) {
+        inicio.setTime(limiteInicial.getTime());
+    }
+
+    return {
+        inicio,
+        fim,
+        inicioSql: formatarData(inicio),
+        fimSql: formatarData(fim)
+    };
+}
+
 function chunkArray(myArray, chunk_size) {
     var index = 0;
     var arrayLength = myArray.length;
@@ -96,7 +119,7 @@ async function criarTabelasPostgres() {
 // SINCRONIZAR FATURAMENTO DIÁRIO
 // =========================================================
 
-async function sincronizarFaturamentoDiario() {
+async function sincronizarFaturamentoDiario(janela) {
     console.log('\n📊 Reconstruindo faturamento diário (No PostgreSQL)...');
     
     // Agora fazemos a agregação diretamente no PostgreSQL baseado na tabela de detalhes já sincronizada
@@ -104,8 +127,8 @@ async function sincronizarFaturamentoDiario() {
     try {
         await pool.query(`
             DELETE FROM faturamento_diario
-            WHERE data >= '2026-01-01' AND data < '2027-01-01'
-        `);
+            WHERE data >= $1 AND data < $2
+        `, [janela.inicioSql, janela.fimSql]);
         await pool.query(`
             WITH agregados AS (
                 SELECT 
@@ -143,7 +166,7 @@ async function sincronizarFaturamentoDiario() {
 // SINCRONIZAR DETALHADO (Para Modal de Registros)
 // =========================================================
 
-async function sincronizarDetalhado(fbDb) {
+async function sincronizarDetalhado(fbDb, janela) {
     console.log('\n📝 Sincronizando registros detalhados (Notas + Itens)...');
 
     // Tabela detalhada que o faturamento-neon.js já espera
@@ -213,9 +236,9 @@ async function sincronizarDetalhado(fbDb) {
 
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_fat_fb_data ON faturamento_firebird(data_faturamento DESC)`);
 
-    const dataInicio = new Date('2026-01-01');
-    const dataFim = '2027-01-01';
-    console.log(`📅 Janela de Sincronização: ${dataInicio.toISOString().split('T')[0]} até hoje.`);
+    const dataInicio = janela.inicio;
+    const dataFim = janela.fim;
+    console.log(`📅 Janela de Sincronização: ${janela.inicioSql} até ${janela.fimSql}.`);
 
     const query = `
     SELECT
@@ -293,13 +316,13 @@ async function sincronizarDetalhado(fbDb) {
                 `, [vendedor.notaFiscal, vendedor.serie, vendedor.vendedorCodigo, vendedor.vendedorNome]);
             }
 
-            // DELETE de 2026 + reinsercao: preserva 2025 congelado e reespelha o ano corrente.
+            // DELETE da janela movel + reinsercao: preserva o historico fora dos ultimos 60 dias.
             // Se a busca no Firebird falhar, esta limpeza nao roda e o Neon fica intacto.
-            console.log('  Limpando faturamento_firebird apenas de 2026...');
+            console.log(`  Limpando faturamento_firebird de ${janela.inicioSql} ate ${janela.fimSql}...`);
             await pool.query(`
                 DELETE FROM faturamento_firebird
-                WHERE data_faturamento >= '2026-01-01' AND data_faturamento < '2027-01-01'
-            `);
+                WHERE data_faturamento >= $1 AND data_faturamento < $2
+            `, [janela.inicioSql, janela.fimSql]);
 
 
             // BUSCAR PREFERÊNCIAS DE EXCLUSÃO (Tabela correta: faturamento_firebird_preferencias)
@@ -483,8 +506,9 @@ async function sincronizar() {
 
             try {
                 // Sincronizar todos os dados - Prioridade para o Detalhado (faturamentos.html)
-                await sincronizarDetalhado(fbDb);
-                await sincronizarFaturamentoDiario(); // Agora no Postgres
+                const janelaFaturamento = obterJanelaMovelFaturamento();
+                await sincronizarDetalhado(fbDb, janelaFaturamento);
+                await sincronizarFaturamentoDiario(janelaFaturamento); // Agora no Postgres
                 await sincronizarEstatisticas();      // Agora no Postgres
 
                 console.log('\n' + '='.repeat(60));
