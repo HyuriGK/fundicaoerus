@@ -167,7 +167,7 @@
             const loading = !domReady || pendingRequests > 0;
             const target = loading ? 70 : 94;
             const next = progress + Math.max(0.12, (target - progress) * 0.045);
-            progress = loading ? Math.min(70, next) : Math.min(94, next);
+            progress = loading ? Math.max(progress, Math.min(70, next)) : Math.max(progress, Math.min(94, next));
             if (pendingRequests > 0) updateLoader('dados', 'Carregando dados', progress);
             else if (domReady) {
                 updateLoader('painel', progress >= 70 ? 'Finalizando painel' : 'Montando painel', progress);
