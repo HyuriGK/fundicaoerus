@@ -7,6 +7,7 @@
     let progress = 8;
     let hideTimer = null;
     let forcedDone = false;
+    let slowProgressTimer = null;
     const startedAt = Date.now();
     const minVisibleMs = 650;
     const maxVisibleMs = 9000;
@@ -98,13 +99,28 @@
 
     const updateLoader = (step, textValue, nextProgress) => {
         if (!loaderEl || loaderEl.classList.contains('fade-out')) return;
-        progress = Math.max(progress, Math.min(100, nextProgress || progress));
+        const maxProgress = forcedDone ? 100 : 94;
+        progress = Math.max(progress, Math.min(maxProgress, nextProgress || progress));
         const fill = document.getElementById('loader-progress-fill');
         const text = document.getElementById('loader-text');
         if (fill) fill.style.width = progress + '%';
         if (text && textValue) text.innerText = textValue;
         const stepProgress = step === 'estrutura' ? 18 : step === 'dados' ? 50 : 84;
         setStepState(Math.max(progress, stepProgress));
+    };
+
+    const startSlowProgress = () => {
+        if (slowProgressTimer) return;
+        slowProgressTimer = setInterval(() => {
+            if (!loaderEl || loaderEl.classList.contains('fade-out')) {
+                clearInterval(slowProgressTimer);
+                slowProgressTimer = null;
+                return;
+            }
+            if (progress >= 70 && progress < 94) {
+                updateLoader('painel', 'Finalizando painel', Math.min(94, progress + 1));
+            }
+        }, 1000);
     };
 
     const hideLoader = () => {
@@ -114,6 +130,10 @@
             if (!loaderEl) return;
             loaderEl.classList.add('fade-out');
             document.body.style.overflow = '';
+            if (slowProgressTimer) {
+                clearInterval(slowProgressTimer);
+                slowProgressTimer = null;
+            }
             setTimeout(() => {
                 if (loaderEl) loaderEl.remove();
                 loaderEl = null;
@@ -144,15 +164,18 @@
     const startLoading = (loaderEl) => {
         const update = () => {
             if (!loaderEl || loaderEl.classList.contains('fade-out')) return;
-            const target = pendingRequests > 0 ? 82 : domReady ? 94 : 34;
-            progress += Math.max(0.15, (target - progress) * 0.045);
+            const loading = !domReady || pendingRequests > 0;
+            const target = loading ? 70 : 94;
+            const next = progress + Math.max(0.12, (target - progress) * 0.045);
+            progress = loading ? Math.min(70, next) : Math.min(94, next);
             if (pendingRequests > 0) updateLoader('dados', 'Carregando dados', progress);
-            else if (domReady) updateLoader('painel', 'Montando painel', progress);
+            else if (domReady) {
+                updateLoader('painel', progress >= 70 ? 'Finalizando painel' : 'Montando painel', progress);
+                if (progress >= 70) startSlowProgress();
+            }
             else updateLoader('estrutura', 'Preparando estrutura', progress);
 
-            if (progress < 99) {
-                requestAnimationFrame(update);
-            }
+            requestAnimationFrame(update);
         };
 
         requestAnimationFrame(update);
