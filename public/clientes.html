@@ -4772,6 +4772,7 @@ function renderClientSummary(client) {
     const rows = getClientSummaryRows(client);
     const dates = rows.map(item => parseFatDateLocal(item.data)).filter(d => d && !isNaN(d)).sort((a, b) => a - b);
     const firstDate = dates.length ? dates[0] : null;
+    const vendedorFaturamento = getClientBillingVendor(rows);
 
     document.getElementById('clientSummaryFields').innerHTML = [
         ['Razão social', client.razaoSocial],
@@ -4779,6 +4780,7 @@ function renderClientSummary(client) {
         ['Código', client.codigo],
         ['Status', client.bloqueado ? 'Bloqueado' : client.ativo ? 'Ativo' : 'Inativo'],
         ['CNPJ', client.cnpjCpf],
+        ['Vendedor faturamento', vendedorFaturamento],
         ['Responsável comercial', client.responsavelComercial],
         ['Contato', client.contato],
         ['Telefone principal', client.telefone1],
@@ -4801,6 +4803,16 @@ function renderClientSummary(client) {
 
     setupClientSummarySelectors(rows);
     renderClientSummaryCharts();
+}
+
+function getClientBillingVendor(rows) {
+    const sorted = [...(rows || [])].sort((a, b) => {
+        const da = parseFatDateLocal(a.data);
+        const db = parseFatDateLocal(b.data);
+        return (db?.getTime() || 0) - (da?.getTime() || 0);
+    });
+    const row = sorted.find(item => String(item.vendedorNome || '').trim());
+    return row ? String(row.vendedorNome).trim().toUpperCase() : 'SEM VENDEDOR';
 }
 
 function updateClientBlockEditorState() {
