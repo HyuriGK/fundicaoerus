@@ -317,6 +317,21 @@
             border:1px solid var(--border-subtle);border-radius:14px;background:rgba(255,255,255,0.025);
             min-height:0;display:flex;flex-direction:column;overflow:hidden;
         }
+        .password-category-panel{padding:16px;border-bottom:1px solid var(--border-subtle);background:linear-gradient(180deg,rgba(251,191,36,0.035),rgba(255,255,255,0.01))}
+        .password-category-title{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+        .password-category-title strong{font-size:0.72rem;text-transform:uppercase;letter-spacing:0.1em;color:#fbbf24}
+        .password-category-title span{font-size:0.72rem;color:var(--text-muted)}
+        .password-category-grid{display:grid;grid-template-columns:repeat(5,minmax(112px,1fr));gap:10px}
+        .password-category-card{
+            min-height:86px;border:1px solid var(--border-subtle);border-radius:12px;background:rgba(255,255,255,0.035);
+            padding:12px;display:flex;flex-direction:column;justify-content:space-between;gap:10px;cursor:pointer;
+            transition:background 0.18s,border-color 0.18s,transform 0.18s;color:var(--text-main);
+        }
+        .password-category-card:hover,.password-category-card.active{border-color:var(--cat-color);background:linear-gradient(180deg,var(--cat-bg),rgba(255,255,255,0.025));transform:translateY(-1px)}
+        .password-category-main{display:flex;align-items:center;gap:9px;min-width:0}
+        .password-category-icon{width:30px;height:30px;border-radius:9px;display:flex;align-items:center;justify-content:center;background:var(--cat-bg);color:var(--cat-color);border:1px solid var(--cat-border)}
+        .password-category-name{font-size:0.82rem;font-weight:850;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .password-category-count{font-family:var(--font-mono);font-size:1.15rem;font-weight:900;color:#fff}
         .password-toolbar{padding:14px;display:flex;gap:10px;border-bottom:1px solid var(--border-subtle);align-items:center}
         .password-search,.password-input,.password-select,.password-textarea{
             width:100%;background:rgba(255,255,255,0.045);border:1px solid var(--border-subtle);
@@ -329,6 +344,21 @@
         .password-search:focus,.password-input:focus,.password-select:focus,.password-textarea:focus{border-color:rgba(251,191,36,0.45)}
         .password-select option{background:#18181b}
         .password-list{padding:12px;overflow:auto;display:grid;gap:10px}
+        .password-table{width:100%;border-collapse:separate;border-spacing:0 8px}
+        .password-table th{
+            padding:0 10px 6px;text-align:left;font-size:0.66rem;text-transform:uppercase;letter-spacing:0.08em;
+            color:#71717a;font-weight:850;border-bottom:1px solid var(--border-subtle);
+        }
+        .password-table td{
+            padding:10px;background:rgba(255,255,255,0.035);border-top:1px solid var(--border-subtle);border-bottom:1px solid var(--border-subtle);
+            color:var(--text-main);font-size:0.78rem;vertical-align:middle;
+        }
+        .password-table tr{cursor:pointer}
+        .password-table tr:hover td,.password-table tr.active td{background:rgba(251,191,36,0.06);border-color:rgba(251,191,36,0.38)}
+        .password-table td:first-child{border-left:1px solid var(--border-subtle);border-radius:10px 0 0 10px}
+        .password-table td:last-child{border-right:1px solid var(--border-subtle);border-radius:0 10px 10px 0}
+        .password-cell-main{font-weight:800;color:#fff;max-width:240px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .password-cell-muted{color:var(--text-muted);max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
         .password-card{
             border:1px solid var(--border-subtle);border-radius:12px;background:rgba(255,255,255,0.035);
             padding:13px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;cursor:pointer;
@@ -356,6 +386,7 @@
         .password-empty i{display:block;font-size:2rem;opacity:0.25;margin-bottom:10px}
         @media(max-width:900px){
             .password-shell{grid-template-columns:1fr}
+            .password-category-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
             .password-form-panel{min-height:auto}
             .header-filters{flex-wrap:wrap;justify-content:flex-end}
         }
@@ -741,8 +772,8 @@
             <div class="modal-head-left">
                 <div class="modal-chamado-titulo"><i class="fa-solid fa-key" style="color:#fbbf24;margin-right:8px"></i>Gestão de Senhas TI</div>
                 <div class="modal-badges">
-                    <span class="badge badge-media"><i class="fa-solid fa-shield-halved"></i> Programas</span>
-                    <span class="badge badge-aberto"><i class="fa-solid fa-desktop"></i> Computadores</span>
+                    <span class="badge badge-media"><i class="fa-solid fa-layer-group"></i> Categorias</span>
+                    <span class="badge badge-aberto"><i class="fa-solid fa-table-list"></i> Listagem por card</span>
                 </div>
             </div>
             <button class="modal-close" onclick="closePasswordModal()"><i class="fa-solid fa-xmark"></i></button>
@@ -750,6 +781,13 @@
         <div class="modal-body">
             <div class="password-shell">
                 <section class="password-list-panel">
+                    <div class="password-category-panel">
+                        <div class="password-category-title">
+                            <strong>Categorias</strong>
+                            <span id="passwordCategoryHint">Selecione uma categoria</span>
+                        </div>
+                        <div class="password-category-grid" id="passwordCategoryGrid"></div>
+                    </div>
                     <div class="password-toolbar">
                         <input class="password-search" id="passwordSearch" placeholder="Buscar por programa, computador, usuário..." oninput="renderPasswords()">
                         <button class="password-action" onclick="resetPasswordForm()" title="Novo registro"><i class="fa-solid fa-plus"></i></button>
@@ -762,10 +800,10 @@
                     <div class="password-field">
                         <label>Tipo</label>
                         <select class="password-select" id="passwordTipo">
-                            <option value="programa">Programa</option>
+                            <option value="anydesk">Anydesk</option>
+                            <option value="servidor">Servidor</option>
                             <option value="computador">Computador</option>
-                            <option value="rede">Rede / Servidor</option>
-                            <option value="email">E-mail</option>
+                            <option value="email">Email</option>
                             <option value="outro">Outro</option>
                         </select>
                     </div>
@@ -858,6 +896,7 @@
     let currentId = null;
     let allPasswords = [];
     let selectedPasswordId = null;
+    let activePasswordCategory = 'anydesk';
     let currentAdminFeature = null;
 
     function switchTiView(view) {
@@ -1218,15 +1257,71 @@
         }
     }
 
+    const passwordCategories = [
+        { id: 'anydesk', label: 'Anydesk', icon: 'fa-display', color: '#fbbf24', tipos: ['programa', 'anydesk'] },
+        { id: 'servidores', label: 'Servidores', icon: 'fa-server', color: '#22c55e', tipos: ['rede', 'servidor'] },
+        { id: 'computadores', label: 'Computadores', icon: 'fa-desktop', color: '#06b6d4', tipos: ['computador'] },
+        { id: 'emails', label: 'Emails', icon: 'fa-envelope', color: '#a78bfa', tipos: ['email'] },
+        { id: 'outros', label: 'Outros', icon: 'fa-folder', color: '#94a3b8', tipos: ['outro'] }
+    ];
+
+    function getPasswordCategoryId(p) {
+        const tipo = String(p?.tipo || '').trim().toLowerCase();
+        const titulo = String(p?.titulo || '').trim().toLowerCase();
+        const sistema = String(p?.sistema || '').trim().toLowerCase();
+        const texto = `${tipo} ${titulo} ${sistema}`;
+        if (texto.includes('anydesk') || tipo === 'programa') return 'anydesk';
+        if (tipo === 'rede' || tipo === 'servidor' || texto.includes('servidor')) return 'servidores';
+        if (tipo === 'computador') return 'computadores';
+        if (tipo === 'email') return 'emails';
+        return 'outros';
+    }
+
+    function renderPasswordCategories() {
+        const grid = document.getElementById('passwordCategoryGrid');
+        if (!grid) return;
+        const counts = passwordCategories.reduce((acc, cat) => ({ ...acc, [cat.id]: 0 }), {});
+        allPasswords.forEach(p => { counts[getPasswordCategoryId(p)] = (counts[getPasswordCategoryId(p)] || 0) + 1; });
+        grid.innerHTML = passwordCategories.map(cat => {
+            const active = activePasswordCategory === cat.id ? 'active' : '';
+            return `
+                <button class="password-category-card ${active}" type="button" onclick="selectPasswordCategory('${cat.id}')" style="--cat-color:${cat.color};--cat-bg:${cat.color}18;--cat-border:${cat.color}55">
+                    <div class="password-category-main">
+                        <span class="password-category-icon"><i class="fa-solid ${cat.icon}"></i></span>
+                        <span class="password-category-name">${cat.label}</span>
+                    </div>
+                    <span class="password-category-count">${counts[cat.id] || 0}</span>
+                </button>
+            `;
+        }).join('');
+        const selected = passwordCategories.find(cat => cat.id === activePasswordCategory);
+        const hint = document.getElementById('passwordCategoryHint');
+        if (hint) hint.textContent = selected ? `${selected.label} selecionado` : 'Selecione uma categoria';
+    }
+
+    function selectPasswordCategory(category) {
+        activePasswordCategory = category;
+        selectedPasswordId = null;
+        document.getElementById('passwordId').value = '';
+        document.getElementById('passwordTipo').value = passwordTypeForCategory(category);
+        renderPasswords();
+    }
+
+    function passwordTypeForCategory(category) {
+        return ({ anydesk:'anydesk', servidores:'servidor', computadores:'computador', emails:'email', outros:'outro' })[category] || 'outro';
+    }
+
     function renderPasswords() {
         const list = document.getElementById('passwordList');
         const q = (document.getElementById('passwordSearch').value || '').toLowerCase();
-        const data = allPasswords.filter(p => [
+        renderPasswordCategories();
+        const data = allPasswords.filter(p => getPasswordCategoryId(p) === activePasswordCategory).filter(p => [
             p.titulo, p.tipo, p.sistema, p.usuario_acesso, p.computador, p.url, p.observacoes
         ].some(v => String(v || '').toLowerCase().includes(q)));
 
         if (!data.length) {
-            list.innerHTML = `<div class="password-empty"><i class="fa-solid fa-key"></i>Nenhuma senha registrada.</div>`;
+            const selected = passwordCategories.find(cat => cat.id === activePasswordCategory);
+            list.innerHTML = `<div class="password-empty"><i class="fa-solid fa-key"></i>Nenhuma senha registrada em ${escapeHtml(selected?.label || 'categoria')}.</div>`;
             return;
         }
 
@@ -1248,14 +1343,59 @@
         `).join('');
     }
 
+    function renderPasswords() {
+        const list = document.getElementById('passwordList');
+        const q = (document.getElementById('passwordSearch').value || '').toLowerCase();
+        renderPasswordCategories();
+        const data = allPasswords.filter(p => getPasswordCategoryId(p) === activePasswordCategory).filter(p => [
+            p.titulo, p.tipo, p.sistema, p.usuario_acesso, p.computador, p.url, p.observacoes
+        ].some(v => String(v || '').toLowerCase().includes(q)));
+
+        if (!data.length) {
+            const selected = passwordCategories.find(cat => cat.id === activePasswordCategory);
+            list.innerHTML = `<div class="password-empty"><i class="fa-solid fa-key"></i>Nenhuma senha registrada em ${escapeHtml(selected?.label || 'categoria')}.</div>`;
+            return;
+        }
+
+        list.innerHTML = `
+            <table class="password-table">
+                <thead>
+                    <tr>
+                        <th>Titulo</th>
+                        <th>Sistema</th>
+                        <th>Usuario</th>
+                        <th>Computador</th>
+                        <th style="text-align:center">Acoes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${data.map(p => `
+                        <tr class="${selectedPasswordId === p.id ? 'active' : ''}" onclick="editPasswordRecord(${p.id})">
+                            <td><div class="password-cell-main">${escapeHtml(p.titulo)}</div></td>
+                            <td><div class="password-cell-muted">${escapeHtml(p.sistema || '-')}</div></td>
+                            <td><div class="password-cell-muted">${escapeHtml(p.usuario_acesso || '-')}</div></td>
+                            <td><div class="password-cell-muted">${escapeHtml(p.computador || '-')}</div></td>
+                            <td>
+                                <div class="password-actions" style="justify-content:center">
+                                    <button class="password-action" onclick="event.stopPropagation();copyPasswordValue('${p.id}','usuario')" title="Copiar usuario"><i class="fa-solid fa-user-check"></i></button>
+                                    <button class="password-action" onclick="event.stopPropagation();copyPasswordValue('${p.id}','senha')" title="Copiar senha"><i class="fa-solid fa-copy"></i></button>
+                                </div>
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
+    }
+
     function tipoPasswordLabel(tipo) {
-        return ({ programa:'Programa', computador:'Computador', rede:'Rede', email:'E-mail', outro:'Outro' })[tipo] || tipo || 'Programa';
+        return ({ programa:'Anydesk', anydesk:'Anydesk', computador:'Computador', rede:'Servidor', servidor:'Servidor', email:'Email', outro:'Outro' })[tipo] || tipo || 'Anydesk';
     }
 
     function resetPasswordForm() {
         selectedPasswordId = null;
         document.getElementById('passwordId').value = '';
-        document.getElementById('passwordTipo').value = 'programa';
+        document.getElementById('passwordTipo').value = passwordTypeForCategory(activePasswordCategory);
         document.getElementById('passwordTitulo').value = '';
         document.getElementById('passwordSistema').value = '';
         document.getElementById('passwordComputador').value = '';
@@ -1273,7 +1413,7 @@
         if (!p) return;
         selectedPasswordId = p.id;
         document.getElementById('passwordId').value = p.id;
-        document.getElementById('passwordTipo').value = p.tipo || 'programa';
+        document.getElementById('passwordTipo').value = passwordTypeForCategory(getPasswordCategoryId(p));
         document.getElementById('passwordTitulo').value = p.titulo || '';
         document.getElementById('passwordSistema').value = p.sistema || '';
         document.getElementById('passwordComputador').value = p.computador || '';
