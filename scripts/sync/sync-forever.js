@@ -123,7 +123,7 @@ const MOLDAGEM_WAIT = 30 * 60 * 1000; // 30 minutos
 let moldagemNextAt  = null;
 let fusaoNextAt     = null;
 
-const DELAY_MS = 10000;
+const DELAY_MS = 2000;
 const getW = () => Math.max(80, (process.stdout.columns || 120)) - 2; // dynamic terminal width
 
 
