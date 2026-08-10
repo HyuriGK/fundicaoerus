@@ -122,7 +122,7 @@ async function syncEmissoes() {
             LEFT JOIN PRODUTO_MATERIAL PM ON P.PRODUTO_PPR = PM.PRODUTO_PMT
             LEFT JOIN MATERIAL M ON PM.MAT_ID_PMT = M.ID_MAT
             LEFT JOIN PEDIDO_PRODUTO_CALCULO_PRECO PC ON P.CODIGO_PPR = PC.PPR_CODIGO_PPRC AND P.ANO_PPR = PC.PPR_ANO_PPRC AND P.ITEM_PPR = PC.PPR_ITEM_PPRC AND P.EMPRESA_PPR = PC.PPR_EMPRESA_PPRC
-            WHERE EXTRACT(YEAR FROM D.EMISSAO_PED) IN (2025, 2026)
+            WHERE EXTRACT(YEAR FROM D.EMISSAO_PED) = 2026
             AND D.STATUS_PED <> 'C'
             AND UPPER(D.STATUS_DESC_PED) <> 'CANCELADO'
         `;
@@ -138,7 +138,7 @@ async function syncEmissoes() {
                 SELECT PP.PPR_EMPRESA_PCPR, PP.PPR_ANO_PCPR, PP.PPR_CODIGO_PCPR, PP.PPR_ITEM_PCPR, PP.PCP_CODIGO_PCPR
                 FROM PRODUCAO_PEDIDO PP
                 JOIN PRODUCAO PR ON PR.CODIGO_PCP = PP.PCP_CODIGO_PCPR AND PR.EMPRESA_PCP = PP.PPR_EMPRESA_PCPR
-                WHERE PP.PPR_ANO_PCPR IN (2025, 2026)
+                WHERE PP.PPR_ANO_PCPR = 2026
                   AND PR.STATUS_PCP NOT IN ('C', 'E')
             `;
             const links = await fbQuery(db, linksQuery, 'vinculos-pedido-op');
@@ -233,7 +233,7 @@ async function syncEmissoes() {
                         SELECT CODIGO_PCS, SETOR_PCS, SUM(QUANTIDADE_PCS) as TOTAL, SUM(DQUANTIDADE_REFUGO_PCS) as TOTAL_REFUGO
                         FROM PRODUCAO_SETOR
                         WHERE CODIGO_PCS IN (${batchIds.join(',')})
-                          AND DATA_PCS >= '2025-01-01' AND DATA_PCS <= '2026-12-31'
+                          AND DATA_PCS >= '2026-01-01' AND DATA_PCS <= '2026-12-31'
                         GROUP BY 1, 2
                     `;
                     const pointingRows = await fbQuery(db, pointingQuery, 'apontamentos');
@@ -369,7 +369,7 @@ async function syncEmissoes() {
             
             const deleteRes = await pgClient.query(`
                 DELETE FROM firebird_sync_emissoes
-                WHERE (data->>'ANO_PPR')::text IN ('2025', '2026')
+                WHERE (data->>'ANO_PPR')::text = '2026'
                 AND sync_key <> ALL($1::text[])
             `, [validKeys]);
             
