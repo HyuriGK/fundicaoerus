@@ -360,7 +360,7 @@ router.get('/resumo-dashboard', async (req, res) => {
                         WHEN f.gera_financeiro = 'N' THEN false
                         ELSE NOT COALESCE(p.excluido, f.excluido_manualmente, false)
                     END AS fat_peso,
-                    COALESCE(f.peso_un, 0) * COALESCE(f.quantidade, 0) AS peso_total
+                    COALESCE(NULLIF(f.peso_un, 0), pc.peso, 0) * COALESCE(f.quantidade, 0) AS peso_total
                 FROM faturamento_firebird f
                 LEFT JOIN faturamento_firebird_preferencias p
                     ON p.nota_fiscal = f.nota_fiscal
@@ -368,6 +368,8 @@ router.get('/resumo-dashboard', async (req, res) => {
                     AND COALESCE(p.pedido, '') = COALESCE(TRIM(f.pedido), '')
                     AND p.data_faturamento = f.data_faturamento
                     AND p.quantidade = f.quantidade
+                LEFT JOIN pesos_customizados pc
+                    ON pc.codigo = TRIM(f.codigo_item)
                 LEFT JOIN fat_peso_overrides o
                     ON o.item_key = CONCAT(
                         f.nota_fiscal,
