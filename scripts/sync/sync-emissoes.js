@@ -21,7 +21,7 @@ const pgPool = new Pool({
 
 // Timeout por query do Firebird — impede que uma query sem retorno congele a sincronização
 const FB_QUERY_TIMEOUT_MS = 180000;
-function fbQuery(db, sql, label) {
+function fbQuery(db, sql, label, params = []) {
     return new Promise((resolve, reject) => {
         let done = false;
         const t = setTimeout(() => {
@@ -29,13 +29,41 @@ function fbQuery(db, sql, label) {
             done = true;
             reject(new Error(`Timeout (${FB_QUERY_TIMEOUT_MS / 1000}s) na query Firebird: ${label}`));
         }, FB_QUERY_TIMEOUT_MS);
-        db.query(sql, (err, res) => {
+        db.query(sql, params, (err, res) => {
             if (done) return;
             done = true;
             clearTimeout(t);
             if (err) reject(err); else resolve(res);
         });
     });
+}
+
+function formatarData(data) {
+    if (!data) return null;
+    return data.toISOString().split('T')[0];
+}
+
+function obterJanelaMovelEmissoes() {
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+
+    const fim = new Date(hoje);
+    fim.setDate(fim.getDate() + 1);
+
+    const inicio = new Date(hoje);
+    inicio.setDate(inicio.getDate() - 60);
+
+    const limiteInicial = new Date('2026-01-01T00:00:00');
+    if (inicio < limiteInicial) {
+        inicio.setTime(limiteInicial.getTime());
+    }
+
+    return {
+        inicio,
+        fim,
+        inicioSql: formatarData(inicio),
+        fimSql: formatarData(fim)
+    };
 }
 
 function chunkArray(items, size) {
@@ -45,7 +73,8 @@ function chunkArray(items, size) {
 }
 
 async function syncEmissoes() {
-    console.log('🚀 Iniciando sincronização de EMISSÕES (Histórico 2025/2026)...');
+    const janela = obterJanelaMovelEmissoes();
+    console.log(`🚀 Iniciando sincronização de EMISSÕES (${janela.inicioSql} até ${janela.fimSql})...`);
     const startTime = Date.now();
 
     let pgClient;
@@ -122,26 +151,32 @@ async function syncEmissoes() {
             LEFT JOIN PRODUTO_MATERIAL PM ON P.PRODUTO_PPR = PM.PRODUTO_PMT
             LEFT JOIN MATERIAL M ON PM.MAT_ID_PMT = M.ID_MAT
             LEFT JOIN PEDIDO_PRODUTO_CALCULO_PRECO PC ON P.CODIGO_PPR = PC.PPR_CODIGO_PPRC AND P.ANO_PPR = PC.PPR_ANO_PPRC AND P.ITEM_PPR = PC.PPR_ITEM_PPRC AND P.EMPRESA_PPR = PC.PPR_EMPRESA_PPRC
-            WHERE EXTRACT(YEAR FROM D.EMISSAO_PED) = 2026
+            WHERE D.EMISSAO_PED >= ?
+            AND D.EMISSAO_PED < ?
             AND D.STATUS_PED <> 'C'
             AND UPPER(D.STATUS_DESC_PED) <> 'CANCELADO'
         `;
 
-        const results = await fbQuery(db, query, 'emissoes-principal');
+        const results = await fbQuery(db, query, 'emissoes-principal', [janela.inicio, janela.fim]);
 
         console.log(`📊 ${results.length} registros de emissão encontrados.`);
 
         if (results.length > 0) {
             // 1. BUSCAR MAPA DE TODOS OS VÍNCULOS PEDIDO -> OP
             console.log('🔗 Mapeando todos os vínculos Pedido -> OP...');
-            const linksQuery = `
-                SELECT PP.PPR_EMPRESA_PCPR, PP.PPR_ANO_PCPR, PP.PPR_CODIGO_PCPR, PP.PPR_ITEM_PCPR, PP.PCP_CODIGO_PCPR
-                FROM PRODUCAO_PEDIDO PP
-                JOIN PRODUCAO PR ON PR.CODIGO_PCP = PP.PCP_CODIGO_PCPR AND PR.EMPRESA_PCP = PP.PPR_EMPRESA_PCPR
-                WHERE PP.PPR_ANO_PCPR = 2026
-                  AND PR.STATUS_PCP NOT IN ('C', 'E')
-            `;
-            const links = await fbQuery(db, linksQuery, 'vinculos-pedido-op');
+            const pedidoCodigos = [...new Set(results.map(r => Number(r.CODIGO_PPR)).filter(Number.isFinite))];
+            const links = [];
+            for (const pedidoBatch of chunkArray(pedidoCodigos, 500)) {
+                const linksQuery = `
+                    SELECT PP.PPR_EMPRESA_PCPR, PP.PPR_ANO_PCPR, PP.PPR_CODIGO_PCPR, PP.PPR_ITEM_PCPR, PP.PCP_CODIGO_PCPR
+                    FROM PRODUCAO_PEDIDO PP
+                    JOIN PRODUCAO PR ON PR.CODIGO_PCP = PP.PCP_CODIGO_PCPR AND PR.EMPRESA_PCP = PP.PPR_EMPRESA_PCPR
+                    WHERE PP.PPR_ANO_PCPR = 2026
+                      AND PP.PPR_CODIGO_PCPR IN (${pedidoBatch.join(',')})
+                      AND PR.STATUS_PCP NOT IN ('C', 'E')
+                `;
+                links.push(...await fbQuery(db, linksQuery, 'vinculos-pedido-op'));
+            }
 
             const linksMap = {};
             links.forEach(l => {
@@ -233,10 +268,10 @@ async function syncEmissoes() {
                         SELECT CODIGO_PCS, SETOR_PCS, SUM(QUANTIDADE_PCS) as TOTAL, SUM(DQUANTIDADE_REFUGO_PCS) as TOTAL_REFUGO
                         FROM PRODUCAO_SETOR
                         WHERE CODIGO_PCS IN (${batchIds.join(',')})
-                          AND DATA_PCS >= '2026-01-01' AND DATA_PCS <= '2026-12-31'
+                          AND DATA_PCS >= ? AND DATA_PCS < ?
                         GROUP BY 1, 2
                     `;
-                    const pointingRows = await fbQuery(db, pointingQuery, 'apontamentos');
+                    const pointingRows = await fbQuery(db, pointingQuery, 'apontamentos', [janela.inicio, janela.fim]);
 
                     pointingRows.forEach(row => {
                         if (!pointingsMap[row.CODIGO_PCS]) pointingsMap[row.CODIGO_PCS] = {};
@@ -363,15 +398,16 @@ async function syncEmissoes() {
                 process.stdout.write(`@PROG:EMISSÕES:${pct}%\n`);
             }
 
-            // 3. LIMPEZA DE REGISTROS DELETADOS NO ERP (Anos 2025/2026)
-            console.log('🧹 Limpando registros que não existem mais no ERP (Anos 2025/2026)...');
+            // 3. LIMPEZA DE REGISTROS DELETADOS NO ERP (apenas janela movel)
+            console.log(`🧹 Limpando registros que não existem mais no ERP (${janela.inicioSql} até ${janela.fimSql})...`);
             const validKeys = results.map(r => `${r.EMPRESA_PPR}-${r.ANO_PPR}-${r.CODIGO_PPR}-${r.ITEM_PPR}`);
             
             const deleteRes = await pgClient.query(`
                 DELETE FROM firebird_sync_emissoes
-                WHERE (data->>'ANO_PPR')::text = '2026'
-                AND sync_key <> ALL($1::text[])
-            `, [validKeys]);
+                WHERE NULLIF(data->>'DATA_EMISSAO_PEDIDO', '')::date >= $1::date
+                AND NULLIF(data->>'DATA_EMISSAO_PEDIDO', '')::date < $2::date
+                AND sync_key <> ALL($3::text[])
+            `, [janela.inicioSql, janela.fimSql, validKeys]);
             
             if (deleteRes.rowCount > 0) {
                 console.log(`🗑️ Removidos ${deleteRes.rowCount} registros órfãos do dashboard.`);
