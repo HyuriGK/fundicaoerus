@@ -465,6 +465,17 @@
         .native-admin-table th{position:sticky;top:0;z-index:1;background:#111113;color:#71717a;font-size:.66rem;font-weight:800;text-transform:uppercase;letter-spacing:.09em;text-align:left;padding:11px 13px;border-bottom:1px solid var(--border-subtle);white-space:nowrap}
         .native-admin-table td{padding:12px 13px;border-bottom:1px solid rgba(255,255,255,.04);font-size:.8rem;color:#d4d4d8;vertical-align:middle}
         .native-admin-table tr:hover td{background:rgba(255,255,255,.025)}
+        .native-task-table{table-layout:fixed;min-width:920px}
+        .native-task-table th:nth-child(1){width:170px}.native-task-table th:nth-child(3){width:92px;text-align:center}.native-task-table th:nth-child(4){width:108px;text-align:center}
+        .native-task-table td:nth-child(3),.native-task-table td:nth-child(4){text-align:center}
+        .native-task-copy{min-width:0;padding:2px 0}
+        .native-task-title{display:flex;align-items:center;gap:8px;color:#f4f4f5;font-size:.79rem;font-weight:850;line-height:1.3}
+        .native-task-priority{width:7px;height:7px;flex:0 0 7px;border-radius:50%;background:#71717a;box-shadow:0 0 0 3px rgba(113,113,122,.1)}
+        .native-task-priority.high{background:#ef4444;box-shadow:0 0 0 3px rgba(239,68,68,.1)}
+        .native-task-description{margin-top:5px;color:#8b8b95;font-size:.69rem;line-height:1.45}
+        .native-task-samples{display:flex;flex-direction:column;gap:3px;margin-top:8px;padding-left:15px;border-left:2px solid rgba(251,191,36,.22)}
+        .native-task-sample{color:#71717a;font-family:var(--font-mono);font-size:.62rem;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .native-task-count{min-width:30px;height:26px;display:inline-flex;align-items:center;justify-content:center;padding:0 8px;border-radius:6px;border:1px solid rgba(239,68,68,.22);background:rgba(239,68,68,.07);color:#fca5a5;font-family:var(--font-mono);font-size:.68rem;font-weight:900}
         .native-perm-table th,
         .native-perm-table td{border-right:1px solid rgba(255,255,255,.075);text-align:center}
         .native-perm-table th:first-child,
@@ -1086,10 +1097,20 @@
             if (!r.ok) throw new Error('Erro ao carregar tarefas');
             const json = await r.json();
             const tasks = Array.isArray(json.tasks) ? json.tasks : [];
-            adminContent(`<div class="native-admin-tablewrap"><table class="native-admin-table"><thead><tr><th>Setor</th><th>Descrição</th><th>Pendente</th><th>Ação</th></tr></thead><tbody>
-                ${tasks.length ? tasks.map(t => `<tr><td><span class="native-badge">${escapeHtml(t.sector)}</span></td><td>${escapeHtml(t.description)}</td><td>${t.count||0}</td><td><a class="native-btn warn" href="${escapeHtml(t.actionUrl||'#')}">Resolver</a></td></tr>`).join('') : '<tr><td colspan="4"><div class="native-empty">Tudo em dia.</div></td></tr>'}
+            adminContent(`<div class="native-admin-tablewrap"><table class="native-admin-table native-task-table"><thead><tr><th>Setor</th><th>Descrição</th><th>Pendente</th><th>Ação</th></tr></thead><tbody>
+                ${tasks.length ? tasks.map(t => `<tr><td><span class="native-badge">${escapeHtml(t.sector)}</span></td><td>${renderNativeTaskDescription(t)}</td><td><span class="native-task-count">${Number(t.count)||0}</span></td><td><a class="native-btn warn" href="${escapeHtml(t.actionUrl||'#')}"><i class="fa-solid fa-arrow-up-right-from-square"></i> Resolver</a></td></tr>`).join('') : '<tr><td colspan="4"><div class="native-empty">Tudo em dia.</div></td></tr>'}
             </tbody></table></div>`);
         } catch(e) { adminContent('<div class="native-empty">Erro ao carregar tarefas.</div>'); }
+    }
+
+    function renderNativeTaskDescription(task) {
+        const description = String(task.description || '').replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+        const samples = Array.isArray(task.samples) ? task.samples.slice(0, 2) : [];
+        return `<div class="native-task-copy">
+            <div class="native-task-title"><span class="native-task-priority ${task.priority === 'high' ? 'high' : ''}"></span>${escapeHtml(task.title || 'Pendência encontrada')}</div>
+            <div class="native-task-description">${escapeHtml(description || 'Este item precisa de revisão.')}</div>
+            ${samples.length ? `<div class="native-task-samples">${samples.map(sample => `<div class="native-task-sample"><i class="fa-regular fa-file-lines"></i> ${escapeHtml([sample.date, sample.code, sample.product].filter(Boolean).join(' · '))}</div>`).join('')}</div>` : ''}
+        </div>`;
     }
 
     async function loadNativePermissions() {

@@ -244,18 +244,18 @@ router.get('/', async (req, res) => {
                     LIMIT 2
                 `;
                 const sampleResult = await pool.query(sampleQuery, [row.setor]);
-                const samples = sampleResult.rows.map(r => `• ${r.data} - ${r.codigo_peca}: ${r.produto.substring(0, 30)}...`);
-                
-                let desc = `Existem ${count} registros sem peso definido no setor <strong>${row.setor}</strong>.`;
-                if (samples.length > 0) {
-                    desc += `<br><br><strong>Amostras:</strong><br>${samples.join('<br>')}`;
-                }
+                const samples = sampleResult.rows.map(r => ({
+                    date: r.data,
+                    code: r.codigo_peca,
+                    product: r.produto || ''
+                }));
 
                 tasks.push({
                     id: `zero-weight-prod-${row.setor.replace(/\s+/g, '-').toLowerCase()}`,
                     sector: row.setor,
                     title: `Pesos Zerados (Produção) - ${row.setor}`,
-                    description: desc,
+                    description: `${count} apontamentos estão sem peso unitário. Corrija o cadastro para normalizar os totais de produção e os indicadores do setor.`,
+                    samples,
                     actionUrl: `apontamentos_produtivos.html?filter=zero-weight&sector=${encodeURIComponent(row.setor)}`,
                     priority: 'high',
                     count: count
@@ -295,7 +295,7 @@ router.get('/', async (req, res) => {
                         id: 'zero-weight-pedidos',
                         sector: 'Comercial',
                         title: 'Pesos Zerados (Carteira)',
-                        description: `Existem <strong>${countP}</strong> itens na Carteira de Pedidos com peso unitário "0,00".<br>Isso afeta o cálculo do faturamento previsto.`,
+                        description: `${countP} itens da carteira estão com peso unitário zerado. Isso afeta o peso em aberto e o cálculo do faturamento previsto.`,
                         actionUrl: 'pedidos.html?filter=zero-weight',
                         priority: 'high',
                         count: countP
@@ -325,7 +325,7 @@ router.get('/', async (req, res) => {
                             id: `sync-delay-${sync.screen_name.toLowerCase()}`,
                             sector: 'Sincronização',
                             title: `Dados Desatualizados: ${sync.screen_name}`,
-                            description: `A sincronização de <strong>${sync.screen_name}</strong> está atrasada.<br>Última atualização: ${lastSync} (${Math.floor(sync.hours_diff)}h atrás).`,
+                            description: `Os dados não são atualizados há ${Math.floor(sync.hours_diff)} horas. Última sincronização concluída em ${lastSync}.`,
                             actionUrl: '#',
                             priority: 'high',
                             count: 1
