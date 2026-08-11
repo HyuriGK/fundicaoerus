@@ -27,6 +27,76 @@
         });
     };
 
+    const stableSurfaceSelector = [
+        '.kpi-card',
+        '.metric-card',
+        '.stat-card',
+        '.chart-panel',
+        '.chart-card',
+        '.chart-container',
+        '.chart-wrapper',
+        '.table-card',
+        '.table-container',
+        '.table-wrapper',
+        '.native-admin-tablewrap'
+    ].join(',');
+
+    const reserveSurfaceHeight = (el) => {
+        if (!el || !el.getBoundingClientRect || el.closest('#global-loader')) return;
+        const style = window.getComputedStyle(el);
+        if (style.display === 'none' || style.visibility === 'hidden') return;
+        const rect = el.getBoundingClientRect();
+        const maxHeight = Math.max(180, window.innerHeight * 0.9);
+        if (rect.height < 32 || rect.height > maxHeight) return;
+        el.style.setProperty('--erus-stable-min-height', `${Math.ceil(rect.height)}px`);
+        el.classList.add('erus-stable-surface');
+    };
+
+    const stabilizeSurfaces = (root = document) => {
+        if (root.matches && root.matches(stableSurfaceSelector)) reserveSurfaceHeight(root);
+        if (!root.querySelectorAll) return;
+        root.querySelectorAll(stableSurfaceSelector).forEach(reserveSurfaceHeight);
+    };
+
+    const unlockActionSize = (button) => {
+        if (!button || button.disabled || button.querySelector('.fa-spin, .spinner, [class*="loading"]')) return;
+        button.classList.remove('erus-action-size-locked');
+        button.style.removeProperty('--erus-action-width');
+        button.style.removeProperty('--erus-action-height');
+    };
+
+    const lockActionSize = (event) => {
+        const button = event.target.closest && event.target.closest('button, [role="button"]');
+        if (!button || button.closest('#global-loader')) return;
+        const rect = button.getBoundingClientRect();
+        if (rect.width < 24 || rect.height < 20) return;
+        button.style.setProperty('--erus-action-width', `${Math.ceil(rect.width)}px`);
+        button.style.setProperty('--erus-action-height', `${Math.ceil(rect.height)}px`);
+        button.classList.add('erus-action-size-locked');
+        setTimeout(() => unlockActionSize(button), 120);
+    };
+
+    const initLayoutStability = () => {
+        document.documentElement.classList.add('erus-layout-stability');
+        requestAnimationFrame(() => stabilizeSurfaces(document));
+        document.addEventListener('click', lockActionSize, true);
+
+        if (!window.MutationObserver) return;
+        new MutationObserver((mutations) => {
+            const addedRoots = new Set();
+            const changedButtons = new Set();
+            mutations.forEach((mutation) => {
+                mutation.addedNodes.forEach((node) => {
+                    if (node.nodeType === 1) addedRoots.add(node);
+                });
+                const button = mutation.target.closest && mutation.target.closest('button, [role="button"]');
+                if (button) changedButtons.add(button);
+            });
+            addedRoots.forEach(root => requestAnimationFrame(() => stabilizeSurfaces(root)));
+            changedButtons.forEach(button => setTimeout(() => unlockActionSize(button), 60));
+        }).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['disabled'] });
+    };
+
     const initAutocompleteGuard = () => {
         disableAutocomplete(document);
         if (!window.MutationObserver) return;
@@ -40,9 +110,13 @@
     };
 
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initAutocompleteGuard);
+        document.addEventListener('DOMContentLoaded', () => {
+            initAutocompleteGuard();
+            initLayoutStability();
+        });
     } else {
         initAutocompleteGuard();
+        initLayoutStability();
     }
 
     let pendingRequests = 0;
