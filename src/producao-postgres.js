@@ -6,6 +6,33 @@ const { logActivity } = require('./lib/logger');
 
 let paradasTableReady = false;
 let producaoClienteColumnReady = false;
+let kpiSnapshotsTableReady = false;
+
+async function ensureKpiSnapshotsTable() {
+    if (kpiSnapshotsTableReady) return;
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS kpi_screen_snapshots (
+            metric_key TEXT NOT NULL,
+            source_key TEXT NOT NULL,
+            context_key TEXT NOT NULL,
+            metric_label TEXT NOT NULL,
+            metric_value NUMERIC NOT NULL,
+            unit TEXT NOT NULL,
+            page_url TEXT NOT NULL,
+            updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (metric_key, source_key, context_key)
+        );
+        CREATE INDEX IF NOT EXISTS idx_kpi_screen_snapshots_updated_at
+            ON kpi_screen_snapshots (updated_at DESC);
+    `);
+    kpiSnapshotsTableReady = true;
+}
+
+function formatKpiTaskValue(value, unit) {
+    const number = Number(value || 0);
+    const digits = unit === '%' ? 2 : 2;
+    return `${number.toLocaleString('pt-BR', { minimumFractionDigits: digits, maximumFractionDigits: digits })} ${unit}`;
+}
 
 function getCommercialOwnerRestriction(req) {
     const role = String(req.user?.role || '').trim().toLowerCase();
@@ -205,6 +232,41 @@ router.get('/resumo-setores', async (req, res) => {
     }
 });
 
+router.post('/kpi-snapshot', async (req, res) => {
+    try {
+        await ensureKpiSnapshotsTable();
+        const metricKey = String(req.body.metricKey || '').trim();
+        const sourceKey = String(req.body.sourceKey || '').trim();
+        const contextKey = String(req.body.contextKey || '').trim();
+        const metricLabel = String(req.body.metricLabel || '').trim();
+        const unit = String(req.body.unit || '').trim();
+        const pageUrl = String(req.body.pageUrl || '').trim();
+        const metricValue = Number(req.body.value);
+        const allowedMetrics = ['carteira_peso', 'faturamento_peso', 'refugo_peso', 'refugo_percentual'];
+        if (!allowedMetrics.includes(metricKey) || !['index', 'original'].includes(sourceKey)) {
+            return res.status(400).json({ success: false, message: 'Métrica inválida.' });
+        }
+        if (!contextKey || contextKey.length > 40 || !metricLabel || !Number.isFinite(metricValue)) {
+            return res.status(400).json({ success: false, message: 'Snapshot inválido.' });
+        }
+        await pool.query(`
+            INSERT INTO kpi_screen_snapshots (
+                metric_key, source_key, context_key, metric_label, metric_value, unit, page_url, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+            ON CONFLICT (metric_key, source_key, context_key) DO UPDATE SET
+                metric_label = EXCLUDED.metric_label,
+                metric_value = EXCLUDED.metric_value,
+                unit = EXCLUDED.unit,
+                page_url = EXCLUDED.page_url,
+                updated_at = NOW()
+        `, [metricKey, sourceKey, contextKey, metricLabel.slice(0, 100), metricValue, unit.slice(0, 12), pageUrl.slice(0, 180)]);
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Erro ao registrar snapshot de KPI:', error);
+        res.status(500).json({ success: false, message: 'Erro ao registrar snapshot de KPI.' });
+    }
+});
+
 router.get('/', async (req, res) => {
     try {
         // 2. Verificar tarefas (registros com peso zero na tabela sincronizada - Agrupado por Setor)
@@ -303,6 +365,110 @@ router.get('/', async (req, res) => {
                 }
             } catch (errP) {
                 console.error('⚠️ Erro ao verificar pesos zerados na carteira:', errP.message);
+            }
+
+            // OPs sugeridas que ainda aguardam decisão do desenvolvedor
+            try {
+                const suggestedOpsResult = await pool.query(`
+                    SELECT
+                        e.sync_key,
+                        e.data->>'CODIGO_PPR' AS pedido,
+                        e.data->>'PRODUTO_PPR' AS codigo,
+                        e.data->>'NOME_PRODUTO_PPR' AS produto,
+                        e.data->>'OP_PCS' AS op
+                    FROM firebird_sync_emissoes e
+                    LEFT JOIN pedidos_op_links l ON l.sync_key = e.sync_key
+                    WHERE LOWER(COALESCE(e.data->>'LINK_STATUS', '')) = 'sugerido'
+                      AND COALESCE(e.data->>'OP_PCS', '') ~ '^[0-9]{1,4}$'
+                      AND COALESCE(e.data->>'STATUS_PPR', '') <> 'C'
+                      AND COALESCE(e.data->>'STATUS_PCP', '') NOT IN ('C', 'E', 'F')
+                      AND (
+                          COALESCE(CASE WHEN e.data->>'QUANTIDADE_PPR' ~ '^-?[0-9]+([.,][0-9]+)?$' THEN REPLACE(e.data->>'QUANTIDADE_PPR', ',', '.')::numeric END, 0)
+                          - COALESCE(CASE WHEN e.data->>'QUANTIDADE_FATURADA_PPR' ~ '^-?[0-9]+([.,][0-9]+)?$' THEN REPLACE(e.data->>'QUANTIDADE_FATURADA_PPR', ',', '.')::numeric END, 0)
+                          - COALESCE(CASE WHEN e.data->>'QUANTIDADE_DESISTENCIA_PPR' ~ '^-?[0-9]+([.,][0-9]+)?$' THEN REPLACE(e.data->>'QUANTIDADE_DESISTENCIA_PPR', ',', '.')::numeric END, 0)
+                      ) > 0
+                      AND (l.sync_key IS NULL OR l.status NOT IN ('confirmado', 'rejeitado', 'removido'))
+                      AND NOT EXISTS (
+                          SELECT 1
+                          FROM firebird_sync_pedidos op
+                          WHERE op.sync_key LIKE 'OP-%'
+                            AND op.data->>'OP_PCS' = e.data->>'OP_PCS'
+                            AND COALESCE(op.data->>'STATUS_PCP', '') IN ('C', 'E', 'F')
+                      )
+                    ORDER BY e.updated_at DESC
+                `);
+                if (suggestedOpsResult.rows.length) {
+                    const count = suggestedOpsResult.rows.length;
+                    tasks.push({
+                        id: 'pending-suggested-ops',
+                        sector: 'Pedidos / OP',
+                        title: 'OPs sugeridas aguardando validação',
+                        description: `${count} itens possuem uma OP sugerida que ainda precisa ser confirmada ou ignorada pelo desenvolvedor.`,
+                        samples: suggestedOpsResult.rows.slice(0, 2).map(row => ({
+                            date: `Pedido ${row.pedido || '-'}`,
+                            code: `OP ${row.op || '-'}`,
+                            product: `${row.codigo || '-'} · ${row.produto || 'Produto sem descrição'}`
+                        })),
+                        actionUrl: 'pedidos.html?filter=suggested',
+                        priority: 'high',
+                        count
+                    });
+                    totalCount += count;
+                }
+            } catch (suggestedOpsError) {
+                console.error('Erro ao verificar OPs sugeridas pendentes:', suggestedOpsError.message);
+            }
+
+            // Divergências entre os KPIs exibidos no Dashboard e nas telas de origem
+            try {
+                await ensureKpiSnapshotsTable();
+                const snapshotResult = await pool.query(`
+                    SELECT
+                        dashboard.metric_key,
+                        dashboard.context_key,
+                        dashboard.metric_label,
+                        dashboard.metric_value AS dashboard_value,
+                        original.metric_value AS original_value,
+                        dashboard.unit,
+                        original.page_url,
+                        dashboard.updated_at AS dashboard_updated_at,
+                        original.updated_at AS original_updated_at
+                    FROM kpi_screen_snapshots dashboard
+                    JOIN kpi_screen_snapshots original
+                      ON original.metric_key = dashboard.metric_key
+                     AND original.context_key = dashboard.context_key
+                     AND original.source_key = 'original'
+                    WHERE dashboard.source_key = 'index'
+                      AND dashboard.updated_at >= NOW() - INTERVAL '24 hours'
+                      AND original.updated_at >= NOW() - INTERVAL '24 hours'
+                      AND ABS(EXTRACT(EPOCH FROM (dashboard.updated_at - original.updated_at))) <= 21600
+                `);
+                snapshotResult.rows.forEach(row => {
+                    const dashboardValue = Number(row.dashboard_value || 0);
+                    const originalValue = Number(row.original_value || 0);
+                    const difference = Math.abs(dashboardValue - originalValue);
+                    const tolerance = row.unit === '%'
+                        ? 0.01
+                        : Math.max(0.1, Math.abs(originalValue) * 0.0001);
+                    if (difference <= tolerance) return;
+                    const percentage = Math.abs(originalValue) > 0 ? (difference / Math.abs(originalValue)) * 100 : 100;
+                    tasks.push({
+                        id: `kpi-divergence-${row.metric_key}-${row.context_key}`,
+                        sector: 'Indicadores',
+                        title: `Divergência: ${row.metric_label}`,
+                        description: `O Dashboard e a tela original apresentam valores diferentes para ${row.context_key}. Diferença de ${formatKpiTaskValue(difference, row.unit)} (${percentage.toFixed(2)}%).`,
+                        samples: [
+                            { date: 'Dashboard', code: formatKpiTaskValue(dashboardValue, row.unit), product: '' },
+                            { date: 'Tela original', code: formatKpiTaskValue(originalValue, row.unit), product: '' }
+                        ],
+                        actionUrl: row.page_url || 'index.html',
+                        priority: 'high',
+                        count: 1
+                    });
+                    totalCount++;
+                });
+            } catch (snapshotError) {
+                console.error('Erro ao comparar KPIs entre telas:', snapshotError.message);
             }
 
             // 3. Adicionar alertas de Sincronização Atrasada (> 2 horas)

@@ -1,6 +1,25 @@
 /* public/js/loader.js */
 
 (function() {
+    const kpiSnapshotSentAt = new Map();
+    window.erusReportKpiSnapshot = (metricKey, sourceKey, contextKey, metricLabel, value, unit, pageUrl) => {
+        const numericValue = Number(value);
+        if (!metricKey || !contextKey || !Number.isFinite(numericValue)) return;
+        const cacheKey = `${metricKey}:${sourceKey}:${contextKey}:${numericValue}`;
+        const now = Date.now();
+        if (now - (kpiSnapshotSentAt.get(cacheKey) || 0) < 30000) return;
+        kpiSnapshotSentAt.set(cacheKey, now);
+        fetch('/api/producao-postgres/kpi-snapshot', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + (localStorage.getItem('erus_token') || '')
+            },
+            body: JSON.stringify({ metricKey, sourceKey, contextKey, metricLabel, value: numericValue, unit, pageUrl }),
+            keepalive: true
+        }).catch(() => {});
+    };
+
     const shouldDisableAutocomplete = (el) => {
         if (!el || el.dataset.allowAutocomplete === 'true' || el.hasAttribute('list')) return false;
         const tag = (el.tagName || '').toLowerCase();
