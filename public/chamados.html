@@ -482,6 +482,15 @@
         .native-btn.gray{border-color:rgba(148,163,184,.18);color:#9ca3af;background:rgba(148,163,184,.08)}
         .native-btn.danger{border-color:rgba(239,68,68,.25);color:#ef4444;background:rgba(239,68,68,.07)}
         .native-icon-btn{width:33px;height:33px;padding:0;border-radius:8px}
+        .native-user-menu-cell{text-align:center;position:relative}
+        .native-user-menu-btn{width:34px;height:34px;padding:0;border-radius:9px;font-size:.9rem}
+        .native-user-menu-backdrop{position:fixed;inset:0;z-index:9998;background:transparent}
+        .native-user-menu{position:fixed;z-index:9999;width:min(280px,calc(100vw - 24px));border:1px solid rgba(255,255,255,.1);border-radius:12px;background:#111113;box-shadow:0 22px 50px rgba(0,0,0,.55);padding:8px;display:flex;flex-direction:column;gap:4px}
+        .native-user-menu-head{padding:8px 9px 10px;border-bottom:1px solid rgba(255,255,255,.07);margin-bottom:4px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+        .native-user-menu-title{min-width:0}.native-user-menu-title strong{display:block;color:#f4f4f5;font-size:.82rem;font-weight:850;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.native-user-menu-title span{display:block;color:#71717a;font-size:.68rem;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .native-user-menu-close{width:28px;height:28px;padding:0;border-radius:8px;flex-shrink:0}
+        .native-user-menu-action{width:100%;border:1px solid transparent;background:transparent;color:#d4d4d8;border-radius:9px;padding:9px 10px;font-family:var(--font-main);font-size:.76rem;font-weight:750;cursor:pointer;display:flex;align-items:center;gap:10px;text-align:left}
+        .native-user-menu-action i{width:18px;text-align:center;color:#a1a1aa}.native-user-menu-action:hover{background:rgba(255,255,255,.055);border-color:rgba(255,255,255,.08);color:#fff}.native-user-menu-action.good i{color:#10b981}.native-user-menu-action.warn i{color:#fbbf24}.native-user-menu-action.purple i{color:#818cf8}.native-user-menu-action.info i{color:#38bdf8}.native-user-menu-action.orange i{color:#fb923c}.native-user-menu-action.danger{color:#fca5a5}.native-user-menu-action.danger i{color:#ef4444}
         .native-input,.native-select,.native-textarea{background:rgba(255,255,255,.045);border:1px solid var(--border-subtle);border-radius:8px;color:#f4f4f5;font-family:var(--font-main);font-size:.82rem;padding:9px 11px;outline:none}
         .native-input:focus,.native-select:focus,.native-textarea:focus{border-color:rgba(251,191,36,.42)}
         .native-select option{background:#18181b}
@@ -1633,6 +1642,7 @@
     }
 
     function renderNativeUsers() {
+        nativeCloseUserActionMenu();
         const q = (document.getElementById('nativeUserSearch')?.value || '').toLowerCase();
         const tbody = document.getElementById('nativeUsersBody');
         if (!tbody) return;
@@ -1647,17 +1657,8 @@
                 <td>${formatDate(u.last_login)}</td>
                 <td><span class="activity-tooltip" data-tooltip="Última tela: ${escapeHtml(activityPageLabel(u.last_activity_page))}">${formatDate(u.last_activity_at)}</span></td>
                 <td>${deviceBadge(u.last_activity_device)}</td>
-                <td>
-                    <div class="native-admin-actions" style="justify-content:center">
-                        <button class="native-btn native-icon-btn ${u.approved ? 'warn' : 'good'}" onclick="nativeToggleUser('${jsAttr(u.username)}',${u.approved ? 'false':'true'})" title="${u.approved ? 'Bloquear acesso':'Liberar acesso'}"><i class="fa-solid fa-user-${u.approved ? 'lock':'check'}"></i></button>
-                        <button class="native-btn native-icon-btn purple" onclick="nativeOpenUserLogs('${jsAttr(u.username)}')" title="Ver logs de atividade"><i class="fa-solid fa-clock-rotate-left"></i></button>
-                        <button class="native-btn native-icon-btn ${u.can_view_monetary ? 'good':'gray'}" onclick="nativeOpenMonetaryModal('${jsAttr(u.username)}', this)" title="Configurar permissão monetária por tela"><i class="fa-solid fa-dollar-sign"></i></button>
-                        <button class="native-btn native-icon-btn ${u.can_access_after_hours ? 'info':'gray'}" onclick="nativeToggleAfterHours('${jsAttr(u.username)}',${u.can_access_after_hours ? 'false':'true'})" title="${u.can_access_after_hours ? 'Revogar permissão extra-turno':'Conceder permissão extra-turno'}"><i class="fa-solid fa-moon"></i></button>
-                        <button class="native-btn native-icon-btn info" onclick="nativePromptEmail('${jsAttr(u.username)}','${jsAttr(u.email || '')}')" title="Definir email"><i class="fa-solid fa-envelope"></i></button>
-                        <button class="native-btn native-icon-btn orange" onclick="nativeKickUser('${jsAttr(u.username)}')" title="Forçar logout"><i class="fa-solid fa-right-from-bracket"></i></button>
-                        <button class="native-btn native-icon-btn gray" onclick="nativePromptRole('${jsAttr(u.username)}','${jsAttr(u.role || '')}')" title="Alterar role"><i class="fa-solid fa-pen"></i></button>
-                        <button class="native-btn native-icon-btn danger" onclick="nativeDeleteUser('${jsAttr(u.username)}')" title="Excluir usuário"><i class="fa-solid fa-trash"></i></button>
-                    </div>
+                <td class="native-user-menu-cell">
+                    <button class="native-btn native-user-menu-btn" onclick="nativeOpenUserActionMenu('${jsAttr(u.username)}', this)" title="Op��es do usu�rio"><i class="fa-solid fa-ellipsis-vertical"></i></button>
                 </td>
             </tr>`).join('') || '<tr><td colspan="9" class="native-empty">Nenhum usuário.</td></tr>';
     }
@@ -1704,6 +1705,61 @@
             btn.innerHTML = '<i class="fa-solid fa-user-plus"></i> Criar usuario';
         }
     }
+
+    function nativeCloseUserActionMenu() {
+        document.getElementById('nativeUserMenuBackdrop')?.remove();
+        document.getElementById('nativeUserActionMenu')?.remove();
+    }
+
+    function nativeMenuAction(fn) {
+        nativeCloseUserActionMenu();
+        setTimeout(fn, 0);
+    }
+
+    function nativeOpenUserActionMenu(username, trigger) {
+        nativeCloseUserActionMenu();
+        const user = (window.__nativeUsers || []).find(u => u.username === username);
+        if (!user || !trigger) return;
+        const backdrop = document.createElement('div');
+        backdrop.id = 'nativeUserMenuBackdrop';
+        backdrop.className = 'native-user-menu-backdrop';
+        backdrop.onclick = nativeCloseUserActionMenu;
+        const menu = document.createElement('div');
+        menu.id = 'nativeUserActionMenu';
+        menu.className = 'native-user-menu';
+        const safeUsername = jsAttr(user.username);
+        const safeRole = jsAttr(user.role || '');
+        const safeEmail = jsAttr(user.email || '');
+        menu.innerHTML = `
+            <div class="native-user-menu-head">
+                <div class="native-user-menu-title"><strong>${escapeHtml(user.username)}</strong><span>${escapeHtml(user.name || user.email || '')}</span></div>
+                <button class="native-btn native-user-menu-close" onclick="nativeCloseUserActionMenu()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <button class="native-user-menu-action ${user.approved ? 'warn' : 'good'}" onclick="nativeMenuAction(() => nativeToggleUser('${safeUsername}', ${user.approved ? 'false' : 'true'}))"><i class="fa-solid fa-user-${user.approved ? 'lock' : 'check'}"></i><span>${user.approved ? 'Bloquear acesso' : 'Liberar acesso'}</span></button>
+            <button class="native-user-menu-action purple" onclick="nativeMenuAction(() => nativeOpenUserLogs('${safeUsername}'))"><i class="fa-solid fa-clock-rotate-left"></i><span>Ver logs de atividade</span></button>
+            <button class="native-user-menu-action ${user.can_view_monetary ? 'good' : ''}" onclick="nativeMenuAction(() => nativeOpenMonetaryModal('${safeUsername}', null))"><i class="fa-solid fa-dollar-sign"></i><span>Permissao monetaria</span></button>
+            <button class="native-user-menu-action ${user.can_access_after_hours ? 'info' : ''}" onclick="nativeMenuAction(() => nativeToggleAfterHours('${safeUsername}', ${user.can_access_after_hours ? 'false' : 'true'}))"><i class="fa-solid fa-moon"></i><span>${user.can_access_after_hours ? 'Revogar extra-turno' : 'Conceder extra-turno'}</span></button>
+            <button class="native-user-menu-action info" onclick="nativeMenuAction(() => nativePromptEmail('${safeUsername}', '${safeEmail}'))"><i class="fa-solid fa-envelope"></i><span>Definir email</span></button>
+            <button class="native-user-menu-action orange" onclick="nativeMenuAction(() => nativeKickUser('${safeUsername}'))"><i class="fa-solid fa-right-from-bracket"></i><span>Forcar logout</span></button>
+            <button class="native-user-menu-action" onclick="nativeMenuAction(() => nativePromptRole('${safeUsername}', '${safeRole}'))"><i class="fa-solid fa-pen"></i><span>Alterar role</span></button>
+            <button class="native-user-menu-action danger" onclick="nativeMenuAction(() => nativeDeleteUser('${safeUsername}'))"><i class="fa-solid fa-trash"></i><span>Excluir usuario</span></button>
+        `;
+        document.body.appendChild(backdrop);
+        document.body.appendChild(menu);
+        const rect = trigger.getBoundingClientRect();
+        const menuRect = menu.getBoundingClientRect();
+        const gap = 8;
+        let left = rect.right - menuRect.width;
+        let top = rect.bottom + gap;
+        left = Math.max(12, Math.min(left, window.innerWidth - menuRect.width - 12));
+        if (top + menuRect.height > window.innerHeight - 12) top = rect.top - menuRect.height - gap;
+        top = Math.max(12, Math.min(top, window.innerHeight - menuRect.height - 12));
+        menu.style.left = left + 'px';
+        menu.style.top = top + 'px';
+    }
+
+    document.addEventListener('keydown', event => { if (event.key === 'Escape') nativeCloseUserActionMenu(); });
+    document.addEventListener('scroll', nativeCloseUserActionMenu, true);
 
     function activityPageLabel(page) {
         if (!page) return 'Sem tela registrada';
@@ -1762,7 +1818,7 @@
             tooltip.className = 'button-tooltip';
             document.body.appendChild(tooltip);
         }
-        const selector = '#nativeUsersBody .native-admin-actions button';
+        const selector = '#nativeUsersBody .native-user-menu-btn';
         let activeTarget = null;
         const hideTooltip = () => {
             activeTarget = null;
