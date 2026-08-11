@@ -11,19 +11,20 @@ let kpiSnapshotsTableReady = false;
 async function ensureKpiSnapshotsTable() {
     if (kpiSnapshotsTableReady) return;
     await pool.query(`
-        CREATE TABLE IF NOT EXISTS kpi_screen_snapshots (
+        CREATE TABLE IF NOT EXISTS kpi_screen_snapshots_v2 (
             metric_key TEXT NOT NULL,
             source_key TEXT NOT NULL,
             context_key TEXT NOT NULL,
+            scope_key TEXT NOT NULL,
             metric_label TEXT NOT NULL,
             metric_value NUMERIC NOT NULL,
             unit TEXT NOT NULL,
             page_url TEXT NOT NULL,
             updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
-            PRIMARY KEY (metric_key, source_key, context_key)
+            PRIMARY KEY (metric_key, source_key, context_key, scope_key)
         );
-        CREATE INDEX IF NOT EXISTS idx_kpi_screen_snapshots_updated_at
-            ON kpi_screen_snapshots (updated_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_kpi_screen_snapshots_v2_updated_at
+            ON kpi_screen_snapshots_v2 (updated_at DESC);
     `);
     kpiSnapshotsTableReady = true;
 }
@@ -242,6 +243,8 @@ router.post('/kpi-snapshot', async (req, res) => {
         const unit = String(req.body.unit || '').trim();
         const pageUrl = String(req.body.pageUrl || '').trim();
         const metricValue = Number(req.body.value);
+        const commercialOwner = getCommercialOwnerRestriction(req);
+        const scopeKey = commercialOwner ? `comercial:${commercialOwner.toLowerCase()}` : 'global';
         const allowedMetrics = ['carteira_peso', 'faturamento_peso', 'refugo_peso', 'refugo_percentual'];
         if (!allowedMetrics.includes(metricKey) || !['index', 'original'].includes(sourceKey)) {
             return res.status(400).json({ success: false, message: 'Métrica inválida.' });
@@ -250,16 +253,16 @@ router.post('/kpi-snapshot', async (req, res) => {
             return res.status(400).json({ success: false, message: 'Snapshot inválido.' });
         }
         await pool.query(`
-            INSERT INTO kpi_screen_snapshots (
-                metric_key, source_key, context_key, metric_label, metric_value, unit, page_url, updated_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
-            ON CONFLICT (metric_key, source_key, context_key) DO UPDATE SET
+            INSERT INTO kpi_screen_snapshots_v2 (
+                metric_key, source_key, context_key, scope_key, metric_label, metric_value, unit, page_url, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+            ON CONFLICT (metric_key, source_key, context_key, scope_key) DO UPDATE SET
                 metric_label = EXCLUDED.metric_label,
                 metric_value = EXCLUDED.metric_value,
                 unit = EXCLUDED.unit,
                 page_url = EXCLUDED.page_url,
                 updated_at = NOW()
-        `, [metricKey, sourceKey, contextKey, metricLabel.slice(0, 100), metricValue, unit.slice(0, 12), pageUrl.slice(0, 180)]);
+        `, [metricKey, sourceKey, contextKey, scopeKey, metricLabel.slice(0, 100), metricValue, unit.slice(0, 12), pageUrl.slice(0, 180)]);
         res.json({ success: true });
     } catch (error) {
         console.error('Erro ao registrar snapshot de KPI:', error);
@@ -433,12 +436,14 @@ router.get('/', async (req, res) => {
                         original.page_url,
                         dashboard.updated_at AS dashboard_updated_at,
                         original.updated_at AS original_updated_at
-                    FROM kpi_screen_snapshots dashboard
-                    JOIN kpi_screen_snapshots original
+                    FROM kpi_screen_snapshots_v2 dashboard
+                    JOIN kpi_screen_snapshots_v2 original
                       ON original.metric_key = dashboard.metric_key
                      AND original.context_key = dashboard.context_key
+                     AND original.scope_key = dashboard.scope_key
                      AND original.source_key = 'original'
                     WHERE dashboard.source_key = 'index'
+                      AND dashboard.scope_key = 'global'
                       AND dashboard.updated_at >= NOW() - INTERVAL '24 hours'
                       AND original.updated_at >= NOW() - INTERVAL '24 hours'
                       AND ABS(EXTRACT(EPOCH FROM (dashboard.updated_at - original.updated_at))) <= 21600
