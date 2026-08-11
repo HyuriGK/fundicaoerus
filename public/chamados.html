@@ -591,7 +591,7 @@
         .neon-kpi-label{color:#71717a;font-size:.61rem;font-weight:900;text-transform:uppercase;letter-spacing:.08em}.neon-kpi-value{color:#fafafa;font:800 1.25rem var(--font-mono)}.neon-kpi-value small{font-size:.62rem;color:#71717a;font-family:var(--font-main)}
         .neon-chart-panel{flex:1;min-height:330px;border:1px solid rgba(255,255,255,.075);border-radius:8px;background:#0e0e11;display:flex;flex-direction:column;overflow:hidden}
         .neon-chart-head{min-height:52px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 15px;border-bottom:1px solid rgba(255,255,255,.065);flex-shrink:0}.neon-chart-title{color:#d4d4d8;font-size:.72rem;font-weight:850;text-transform:uppercase;letter-spacing:.08em}.neon-source{display:inline-flex;align-items:center;gap:6px;color:#34d399;font-size:.64rem;font-weight:800}.neon-source::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor;box-shadow:0 0 0 3px rgba(16,185,129,.1)}.neon-source.error{color:#ef4444}
-        .neon-chart-wrap{position:relative;flex:1;min-height:270px;padding:14px 16px 10px}.neon-chart-wrap canvas{width:100%!important;height:100%!important}.neon-chart-note{color:#71717a;font-size:.65rem;line-height:1.4;padding:0 16px 12px}
+        .neon-chart-wrap{position:relative;flex:1;min-height:270px;padding:18px 18px 8px}.neon-chart-wrap canvas{width:100%!important;height:100%!important}.neon-chart-note{color:#71717a;font-size:.65rem;line-height:1.4;padding:0 18px 13px;display:flex;align-items:center;gap:8px}.neon-chart-note::before{content:'';width:7px;height:7px;flex:0 0 7px;border-radius:2px;background:#ea580c}
         @media(max-width:980px){.neon-status-kpis{grid-template-columns:repeat(2,minmax(150px,1fr))}.neon-chart-panel{min-height:380px}}
         @media(max-width:620px){.neon-status-kpis{grid-template-columns:1fr}.neon-status-filters{width:100%}.neon-status-filters label{flex:1}.neon-status-filters .native-input{width:100%}.neon-status-filters .native-btn{height:34px}.neon-chart-panel{min-height:420px}}
         .toast-container{position:fixed;top:18px;right:18px;z-index:10000;display:flex;flex-direction:column;gap:10px;pointer-events:none}
@@ -1130,7 +1130,7 @@
                     ${Array.from({length:4}, () => '<div class="neon-kpi"><span class="neon-kpi-label">Carregando</span><span class="neon-kpi-value">--</span></div>').join('')}
                 </div>
                 <div class="neon-chart-panel">
-                    <div class="neon-chart-head"><span class="neon-chart-title">Custo diário estimado</span><span class="neon-source" id="neonUsageSource">Consultando Neon</span></div>
+                    <div class="neon-chart-head"><span class="neon-chart-title" id="neonUsageChartTitle">Custo diário estimado</span><span class="neon-source" id="neonUsageSource">Consultando Neon</span></div>
                     <div class="neon-chart-wrap"><canvas id="neonUsageChart"></canvas></div>
                     <div class="neon-chart-note" id="neonUsageNote">Passe o cursor sobre um dia para visualizar Compute, Storage e Network.</div>
                 </div>
@@ -1171,7 +1171,7 @@
             <div class="neon-kpi" style="--kpi-ac:#fbbf24"><span class="neon-kpi-label">Custo estimado</span><span class="neon-kpi-value">US$ ${totalCost.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div>`;
         source.textContent = 'API Neon em tempo real';
         source.classList.remove('error');
-        note.textContent = 'Custo estimado: Compute a US$ 0,106/CUH e Storage a US$ 0,35/GB-mês. Network está incluído no plano.';
+        note.textContent = 'Barras laranjas representam dados retornados pelo Neon. Dias futuros ou sem leitura permanecem zerados.';
         renderNativeNeonUsageChart(rows);
     }
 
@@ -1185,22 +1185,54 @@
         if (note) note.textContent = message || 'Tente atualizar novamente.';
     }
 
+    function completeNativeNeonCalendar(rows) {
+        const fromValue = document.getElementById('neonUsageFrom')?.value || rows[0]?.data;
+        const toValue = document.getElementById('neonUsageTo')?.value || rows[rows.length - 1]?.data || fromValue;
+        if (!fromValue || !toValue) return [];
+        const start = new Date(`${fromValue.slice(0, 7)}-01T00:00:00.000Z`);
+        const toDate = new Date(`${toValue}T00:00:00.000Z`);
+        const end = new Date(Date.UTC(toDate.getUTCFullYear(), toDate.getUTCMonth() + 1, 0));
+        const byDate = new Map(rows.map(row => [row.data, row]));
+        const today = new Date().toISOString().slice(0, 10);
+        const calendar = [];
+        for (const cursor = new Date(start); cursor <= end; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
+            const data = cursor.toISOString().slice(0, 10);
+            const row = byDate.get(data);
+            calendar.push(row
+                ? { ...row, has_data: true, is_future: false }
+                : { data, compute_cuh: 0, storage_gb: 0, network_mb: 0, custo_usd: 0, has_data: false, is_future: data > today });
+        }
+        return calendar;
+    }
+
     function renderNativeNeonUsageChart(rows) {
         const canvas = document.getElementById('neonUsageChart');
         if (!canvas || typeof Chart === 'undefined') return;
+        const calendarRows = completeNativeNeonCalendar(rows);
+        const title = document.getElementById('neonUsageChartTitle');
+        if (title && calendarRows.length) {
+            const first = new Date(`${calendarRows[0].data}T12:00:00.000Z`);
+            const last = new Date(`${calendarRows[calendarRows.length - 1].data}T12:00:00.000Z`);
+            const firstMonth = first.toLocaleDateString('pt-BR', { month:'long', year:'numeric', timeZone:'UTC' });
+            const lastMonth = last.toLocaleDateString('pt-BR', { month:'long', year:'numeric', timeZone:'UTC' });
+            title.textContent = `Custo diário estimado · ${firstMonth === lastMonth ? firstMonth : `${firstMonth} a ${lastMonth}`}`;
+        }
         if (nativeNeonUsageChart) nativeNeonUsageChart.destroy();
         nativeNeonUsageChart = new Chart(canvas.getContext('2d'), {
             type: 'bar',
             data: {
-                labels: rows.map(row => row.data),
+                labels: calendarRows.map(row => row.data),
                 datasets: [{
                     label: 'Custo estimado (USD)',
-                    data: rows.map(row => Number(row.custo_usd || 0)),
-                    backgroundColor: 'rgba(16,185,129,.55)',
-                    borderColor: '#34d399',
-                    borderWidth: 1,
+                    data: calendarRows.map(row => Number(row.custo_usd || 0)),
+                    backgroundColor: calendarRows.map(row => row.has_data ? '#ea580c' : 'rgba(113,113,122,.12)'),
+                    hoverBackgroundColor: calendarRows.map(row => row.has_data ? '#fb923c' : 'rgba(113,113,122,.18)'),
+                    borderWidth: 0,
                     borderRadius: 4,
-                    maxBarThickness: 42
+                    borderSkipped: false,
+                    categoryPercentage: .72,
+                    barPercentage: .82,
+                    maxBarThickness: 34
                 }]
             },
             options: {
@@ -1212,16 +1244,19 @@
                     tooltip: {
                         displayColors: false,
                         backgroundColor: 'rgba(9,9,11,.98)',
-                        borderColor: 'rgba(52,211,153,.32)',
+                        borderColor: 'rgba(234,88,12,.38)',
                         borderWidth: 1,
                         padding: 12,
                         titleColor: '#f4f4f5',
                         bodyColor: '#d4d4d8',
                         callbacks: {
                             title: items => new Date(`${items[0].label}T12:00:00`).toLocaleDateString('pt-BR'),
-                            label: item => `Custo: US$ ${Number(item.raw).toFixed(2)}`,
+                            label: item => calendarRows[item.dataIndex]?.has_data
+                                ? `Custo: US$ ${Number(item.raw).toFixed(2)}`
+                                : (calendarRows[item.dataIndex]?.is_future ? 'Dia futuro' : 'Sem dados retornados'),
                             afterLabel: item => {
-                                const row = rows[item.dataIndex] || {};
+                                const row = calendarRows[item.dataIndex] || {};
+                                if (!row.has_data) return [];
                                 return [
                                     `Compute: ${Number(row.compute_cuh || 0).toLocaleString('pt-BR',{maximumFractionDigits:3})} CUH`,
                                     `Storage: ${Number(row.storage_gb || 0).toLocaleString('pt-BR',{maximumFractionDigits:3})} GB-mês`,
@@ -1232,8 +1267,8 @@
                     }
                 },
                 scales: {
-                    x: { grid: { display: false }, ticks: { color: '#71717a', maxRotation: 0, autoSkip: true, font: { family: "'JetBrains Mono', monospace", size: 10 }, callback: function(value){ const date=this.getLabelForValue(value); return date ? date.slice(8,10)+'/'+date.slice(5,7) : ''; } } },
-                    y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,.055)' }, ticks: { color: '#71717a', font: { family: "'JetBrains Mono', monospace", size: 10 }, callback: value => `US$ ${Number(value).toFixed(2)}` }, title: { display: true, text: 'Custo estimado (USD)', color: '#71717a', font: { size: 10, weight: '700' } } }
+                    x: { border: { display: false }, grid: { display: false }, ticks: { color: context => calendarRows[context.index]?.has_data ? '#a1a1aa' : '#52525b', maxRotation: 0, minRotation: 0, autoSkip: false, font: { family: "'JetBrains Mono', monospace", size: 9 }, callback: function(value){ const date=this.getLabelForValue(value); return date ? date.slice(8,10) : ''; } } },
+                    y: { beginAtZero: true, border: { display: false }, grid: { color: 'rgba(255,255,255,.05)', drawTicks: false }, ticks: { color: '#71717a', padding: 10, font: { family: "'JetBrains Mono', monospace", size: 9 }, callback: value => `US$ ${Number(value).toFixed(2)}` } }
                 }
             }
         });
