@@ -1571,11 +1571,69 @@
         }
 
         #auditModal {
-            z-index: 1000002 !important;
+            position: fixed !important;
+            inset: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            height: 100dvh !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            z-index: 2147483000 !important;
+            align-items: stretch !important;
+            justify-content: stretch !important;
+        }
+
+        #auditModal .modal-card.fullscreen {
+            width: 100vw !important;
+            height: 100vh !important;
+            height: 100dvh !important;
+            max-width: none !important;
+            max-height: none !important;
+            margin: 0 !important;
+            border: 0 !important;
+            border-radius: 0 !important;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #auditModal .modal-header {
+            min-height: 74px;
+            flex: 0 0 auto;
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            background: #101014;
+        }
+
+        #auditModal .audit-body {
+            flex: 1 1 auto;
+            min-height: 0;
+            padding: 26px clamp(20px, 3vw, 48px) 52px;
+        }
+
+        #auditModal .audit-grid {
+            grid-template-columns: repeat(3, minmax(260px, 1fr));
+            align-items: stretch;
+        }
+
+        body.audit-open {
+            overflow: hidden !important;
         }
 
         body:not(.presentation-mode) #erus-sidebar {
             z-index: 1000003 !important;
+        }
+
+        @media (max-width: 1180px) {
+            #auditModal .audit-grid { grid-template-columns: repeat(2, minmax(260px, 1fr)); }
+        }
+
+        @media (max-width: 700px) {
+            #auditModal .modal-header { min-height: 64px; padding: 14px 18px !important; }
+            #auditModal .modal-title { font-size: 1rem !important; }
+            #auditModal .audit-body { padding: 20px 14px 36px; }
+            #auditModal .audit-grid { grid-template-columns: 1fr; }
+            #auditModal .audit-card { padding: 18px; }
         }
 
         body:not(.presentation-mode) #configModal .modal-card.fullscreen {
@@ -1865,9 +1923,9 @@
             </div>
             <div class="audit-body">
                 <p class="audit-intro">
-                    Pense em cada coluna como uma fila de produção. Cada card mostra quantas peças da OP estão
-                    naquele ponto, há quanto tempo estão ali e se já deveriam ter seguido para o próximo setor.
-                    Os dados são atualizados automaticamente a cada 60 segundos.
+                    Esta auditoria explica de onde vem cada informação do quadro e qual regra é aplicada. Os cards
+                    mostram o saldo estimado em cada etapa, o tempo parado em dias corridos e, somente quando existe
+                    data de entrega, o prazo industrial em dias úteis. Os dados são atualizados a cada 60 segundos.
                 </p>
 
                 <div class="audit-grid">
@@ -1875,20 +1933,22 @@
                         <h3><i class="fa-solid fa-map"></i> Como ler esta tela</h3>
                         <ul>
                             <li><strong>Cada coluna</strong> representa um setor ou uma espera antes do próximo setor.</li>
-                            <li><strong>Cada card</strong> representa uma OP ou um item de pedido.</li>
+                            <li><strong>OP:</strong> item com ordem de produção válida e acompanhamento por apontamentos.</li>
+                            <li><strong>PED:</strong> item ainda sem OP válida; permanece na etapa inicial.</li>
                             <li><strong>QTD</strong> é a quantidade de peças naquele ponto da produção.</li>
-                            <li><strong>Dias</strong> é o tempo de espera do lote mais antigo.</li>
-                            <li><strong>Atraso ou prazo</strong> compara a espera com o tempo permitido no setor.</li>
+                            <li><strong>Dias</strong> é o tempo corrido do lote mais antigo ainda presente.</li>
+                            <li><strong>Atraso ou prazo</strong> só aparece quando o pedido possui data de entrega.</li>
                         </ul>
                     </section>
 
                     <section class="audit-card">
-                        <h3><i class="fa-solid fa-arrow-right-arrow-left"></i> Como as peças mudam de coluna</h3>
-                        <p>As peças avançam quando existe um apontamento de produção no setor atual.</p>
+                        <h3><i class="fa-solid fa-arrow-right-arrow-left"></i> Como o saldo avança</h3>
+                        <p>As peças avançam conforme os apontamentos acumulados das etapas da rota produtiva.</p>
                         <ul>
                             <li>Exemplo: uma OP tem 10 peças e 4 são apontadas na Moldagem. Ficam 6 na Moldagem e surgem 4 na Fusão.</li>
                             <li>Quando apenas parte avança, a mesma OP aparece em duas colunas.</li>
-                            <li>Peças refugadas são retiradas do saldo no setor onde ocorreu o refugo.</li>
+                            <li>Um apontamento em etapa posterior também confirma a passagem pelas etapas anteriores.</li>
+                            <li>Peças refugadas são descontadas do saldo produtivo correspondente.</li>
                         </ul>
                     </section>
 
@@ -1902,31 +1962,32 @@
 
                     <section class="audit-card">
                         <h3><i class="fa-solid fa-hourglass-half"></i> Como calculamos os dias parados</h3>
-                        <p>Encontramos o lote mais antigo que ainda está no setor e contamos os dias úteis desde a entrada dele até hoje.</p>
+                        <p>Encontramos o lote mais antigo que ainda permanece no setor e contamos os dias corridos desde sua entrada até hoje.</p>
                         <div class="audit-formula">dias parados = hoje − entrada do lote mais antigo</div>
                         <ul>
-                            <li>Sábado e domingo não entram na conta.</li>
-                            <li>Feriados ainda não são descontados.</li>
-                            <li>Na primeira etapa, sem entrada anterior, usamos a emissão da OP ou do pedido.</li>
+                            <li>Sábados, domingos e feriados entram na contagem.</li>
+                            <li>Na primeira etapa usamos a emissão do pedido; com OP válida, a emissão da OP pode ser usada.</li>
+                            <li>Nas etapas seguintes usamos a data do lote mais antigo ainda não consumido pelo FIFO.</li>
                         </ul>
                     </section>
 
                     <section class="audit-card">
                         <h3><i class="fa-solid fa-triangle-exclamation"></i> Como calculamos o atraso</h3>
-                        <p>Começamos pela entrega programada pelo PCP e planejamos as etapas de trás para frente.</p>
-                        <div class="audit-formula">prazo da última etapa = entrega PCP<br>prazo da etapa anterior = prazo seguinte − tempo permitido</div>
+                        <p>O cálculo só existe quando o pedido possui data de entrega. A partir dela, planejamos as etapas de trás para frente.</p>
+                        <div class="audit-formula">prazo da última etapa = data de entrega<br>prazo da etapa anterior = prazo seguinte − tempo permitido</div>
                         <ul>
                             <li><strong>3d atraso:</strong> o lote deveria ter saído há 3 dias úteis.</li>
                             <li><strong>2d prazo:</strong> ainda existem 2 dias úteis para sair.</li>
                             <li><strong>Vence hoje:</strong> hoje é o último dia permitido.</li>
+                            <li><strong>Sem entrega:</strong> nenhum selo de atraso ou prazo é exibido.</li>
                         </ul>
                     </section>
 
                     <section class="audit-card">
                         <h3><i class="fa-solid fa-calendar-check"></i> Tempo permitido por setor</h3>
-                        <p>É o tempo reservado para cada etapa dentro do caminho até a entrega.</p>
+                        <p>É o número de dias úteis reservado para cada etapa da rota até a entrega informada.</p>
                         <p><strong>Exemplo:</strong> entrega na sexta e última etapa com 1 dia útil. A etapa anterior precisa terminar até quinta-feira.</p>
-                        <p>Esses tempos podem ser alterados no botão <strong>Config</strong>.</p>
+                        <p>Esses tempos são configuráveis. Eles distribuem o prazo, mas nunca criam uma data de entrega inexistente.</p>
                     </section>
 
                     <section class="audit-card">
@@ -1948,8 +2009,8 @@
                         <h3><i class="fa-solid fa-list-ol"></i> Como funciona a ordenação</h3>
                         <ul>
                             <li><strong>Maior peso:</strong> cards mais pesados no topo.</li>
-                            <li><strong>Mais tempo parado:</strong> lote mais antigo no topo.</li>
-                            <li><strong>Mais atrasado:</strong> entrega programada pelo PCP mais urgente primeiro.</li>
+                            <li><strong>Mais tempo parado:</strong> maior quantidade de dias corridos no topo.</li>
+                            <li><strong>Mais atrasado:</strong> data de entrega mais crítica primeiro; itens sem entrega não são atrasados.</li>
                             <li><strong>Cliente:</strong> ordem pelo nome do cliente.</li>
                             <li><strong>OP:</strong> número crescente ou decrescente.</li>
                         </ul>
@@ -1959,7 +2020,8 @@
                         <h3><i class="fa-solid fa-filter"></i> Busca e filtro de atrasados</h3>
                         <ul>
                             <li>Você pode procurar por OP, pedido, produto, descrição ou cliente.</li>
-                            <li><strong>Somente atrasados</strong> mostra apenas lotes que passaram do tempo permitido no setor.</li>
+                            <li><strong>Somente atrasados</strong> mostra lotes com data de entrega cujo prazo da etapa já venceu.</li>
+                            <li>Pedidos sem data de entrega não entram no filtro de atrasados.</li>
                             <li>Uma OP aparece no máximo uma vez dentro da mesma coluna.</li>
                         </ul>
                     </section>
@@ -1977,12 +2039,13 @@
                     <section class="audit-card">
                         <h3><i class="fa-solid fa-clock-rotate-left"></i> De onde vêm as informações</h3>
                         <ul>
-                            <li><strong>OP, pedido, cliente e produto:</strong> vêm dos dados sincronizados do ERP.</li>
+                            <li><strong>OP, pedido, cliente, produto e entrega:</strong> vêm dos dados sincronizados do ERP.</li>
                             <li><strong>Quantidades e datas por setor:</strong> vêm dos apontamentos da produção.</li>
-                            <li><strong>Data de entrega:</strong> usa a programação do PCP mostrada em pedidos.html.</li>
+                            <li><strong>Card PED:</strong> usa a emissão do pedido e não herda datas de OP sugerida.</li>
+                            <li><strong>Data de entrega:</strong> usa ENTREGA_PETR e, como alternativa, DATA_ENTREGA_PPR.</li>
                             <li><strong>Atualização:</strong> acontece automaticamente a cada 60 segundos.</li>
                         </ul>
-                        <p>Ao clicar no card, você pode conferir os dados e o histórico da OP.</p>
+                        <p>Cards de OP podem ser abertos para conferir roteiro e apontamentos. Cards PED permanecem apenas como pendência inicial.</p>
                     </section>
                 </div>
             </div>
@@ -2717,6 +2780,14 @@
             return isNegative ? -count : count;
         }
 
+        function getCalendarDaysDiff(date1, date2) {
+            const d1 = toLocalDate(date1);
+            const d2 = toLocalDate(date2);
+            const utc1 = Date.UTC(d1.getFullYear(), d1.getMonth(), d1.getDate());
+            const utc2 = Date.UTC(d2.getFullYear(), d2.getMonth(), d2.getDate());
+            return Math.round((utc2 - utc1) / 86400000);
+        }
+
         const panelMeta = {
             'lead-times': { title: 'Lead Times', desc: 'Defina o tempo padrão por setor em dias úteis' },
             'exibicao':   { title: 'Ordenação & Exibição', desc: 'Controle como os cards são ordenados e o que é exibido' },
@@ -2758,11 +2829,13 @@
         }
 
         function openAudit() {
+            document.body.classList.add('audit-open');
             document.getElementById('auditModal').style.display = 'flex';
         }
 
         function closeAudit() {
             document.getElementById('auditModal').style.display = 'none';
+            document.body.classList.remove('audit-open');
         }
 
         function escapeHtml(value) {
@@ -3010,7 +3083,7 @@
                 const qtyStayingInStage = Math.max(0, prevStageQty - qtyMovingToNext);
 
                 // Days stopped in this sector = business days since the previous stage was finished
-                const daysStopped = getBusinessDaysDiff(arrivalDate, now);
+                const daysStopped = getCalendarDaysDiff(arrivalDate, now);
 
 
                 if (qtyStayingInStage > 0.001) {
@@ -3069,7 +3142,7 @@
                     isDelayed: diff !== null && diff > 0,
                     statusColor: diff === null ? 'var(--text-muted)' : (diff > 0 ? 'var(--status-danger)' : 'var(--status-success)'),
                     qtyExpedited: qtyExpedited,
-                    daysStopped: getBusinessDaysDiff(arrivalDate, now),
+                    daysStopped: getCalendarDaysDiff(arrivalDate, now),
                     sectorDeadlineDiff: diff
                 });
             }
@@ -3180,7 +3253,7 @@
                     isDelayed: diff !== null && diff > 0,
                     statusColor: diff === null ? 'var(--text-muted)' : (diff > 0 ? 'var(--status-danger)' : 'var(--status-success)'),
                     qtyExpedited: 0,
-                    daysStopped: getBusinessDaysDiff(emissionDate, now),
+                    daysStopped: getCalendarDaysDiff(emissionDate, now),
                     sectorDeadlineDiff: diff
                 }] : [];
             }
@@ -3214,7 +3287,7 @@
                         isDelayed: diff !== null && diff > 0,
                         statusColor: diff === null ? 'var(--text-muted)' : (diff > 0 ? 'var(--status-danger)' : 'var(--status-success)'),
                         qtyExpedited,
-                        daysStopped: getBusinessDaysDiff(arrivalDate, now),
+                        daysStopped: getCalendarDaysDiff(arrivalDate, now),
                         sectorDeadlineDiff: diff
                     };
                 });
