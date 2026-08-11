@@ -1,6 +1,50 @@
 /* public/js/loader.js */
 
 (function() {
+    const shouldDisableAutocomplete = (el) => {
+        if (!el || el.dataset.allowAutocomplete === 'true' || el.hasAttribute('list')) return false;
+        const tag = (el.tagName || '').toLowerCase();
+        if (tag === 'textarea') return true;
+        if (tag !== 'input') return false;
+        const type = String(el.getAttribute('type') || 'text').toLowerCase();
+        return ['text', 'search', 'email', 'password', 'number', 'tel', 'url', 'date', 'time', 'month', 'week', 'datetime-local'].includes(type);
+    };
+
+    const disableAutocomplete = (root) => {
+        const scope = root && root.querySelectorAll ? root : document;
+        if (shouldDisableAutocomplete(root)) {
+            root.setAttribute('autocomplete', 'off');
+            root.setAttribute('autocorrect', 'off');
+            root.setAttribute('autocapitalize', 'off');
+            root.setAttribute('spellcheck', 'false');
+        }
+        scope.querySelectorAll('input, textarea').forEach((el) => {
+            if (!shouldDisableAutocomplete(el)) return;
+            el.setAttribute('autocomplete', 'off');
+            el.setAttribute('autocorrect', 'off');
+            el.setAttribute('autocapitalize', 'off');
+            el.setAttribute('spellcheck', 'false');
+        });
+    };
+
+    const initAutocompleteGuard = () => {
+        disableAutocomplete(document);
+        if (!window.MutationObserver) return;
+        new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+                mutation.addedNodes.forEach((node) => {
+                    if (node.nodeType === 1) disableAutocomplete(node);
+                });
+            });
+        }).observe(document.documentElement, { childList: true, subtree: true });
+    };
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initAutocompleteGuard);
+    } else {
+        initAutocompleteGuard();
+    }
+
     let pendingRequests = 0;
     let loaderEl = null;
     let domReady = document.readyState !== 'loading';
