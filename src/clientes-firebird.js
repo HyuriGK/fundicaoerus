@@ -2864,9 +2864,11 @@ router.get('/crm/contatos', async (req, res) => {
         const crmUser = String(req.user?.user || req.user?.name || '').trim();
         const role = String(req.user?.role || '').trim().toLowerCase();
         const requestedUser = String(req.query.user || 'mine').trim().toLowerCase();
+        const pedido = String(req.query.pedido || '').trim();
         const empresa = req.query.empresa === undefined || req.query.empresa === '' ? null : Number(req.query.empresa);
         const codigo = req.query.codigo === undefined || req.query.codigo === '' ? null : Number(req.query.codigo);
         if (!crmUser) return res.status(400).json({ success: false, error: 'Usuário inválido.' });
+        if (pedido.length > 80) return res.status(400).json({ success: false, error: 'Pedido inválido.' });
         if (empresa !== null && !Number.isInteger(empresa)) return res.status(400).json({ success: false, error: 'Empresa inválida.' });
         if (codigo !== null && !Number.isInteger(codigo)) return res.status(400).json({ success: false, error: 'Código inválido.' });
         const canViewAll = ['admin', 'desenvolvedor', 'gerente comercial', 'diretor'].includes(role);
@@ -2882,6 +2884,10 @@ router.get('/crm/contatos', async (req, res) => {
             params.push(empresa, codigo);
             whereClause += ` AND empresa = $${params.length - 1} AND codigo = $${params.length}`;
         }
+        if (pedido) {
+            params.push(`%${pedido}%`);
+            whereClause += ` AND pedido ILIKE $${params.length}`;
+        }
         const result = await pool.query(`
             SELECT id, cliente_nome, empresa, codigo, crm_user, contato_em, canal, pessoa_contatada, pedido,
                    cargo, telefone, email, motivo, resultado, humor_cliente, potencial, proxima_acao,
@@ -2889,7 +2895,7 @@ router.get('/crm/contatos', async (req, res) => {
             FROM clientes_contatos_crm
             ${whereClause}
             ORDER BY contato_em DESC, id DESC
-            ${empresa !== null && codigo !== null ? '' : 'LIMIT 20'}
+            ${(empresa !== null && codigo !== null) || pedido ? '' : 'LIMIT 20'}
         `, params);
         res.json({ success: true, data: result.rows });
     } catch (err) {
