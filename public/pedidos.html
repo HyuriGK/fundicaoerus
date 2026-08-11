@@ -1695,6 +1695,35 @@
             width: 17%;
             text-align: center;
         }
+        #recordsModal .historical-only-column {
+            display: none;
+        }
+        #recordsModal.emission-history-modal .historical-only-column {
+            display: table-cell;
+        }
+        .billing-status-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 68px;
+            min-height: 24px;
+            padding: 4px 8px;
+            border: 1px solid transparent;
+            border-radius: 6px;
+            font-size: 0.66rem;
+            font-weight: 850;
+            letter-spacing: 0.06em;
+        }
+        .billing-status-badge.total {
+            color: #34d399;
+            border-color: rgba(52,211,153,.28);
+            background: rgba(52,211,153,.09);
+        }
+        .billing-status-badge.parcial {
+            color: #fbbf24;
+            border-color: rgba(251,191,36,.28);
+            background: rgba(251,191,36,.09);
+        }
         /* Ocultar OP no modal de emissões */
         .hide-op-column th:nth-child(2),
         .hide-op-column td:nth-child(2),
@@ -1702,12 +1731,12 @@
         .hide-op-column th:nth-child(3),
         .hide-op-column td:nth-child(3),
         .hide-op-column tr#filterRow th:nth-child(3),
-        .hide-op-column th:nth-child(12),
-        .hide-op-column td:nth-child(12),
-        .hide-op-column tr#filterRow th:nth-child(12),
-        .hide-op-column th:nth-child(13),
-        .hide-op-column td:nth-child(13),
-        .hide-op-column tr#filterRow th:nth-child(13) {
+        .hide-op-column th:nth-child(14),
+        .hide-op-column td:nth-child(14),
+        .hide-op-column tr#filterRow th:nth-child(14),
+        .hide-op-column th:nth-child(15),
+        .hide-op-column td:nth-child(15),
+        .hide-op-column tr#filterRow th:nth-child(15) {
             display: none !important;
         }
         #recordsModal.hide-op-column #dataTable tbody td,
@@ -2573,6 +2602,8 @@
                             <th style="width: 1px; text-align: center; white-space: nowrap;">CÓDIGO</th>
                             <th style="">PRODUTO</th>
                             <th class="sortable-th" id="th-saldo" onclick="toggleSort('saldo')" style="width: 1px;">SALDO</th>
+                            <th class="sortable-th historical-only-column" id="th-faturamento" onclick="toggleSort('faturamento')" style="width: 105px; white-space: nowrap; text-align:center;">FATURAMENTO</th>
+                            <th class="sortable-th historical-only-column" id="th-falta_entregar" onclick="toggleSort('falta_entregar')" style="width: 145px; white-space: nowrap; text-align:center;">QUANT. FALTA ENTREGAR</th>
                             <th class="sortable-th" id="th-peso_un" onclick="toggleSort('peso_un')" style="width: 8%; white-space: nowrap;">PESO UN</th>
                             <th class="sortable-th" id="th-peso_total" onclick="toggleSort('peso_total')" style="width: 9%; white-space: nowrap;">PESO TOTAL</th>
                             <th class="sortable-th" id="th-valor_total" onclick="toggleSort('valor_total')" style="width: 9%; white-space: nowrap;">TOTAL (R$)</th>
@@ -2589,6 +2620,8 @@
                             <th><input class="filter-input-table" data-col="5" placeholder="..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" style="text-align: center;"></th>
                             <th><input class="filter-input-table" data-col="6" placeholder="..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></th>
                             <th><input class="filter-input-table" data-col="7" placeholder="..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></th>
+                            <th class="historical-only-column"><input class="filter-input-table" data-col="13" placeholder="..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></th>
+                            <th class="historical-only-column"><input class="filter-input-table" data-col="14" placeholder="..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></th>
                             <!-- Total R$ -->
                             <th><input class="filter-input-table" data-col="8" placeholder="..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
                             </th>
@@ -3430,6 +3463,7 @@
             const modal = document.getElementById('recordsModal');
             const titleEl = document.getElementById('recordsModalTitle');
             modal.classList.toggle('client-records-modal', chartMode === 'client');
+            modal.classList.toggle('emission-history-modal', chartMode === 'emission_total');
             if (hideOP) {
                 modal.classList.add('hide-op-column');
                 activeBlockReasonFilter = null;
@@ -3480,6 +3514,7 @@
             const modal = document.getElementById('recordsModal');
             modal.style.display = 'none';
             modal.classList.remove('client-records-modal');
+            modal.classList.remove('emission-history-modal');
             // Restore backlog if we were in historical view
             if (backlogDataState) {
                 allData = [...backlogDataState];
@@ -4470,7 +4505,7 @@
             const showConferencia = shouldShowConferenciaColumn();
             updateConferenciaColumnVisibility(showConferencia);
             if (list.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="${showConferencia ? 14 : 13}" style="text-align:center; padding:20px;">Nenhum registro encontrado.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="${showConferencia ? 16 : 15}" style="text-align:center; padding:20px;">Nenhum registro encontrado.</td></tr>`;
                 return;
             }
             tbody.innerHTML = list.map((item, index) => {
@@ -4479,6 +4514,7 @@
                 const metrics = getItemSectorMetrics(item);
                 const saldoReal = item._sectorQty !== undefined ? item._sectorQty : getCommercialBalance(item);
                 const qtdOriginal = metrics.originalTarget;
+                const billingInfo = getHistoricalBillingInfo(item);
                 // Use a utilidade compartilhada para obter o peso unitário correto
                 // ou use o peso total calculado se já estiver disponível (modo setor)
                 let totalWeightReal = 0;
@@ -4614,6 +4650,8 @@
                         ${item.NOME_PRODUTO_PPR || item.PRODUTO_PPR || item.CODIGO_PECA || item.sync_key || '-'}
                     </td>
                     <td style="text-align:center;">${saldoReal}</td>
+                    <td class="historical-only-column" style="text-align:center;"><span class="billing-status-badge ${billingInfo.status.toLowerCase()}">${billingInfo.status}</span></td>
+                    <td class="historical-only-column" style="text-align:center; font-weight:800; color:${billingInfo.missing > 0 ? '#fbbf24' : '#34d399'};">${formatNumber(billingInfo.missing, 0)}</td>
                     <td style="text-align:center;">${weightInputHtml}</td>
                     <td style="text-align:center;">${formatNumber(totalWeightReal)}</td>
                     <td style="text-align:center; color:var(--status-purple); font-weight:bold;">${valorVisible ? formatCurrency(valorTotal) : '-----'}</td>
@@ -5103,6 +5141,17 @@
             const qtdOriginal = Number(item.QUANTIDADE_PPR) || 0;
             return getResolvedUnitWeight(item, customWeights, qtdOriginal);
         }
+        function getHistoricalBillingInfo(item) {
+            const original = Math.max(0, Number(item.QUANTIDADE_PPR) || 0);
+            const billed = Math.max(0, Number(item.QUANTIDADE_FATURADO_PPR || item.QUANTIDADE_FATURADA_PPR) || 0);
+            const withdrawn = Math.max(0, Number(item.QUANTIDADE_DESISTENCIA_PPR) || 0);
+            const markedTotal = String(item.FATURADO_PPR || '').trim().toUpperCase() === 'T';
+            const missing = markedTotal ? 0 : Math.max(0, original - billed - withdrawn);
+            return {
+                missing,
+                status: markedTotal || (original > 0 && missing === 0) ? 'TOTAL' : 'PARCIAL'
+            };
+        }
         function syncQuickDeliveryButtonState() {
             const btn = document.getElementById('btnQuickDeliveryToday');
             if (!btn) return;
@@ -5130,7 +5179,9 @@
                 '9': 'PESO_LIQUIDO_NPR',
                 '10': 'VALOR_TOTAL',
                 '11': 'modelo_status',
-                '12': 'observacao'
+                '12': 'observacao',
+                '13': 'FATURAMENTO_STATUS',
+                '14': 'QUANTIDADE_FALTA_ENTREGAR'
             };
             // Collect individual column filters
             const filters = {};
@@ -5280,6 +5331,12 @@
                         const val = activeChartFilters.stage ? getItemSectorMetrics(item).totalBalance : getCommercialBalance(item);
                         return String(val).includes(value);
                     }
+                    if (key === 'FATURAMENTO_STATUS') {
+                        return getHistoricalBillingInfo(item).status.toLowerCase().includes(value);
+                    }
+                    if (key === 'QUANTIDADE_FALTA_ENTREGAR') {
+                        return String(getHistoricalBillingInfo(item).missing).includes(value.replace(',', '.'));
+                    }
                     if (key === 'PESO_LIQUIDO_NPR') {
                         // Permite user digitar 10,5 e converter para 10.5
                         const cleanValue = value.replace(',', '.');
@@ -5390,6 +5447,12 @@
                         };
                         valA = getS(a);
                         valB = getS(b);
+                    } else if (sortConfig.column === 'faturamento') {
+                        valA = getHistoricalBillingInfo(a).status;
+                        valB = getHistoricalBillingInfo(b).status;
+                    } else if (sortConfig.column === 'falta_entregar') {
+                        valA = getHistoricalBillingInfo(a).missing;
+                        valB = getHistoricalBillingInfo(b).missing;
                     } else if (sortConfig.column === 'valor_total') {
                         const getV = (item) => {
                             if (item._sectorValue !== undefined) return item._sectorValue;
@@ -6468,6 +6531,7 @@ function flashConcentracaoBar(barIndex) {
             const titleEl = document.getElementById('recordsModalTitle');
             if (!modal) return;
             modal.classList.toggle('client-records-modal', chartMode === 'client');
+            modal.classList.toggle('emission-history-modal', chartMode === 'emission_total');
             modal.classList.toggle('hide-op-column', !!hideOP);
             if (titleEl) titleEl.innerHTML = `<i class="fa-solid fa-list-check" style="margin-right: 15px;"></i>${title}`;
             modal.style.display = 'flex';
@@ -6928,6 +6992,7 @@ function flashConcentracaoBar(barIndex) {
             const titleEl = document.querySelector('#recordsModal .modal-title');
             const headerDate = document.querySelector('#dataTable thead tr:first-child th:nth-child(4)');
             if (titleEl) titleEl.innerHTML = `<i class="fa-solid fa-history" style="margin-right: 15px;"></i>${title}`;
+            chartMode = 'emission_total';
             openModal(true);
             await waitForPaint();
             if (headerDate) headerDate.innerText = 'EMISSÃO';
@@ -6942,7 +7007,6 @@ function flashConcentracaoBar(barIndex) {
             allData = normalized;
             clearTableFilters();
             // Garantir que chartMode e activeChartFilters não filtrem os registros históricos
-            chartMode = 'emission_total';
             activeChartFilters.month = null;
             activeChartFilters.client = null;
             activeChartFilters.day = null;
