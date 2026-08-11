@@ -14,6 +14,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     <script src="js/activity-logger.js?v=20260605e"></script>
     <script src="js/audit-log-formatter.js?v=20260807a"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         *{user-select:none;-webkit-user-select:none;box-sizing:border-box}
         input,textarea,[contenteditable="true"]{user-select:text!important;-webkit-user-select:text!important;cursor:text}
@@ -578,6 +579,21 @@
         .native-grid-2{display:grid;grid-template-columns:340px minmax(0,1fr);gap:18px;min-height:0;flex:1}
         .native-panel{border:1px solid var(--border-subtle);border-radius:14px;background:rgba(255,255,255,.025);padding:16px;min-height:0;overflow:auto}
         .native-empty{height:100%;display:flex;align-items:center;justify-content:center;color:#71717a;text-align:center;padding:30px}
+        .neon-status-screen{height:100%;min-height:0;display:flex;flex-direction:column;gap:14px;overflow:auto;padding-right:3px}
+        .neon-status-toolbar{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;flex-shrink:0}
+        .neon-status-heading{display:flex;align-items:center;gap:11px;min-width:0}
+        .neon-status-heading-icon{width:38px;height:38px;display:flex;align-items:center;justify-content:center;border:1px solid rgba(16,185,129,.25);border-radius:9px;background:rgba(16,185,129,.08);color:#34d399}
+        .neon-status-heading strong{display:block;color:#f4f4f5;font-size:.88rem;font-weight:850}.neon-status-heading span{display:block;color:#71717a;font-size:.68rem;margin-top:3px}
+        .neon-status-filters{display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap}.neon-status-filters label{display:flex;flex-direction:column;gap:5px;color:#71717a;font-size:.6rem;font-weight:850;text-transform:uppercase;letter-spacing:.08em}.neon-status-filters .native-input{height:34px;padding:6px 9px;color-scheme:dark}
+        .neon-status-kpis{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:10px;flex-shrink:0}
+        .neon-kpi{min-height:94px;border:1px solid rgba(255,255,255,.075);border-radius:8px;background:#101013;padding:14px 15px;display:flex;flex-direction:column;justify-content:space-between;position:relative;overflow:hidden}
+        .neon-kpi::before{content:'';position:absolute;left:0;top:12px;bottom:12px;width:2px;background:var(--kpi-ac,#10b981)}
+        .neon-kpi-label{color:#71717a;font-size:.61rem;font-weight:900;text-transform:uppercase;letter-spacing:.08em}.neon-kpi-value{color:#fafafa;font:800 1.25rem var(--font-mono)}.neon-kpi-value small{font-size:.62rem;color:#71717a;font-family:var(--font-main)}
+        .neon-chart-panel{flex:1;min-height:330px;border:1px solid rgba(255,255,255,.075);border-radius:8px;background:#0e0e11;display:flex;flex-direction:column;overflow:hidden}
+        .neon-chart-head{min-height:52px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 15px;border-bottom:1px solid rgba(255,255,255,.065);flex-shrink:0}.neon-chart-title{color:#d4d4d8;font-size:.72rem;font-weight:850;text-transform:uppercase;letter-spacing:.08em}.neon-source{display:inline-flex;align-items:center;gap:6px;color:#34d399;font-size:.64rem;font-weight:800}.neon-source::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor;box-shadow:0 0 0 3px rgba(16,185,129,.1)}.neon-source.mock{color:#fbbf24}
+        .neon-chart-wrap{position:relative;flex:1;min-height:270px;padding:14px 16px 10px}.neon-chart-wrap canvas{width:100%!important;height:100%!important}.neon-chart-note{color:#71717a;font-size:.65rem;line-height:1.4;padding:0 16px 12px}
+        @media(max-width:980px){.neon-status-kpis{grid-template-columns:repeat(2,minmax(150px,1fr))}.neon-chart-panel{min-height:380px}}
+        @media(max-width:620px){.neon-status-kpis{grid-template-columns:1fr}.neon-status-filters{width:100%}.neon-status-filters label{flex:1}.neon-status-filters .native-input{width:100%}.neon-status-filters .native-btn{height:34px}.neon-chart-panel{min-height:420px}}
         .toast-container{position:fixed;top:18px;right:18px;z-index:10000;display:flex;flex-direction:column;gap:10px;pointer-events:none}
         .toast{min-width:280px;max-width:380px;background:#18181b;border:1px solid rgba(255,255,255,.08);border-left:3px solid #3b82f6;border-radius:10px;padding:13px 15px;display:flex;gap:12px;align-items:flex-start;box-shadow:0 18px 40px rgba(0,0,0,.45);animation:toastIn .22s ease-out;pointer-events:auto}
         .toast.success{border-left-color:#10b981}.toast.danger{border-left-color:#ef4444}.toast.info{border-left-color:#3b82f6}
@@ -669,11 +685,11 @@
                         <div class="ti-panel-desc">Pendências e manutenções de dados do sistema.</div>
                     </div>
                 </div>
-                <div class="ti-panel-card disabled" style="--ac:#52525b">
+                <div class="ti-panel-card" style="--ac:#10b981" onclick="openAdminFeature('serverStatus')">
                     <div class="ti-panel-icon"><i class="fa-solid fa-database"></i></div>
                     <div>
                         <div class="ti-panel-title">Status do Servidor</div>
-                        <div class="ti-panel-desc">Monitoramento de banco de dados e sincronização em breve.</div>
+                        <div class="ti-panel-desc">Acompanhar consumo diário, tráfego, armazenamento e custo estimado do Neon.</div>
                     </div>
                 </div>
 
@@ -1006,6 +1022,7 @@
             permissions: 'Permissões por Role',
             logs: 'Logs do Sistema',
             tasks: 'Central de Tarefas',
+            serverStatus: 'Status do Servidor',
             locks: 'Bloqueio de Telas',
             communication: 'Comunicação',
             developments: 'Desenvolvimentos'
@@ -1085,9 +1102,147 @@
         if (view === 'permissions') return loadNativePermissions();
         if (view === 'logs') return loadNativeLogs();
         if (view === 'tasks') return loadNativeTasks();
+        if (view === 'serverStatus') return loadNativeServerStatus();
         if (view === 'locks') return loadNativeLocks();
         if (view === 'communication') return loadNativeCommunication();
         if (view === 'developments') return loadNativeDevelopments();
+    }
+
+    const neonUsageMock = [
+        {data:'2026-08-01',compute_cuh:3.12,storage_gb:1.45,network_mb:1240.50,custo_usd:0.35},
+        {data:'2026-08-02',compute_cuh:2.85,storage_gb:1.45,network_mb:980.12,custo_usd:0.32},
+        {data:'2026-08-03',compute_cuh:4.20,storage_gb:1.45,network_mb:2150.34,custo_usd:0.47},
+        {data:'2026-08-04',compute_cuh:3.95,storage_gb:1.48,network_mb:1890.40,custo_usd:0.45},
+        {data:'2026-08-05',compute_cuh:4.51,storage_gb:1.49,network_mb:3420.15,custo_usd:0.51},
+        {data:'2026-08-06',compute_cuh:3.88,storage_gb:1.49,network_mb:2100.80,custo_usd:0.45},
+        {data:'2026-08-07',compute_cuh:4.10,storage_gb:1.50,network_mb:2870.22,custo_usd:0.47},
+        {data:'2026-08-08',compute_cuh:2.90,storage_gb:1.50,network_mb:1120.45,custo_usd:0.33},
+        {data:'2026-08-09',compute_cuh:3.05,storage_gb:1.50,network_mb:1340.60,custo_usd:0.35},
+        {data:'2026-08-10',compute_cuh:5.12,storage_gb:1.51,network_mb:4120.80,custo_usd:0.58},
+        {data:'2026-08-11',compute_cuh:3.65,storage_gb:1.51,network_mb:3110.15,custo_usd:0.41}
+    ];
+    let nativeNeonUsageChart = null;
+
+    function loadNativeServerStatus() {
+        const today = new Date().toISOString().slice(0, 10);
+        const monthStart = `${today.slice(0, 8)}01`;
+        adminContent(`
+            <div class="neon-status-screen">
+                <div class="neon-status-toolbar">
+                    <div class="neon-status-heading">
+                        <div class="neon-status-heading-icon"><i class="fa-solid fa-database"></i></div>
+                        <div><strong>Consumo do banco Neon</strong><span>Métricas diárias consolidadas de todos os projetos</span></div>
+                    </div>
+                    <div class="neon-status-filters">
+                        <label>De<input type="date" id="neonUsageFrom" class="native-input" value="${monthStart}" autocomplete="off"></label>
+                        <label>Até<input type="date" id="neonUsageTo" class="native-input" value="${today}" autocomplete="off"></label>
+                        <button class="native-btn good" id="neonUsageRefresh" onclick="refreshNativeNeonUsage()" title="Atualizar consumo"><i class="fa-solid fa-rotate"></i> Atualizar</button>
+                    </div>
+                </div>
+                <div class="neon-status-kpis" id="neonUsageKpis">
+                    ${Array.from({length:4}, () => '<div class="neon-kpi"><span class="neon-kpi-label">Carregando</span><span class="neon-kpi-value">--</span></div>').join('')}
+                </div>
+                <div class="neon-chart-panel">
+                    <div class="neon-chart-head"><span class="neon-chart-title">Custo diário estimado</span><span class="neon-source" id="neonUsageSource">Consultando Neon</span></div>
+                    <div class="neon-chart-wrap"><canvas id="neonUsageChart"></canvas></div>
+                    <div class="neon-chart-note" id="neonUsageNote">Passe o cursor sobre um dia para visualizar Compute, Storage e Network.</div>
+                </div>
+            </div>`);
+        refreshNativeNeonUsage();
+    }
+
+    async function refreshNativeNeonUsage() {
+        const from = document.getElementById('neonUsageFrom')?.value;
+        const to = document.getElementById('neonUsageTo')?.value;
+        const button = document.getElementById('neonUsageRefresh');
+        if (!from || !to || from > to) return showToast('Período inválido', 'Revise as datas informadas.', 'danger');
+        if (button) button.disabled = true;
+        try {
+            const json = await adminRequest(`/api/neon-usage?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+            renderNativeNeonUsage(Array.isArray(json.data) ? json.data : [], false);
+        } catch (error) {
+            const mock = neonUsageMock.filter(item => item.data >= from && item.data <= to);
+            renderNativeNeonUsage(mock.length ? mock : neonUsageMock, true, error.message);
+        } finally {
+            if (button) button.disabled = false;
+        }
+    }
+
+    function renderNativeNeonUsage(rows, isMock, errorMessage) {
+        const kpis = document.getElementById('neonUsageKpis');
+        const source = document.getElementById('neonUsageSource');
+        const note = document.getElementById('neonUsageNote');
+        if (!kpis || !source || !note) return;
+        const totalCompute = rows.reduce((sum, row) => sum + Number(row.compute_cuh || 0), 0);
+        const totalNetwork = rows.reduce((sum, row) => sum + Number(row.network_mb || 0), 0);
+        const totalCost = rows.reduce((sum, row) => sum + Number(row.custo_usd || 0), 0);
+        const latestStorage = rows.length ? Number(rows[rows.length - 1].storage_gb || 0) : 0;
+        const networkDisplay = totalNetwork >= 1000 ? `${(totalNetwork / 1000).toLocaleString('pt-BR',{maximumFractionDigits:2})} <small>GB</small>` : `${totalNetwork.toLocaleString('pt-BR',{maximumFractionDigits:1})} <small>MB</small>`;
+        kpis.innerHTML = `
+            <div class="neon-kpi" style="--kpi-ac:#34d399"><span class="neon-kpi-label">Compute no período</span><span class="neon-kpi-value">${totalCompute.toLocaleString('pt-BR',{maximumFractionDigits:2})} <small>CUH</small></span></div>
+            <div class="neon-kpi" style="--kpi-ac:#38bdf8"><span class="neon-kpi-label">Storage mais recente</span><span class="neon-kpi-value">${latestStorage.toLocaleString('pt-BR',{maximumFractionDigits:3})} <small>GB-mês</small></span></div>
+            <div class="neon-kpi" style="--kpi-ac:#a78bfa"><span class="neon-kpi-label">Network no período</span><span class="neon-kpi-value">${networkDisplay}</span></div>
+            <div class="neon-kpi" style="--kpi-ac:#fbbf24"><span class="neon-kpi-label">Custo estimado</span><span class="neon-kpi-value">US$ ${totalCost.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div>`;
+        source.textContent = isMock ? 'Mock de validação' : 'API Neon em tempo real';
+        source.classList.toggle('mock', isMock);
+        note.textContent = isMock
+            ? `API indisponível: ${errorMessage || 'falha na consulta'}. Exibindo dados de validação.`
+            : 'Custo estimado com a taxa configurada no servidor. Passe o cursor sobre um dia para visualizar os detalhes.';
+        renderNativeNeonUsageChart(rows);
+    }
+
+    function renderNativeNeonUsageChart(rows) {
+        const canvas = document.getElementById('neonUsageChart');
+        if (!canvas || typeof Chart === 'undefined') return;
+        if (nativeNeonUsageChart) nativeNeonUsageChart.destroy();
+        nativeNeonUsageChart = new Chart(canvas.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: rows.map(row => row.data),
+                datasets: [{
+                    label: 'Custo estimado (USD)',
+                    data: rows.map(row => Number(row.custo_usd || 0)),
+                    backgroundColor: 'rgba(16,185,129,.55)',
+                    borderColor: '#34d399',
+                    borderWidth: 1,
+                    borderRadius: 4,
+                    maxBarThickness: 42
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        displayColors: false,
+                        backgroundColor: 'rgba(9,9,11,.98)',
+                        borderColor: 'rgba(52,211,153,.32)',
+                        borderWidth: 1,
+                        padding: 12,
+                        titleColor: '#f4f4f5',
+                        bodyColor: '#d4d4d8',
+                        callbacks: {
+                            title: items => new Date(`${items[0].label}T12:00:00`).toLocaleDateString('pt-BR'),
+                            label: item => `Custo: US$ ${Number(item.raw).toFixed(2)}`,
+                            afterLabel: item => {
+                                const row = rows[item.dataIndex] || {};
+                                return [
+                                    `Compute: ${Number(row.compute_cuh || 0).toLocaleString('pt-BR',{maximumFractionDigits:3})} CUH`,
+                                    `Storage: ${Number(row.storage_gb || 0).toLocaleString('pt-BR',{maximumFractionDigits:3})} GB-mês`,
+                                    `Network: ${Number(row.network_mb || 0).toLocaleString('pt-BR',{maximumFractionDigits:2})} MB`
+                                ];
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: { grid: { display: false }, ticks: { color: '#71717a', maxRotation: 0, autoSkip: true, font: { family: "'JetBrains Mono', monospace", size: 10 }, callback: function(value){ const date=this.getLabelForValue(value); return date ? date.slice(8,10)+'/'+date.slice(5,7) : ''; } } },
+                    y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,.055)' }, ticks: { color: '#71717a', font: { family: "'JetBrains Mono', monospace", size: 10 }, callback: value => `US$ ${Number(value).toFixed(2)}` }, title: { display: true, text: 'Custo estimado (USD)', color: '#71717a', font: { size: 10, weight: '700' } } }
+                }
+            }
+        });
     }
 
     async function loadNativeTasks() {
