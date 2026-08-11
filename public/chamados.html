@@ -568,11 +568,18 @@
         <div id="tiDashboardView" class="ti-view active">
             <div class="ti-dashboard">
                 <div class="ti-section-label">Gestão de Acesso</div>
+                <div class="ti-panel-card" style="--ac:#22c55e" onclick="openAdminFeature('createUser')">
+                    <div class="ti-panel-icon"><i class="fa-solid fa-user-plus"></i></div>
+                    <div>
+                        <div class="ti-panel-title">Criar Usuário</div>
+                        <div class="ti-panel-desc">Cadastrar uma nova conta escolhendo role, status e permissões.</div>
+                    </div>
+                </div>
                 <div class="ti-panel-card" style="--ac:#3b82f6" onclick="openAdminFeature('users')">
                     <div class="ti-panel-icon"><i class="fa-solid fa-users-gear"></i></div>
                     <div>
                         <div class="ti-panel-title">Usuários</div>
-                        <div class="ti-panel-desc">Criar, editar e gerenciar contas de acesso ao sistema.</div>
+                        <div class="ti-panel-desc">Editar, bloquear, auditar e gerenciar contas existentes.</div>
                     </div>
                 </div>
                 <div class="ti-panel-card" style="--ac:#f97316" onclick="openAdminFeature('permissions')">
@@ -929,6 +936,7 @@
     function openAdminFeature(view) {
         currentAdminFeature = view;
         const labels = {
+            createUser: 'Criar Usuario',
             users: 'Usuários',
             permissions: 'Permissões por Role',
             logs: 'Logs do Sistema',
@@ -1009,6 +1017,7 @@
     }
 
     function loadNativeAdminView(view) {
+        if (view === 'createUser') return loadNativeCreateUser();
         if (view === 'users') return loadNativeUsers();
         if (view === 'permissions') return loadNativePermissions();
         if (view === 'logs') return loadNativeLogs();
@@ -1529,15 +1538,8 @@
         return `<span class="native-badge" style="color:${color};border-color:${color}55;background:${color}14"><i class="fa-solid ${icon}"></i> ${label}</span>`;
     }
 
-    async function loadNativeUsers() {
-        adminContent('<div class="native-empty">Carregando usuários...</div>');
-        try {
-            const r = await fetch('/api/admin/users', { headers: adminHeaders() });
-            if (!r.ok) throw new Error('Erro ao carregar usuarios');
-            const json = await r.json();
-            if (!Array.isArray(json.users)) throw new Error('Resposta invalida');
-            window.__nativeUsers = (json.users || []).sort((a, b) => new Date(b.last_activity_at || 0) - new Date(a.last_activity_at || 0));
-            adminContent(`
+    function createUserFormHtml() {
+        return `
                 <form class="native-create-user" onsubmit="nativeCreateUser(event)">
                     <label>Nome completo
                         <input class="native-input" id="nativeNewFullName" autocomplete="off" required>
@@ -1567,6 +1569,27 @@
                         <button class="native-btn gray" type="button" onclick="nativeResetCreateUserForm()"><i class="fa-solid fa-eraser"></i> Limpar</button>
                     </div>
                 </form>
+                `;
+    }
+
+    function loadNativeCreateUser() {
+        adminContent(`
+            <div class="native-admin-toolbar">
+                <div style="color:#a1a1aa;font-size:.82rem">Cadastre a conta e escolha as permiss�es iniciais.</div>
+                <button class="native-btn" onclick="openAdminFeature('users')"><i class="fa-solid fa-users-gear"></i> Ver usuarios</button>
+            </div>
+            ${createUserFormHtml()}
+        `);
+    }
+    async function loadNativeUsers() {
+        adminContent('<div class="native-empty">Carregando usuários...</div>');
+        try {
+            const r = await fetch('/api/admin/users', { headers: adminHeaders() });
+            if (!r.ok) throw new Error('Erro ao carregar usuarios');
+            const json = await r.json();
+            if (!Array.isArray(json.users)) throw new Error('Resposta invalida');
+            window.__nativeUsers = (json.users || []).sort((a, b) => new Date(b.last_activity_at || 0) - new Date(a.last_activity_at || 0));
+            adminContent(`
                 <div class="native-admin-toolbar">
                     <input class="native-input" id="nativeUserSearch" placeholder="Buscar usuario..." oninput="renderNativeUsers()" style="width:280px">
                     <button class="native-btn" onclick="loadNativeUsers()"><i class="fa-solid fa-rotate"></i> Atualizar</button>
@@ -1645,7 +1668,7 @@
         try {
             await adminRequest('/api/admin/users', { method:'POST', body:JSON.stringify(payload) });
             showToast('Usuario criado', payload.username, 'success');
-            await loadNativeUsers();
+            nativeResetCreateUserForm();
         } catch(e) {
             showToast('Erro', e.message || 'Falha ao criar usuario.', 'danger');
         } finally {
