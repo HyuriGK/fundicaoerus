@@ -55,6 +55,14 @@ async function loadAllProjects(token, query) {
     return projects;
 }
 
+function getPricing() {
+    return {
+        compute_usd_per_cuh: Number(process.env.NEON_COMPUTE_USD_PER_CUH || 0.106),
+        storage_usd_per_gb_month: Number(process.env.NEON_STORAGE_USD_PER_GB_MONTH || 0.35),
+        network_usd_per_gb: Number(process.env.NEON_NETWORK_USD_PER_GB || 0)
+    };
+}
+
 function normalizeUsage(projects, from, to) {
     const days = new Map();
     for (const project of projects) {
@@ -71,14 +79,12 @@ function normalizeUsage(projects, from, to) {
         }
     }
 
-    const computeRate = Number(process.env.NEON_COMPUTE_USD_PER_CUH || 0.1125);
-    const storageRate = Number(process.env.NEON_STORAGE_USD_PER_GB_MONTH || 0);
-    const networkRate = Number(process.env.NEON_NETWORK_USD_PER_GB || 0);
+    const pricing = getPricing();
     return [...days.values()].sort((a, b) => a.data.localeCompare(b.data)).map(day => {
         const computeCuh = day.compute_unit_seconds / 3600;
         const storageGb = day.root_branch_bytes_month / 1e9;
         const networkMb = day.public_network_transfer_bytes / 1e6;
-        const cost = computeCuh * computeRate + storageGb * storageRate + (networkMb / 1000) * networkRate;
+        const cost = computeCuh * pricing.compute_usd_per_cuh + storageGb * pricing.storage_usd_per_gb_month + (networkMb / 1000) * pricing.network_usd_per_gb;
         return {
             data: day.data,
             compute_cuh: Number(computeCuh.toFixed(4)),
@@ -108,7 +114,14 @@ router.get('/', checkDevRole, async (req, res) => {
             granularity: 'daily',
             metrics: METRICS.join(',')
         });
-        res.json({ success: true, source: 'neon', aggregation_interval: 'daily', metrics: METRICS, data: normalizeUsage(projects, from, to) });
+        res.json({
+            success: true,
+            source: 'neon',
+            aggregation_interval: 'daily',
+            metrics: METRICS,
+            pricing: getPricing(),
+            data: normalizeUsage(projects, from, to)
+        });
     } catch (error) {
         console.error('[NEON-USAGE]', error.message);
         res.status(502).json({ success: false, message: 'Nao foi possivel consultar o consumo do Neon.' });
