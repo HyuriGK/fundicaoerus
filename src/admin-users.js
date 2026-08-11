@@ -3,6 +3,7 @@ const router = express.Router();
 const pool = require('../lib/db');
 const { logActivity } = require('./lib/logger');
 const { requireRole } = require('../lib/middleware');
+const bcrypt = require('bcryptjs');
 
 const checkDevRole = requireRole('desenvolvedor', 'admin');
 
@@ -125,6 +126,62 @@ router.get('/', checkDevRole, async (req, res) => {
     } catch (error) {
         console.error('Erro ao listar usuários:', error);
         res.status(500).json({ success: false, message: 'Erro ao buscar usuários.' });
+    }
+});
+
+router.post('/', checkDevRole, async (req, res) => {
+    const fullName = String(req.body.fullName || req.body.name || '').trim();
+    const username = String(req.body.username || req.body.user || '').trim().toLowerCase();
+    const password = String(req.body.password || req.body.pass || '');
+    const email = String(req.body.email || '').trim().toLowerCase();
+    const role = String(req.body.role || 'visitante').trim().toLowerCase();
+    const approved = req.body.approved !== false;
+    const canAccessAfterHours = req.body.can_access_after_hours === true;
+    const pages = Array.isArray(req.body.monetary_pages) ? req.body.monetary_pages : [];
+    const validMonetaryPages = new Set(MONETARY_PAGES.map(([, key]) => key));
+    const selectedPages = pages.filter(page => validMonetaryPages.has(page));
+
+    if (!fullName || !username || !password) {
+        return res.status(400).json({ success: false, message: 'Informe nome, usuario e senha.' });
+    }
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return res.status(400).json({ success: false, message: 'Email invalido.' });
+    }
+
+    const client = await pool.connect();
+    try {
+        const userCheck = await client.query('SELECT id FROM users WHERE username = $1', [username]);
+        if (userCheck.rows.length > 0) {
+            return res.status(400).json({ success: false, message: 'Usuario ja existe. Escolha outro.' });
+        }
+
+        const hashPass = await bcrypt.hash(password, await bcrypt.genSalt(10));
+        await client.query('BEGIN');
+        const result = await client.query(
+            `INSERT INTO users (name, username, password, email, role, approved, can_access_after_hours, can_view_monetary)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, FALSE)
+             RETURNING id, username, name, email, role, approved, can_access_after_hours`,
+            [fullName, username, hashPass, email || null, role, approved, canAccessAfterHours]
+        );
+        for (const page of selectedPages) {
+            await client.query(
+                `INSERT INTO user_monetary_permissions (username, page_key, allowed, updated_at)
+                 VALUES ($1, $2, TRUE, NOW())
+                 ON CONFLICT (username, page_key) DO UPDATE SET allowed = TRUE, updated_at = NOW()`,
+                [username, page]
+            );
+        }
+        await client.query('COMMIT');
+
+        const adminUser = req.user.name || 'Admin';
+        logActivity(adminUser, 'CREATE_USER', 'users', { affected_user: username, role, approved, monetary_pages: selectedPages });
+        res.status(201).json({ success: true, user: { ...result.rows[0], monetary_pages: selectedPages, can_view_monetary: selectedPages.length > 0 } });
+    } catch (error) {
+        await client.query('ROLLBACK').catch(() => {});
+        console.error('Erro ao criar usuario:', error);
+        res.status(500).json({ success: false, message: 'Erro ao criar usuario.' });
+    } finally {
+        client.release();
     }
 });
 

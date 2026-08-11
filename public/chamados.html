@@ -485,6 +485,16 @@
         .native-input,.native-select,.native-textarea{background:rgba(255,255,255,.045);border:1px solid var(--border-subtle);border-radius:8px;color:#f4f4f5;font-family:var(--font-main);font-size:.82rem;padding:9px 11px;outline:none}
         .native-input:focus,.native-select:focus,.native-textarea:focus{border-color:rgba(251,191,36,.42)}
         .native-select option{background:#18181b}
+        .native-create-user{border:1px solid var(--border-subtle);border-radius:14px;background:rgba(255,255,255,.025);padding:14px;display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:10px;flex-shrink:0}
+        .native-create-user label{display:flex;flex-direction:column;gap:6px;color:#71717a;font-size:.64rem;font-weight:850;text-transform:uppercase;letter-spacing:.08em}
+        .native-create-user .native-check{flex-direction:row;align-items:center;text-transform:none;letter-spacing:0;color:#a1a1aa;font-size:.76rem;font-weight:750;padding-top:22px}
+        .native-create-user .span-2{grid-column:span 2}
+        .native-create-user .span-4{grid-column:1/-1}
+        .native-create-actions{display:flex;align-items:end;gap:8px}
+        .native-create-monetary{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;max-height:118px;overflow:auto;border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:9px;background:rgba(0,0,0,.16)}
+        .native-create-monetary label{flex-direction:row;align-items:center;text-transform:none;letter-spacing:0;color:#a1a1aa;font-size:.72rem;font-weight:700}
+        @media(max-width:1100px){.native-create-user{grid-template-columns:repeat(2,minmax(150px,1fr))}.native-create-user .span-2{grid-column:span 1}}
+        @media(max-width:700px){.native-create-user{grid-template-columns:1fr}.native-create-user .span-2,.native-create-user .span-4{grid-column:1}}
         .native-badge{display:inline-flex;align-items:center;gap:5px;border-radius:999px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.04);padding:3px 8px;font-size:.66rem;font-weight:800;color:#a1a1aa}
         .native-badge.good{color:#10b981;border-color:rgba(16,185,129,.28);background:rgba(16,185,129,.08)}
         .native-badge.bad{color:#ef4444;border-color:rgba(239,68,68,.25);background:rgba(239,68,68,.07)}
@@ -1528,8 +1538,37 @@
             if (!Array.isArray(json.users)) throw new Error('Resposta invalida');
             window.__nativeUsers = (json.users || []).sort((a, b) => new Date(b.last_activity_at || 0) - new Date(a.last_activity_at || 0));
             adminContent(`
+                <form class="native-create-user" onsubmit="nativeCreateUser(event)">
+                    <label>Nome completo
+                        <input class="native-input" id="nativeNewFullName" autocomplete="off" required>
+                    </label>
+                    <label>Usuario
+                        <input class="native-input" id="nativeNewUsername" autocomplete="off" required>
+                    </label>
+                    <label>Senha
+                        <input class="native-input" id="nativeNewPassword" type="password" autocomplete="new-password" required>
+                    </label>
+                    <label>Role
+                        <select class="native-select" id="nativeNewRole">${adminRoles.map(role => `<option value="${escapeHtml(role)}">${escapeHtml(role)}</option>`).join('')}</select>
+                    </label>
+                    <label class="span-2">Email
+                        <input class="native-input" id="nativeNewEmail" type="email" autocomplete="off">
+                    </label>
+                    <label class="native-check"><input type="checkbox" id="nativeNewApproved" checked> Usuario aprovado</label>
+                    <label class="native-check"><input type="checkbox" id="nativeNewAfterHours"> Acesso extra-turno</label>
+                    <div class="span-4">
+                        <div style="color:#71717a;font-size:.64rem;font-weight:850;text-transform:uppercase;letter-spacing:.08em;margin-bottom:7px">Permissao monetaria por tela</div>
+                        <div class="native-create-monetary">
+                            ${nativePermPages.flatMap(g => g.pages).map(p => `<label><input type="checkbox" class="native-new-monetary-page" value="${escapeHtml(p[0])}"> ${escapeHtml(p[1])}</label>`).join('')}
+                        </div>
+                    </div>
+                    <div class="native-create-actions span-4">
+                        <button class="native-btn good" id="nativeCreateUserBtn" type="submit"><i class="fa-solid fa-user-plus"></i> Criar usuario</button>
+                        <button class="native-btn gray" type="button" onclick="nativeResetCreateUserForm()"><i class="fa-solid fa-eraser"></i> Limpar</button>
+                    </div>
+                </form>
                 <div class="native-admin-toolbar">
-                    <input class="native-input" id="nativeUserSearch" placeholder="Buscar usuário..." oninput="renderNativeUsers()" style="width:280px">
+                    <input class="native-input" id="nativeUserSearch" placeholder="Buscar usuario..." oninput="renderNativeUsers()" style="width:280px">
                     <button class="native-btn" onclick="loadNativeUsers()"><i class="fa-solid fa-rotate"></i> Atualizar</button>
                 </div>
                 <div class="native-admin-tablewrap"><table class="native-admin-table">
@@ -1570,6 +1609,49 @@
                     </div>
                 </td>
             </tr>`).join('') || '<tr><td colspan="9" class="native-empty">Nenhum usuário.</td></tr>';
+    }
+
+
+    function nativeResetCreateUserForm() {
+        document.getElementById('nativeNewFullName').value = '';
+        document.getElementById('nativeNewUsername').value = '';
+        document.getElementById('nativeNewPassword').value = '';
+        document.getElementById('nativeNewEmail').value = '';
+        document.getElementById('nativeNewRole').value = 'admin';
+        document.getElementById('nativeNewApproved').checked = true;
+        document.getElementById('nativeNewAfterHours').checked = false;
+        document.querySelectorAll('.native-new-monetary-page').forEach(input => input.checked = false);
+    }
+
+    async function nativeCreateUser(event) {
+        event.preventDefault();
+        const btn = document.getElementById('nativeCreateUserBtn');
+        const payload = {
+            fullName: document.getElementById('nativeNewFullName').value.trim(),
+            username: document.getElementById('nativeNewUsername').value.trim(),
+            password: document.getElementById('nativeNewPassword').value,
+            email: document.getElementById('nativeNewEmail').value.trim(),
+            role: document.getElementById('nativeNewRole').value,
+            approved: document.getElementById('nativeNewApproved').checked,
+            can_access_after_hours: document.getElementById('nativeNewAfterHours').checked,
+            monetary_pages: Array.from(document.querySelectorAll('.native-new-monetary-page:checked')).map(input => input.value)
+        };
+        if (!payload.fullName || !payload.username || !payload.password) {
+            showToast('Campos obrigatorios', 'Informe nome, usuario e senha.', 'danger');
+            return;
+        }
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Criando...';
+        try {
+            await adminRequest('/api/admin/users', { method:'POST', body:JSON.stringify(payload) });
+            showToast('Usuario criado', payload.username, 'success');
+            await loadNativeUsers();
+        } catch(e) {
+            showToast('Erro', e.message || 'Falha ao criar usuario.', 'danger');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-user-plus"></i> Criar usuario';
+        }
     }
 
     function activityPageLabel(page) {
