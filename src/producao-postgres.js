@@ -482,6 +482,7 @@ router.get('/', async (req, res) => {
                         last_sync_at,
                         EXTRACT(EPOCH FROM (NOW() - last_sync_at))/3600 as hours_diff
                     FROM sync_status
+                    WHERE LOWER(TRIM(screen_name)) <> 'assertividade'
                 `);
 
                 for (const sync of syncStatusResult.rows) {
