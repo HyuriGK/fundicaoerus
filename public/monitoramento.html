@@ -2681,6 +2681,15 @@
             return new Date(d.getFullYear(), d.getMonth(), d.getDate());
         }
 
+        function getMonitoringEmissionDate(op) {
+            const opNumber = String(op?.OP_PCS || '').trim();
+            const hasOp = Boolean(opNumber && opNumber !== '-');
+            const rawDate = hasOp
+                ? (op.OP_EMISSAO || op.DATA_EMISSAO_PEDIDO)
+                : (op.DATA_EMISSAO_PEDIDO || op.OP_EMISSAO);
+            return toLocalDate(rawDate || new Date());
+        }
+
         // Helper to check the difference in business days between two dates logically
         function getBusinessDaysDiff(date1, date2) {
             const d1 = toLocalDate(date1);
@@ -3156,14 +3165,14 @@
         function getCarteiraStages(op) {
             if (typeof getItemSectorMetrics !== 'function') {
                 const totalQty = parseInt(op.OP_QUANTIDADE) || parseInt(op.QUANTIDADE_PPR) || 0;
-                return getOpStages(op.OP_PCS, totalQty, op.OP_EMISSAO || op.DATA_EMISSAO_PEDIDO, op.ROTEIRO_PRODUCAO);
+                return getOpStages(op.OP_PCS, totalQty, getMonitoringEmissionDate(op), op.ROTEIRO_PRODUCAO);
             }
 
             const metrics = getItemSectorMetrics(op);
             const route = String(op.ROTEIRO_PRODUCAO || '').toUpperCase();
             const hasUsinagem = route.includes('USINAGEM');
             const now = toLocalDate(new Date());
-            const emissionDate = toLocalDate(op.OP_EMISSAO || op.DATA_EMISSAO_PEDIDO || new Date());
+            const emissionDate = getMonitoringEmissionDate(op);
             const routeStages = getMonitoringRouteStages(op);
             const backwardMetaDates = calculateBackwardMetaDates(
                 routeStages,
@@ -3520,7 +3529,7 @@
 
             document.getElementById('opModalNumber').innerText = op;
             document.getElementById('opModalClient').innerText = opData.NOME_CLIENTE || '-';
-            document.getElementById('opModalDate').innerText = formatDateLocal(opData.OP_EMISSAO || opData.DATA_EMISSAO_PEDIDO);
+            document.getElementById('opModalDate').innerText = formatDateLocal(getMonitoringEmissionDate(opData));
 
             const deliveryRaw = opData.ENTREGA_PETR || opData.DATA_ENTREGA_PPR;
             document.getElementById('opModalDelivery').innerText = formatDateLocal(deliveryRaw);
@@ -3646,7 +3655,7 @@
 
                 if (!metaDates) {
                     metaDates = {};
-                    let baselineDate = toLocalDate(opData.OP_EMISSAO || opData.DATA_EMISSAO_PEDIDO);
+                    let baselineDate = getMonitoringEmissionDate(opData);
                     ordered.forEach((sector) => {
                         const configKey = configKeyMap[sector];
                         let currentMeta = toLocalDate(baselineDate);
