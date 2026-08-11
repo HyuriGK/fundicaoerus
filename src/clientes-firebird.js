@@ -2155,7 +2155,7 @@ router.all('/digisac/consultor', async (req, res) => {
                         contactId,
                         DIGISAC_COMERCIAL_DEPARTMENT_ID,
                         null,
-                        'Contato informou que nÃ£o Ã© cliente. Transferido automaticamente para o departamento Comercial.'
+                        'Contato informou que nao e cliente. Transferido automaticamente para o departamento Comercial.'
                     );
 
                     const atendimentoTag = await addDigisacEmAtendimentoTag(contactId);
@@ -2808,11 +2808,11 @@ router.put('/crm/contatos/:id', async (req, res) => {
         const dataProximaAcao = String(req.body.dataProximaAcao || '').trim() || null;
         const resumo = String(req.body.resumo || '').trim();
 
-        if (!crmUser) return res.status(400).json({ success: false, error: 'UsuÃ¡rio invÃ¡lido.' });
-        if (!Number.isInteger(id)) return res.status(400).json({ success: false, error: 'Atendimento invÃ¡lido.' });
-        if (!clienteNome) return res.status(400).json({ success: false, error: 'Cliente invÃ¡lido.' });
-        if (empresa !== null && !Number.isInteger(empresa)) return res.status(400).json({ success: false, error: 'Empresa invÃ¡lida.' });
-        if (codigo !== null && !Number.isInteger(codigo)) return res.status(400).json({ success: false, error: 'CÃ³digo invÃ¡lido.' });
+        if (!crmUser) return res.status(400).json({ success: false, error: 'Usuario invalido.' });
+        if (!Number.isInteger(id)) return res.status(400).json({ success: false, error: 'Atendimento invalido.' });
+        if (!clienteNome) return res.status(400).json({ success: false, error: 'Cliente invalido.' });
+        if (empresa !== null && !Number.isInteger(empresa)) return res.status(400).json({ success: false, error: 'Empresa invalida.' });
+        if (codigo !== null && !Number.isInteger(codigo)) return res.status(400).json({ success: false, error: 'Codigo invalido.' });
 
         const canEditAll = ['admin', 'desenvolvedor', 'gerente comercial', 'diretor'].includes(role);
         const params = [
@@ -2851,7 +2851,7 @@ router.put('/crm/contatos/:id', async (req, res) => {
                       TO_CHAR(data_proxima_acao, 'YYYY-MM-DD') AS data_proxima_acao, resumo, created_at
         `, params);
 
-        if (!result.rows.length) return res.status(404).json({ success: false, error: 'Atendimento nÃ£o encontrado ou sem permissÃ£o para editar.' });
+        if (!result.rows.length) return res.status(404).json({ success: false, error: 'Atendimento nao encontrado ou sem permissao para editar.' });
         res.json({ success: true, data: result.rows[0] });
     } catch (err) {
         res.status(500).json({ success: false, error: 'Erro ao editar contato com cliente', details: err.message });

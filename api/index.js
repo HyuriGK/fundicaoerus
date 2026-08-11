@@ -38,13 +38,13 @@ const registerLimiter = rateLimit({
 const apiLimiter = rateLimit({
     windowMs: 60 * 1000,
     max: 100,
-    message: { success: false, message: 'Limite de requisi��es excedido.' }
+    message: { success: false, message: 'Limite de requisicoes excedido.' }
 });
 
 const aiLimiter = rateLimit({
     windowMs: 60 * 1000,
     max: 10,
-    message: { success: false, message: 'Limite de requisi��es � IA excedido.' }
+    message: { success: false, message: 'Limite de requisicoes a IA excedido.' }
 });
 
 // Middleware para entender JSON

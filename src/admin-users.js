@@ -337,13 +337,13 @@ router.put('/:username/after-hours', checkDevRole, async (req, res) => {
 
     try {
         const result = await pool.query('UPDATE users SET can_access_after_hours = $1 WHERE username = $2 RETURNING username, can_access_after_hours', [can_access_after_hours, username]);
-        if (!result.rows.length) return res.status(404).json({ success: false, message: 'UsuÃ¡rio nÃ£o encontrado.' });
+        if (!result.rows.length) return res.status(404).json({ success: false, message: 'Usuario nao encontrado.' });
         const adminUser = req.user.name || 'Admin';
         logActivity(adminUser, 'UPDATE_AFTER_HOURS_PERM', 'users', { affected_user: username, can_access_after_hours });
-        res.json({ success: true, message: `PermissÃ£o extra-turno ${can_access_after_hours ? 'habilitada' : 'desabilitada'} para ${username}.` });
+        res.json({ success: true, message: `Permissao extra-turno ${can_access_after_hours ? 'habilitada' : 'desabilitada'} para ${username}.` });
     } catch (error) {
-        console.error('Erro ao atualizar permissÃ£o extra-turno:', error);
-        res.status(500).json({ success: false, message: 'Erro ao atualizar permissÃ£o extra-turno.' });
+        console.error('Erro ao atualizar permissao extra-turno:', error);
+        res.status(500).json({ success: false, message: 'Erro ao atualizar permissao extra-turno.' });
     }
 });
 
