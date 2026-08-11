@@ -2946,7 +2946,7 @@
             }
         }
 
-        function getOpStages(opNumber, totalQty, emissionDate, rawRoute) {
+        function getOpStages(opNumber, totalQty, emissionDate, rawRoute, deliveryDate) {
             const opPoints = pointingSummary[opNumber] || {};
 
             // Parse production route (list of sector names or IDs)
@@ -2978,22 +2978,8 @@
                 ? routeStages
                 : orderedStages.filter(stage => groupStatus[stage].qty > 0);
 
-            // --- 2. Calculate Meta Dates sequentially for these stages only ---
-            const metaDates = {};
-            let baselineDate = emissionDate ? toLocalDate(emissionDate) : toLocalDate(new Date());
-            thisOpStages.forEach((stage) => {
-                const configKey = configKeyMap[stage];
-                const lt = leadTimes[configKey] || 0;
-                let currentMeta = toLocalDate(baselineDate);
-                let daysToAdd = lt;
-                while (daysToAdd > 0) {
-                    currentMeta.setDate(currentMeta.getDate() + 1);
-                    const day = currentMeta.getDay();
-                    if (day !== 0 && day !== 6) daysToAdd--;
-                }
-                metaDates[stage] = toLocalDate(currentMeta);
-                baselineDate = toLocalDate(currentMeta);
-            });
+            // Prazo so existe quando ha uma data de entrega real.
+            const metaDates = calculateBackwardMetaDates(thisOpStages, deliveryDate, configKeyMap);
 
             // --- 3. Robust Flow Logic: Account for skipped pointing in earlier stages ---
             // Calculate max pointing in any LATER stage (including and after this one)
@@ -3028,14 +3014,16 @@
 
 
                 if (qtyStayingInStage > 0.001) {
-                    const metaDate = metaDates[stage];
-                    const diff = getBusinessDaysDiff(metaDate, now);
+                    const metaDate = metaDates?.[stage] || null;
+                    const diff = metaDate ? getBusinessDaysDiff(metaDate, now) : null;
 
                     let statusText = '';
                     let isDelayed = false;
                     let statusColor = 'var(--text-muted)';
 
-                    if (diff > 0) {
+                    if (diff === null) {
+                        statusText = '';
+                    } else if (diff > 0) {
                         statusText = `ATRASADO HÁ ${diff} ${diff === 1 ? 'DIA' : 'DIAS'}`;
                         isDelayed = true;
                         statusColor = 'var(--status-danger)';
@@ -3070,16 +3058,16 @@
             // Special Case: If everything is pointed in the last stage, keep it in the last stage
             if (activeStages.length === 0 && prevStageQty > 0) {
                 const stage = orderedStages[orderedStages.length - 1];
-                const metaDate = metaDates[stage];
-                const diff = getBusinessDaysDiff(metaDate, now);
-                let statusText = diff > 0 ? `ATRASADO HÁ ${diff} D` : (diff < 0 ? `ADIANTADO HÁ ${Math.abs(diff)} D` : `NO PRAZO`);
+                const metaDate = metaDates?.[stage] || null;
+                const diff = metaDate ? getBusinessDaysDiff(metaDate, now) : null;
+                let statusText = diff === null ? '' : (diff > 0 ? `ATRASADO HÁ ${diff} D` : (diff < 0 ? `ADIANTADO HÁ ${Math.abs(diff)} D` : `NO PRAZO`));
 
                 activeStages.push({
                     stage: stage,
                     qty: prevStageQty,
                     statusText: statusText,
-                    isDelayed: diff > 0,
-                    statusColor: diff > 0 ? 'var(--status-danger)' : 'var(--status-success)',
+                    isDelayed: diff !== null && diff > 0,
+                    statusColor: diff === null ? 'var(--text-muted)' : (diff > 0 ? 'var(--status-danger)' : 'var(--status-success)'),
                     qtyExpedited: qtyExpedited,
                     daysStopped: getBusinessDaysDiff(arrivalDate, now),
                     sectorDeadlineDiff: diff
@@ -3165,7 +3153,7 @@
         function getCarteiraStages(op) {
             if (typeof getItemSectorMetrics !== 'function') {
                 const totalQty = parseInt(op.OP_QUANTIDADE) || parseInt(op.QUANTIDADE_PPR) || 0;
-                return getOpStages(op.OP_PCS, totalQty, getMonitoringEmissionDate(op), op.ROTEIRO_PRODUCAO);
+                return getOpStages(op.OP_PCS, totalQty, getMonitoringEmissionDate(op), op.ROTEIRO_PRODUCAO, op.ENTREGA_PETR || op.DATA_ENTREGA_PPR);
             }
 
             const metrics = getItemSectorMetrics(op);
@@ -3182,25 +3170,15 @@
             if (!hasOp) {
                 const qty = metrics.qAguardando || 0;
                 const stage = getMoldagemStage(op);
-                const configKey = stageLeadTimeKeyMap[stage];
-                let metaDate = backwardMetaDates?.[stage];
-                if (!metaDate) {
-                    metaDate = toLocalDate(emissionDate);
-                    let daysToAdd = leadTimes[configKey] || 0;
-                    while (daysToAdd > 0) {
-                        metaDate.setDate(metaDate.getDate() + 1);
-                        const day = metaDate.getDay();
-                        if (day !== 0 && day !== 6) daysToAdd--;
-                    }
-                }
-                const diff = getBusinessDaysDiff(metaDate, now);
+                const metaDate = backwardMetaDates?.[stage] || null;
+                const diff = metaDate ? getBusinessDaysDiff(metaDate, now) : null;
                 return qty > 0 ? [{
                     stage,
                     qty,
                     totalQty: metrics.targetTotalQty,
-                    statusText: diff > 0 ? `ATRASADO HÁ ${diff} D` : (diff < 0 ? `ADIANTADO HÁ ${Math.abs(diff)} D` : 'NO PRAZO'),
-                    isDelayed: diff > 0,
-                    statusColor: diff > 0 ? 'var(--status-danger)' : 'var(--status-success)',
+                    statusText: diff === null ? '' : (diff > 0 ? `ATRASADO HÁ ${diff} D` : (diff < 0 ? `ADIANTADO HÁ ${Math.abs(diff)} D` : 'NO PRAZO')),
+                    isDelayed: diff !== null && diff > 0,
+                    statusColor: diff === null ? 'var(--text-muted)' : (diff > 0 ? 'var(--status-danger)' : 'var(--status-success)'),
                     qtyExpedited: 0,
                     daysStopped: getBusinessDaysDiff(emissionDate, now),
                     sectorDeadlineDiff: diff
@@ -3226,26 +3204,15 @@
                 .filter(([, qty]) => qty > 0)
                 .map(([stage, qty]) => {
                     const arrivalDate = getStageArrivalDate(op, stage, qty, emissionDate);
-                    let metaDate = backwardMetaDates?.[stage];
-                    if (!metaDate) {
-                        const configKey = stageLeadTimeKeyMap[stage] || configKeyMap[stage];
-                        const lt = leadTimes[configKey] || 0;
-                        metaDate = toLocalDate(arrivalDate);
-                        let daysToAdd = lt;
-                        while (daysToAdd > 0) {
-                            metaDate.setDate(metaDate.getDate() + 1);
-                            const day = metaDate.getDay();
-                            if (day !== 0 && day !== 6) daysToAdd--;
-                        }
-                    }
-                    const diff = getBusinessDaysDiff(metaDate, now);
+                    const metaDate = backwardMetaDates?.[stage] || null;
+                    const diff = metaDate ? getBusinessDaysDiff(metaDate, now) : null;
                     return {
                         stage,
                         qty,
                         totalQty: metrics.targetTotalQty,
-                        statusText: diff > 0 ? `ATRASADO HÁ ${diff} D` : (diff < 0 ? `ADIANTADO HÁ ${Math.abs(diff)} D` : 'NO PRAZO'),
-                        isDelayed: diff > 0,
-                        statusColor: diff > 0 ? 'var(--status-danger)' : 'var(--status-success)',
+                        statusText: diff === null ? '' : (diff > 0 ? `ATRASADO HÁ ${diff} D` : (diff < 0 ? `ADIANTADO HÁ ${Math.abs(diff)} D` : 'NO PRAZO')),
+                        isDelayed: diff !== null && diff > 0,
+                        statusColor: diff === null ? 'var(--text-muted)' : (diff > 0 ? 'var(--status-danger)' : 'var(--status-success)'),
                         qtyExpedited,
                         daysStopped: getBusinessDaysDiff(arrivalDate, now),
                         sectorDeadlineDiff: diff
@@ -3398,12 +3365,16 @@
                     const qtyBaseDisplay = (isPartial ? `${Math.round(qty)} DE ${totalQtyAll}` : `${totalQtyAll}`) + ' PÇS';
                     const expeditedQty = (stage !== 'AGUARDANDO FATURAMENTO' && qtyExpedited > 0) ? Math.round(qtyExpedited) : 0;
 
-                    const sectorDeadlineDiff = Number(status.sectorDeadlineDiff) || 0;
-                    const deadlineLabel = sectorDeadlineDiff > 0
-                        ? `${sectorDeadlineDiff}d atraso`
-                        : sectorDeadlineDiff < 0
-                            ? `${Math.abs(sectorDeadlineDiff)}d prazo`
-                            : 'vence hoje';
+                    const rawDeadlineDiff = status.sectorDeadlineDiff;
+                    const hasDeadline = rawDeadlineDiff !== null && rawDeadlineDiff !== undefined && rawDeadlineDiff !== '' && Number.isFinite(Number(rawDeadlineDiff));
+                    const sectorDeadlineDiff = hasDeadline ? Number(rawDeadlineDiff) : 0;
+                    const deadlineLabel = !hasDeadline
+                        ? ''
+                        : sectorDeadlineDiff > 0
+                            ? `${sectorDeadlineDiff}d atraso`
+                            : sectorDeadlineDiff < 0
+                                ? `${Math.abs(sectorDeadlineDiff)}d prazo`
+                                : 'vence hoje';
                     const deadlineColor = sectorDeadlineDiff > 0
                         ? 'var(--status-danger)'
                         : sectorDeadlineDiff < 0
@@ -3436,9 +3407,7 @@
                                     <div class="stopped-info" style="color: #fff; opacity: 1; background: rgba(255,255,255,0.08); padding: 3px 7px; border-radius: 4px; display: inline-flex; align-items: center; font-variant-numeric: tabular-nums;">
                                          ${status.daysStopped} dias
                                      </div>
-                                     <div class="deadline-info" style="color: ${deadlineColor}; opacity: 1; background: rgba(255,255,255,0.08); padding: 3px 7px; border-radius: 4px; display: inline-flex; align-items: center;">
-                                        ${deadlineLabel}
-                                     </div>
+                                     ${hasDeadline ? `<div class="deadline-info" style="color: ${deadlineColor}; opacity: 1; background: rgba(255,255,255,0.08); padding: 3px 7px; border-radius: 4px; display: inline-flex; align-items: center;">${deadlineLabel}</div>` : ''}
                                  </div>
                              </div>
                         `;
@@ -3472,9 +3441,7 @@
                                     <div class="stopped-info" style="font-family: var(--font-main); font-size: 0.76rem; font-weight: 600; color: var(--text-muted); opacity: 0.9; font-variant-numeric: tabular-nums;">
                                         ${status.daysStopped} dias parado
                                     </div>
-                                    <div class="days-counter ${sectorDeadlineDiff > 0 ? 'danger' : ''}" style="color: ${deadlineColor}; font-size: 0.72rem; font-weight: 600;">
-                                        ${deadlineLabel}
-                                    </div>
+                                    ${hasDeadline ? `<div class="days-counter ${sectorDeadlineDiff > 0 ? 'danger' : ''}" style="color: ${deadlineColor}; font-size: 0.72rem; font-weight: 600;">${deadlineLabel}</div>` : ''}
                                 </div>
                             </div>
                         `;
@@ -3651,24 +3618,7 @@
                 }
 
                 const deliveryDate = opData.ENTREGA_PETR || opData.DATA_ENTREGA_PPR;
-                let metaDates = calculateBackwardMetaDates(ordered, deliveryDate, configKeyMap);
-
-                if (!metaDates) {
-                    metaDates = {};
-                    let baselineDate = getMonitoringEmissionDate(opData);
-                    ordered.forEach((sector) => {
-                        const configKey = configKeyMap[sector];
-                        let currentMeta = toLocalDate(baselineDate);
-                        let daysToAdd = leadTimes[configKey] || 0;
-                        while (daysToAdd > 0) {
-                            currentMeta.setDate(currentMeta.getDate() + 1);
-                            const day = currentMeta.getDay();
-                            if (day !== 0 && day !== 6) daysToAdd--;
-                        }
-                        metaDates[sector] = toLocalDate(currentMeta);
-                        baselineDate = toLocalDate(currentMeta);
-                    });
-                }
+                const metaDates = calculateBackwardMetaDates(ordered, deliveryDate, configKeyMap);
 
                 // --- 3. Robust Flow Logic (Modal) ---
                 const maxForwardModal = {};
@@ -3708,12 +3658,14 @@
                     const qtyExpected = totalQty;
                     const qtyBalance = Math.max(0, qtyExpected - qtyPointed);
                     const qtyInStage = isLastStage ? qtyPointed : Math.max(0, prevFlowQty - qtyMovedOut);
-                    const meta = metaDates[sector];
-                    const metaMidnight = toLocalDate(meta);
+                    const meta = metaDates?.[sector] || null;
+                    const metaMidnight = meta ? toLocalDate(meta) : null;
                     const hasPointing = qtyPointed > 0;
-                    let statusHtml = `<span style="color: var(--text-muted);">Aguardando</span>`;
+                    let statusHtml = meta
+                        ? `<span style="color: var(--text-muted);">Aguardando</span>`
+                        : `<span style="color: var(--text-muted);">Sem data de entrega</span>`;
 
-                    if (hasPointing) {
+                    if (hasPointing && metaMidnight) {
                         const referenceDate = toLocalDate(lastPointingDate[sector]);
                         const timeDiff = referenceDate.getTime() - metaMidnight.getTime();
                         const daysDiff = Math.round(timeDiff / (1000 * 3600 * 24));
@@ -3761,7 +3713,7 @@
                                     </span>
                                 </td>
                                 <td style="padding: 15px 25px; text-align: center; font-family: var(--font-mono); font-size: 0.85rem;">
-                                    ${meta.toLocaleDateString('pt-BR')}
+                                    ${meta ? meta.toLocaleDateString('pt-BR') : '-'}
                                 </td>
                                 <td style="padding: 15px 25px; text-align: center; font-size: 0.85rem;">
                                     ${statusHtml}
@@ -3794,7 +3746,7 @@
                                     ${qtyInStage.toLocaleString('pt-BR')} <small style="font-size: 0.7em;">PÇS</small>
                                 </td>
                                 <td style="padding: 15px 25px; text-align: center; font-family: var(--font-mono); font-size: 0.85rem;">
-                                    ${meta.toLocaleDateString('pt-BR')}
+                                    ${meta ? meta.toLocaleDateString('pt-BR') : '-'}
                                 </td>
                                 <td style="padding: 15px 25px; text-align: center; font-size: 0.85rem;">
                                     ${statusHtml}
