@@ -27,17 +27,13 @@ const MONETARY_PAGES = [
     ['Custos Gerais', 'custos.html'],
     ['Calculadora de Custos', 'custopeca.html'],
     ['Centro de Custo', 'centrocusto.html'],
-    ['OTIF', 'otif.html'],
-    ['Aderencia', 'aderencia.html'],
     ['Refugos', 'refugos.html'],
     ['Devolucoes', 'devolucoes.html'],
-    ['Planner', 'planner.html'],
     ['Balanco', 'balanco.html'],
     ['Funcionarios', 'rh.html'],
     ['Solicitar Chamado', 'solicitarchamados.html'],
     ['Painel TI', 'chamados.html'],
-    ['Comunicacao', 'comunicacao.html'],
-    ['Relatorios', 'relatorio.html']
+    ['Comunicacao', 'comunicacao.html']
 ];
 
 (async () => {

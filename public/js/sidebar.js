@@ -470,17 +470,6 @@
                 '<a href="centrocusto.html" data-stip="Centro de Custo" class="erus-nav-link' + isActive('centrocusto.html') + '">' +
                     '<i class="fa-solid fa-sitemap"></i><span>Centro de Custo</span></a>' +
             '</div>' +
-            // INDICADORES
-            '<div class="erus-nav-group-sep" data-stip="Indicadores" onclick="erusSidebarToggleGroup(\'eg-indicadores\')">' +
-                '<i class="fas fa-gauge-high" style="font-size:0.8rem;color:#52525b;margin-right:8px;flex-shrink:0;"></i>' +
-                '<span class="erus-nav-group-label">Indicadores</span>' +
-                '<div class="erus-nav-group-line"></div>' +
-                '<i class="fa-solid fa-plus" id="icon-eg-indicadores"></i>' +
-            '</div>' +
-            '<div id="eg-indicadores" class="erus-nav-group-wrapper collapsed">' +
-                '<a href="otif.html" data-stip="OTIF" class="erus-nav-link' + isActive('otif.html') + '">' +
-                    '<i class="fa-solid fa-truck-fast"></i><span>OTIF</span></a>' +
-            '</div>' +
             // CONTROLES
             '<div class="erus-nav-group-sep" data-stip="Controles" onclick="erusSidebarToggleGroup(\'eg-controles\')">' +
                 '<i class="fas fa-sliders" style="font-size:0.8rem;color:#52525b;margin-right:8px;flex-shrink:0;"></i>' +
@@ -489,23 +478,10 @@
                 '<i class="fa-solid fa-plus" id="icon-eg-controles"></i>' +
             '</div>' +
             '<div id="eg-controles" class="erus-nav-group-wrapper collapsed">' +
-                '<a href="aderencia.html" data-stip="Aderência" class="erus-nav-link' + isActive('aderencia.html') + '">' +
-                    '<i class="fa-solid fa-check-double"></i><span>Aderência</span></a>' +
                 '<a href="refugos.html" data-stip="Refugo" class="erus-nav-link' + isActive('refugos.html') + '">' +
                     '<i class="fa-solid fa-trash-can"></i><span>Refugo</span></a>' +
                 '<a href="devolucoes.html" data-stip="Devoluções" class="erus-nav-link' + isActive('devolucoes.html') + '">' +
                     '<i class="fa-solid fa-rotate-left"></i><span>Devoluções</span></a>' +
-            '</div>' +
-            // ORGANIZACAO
-            '<div id="erus-sep-organizacao" class="erus-nav-group-sep" data-stip="Organização" onclick="erusSidebarToggleGroup(\'eg-organizacao\')">' +
-                '<i class="fas fa-list-check" style="font-size:0.8rem;color:#52525b;margin-right:8px;flex-shrink:0;"></i>' +
-                '<span class="erus-nav-group-label">Organização</span>' +
-                '<div class="erus-nav-group-line"></div>' +
-                '<i class="fa-solid fa-plus" id="icon-eg-organizacao"></i>' +
-            '</div>' +
-            '<div id="eg-organizacao" class="erus-nav-group-wrapper collapsed">' +
-                '<a href="planner.html" data-stip="Planner" class="erus-nav-link' + isActive('planner.html') + '">' +
-                    '<i class="fa-solid fa-list-check"></i><span>Planner</span></a>' +
             '</div>' +
             // FINANCEIRO
             '<div id="erus-sep-financeiro" class="erus-nav-group-sep" data-stip="Financeiro" onclick="erusSidebarToggleGroup(\'eg-financeiro\')">' +
