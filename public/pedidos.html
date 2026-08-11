@@ -1701,6 +1701,9 @@
         #recordsModal.emission-history-modal .historical-only-column {
             display: table-cell;
         }
+        #recordsModal.emission-history-modal .observations-column {
+            display: none !important;
+        }
         .billing-status-badge {
             display: inline-flex;
             align-items: center;
@@ -2608,7 +2611,7 @@
                             <th class="sortable-th" id="th-peso_total" onclick="toggleSort('peso_total')" style="width: 9%; white-space: nowrap;">PESO TOTAL</th>
                             <th class="sortable-th" id="th-valor_total" onclick="toggleSort('valor_total')" style="width: 9%; white-space: nowrap;">TOTAL (R$)</th>
                             <th style="width: 210px; min-width: 210px;">MODELO</th>
-                            <th style="width: 18%; min-width: 300px;">OBSERVAÇÕES</th>
+                            <th class="observations-column" style="width: 18%; min-width: 300px;">OBSERVAÇÕES</th>
                         </tr>
                         <tr id="filterRow">
                             <th class="conferencia-col dev-conferencia-col" style="display:none;"></th>
@@ -2629,7 +2632,7 @@
                             <!-- Observações (was 10) -->
                             <th><input class="filter-input-table" data-col="10" placeholder="..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></th>
                             <th><input class="filter-input-table" data-col="11" placeholder="..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></th>
-                            <th><input class="filter-input-table" data-col="12" placeholder="..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></th>
+                            <th class="observations-column"><input class="filter-input-table" data-col="12" placeholder="..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></th>
                         </tr>
                     </thead>
                     <tbody id="table-body"></tbody>
@@ -3459,11 +3462,18 @@
         }
         let isModelosHidden = true; // Inicia OCULTO por padrão
         let backlogDataState = null; // Backup for commercial backlog when viewing history
+        function updateRecordsModalColumnLabels(isHistorical = chartMode === 'emission_total') {
+            const deliveryHeader = document.getElementById('th-entrega');
+            const balanceHeader = document.getElementById('th-saldo');
+            if (deliveryHeader) deliveryHeader.textContent = isHistorical ? 'DATA DE EMISSÃO' : 'ENTREGA';
+            if (balanceHeader) balanceHeader.textContent = isHistorical ? 'QUANT. EMITIDA' : 'SALDO';
+        }
         function openModal(hideOP = false) { 
             const modal = document.getElementById('recordsModal');
             const titleEl = document.getElementById('recordsModalTitle');
             modal.classList.toggle('client-records-modal', chartMode === 'client');
             modal.classList.toggle('emission-history-modal', chartMode === 'emission_total');
+            updateRecordsModalColumnLabels();
             if (hideOP) {
                 modal.classList.add('hide-op-column');
                 activeBlockReasonFilter = null;
@@ -3515,6 +3525,7 @@
             modal.style.display = 'none';
             modal.classList.remove('client-records-modal');
             modal.classList.remove('emission-history-modal');
+            updateRecordsModalColumnLabels(false);
             // Restore backlog if we were in historical view
             if (backlogDataState) {
                 allData = [...backlogDataState];
@@ -4509,8 +4520,10 @@
                 return;
             }
             tbody.innerHTML = list.map((item, index) => {
-                const entrega = item.ENTREGA_PETR ? new Date(item.ENTREGA_PETR).toLocaleDateString() :
-                    (item.DATA_ENTREGA_PPR ? new Date(item.DATA_ENTREGA_PPR).toLocaleDateString() : '-');
+                const tableDate = chartMode === 'emission_total'
+                    ? item.DATA_EMISSAO_PEDIDO
+                    : (item.ENTREGA_PETR || item.DATA_ENTREGA_PPR);
+                const entrega = formatDateLocal(tableDate) || '-';
                 const metrics = getItemSectorMetrics(item);
                 const saldoReal = item._sectorQty !== undefined ? item._sectorQty : getCommercialBalance(item);
                 const qtdOriginal = metrics.originalTarget;
@@ -4656,7 +4669,7 @@
                     <td style="text-align:center;">${formatNumber(totalWeightReal)}</td>
                     <td style="text-align:center; color:var(--status-purple); font-weight:bold;">${valorVisible ? formatCurrency(valorTotal) : '-----'}</td>
                     <td style="text-align:center;" onclick="event.stopPropagation()">${renderModeloStatusSelect(item)}</td>
-                    <td style="text-align:center;">
+                    <td class="observations-column" style="text-align:center;">
                         <input 
                             type="text" 
                             class="obs-edit-input" 
@@ -6532,6 +6545,7 @@ function flashConcentracaoBar(barIndex) {
             if (!modal) return;
             modal.classList.toggle('client-records-modal', chartMode === 'client');
             modal.classList.toggle('emission-history-modal', chartMode === 'emission_total');
+            updateRecordsModalColumnLabels();
             modal.classList.toggle('hide-op-column', !!hideOP);
             if (titleEl) titleEl.innerHTML = `<i class="fa-solid fa-list-check" style="margin-right: 15px;"></i>${title}`;
             modal.style.display = 'flex';
@@ -7018,7 +7032,7 @@ function flashConcentracaoBar(barIndex) {
             // Override close modal logic once to restore title and cleanup
             const originalClose = window.closeModal;
             window.closeModal = function () {
-                if (headerDate) headerDate.innerText = 'ENTREGA';
+                if (headerDate) headerDate.innerText = 'BLOCK / SEM DATA';
                 // Restore logic handled in main closeModal
                 originalClose();
                 window.closeModal = originalClose; // Reset
