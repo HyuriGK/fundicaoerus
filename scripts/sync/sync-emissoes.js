@@ -38,34 +38,6 @@ function fbQuery(db, sql, label, params = []) {
     });
 }
 
-function formatarData(data) {
-    if (!data) return null;
-    return data.toISOString().split('T')[0];
-}
-
-function obterJanelaMovelEmissoes() {
-    const hoje = new Date();
-    hoje.setHours(0, 0, 0, 0);
-
-    const fim = new Date(hoje);
-    fim.setDate(fim.getDate() + 1);
-
-    const inicio = new Date(hoje);
-    inicio.setDate(inicio.getDate() - 60);
-
-    const limiteInicial = new Date('2026-01-01T00:00:00');
-    if (inicio < limiteInicial) {
-        inicio.setTime(limiteInicial.getTime());
-    }
-
-    return {
-        inicio,
-        fim,
-        inicioSql: formatarData(inicio),
-        fimSql: formatarData(fim)
-    };
-}
-
 function chunkArray(items, size) {
     const chunks = [];
     for (let i = 0; i < items.length; i += size) chunks.push(items.slice(i, i + size));
@@ -73,7 +45,7 @@ function chunkArray(items, size) {
 }
 
 async function syncEmissoes() {
-    const janela = obterJanelaMovelEmissoes();
+    const janela = { inicio: new Date('2025-01-01T00:00:00'), fim: new Date('2027-01-01T00:00:00'), inicioSql: '2025-01-01', fimSql: '2027-01-01' };
     console.log(`🚀 Iniciando sincronização de EMISSÕES (${janela.inicioSql} até ${janela.fimSql})...`);
     const startTime = Date.now();
 
