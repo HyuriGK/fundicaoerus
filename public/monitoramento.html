@@ -3223,6 +3223,48 @@
             return oldestRemainingLot?.date || toLocalDate(fallbackDate);
         }
 
+        function getPhysicalMonitoringMetrics(op, baseMetrics) {
+            const linkStatus = String(op.LINK_STATUS || '').trim().toLowerCase();
+            const ignoreSuggestedOp = linkStatus === 'sugerido';
+            const num = key => ignoreSuggestedOp ? 0 : Math.max(0, Number(op[key]) || 0);
+
+            const rawFaturamento = num('QTY_FATURAMENTO');
+            const rawExpedicao = num('QTY_EXPEDICAO');
+            const rawQualidade = num('QTY_QUALIDADE');
+            const rawUsinagem = num('QTY_USINAGEM');
+            const rawTT = num('QTY_TT');
+            const rawAcabamento = num('QTY_ACABAMENTO');
+            const rawFusao = num('QTY_FUSAO');
+            const rawMoldada = num('QTY_MOLDADA');
+
+            const cFat = rawFaturamento;
+            const cExp = Math.max(cFat, rawExpedicao);
+            const cQual = Math.max(cExp, rawQualidade);
+            const cUsi = Math.max(cQual, rawUsinagem);
+            const cTT = Math.max(cUsi, rawTT);
+            const cAcab = Math.max(cTT, rawAcabamento);
+            const cFus = Math.max(cAcab, rawFusao);
+
+            const cExpIn = cExp;
+            const cQualIn = Math.max(cExpIn, rawQualidade);
+            const cUsiIn = Math.max(cQualIn, rawUsinagem);
+            const cTTIn = Math.max(cUsiIn, rawTT);
+            const cAcabIn = Math.min(rawFusao, Math.max(cTTIn, rawAcabamento));
+            const cFusIn = Math.max(cAcabIn, rawFusao);
+            const cMold = Math.max(cFusIn, rawMoldada);
+
+            return {
+                qExpedicao: Math.max(0, cExp - cFat),
+                qQualidade: Math.max(0, cQual - cExpIn),
+                qUsinagem: Math.max(0, cUsi - cQualIn),
+                qTT: Math.max(0, cTT - cUsiIn),
+                qAcabamento: Math.max(0, cAcab - cTTIn),
+                qFusao: Math.max(0, cFus - cAcabIn),
+                qMoldada: Math.max(0, cMold - cFusIn),
+                qAguardando: Math.max(0, (baseMetrics.targetTotalQty || 0) - cMold)
+            };
+        }
+
         function getCarteiraStages(op) {
             if (typeof getItemSectorMetrics !== 'function') {
                 const totalQty = parseInt(op.OP_QUANTIDADE) || parseInt(op.QUANTIDADE_PPR) || 0;
@@ -3259,18 +3301,19 @@
             }
 
             const qtyExpedited = metrics.rawFaturamento || 0;
+            const physicalMetrics = getPhysicalMonitoringMetrics(op, metrics);
             const stageQty = {};
             const addStage = (stage, qty) => {
                 if (qty > 0) stageQty[stage] = (stageQty[stage] || 0) + qty;
             };
-            addStage(getMoldagemStage(op), metrics.qAguardando || 0);
-            addStage('FUSÃO', metrics.qMoldada || 0);
-            addStage('ACABAMENTO', metrics.qFusao || 0);
-            addStage('TRATAMENTO TÉRMICO', metrics.qAcabamento || 0);
-            addStage(hasUsinagem ? 'AGUARDANDO USINAGEM EXTERNA' : 'AGUARDANDO QUALIDADE', metrics.qTT || 0);
-            addStage('EM USINAGEM EXTERNA', metrics.qUsinagem || 0);
-            addStage('AGUARDANDO EXPEDIÇÃO', metrics.qQualidade || 0);
-            addStage('AGUARDANDO FATURAMENTO', metrics.qExpedicao || 0);
+            addStage(getMoldagemStage(op), physicalMetrics.qAguardando || 0);
+            addStage('FUSÃO', physicalMetrics.qMoldada || 0);
+            addStage('ACABAMENTO', physicalMetrics.qFusao || 0);
+            addStage('TRATAMENTO TÉRMICO', physicalMetrics.qAcabamento || 0);
+            addStage(hasUsinagem ? 'AGUARDANDO USINAGEM EXTERNA' : 'AGUARDANDO QUALIDADE', physicalMetrics.qTT || 0);
+            addStage('EM USINAGEM EXTERNA', physicalMetrics.qUsinagem || 0);
+            addStage('AGUARDANDO EXPEDIÇÃO', physicalMetrics.qQualidade || 0);
+            addStage('AGUARDANDO FATURAMENTO', physicalMetrics.qExpedicao || 0);
             const stageRows = orderedStages.map(stage => [stage, stageQty[stage] || 0]);
 
             return stageRows
