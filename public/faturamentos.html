@@ -3085,6 +3085,14 @@ async function loadRecordsData() {
             const isIgnored = item.gera_financeiro === 'N' || (item.excluido_manualmente === true && (!isService || !showServices));
             return !isIgnored;
         }
+        function canViewIgnoredBillingRows() {
+            const role = (localStorage.getItem('erus_role') || 'Visitante').toLowerCase();
+            return ['desenvolvedor', 'gerente comercial', 'diretor'].includes(role);
+        }
+        function isIgnoredBillingItem(item) {
+            const isService = isServiceClient(item);
+            return item.gera_financeiro === 'N' || (item.excluido_manualmente === true && (!isService || !showServices));
+        }
         async function toggleFatPeso(idx) {
             if ((localStorage.getItem('erus_role') || '').toLowerCase() !== 'desenvolvedor') return;
             const item = allData[idx];
@@ -3167,6 +3175,7 @@ async function loadRecordsData() {
             const startInput = document.getElementById('startDate').value;
             const endInput = document.getElementById('endDate').value;
             const isDev = (localStorage.getItem('erus_role') || 'Visitante').toLowerCase() === 'desenvolvedor';
+            const showIgnoredRows = canViewIgnoredBillingRows();
             // Hide/Show column based on role
             const headerCell = document.getElementById('colInclHeader');
             const filterCell = document.getElementById('colInclFilter');
@@ -3193,6 +3202,7 @@ async function loadRecordsData() {
                     const n = String(item.clienteNome || '').toUpperCase().replace(/\s+/g, ' ').trim();
                     if (!mapaCityFilter.clients.has(n)) return false;
                 }
+                if (!showIgnoredRows && isIgnoredBillingItem(item)) return false;
                 if (onlyServices) return isService;
                 if (isService) return showServices;
                 const name = (item.clienteNome || 'Desconhecido').trim();
@@ -3229,8 +3239,7 @@ async function loadRecordsData() {
                 const globalIdx = allData.indexOf(item);
                 const calculatedTotal = calculateCalculatedTotal(item);
                 const valorTotal = isVisible ? formatCurrency(calculatedTotal) : 'R$ ---';
-                const isService = isServiceClient(item);
-                const isIgnored = item.gera_financeiro === 'N' || (item.excluido_manualmente === true && (!isService || !showServices));
+                const isIgnored = isIgnoredBillingItem(item);
                 const inclCell = `<td class="checkbox-cell" style="${isDev ? '' : 'display: none;'}" onclick="event.stopPropagation()"><input type="checkbox" ${!isIgnored ? 'checked' : ''} onclick="toggleRowExclusion(${globalIdx})"></td>`;
                 const fatPesoChecked = getFatPesoState(item);
                 const fatPesoCell = isDev
@@ -3314,10 +3323,12 @@ async function loadRecordsData() {
         function getModalFilteredData() {
             const startInput = document.getElementById('startDate').value;
             const endInput = document.getElementById('endDate').value;
+            const showIgnoredRows = canViewIgnoredBillingRows();
             let filtered = allData.filter(item => {
                 const isService = isServiceClient(item);
                 if (startInput && item.data < startInput) return false;
                 if (endInput && item.data > endInput) return false;
+                if (!showIgnoredRows && isIgnoredBillingItem(item)) return false;
                 if (isService) return showServices;
                 const name = (item.clienteNome || 'Desconhecido').trim();
                 if (excludedClients.has(name)) return false;
