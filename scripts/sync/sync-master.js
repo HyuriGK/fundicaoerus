@@ -290,7 +290,7 @@ async function syncMaster() {
                     op.QTY_TT = totals[40];
                     op.QTY_USINAGEM = totals[50] + totals[105];
                     op.QTY_QUALIDADE = totals[60];
-                    op.QTY_EXPEDICAO = totals[101];
+                    op.QTY_EXPEDICAO = totals[100];
                     op.QTY_FATURAMENTO = totals[101];
 
                     const refs = opsData;

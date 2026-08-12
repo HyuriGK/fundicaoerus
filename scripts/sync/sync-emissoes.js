@@ -367,7 +367,7 @@ async function syncEmissoes() {
                         QTY_TT: totals[40],
                         QTY_USINAGEM: totals[50] + totals[105],
                         QTY_QUALIDADE: totals[60],
-                        QTY_EXPEDICAO: totals[101],
+                        QTY_EXPEDICAO: totals[100],
                         QTY_FATURAMENTO: totals[101],
                         REFUGO_MOLDAGEM:   refs[10] + refs[11] + refs[12],
                         REFUGO_FUSAO:      refs[20],
