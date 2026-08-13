@@ -369,6 +369,7 @@
                 <button class="seg-btn active" data-metric="faturamento">Faturamento</button>
                 <button class="seg-btn" data-metric="producao">Producao</button>
                 <button class="seg-btn" data-metric="refugo">Refugo</button>
+                <button class="seg-btn" data-metric="acabamentoExterno">Acab. Externo</button>
             </div>
         </section>
 
@@ -400,11 +401,11 @@
                 <div class="panel-head">
                     <h2 class="panel-title" id="mainChartTitle">Evolucao diaria</h2>
                     <div class="panel-segment">
-                        <button class="seg-btn active" data-chart-mode="daily">Diaria</button>
-                        <button class="seg-btn" data-chart-mode="monthly">Mensal</button>
+                        <button class="seg-btn" data-chart-mode="daily">Diaria</button>
+                        <button class="seg-btn active" data-chart-mode="monthly">Mensal</button>
                     </div>
                     <select class="field panel-filter" id="sectorSelect" aria-label="Setor">
-                        <option value="Todos">Todos setores</option>
+                        <option value="MOLDAGEM GERAL">MOLDAGEM GERAL</option>
                     </select>
                     <span class="panel-note" id="mainChartNote">Faturamento em kg</span>
                 </div>
@@ -433,11 +434,11 @@
         const now = new Date();
         let selectedYear = now.getFullYear();
         let selectedMonth = now.getMonth() + 1;
-        let chartMode = 'daily';
+        let chartMode = 'monthly';
         let selectedMetric = 'faturamento';
-        let selectedSector = 'Todos';
+        let selectedSector = 'MOLDAGEM GERAL';
         let dailyChart;
-        let dashboardCache = { prodRows: [], fatDaily: [], refRows: [], ref: {}, monthly: null };
+        let dashboardCache = { prodRows: [], fatDaily: [], refRows: [], acabamentoRows: [], ref: {}, monthly: null };
         const SECTOR_ORDER = [
             'MOLDAGEM GERAL',
             'MOLDAGEM LEVE',
@@ -498,8 +499,9 @@
                 return name.charAt(0).toUpperCase() + name.slice(1);
             });
             monthSelect.innerHTML = months.map((m, i) => `<option value="${i + 1}">${m}</option>`).join('');
-            const years = Array.from({ length: 6 }, (_, i) => now.getFullYear() - 4 + i);
+            const years = [2026, 2025];
             yearSelect.innerHTML = years.map(y => `<option value="${y}">${y}</option>`).join('');
+            if (!years.includes(selectedYear)) selectedYear = 2026;
             monthSelect.value = selectedMonth;
             yearSelect.value = selectedYear;
             monthSelect.addEventListener('change', () => { selectedMonth = Number(monthSelect.value); loadMeetingDashboard(); });
@@ -532,12 +534,13 @@
             const startDate = selectedStartDate();
             const endDate = selectedEndDate();
             const prev = new Date(selectedYear, selectedMonth - 2, 1);
-            const [prodStats, prodRows, fat, ref, refRaw, refPrev] = await Promise.all([
+            const [prodStats, prodRows, fat, ref, refRaw, acabamentoRaw, refPrev] = await Promise.all([
                 getJson(`/api/producao-postgres/stats?startDate=${startDate}&endDate=${endDate}`, { success: false }),
                 getJson(`/api/producao-postgres?startDate=${startDate}&endDate=${endDate}&limit=100000`, { success: false, data: [] }),
                 getJson(`/api/faturamento-postgres/resumo-dashboard?year=${selectedYear}&month=${selectedMonth}`, { success: false, totalKg: 0, previousTotalKg: 0, daily: [] }),
                 getJson(`/api/refugos-new/resumo-dashboard?year=${selectedYear}&month=${selectedMonth}`, { success: false, totalKg: 0, productionKg: 0, scrapPct: 0, byMotive: {} }),
                 getJson('/api/refugos-new', { refugoRawData: [] }),
+                getJson('/api/acabamento-externo', { registros: [] }),
                 getJson(`/api/refugos-new/resumo-dashboard?year=${prev.getFullYear()}&month=${prev.getMonth() + 1}`, { success: false, totalKg: 0 })
             ]);
 
@@ -569,7 +572,8 @@
 
             const monthPrefix = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
             const refRows = (refRaw.refugoRawData || []).filter(r => String(r.data || '').slice(0, 7) === monthPrefix);
-            dashboardCache = { prodRows: prodRows.data || [], fatDaily: fat.daily || [], refRows, ref, monthly: null };
+            const acabamentoRows = (acabamentoRaw.registros || []).filter(r => String(r.data || '').slice(0, 4) === String(selectedYear));
+            dashboardCache = { prodRows: prodRows.data || [], fatDaily: fat.daily || [], refRows, acabamentoRows, ref, monthly: null };
             renderSectorOptions(dashboardCache.prodRows);
             renderMainChart();
             renderScrap(ref.byMotive || {});
@@ -581,8 +585,8 @@
             const ordered = SECTOR_ORDER.filter(s => s === 'MOLDAGEM GERAL' || existing.has(s));
             const extra = Array.from(existing).filter(s => !SECTOR_ORDER.includes(s)).sort();
             const sectors = ordered.concat(extra);
-            if (selectedSector !== 'Todos' && !sectors.includes(selectedSector)) selectedSector = 'Todos';
-            select.innerHTML = '<option value="Todos">Todos setores</option>' + sectors.map(s => `<option value="${s}">${s}</option>`).join('');
+            if (!sectors.includes(selectedSector)) selectedSector = sectors.includes('MOLDAGEM GERAL') ? 'MOLDAGEM GERAL' : (sectors[0] || 'MOLDAGEM GERAL');
+            select.innerHTML = sectors.map(s => `<option value="${s}">${s}</option>`).join('');
             select.value = selectedSector;
         }
 
@@ -591,7 +595,6 @@
         }
 
         function matchesSelectedSector(rowSector) {
-            if (selectedSector === 'Todos') return true;
             const sector = normalizeSector(rowSector);
             if (selectedSector === 'MOLDAGEM GERAL') return MOLDAGEM_GERAL_TYPES.includes(sector);
             return sector === selectedSector;
@@ -610,11 +613,19 @@
                 const d = String(r.data || '').slice(8, 10);
                 refMap[d] = (refMap[d] || 0) + Number(r.peso_total || r.pesoTotal || 0);
             });
+            const acabamentoMap = {};
+            dashboardCache.acabamentoRows.forEach(r => {
+                const date = String(r.data || '').slice(0, 10);
+                if (date.slice(0, 7) !== `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`) return;
+                const d = date.slice(8, 10);
+                acabamentoMap[d] = (acabamentoMap[d] || 0) + (Number(r.quant || 0) * Number(r.peso || 0));
+            });
             const keyPrefix = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-`;
             const values = {
                 producao: days.map(d => prodMap[d] || 0),
                 faturamento: days.map(d => fatMap[keyPrefix + d] || 0),
-                refugo: days.map(d => refMap[d] || 0)
+                refugo: days.map(d => refMap[d] || 0),
+                acabamentoExterno: days.map(d => acabamentoMap[d] || 0)
             };
             return { labels: days, values: values[metric] || values.faturamento };
         }
@@ -640,7 +651,8 @@
                     return {
                         producao: prodWeight,
                         faturamento: Number(fat.totalKg || 0),
-                        refugo: Number(ref.scrapPct || 0)
+                        refugo: Number(ref.scrapPct || 0),
+                        acabamentoExterno: monthlyAcabamentoWeight(m)
                     };
                 }));
                 dashboardCache.monthly = rows;
@@ -650,7 +662,7 @@
         }
 
         async function renderMainChart() {
-            const labelMap = { faturamento: 'Faturamento', producao: 'Producao', refugo: 'Refugo' };
+            const labelMap = { faturamento: 'Faturamento', producao: 'Producao', refugo: 'Refugo', acabamentoExterno: 'Acabamento Externo' };
             const series = chartMode === 'monthly' ? await monthlySeries(selectedMetric) : dailySeries(selectedMetric);
             document.getElementById('mainChartTitle').textContent = chartMode === 'monthly' ? 'Evolucao mensal' : 'Evolucao diaria';
             document.getElementById('mainChartNote').textContent = '';
@@ -660,6 +672,13 @@
             const unit = chartMode === 'monthly' && selectedMetric === 'refugo' ? '%' : 'kg';
             const plugins = unit === '%' ? [monthlyScrapLabelPlugin] : [];
             dailyChart = new Chart(document.getElementById('dailyChart'), { type: 'bar', data, options: chartOptions(unit, roundedSuggestedMax(series.values)), plugins });
+        }
+
+        function monthlyAcabamentoWeight(month) {
+            const key = `${selectedYear}-${String(month).padStart(2, '0')}`;
+            return dashboardCache.acabamentoRows
+                .filter(r => String(r.data || '').slice(0, 7) === key)
+                .reduce((sum, r) => sum + (Number(r.quant || 0) * Number(r.peso || 0)), 0);
         }
 
         function renderScrap(byMotive) {
@@ -682,9 +701,28 @@
                 maintainAspectRatio: false,
                 scales: {
                     x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#a1a1aa', font: { weight: 700 } } },
-                    y: { beginAtZero: true, suggestedMax, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#a1a1aa', callback: v => unit === 'kg' ? (v / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + 't' : Number(v).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + '%' } }
+                    y: { beginAtZero: true, suggestedMax, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#a1a1aa', callback: v => unit === 'kg' ? (v / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + 't' : Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%' } }
                 },
-                plugins: { legend: { labels: { color: '#d4d4d8', font: { weight: 800 } } } }
+                plugins: {
+                    legend: { labels: { color: '#d4d4d8', font: { weight: 800 } } },
+                    tooltip: {
+                        padding: 18,
+                        titleMarginBottom: 10,
+                        bodySpacing: 8,
+                        caretSize: 9,
+                        cornerRadius: 8,
+                        titleFont: { size: 16, weight: '800' },
+                        bodyFont: { size: 15, weight: '800' },
+                        displayColors: true,
+                        callbacks: {
+                            label: item => {
+                                const v = Number(item.parsed.y || 0);
+                                if (unit === '%') return '  ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%';
+                                return '  ' + fmtKg(v);
+                            }
+                        }
+                    }
+                }
             };
         }
 
@@ -702,7 +740,7 @@
                 values.forEach((value, index) => {
                     const bar = meta.data[index];
                     if (!bar || !Number(value)) return;
-                    const label = Number(value).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + '%';
+                    const label = Number(value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%';
                     ctx.fillText(label, bar.x, bar.y - 7);
                 });
                 ctx.restore();
