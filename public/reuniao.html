@@ -445,7 +445,7 @@
         let selectedMetric = 'faturamento';
         let selectedSector = 'Todos';
         let dailyChart;
-        let dashboardCache = { prodRows: [], fatDaily: [], ref: {}, monthly: null };
+        let dashboardCache = { prodRows: [], fatDaily: [], refRows: [], ref: {}, monthly: null };
         const SECTOR_ORDER = [
             'MOLDAGEM GERAL',
             'MOLDAGEM LEVE',
@@ -530,11 +530,12 @@
             const startDate = selectedStartDate();
             const endDate = selectedEndDate();
             const prev = new Date(selectedYear, selectedMonth - 2, 1);
-            const [prodStats, prodRows, fat, ref, refPrev] = await Promise.all([
+            const [prodStats, prodRows, fat, ref, refRaw, refPrev] = await Promise.all([
                 getJson(`/api/producao-postgres/stats?startDate=${startDate}&endDate=${endDate}`, { success: false }),
                 getJson(`/api/producao-postgres?startDate=${startDate}&endDate=${endDate}&limit=100000`, { success: false, data: [] }),
                 getJson(`/api/faturamento-postgres/resumo-dashboard?year=${selectedYear}&month=${selectedMonth}`, { success: false, totalKg: 0, previousTotalKg: 0, daily: [] }),
                 getJson(`/api/refugos-new/resumo-dashboard?year=${selectedYear}&month=${selectedMonth}`, { success: false, totalKg: 0, productionKg: 0, scrapPct: 0, byMotive: {} }),
+                getJson('/api/refugos-new', { refugoRawData: [] }),
                 getJson(`/api/refugos-new/resumo-dashboard?year=${prev.getFullYear()}&month=${prev.getMonth() + 1}`, { success: false, totalKg: 0 })
             ]);
 
@@ -563,7 +564,9 @@
             document.getElementById('billingDays').textContent = fatDays.toLocaleString('pt-BR');
             document.getElementById('updatedAt').textContent = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
-            dashboardCache = { prodRows: prodRows.data || [], fatDaily: fat.daily || [], ref, monthly: null };
+            const monthPrefix = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
+            const refRows = (refRaw.refugoRawData || []).filter(r => String(r.data || '').slice(0, 7) === monthPrefix);
+            dashboardCache = { prodRows: prodRows.data || [], fatDaily: fat.daily || [], refRows, ref, monthly: null };
             renderSectorOptions(dashboardCache.prodRows);
             renderMainChart();
             renderScrap(ref.byMotive || {});
@@ -599,12 +602,16 @@
                 prodMap[d] = (prodMap[d] || 0) + Number(r.peso_total || r.pesoTotal || 0);
             });
             const fatMap = sumDaily(dashboardCache.fatDaily);
-            const refAvg = Number(dashboardCache.ref.totalKg || 0) / Math.max(1, days.length);
+            const refMap = {};
+            dashboardCache.refRows.forEach(r => {
+                const d = String(r.data || '').slice(8, 10);
+                refMap[d] = (refMap[d] || 0) + Number(r.peso_total || r.pesoTotal || 0);
+            });
             const keyPrefix = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-`;
             const values = {
                 producao: days.map(d => prodMap[d] || 0),
                 faturamento: days.map(d => fatMap[keyPrefix + d] || 0),
-                refugo: days.map(() => refAvg)
+                refugo: days.map(d => refMap[d] || 0)
             };
             return { labels: days, values: values[metric] || values.faturamento };
         }
@@ -647,7 +654,7 @@
             const color = '#f59e0b';
             const data = { labels: series.labels, datasets: [{ label: labelMap[selectedMetric], data: series.values, borderColor: color, backgroundColor: color, borderWidth: 1, borderRadius: 5, categoryPercentage: 0.82, barPercentage: 0.9, maxBarThickness: chartMode === 'monthly' ? 62 : 36 }] };
             if (dailyChart) dailyChart.destroy();
-            dailyChart = new Chart(document.getElementById('dailyChart'), { type: 'bar', data, options: chartOptions('kg') });
+            dailyChart = new Chart(document.getElementById('dailyChart'), { type: 'bar', data, options: chartOptions('kg', roundedSuggestedMax(series.values)) });
         }
 
         function renderScrap(byMotive) {
@@ -655,13 +662,22 @@
             document.getElementById('scrapRanking').innerHTML = rows.length ? rows.map(r => `<div class="rank-row"><div class="rank-name">${r.name}</div><div class="rank-value">${fmtKg(r.value)}</div></div>`).join('') : '<div class="loading">Sem refugo no periodo</div>';
         }
 
-        function chartOptions(unit) {
+        function roundedSuggestedMax(values) {
+            const max = Math.max(0, ...(values || []).map(Number));
+            if (!max) return undefined;
+            const padded = max * 1.18;
+            const magnitude = Math.pow(10, Math.floor(Math.log10(padded)));
+            const step = magnitude / 2;
+            return Math.ceil(padded / step) * step;
+        }
+
+        function chartOptions(unit, suggestedMax) {
             return {
                 responsive: true,
                 maintainAspectRatio: false,
                 scales: {
                     x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#a1a1aa', font: { weight: 700 } } },
-                    y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#a1a1aa', callback: v => unit === 'kg' ? (v / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + 't' : v } }
+                    y: { beginAtZero: true, suggestedMax, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#a1a1aa', callback: v => unit === 'kg' ? (v / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + 't' : v } }
                 },
                 plugins: { legend: { labels: { color: '#d4d4d8', font: { weight: 800 } } } }
             };
