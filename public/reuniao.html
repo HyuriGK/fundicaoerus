@@ -140,6 +140,12 @@
             padding: 0 10px;
             font-size: 0.72rem;
         }
+        .panel-filter {
+            width: 180px;
+            height: 30px;
+            font-size: 0.72rem;
+            padding: 0 9px;
+        }
         .kpi-grid {
             display: grid;
             grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -294,7 +300,7 @@
             body { overflow: auto; }
             .meeting-shell { min-height: 100vh; }
             .kpi-grid { grid-template-columns: repeat(2, 1fr); }
-            .content-grid { grid-template-columns: 1fr; grid-template-rows: 420px 320px 280px; }
+            .content-grid { grid-template-columns: 1fr; grid-template-rows: 420px auto; }
             .panel.wide { grid-row: span 1; }
         }
         @media (max-width: 720px) {
@@ -305,7 +311,7 @@
             .kpi-grid { grid-template-columns: 1fr; }
             .kpi-card { min-height: 132px; }
             .kpi-value { font-size: 2rem; }
-            .content-grid { grid-template-rows: 360px 300px auto; }
+            .content-grid { grid-template-rows: 360px auto; }
             .health-grid { grid-template-columns: 1fr; }
         }
         body { overflow: auto; }
@@ -319,7 +325,8 @@
         .kpi-label { font-size: clamp(0.66rem, 0.72vw, 0.76rem); }
         .kpi-value { font-size: clamp(1.7rem, 2.25vw, 2.9rem); }
         .kpi-sub { font-size: clamp(0.72rem, 0.75vw, 0.82rem); }
-        .content-grid { grid-template-columns: minmax(0, 1.25fr) minmax(360px, 0.95fr); grid-template-rows: minmax(280px, 1fr) minmax(170px, 0.58fr); gap: clamp(10px, 0.9vw, 14px); }
+        .content-grid { grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.7fr); grid-template-rows: minmax(300px, 1fr); gap: clamp(10px, 0.9vw, 14px); }
+        .panel.wide { grid-row: span 1; }
         .panel { padding: clamp(12px, 1vw, 16px); }
         .panel-head { margin-bottom: 8px; }
         .panel-title { font-size: clamp(0.92rem, 1vw, 1.05rem); }
@@ -331,7 +338,7 @@
         .health-value { font-size: clamp(1rem, 1.2vw, 1.25rem); }
         @media (min-width: 1201px) and (max-height: 820px) {
             .meeting-shell { min-height: auto; }
-            .content-grid { grid-template-rows: minmax(220px, 32vh) minmax(130px, 18vh); }
+            .content-grid { grid-template-rows: minmax(300px, 52vh); }
             .kpi-card { min-height: 104px; }
             .rank-row:nth-child(n+5) { display: none; }
         }
@@ -393,16 +400,12 @@
                         <button class="seg-btn active" data-chart-mode="daily">Diaria</button>
                         <button class="seg-btn" data-chart-mode="monthly">Mensal</button>
                     </div>
+                    <select class="field panel-filter" id="sectorSelect" aria-label="Setor">
+                        <option value="Todos">Todos setores</option>
+                    </select>
                     <span class="panel-note" id="mainChartNote">Faturamento em kg</span>
                 </div>
                 <div class="chart-wrap"><canvas id="dailyChart"></canvas></div>
-            </article>
-            <article class="panel">
-                <div class="panel-head">
-                    <h2 class="panel-title">Producao por setor</h2>
-                    <span class="panel-note" id="sectorTotal">--</span>
-                </div>
-                <div class="chart-wrap"><canvas id="sectorChart"></canvas></div>
             </article>
             <article class="panel">
                 <div class="panel-head">
@@ -429,7 +432,8 @@
         let selectedMonth = now.getMonth() + 1;
         let chartMode = 'daily';
         let selectedMetric = 'faturamento';
-        let dailyChart, sectorChart;
+        let selectedSector = 'Todos';
+        let dailyChart;
         let dashboardCache = { prodRows: [], fatDaily: [], ref: {}, monthly: null };
 
         async function getJson(url, fallback) {
@@ -492,6 +496,11 @@
                 document.querySelectorAll('[data-metric]').forEach(b => b.classList.toggle('active', b === btn));
                 renderMainChart();
             }));
+            document.getElementById('sectorSelect').addEventListener('change', e => {
+                selectedSector = e.target.value;
+                dashboardCache.monthly = null;
+                renderMainChart();
+            });
         }
 
         async function loadMeetingDashboard() {
@@ -499,10 +508,9 @@
             const startDate = selectedStartDate();
             const endDate = selectedEndDate();
             const prev = new Date(selectedYear, selectedMonth - 2, 1);
-            const [prodStats, prodRows, sectors, fat, ref, refPrev] = await Promise.all([
+            const [prodStats, prodRows, fat, ref, refPrev] = await Promise.all([
                 getJson(`/api/producao-postgres/stats?startDate=${startDate}&endDate=${endDate}`, { success: false }),
                 getJson(`/api/producao-postgres?startDate=${startDate}&endDate=${endDate}&limit=100000`, { success: false, data: [] }),
-                getJson(`/api/producao-postgres/resumo-setores?year=${selectedYear}&month=${selectedMonth}`, { success: false, sectors: [] }),
                 getJson(`/api/faturamento-postgres/resumo-dashboard?year=${selectedYear}&month=${selectedMonth}`, { success: false, totalKg: 0, previousTotalKg: 0, daily: [] }),
                 getJson(`/api/refugos-new/resumo-dashboard?year=${selectedYear}&month=${selectedMonth}`, { success: false, totalKg: 0, productionKg: 0, scrapPct: 0, byMotive: {} }),
                 getJson(`/api/refugos-new/resumo-dashboard?year=${prev.getFullYear()}&month=${prev.getMonth() + 1}`, { success: false, totalKg: 0 })
@@ -534,15 +542,23 @@
             document.getElementById('updatedAt').textContent = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
             dashboardCache = { prodRows: prodRows.data || [], fatDaily: fat.daily || [], ref, monthly: null };
+            renderSectorOptions(dashboardCache.prodRows);
             renderMainChart();
-            renderSectors(sectors.totals || sectors.sectors || sectors.data || []);
             renderScrap(ref.byMotive || {});
+        }
+
+        function renderSectorOptions(rows) {
+            const select = document.getElementById('sectorSelect');
+            const sectors = Array.from(new Set((rows || []).map(r => String(r.setor || '').trim()).filter(Boolean))).sort();
+            if (selectedSector !== 'Todos' && !sectors.includes(selectedSector)) selectedSector = 'Todos';
+            select.innerHTML = '<option value="Todos">Todos setores</option>' + sectors.map(s => `<option value="${s}">${s}</option>`).join('');
+            select.value = selectedSector;
         }
 
         function dailySeries(metric) {
             const days = Array.from({ length: new Date(selectedYear, selectedMonth, 0).getDate() }, (_, i) => String(i + 1).padStart(2, '0'));
             const prodMap = {};
-            dashboardCache.prodRows.forEach(r => {
+            dashboardCache.prodRows.filter(r => selectedSector === 'Todos' || String(r.setor || '').trim() === selectedSector).forEach(r => {
                 const d = String(r.data || '').slice(8, 10);
                 prodMap[d] = (prodMap[d] || 0) + Number(r.peso_total || r.pesoTotal || 0);
             });
@@ -564,7 +580,7 @@
                     const start = iso(new Date(selectedYear, m - 1, 1));
                     const end = iso(new Date(selectedYear, m, 0));
                     const [prod, fat, ref] = await Promise.all([
-                        getJson(`/api/producao-postgres/stats?startDate=${start}&endDate=${end}`, { success: false, stats: {} }),
+                        getJson(`/api/producao-postgres/stats?startDate=${start}&endDate=${end}${selectedSector !== 'Todos' ? `&sector=${encodeURIComponent(selectedSector)}` : ''}`, { success: false, stats: {} }),
                         getJson(`/api/faturamento-postgres/resumo-dashboard?year=${selectedYear}&month=${m}`, { success: false, totalKg: 0 }),
                         getJson(`/api/refugos-new/resumo-dashboard?year=${selectedYear}&month=${m}`, { success: false, totalKg: 0 })
                     ]);
@@ -585,24 +601,11 @@
             const colorMap = { faturamento: '#f59e0b', producao: '#06b6d4', refugo: '#ef4444' };
             const series = chartMode === 'monthly' ? await monthlySeries(selectedMetric) : dailySeries(selectedMetric);
             document.getElementById('mainChartTitle').textContent = chartMode === 'monthly' ? 'Evolucao mensal' : 'Evolucao diaria';
-            document.getElementById('mainChartNote').textContent = `${labelMap[selectedMetric]} em kg`;
+            document.getElementById('mainChartNote').textContent = `${labelMap[selectedMetric]} em kg${selectedMetric === 'producao' && selectedSector !== 'Todos' ? ' - ' + selectedSector : ''}`;
             const color = colorMap[selectedMetric];
             const data = { labels: series.labels, datasets: [{ label: labelMap[selectedMetric], data: series.values, borderColor: color, backgroundColor: color, borderWidth: 1, borderRadius: 5, maxBarThickness: chartMode === 'monthly' ? 48 : 28 }] };
             if (dailyChart) dailyChart.destroy();
             dailyChart = new Chart(document.getElementById('dailyChart'), { type: 'bar', data, options: chartOptions('kg') });
-        }
-
-        function renderSectors(rows) {
-            const sourceRows = Array.isArray(rows) ? rows : Object.entries(rows).map(([setor, peso_total]) => ({ setor, peso_total }));
-            const sorted = sourceRows.map(r => ({ label: r.setor || r.sector || 'Nao informado', value: Number(r.total_peso || r.totalPeso || r.peso_total || r.totalKg || 0) }))
-                .filter(r => r.value > 0).sort((a, b) => b.value - a.value).slice(0, 8);
-            document.getElementById('sectorTotal').textContent = sorted.length + ' setores';
-            if (sectorChart) sectorChart.destroy();
-            sectorChart = new Chart(document.getElementById('sectorChart'), {
-                type: 'bar',
-                data: { labels: sorted.map(r => r.label), datasets: [{ data: sorted.map(r => r.value), backgroundColor: ['#06b6d4','#3b82f6','#10b981','#f59e0b','#8b5cf6','#14b8a6','#f97316','#64748b'], borderRadius: 5 }] },
-                options: { ...chartOptions('kg'), indexAxis: 'y', plugins: { legend: { display: false } } }
-            });
         }
 
         function renderScrap(byMotive) {
