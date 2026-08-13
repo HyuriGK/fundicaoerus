@@ -48,7 +48,7 @@
             min-height: 100vh;
             padding: 22px 24px 24px;
             display: grid;
-            grid-template-rows: auto auto auto 1fr;
+            grid-template-rows: auto auto 1fr;
             gap: 18px;
         }
         .meeting-header {
@@ -357,17 +357,6 @@
 </head>
 <body>
     <main class="meeting-shell erus-sidebar-content-offset erus-fill-layout">
-        <header class="meeting-header">
-            <div class="title-block">
-                <h1>Reuniao de Indicadores</h1>
-                <p id="periodLabel">Mes atual</p>
-            </div>
-            <div class="header-meta">
-                <span class="meta-pill"><i class="fa-solid fa-rotate"></i><span id="updatedAt">Atualizando...</span></span>
-                <span class="meta-pill"><i class="fa-solid fa-display"></i>Modo telao</span>
-            </div>
-        </header>
-
         <section class="control-row">
             <div class="control-group">
                 <select class="field" id="monthSelect" aria-label="Mes"></select>
@@ -494,13 +483,17 @@
         }
 
         function setPeriodLabel() {
-            document.getElementById('periodLabel').textContent = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' }).format(new Date(selectedYear, selectedMonth - 1, 1));
+            const label = document.getElementById('periodLabel');
+            if (label) label.textContent = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' }).format(new Date(selectedYear, selectedMonth - 1, 1));
         }
 
         function initControls() {
             const monthSelect = document.getElementById('monthSelect');
             const yearSelect = document.getElementById('yearSelect');
-            const months = Array.from({ length: 12 }, (_, i) => new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(new Date(2026, i, 1)));
+            const months = Array.from({ length: 12 }, (_, i) => {
+                const name = new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(new Date(2026, i, 1));
+                return name.charAt(0).toUpperCase() + name.slice(1);
+            });
             monthSelect.innerHTML = months.map((m, i) => `<option value="${i + 1}">${m}</option>`).join('');
             const years = Array.from({ length: 6 }, (_, i) => now.getFullYear() - 4 + i);
             yearSelect.innerHTML = years.map(y => `<option value="${y}">${y}</option>`).join('');
@@ -562,7 +555,8 @@
             document.getElementById('convStatus').textContent = conv >= 75 ? 'forte' : 'acompanhar';
             document.getElementById('fusionKg').textContent = fmtTon(Number(ref.productionKg || 0));
             document.getElementById('billingDays').textContent = fatDays.toLocaleString('pt-BR');
-            document.getElementById('updatedAt').textContent = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+            const updatedAt = document.getElementById('updatedAt');
+            if (updatedAt) updatedAt.textContent = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
             const monthPrefix = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
             const refRows = (refRaw.refugoRawData || []).filter(r => String(r.data || '').slice(0, 7) === monthPrefix);
@@ -637,7 +631,7 @@
                     return {
                         producao: prodWeight,
                         faturamento: Number(fat.totalKg || 0),
-                        refugo: Number(ref.totalKg || 0)
+                        refugo: Number(ref.scrapPct || 0)
                     };
                 }));
                 dashboardCache.monthly = rows;
@@ -654,7 +648,8 @@
             const color = '#f59e0b';
             const data = { labels: series.labels, datasets: [{ label: labelMap[selectedMetric], data: series.values, borderColor: color, backgroundColor: color, borderWidth: 1, borderRadius: 5, categoryPercentage: 0.82, barPercentage: 0.9, maxBarThickness: chartMode === 'monthly' ? 62 : 36 }] };
             if (dailyChart) dailyChart.destroy();
-            dailyChart = new Chart(document.getElementById('dailyChart'), { type: 'bar', data, options: chartOptions('kg', roundedSuggestedMax(series.values)) });
+            const unit = chartMode === 'monthly' && selectedMetric === 'refugo' ? '%' : 'kg';
+            dailyChart = new Chart(document.getElementById('dailyChart'), { type: 'bar', data, options: chartOptions(unit, roundedSuggestedMax(series.values)) });
         }
 
         function renderScrap(byMotive) {
@@ -677,7 +672,7 @@
                 maintainAspectRatio: false,
                 scales: {
                     x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#a1a1aa', font: { weight: 700 } } },
-                    y: { beginAtZero: true, suggestedMax, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#a1a1aa', callback: v => unit === 'kg' ? (v / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + 't' : v } }
+                    y: { beginAtZero: true, suggestedMax, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#a1a1aa', callback: v => unit === 'kg' ? (v / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + 't' : Number(v).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + '%' } }
                 },
                 plugins: { legend: { labels: { color: '#d4d4d8', font: { weight: 800 } } } }
             };
