@@ -625,8 +625,15 @@
                 if (!sector) return;
                 totals[sector] = (totals[sector] || 0) + Number(r.peso_total || r.pesoTotal || 0);
             });
+            const externalAcabamento = monthlyExternalWeight(dashboardCache.acabamentoRows, selectedMonth);
             const labels = SECTOR_ORDER.concat(Object.keys(totals).filter(s => !SECTOR_ORDER.includes(s)).sort());
-            return labels.map(label => ({ label, value: label === 'MOLDAGEM GERAL' ? MOLDAGEM_GERAL_TYPES.reduce((sum, s) => sum + Number(totals[s] || 0), 0) : Number(totals[label] || 0) }))
+            return labels.map(label => {
+                const total = label === 'MOLDAGEM GERAL'
+                    ? MOLDAGEM_GERAL_TYPES.reduce((sum, s) => sum + Number(totals[s] || 0), 0)
+                    : Number(totals[label] || 0);
+                const thirdParty = label === 'ACABAMENTO' ? Math.min(total, externalAcabamento) : 0;
+                return { label, value: total, internal: Math.max(total - thirdParty, 0), thirdParty };
+            })
                 .filter(item => item.value > 0);
         }
 
@@ -634,7 +641,14 @@
             const days = Array.from({ length: new Date(selectedYear, selectedMonth, 0).getDate() }, (_, i) => String(i + 1).padStart(2, '0'));
             if (metric === 'producao' && selectedSector === 'TODOS') {
                 const rows = productionBySectorRows(dashboardCache.prodRows);
-                return { labels: rows.map(r => r.label), values: rows.map(r => r.value) };
+                return {
+                    labels: rows.map(r => r.label),
+                    values: rows.map(r => r.value),
+                    datasets: [
+                        { label: 'Interno', data: rows.map(r => r.internal), backgroundColor: '#f59e0b', borderColor: '#f59e0b' },
+                        { label: 'Terceirizado', data: rows.map(r => r.thirdParty), backgroundColor: '#3b82f6', borderColor: '#3b82f6' }
+                    ]
+                };
             }
             const prodMap = {};
             dashboardCache.prodRows.filter(r => matchesSelectedSector(r.setor)).forEach(r => {
@@ -684,7 +698,14 @@
         async function monthlySeries(metric) {
             if (metric === 'producao' && selectedSector === 'TODOS') {
                 const rows = productionBySectorRows(dashboardCache.prodRows);
-                return { labels: rows.map(r => r.label), values: rows.map(r => r.value) };
+                return {
+                    labels: rows.map(r => r.label),
+                    values: rows.map(r => r.value),
+                    datasets: [
+                        { label: 'Interno', data: rows.map(r => r.internal), backgroundColor: '#f59e0b', borderColor: '#f59e0b' },
+                        { label: 'Terceirizado', data: rows.map(r => r.thirdParty), backgroundColor: '#3b82f6', borderColor: '#3b82f6' }
+                    ]
+                };
             }
             if (!dashboardCache.monthly) {
                 const months = Array.from({ length: 12 }, (_, i) => i + 1);
@@ -723,11 +744,14 @@
             document.getElementById('mainChartTitle').textContent = selectedMetric === 'producao' && selectedSector === 'TODOS' ? 'Producao por setor' : (chartMode === 'monthly' ? 'Evolucao mensal' : 'Evolucao diaria');
             document.getElementById('mainChartNote').textContent = '';
             const color = '#f59e0b';
-            const data = { labels: series.labels, datasets: [{ label: labelMap[selectedMetric], data: series.values, borderColor: color, backgroundColor: color, borderWidth: 1, borderRadius: 5, categoryPercentage: 0.82, barPercentage: 0.9, maxBarThickness: chartMode === 'monthly' ? 62 : 36 }] };
+            const datasets = series.datasets
+                ? series.datasets.map(ds => ({ ...ds, borderWidth: 1, borderRadius: 5, categoryPercentage: 0.82, barPercentage: 0.9, maxBarThickness: chartMode === 'monthly' ? 62 : 36, stack: 'producao' }))
+                : [{ label: labelMap[selectedMetric], data: series.values, borderColor: color, backgroundColor: color, borderWidth: 1, borderRadius: 5, categoryPercentage: 0.82, barPercentage: 0.9, maxBarThickness: chartMode === 'monthly' ? 62 : 36 }];
+            const data = { labels: series.labels, datasets };
             if (dailyChart) dailyChart.destroy();
             const unit = chartMode === 'monthly' && selectedMetric === 'refugo' ? '%' : 'kg';
             const plugins = unit === '%' ? [monthlyScrapLabelPlugin] : [];
-            dailyChart = new Chart(document.getElementById('dailyChart'), { type: 'bar', data, options: chartOptions(unit, roundedSuggestedMax(series.values)), plugins });
+            dailyChart = new Chart(document.getElementById('dailyChart'), { type: 'bar', data, options: chartOptions(unit, roundedSuggestedMax(series.values), Boolean(series.datasets)), plugins });
         }
 
         function renderScrap(byMotive) {
@@ -744,13 +768,13 @@
             return Math.ceil(padded / step) * step;
         }
 
-        function chartOptions(unit, suggestedMax) {
+        function chartOptions(unit, suggestedMax, stacked) {
             return {
                 responsive: true,
                 maintainAspectRatio: false,
                 scales: {
-                    x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#a1a1aa', font: { weight: 700 } } },
-                    y: { beginAtZero: true, suggestedMax, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#a1a1aa', callback: v => unit === 'kg' ? (v / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + 't' : Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%' } }
+                    x: { stacked, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#a1a1aa', font: { weight: 700 } } },
+                    y: { stacked, beginAtZero: true, suggestedMax, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#a1a1aa', callback: v => unit === 'kg' ? (v / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + 't' : Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%' } }
                 },
                 plugins: {
                     legend: { labels: { color: '#d4d4d8', font: { weight: 800 } } },
