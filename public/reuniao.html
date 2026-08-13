@@ -460,6 +460,17 @@
             padding: 14px 22px;
             border-bottom: 1px solid rgba(255,255,255,0.08);
         }
+        .scrap-modal-tabs {
+            display: none;
+            gap: 8px;
+            padding: 14px 22px 0;
+        }
+        .scrap-modal-tabs.open { display: flex; }
+        .scrap-modal-tabs .seg-btn {
+            height: 32px;
+            min-width: 100px;
+            font-size: 0.72rem;
+        }
         .scrap-stat {
             border: 1px solid rgba(255,255,255,0.07);
             border-radius: 8px;
@@ -687,6 +698,11 @@
                 <div class="scrap-stat"><div class="scrap-stat-label">Registros</div><div class="scrap-stat-value" id="scrapModalCount">--</div></div>
                 <div class="scrap-stat"><div class="scrap-stat-label">Participacao</div><div class="scrap-stat-value" id="scrapModalPct">--</div></div>
             </div>
+            <div class="scrap-modal-tabs" id="scrapModalTabs">
+                <button class="seg-btn active" type="button" data-client-drill="motivo">Motivos</button>
+                <button class="seg-btn" type="button" data-client-drill="item">Peças</button>
+                <button class="seg-btn" type="button" data-client-drill="registros">Registros</button>
+            </div>
             <div class="scrap-records" id="scrapModalRecords"></div>
         </div>
     </div>
@@ -798,6 +814,10 @@
                 if (!row) return;
                 openScrapModal(row.dataset.scrapMode, row.dataset.scrapName);
             });
+            document.querySelectorAll('[data-client-drill]').forEach(btn => btn.addEventListener('click', () => {
+                document.querySelectorAll('[data-client-drill]').forEach(b => b.classList.toggle('active', b === btn));
+                renderClientDrilldown(btn.dataset.clientDrill);
+            }));
             document.addEventListener('keydown', e => {
                 if (e.key === 'Escape') closeScrapModal();
             });
@@ -1070,15 +1090,55 @@
             document.getElementById('scrapModalWeight').textContent = fmtKg(total);
             document.getElementById('scrapModalCount').textContent = rows.length.toLocaleString('pt-BR');
             document.getElementById('scrapModalPct').textContent = fmtPct(pct);
+            window.currentScrapModal = { mode, value, rows };
+            document.getElementById('scrapModalTabs').classList.toggle('open', mode === 'cliente');
+            document.querySelectorAll('[data-client-drill]').forEach(btn => btn.classList.toggle('active', btn.dataset.clientDrill === (mode === 'cliente' ? 'motivo' : 'registros')));
+            if (mode === 'cliente') renderClientDrilldown('motivo');
+            else renderScrapRecords(rows);
+            const modal = document.getElementById('scrapModal');
+            modal.classList.add('open');
+            modal.setAttribute('aria-hidden', 'false');
+        }
+
+        function renderScrapRecords(rows) {
             const recordsEl = document.getElementById('scrapModalRecords');
             recordsEl.innerHTML = rows
                 .sort((a, b) => String(b.data || '').localeCompare(String(a.data || '')))
                 .map(renderScrapRecord)
                 .join('') || '<div class="loading">Sem registros</div>';
             recordsEl.scrollTop = 0;
-            const modal = document.getElementById('scrapModal');
-            modal.classList.add('open');
-            modal.setAttribute('aria-hidden', 'false');
+        }
+
+        function renderClientDrilldown(type) {
+            const state = window.currentScrapModal;
+            if (!state || state.mode !== 'cliente') return;
+            if (type === 'registros') return renderScrapRecords(state.rows);
+            const field = type === 'item' ? 'item' : 'motivo';
+            const rows = aggregateModalRows(state.rows, field);
+            const total = rows.reduce((sum, row) => sum + row.value, 0);
+            const recordsEl = document.getElementById('scrapModalRecords');
+            recordsEl.innerHTML = rows.length ? rows.map((r, index) => {
+                const pct = total > 0 ? (r.value / total) * 100 : 0;
+                return `<div class="rank-row" style="--pct:${pct.toFixed(2)}%;">
+                    <div class="rank-pos">${index + 1}</div>
+                    <div>
+                        <div class="rank-name" title="${escapeHtml(r.name)}">${escapeHtml(r.name)}</div>
+                        <div class="rank-detail" title="${escapeHtml(r.detail)}">${escapeHtml(r.detail)}</div>
+                    </div>
+                    <div class="rank-value">${fmtKg(r.value)}<span class="rank-pct">${fmtPct(pct)}</span></div>
+                </div>`;
+            }).join('') : '<div class="loading">Sem registros</div>';
+            recordsEl.scrollTop = 0;
+        }
+
+        function aggregateModalRows(rows, mode) {
+            const map = {};
+            rows.forEach(r => {
+                const key = scrapKey(r, mode);
+                if (!map[key.name]) map[key.name] = { name: key.name, detail: key.detail, value: 0 };
+                map[key.name].value += Number(r.peso_total || r.pesoTotal || 0);
+            });
+            return Object.values(map).sort((a, b) => b.value - a.value);
         }
 
         function closeScrapModal() {
