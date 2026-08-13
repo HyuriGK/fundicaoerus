@@ -435,6 +435,17 @@
         let selectedSector = 'Todos';
         let dailyChart;
         let dashboardCache = { prodRows: [], fatDaily: [], ref: {}, monthly: null };
+        const SECTOR_ORDER = [
+            'MOLDAGEM GERAL',
+            'MOLDAGEM LEVE',
+            'MOLDAGEM MANUAL',
+            'MOLDAGEM PESADA',
+            'FECHAMENTO MANUAL',
+            'ACABAMENTO',
+            'FUSAO',
+            'EXPEDICAO'
+        ];
+        const MOLDAGEM_GERAL_TYPES = ['MOLDAGEM MANUAL', 'MOLDAGEM LEVE', 'MOLDAGEM PESADA'];
 
         async function getJson(url, fallback) {
             try {
@@ -549,16 +560,30 @@
 
         function renderSectorOptions(rows) {
             const select = document.getElementById('sectorSelect');
-            const sectors = Array.from(new Set((rows || []).map(r => String(r.setor || '').trim()).filter(Boolean))).sort();
+            const existing = new Set((rows || []).map(r => normalizeSector(r.setor)).filter(Boolean));
+            const ordered = SECTOR_ORDER.filter(s => s === 'MOLDAGEM GERAL' || existing.has(s));
+            const extra = Array.from(existing).filter(s => !SECTOR_ORDER.includes(s)).sort();
+            const sectors = ordered.concat(extra);
             if (selectedSector !== 'Todos' && !sectors.includes(selectedSector)) selectedSector = 'Todos';
             select.innerHTML = '<option value="Todos">Todos setores</option>' + sectors.map(s => `<option value="${s}">${s}</option>`).join('');
             select.value = selectedSector;
         }
 
+        function normalizeSector(value) {
+            return String(value || '').trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        }
+
+        function matchesSelectedSector(rowSector) {
+            if (selectedSector === 'Todos') return true;
+            const sector = normalizeSector(rowSector);
+            if (selectedSector === 'MOLDAGEM GERAL') return MOLDAGEM_GERAL_TYPES.includes(sector);
+            return sector === selectedSector;
+        }
+
         function dailySeries(metric) {
             const days = Array.from({ length: new Date(selectedYear, selectedMonth, 0).getDate() }, (_, i) => String(i + 1).padStart(2, '0'));
             const prodMap = {};
-            dashboardCache.prodRows.filter(r => selectedSector === 'Todos' || String(r.setor || '').trim() === selectedSector).forEach(r => {
+            dashboardCache.prodRows.filter(r => matchesSelectedSector(r.setor)).forEach(r => {
                 const d = String(r.data || '').slice(8, 10);
                 prodMap[d] = (prodMap[d] || 0) + Number(r.peso_total || r.pesoTotal || 0);
             });
@@ -579,13 +604,20 @@
                 const rows = await Promise.all(months.map(async m => {
                     const start = iso(new Date(selectedYear, m - 1, 1));
                     const end = iso(new Date(selectedYear, m, 0));
+                    const sectorQuery = selectedSector !== 'Todos' && selectedSector !== 'MOLDAGEM GERAL' ? `&sector=${encodeURIComponent(selectedSector)}` : '';
+                    const prodPromise = selectedSector === 'MOLDAGEM GERAL'
+                        ? Promise.all(MOLDAGEM_GERAL_TYPES.map(sector => getJson(`/api/producao-postgres/stats?startDate=${start}&endDate=${end}&sector=${encodeURIComponent(sector)}`, { success: false, stats: {} })))
+                        : getJson(`/api/producao-postgres/stats?startDate=${start}&endDate=${end}${sectorQuery}`, { success: false, stats: {} });
                     const [prod, fat, ref] = await Promise.all([
-                        getJson(`/api/producao-postgres/stats?startDate=${start}&endDate=${end}${selectedSector !== 'Todos' ? `&sector=${encodeURIComponent(selectedSector)}` : ''}`, { success: false, stats: {} }),
+                        prodPromise,
                         getJson(`/api/faturamento-postgres/resumo-dashboard?year=${selectedYear}&month=${m}`, { success: false, totalKg: 0 }),
                         getJson(`/api/refugos-new/resumo-dashboard?year=${selectedYear}&month=${m}`, { success: false, totalKg: 0 })
                     ]);
+                    const prodWeight = Array.isArray(prod)
+                        ? prod.reduce((sum, item) => sum + Number((item.stats && item.stats.totalWeight) || 0), 0)
+                        : Number((prod.stats && prod.stats.totalWeight) || 0);
                     return {
-                        producao: Number((prod.stats && prod.stats.totalWeight) || 0),
+                        producao: prodWeight,
                         faturamento: Number(fat.totalKg || 0),
                         refugo: Number(ref.totalKg || 0)
                     };
