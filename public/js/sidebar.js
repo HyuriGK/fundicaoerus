@@ -478,6 +478,8 @@
                 '<i class="fa-solid fa-plus" id="icon-eg-controles"></i>' +
             '</div>' +
             '<div id="eg-controles" class="erus-nav-group-wrapper collapsed">' +
+                '<a href="reuniao.html" data-stip="Reunião de Indicadores" class="erus-nav-link' + isActive('reuniao.html') + '">' +
+                    '<i class="fa-solid fa-tv"></i><span>Reunião de Indicadores</span></a>' +
                 '<a href="refugos.html" data-stip="Refugo" class="erus-nav-link' + isActive('refugos.html') + '">' +
                     '<i class="fa-solid fa-trash-can"></i><span>Refugo</span></a>' +
                 '<a href="devolucoes.html" data-stip="Devoluções" class="erus-nav-link' + isActive('devolucoes.html') + '">' +
