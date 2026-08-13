@@ -317,6 +317,19 @@
             width: 100% !important;
             height: 100% !important;
         }
+        .chart-wrapper.pareto-scroll {
+            overflow-x: auto;
+            overflow-y: hidden;
+            scrollbar-width: none;
+        }
+        .chart-wrapper.pareto-scroll::-webkit-scrollbar {
+            display: none;
+        }
+        .chart-wrapper.pareto-scroll canvas {
+            width: var(--pareto-canvas-width, 100%) !important;
+            min-width: var(--pareto-canvas-width, 100%) !important;
+            max-width: none !important;
+        }
         .inline-loading-overlay {
             position: absolute;
             inset: 0;
@@ -2101,6 +2114,21 @@
             }
             return { labels: paddedLabels, datasets: paddedDatasets, realCount };
         }
+        function setupParetoHorizontalScroll(canvasId, itemCount) {
+            const canvas = document.getElementById(canvasId);
+            const wrapper = canvas?.closest('.chart-wrapper');
+            if (!canvas || !wrapper) return;
+            const visibleBars = 10;
+            const count = Math.max(itemCount || 0, visibleBars);
+            const baseWidth = wrapper.clientWidth || wrapper.getBoundingClientRect().width || 900;
+            const width = Math.ceil(baseWidth * (count / visibleBars));
+            const height = wrapper.clientHeight || wrapper.getBoundingClientRect().height || 420;
+            wrapper.classList.add('pareto-scroll');
+            wrapper.style.setProperty('--pareto-canvas-width', `${width}px`);
+            canvas.width = width;
+            canvas.height = height;
+            wrapper.scrollLeft = 0;
+        }
         const refugoBarSpacing = {
             categoryPercentage: 0.72,
             barPercentage: 0.92
@@ -2583,6 +2611,7 @@
                             hidden: labels.length <= 1
                         }
             ]);
+            setupParetoHorizontalScroll('paretoChart', padded.labels.length);
             paretoChartInstance = new Chart(ctx, {
                 type: 'bar',
                 data: {
@@ -2590,7 +2619,7 @@
                     datasets: padded.datasets
                 },
                 options: {
-                    responsive: true,
+                    responsive: false,
                     maintainAspectRatio: false,
                     layout: getRefugoBarLayout(labels),
                     interaction: { mode: 'index', intersect: false },
@@ -2708,6 +2737,7 @@
                             hidden: labels.length <= 1
                         }
             ]);
+            setupParetoHorizontalScroll('itemParetoChart', padded.labels.length);
             itemParetoChartInstance = new Chart(ctx, {
                 type: 'bar',
                 data: {
@@ -2715,7 +2745,7 @@
                     datasets: padded.datasets
                 },
                 options: {
-                    responsive: true,
+                    responsive: false,
                     maintainAspectRatio: false,
                     layout: getRefugoBarLayout(labels),
                     interaction: { mode: 'index', intersect: false },
