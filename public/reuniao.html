@@ -823,8 +823,11 @@
                 openClientDrillRecords(row.dataset.modalDrillMode, row.dataset.modalDrillValue);
             });
             document.addEventListener('keydown', e => {
-                if (e.key === 'Escape') closeScrapModal();
-            });
+                if (e.key !== 'Escape' || !document.getElementById('scrapModal').classList.contains('open')) return;
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                handleScrapModalBack();
+            }, true);
             document.getElementById('sectorSelect').addEventListener('change', e => {
                 selectedSector = e.target.value;
                 dashboardCache.monthly = null;
@@ -1095,6 +1098,7 @@
             document.getElementById('scrapModalCount').textContent = rows.length.toLocaleString('pt-BR');
             document.getElementById('scrapModalPct').textContent = fmtPct(pct);
             window.currentScrapModal = { mode, value, rows };
+            window.scrapModalLevel = 'main';
             document.getElementById('scrapModalTabs').classList.toggle('open', mode === 'cliente');
             document.querySelectorAll('[data-client-drill]').forEach(btn => btn.classList.toggle('active', btn.dataset.clientDrill === 'motivo'));
             if (mode === 'cliente') renderClientDrilldown('motivo');
@@ -1116,6 +1120,9 @@
         function renderClientDrilldown(type) {
             const state = window.currentScrapModal;
             if (!state || state.mode !== 'cliente') return;
+            window.currentClientDrill = type === 'item' ? 'item' : 'motivo';
+            window.scrapModalLevel = 'client-list';
+            document.getElementById('scrapModalSub').textContent = `${state.value} - principais ${window.currentClientDrill === 'item' ? 'pecas' : 'motivos'}`;
             const field = type === 'item' ? 'item' : 'motivo';
             const rows = aggregateModalRows(state.rows, field);
             const total = rows.reduce((sum, row) => sum + row.value, 0);
@@ -1140,6 +1147,7 @@
             const rows = state.rows.filter(r => scrapMatches(r, mode, value));
             document.querySelectorAll('[data-client-drill]').forEach(btn => btn.classList.remove('active'));
             document.getElementById('scrapModalSub').textContent = `${state.value} - ${labelScrapMode(mode)}: ${value}`;
+            window.scrapModalLevel = 'client-records';
             renderScrapRecords(rows);
         }
 
@@ -1158,6 +1166,18 @@
             if (!modal) return;
             modal.classList.remove('open');
             modal.setAttribute('aria-hidden', 'true');
+            window.scrapModalLevel = null;
+        }
+
+        function handleScrapModalBack() {
+            const state = window.currentScrapModal;
+            if (state && state.mode === 'cliente' && window.scrapModalLevel === 'client-records') {
+                const drill = window.currentClientDrill || 'motivo';
+                document.querySelectorAll('[data-client-drill]').forEach(btn => btn.classList.toggle('active', btn.dataset.clientDrill === drill));
+                renderClientDrilldown(drill);
+                return;
+            }
+            closeScrapModal();
         }
 
         function renderScrapRecord(row) {
