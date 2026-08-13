@@ -1113,7 +1113,7 @@
 
     window.erusSidebarOpenAdmin = function() {
         if (typeof openAdminModal === 'function') openAdminModal();
-        else window.location.href = 'index.html';
+        else window.location.href = 'chamados.html';
     };
 
     window.erusSidebarAccessCustos = function(e) {
