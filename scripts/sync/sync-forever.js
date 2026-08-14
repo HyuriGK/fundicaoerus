@@ -103,25 +103,27 @@ const LOG_FILE      = path.join(__dirname, 'sync-errors.log');
 const CYCLE_LOG     = path.join(ROOT_DIR, 'sync-ciclos.txt');
 const W        = 66; // inner content width (ASCII-safe)
 
-const SYNC_BATS = [
-    { name: 'CUSTOS',      file: path.join('sync', 'sincronizar_acustos.bat'),       icon: '[$$]', pageId: 'custos.html' },
-    { name: 'BALANCO',     file: path.join('sync', 'sincronizar_balanco.bat'),        icon: '[BL]', pageId: 'balanco.html' },
-    { name: 'DEVOLUCOES',  file: path.join('sync', 'sincronizar_adevolucoes.bat'),   icon: '[<<]', pageId: 'devolucoes.html' },
-    { name: 'EMISSOES',    file: path.join('sync', 'sincronizar_aemissoes.bat'),     icon: '[>>]', pageId: 'pedidos.html' },
+const CYCLE_BATS = [
+    { name: 'EMISSOES',    file: path.join('sync', 'sincronizar_aemissoes.bat'),     icon: '[>>]', pageId: 'pedidos.html', progressAlias: 'EMISSÕES' },
     { name: 'FATURAMENTO', file: path.join('sync', 'sincronizar_afaturamento.bat'),  icon: '[NF]', pageId: 'faturamentos.html' },
-    { name: 'CLIENTES',    file: path.join('sync', 'sincronizar_aclientes.bat'),     icon: '[CL]', pageId: 'clientes.html' },
     { name: 'PEDIDOS',     file: path.join('sync', 'sincronizar_apedidos.bat'),      icon: '[PD]', pageId: 'pedidos.html' },
-    { name: 'PRODUCAO',    file: path.join('sync', 'sincronizar_aproducao.bat'),     icon: '[PR]', pageId: 'pedidos.html' },
-    { name: 'REFUGOS',     file: path.join('sync', 'sincronizar_arefugo.bat'),       icon: '[RF]', pageId: 'refugos.html' },
-    { name: 'SNAPSHOTS',   file: path.join('sync', 'sincronizar_asnapshots.bat'),    icon: '[SS]', pageId: 'pedidos.html' },
-    { name: 'VALOR USI',   file: path.join('sync', 'sincronizar_valorusinagem.bat'), icon: '[VU]', pageId: 'usinagem_externa.html' },
+    { name: 'PRODUCAO',    file: path.join('sync', 'sincronizar_aproducao.bat'),     icon: '[PR]', pageId: 'pedidos.html', progressAlias: 'PRODUÇÃO' },
 ];
 
-const MOLDAGEM_BAT  = { name: 'MOLDAGEM', file: path.join('sync', 'sincronizar_fichatecmoldagem.bat'), icon: '[ML]', pageId: 'fichatecmoldagem.html' };
-const FUSAO_BAT     = { name: 'FUSAO FT',  file: path.join('sync', 'sincronizar_fichatecfusao.bat'),   icon: '[FU]', pageId: 'fichatecfusao.html' };
-const MOLDAGEM_WAIT = 30 * 60 * 1000; // 30 minutos
-let moldagemNextAt  = null;
-let fusaoNextAt     = null;
+const INDEPENDENT_BATS = [
+    { name: 'CUSTOS',      file: path.join('sync', 'sincronizar_acustos.bat'),       icon: '[$$]', pageId: 'custos.html' },
+    { name: 'BALANCO',     file: path.join('sync', 'sincronizar_balanco.bat'),        icon: '[BL]', pageId: 'balanco.html' },
+    { name: 'VALOR USI',   file: path.join('sync', 'sincronizar_valorusinagem.bat'), icon: '[VU]', pageId: 'usinagem_externa.html' },
+    { name: 'DEVOLUCOES',  file: path.join('sync', 'sincronizar_adevolucoes.bat'),   icon: '[<<]', pageId: 'devolucoes.html', progressAlias: 'DEVOLUÇÕES' },
+    { name: 'CLIENTES',    file: path.join('sync', 'sincronizar_aclientes.bat'),     icon: '[CL]', pageId: 'clientes.html' },
+    { name: 'REFUGOS',     file: path.join('sync', 'sincronizar_arefugo.bat'),       icon: '[RF]', pageId: 'refugos.html' },
+    { name: 'SNAPSHOTS',   file: path.join('sync', 'sincronizar_asnapshots.bat'),    icon: '[SS]', pageId: 'pedidos.html' },
+    { name: 'MOLDAGEM FT', file: path.join('sync', 'sincronizar_fichatecmoldagem.bat'), icon: '[ML]', pageId: 'fichatecmoldagem.html', progressAlias: 'MOLDAGEM' },
+    { name: 'FUSAO FT',    file: path.join('sync', 'sincronizar_fichatecfusao.bat'),   icon: '[FU]', pageId: 'fichatecfusao.html' },
+];
+
+const INDEPENDENT_WAIT = 2 * 60 * 1000; // 2 minutos
+let nextRunAt = {};
 
 const DELAY_MS = 2000;
 const getW = () => Math.max(80, (process.stdout.columns || 120)) - 2; // dynamic terminal width
@@ -137,11 +139,10 @@ let totalErrors  = 0;
 let logHistory   = [];
 let lastOkAt     = {};
 
-SYNC_BATS.forEach(b => { currentProg[b.name] = 0; scriptState[b.name] = 'IDLE'; });
-currentProg[MOLDAGEM_BAT.name] = 0;
-scriptState[MOLDAGEM_BAT.name] = 'IDLE';
-currentProg[FUSAO_BAT.name] = 0;
-scriptState[FUSAO_BAT.name] = 'IDLE';
+[...CYCLE_BATS, ...INDEPENDENT_BATS].forEach(b => {
+    currentProg[b.name] = 0;
+    scriptState[b.name] = 'IDLE';
+});
 
 // ─── BOX HELPERS ─────────────────────────────────────────────────────────────
 const bdr = C.border;
@@ -229,15 +230,12 @@ function buildFrame(cycleStart) {
     const FIXED = 1 + 4 + 1 + 11 + 2 + 2 + 4 + 2 + 10 + 5 + 8; // = 50
     const BAR = Math.max(10, W - FIXED - 2);
 
-    [...SYNC_BATS, MOLDAGEM_BAT, FUSAO_BAT].forEach(bat => {
+    const drawModuleRow = (bat) => {
         const prog  = currentProg[bat.name] || 0;
         const state = scriptState[bat.name];
-
-        // Countdown para loops independentes aguardando pr\u00f3ximo ciclo
         let countdownStr = '';
-        const nextAtMap = { 'MOLDAGEM': moldagemNextAt, 'FUSAO FT': fusaoNextAt };
-        if (nextAtMap[bat.name] && state === 'IDLE') {
-            const secsLeft = Math.max(0, Math.round((nextAtMap[bat.name] - Date.now()) / 1000));
+        if (nextRunAt[bat.name] && state === 'IDLE') {
+            const secsLeft = Math.max(0, Math.round((nextRunAt[bat.name] - Date.now()) / 1000));
             if (secsLeft > 0) {
                 const mm = String(Math.floor(secsLeft / 60)).padStart(2, '0');
                 const ss = String(secsLeft % 60).padStart(2, '0');
@@ -267,9 +265,14 @@ function buildFrame(cycleStart) {
         const badge = stateColor + bold + '[' + stateLabel + ']' + reset;
         const ok    = lastOkAt[bat.name] ? dim + '  ok ' + lastOkAt[bat.name] + reset : '         ';
 
-        const row = ' ' + icon + ' ' + name + ' [' + bar + '] ' + pct + '  ' + badge + '  ' + ok + countdownStr;
-        out.push(B.row(row, W));
-    });
+        out.push(B.row(' ' + icon + ' ' + name + ' [' + bar + '] ' + pct + '  ' + badge + '  ' + ok + countdownStr, W));
+    };
+
+    out.push(B.row(centerStr(bold + C.cyan + 'TELAS EM CICLO' + reset, W), W));
+    CYCLE_BATS.forEach(drawModuleRow);
+    out.push(B.sep());
+    out.push(B.row(centerStr(bold + C.gold + 'TELAS INDEPENDENTES' + reset, W), W));
+    INDEPENDENT_BATS.forEach(drawModuleRow);
 
     // ── ALERTS ───────────────────────────────────────────────────────────────
     out.push(B.sep());
@@ -338,8 +341,11 @@ function runBat(bat) {
                 if (l.includes('@PROG:')) {
                     const parts = l.split(':');
                     if (parts.length >= 3) {
-                        currentProg[parts[1]] = parseInt(parts[2]) || 0;
-                        updateSyncProgress(bat.pageId, currentProg[parts[1]]);
+                        const progressName = parts[1];
+                        const pct = parseInt(parts[2]) || 0;
+                        const targetName = (progressName === bat.name || progressName === bat.progressAlias) ? bat.name : progressName;
+                        currentProg[targetName] = pct;
+                        updateSyncProgress(bat.pageId, pct);
                     }
                 } else if (l.includes('Falha definitiva')) {
                     // Só conta erro após esgotar todas as tentativas do firebird-helper
@@ -432,14 +438,14 @@ async function startForever() {
         }
 
         cycleCount++;
-        SYNC_BATS.forEach(b => { currentProg[b.name] = 0; scriptState[b.name] = 'IDLE'; });
+        CYCLE_BATS.forEach(b => { currentProg[b.name] = 0; scriptState[b.name] = 'IDLE'; });
 
         const cycleStart = Date.now();
         const timer = setInterval(() => drawDashboard(cycleStart), 800);
 
-        for (let i = 0; i < SYNC_BATS.length; i++) {
-            await runBat(SYNC_BATS[i]);
-            if (i < SYNC_BATS.length - 1) await new Promise(r => setTimeout(r, DELAY_MS));
+        for (let i = 0; i < CYCLE_BATS.length; i++) {
+            await runBat(CYCLE_BATS[i]);
+            if (i < CYCLE_BATS.length - 1) await new Promise(r => setTimeout(r, DELAY_MS));
         }
 
         clearInterval(timer);
@@ -461,58 +467,33 @@ async function startForever() {
 }
 
 // ─── LOOP INDEPENDENTE FUSAO ─────────────────────────────────────────────────
-async function startFusaoLoop() {
+async function startIndependentLoop(bat) {
     while (true) {
         if (!isWithinSchedule()) {
             await new Promise(r => setTimeout(r, 60000));
             continue;
         }
 
-        fusaoNextAt = null;
-        await runBat(FUSAO_BAT);
+        const startedAt = Date.now();
+        nextRunAt[bat.name] = null;
+        await runBat(bat);
 
+        const duration = (Date.now() - startedAt) / 1000;
+        const startDate = new Date(startedAt);
         const fmtDate = d => d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR');
-        const line = `[FUSAO FT] Fim: ${fmtDate(new Date())}\n`;
+        const line = `[${bat.name}] Inicio: ${fmtDate(startDate)} | Fim: ${fmtDate(new Date())} | Duracao: ${duration.toFixed(1)}s\n`;
         try { fs.appendFileSync(CYCLE_LOG, line); } catch(e) {}
-        logEvent('FUSAO FT', `Ciclo concluido`, false);
+        logEvent(bat.name, `Ciclo concluido em ${duration.toFixed(1)}s`, false);
 
-        fusaoNextAt = Date.now() + MOLDAGEM_WAIT;
-        scriptState[FUSAO_BAT.name] = 'IDLE';
-        await new Promise(r => setTimeout(r, MOLDAGEM_WAIT));
-        fusaoNextAt = null;
-    }
-}
-
-// ─── LOOP INDEPENDENTE MOLDAGEM ──────────────────────────────────────────────
-async function startMoldagemLoop() {
-    while (true) {
-        if (!isWithinSchedule()) {
-            await new Promise(r => setTimeout(r, 60000));
-            continue;
-        }
-
-        const moldStart = Date.now();
-        moldagemNextAt  = null;
-        await runBat(MOLDAGEM_BAT);
-
-        const moldDuration = (Date.now() - moldStart) / 1000;
-        const moldStartDate = new Date(moldStart);
-        const fmtDate = d => d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR');
-        const moldLogLine = `[MOLDAGEM] Inicio: ${fmtDate(moldStartDate)} | Fim: ${fmtDate(new Date())} | Duracao: ${moldDuration.toFixed(1)}s\n`;
-        try { fs.appendFileSync(CYCLE_LOG, moldLogLine); } catch(e) {}
-        logEvent('MOLDAGEM', `Ciclo concluido em ${moldDuration.toFixed(1)}s`, false);
-
-        // Aguardar 30 minutos com countdown visível
-        moldagemNextAt = Date.now() + MOLDAGEM_WAIT;
-        scriptState[MOLDAGEM_BAT.name] = 'IDLE';
-        await new Promise(r => setTimeout(r, MOLDAGEM_WAIT));
-        moldagemNextAt = null;
+        nextRunAt[bat.name] = Date.now() + INDEPENDENT_WAIT;
+        scriptState[bat.name] = 'IDLE';
+        await new Promise(r => setTimeout(r, INDEPENDENT_WAIT));
+        nextRunAt[bat.name] = null;
     }
 }
 
 process.on('SIGINT', () => { process.stdout.write('\x1B[?25h'); process.exit(0); });
 process.on('exit',   () => process.stdout.write('\x1B[?25h'));
 
-startMoldagemLoop();
-startFusaoLoop();
+INDEPENDENT_BATS.forEach(bat => startIndependentLoop(bat));
 startForever();

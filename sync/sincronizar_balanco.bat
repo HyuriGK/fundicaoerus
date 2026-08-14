@@ -28,4 +28,4 @@ echo   SYNC CONCLUIDO: Dados carregados no Neon.
 echo   Abra o balanco.html para visualizar!
 echo ======================================================
 echo.
-pause
+exit
