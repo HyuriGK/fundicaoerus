@@ -81,6 +81,7 @@ function getMaterialInfo(db, produtoCodigo) {
 
 async function syncFichasFusao() {
     console.log('🚀 Sincronização de Fichas Técnicas de Fusão...');
+    process.stdout.write('@PROG:FUSAO FT:1%\n');
 
     // Garante colunas extras na tabela
     await pool.query(`ALTER TABLE ficha_tecnica_fusao ADD COLUMN IF NOT EXISTS peso_liquido NUMERIC`);
@@ -143,6 +144,7 @@ async function syncFichasFusao() {
             if (err) { console.error('Erro query:', err); db.detach(); process.exit(1); }
 
             console.log(`📊 ${results.length} registros recebidos.`);
+            process.stdout.write('@PROG:FUSAO FT:5%\n');
 
             // Busca todas as fotos já sincronizadas na ficha de moldagem (Postgres)
             const fotosResult = await pool.query('SELECT pro_codigo_fic, foto_base64 FROM ficha_tecnica WHERE foto_base64 IS NOT NULL');
@@ -240,12 +242,17 @@ async function syncFichasFusao() {
                         row.DATA_FIC || null
                     ]);
                     count++;
+                    if (count % 10 === 0) {
+                        const pct = Math.min(99, Math.max(5, Math.round((count / results.length) * 100)));
+                        process.stdout.write(`@PROG:FUSAO FT:${pct}%\n`);
+                    }
                     if (count % 50 === 0) console.log(`⏳ ${count}/${results.length}...`);
                 } catch (e) {
                     console.error(`Erro em ${row.PRO_CODIGO_FIC}:`, e.message);
                 }
             }
 
+            process.stdout.write('@PROG:FUSAO FT:100%\n');
             console.log(`✅ Sincronização de fusão concluída: ${count} registros.`);
             db.detach();
             process.exit(0);

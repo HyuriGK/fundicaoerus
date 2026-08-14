@@ -6,4 +6,4 @@ node scripts\sync\sync-fichatecnica-fusao.js
 node scripts/sync/sync-page-lock.js unlock fichatecfusao.html
 echo.
 echo Sincronizacao Concluida!
-pause
+exit
