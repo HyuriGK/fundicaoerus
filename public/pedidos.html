@@ -6372,14 +6372,24 @@ function flashConcentracaoBar(barIndex) {
         function buildEmissionMonthlySummaryFromLocal(year) {
             const weightData = Array(12).fill(0);
             const valueData = Array(12).fill(0);
+            const moldagemPesadaData = Array(12).fill(0);
+            const moldagemManualData = Array(12).fill(0);
+            const moldagemLeveData = Array(12).fill(0);
+            const semTipoMoldagemData = Array(12).fill(0);
             getChartOrders(allData).forEach(item => {
                 const d = toLocalDate(item.DATA_EMISSAO_PEDIDO || item.OP_EMISSAO);
                 if (!d || d.getFullYear() !== year) return;
                 const { peso, valor } = _calcEmissaoWeight(item);
-                weightData[d.getMonth()] += peso;
-                valueData[d.getMonth()] += valor;
+                const monthIndex = d.getMonth();
+                const tipoMoldagem = String(item._tipo_moldagem_procedimento || '').trim().toUpperCase();
+                weightData[monthIndex] += peso;
+                valueData[monthIndex] += valor;
+                if (tipoMoldagem === 'MOLDAGEM PESADA') moldagemPesadaData[monthIndex] += peso;
+                else if (tipoMoldagem === 'MOLDAGEM MANUAL') moldagemManualData[monthIndex] += peso;
+                else if (tipoMoldagem === 'MOLDAGEM LEVE') moldagemLeveData[monthIndex] += peso;
+                else semTipoMoldagemData[monthIndex] += peso;
             });
-            return { weightData, valueData };
+            return { weightData, valueData, moldagemPesadaData, moldagemManualData, moldagemLeveData, semTipoMoldagemData };
         }
 
         function buildEmissionClientSummaryFromLocal(year, month) {
@@ -6673,19 +6683,33 @@ function flashConcentracaoBar(barIndex) {
                         }
                         const weightData = Array(12).fill(0);
                         const valueData = Array(12).fill(0);
+                        const moldagemPesadaData = Array(12).fill(0);
+                        const moldagemManualData = Array(12).fill(0);
+                        const moldagemLeveData = Array(12).fill(0);
+                        const semTipoMoldagemData = Array(12).fill(0);
                         emissionDataCache.forEach(row => {
                             if (row.ano === selectedYear) {
                                 weightData[row.mes - 1] = row.totalPeso;
                                 valueData[row.mes - 1] = row.totalValor;
+                                moldagemPesadaData[row.mes - 1] = row.totalMoldagemPesada || 0;
+                                moldagemManualData[row.mes - 1] = row.totalMoldagemManual || 0;
+                                moldagemLeveData[row.mes - 1] = row.totalMoldagemLeve || 0;
+                                semTipoMoldagemData[row.mes - 1] = row.totalSemTipoMoldagem || 0;
                             }
                         });
                         if (!weightData.some(v => Number(v) > 0)) {
                             const localSummary = buildEmissionMonthlySummaryFromLocal(selectedYear);
                             weightData.splice(0, weightData.length, ...localSummary.weightData);
                             valueData.splice(0, valueData.length, ...localSummary.valueData);
+                            moldagemPesadaData.splice(0, 12, ...localSummary.moldagemPesadaData);
+                            moldagemManualData.splice(0, 12, ...localSummary.moldagemManualData);
+                            moldagemLeveData.splice(0, 12, ...localSummary.moldagemLeveData);
+                            semTipoMoldagemData.splice(0, 12, ...localSummary.semTipoMoldagemData);
                         }
-                        const monthlyBgColors = monthLabels.map((_, i) =>
-                            (activePillMonth !== null && i === activePillMonth) ? '#ffffff' : chartColorAmber
+                        const totalEmitido = weightData.reduce((sum, value) => sum + Number(value || 0), 0);
+                        if (titleEl) titleEl.innerHTML = `GrÃ¡fico de EmissÃ£o de Pedidos <span style="font-size:0.85rem;color:var(--color-primary);margin-left:15px;">Total emitido: ${formatNumber(totalEmitido, 0)} kg</span>`;
+                        const selectedBorders = monthLabels.map((_, i) =>
+                            activePillMonth !== null && i === activePillMonth ? '#ffffff' : 'transparent'
                         );
                         if (requestSeq !== historicalChartRequestSeq) return;
                         if (chartHistorical) chartHistorical.destroy();
@@ -6693,15 +6717,48 @@ function flashConcentracaoBar(barIndex) {
                             type: 'bar',
                             data: {
                                 labels: monthLabels,
-                                datasets: [{
-                                    label: 'Peso (kg)',
-                                    data: weightData,
-                                    backgroundColor: monthlyBgColors,
-                                    borderRadius: 4,
-                                    extraData: valueData
-                                }]
+                                datasets: [
+                                    {
+                                        label: 'Moldagem Pesada',
+                                        moldagemType: true,
+                                        data: moldagemPesadaData,
+                                        backgroundColor: '#f97316',
+                                        borderColor: selectedBorders,
+                                        borderWidth: 2,
+                                        extraMonthlyTotal: weightData
+                                    },
+                                    {
+                                        label: 'Moldagem Manual',
+                                        moldagemType: true,
+                                        data: moldagemManualData,
+                                        backgroundColor: '#a855f7',
+                                        borderColor: selectedBorders,
+                                        borderWidth: 2,
+                                        extraMonthlyTotal: weightData
+                                    },
+                                    {
+                                        label: 'Moldagem Leve',
+                                        moldagemType: true,
+                                        data: moldagemLeveData,
+                                        backgroundColor: '#3b82f6',
+                                        borderColor: selectedBorders,
+                                        borderWidth: 2,
+                                        extraMonthlyTotal: weightData
+                                    },
+                                    {
+                                        label: 'Sem tipo cadastrado',
+                                        moldagemType: true,
+                                        data: semTipoMoldagemData,
+                                        backgroundColor: '#6b7280',
+                                        borderColor: selectedBorders,
+                                        borderWidth: 2,
+                                        extraMonthlyTotal: weightData,
+                                        extraData: valueData
+                                    }
+                                ].filter(dataset => dataset.label !== 'Sem tipo cadastrado' || dataset.data.some(value => Number(value) > 0))
                             },
-                            options: getHistoricalOptions('kg', false)
+                            options: getHistoricalOptions('kg', false, true),
+                            plugins: typeof ChartDataLabels !== 'undefined' ? [ChartDataLabels] : []
                         });
                         chartReady = true;
                     } else {
@@ -6857,10 +6914,11 @@ function flashConcentracaoBar(barIndex) {
                 }
             }
         }
-        function getHistoricalOptions(unit, isPareto) {
+        function getHistoricalOptions(unit, isPareto, isMoldagemMonthly = false) {
             return {
                 responsive: true,
                 maintainAspectRatio: false,
+                layout: isMoldagemMonthly ? { padding: { top: 18 } } : undefined,
                 scales: {
                     y: {
                         type: 'linear',
@@ -6869,7 +6927,8 @@ function flashConcentracaoBar(barIndex) {
                         beginAtZero: true,
                         grid: { color: _gc() },
                         ticks: { color: _tc() },
-                        title: { display: !isPareto, text: unit, color: _tc() }
+                        title: { display: !isPareto, text: unit, color: _tc() },
+                        stacked: isMoldagemMonthly
                     },
                     yPercent: {
                         display: isPareto,
@@ -6880,6 +6939,7 @@ function flashConcentracaoBar(barIndex) {
                         grid: { drawOnChartArea: false }
                     },
                     x: {
+                        stacked: isMoldagemMonthly,
                         ticks: {
                             maxRotation: 45,
                             minRotation: 45,
@@ -6893,7 +6953,36 @@ function flashConcentracaoBar(barIndex) {
                     }
                 },
                 plugins: {
-                    legend: { display: isPareto, labels: { color: _tc() } },
+                    legend: { display: isPareto || isMoldagemMonthly, labels: { color: _tc() } },
+                    datalabels: isMoldagemMonthly ? {
+                        labels: {
+                            percent: {
+                                color: '#ffffff',
+                                font: { size: 9, weight: '700' },
+                                formatter: function (value, context) {
+                                    const total = Number(context.dataset.extraMonthlyTotal?.[context.dataIndex] || 0);
+                                    const pct = total > 0 ? Number(value || 0) / total * 100 : 0;
+                                    return pct >= 7 ? `${pct.toFixed(0)}%` : '';
+                                }
+                            },
+                            total: {
+                                anchor: 'end',
+                                align: 'top',
+                                offset: 2,
+                                color: _tc(),
+                                font: { size: 9, weight: '700' },
+                                display: function (context) {
+                                    const datasets = context.chart.data.datasets;
+                                    const total = Number(context.dataset.extraMonthlyTotal?.[context.dataIndex] || 0);
+                                    return context.datasetIndex === datasets.length - 1 && total > 0;
+                                },
+                                formatter: function (value, context) {
+                                    const total = Number(context.dataset.extraMonthlyTotal?.[context.dataIndex] || 0);
+                                    return `${formatNumber(total, 0)} kg`;
+                                }
+                            }
+                        }
+                    } : { display: false },
                     tooltip: {
                         callbacks: {
                             label: function (context) {
@@ -6901,6 +6990,14 @@ function flashConcentracaoBar(barIndex) {
                                     return `% Acumulada: ${context.parsed.y.toFixed(1)}%`;
                                 }
                                 const weight = context.parsed.y;
+                                if (context.dataset.moldagemType) {
+                                    const total = Number(context.dataset.extraMonthlyTotal?.[context.dataIndex] || 0);
+                                    const pct = total > 0 ? weight / total * 100 : 0;
+                                    return [
+                                        `${context.dataset.label}: ${formatNumber(weight, 0)} kg (${pct.toFixed(1)}%)`,
+                                        `Total do mÃªs: ${formatNumber(total, 0)} kg`
+                                    ];
+                                }
                                 const val = context.dataset.extraData ? context.dataset.extraData[context.dataIndex] : 0;
                                 const valStr = valorVisible ? val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-----';
                                 if (isPareto) {

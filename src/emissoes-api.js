@@ -110,6 +110,26 @@ router.get('/monthly-summary', async (req, res) => {
                 EXTRACT(YEAR FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) as ano,
                 EXTRACT(MONTH FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) as mes,
                 SUM(${emissionTotalWeightSql}) as total_peso,
+                SUM(CASE
+                    WHEN UPPER(TRIM(COALESCE(f.tipo_moldagem_procedimento, ''))) = 'MOLDAGEM PESADA'
+                        THEN ${emissionTotalWeightSql}
+                    ELSE 0
+                END) as total_moldagem_pesada,
+                SUM(CASE
+                    WHEN UPPER(TRIM(COALESCE(f.tipo_moldagem_procedimento, ''))) = 'MOLDAGEM MANUAL'
+                        THEN ${emissionTotalWeightSql}
+                    ELSE 0
+                END) as total_moldagem_manual,
+                SUM(CASE
+                    WHEN UPPER(TRIM(COALESCE(f.tipo_moldagem_procedimento, ''))) = 'MOLDAGEM LEVE'
+                        THEN ${emissionTotalWeightSql}
+                    ELSE 0
+                END) as total_moldagem_leve,
+                SUM(CASE
+                    WHEN UPPER(TRIM(COALESCE(f.tipo_moldagem_procedimento, ''))) NOT IN ('MOLDAGEM PESADA', 'MOLDAGEM MANUAL', 'MOLDAGEM LEVE')
+                        THEN ${emissionTotalWeightSql}
+                    ELSE 0
+                END) as total_sem_tipo_moldagem,
                 SUM(
                     CASE
                         WHEN pc.peso IS NOT NULL AND CAST(COALESCE(p.data->>'PRECO_KG', '0') AS NUMERIC) > 0
@@ -136,6 +156,10 @@ router.get('/monthly-summary', async (req, res) => {
             ano: parseInt(row.ano),
             mes: parseInt(row.mes),
             totalPeso: parseFloat(row.total_peso),
+            totalMoldagemPesada: parseFloat(row.total_moldagem_pesada) || 0,
+            totalMoldagemManual: parseFloat(row.total_moldagem_manual) || 0,
+            totalMoldagemLeve: parseFloat(row.total_moldagem_leve) || 0,
+            totalSemTipoMoldagem: parseFloat(row.total_sem_tipo_moldagem) || 0,
             totalValor: parseFloat(row.total_valor)
         }));
 
