@@ -919,7 +919,6 @@
                 indicator.style.maxHeight = SYNC_FLOAT_VISIBLE_HEIGHT + 'px';
                 indicator.style.opacity = '1';
                 if (toastFill) requestAnimationFrame(() => { toastFill.style.width = '100%'; });
-                autoHideTimer = setTimeout(() => hideIndicator(true), SYNC_TOAST_EXPOSURE_MS);
             });
         }, SYNC_TOAST_SHOW_DELAY_MS);
 

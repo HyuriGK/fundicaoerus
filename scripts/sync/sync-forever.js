@@ -110,7 +110,7 @@ const INDEPENDENT_BATS = [
     { name: 'EMISSOES',    file: path.join('sync', 'sincronizar_aemissoes.bat'),     icon: '[>>]', pageId: 'pedidos.html', progressAlias: 'EMISSÕES' },
     { name: 'FATURAMENTO', file: path.join('sync', 'sincronizar_afaturamento.bat'),  icon: '[NF]', pageId: 'faturamentos.html' },
     { name: 'PEDIDOS',     file: path.join('sync', 'sincronizar_apedidos.bat'),      icon: '[PD]', pageId: 'pedidos.html' },
-    { name: 'PRODUCAO',    file: path.join('sync', 'sincronizar_aproducao.bat'),     icon: '[PR]', pageId: 'pedidos.html', progressAlias: 'PRODUÇÃO' },
+    { name: 'PRODUCAO',    file: path.join('sync', 'sincronizar_aproducao.bat'),     icon: '[PR]', pageId: 'apontamentos_produtivos.html', progressAlias: 'PRODUÇÃO' },
     { name: 'CUSTOS',      file: path.join('sync', 'sincronizar_acustos.bat'),       icon: '[$$]', pageId: 'custos.html' },
     { name: 'BALANCO',     file: path.join('sync', 'sincronizar_balanco.bat'),        icon: '[BL]', pageId: 'balanco.html' },
     { name: 'VALOR USI',   file: path.join('sync', 'sincronizar_valorusinagem.bat'), icon: '[VU]', pageId: 'usinagem_externa.html' },
