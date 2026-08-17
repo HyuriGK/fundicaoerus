@@ -623,6 +623,12 @@
         blurTarget.style.transition = 'filter 0.6s ease';
 
         // Calcular progresso inicial
+        const formatSyncTime = (ms) => {
+            const totalSeconds = Math.max(0, Math.round(ms / 1000));
+            const minutes = Math.floor(totalSeconds / 60);
+            const seconds = totalSeconds % 60;
+            return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        };
         const elapsedMs = Date.now() - syncStartedAt;
         const initialProgress = Math.min((elapsedMs / syncEstimatedMs) * 100, 95);
 
@@ -846,7 +852,7 @@
 
             <div id="sync-float-status" style="font-size: 0.7rem; color: #71717a; display: flex; align-items: center; gap: 4px;">
                 <i class="fa-solid fa-cloud-arrow-down" style="font-size: 10px;"></i>
-                <span>Sincronizando com SIGE...</span>
+                <span>Sincronizando com SIGE... <strong id="sync-float-time" style="color:#a1a1aa;font-weight:700;">${formatSyncTime(elapsedMs)} / ${formatSyncTime(syncEstimatedMs)}</strong></span>
             </div>
 
             <div style="height:3px;background:rgba(161,161,170,0.12);border-radius:999px;overflow:hidden;">
@@ -860,6 +866,7 @@
         const fill = document.getElementById('sync-float-fill');
         const toastFill = document.getElementById('sync-float-toast-fill');
         const pctText = document.getElementById('sync-float-pct');
+        const timeText = document.getElementById('sync-float-time');
         const statusText = document.getElementById('sync-float-status');
 
         let checkInterval;
@@ -874,6 +881,7 @@
                 fill.style.width = timePct + '%';
                 if (pctText) pctText.textContent = Math.round(timePct) + '%';
             }
+            if (timeText) timeText.textContent = `${formatSyncTime(elapsed)} / ${formatSyncTime(syncEstimatedMs)}`;
         }, 1000);
 
         function hideIndicator(markDismissed) {
