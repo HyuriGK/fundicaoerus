@@ -123,6 +123,7 @@ const INDEPENDENT_BATS = [
 ];
 
 const INDEPENDENT_WAIT = 2 * 60 * 1000; // 2 minutos
+const INDEPENDENT_START_STAGGER = 15000;
 let nextRunAt = {};
 
 const DELAY_MS = 2000;
@@ -474,5 +475,12 @@ async function startIndependentLoop(bat) {
 process.on('SIGINT', () => { process.stdout.write('\x1B[?25h'); process.exit(0); });
 process.on('exit',   () => process.stdout.write('\x1B[?25h'));
 
-INDEPENDENT_BATS.forEach(bat => startIndependentLoop(bat));
+async function startIndependentLoops() {
+    for (const bat of INDEPENDENT_BATS) {
+        startIndependentLoop(bat);
+        await new Promise(r => setTimeout(r, INDEPENDENT_START_STAGGER));
+    }
+}
+
+startIndependentLoops();
 startForever();

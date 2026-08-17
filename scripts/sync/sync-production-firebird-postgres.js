@@ -59,8 +59,7 @@ function chunkArray(myArray, chunk_size) {
         `);
         console.log('✅ Postgres ready.');
 
-        let startDateObj = new Date();
-        let startDate = '2023-01-01';
+        let startDate = '2025-01-01';
 
         console.log(`📅 Janela de Sincronização: ${startDate} até hoje.`);
 
