@@ -104,14 +104,13 @@ const CYCLE_LOG     = path.join(ROOT_DIR, 'sync-ciclos.txt');
 const W        = 66; // inner content width (ASCII-safe)
 
 const CYCLE_BATS = [
+];
+
+const INDEPENDENT_BATS = [
     { name: 'EMISSOES',    file: path.join('sync', 'sincronizar_aemissoes.bat'),     icon: '[>>]', pageId: 'pedidos.html', progressAlias: 'EMISSÕES' },
     { name: 'FATURAMENTO', file: path.join('sync', 'sincronizar_afaturamento.bat'),  icon: '[NF]', pageId: 'faturamentos.html' },
     { name: 'PEDIDOS',     file: path.join('sync', 'sincronizar_apedidos.bat'),      icon: '[PD]', pageId: 'pedidos.html' },
     { name: 'PRODUCAO',    file: path.join('sync', 'sincronizar_aproducao.bat'),     icon: '[PR]', pageId: 'pedidos.html', progressAlias: 'PRODUÇÃO' },
-];
-
-const INDEPENDENT_BATS = [
-    { name: 'FAT IND',     file: path.join('sync', 'sincronizar_afaturamento.bat'),  icon: '[NF]', pageId: 'faturamentos.html', progressAlias: 'FATURAMENTO' },
     { name: 'CUSTOS',      file: path.join('sync', 'sincronizar_acustos.bat'),       icon: '[$$]', pageId: 'custos.html' },
     { name: 'BALANCO',     file: path.join('sync', 'sincronizar_balanco.bat'),        icon: '[BL]', pageId: 'balanco.html' },
     { name: 'VALOR USI',   file: path.join('sync', 'sincronizar_valorusinagem.bat'), icon: '[VU]', pageId: 'usinagem_externa.html' },
@@ -269,9 +268,11 @@ function buildFrame(cycleStart) {
         out.push(B.row(' ' + icon + ' ' + name + ' [' + bar + '] ' + pct + '  ' + badge + '  ' + ok + countdownStr, W));
     };
 
-    out.push(B.row(centerStr(bold + C.cyan + 'TELAS EM CICLO' + reset, W), W));
-    CYCLE_BATS.forEach(drawModuleRow);
-    out.push(B.sep());
+    if (CYCLE_BATS.length) {
+        out.push(B.row(centerStr(bold + C.cyan + 'TELAS EM CICLO' + reset, W), W));
+        CYCLE_BATS.forEach(drawModuleRow);
+        out.push(B.sep());
+    }
     out.push(B.row(centerStr(bold + C.gold + 'TELAS INDEPENDENTES' + reset, W), W));
     INDEPENDENT_BATS.forEach(drawModuleRow);
 
@@ -438,32 +439,9 @@ async function startForever() {
             continue;
         }
 
-        cycleCount++;
-        CYCLE_BATS.forEach(b => { currentProg[b.name] = 0; scriptState[b.name] = 'IDLE'; });
-
         const cycleStart = Date.now();
-        const timer = setInterval(() => drawDashboard(cycleStart), 800);
-
-        for (let i = 0; i < CYCLE_BATS.length; i++) {
-            await runBat(CYCLE_BATS[i]);
-            if (i < CYCLE_BATS.length - 1) await new Promise(r => setTimeout(r, DELAY_MS));
-        }
-
-        clearInterval(timer);
-        const cycleEnd = new Date();
-        const duration = (Date.now() - cycleStart) / 1000;
-        cycleHistory.push(duration);
-        if (cycleHistory.length > 50) cycleHistory.shift();
-
-        const cycleStartDate = new Date(cycleStart);
-        const fmtDate = d => d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR');
-        const cycleLogLine = `Ciclo #${String(cycleCount).padStart(3,'0')} | Inicio: ${fmtDate(cycleStartDate)} | Fim: ${fmtDate(cycleEnd)} | Duracao: ${duration.toFixed(1)}s\n`;
-        try { fs.appendFileSync(CYCLE_LOG, cycleLogLine); } catch(e) {}
-
-        logEvent('SISTEMA', `Ciclo #${cycleCount} concluido em ${duration.toFixed(1)}s`, false);
         drawDashboard(cycleStart);
-
-        await new Promise(r => setTimeout(r, 30000));
+        await new Promise(r => setTimeout(r, 800));
     }
 }
 
