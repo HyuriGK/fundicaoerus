@@ -132,6 +132,9 @@ async function ensureClientesCrmTable() {
         )
     `);
     await pool.query(`ALTER TABLE clientes_crm_historico ADD COLUMN IF NOT EXISTS crm_user TEXT`);
+    await pool.query(`ALTER TABLE clientes_crm_historico ADD COLUMN IF NOT EXISTS action_status TEXT DEFAULT 'aberta'`);
+    await pool.query(`ALTER TABLE clientes_crm_historico ADD COLUMN IF NOT EXISTS encerrada_em TIMESTAMP`);
+    await pool.query(`ALTER TABLE clientes_crm_historico ADD COLUMN IF NOT EXISTS reaberta_em TIMESTAMP`);
 }
 
 async function ensureClientesContatosTable() {
@@ -2711,10 +2714,12 @@ router.post('/crm', async (req, res) => {
             RETURNING cliente_nome, crm_user, empresa, codigo, status, proxima_acao, data_acao, notas, updated_by, created_at, updated_at
         `, [clienteNome, crmUser, empresa, codigo, status, proximaAcao, dataAcao, notas, updatedBy]);
 
-        await pool.query(`
-            INSERT INTO clientes_crm_historico (cliente_nome, crm_user, empresa, codigo, status, proxima_acao, data_acao, notas, updated_by)
-            VALUES ($1, $2, $3, $4, NULLIF($5, ''), NULLIF($6, ''), $7, NULLIF($8, ''), NULLIF($9, ''))
-        `, [clienteNome, crmUser, empresa, codigo, status, proximaAcao, dataAcao, notas, updatedBy]);
+        if (proximaAcao || dataAcao) {
+            await pool.query(`
+                INSERT INTO clientes_crm_historico (cliente_nome, crm_user, empresa, codigo, status, proxima_acao, data_acao, notas, updated_by, action_status)
+                VALUES ($1, $2, $3, $4, NULLIF($5, ''), NULLIF($6, ''), $7, NULLIF($8, ''), NULLIF($9, ''), 'aberta')
+            `, [clienteNome, crmUser, empresa, codigo, status, proximaAcao, dataAcao, notas, updatedBy]);
+        }
 
         const row = saved.rows[0];
         res.json({
@@ -2734,6 +2739,154 @@ router.post('/crm', async (req, res) => {
         });
     } catch (err) {
         res.status(500).json({ success: false, error: 'Erro ao salvar CRM do cliente', details: err.message });
+    }
+});
+
+router.get('/crm/actions/history', async (req, res) => {
+    try {
+        await ensureClientesCrmTable();
+        const crmUser = String(req.user?.user || req.user?.name || '').trim();
+        if (!crmUser) return res.status(400).json({ success: false, error: 'UsuÃ¡rio invÃ¡lido.' });
+        const result = await pool.query(`
+            SELECT id, cliente_nome, crm_user, empresa, codigo, status, proxima_acao, data_acao, notas, updated_by, created_at, encerrada_em
+            FROM clientes_crm_historico
+            WHERE crm_user = $1
+              AND action_status = 'encerrada'
+              AND reaberta_em IS NULL
+            ORDER BY encerrada_em DESC NULLS LAST, created_at DESC
+            LIMIT 200
+        `, [crmUser]);
+        res.json({
+            success: true,
+            data: result.rows.map(row => ({
+                id: row.id,
+                clienteNome: row.cliente_nome,
+                crmUser: row.crm_user,
+                empresa: row.empresa,
+                codigo: row.codigo,
+                status: row.status || '',
+                nextAction: row.proxima_acao || '',
+                dueDate: row.data_acao ? row.data_acao.toISOString().slice(0, 10) : '',
+                notes: row.notas || '',
+                updatedBy: row.updated_by || '',
+                createdAt: row.created_at,
+                closedAt: row.encerrada_em
+            }))
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, error: 'Erro ao consultar histÃ³rico de aÃ§Ãµes', details: err.message });
+    }
+});
+
+router.post('/crm/actions/:id/reopen', async (req, res) => {
+    try {
+        await ensureClientesCrmTable();
+        const crmUser = String(req.user?.user || req.user?.name || '').trim();
+        const userName = String(req.user?.name || req.user?.user || '').trim();
+        const id = Number(req.params.id);
+        if (!crmUser) return res.status(400).json({ success: false, error: 'UsuÃ¡rio invÃ¡lido.' });
+        if (!Number.isInteger(id)) return res.status(400).json({ success: false, error: 'AÃ§Ã£o invÃ¡lida.' });
+        const action = await pool.query(`
+            SELECT *
+            FROM clientes_crm_historico
+            WHERE id = $1
+              AND crm_user = $2
+              AND action_status = 'encerrada'
+              AND reaberta_em IS NULL
+            LIMIT 1
+        `, [id, crmUser]);
+        if (!action.rowCount) return res.status(404).json({ success: false, error: 'AÃ§Ã£o encerrada nÃ£o encontrada.' });
+        const r = action.rows[0];
+        const updatedBy = userName || crmUser;
+        const saved = await pool.query(`
+            INSERT INTO clientes_crm (cliente_nome, crm_user, empresa, codigo, status, proxima_acao, data_acao, notas, updated_by, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULLIF($9, ''), NOW())
+            ON CONFLICT (cliente_nome, crm_user)
+            DO UPDATE SET
+                empresa = COALESCE(EXCLUDED.empresa, clientes_crm.empresa),
+                codigo = COALESCE(EXCLUDED.codigo, clientes_crm.codigo),
+                status = EXCLUDED.status,
+                proxima_acao = EXCLUDED.proxima_acao,
+                data_acao = EXCLUDED.data_acao,
+                notas = EXCLUDED.notas,
+                updated_by = EXCLUDED.updated_by,
+                updated_at = NOW()
+            RETURNING cliente_nome, crm_user, empresa, codigo, status, proxima_acao, data_acao, notas, updated_by, created_at, updated_at
+        `, [r.cliente_nome, crmUser, r.empresa, r.codigo, r.status, r.proxima_acao, r.data_acao, r.notas, updatedBy]);
+        await pool.query(`UPDATE clientes_crm_historico SET reaberta_em = NOW(), updated_by = NULLIF($2, '') WHERE id = $1`, [id, updatedBy]);
+        const row = saved.rows[0];
+        res.json({
+            success: true,
+            data: {
+                clienteNome: row.cliente_nome,
+                crmUser: row.crm_user,
+                empresa: row.empresa,
+                codigo: row.codigo,
+                status: row.status || '',
+                nextAction: row.proxima_acao || '',
+                dueDate: row.data_acao ? row.data_acao.toISOString().slice(0, 10) : '',
+                notes: row.notas || '',
+                updatedBy: row.updated_by || '',
+                createdAt: row.created_at,
+                updatedAt: row.updated_at
+            }
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, error: 'Erro ao reabrir aÃ§Ã£o', details: err.message });
+    }
+});
+
+router.post('/crm/actions/close', async (req, res) => {
+    try {
+        await ensureClientesCrmTable();
+        const crmUser = String(req.user?.user || req.user?.name || '').trim();
+        const userName = String(req.user?.name || req.user?.user || '').trim();
+        const clienteNome = String(req.body.clienteNome || '').trim();
+        if (!crmUser) return res.status(400).json({ success: false, error: 'UsuÃ¡rio invÃ¡lido.' });
+        if (!clienteNome) return res.status(400).json({ success: false, error: 'Cliente invÃ¡lido.' });
+        const current = await pool.query(`
+            SELECT cliente_nome, crm_user, empresa, codigo, status, proxima_acao, data_acao, notas
+            FROM clientes_crm
+            WHERE cliente_nome = $1 AND crm_user = $2
+            LIMIT 1
+        `, [clienteNome, crmUser]);
+        if (!current.rowCount || (!current.rows[0].proxima_acao && !current.rows[0].data_acao)) {
+            return res.status(404).json({ success: false, error: 'AÃ§Ã£o aberta nÃ£o encontrada.' });
+        }
+        const r = current.rows[0];
+        const updatedBy = userName || crmUser;
+        await pool.query(`
+            INSERT INTO clientes_crm_historico (cliente_nome, crm_user, empresa, codigo, status, proxima_acao, data_acao, notas, updated_by, action_status, encerrada_em)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULLIF($9, ''), 'encerrada', NOW())
+        `, [r.cliente_nome, r.crm_user, r.empresa, r.codigo, r.status, r.proxima_acao, r.data_acao, r.notas, updatedBy]);
+        const saved = await pool.query(`
+            UPDATE clientes_crm
+            SET proxima_acao = NULL,
+                data_acao = NULL,
+                updated_by = NULLIF($3, ''),
+                updated_at = NOW()
+            WHERE cliente_nome = $1 AND crm_user = $2
+            RETURNING cliente_nome, crm_user, empresa, codigo, status, proxima_acao, data_acao, notas, updated_by, created_at, updated_at
+        `, [clienteNome, crmUser, updatedBy]);
+        const row = saved.rows[0];
+        res.json({
+            success: true,
+            data: {
+                clienteNome: row.cliente_nome,
+                crmUser: row.crm_user,
+                empresa: row.empresa,
+                codigo: row.codigo,
+                status: row.status || '',
+                nextAction: row.proxima_acao || '',
+                dueDate: row.data_acao ? row.data_acao.toISOString().slice(0, 10) : '',
+                notes: row.notas || '',
+                updatedBy: row.updated_by || '',
+                createdAt: row.created_at,
+                updatedAt: row.updated_at
+            }
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, error: 'Erro ao encerrar aÃ§Ã£o', details: err.message });
     }
 });
 
