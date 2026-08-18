@@ -96,6 +96,16 @@ const emissionUnitWeightSql = `
     )
 `;
 const emissionTotalWeightSql = `(${emissionUnitWeightSql} * ${emissionQtySql})`;
+const emissionTotalValueSql = `
+    (
+        CASE
+            WHEN pc.peso IS NOT NULL AND CAST(COALESCE(p.data->>'PRECO_KG', '0') AS NUMERIC) > 0
+                THEN CAST(COALESCE(p.data->>'PRECO_KG', '0') AS NUMERIC) * pc.peso * CAST(COALESCE(p.data->>'QUANTIDADE_PPR', '0') AS NUMERIC)
+            ELSE
+                CAST(COALESCE(p.data->>'VALOR_PPR', '0') AS NUMERIC) * CAST(COALESCE(p.data->>'QUANTIDADE_PPR', '0') AS NUMERIC)
+        END
+    )
+`;
 const emissionFichaJoinSql = `
             LEFT JOIN ficha_tecnica f ON f.pro_codigo_fic = TRIM(p.data->>'PRODUTO_PPR')
 `;
@@ -118,7 +128,7 @@ const emissionPedidoPesoJoinSql = `
 // GET /api/emissoes/monthly-summary
 router.get('/monthly-summary', async (req, res) => {
     try {
-        const cacheKey = getUserCacheKey(req);
+        const cacheKey = getUserCacheKey(req, { route: 'monthly-summary', version: 2 });
         const cached = getCache(monthlySummaryCache, cacheKey);
         if (cached) return res.json(cached);
         const params = [];
@@ -134,28 +144,41 @@ router.get('/monthly-summary', async (req, res) => {
                     ELSE 0
                 END) as total_moldagem_pesada,
                 SUM(CASE
+                    WHEN UPPER(TRIM(COALESCE(f.tipo_moldagem_procedimento, ''))) = 'MOLDAGEM PESADA'
+                        THEN ${emissionTotalValueSql}
+                    ELSE 0
+                END) as valor_moldagem_pesada,
+                SUM(CASE
                     WHEN UPPER(TRIM(COALESCE(f.tipo_moldagem_procedimento, ''))) = 'MOLDAGEM MANUAL'
                         THEN ${emissionTotalWeightSql}
                     ELSE 0
                 END) as total_moldagem_manual,
+                SUM(CASE
+                    WHEN UPPER(TRIM(COALESCE(f.tipo_moldagem_procedimento, ''))) = 'MOLDAGEM MANUAL'
+                        THEN ${emissionTotalValueSql}
+                    ELSE 0
+                END) as valor_moldagem_manual,
                 SUM(CASE
                     WHEN UPPER(TRIM(COALESCE(f.tipo_moldagem_procedimento, ''))) = 'MOLDAGEM LEVE'
                         THEN ${emissionTotalWeightSql}
                     ELSE 0
                 END) as total_moldagem_leve,
                 SUM(CASE
+                    WHEN UPPER(TRIM(COALESCE(f.tipo_moldagem_procedimento, ''))) = 'MOLDAGEM LEVE'
+                        THEN ${emissionTotalValueSql}
+                    ELSE 0
+                END) as valor_moldagem_leve,
+                SUM(CASE
                     WHEN UPPER(TRIM(COALESCE(f.tipo_moldagem_procedimento, ''))) NOT IN ('MOLDAGEM PESADA', 'MOLDAGEM MANUAL', 'MOLDAGEM LEVE')
                         THEN ${emissionTotalWeightSql}
                     ELSE 0
                 END) as total_sem_tipo_moldagem,
-                SUM(
-                    CASE
-                        WHEN pc.peso IS NOT NULL AND CAST(COALESCE(p.data->>'PRECO_KG', '0') AS NUMERIC) > 0
-                            THEN CAST(COALESCE(p.data->>'PRECO_KG', '0') AS NUMERIC) * pc.peso * CAST(COALESCE(p.data->>'QUANTIDADE_PPR', '0') AS NUMERIC)
-                        ELSE
-                            CAST(COALESCE(p.data->>'VALOR_PPR', '0') AS NUMERIC) * CAST(COALESCE(p.data->>'QUANTIDADE_PPR', '0') AS NUMERIC)
-                    END
-                ) as total_valor
+                SUM(CASE
+                    WHEN UPPER(TRIM(COALESCE(f.tipo_moldagem_procedimento, ''))) NOT IN ('MOLDAGEM PESADA', 'MOLDAGEM MANUAL', 'MOLDAGEM LEVE')
+                        THEN ${emissionTotalValueSql}
+                    ELSE 0
+                END) as valor_sem_tipo_moldagem,
+                SUM(${emissionTotalValueSql}) as total_valor
             FROM firebird_sync_emissoes p
             LEFT JOIN pesos_customizados pc ON TRIM(p.data->>'PRODUTO_PPR') = pc.codigo
             ${emissionFichaJoinSql}
@@ -175,9 +198,13 @@ router.get('/monthly-summary', async (req, res) => {
             mes: parseInt(row.mes),
             totalPeso: parseFloat(row.total_peso),
             totalMoldagemPesada: parseFloat(row.total_moldagem_pesada) || 0,
+            valorMoldagemPesada: parseFloat(row.valor_moldagem_pesada) || 0,
             totalMoldagemManual: parseFloat(row.total_moldagem_manual) || 0,
+            valorMoldagemManual: parseFloat(row.valor_moldagem_manual) || 0,
             totalMoldagemLeve: parseFloat(row.total_moldagem_leve) || 0,
+            valorMoldagemLeve: parseFloat(row.valor_moldagem_leve) || 0,
             totalSemTipoMoldagem: parseFloat(row.total_sem_tipo_moldagem) || 0,
+            valorSemTipoMoldagem: parseFloat(row.valor_sem_tipo_moldagem) || 0,
             totalValor: parseFloat(row.total_valor)
         }));
 
