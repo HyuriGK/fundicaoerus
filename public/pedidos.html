@@ -1710,6 +1710,9 @@
         #recordsModal.emission-history-modal #dataTable .value-total-column {
             display: table-cell !important;
         }
+        #recordsModal.emission-history-modal #blockReasonCards {
+            display: none !important;
+        }
         #recordsModal.emission-history-modal #dataTable .history-pedido-header,
         #recordsModal.emission-history-modal #dataTable .pedido-column {
             width: 78px !important;
@@ -1750,7 +1753,7 @@
             background: rgba(251,191,36,.09);
         }
         /* Ocultar OP no modal de emissões */
-        .hide-op-column .op-column,
+        .hide-op-column .block-reason-column,
         .hide-op-column .modelo-column,
         .hide-op-column .observations-column {
             display: none !important;
@@ -2612,7 +2615,7 @@
                             <th class="conferencia-col dev-conferencia-col" style="display:none;" title="Conferido"></th>
                             <th class="sortable-th" id="th-pedido" onclick="toggleSort('pedido')" style="width: 110px;">PEDIDO</th>
                             <th class="sortable-th op-column" id="th-op" onclick="toggleSort('op')" style="width: 105px;">OP</th>
-                            <th class="sortable-th history-pedido-header" id="th-bloqueio" onclick="toggleSort('bloqueio')" style="width: 175px;">BLOCK / SEM DATA</th>
+                            <th class="sortable-th history-pedido-header block-reason-column" id="th-bloqueio" onclick="toggleSort('bloqueio')" style="width: 175px;">BLOCK / SEM DATA</th>
                             <th class="sortable-th emission-date-column" id="th-entrega" onclick="toggleSort('entrega')" style="width: 8%; white-space: nowrap;">ENTREGA</th>
                             <th class="sortable-th" id="th-cliente" onclick="toggleSort('cliente')" style="text-align: left; width: 15%;">CLIENTE</th>
                             <th class="code-column" style="width: 1px; text-align: center; white-space: nowrap;">CÓDIGO</th>
@@ -2624,7 +2627,7 @@
                             <th class="sortable-th" id="th-peso_un" onclick="toggleSort('peso_un')" style="width: 8%; white-space: nowrap;">PESO UN</th>
                             <th class="sortable-th" id="th-peso_total" onclick="toggleSort('peso_total')" style="width: 9%; white-space: nowrap;">PESO TOTAL</th>
                             <th class="sortable-th value-total-column" id="th-valor_un" onclick="toggleSort('valor_un')" style="width: 9%; white-space: nowrap;">VALOR UN</th>
-                            <th class="sortable-th value-total-column" id="th-valor_total" onclick="toggleSort('valor_total')" style="width: 9%; white-space: nowrap;">TOTAL (R$)</th>
+                            <th class="sortable-th value-total-column" id="th-valor_total" onclick="toggleSort('valor_total')" style="width: 9%; white-space: nowrap;">VALOR TOTAL</th>
                             <th class="modelo-column" style="width: 210px; min-width: 210px;">MODELO</th>
                             <th class="observations-column" style="width: 18%; min-width: 300px;">OBSERVAÇÕES</th>
                         </tr>
@@ -2632,7 +2635,7 @@
                             <th class="conferencia-col dev-conferencia-col" style="display:none;"></th>
                             <th><input class="filter-input-table" data-col="0" placeholder="..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></th>
                             <th class="op-column"><input class="filter-input-table" data-col="1" placeholder="..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></th>
-                            <th><input class="filter-input-table" data-col="2" placeholder="..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></th>
+                            <th class="block-reason-column"><input class="filter-input-table" data-col="2" placeholder="..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></th>
                             <th><input class="filter-input-table" data-col="3" placeholder="..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></th>
                             <th><input class="filter-input-table" data-col="4" placeholder="..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></th>
                             <th><input class="filter-input-table" data-col="5" placeholder="..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" style="text-align: center;"></th>
@@ -4678,7 +4681,7 @@
                         ` : ``}
                     </td>
                     <td style="text-align:center;">${opHtml}</td>
-                    <td style="text-align:center; min-width: 170px;">${renderPedidoBlockReasons(item)}</td>
+                    <td class="block-reason-column" style="text-align:center; min-width: 170px;">${renderPedidoBlockReasons(item)}</td>
                     <td class="emission-date-column" style="text-align:center;">${entrega}</td>
                     <td style="color:var(--text-main); text-align:left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 320px;" title="${item.NOME_CLIENTE || '-'}">${item.NOME_CLIENTE || '-'}</td>
                     <td class="copyable code-column" style="text-align:center;" onclick="copyToClipboard('${item.PRODUTO_PPR || item.CODIGO_PECA || item.sync_key || ''}', 'Código')">
@@ -7155,12 +7158,10 @@ function flashConcentracaoBar(barIndex) {
         async function showHistoricalDetails(records, title) {
             setInlineLoading('recordsLoadingOverlay', true);
             const titleEl = document.querySelector('#recordsModal .modal-title');
-            const headerDate = document.querySelector('#dataTable thead tr:first-child th:nth-child(4)');
             if (titleEl) titleEl.innerHTML = `<i class="fa-solid fa-history" style="margin-right: 15px;"></i>${title}`;
             chartMode = 'emission_total';
             openModal(true);
             await waitForPaint();
-            if (headerDate) headerDate.innerText = 'PEDIDO';
             // Normalizar registros para o formato da tabela
             const normalized = records.map(r => ({
                 ...r,
@@ -7183,7 +7184,6 @@ function flashConcentracaoBar(barIndex) {
             // Override close modal logic once to restore title and cleanup
             const originalClose = window.closeModal;
             window.closeModal = function () {
-                if (headerDate) headerDate.innerText = 'BLOCK / SEM DATA';
                 // Restore logic handled in main closeModal
                 originalClose();
                 window.closeModal = originalClose; // Reset
