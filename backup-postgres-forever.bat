@@ -26,8 +26,14 @@ if "%NOW%" GEQ "%BACKUP_TIME%" (
         if errorlevel 1 (
             echo [%DATE% %TIME%] ERRO no backup. Verifique "%BACKUP_ROOT%\logs\backup-postgres.log"
         ) else (
-            echo %TODAY%>"%LAST_RUN_FILE%"
-            echo [%DATE% %TIME%] Backup concluido.
+            echo [%DATE% %TIME%] Iniciando backup da pasta SGP...
+            powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\backup\backup-code.ps1"
+            if errorlevel 1 (
+                echo [%DATE% %TIME%] ERRO no backup da pasta SGP. Verifique "..\backup-sgp\logs\backup-sgp.log"
+            ) else (
+                echo %TODAY%>"%LAST_RUN_FILE%"
+                echo [%DATE% %TIME%] Backups concluidos.
+            )
         )
         echo.
     )
