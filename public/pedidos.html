@@ -2626,6 +2626,7 @@
                             <th class="sortable-th" id="th-cliente" onclick="toggleSort('cliente')" style="text-align: left; width: 15%;">CLIENTE</th>
                             <th class="code-column" style="width: 1px; text-align: center; white-space: nowrap;">CÓDIGO</th>
                             <th style="">PRODUTO</th>
+                            <th class="sortable-th historical-only-column" id="th-tipo_moldagem" onclick="toggleSort('tipo_moldagem')" style="width: 155px; white-space: nowrap; text-align:center;">TIPO MOLDAGEM</th>
                             <th class="sortable-th" id="th-saldo" onclick="toggleSort('saldo')" style="width: 1px;">SALDO</th>
                             <th class="sortable-th historical-only-column" id="th-faturamento" onclick="toggleSort('faturamento')" style="width: 105px; white-space: nowrap; text-align:center;">FATURAMENTO</th>
                             <th class="sortable-th historical-only-column" id="th-falta_entregar" onclick="toggleSort('falta_entregar')" style="width: 125px; white-space: nowrap; text-align:center;">FALTA ENTREGAR</th>
@@ -2644,6 +2645,7 @@
                             <th><input class="filter-input-table" data-col="4" placeholder="..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></th>
                             <th><input class="filter-input-table" data-col="5" placeholder="..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" style="text-align: center;"></th>
                             <th><input class="filter-input-table" data-col="6" placeholder="..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></th>
+                            <th class="historical-only-column"><input class="filter-input-table" data-col="15" placeholder="..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></th>
                             <th><input class="filter-input-table" data-col="7" placeholder="..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></th>
                             <th class="historical-only-column"><input class="filter-input-table" data-col="13" placeholder="..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></th>
                             <th class="historical-only-column"><input class="filter-input-table" data-col="14" placeholder="..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></th>
@@ -4542,7 +4544,7 @@
             const showConferencia = shouldShowConferenciaColumn();
             updateConferenciaColumnVisibility(showConferencia);
             if (list.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="${showConferencia ? 16 : 15}" style="text-align:center; padding:20px;">Nenhum registro encontrado.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="${showConferencia ? 17 : 16}" style="text-align:center; padding:20px;">Nenhum registro encontrado.</td></tr>`;
                 return;
             }
             tbody.innerHTML = list.map((item, index) => {
@@ -4554,6 +4556,7 @@
                 const saldoReal = item._sectorQty !== undefined ? item._sectorQty : getCommercialBalance(item);
                 const qtdOriginal = metrics.originalTarget;
                 const billingInfo = getHistoricalBillingInfo(item);
+                const tipoMoldagemLabel = getEmissionMoldagemTypeLabel(item);
                 // Use a utilidade compartilhada para obter o peso unitário correto
                 // ou use o peso total calculado se já estiver disponível (modo setor)
                 let totalWeightReal = 0;
@@ -4688,6 +4691,7 @@
                     <td style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 300px;" title="${item.NOME_PRODUTO_PPR || ''}">
                         ${item.NOME_PRODUTO_PPR || item.PRODUTO_PPR || item.CODIGO_PECA || item.sync_key || '-'}
                     </td>
+                    <td class="historical-only-column" style="text-align:center; white-space: nowrap;">${tipoMoldagemLabel}</td>
                     <td style="text-align:center;">${saldoReal}</td>
                     <td class="historical-only-column" style="text-align:center;"><span class="billing-status-badge ${billingInfo.status.toLowerCase()}">${billingInfo.status}</span></td>
                     <td class="historical-only-column" style="text-align:center; font-weight:800; color:${billingInfo.missing > 0 ? '#fbbf24' : '#34d399'};">${formatNumber(billingInfo.missing, 0)}</td>
@@ -5183,6 +5187,13 @@
             const qtdOriginal = Number(item.QUANTIDADE_PPR) || 0;
             return getResolvedUnitWeight(item, customWeights, qtdOriginal);
         }
+        function getEmissionMoldagemTypeLabel(item) {
+            const tipo = String(item?._tipo_moldagem_procedimento || item?.tipo_moldagem_procedimento || '').trim().toUpperCase();
+            if (tipo === 'MOLDAGEM PESADA') return 'MOLDAGEM PESADA';
+            if (tipo === 'MOLDAGEM LEVE') return 'MOLDAGEM LEVE';
+            if (tipo === 'MOLDAGEM MANUAL') return 'MOLDAGEM MANUAL';
+            return 'SEM TIPO CADASTRADO';
+        }
         function getHistoricalBillingInfo(item) {
             const original = Math.max(0, Number(item.QUANTIDADE_PPR) || 0);
             const billed = Math.max(0, Number(item.QUANTIDADE_FATURADO_PPR || item.QUANTIDADE_FATURADA_PPR) || 0);
@@ -5223,7 +5234,8 @@
                 '11': 'modelo_status',
                 '12': 'observacao',
                 '13': 'FATURAMENTO_STATUS',
-                '14': 'QUANTIDADE_FALTA_ENTREGAR'
+                '14': 'QUANTIDADE_FALTA_ENTREGAR',
+                '15': 'TIPO_MOLDAGEM'
             };
             // Collect individual column filters
             const filters = {};
@@ -5379,6 +5391,9 @@
                     if (key === 'QUANTIDADE_FALTA_ENTREGAR') {
                         return String(getHistoricalBillingInfo(item).missing).includes(value.replace(',', '.'));
                     }
+                    if (key === 'TIPO_MOLDAGEM') {
+                        return getEmissionMoldagemTypeLabel(item).toLowerCase().includes(value);
+                    }
                     if (key === 'PESO_LIQUIDO_NPR') {
                         // Permite user digitar 10,5 e converter para 10.5
                         const cleanValue = value.replace(',', '.');
@@ -5495,6 +5510,9 @@
                     } else if (sortConfig.column === 'falta_entregar') {
                         valA = getHistoricalBillingInfo(a).missing;
                         valB = getHistoricalBillingInfo(b).missing;
+                    } else if (sortConfig.column === 'tipo_moldagem') {
+                        valA = getEmissionMoldagemTypeLabel(a);
+                        valB = getEmissionMoldagemTypeLabel(b);
                     } else if (sortConfig.column === 'valor_total') {
                         const getV = (item) => {
                             if (item._sectorValue !== undefined) return item._sectorValue;
