@@ -6407,46 +6407,6 @@ function flashConcentracaoBar(barIndex) {
             return { peso: wUn * qOriginal, valor: vUn * qOriginal };
         }
 
-        function buildEmissionMonthlySummaryFromLocal(year) {
-            const weightData = Array(12).fill(0);
-            const valueData = Array(12).fill(0);
-            const moldagemPesadaData = Array(12).fill(0);
-            const moldagemManualData = Array(12).fill(0);
-            const moldagemLeveData = Array(12).fill(0);
-            const semTipoMoldagemData = Array(12).fill(0);
-            getChartOrders(allData).forEach(item => {
-                const d = toLocalDate(item.DATA_EMISSAO_PEDIDO || item.OP_EMISSAO);
-                if (!d || d.getFullYear() !== year) return;
-                const { peso, valor } = _calcEmissaoWeight(item);
-                const monthIndex = d.getMonth();
-                const tipoMoldagem = String(item._tipo_moldagem_procedimento || '').trim().toUpperCase();
-                weightData[monthIndex] += peso;
-                valueData[monthIndex] += valor;
-                if (tipoMoldagem === 'MOLDAGEM PESADA') moldagemPesadaData[monthIndex] += peso;
-                else if (tipoMoldagem === 'MOLDAGEM MANUAL') moldagemManualData[monthIndex] += peso;
-                else if (tipoMoldagem === 'MOLDAGEM LEVE') moldagemLeveData[monthIndex] += peso;
-                else semTipoMoldagemData[monthIndex] += peso;
-            });
-            return { weightData, valueData, moldagemPesadaData, moldagemManualData, moldagemLeveData, semTipoMoldagemData };
-        }
-
-        function buildEmissionClientSummaryFromLocal(year, month) {
-            const clientMap = {};
-            getChartOrders(allData).forEach(item => {
-                const d = toLocalDate(item.DATA_EMISSAO_PEDIDO || item.OP_EMISSAO);
-                if (!d || d.getFullYear() !== year) return;
-                if (month !== 'Todos' && d.getMonth() + 1 !== parseInt(month)) return;
-                const name = String(item.NOME_CLIENTE || 'Cliente nao identificado').trim();
-                const id = String(item.ID_CLIENTE_CORE || name).trim();
-                const key = `${id}|${name}`;
-                if (!clientMap[key]) clientMap[key] = { id, name, totalPeso: 0, totalValor: 0 };
-                const { peso, valor } = _calcEmissaoWeight(item);
-                clientMap[key].totalPeso += peso;
-                clientMap[key].totalValor += valor;
-            });
-            return Object.values(clientMap).filter(row => row.totalPeso > 0);
-        }
-
         function renderClientChart() {
             if (!emissaoClientView) return;
             const yearEl = document.getElementById('yearFilterHistorical');
@@ -6862,9 +6822,6 @@ function flashConcentracaoBar(barIndex) {
                         if (Array.isArray(data) && data.length) emissionClientCache[cacheKey] = data;
                     }
                     if (requestSeq !== historicalChartRequestSeq) return;
-                    if (!Array.isArray(data) || !data.length) {
-                        data = buildEmissionClientSummaryFromLocal(selectedYear, selectedMonth);
-                    }
                     if (!Array.isArray(data) || !data.length) {
                         console.warn('Resumo de emissao por cliente retornou vazio', { selectedYear, selectedMonth });
                         return;
