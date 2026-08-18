@@ -3,6 +3,26 @@ const router = express.Router();
 const pool = require('../lib/db');
 const monthlySummaryCache = new Map();
 const MONTHLY_SUMMARY_CACHE_TTL_MS = 5 * 60 * 1000;
+const pendingSummaryCache = new Map();
+const variacaoCache = new Map();
+
+function getUserCacheKey(req, extra = {}) {
+    return JSON.stringify({
+        role: req.user?.role || '',
+        user: req.user?.user || '',
+        name: req.user?.name || '',
+        ...extra
+    });
+}
+
+function getCache(cache, key) {
+    const cached = cache.get(key);
+    return cached && Date.now() - cached.at < MONTHLY_SUMMARY_CACHE_TTL_MS ? cached.data : null;
+}
+
+function setCache(cache, key, data) {
+    cache.set(key, { at: Date.now(), data });
+}
 
 function getCommercialOwnerRestriction(req) {
     const role = String(req.user?.role || '').trim().toLowerCase();
@@ -98,15 +118,9 @@ const emissionPedidoPesoJoinSql = `
 // GET /api/emissoes/monthly-summary
 router.get('/monthly-summary', async (req, res) => {
     try {
-        const cacheKey = JSON.stringify({
-            role: req.user?.role || '',
-            user: req.user?.user || '',
-            name: req.user?.name || ''
-        });
-        const cached = monthlySummaryCache.get(cacheKey);
-        if (cached && Date.now() - cached.at < MONTHLY_SUMMARY_CACHE_TTL_MS) {
-            return res.json(cached.data);
-        }
+        const cacheKey = getUserCacheKey(req);
+        const cached = getCache(monthlySummaryCache, cacheKey);
+        if (cached) return res.json(cached);
         const params = [];
         const ownerScope = addCommercialOwnerScope(req, params);
         const query = `
@@ -167,7 +181,7 @@ router.get('/monthly-summary', async (req, res) => {
             totalValor: parseFloat(row.total_valor)
         }));
 
-        monthlySummaryCache.set(cacheKey, { at: Date.now(), data: formatted });
+        setCache(monthlySummaryCache, cacheKey, formatted);
         res.json(formatted);
     } catch (error) {
         console.error('Erro ao buscar resumo de emissões:', error);
@@ -332,6 +346,10 @@ router.get('/list', async (req, res) => {
 // Mesma fonte (firebird_sync_emissoes), mas filtra apenas itens com entrega pendente (não faturados)
 router.get('/pending-summary', async (req, res) => {
     try {
+        const cacheKey = getUserCacheKey(req, { route: 'pending-summary' });
+        const cached = getCache(pendingSummaryCache, cacheKey);
+        if (cached) return res.json(cached);
+
         const query = `
             SELECT 
                 EXTRACT(YEAR FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) as ano,
@@ -370,6 +388,7 @@ router.get('/pending-summary', async (req, res) => {
             totalValor: parseFloat(row.total_valor)
         }));
 
+        setCache(pendingSummaryCache, cacheKey, formatted);
         res.json(formatted);
     } catch (error) {
         console.error('Erro ao buscar resumo de emissões pendentes:', error);
@@ -444,6 +463,10 @@ router.get('/variacao-diaria', async (req, res) => {
         if (!ano || !mes) {
             return res.status(400).json({ error: 'Ano e mês são obrigatórios.' });
         }
+
+        const cacheKey = getUserCacheKey(req, { route: 'variacao-diaria', ano, mes });
+        const cached = getCache(variacaoCache, cacheKey);
+        if (cached) return res.json(cached);
 
         // Entrada: mesma logica de pedidos.html: ERP primeiro, customizado apenas como fallback
         const emissoesQuery = `
@@ -533,6 +556,7 @@ router.get('/variacao-diaria', async (req, res) => {
             result.push({ dia: dateStr, entrada: e.peso, saida: s.peso, valorEntrada: e.valor, valorSaida: s.valor });
         }
 
+        setCache(variacaoCache, cacheKey, result);
         res.json(result);
     } catch (error) {
         console.error('Erro ao buscar variação diária:', error);
@@ -546,6 +570,10 @@ router.get('/variacao-mensal', async (req, res) => {
     try {
         const { ano } = req.query;
         if (!ano) return res.status(400).json({ error: 'ano é obrigatório.' });
+
+        const cacheKey = getUserCacheKey(req, { route: 'variacao-mensal', ano });
+        const cached = getCache(variacaoCache, cacheKey);
+        if (cached) return res.json(cached);
 
         const emissoesQuery = `
             SELECT
@@ -618,6 +646,7 @@ router.get('/variacao-mensal', async (req, res) => {
             const s = saidaMap[m] || { peso: 0, valor: 0 };
             result.push({ mes: m, entrada: e.peso, saida: s.peso, valorEntrada: e.valor, valorSaida: s.valor });
         }
+        setCache(variacaoCache, cacheKey, result);
         res.json(result);
     } catch (error) {
         console.error('Erro ao buscar variação mensal:', error);

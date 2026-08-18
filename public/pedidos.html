@@ -3230,6 +3230,7 @@
         }
         let activeBlockReasonFilter = null;
         let chartPCP = null, chartPareto = null, chartPending = null, chartHistorical = null, chartConcentracao = null, chartVariacao = null;
+        const localChartCache = new Map();
         let activeMonthFilter = null, activeClientFilter = null; // Legacy vars, replacing with object below
         let activeChartFilters = { month: null, client: null, stage: null, day: null, moldagemTipo: null }; // New PowerBI-style filters
         let chartDaily = null;
@@ -4200,6 +4201,7 @@
                 const resCarteira = carteiraFetch.status === 'fulfilled' ? carteiraFetch.value : null;
                 if (!resPedidos || !resPedidos.ok) throw new Error('Erro na API Pedidos');
                 allData = await resPedidos.json();
+                localChartCache.clear();
                 updatePedidosPageLoader('graficos', 'Montando indicadores e graficos', 78);
                 if (resCarteira && resCarteira.ok) {
                     carteiraData = await resCarteira.json();
@@ -5697,7 +5699,12 @@
             const mDataValue = Array(12).fill(0);
             const yearEl = document.getElementById('yearFilterPCP');
             const selectedYear = yearEl ? (parseInt(yearEl.value) || new Date().getFullYear()) : new Date().getFullYear();
-            list.forEach(item => {
+            const deliveryCacheKey = `delivery:${selectedYear}:${list.length}`;
+            const deliveryCached = localChartCache.get(deliveryCacheKey);
+            if (deliveryCached) {
+                mData.splice(0, 12, ...deliveryCached.mData);
+                mDataValue.splice(0, 12, ...deliveryCached.mDataValue);
+            } else list.forEach(item => {
                 const isBlockReasonStatus = (
                     item.STATUS_PED === 'B' ||
                     item.STATUS_PPR === 'B' ||
@@ -5721,6 +5728,7 @@
                     mDataValue[d.getMonth()] += (unitPrice * realQty);
                 }
             });
+            if (!deliveryCached) localChartCache.set(deliveryCacheKey, { mData: [...mData], mDataValue: [...mDataValue] });
             const monthLabels = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
             const finalLabels = [...monthLabels];
             const finalData = [...mData];
@@ -5820,6 +5828,13 @@
                     if (getCommercialBalance(item) <= 0) return false;
                     return true;
                 });
+                const pendingCacheKey = `pending:${selectedYear}:${selectedMonth}:${list.length}`;
+                const pendingCached = localChartCache.get(pendingCacheKey);
+                if (pendingCached) {
+                    if (titleEl && pendingCached.title) titleEl.innerText = pendingCached.title;
+                    renderPendingChart(pendingCached.labels, pendingCached.data, pendingCached.extraData, pendingCached.bgColors);
+                    return;
+                }
                 if (selectedMonth === 'Todos') {
                     if (titleEl) titleEl.innerText = 'Gráfico de Emissão de Pedidos C/ Entrega Pendente';
                     const mData = Array(12).fill(0);
@@ -5844,6 +5859,7 @@
                     const monthlyBgColors = monthLabels.map((_, i) =>
                         (activePillMonth !== null && i === activePillMonth) ? '#ffffff' : chartColorAmber
                     );
+                    localChartCache.set(pendingCacheKey, { title: titleEl ? titleEl.innerText : '', labels: monthLabels, data: mData, extraData: mDataValue, bgColors: monthlyBgColors });
                     renderPendingChart(monthLabels, mData, mDataValue, monthlyBgColors);
                 } else {
                     const mIdx = parseInt(selectedMonth);
@@ -5889,6 +5905,7 @@
                     const finalBgColors = labels.map((_, i) =>
                         (selectedHistoricalDay !== null && i === selectedHistoricalDay - 1) ? '#ffffff' : chartColorAmber
                     );
+                    localChartCache.set(pendingCacheKey, { title: titleEl ? titleEl.innerText : '', labels, data: weightData, extraData: valueData, bgColors: finalBgColors });
                     renderPendingChart(labels, weightData, valueData, finalBgColors);
                 }
             } catch (err) {
@@ -6082,10 +6099,12 @@
 
         function updateConcentracaoChart(list) {
             list = getChartOrders(list);
-            const clientWeight = {};
-            const clientValue = {};
-            const clientId = {};
-            list.forEach(item => {
+            const concentrationCacheKey = `concentration:${list.length}`;
+            const concentrationCached = localChartCache.get(concentrationCacheKey);
+            let clientWeight = concentrationCached?.clientWeight || {};
+            let clientValue = concentrationCached?.clientValue || {};
+            let clientId = concentrationCached?.clientId || {};
+            if (!concentrationCached) list.forEach(item => {
                 const prodCode = String(item.PRODUTO_PPR || '').trim();
                 if (prodCode.endsWith('1')) return;
                 const name = (item.NOME_CLIENTE || 'Desconhecido').trim().toUpperCase();
@@ -6102,6 +6121,7 @@
                 clientWeight[name] += w;
                 clientValue[name] += unitPrice * realQty;
             });
+            if (!concentrationCached) localChartCache.set(concentrationCacheKey, { clientWeight, clientValue, clientId });
             const cMap = Object.fromEntries(
                 Object.entries(clientWeight).map(([name, val]) => [name, { val, name }])
             );
@@ -8415,18 +8435,28 @@ function flashConcentracaoBar(barIndex) {
                 if (isTodos) {
                     // Modo mensal
                     if (titleEl) titleEl.textContent = `Variação da Carteira ${ano} — Mensal (kg)`;
-                    const res = await fetch(`/api/emissoes/variacao-mensal?ano=${ano}`);
-                    if (!res.ok) throw new Error();
-                    rawData = await res.json();
+                    const variacaoCacheKey = `variacao:mensal:${ano}`;
+                    rawData = localChartCache.get(variacaoCacheKey);
+                    if (!rawData) {
+                        const res = await fetch(`/api/emissoes/variacao-mensal?ano=${ano}`);
+                        if (!res.ok) throw new Error();
+                        rawData = await res.json();
+                        localChartCache.set(variacaoCacheKey, rawData);
+                    }
                     labels    = MONTH_NAMES.map(m => m.slice(0,3).toUpperCase());
                     varArr    = rawData.map(d => Math.round((d.entrada - d.saida) * 100) / 100);
                     clickData = rawData.map(d => ({ mes: d.mes, ano }));
                 } else {
                     // Modo diário
                     if (titleEl) titleEl.textContent = `Variação da Carteira — ${MONTH_NAMES[mesIdx]}/${ano} (kg)`;
-                    const res = await fetch(`/api/emissoes/variacao-diaria?ano=${ano}&mes=${mes}`);
-                    if (!res.ok) throw new Error();
-                    rawData = await res.json();
+                    const variacaoCacheKey = `variacao:diaria:${ano}:${mes}`;
+                    rawData = localChartCache.get(variacaoCacheKey);
+                    if (!rawData) {
+                        const res = await fetch(`/api/emissoes/variacao-diaria?ano=${ano}&mes=${mes}`);
+                        if (!res.ok) throw new Error();
+                        rawData = await res.json();
+                        localChartCache.set(variacaoCacheKey, rawData);
+                    }
                     labels    = rawData.map(d => String(new Date(d.dia + 'T12:00:00').getDate()).padStart(2,'0'));
                     varArr    = rawData.map(d => Math.round((d.entrada - d.saida) * 100) / 100);
                     clickData = rawData.map(d => ({ dia: d.dia, mes, ano }));
