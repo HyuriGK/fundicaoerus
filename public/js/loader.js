@@ -157,6 +157,119 @@
     const currentPage = (window.location.pathname.split('/').pop() || 'index.html');
     const postLoginIndexLoader = currentPage === 'index.html' && sessionStorage.getItem('erus_post_login_loader') === '1';
 
+    if (!document.getElementById('loader-critical-css')) {
+        const style = document.createElement('style');
+        style.id = 'loader-critical-css';
+        style.textContent = `
+            #global-loader {
+                position: fixed;
+                inset: 0;
+                z-index: 999999;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 24px;
+                background: #09090b;
+                color: #fafafa;
+                box-sizing: border-box;
+            }
+            #global-loader *,
+            #global-loader *::before,
+            #global-loader *::after {
+                box-sizing: border-box;
+            }
+            #global-loader.fade-out {
+                opacity: 0;
+                visibility: hidden;
+                pointer-events: none;
+            }
+            #global-loader .loader-container {
+                width: min(520px, 100%);
+                padding: 28px;
+                display: flex;
+                flex-direction: column;
+                gap: 18px;
+                border: 1px solid rgba(251, 191, 36, 0.18);
+                border-radius: 16px;
+                background: rgba(16, 16, 19, 0.92);
+            }
+            #global-loader .loader-top {
+                display: flex;
+                align-items: center;
+                gap: 14px;
+            }
+            #global-loader .loader-logo {
+                width: 44px;
+                height: 44px;
+                flex: 0 0 44px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                color: #fbbf24;
+            }
+            #global-loader .loader-title {
+                font-family: Inter, Arial, sans-serif;
+                font-size: 1rem;
+                font-weight: 850;
+                color: #fafafa;
+            }
+            #global-loader .loader-text {
+                margin-top: 4px;
+                font-family: "JetBrains Mono", Consolas, monospace;
+                font-size: 0.72rem;
+                color: #a1a1aa;
+            }
+            #global-loader .loader-progress-bg {
+                height: 8px;
+                border-radius: 999px;
+                overflow: hidden;
+                background: rgba(255, 255, 255, 0.07);
+            }
+            #global-loader #loader-progress-fill {
+                height: 100%;
+                width: 0%;
+                border-radius: inherit;
+                background: #fbbf24;
+            }
+            #global-loader .loader-steps {
+                display: grid;
+                grid-template-columns: repeat(3, 1fr);
+                gap: 8px;
+            }
+            #global-loader .loader-step {
+                min-height: 44px;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                padding: 9px 10px;
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 10px;
+                color: #71717a;
+                font-family: Inter, Arial, sans-serif;
+                font-size: 0.68rem;
+                font-weight: 800;
+                text-transform: uppercase;
+            }
+            #global-loader .loader-step.active {
+                color: #fbbf24;
+                border-color: rgba(251, 191, 36, 0.28);
+            }
+            #global-loader .loader-step.done {
+                color: #22c55e;
+                border-color: rgba(34, 197, 94, 0.24);
+            }
+            @media (max-width: 700px) {
+                #global-loader .loader-container {
+                    padding: 22px;
+                }
+                #global-loader .loader-steps {
+                    grid-template-columns: 1fr;
+                }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
     if (!document.getElementById('loader-css')) {
         const link = document.createElement('link');
         link.id = 'loader-css';
