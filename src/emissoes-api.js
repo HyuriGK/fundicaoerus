@@ -78,8 +78,7 @@ const emissionFichaJoinSql = `
             LEFT JOIN LATERAL (
                 SELECT peso_liquido_pro, data_fic, pro_codigo_fic, tipo_moldagem_procedimento
                 FROM ficha_tecnica
-                WHERE pro_codigo_fic = (p.data->>'PRODUTO_PPR')
-                  AND peso_liquido_pro > 0
+                WHERE TRIM(pro_codigo_fic) = TRIM(p.data->>'PRODUTO_PPR')
                 ORDER BY updated_at DESC
                 LIMIT 1
             ) f ON true
