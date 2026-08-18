@@ -6715,17 +6715,9 @@ function flashConcentracaoBar(barIndex) {
                     if (selectedMonth === 'Todos') {
                         if (titleEl) titleEl.innerText = 'Gráfico de Emissão de Pedidos';
                         if (!emissionDataCache) {
-                            try {
-                                const controller = new AbortController();
-                                const timeoutId = setTimeout(() => controller.abort(), 6000);
-                                const res = await fetch('/api/emissoes/monthly-summary', { signal: controller.signal });
-                                clearTimeout(timeoutId);
-                                if (!res.ok) throw new Error('Erro ao buscar dados de emissão');
-                                emissionDataCache = await res.json();
-                            } catch (err) {
-                                console.warn('Falha/timeout no resumo mensal de emissoes, usando dados locais', err);
-                                emissionDataCache = [];
-                            }
+                            const res = await fetch('/api/emissoes/monthly-summary');
+                            if (!res.ok) throw new Error('Erro ao buscar dados de emissão');
+                            emissionDataCache = await res.json();
                         }
                         const weightData = Array(12).fill(0);
                         const valueData = Array(12).fill(0);
@@ -6743,15 +6735,6 @@ function flashConcentracaoBar(barIndex) {
                                 semTipoMoldagemData[row.mes - 1] = row.totalSemTipoMoldagem || 0;
                             }
                         });
-                        if (!weightData.some(v => Number(v) > 0)) {
-                            const localSummary = buildEmissionMonthlySummaryFromLocal(selectedYear);
-                            weightData.splice(0, weightData.length, ...localSummary.weightData);
-                            valueData.splice(0, valueData.length, ...localSummary.valueData);
-                            moldagemPesadaData.splice(0, 12, ...localSummary.moldagemPesadaData);
-                            moldagemManualData.splice(0, 12, ...localSummary.moldagemManualData);
-                            moldagemLeveData.splice(0, 12, ...localSummary.moldagemLeveData);
-                            semTipoMoldagemData.splice(0, 12, ...localSummary.semTipoMoldagemData);
-                        }
                         const totalEmitido = weightData.reduce((sum, value) => sum + Number(value || 0), 0);
                         if (titleEl) titleEl.innerHTML = `Gr\u00e1fico de Emiss\u00e3o de Pedidos <span style="font-size:0.85rem;color:var(--color-primary);margin-left:15px;">Total emitido: ${formatNumber(totalEmitido, 0)} kg</span>`;
                         const selectedBorders = monthLabels.map((_, i) =>
