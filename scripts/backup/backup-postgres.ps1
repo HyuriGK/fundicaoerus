@@ -1,11 +1,13 @@
 $ErrorActionPreference = "Stop"
 
 $RootDir = Resolve-Path (Join-Path $PSScriptRoot "..\..")
-$BackupDir = Join-Path (Split-Path $RootDir -Parent) "backup-neon"
-$LogDir = Join-Path $BackupDir "logs"
+$BackupRoot = Join-Path (Split-Path $RootDir -Parent) "backup-neon"
+$BackupDir = Join-Path $BackupRoot (Get-Date -Format "dd-MM-yyyy")
+$LogDir = Join-Path $BackupRoot "logs"
 $PgDump = "C:\Program Files\PostgreSQL\18\bin\pg_dump.exe"
 $RetentionDays = 30
 
+New-Item -ItemType Directory -Force -Path $BackupRoot | Out-Null
 New-Item -ItemType Directory -Force -Path $BackupDir | Out-Null
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 
@@ -51,6 +53,10 @@ try {
     if ($file.Length -le 0) {
         throw "backup gerado com tamanho zero"
     }
+
+    Get-ChildItem $BackupRoot -Directory |
+        Where-Object { $_.Name -match '^\d{2}-\d{2}-\d{4}$' -and $_.LastWriteTime -lt (Get-Date).AddDays(-$RetentionDays) } |
+        Remove-Item -Recurse -Force
 
     Get-ChildItem $BackupDir -Filter "backup-postgres-*.dump" |
         Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-$RetentionDays) } |
