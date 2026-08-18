@@ -6695,9 +6695,17 @@ function flashConcentracaoBar(barIndex) {
                     if (selectedMonth === 'Todos') {
                         if (titleEl) titleEl.innerText = 'Gráfico de Emissão de Pedidos';
                         if (!emissionDataCache) {
-                            const res = await fetch('/api/emissoes/monthly-summary');
-                            if (!res.ok) throw new Error('Erro ao buscar dados de emissão');
-                            emissionDataCache = await res.json();
+                            try {
+                                const controller = new AbortController();
+                                const timeoutId = setTimeout(() => controller.abort(), 6000);
+                                const res = await fetch('/api/emissoes/monthly-summary', { signal: controller.signal });
+                                clearTimeout(timeoutId);
+                                if (!res.ok) throw new Error('Erro ao buscar dados de emissão');
+                                emissionDataCache = await res.json();
+                            } catch (err) {
+                                console.warn('Falha/timeout no resumo mensal de emissoes, usando dados locais', err);
+                                emissionDataCache = [];
+                            }
                         }
                         const weightData = Array(12).fill(0);
                         const valueData = Array(12).fill(0);

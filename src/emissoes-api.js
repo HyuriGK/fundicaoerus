@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../lib/db');
+const monthlySummaryCache = new Map();
+const MONTHLY_SUMMARY_CACHE_TTL_MS = 5 * 60 * 1000;
 
 function getCommercialOwnerRestriction(req) {
     const role = String(req.user?.role || '').trim().toLowerCase();
@@ -75,13 +77,7 @@ const emissionUnitWeightSql = `
 `;
 const emissionTotalWeightSql = `(${emissionUnitWeightSql} * ${emissionQtySql})`;
 const emissionFichaJoinSql = `
-            LEFT JOIN LATERAL (
-                SELECT peso_liquido_pro, data_fic, pro_codigo_fic, tipo_moldagem_procedimento
-                FROM ficha_tecnica
-                WHERE TRIM(pro_codigo_fic) = TRIM(p.data->>'PRODUTO_PPR')
-                ORDER BY updated_at DESC
-                LIMIT 1
-            ) f ON true
+            LEFT JOIN ficha_tecnica f ON f.pro_codigo_fic = TRIM(p.data->>'PRODUTO_PPR')
 `;
 const emissionPedidoPesoJoinSql = `
             LEFT JOIN LATERAL (
@@ -102,6 +98,15 @@ const emissionPedidoPesoJoinSql = `
 // GET /api/emissoes/monthly-summary
 router.get('/monthly-summary', async (req, res) => {
     try {
+        const cacheKey = JSON.stringify({
+            role: req.user?.role || '',
+            user: req.user?.user || '',
+            name: req.user?.name || ''
+        });
+        const cached = monthlySummaryCache.get(cacheKey);
+        if (cached && Date.now() - cached.at < MONTHLY_SUMMARY_CACHE_TTL_MS) {
+            return res.json(cached.data);
+        }
         const params = [];
         const ownerScope = addCommercialOwnerScope(req, params);
         const query = `
@@ -162,6 +167,7 @@ router.get('/monthly-summary', async (req, res) => {
             totalValor: parseFloat(row.total_valor)
         }));
 
+        monthlySummaryCache.set(cacheKey, { at: Date.now(), data: formatted });
         res.json(formatted);
     } catch (error) {
         console.error('Erro ao buscar resumo de emissões:', error);
