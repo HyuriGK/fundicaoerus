@@ -3,9 +3,10 @@ cd /d "%~dp0"
 title SGP ERUS - Backup Postgres Forever
 
 set BACKUP_TIME=19:00
-set LAST_RUN_FILE=backups\logs\backup-postgres-last-run.txt
+set BACKUP_ROOT=%~dp0..\backup-neon
+set LAST_RUN_FILE=%BACKUP_ROOT%\logs\backup-postgres-last-run.txt
 
-if not exist backups\logs mkdir backups\logs
+if not exist "%BACKUP_ROOT%\logs" mkdir "%BACKUP_ROOT%\logs"
 
 echo [INFO] Backup Postgres automatico iniciado.
 echo [INFO] Horario diario: %BACKUP_TIME%
@@ -23,7 +24,7 @@ if "%NOW%" GEQ "%BACKUP_TIME%" (
         echo [%DATE% %TIME%] Iniciando backup Postgres...
         powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\backup\backup-postgres.ps1"
         if errorlevel 1 (
-            echo [%DATE% %TIME%] ERRO no backup. Verifique backups\logs\backup-postgres.log
+            echo [%DATE% %TIME%] ERRO no backup. Verifique "%BACKUP_ROOT%\logs\backup-postgres.log"
         ) else (
             echo %TODAY%>"%LAST_RUN_FILE%"
             echo [%DATE% %TIME%] Backup concluido.

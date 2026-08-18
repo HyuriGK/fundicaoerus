@@ -1,8 +1,8 @@
 $ErrorActionPreference = "Stop"
 
 $RootDir = Resolve-Path (Join-Path $PSScriptRoot "..\..")
-$BackupDir = Join-Path $RootDir "backups\postgres"
-$LogDir = Join-Path $RootDir "backups\logs"
+$BackupDir = Join-Path (Split-Path $RootDir -Parent) "backup-neon"
+$LogDir = Join-Path $BackupDir "logs"
 $PgDump = "C:\Program Files\PostgreSQL\18\bin\pg_dump.exe"
 $RetentionDays = 30
 
