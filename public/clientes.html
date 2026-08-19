@@ -3530,6 +3530,17 @@ function renderActionNotesTimeline(notes) {
     return `<div class="action-notes-timeline">${entries.map(entry => `<div class="action-timeline-entry">${escapeHtml(entry)}</div>`).join('')}</div>`;
 }
 
+function renderOpenActionDetailText(action) {
+    const el = document.getElementById('crmActionDetailText');
+    if (!el) return;
+    el.innerHTML = `
+        <div style="color:#fbbf24;font-size:0.64rem;font-weight:900;text-transform:uppercase;margin-bottom:7px;">Ação a ser feita</div>
+        <div>${escapeHtml(action.nextAction || 'Sem descrição cadastrada.')}</div>
+        <div style="margin-top:16px;color:#a1a1aa;font-size:0.72rem;font-weight:900;text-transform:uppercase;">Linha do tempo</div>
+        ${renderActionNotesTimeline(action.notes)}
+    `;
+}
+
 function openCrmActionDetailModal(actionKey) {
     const action = getCrmActionRecord(actionKey);
     if (!action) return;
@@ -3547,11 +3558,7 @@ function openCrmActionDetailModal(actionKey) {
         ['Criado em', action.createdAt ? formatDateTime(action.createdAt) : '-'],
         ['Atualizado em', action.updatedAt ? formatDateTime(action.updatedAt) : '-']
     ].map(([label, value]) => `<div class="action-detail-field"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value || '-')}</strong></div>`).join('');
-    document.getElementById('crmActionDetailText').innerHTML = `
-        <div style="color:#fbbf24;font-size:0.64rem;font-weight:900;text-transform:uppercase;margin-bottom:7px;">Ação a ser feita</div>
-        <div>${escapeHtml(action.nextAction || 'Sem descrição cadastrada.')}</div>
-        ${action.notes ? `<div style="margin-top:16px;color:#a1a1aa;font-size:0.72rem;font-weight:900;text-transform:uppercase;">Linha do tempo</div>${renderActionNotesTimeline(action.notes)}` : ''}
-    `;
+    renderOpenActionDetailText(action);
     currentCrmActionDetailKey = action.key;
     const observationWrap = document.getElementById('crmActionObservationWrap');
     const observationText = document.getElementById('crmActionObservationText');
@@ -3628,14 +3635,19 @@ async function saveCrmActionObservation() {
     const action = getCrmActionRecord(currentCrmActionDetailKey);
     const text = String(document.getElementById('crmActionObservationText')?.value || '').trim();
     if (!action || !text) return;
+    const nextNotes = [action.notes, text].filter(Boolean).join('\n\n');
     const updatedRecord = {
         ...action,
-        notes: [action.notes, text].filter(Boolean).join('\n\n'),
+        notes: nextNotes,
         updatedAt: new Date().toISOString()
     };
     await saveCrmToDatabase(action.clientName, updatedRecord, { silent: true, auditAction: 'ADICIONAR_OBSERVACAO_ACAO_CRM' });
+    crmRecords[action.key] = { ...(crmRecords[action.key] || {}), ...updatedRecord };
+    action.notes = nextNotes;
+    renderOpenActionDetailText(action);
+    const observationText = document.getElementById('crmActionObservationText');
+    if (observationText) observationText.value = `${getTodayBrDate()}\n`;
     toast('Observação salva', 'Nova entrada adicionada à linha do tempo.', 'success');
-    openCrmActionDetailModal(action.key);
 }
 
 async function completeCrmAction(clientName) {
