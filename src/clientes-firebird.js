@@ -2842,6 +2842,7 @@ router.post('/crm/actions/close', async (req, res) => {
         const crmUser = String(req.user?.user || req.user?.name || '').trim();
         const userName = String(req.user?.name || req.user?.user || '').trim();
         const clienteNome = String(req.body.clienteNome || '').trim();
+        const completionNote = String(req.body.completionNote || '').trim();
         if (!crmUser) return res.status(400).json({ success: false, error: 'UsuÃ¡rio invÃ¡lido.' });
         if (!clienteNome) return res.status(400).json({ success: false, error: 'Cliente invÃ¡lido.' });
         const current = await pool.query(`
@@ -2855,10 +2856,13 @@ router.post('/crm/actions/close', async (req, res) => {
         }
         const r = current.rows[0];
         const updatedBy = userName || crmUser;
+        const historicoNotas = completionNote
+            ? [r.notas, completionNote].filter(Boolean).join('\n\n')
+            : r.notas;
         await pool.query(`
             INSERT INTO clientes_crm_historico (cliente_nome, crm_user, empresa, codigo, status, proxima_acao, data_acao, notas, updated_by, action_status, encerrada_em)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULLIF($9, ''), 'encerrada', NOW())
-        `, [r.cliente_nome, r.crm_user, r.empresa, r.codigo, r.status, r.proxima_acao, r.data_acao, r.notas, updatedBy]);
+        `, [r.cliente_nome, r.crm_user, r.empresa, r.codigo, r.status, r.proxima_acao, r.data_acao, historicoNotas, updatedBy]);
         const saved = await pool.query(`
             UPDATE clientes_crm
             SET proxima_acao = NULL,
