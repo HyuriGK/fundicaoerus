@@ -3523,6 +3523,28 @@ function buildActionCompletionObservation(action) {
 }
 
 let currentCrmActionDetailKey = '';
+let crmActionModalPreviousBodyOverflow = '';
+let crmActionModalPreviousHtmlOverflow = '';
+
+function lockCrmActionModalScroll() {
+    if (document.body.dataset.crmActionScrollLocked === '1') return;
+    crmActionModalPreviousBodyOverflow = document.body.style.overflow || '';
+    crmActionModalPreviousHtmlOverflow = document.documentElement.style.overflow || '';
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+    document.body.dataset.crmActionScrollLocked = '1';
+}
+
+function unlockCrmActionModalScroll() {
+    const actionModalOpen = ['crmActionDetailModal', 'crmActionHistoryModal'].some(id => {
+        const el = document.getElementById(id);
+        return el && el.style.display !== 'none' && el.style.display !== '';
+    });
+    if (actionModalOpen || document.body.dataset.crmActionScrollLocked !== '1') return;
+    document.body.style.overflow = crmActionModalPreviousBodyOverflow;
+    document.documentElement.style.overflow = crmActionModalPreviousHtmlOverflow;
+    delete document.body.dataset.crmActionScrollLocked;
+}
 
 function renderActionNotesTimeline(notes) {
     const entries = String(notes || '').split(/\n{2,}/).map((value, index) => {
@@ -3577,6 +3599,7 @@ function openCrmActionDetailModal(actionKey) {
     }
     document.getElementById('crmActionDetailCompleteBtn').onclick = () => completeCrmActionByKey(action.key);
     document.getElementById('crmActionDetailModal').style.display = 'flex';
+    lockCrmActionModalScroll();
 }
 
 function openClosedCrmActionDetailModal(id) {
@@ -3617,6 +3640,7 @@ function openClosedCrmActionDetailModal(id) {
     document.getElementById('crmActionDetailCompleteBtn').onclick = () => reopenCrmAction(action.id);
     closeCrmActionHistoryModal();
     document.getElementById('crmActionDetailModal').style.display = 'flex';
+    lockCrmActionModalScroll();
 }
 
 function closeCrmActionDetailModal() {
@@ -3634,6 +3658,7 @@ function closeCrmActionDetailModal() {
     }
     currentCrmActionDetailKey = '';
     document.getElementById('crmActionDetailModal').style.display = 'none';
+    unlockCrmActionModalScroll();
     if (window.returnToCrmActionHistory) {
         window.returnToCrmActionHistory = false;
         openCrmActionHistoryModal();
@@ -3724,6 +3749,7 @@ async function openCrmActionHistoryModal() {
     const sub = document.getElementById('crmActionHistorySub');
     if (!modal || !list) return;
     modal.style.display = 'flex';
+    lockCrmActionModalScroll();
     list.innerHTML = '<div class="crm-dashboard-empty">Carregando histórico...</div>';
     try {
         const res = await fetch('/api/clientes-firebird/crm/actions/history');
@@ -3754,6 +3780,7 @@ async function openCrmActionHistoryModal() {
 
 function closeCrmActionHistoryModal() {
     document.getElementById('crmActionHistoryModal').style.display = 'none';
+    unlockCrmActionModalScroll();
 }
 
 async function reopenCrmAction(id) {
