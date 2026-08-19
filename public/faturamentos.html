@@ -1662,6 +1662,7 @@
                             <th style="min-width: 160px;">Vendedor</th>
                             <th style="min-width: 100px;">C&oacute;d. Item</th>
                             <th style="min-width: 300px;">Descri&ccedil;&atilde;o</th>
+                            <th style="min-width: 150px;">Tipo Moldagem</th>
                             <th style="min-width: 180px;">Material</th>
                         </tr>
                     </thead>
@@ -1898,6 +1899,12 @@
                                 <span id="deliveryFilterLabel">Filtro</span>
                             </button>
                             <div id="deliveryFilterMenu" class="delivery-filter-menu">
+                                <select id="deliveryMoldagemSelect" class="year-select delivery-filter-select" onchange="setDeliveryMaterialFilters()">
+                                    <option value="">Todos os tipos de moldagem</option>
+                                    <option value="MOLDAGEM PESADA">Moldagem Pesada</option>
+                                    <option value="MOLDAGEM MANUAL">Moldagem Manual</option>
+                                    <option value="MOLDAGEM LEVE">Moldagem Leve</option>
+                                </select>
                                 <select id="deliveryGroupSelect" class="year-select delivery-filter-select" onchange="setDeliveryMaterialFilters()">
                                     <option value="">Todos os grupos</option>
                                 </select>
@@ -1940,6 +1947,7 @@
         let dailyChart = null, annualChart = null, abcChart = null, deliveryTimeChart = null;
         let selectedDeliveryTimeMonth = null;
         let deliveryTimeMetric = 'first';
+        let deliveryMoldagemFilter = '';
         let deliveryGroupFilter = '';
         let deliveryMaterialFilter = '';
         let dailyChartMode = 'normal'; // 'normal' | 'servicos'
@@ -3745,6 +3753,7 @@ async function loadRecordsData() {
                         vendedor: item.vendedorNome || item.vendedorCodigo || '',
                         codigoItem: item.codigoItem || '',
                         descricao: item.descricao || '',
+                        tipoMoldagem: getDeliveryMoldagemType(item),
                         material: item.material || '',
                         qtdPedido: group.quantidadePedido,
                         qtdFaturada: item.quantidadeOriginal ?? item.quantidade ?? 0
@@ -3775,11 +3784,12 @@ async function loadRecordsData() {
                     <td>${row.vendedor}</td>
                     <td>${row.codigoItem}</td>
                     <td>${row.descricao}</td>
+                    <td>${row.tipoMoldagem || ''}</td>
                     <td>${row.material}</td>
                 </tr>
                 <tr id="${row.detailId}" style="display:none; background:rgba(255,255,255,0.025);">
                     <td></td>
-                    <td colspan="11" style="padding:14px 18px;">
+                    <td colspan="12" style="padding:14px 18px;">
                             <div style="font-weight:800; color:var(--text-secondary); margin-bottom:10px;">Faturamentos considerados neste prazo</div>
                             <table style="width:auto; max-width:720px; border-collapse:collapse; table-layout:auto;">
                                 <thead>
@@ -3789,6 +3799,7 @@ async function loadRecordsData() {
                                         <th class="text-right" style="width:58px;">Dias</th>
                                         <th class="text-right" style="width:90px;">Quant. Fat.</th>
                                         <th class="text-right" style="width:98px;">Quant. Acum.</th>
+                                        <th style="width:140px;">Tipo Moldagem</th>
                                         <th style="width:92px;">OC</th>
                                         <th style="width:130px;">Vendedor</th>
                                     </tr>
@@ -3806,6 +3817,7 @@ async function loadRecordsData() {
                                                     <td class="text-right">${formatNumber(diffDays(row.emissao, fat.data), 0)}</td>
                                                     <td class="text-right">${formatNumber(qtdFat, 0)}</td>
                                                     <td class="text-right">${formatNumber(acumulado, 0)}</td>
+                                                    <td>${getDeliveryMoldagemType(fat) || ''}</td>
                                                     <td>${fat.ordemCompra || ''}</td>
                                                     <td>${fat.vendedorNome || fat.vendedorCodigo || ''}</td>
                                                 </tr>
@@ -3816,7 +3828,7 @@ async function loadRecordsData() {
                             </table>
                     </td>
                 </tr>
-            `).join('') || '<tr><td colspan="12" style="text-align:center; padding: 20px;">Nenhum registro.</td></tr>';
+            `).join('') || '<tr><td colspan="13" style="text-align:center; padding: 20px;">Nenhum registro.</td></tr>';
             document.getElementById('deliveryTimeModal').style.display = 'flex';
             document.body.style.overflow = 'hidden';
         }
@@ -3835,6 +3847,12 @@ async function loadRecordsData() {
         function normalizeDeliveryMaterial(value) {
             return String(value || '').trim();
         }
+        function normalizeDeliveryMoldagem(value) {
+            return String(value || '').trim().toUpperCase();
+        }
+        function getDeliveryMoldagemType(item) {
+            return normalizeDeliveryMoldagem(item?.tipoMoldagem || item?.tipo_moldagem_procedimento || item?._tipo_moldagem_procedimento || item?.tipo_moldagem);
+        }
         function getDeliveryMaterialGroup(material) {
             const text = normalizeDeliveryMaterial(material).toUpperCase();
             if (!text) return '';
@@ -3851,6 +3869,8 @@ async function loadRecordsData() {
         function deliveryMaterialPasses(item) {
             const material = normalizeDeliveryMaterial(item.material);
             const group = getDeliveryItemGroup(item);
+            const moldagem = getDeliveryMoldagemType(item);
+            if (deliveryMoldagemFilter && moldagem !== deliveryMoldagemFilter) return false;
             if (deliveryMaterialFilter && material !== deliveryMaterialFilter) return false;
             if (deliveryGroupFilter && group !== deliveryGroupFilter) return false;
             return true;
@@ -3858,15 +3878,20 @@ async function loadRecordsData() {
         function populateDeliveryMaterialFilters(rows) {
             const groupSelect = document.getElementById('deliveryGroupSelect');
             const materialSelect = document.getElementById('deliveryMaterialSelect');
+            const moldagemSelect = document.getElementById('deliveryMoldagemSelect');
             if (!groupSelect || !materialSelect) return;
             const allItems = rows.flatMap(r => r.linhas || []);
-            const allMaterials = [...new Set(allItems.map(item => normalizeDeliveryMaterial(item.material)).filter(Boolean))].sort();
-            const groups = [...new Set(allItems.map(getDeliveryItemGroup).filter(Boolean))].sort();
+            const moldagemItems = deliveryMoldagemFilter
+                ? allItems.filter(item => getDeliveryMoldagemType(item) === deliveryMoldagemFilter)
+                : allItems;
+            const allMaterials = [...new Set(moldagemItems.map(item => normalizeDeliveryMaterial(item.material)).filter(Boolean))].sort();
+            const groups = [...new Set(moldagemItems.map(getDeliveryItemGroup).filter(Boolean))].sort();
             const materials = deliveryGroupFilter
-                ? [...new Set(allItems.filter(item => getDeliveryItemGroup(item) === deliveryGroupFilter).map(item => normalizeDeliveryMaterial(item.material)).filter(Boolean))].sort()
+                ? [...new Set(moldagemItems.filter(item => getDeliveryItemGroup(item) === deliveryGroupFilter).map(item => normalizeDeliveryMaterial(item.material)).filter(Boolean))].sort()
                 : allMaterials;
             if (deliveryGroupFilter && !groups.includes(deliveryGroupFilter)) deliveryGroupFilter = '';
             if (deliveryMaterialFilter && !materials.includes(deliveryMaterialFilter)) deliveryMaterialFilter = '';
+            if (moldagemSelect) moldagemSelect.value = deliveryMoldagemFilter;
             groupSelect.innerHTML = '<option value="">Todos os grupos</option>' + groups.map(g => `<option value="${g.replace(/"/g, '&quot;')}">${g}</option>`).join('');
             materialSelect.innerHTML = '<option value="">Todos os materiais</option>' + materials.map(m => `<option value="${m.replace(/"/g, '&quot;')}">${m}</option>`).join('');
             groupSelect.value = deliveryGroupFilter;
@@ -3877,7 +3902,7 @@ async function loadRecordsData() {
             const button = document.getElementById('deliveryFilterButton');
             const label = document.getElementById('deliveryFilterLabel');
             if (!button || !label) return;
-            const count = [deliveryGroupFilter, deliveryMaterialFilter].filter(Boolean).length;
+            const count = [deliveryMoldagemFilter, deliveryGroupFilter, deliveryMaterialFilter].filter(Boolean).length;
             label.textContent = count ? `${count} filtro${count > 1 ? 's' : ''}` : 'Filtro';
             button.classList.toggle('active', count > 0);
         }
@@ -3893,10 +3918,11 @@ async function loadRecordsData() {
             if (wrap && menu && !wrap.contains(event.target)) menu.classList.remove('open');
         });
         function setDeliveryMaterialFilters() {
+            deliveryMoldagemFilter = document.getElementById('deliveryMoldagemSelect')?.value || '';
             deliveryGroupFilter = document.getElementById('deliveryGroupSelect')?.value || '';
             deliveryMaterialFilter = document.getElementById('deliveryMaterialSelect')?.value || '';
             updateDeliveryFilterButton();
-            if (window.erusAudit) window.erusAudit('SELECT_FILTRO_MATERIAL_PRAZO_FAT', { grupo: deliveryGroupFilter || null, material: deliveryMaterialFilter || null });
+            if (window.erusAudit) window.erusAudit('SELECT_FILTRO_MATERIAL_PRAZO_FAT', { tipo_moldagem: deliveryMoldagemFilter || null, grupo: deliveryGroupFilter || null, material: deliveryMaterialFilter || null });
             renderDeliveryTimeChart();
         }
         function renderDeliveryTimeChart() {
