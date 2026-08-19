@@ -825,6 +825,9 @@
         .action-detail-observation-label { color:#38bdf8; font-size:0.64rem; font-weight:900; text-transform:uppercase; margin-bottom:9px; }
         .action-detail-observation textarea { width:100%; min-height:190px; resize:vertical; border:1px solid rgba(255,255,255,0.1); border-radius:8px; background:#09090b; color:#f4f4f5; padding:13px 14px; font-family:var(--font-main); font-size:0.88rem; line-height:1.5; outline:none; }
         .action-detail-observation textarea:focus { border-color:rgba(56,189,248,0.55); box-shadow:0 0 0 3px rgba(56,189,248,0.1); }
+        .action-notes-timeline { margin-top:14px; display:flex; flex-direction:column; gap:10px; }
+        .action-timeline-entry { position:relative; padding:12px 14px 12px 18px; border:1px solid rgba(255,255,255,0.08); border-radius:8px; background:rgba(0,0,0,0.18); color:#d4d4d8; white-space:pre-wrap; }
+        .action-timeline-entry:before { content:""; position:absolute; left:0; top:12px; bottom:12px; width:3px; border-radius:4px; background:#38bdf8; }
         .action-detail-actions { display:flex; justify-content:flex-end; gap:10px; padding-top:16px; margin-top:auto; border-top:1px solid rgba(255,255,255,0.08); }
         .action-history-list { max-height:min(62vh, 560px); overflow:auto; display:flex; flex-direction:column; gap:10px; }
         .action-history-row { border:1px solid rgba(255,255,255,0.08); border-radius:9px; background:rgba(255,255,255,0.025); padding:12px; display:grid; grid-template-columns:minmax(0, 1fr) auto; gap:12px; align-items:start; }
@@ -1991,6 +1994,7 @@
             </div>
             <div class="action-detail-actions">
                 <button class="btn-cancel" onclick="closeCrmActionDetailModal()">Fechar</button>
+                <button class="btn-cancel" id="crmActionAddObservationBtn" onclick="saveCrmActionObservation()"><i class="fa-solid fa-plus"></i> Adicionar observação</button>
                 <button class="btn-save" id="crmActionDetailCompleteBtn"><i class="fa-solid fa-check"></i> Concluir ação</button>
             </div>
         </div>
@@ -3518,6 +3522,14 @@ function buildActionCompletionObservation(action) {
     return existing || `${getTodayBrDate()}\n`;
 }
 
+let currentCrmActionDetailKey = '';
+
+function renderActionNotesTimeline(notes) {
+    const entries = String(notes || '').split(/\n{2,}/).map(v => v.trim()).filter(Boolean);
+    if (!entries.length) return '';
+    return `<div class="action-notes-timeline">${entries.map(entry => `<div class="action-timeline-entry">${escapeHtml(entry)}</div>`).join('')}</div>`;
+}
+
 function openCrmActionDetailModal(actionKey) {
     const action = getCrmActionRecord(actionKey);
     if (!action) return;
@@ -3538,21 +3550,17 @@ function openCrmActionDetailModal(actionKey) {
     document.getElementById('crmActionDetailText').innerHTML = `
         <div style="color:#fbbf24;font-size:0.64rem;font-weight:900;text-transform:uppercase;margin-bottom:7px;">Ação a ser feita</div>
         <div>${escapeHtml(action.nextAction || 'Sem descrição cadastrada.')}</div>
-        ${action.notes ? `<div style="margin-top:12px;color:#a1a1aa;font-size:0.72rem;font-weight:900;text-transform:uppercase;">Notas</div><div style="margin-top:5px;">${escapeHtml(action.notes)}</div>` : ''}
+        ${action.notes ? `<div style="margin-top:16px;color:#a1a1aa;font-size:0.72rem;font-weight:900;text-transform:uppercase;">Linha do tempo</div>${renderActionNotesTimeline(action.notes)}` : ''}
     `;
+    currentCrmActionDetailKey = action.key;
     const observationWrap = document.getElementById('crmActionObservationWrap');
     const observationText = document.getElementById('crmActionObservationText');
+    const addObservationBtn = document.getElementById('crmActionAddObservationBtn');
     if (observationWrap) observationWrap.style.display = '';
     if (observationText) observationText.value = buildActionCompletionObservation(action);
+    if (addObservationBtn) addObservationBtn.style.display = '';
     document.getElementById('crmActionDetailCompleteBtn').onclick = () => completeCrmActionByKey(action.key);
     document.getElementById('crmActionDetailModal').style.display = 'flex';
-    setTimeout(() => {
-        const textarea = document.getElementById('crmActionObservationText');
-        if (textarea) {
-            textarea.focus();
-            textarea.setSelectionRange(textarea.value.length, textarea.value.length);
-        }
-    }, 80);
 }
 
 function openClosedCrmActionDetailModal(id) {
@@ -3580,10 +3588,12 @@ function openClosedCrmActionDetailModal(id) {
     document.getElementById('crmActionDetailText').innerHTML = `
         <div style="color:#fbbf24;font-size:0.64rem;font-weight:900;text-transform:uppercase;margin-bottom:7px;">Ação encerrada</div>
         <div>${escapeHtml(action.nextAction || 'Sem descrição cadastrada.')}</div>
-        ${action.notes ? `<div style="margin-top:12px;color:#a1a1aa;font-size:0.72rem;font-weight:900;text-transform:uppercase;">Notas</div><div style="margin-top:5px;">${escapeHtml(action.notes)}</div>` : ''}
+        ${action.notes ? `<div style="margin-top:16px;color:#a1a1aa;font-size:0.72rem;font-weight:900;text-transform:uppercase;">Linha do tempo</div>${renderActionNotesTimeline(action.notes)}` : ''}
     `;
     const observationWrap = document.getElementById('crmActionObservationWrap');
+    const addObservationBtn = document.getElementById('crmActionAddObservationBtn');
     if (observationWrap) observationWrap.style.display = 'none';
+    if (addObservationBtn) addObservationBtn.style.display = 'none';
     document.getElementById('crmActionDetailCompleteBtn').innerHTML = '<i class="fa-solid fa-rotate-left"></i> Reabrir ação';
     document.getElementById('crmActionDetailCompleteBtn').onclick = () => reopenCrmAction(action.id);
     closeCrmActionHistoryModal();
@@ -3595,8 +3605,11 @@ function closeCrmActionDetailModal() {
     if (btn) btn.innerHTML = '<i class="fa-solid fa-check"></i> Concluir ação';
     const observationWrap = document.getElementById('crmActionObservationWrap');
     const observationText = document.getElementById('crmActionObservationText');
+    const addObservationBtn = document.getElementById('crmActionAddObservationBtn');
     if (observationWrap) observationWrap.style.display = '';
     if (observationText) observationText.value = '';
+    if (addObservationBtn) addObservationBtn.style.display = '';
+    currentCrmActionDetailKey = '';
     document.getElementById('crmActionDetailModal').style.display = 'none';
     if (window.returnToCrmActionHistory) {
         window.returnToCrmActionHistory = false;
@@ -3609,6 +3622,20 @@ async function completeCrmActionByKey(actionKey) {
     if (!action) return;
     await closeCrmActionInDatabase(action.clientName, document.getElementById('crmActionObservationText')?.value || '');
     closeCrmActionDetailModal();
+}
+
+async function saveCrmActionObservation() {
+    const action = getCrmActionRecord(currentCrmActionDetailKey);
+    const text = String(document.getElementById('crmActionObservationText')?.value || '').trim();
+    if (!action || !text) return;
+    const updatedRecord = {
+        ...action,
+        notes: [action.notes, text].filter(Boolean).join('\n\n'),
+        updatedAt: new Date().toISOString()
+    };
+    await saveCrmToDatabase(action.clientName, updatedRecord, { silent: true, auditAction: 'ADICIONAR_OBSERVACAO_ACAO_CRM' });
+    toast('Observação salva', 'Nova entrada adicionada à linha do tempo.', 'success');
+    openCrmActionDetailModal(action.key);
 }
 
 async function completeCrmAction(clientName) {
