@@ -30,6 +30,7 @@ router.get('/list', async (req, res) => {
 
 router.get('/detail/:codigo', async (req, res) => {
     try {
+        res.set('Cache-Control', 'no-store');
         const codigo = Number(req.params.codigo);
         if (!Number.isInteger(codigo)) return res.status(400).json({ error: 'Código inválido' });
         const result = await pool.query('SELECT data FROM sac_firebird_sync WHERE codigo = $1', [codigo]);

@@ -27,7 +27,7 @@
     };
 
     const shouldDisableAutocomplete = (el) => {
-        if (!el || el.dataset.allowAutocomplete === 'true' || el.hasAttribute('list')) return false;
+        if (!el || el.nodeType !== 1 || !el.dataset || el.dataset.allowAutocomplete === 'true' || !el.hasAttribute || el.hasAttribute('list')) return false;
         const tag = (el.tagName || '').toLowerCase();
         if (tag === 'textarea') return true;
         if (tag !== 'input') return false;
