@@ -9,7 +9,7 @@ function firebirdQuery(sql) {
 }
 
 function sanitize(value) {
-    if (typeof value === 'string') return value.replace(/\0/g, '');
+    if (typeof value === 'string') return rtfToText(value.replace(/\0/g, ''));
     if (Array.isArray(value)) return value.map(sanitize);
     if (value && typeof value === 'object' && !(value instanceof Date)) {
         return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, sanitize(item)]));
@@ -17,17 +17,35 @@ function sanitize(value) {
     return value;
 }
 
+function rtfToText(value) {
+    if (!/^\{\\rtf/i.test(value)) return value;
+    return value
+        .replace(/\\par[d]?/gi, '\n')
+        .replace(/\\tab/gi, '\t')
+        .replace(/\\u(-?\d+)\??/g, (_, code) => String.fromCharCode((Number(code) + 65536) % 65536))
+        .replace(/\\'([0-9a-f]{2})/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+        .replace(/\\[a-z]+-?\d* ?/gi, '')
+        .replace(/[{}]/g, '')
+        .replace(/\\([\\{}])/g, '$1')
+        .replace(/^[A-Za-z0-9 _-]+;\s*(?:;;\s*)?/, '')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+}
+
 async function sync() {
-    const [cabecalhos, produtos, acoes, responsaveis, causas, anexos, historico, custos] = await Promise.all([
+    const [cabecalhos, produtos, acoes, responsaveis, causas, anexos, historico, custos, usuarios] = await Promise.all([
         firebirdQuery(`SELECT s.CODIGO_SAV, s.SITUACAO_SAV, s.DATA_CADASTRO_SAV, s.DATA_LIMITE_SAV, s.DATA_RESOLVIDO_SAV, s.CLI_CODIGO_SAV, s.NOME_CLIENTE_SAV, s.CNPJ_CPF_CLIENTE_SAV, s.RECLAMANTE_NOME_SAV, s.RECLAMANTE_FONE_SAV, s.RECLAMANTE_EMAIL_SAV, s.PROCEDENCIA_SAV, s.ORIGEM_SAV, s.DISPOSICAO_SAV, s.DISPOSICAO_OBS_SAV, s.BAN_CODIGO_RESSARCIMENTO_SAV, s.CNPJ_CPF_RESSARCIMENTO_SAV, s.AGENCIA_RESSARCIMENTO_SAV, s.CONTA_RESSARCIMENTO_SAV, s.OPERACAO_RESSARCIMENTO_SAV, s.TITULAR_RESSARCIMENTO_SAV, CAST(s.RELATO_CLIENTE_SAV AS VARCHAR(8191)) RELATO_CLIENTE_TEXTO, CAST(s.CAUSA_PROBLEMA_SAV AS VARCHAR(8191)) CAUSA_PROBLEMA_TEXTO FROM SAC_VENDA s`),
         firebirdQuery(`SELECT p.*, CAST(p.PEDIDOS_SVP AS VARCHAR(8191)) PEDIDOS_TEXTO, CAST(p.RELATO_TECNICO_SVP AS VARCHAR(8191)) RELATO_TECNICO_TEXTO, CAST(p.OBSERVACAO_SVP AS VARCHAR(8191)) OBSERVACAO_TEXTO FROM SAC_VENDA_PRODUTO p`),
         firebirdQuery(`SELECT a.*, CAST(a.OBS_SVAC AS VARCHAR(8191)) OBS_TEXTO FROM SAC_VENDA_ACAO a`),
         firebirdQuery('SELECT * FROM SAC_VENDA_USUARIO'),
         firebirdQuery('SELECT c.*, o.DESCRICAO_OPP FROM SAC_VENDA_CAUSA_PROBLEMA c LEFT JOIN OCORRENCIA_PROPOSTA_COMERCIAL o ON o.CODIGO_OPP=c.OPP_CODIGO_SVCP'),
         firebirdQuery('SELECT * FROM SAC_VENDA_ANEXO'),
-        firebirdQuery('SELECT h.*, CAST(h.OBSERVACAO_SVAP AS VARCHAR(8191)) OBSERVACAO_TEXTO FROM SAC_VENDA_APONTAMENTO h'),
-        firebirdQuery('SELECT * FROM SAC_VENDA_OUTROS_CUSTOS')
+        firebirdQuery('SELECT h.*, u.NOME_USU AS NOME_USUARIO_SVAP, CAST(h.OBSERVACAO_SVAP AS VARCHAR(8191)) OBSERVACAO_TEXTO FROM SAC_VENDA_APONTAMENTO h LEFT JOIN USUARIO u ON u.CODIGO_USU=h.USU_CODIGO_SVAP'),
+        firebirdQuery('SELECT * FROM SAC_VENDA_OUTROS_CUSTOS'),
+        firebirdQuery('SELECT CODIGO_USU, NOME_USU FROM USUARIO')
     ]);
+    const nomesUsuarios = new Map(usuarios.map(user => [Number(user.CODIGO_USU), user.NOME_USU]));
+    historico.forEach(item => { item.NOME_USUARIO_SVAP = item.NOME_USUARIO_SVAP || nomesUsuarios.get(Number(item.USU_CODIGO_SVAP)) || null; });
     const group = (rows, key) => rows.reduce((map, row) => { const id = row[key]; (map[id] ||= []).push(row); return map; }, {});
     const by = { produtos: group(produtos, 'SAV_CODIGO_SVP'), acoes: group(acoes, 'SAV_CODIGO_SVAC'), responsaveis: group(responsaveis, 'SAV_CODIGO_SVU'), causas: group(causas, 'SAV_CODIGO_SVCP'), anexos: group(anexos, 'SAV_CODIGO_SVA'), historico: group(historico, 'SAV_CODIGO_SVAP'), custos: group(custos, 'SAV_CODIGO_SVOC') };
     const client = await pool.connect();
