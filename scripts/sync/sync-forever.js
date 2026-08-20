@@ -117,7 +117,7 @@ const INDEPENDENT_BATS = [
     { name: 'DEVOLUCOES',  file: path.join('sync', 'sincronizar_adevolucoes.bat'),   icon: '[<<]', pageId: 'devolucoes.html', progressAlias: 'DEVOLUÇÕES' },
     { name: 'CLIENTES',    file: path.join('sync', 'sincronizar_aclientes.bat'),     icon: '[CL]', pageId: 'clientes.html' },
     { name: 'REFUGOS',     file: path.join('sync', 'sincronizar_arefugo.bat'),       icon: '[RF]', pageId: 'refugos.html' },
-    { name: 'SAC',         file: path.join('sync', 'sincronizar_asac.bat'),          icon: '[SAC]', pageId: 'sac.html' },
+    { name: 'SAC',         file: path.join('sync', 'sincronizar_asac.bat'),          icon: '[SC]', pageId: 'sac.html' },
     { name: 'SNAPSHOTS',   file: path.join('sync', 'sincronizar_asnapshots.bat'),    icon: '[SS]', pageId: 'pedidos.html' },
     { name: 'MOLDAGEM FT', file: path.join('sync', 'sincronizar_fichatecmoldagem.bat'), icon: '[ML]', pageId: 'fichatecmoldagem.html', progressAlias: 'MOLDAGEM' },
     { name: 'FUSAO FT',    file: path.join('sync', 'sincronizar_fichatecfusao.bat'),   icon: '[FU]', pageId: 'fichatecfusao.html' },
