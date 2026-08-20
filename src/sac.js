@@ -45,7 +45,7 @@ router.get('/anexos/:id/download', async (req, res) => {
         const result = await pool.query('SELECT nome_arquivo, mime_type, conteudo FROM sac_anexos_sync WHERE id=$1', [Number(req.params.id)]);
         if (!result.rows.length) return res.status(404).json({ error: 'Anexo não encontrado' });
         const arquivo = result.rows[0];
-        res.set({ 'Content-Type': arquivo.mime_type, 'Content-Disposition': `inline; filename="${arquivo.nome_arquivo.replace(/["\\]/g, '')}"`, 'Cache-Control': 'private, max-age=3600' });
+        res.set({ 'Content-Type': arquivo.mime_type, 'Cache-Control': 'private, max-age=3600' });
         res.send(arquivo.conteudo);
     } catch (error) { res.status(500).json({ error: 'Não foi possível abrir o anexo', details: error.message }); }
 });
