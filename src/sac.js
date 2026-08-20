@@ -35,7 +35,7 @@ router.get('/:codigo/anexos', async (req, res) => {
     try {
         const codigo = Number(req.params.codigo);
         if (!Number.isInteger(codigo)) return res.status(400).json({ error: 'Código inválido' });
-        const result = await pool.query('SELECT id, anexo_codigo, nome_arquivo, mime_type, tamanho_bytes, modificado_em FROM sac_anexos_sync WHERE sac_codigo=$1 ORDER BY anexo_codigo, nome_arquivo', [codigo]);
+        const result = await pool.query("SELECT id, anexo_codigo, nome_arquivo, mime_type, tamanho_bytes, modificado_em FROM sac_anexos_sync WHERE sac_codigo=$1 AND LOWER(nome_arquivo) <> 'thumbs.db' ORDER BY anexo_codigo, nome_arquivo", [codigo]);
         res.json(result.rows);
     } catch (error) { res.status(500).json({ error: 'Anexos ainda não sincronizados', details: error.message }); }
 });

@@ -25,9 +25,11 @@ async function sync() {
     try {
         await client.query(`CREATE TABLE IF NOT EXISTS sac_anexos_sync (id BIGSERIAL PRIMARY KEY, sac_codigo INTEGER NOT NULL, anexo_codigo INTEGER, caminho_relativo TEXT NOT NULL UNIQUE, nome_arquivo TEXT NOT NULL, mime_type TEXT NOT NULL, tamanho_bytes BIGINT NOT NULL, modificado_em TIMESTAMPTZ NOT NULL, hash_sha256 CHAR(64) NOT NULL, conteudo BYTEA NOT NULL, sincronizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
         await client.query('CREATE INDEX IF NOT EXISTS idx_sac_anexos_sync_sac ON sac_anexos_sync (sac_codigo, anexo_codigo)');
+        await client.query("DELETE FROM sac_anexos_sync WHERE LOWER(nome_arquivo) = 'thumbs.db'");
         const lista = await arquivos(ROOT);
         let sincronizados = 0;
         for (const arquivo of lista) {
+            if (path.basename(arquivo).toLowerCase() === 'thumbs.db') continue;
             const relativo = path.relative(ROOT, arquivo).replace(/\\/g, '/');
             const partes = relativo.split('/');
             const sac = Number(partes[0]), anexo = Number(partes[1]);
