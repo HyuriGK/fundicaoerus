@@ -17,7 +17,7 @@ async function arquivos(dir) {
 
 function mime(nome) {
     const ext = path.extname(nome).toLowerCase();
-    return { '.pdf':'application/pdf', '.doc':'application/msword', '.docx':'application/vnd.openxmlformats-officedocument.wordprocessingml.document', '.xls':'application/vnd.ms-excel', '.xlsx':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', '.jpg':'image/jpeg', '.jpeg':'image/jpeg', '.png':'image/png' }[ext] || 'application/octet-stream';
+    return { '.pdf':'application/pdf', '.doc':'application/msword', '.docx':'application/vnd.openxmlformats-officedocument.wordprocessingml.document', '.xls':'application/vnd.ms-excel', '.xlsx':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', '.jpg':'image/jpeg', '.jpeg':'image/jpeg', '.png':'image/png', '.mp4':'video/mp4', '.webm':'video/webm', '.mov':'video/quicktime' }[ext] || 'application/octet-stream';
 }
 
 async function sync() {
@@ -36,7 +36,7 @@ async function sync() {
             if (!Number.isInteger(sac)) continue;
             const [conteudo, stat] = await Promise.all([fs.readFile(arquivo), fs.stat(arquivo)]);
             const hash = crypto.createHash('sha256').update(conteudo).digest('hex');
-            const result = await client.query(`INSERT INTO sac_anexos_sync (sac_codigo,anexo_codigo,caminho_relativo,nome_arquivo,mime_type,tamanho_bytes,modificado_em,hash_sha256,conteudo) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (caminho_relativo) DO UPDATE SET sac_codigo=EXCLUDED.sac_codigo,anexo_codigo=EXCLUDED.anexo_codigo,nome_arquivo=EXCLUDED.nome_arquivo,mime_type=EXCLUDED.mime_type,tamanho_bytes=EXCLUDED.tamanho_bytes,modificado_em=EXCLUDED.modificado_em,hash_sha256=EXCLUDED.hash_sha256,conteudo=EXCLUDED.conteudo,sincronizado_em=NOW() WHERE sac_anexos_sync.hash_sha256 IS DISTINCT FROM EXCLUDED.hash_sha256 RETURNING id`, [sac, Number.isInteger(anexo) ? anexo : null, relativo, path.basename(arquivo), mime(arquivo), stat.size, stat.mtime, hash, conteudo]);
+            const result = await client.query(`INSERT INTO sac_anexos_sync (sac_codigo,anexo_codigo,caminho_relativo,nome_arquivo,mime_type,tamanho_bytes,modificado_em,hash_sha256,conteudo) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (caminho_relativo) DO UPDATE SET sac_codigo=EXCLUDED.sac_codigo,anexo_codigo=EXCLUDED.anexo_codigo,nome_arquivo=EXCLUDED.nome_arquivo,mime_type=EXCLUDED.mime_type,tamanho_bytes=EXCLUDED.tamanho_bytes,modificado_em=EXCLUDED.modificado_em,hash_sha256=EXCLUDED.hash_sha256,conteudo=EXCLUDED.conteudo,sincronizado_em=NOW() WHERE sac_anexos_sync.hash_sha256 IS DISTINCT FROM EXCLUDED.hash_sha256 OR sac_anexos_sync.mime_type IS DISTINCT FROM EXCLUDED.mime_type RETURNING id`, [sac, Number.isInteger(anexo) ? anexo : null, relativo, path.basename(arquivo), mime(arquivo), stat.size, stat.mtime, hash, conteudo]);
             sincronizados += result.rowCount;
         }
         console.log(`Anexos SAC sincronizados: ${lista.length} encontrados, ${sincronizados} incluídos/atualizados.`);
