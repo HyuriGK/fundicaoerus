@@ -5,6 +5,13 @@ const pool = require('../lib/db');
 const situacoes = { 0: 'ABERTO', 1: 'RESOLVIDO', 2: 'CANCELADO' };
 const procedencias = { 0: 'NÃO DEFINIDO', 1: 'CLIENTE', 2: 'INTERNO' };
 
+function normalizarRtf(value) {
+    if (typeof value === 'string' && /^\{\\rtf/i.test(value)) return value.replace(/\\par[d]?/gi, '\n').replace(/\\tab/gi, '\t').replace(/\\u(-?\d+)\??/g, (_, code) => String.fromCharCode((Number(code) + 65536) % 65536)).replace(/\\'([0-9a-f]{2})/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16))).replace(/\\[a-z]+-?\d* ?/gi, '').replace(/[{}]/g, '').replace(/\\([\\{}])/g, '$1').replace(/^[A-Za-z0-9 _-]+;\s*(?:;;\s*)?/, '').replace(/\n{3,}/g, '\n\n').trim();
+    if (Array.isArray(value)) return value.map(normalizarRtf);
+    if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, normalizarRtf(item)]));
+    return value;
+}
+
 router.get('/list', async (req, res) => {
     try {
         const { busca = '', situacao = '', origem = '' } = req.query;
@@ -27,7 +34,11 @@ router.get('/detail/:codigo', async (req, res) => {
         if (!Number.isInteger(codigo)) return res.status(400).json({ error: 'Código inválido' });
         const result = await pool.query('SELECT data FROM sac_firebird_sync WHERE codigo = $1', [codigo]);
         if (!result.rows.length) return res.status(404).json({ error: 'SAC não encontrado na sincronização' });
-        const data = result.rows[0].data;
+        const data = normalizarRtf(result.rows[0].data);
+        data.acoes = (data.acoes || []).map(acao => ({
+            ...acao,
+            RESPONSAVEIS: (data.responsaveis || []).filter(usuario => Number(usuario.SVAC_ID_SVU) === Number(acao.ID_SVAC)).map(usuario => `${usuario.USU_CODIGO_SVU} - ${usuario.NOME_USUARIO_SVU}`).filter(Boolean).join(', ') || '—'
+        }));
         res.json({ ...data, SITUACAO_NOME: situacoes[data.SITUACAO_SAV] || 'NÃO DEFINIDO', PROCEDENCIA_NOME: procedencias[data.PROCEDENCIA_SAV] || 'NÃO DEFINIDO' });
     } catch (error) { res.status(500).json({ error: 'Erro ao consultar SAC sincronizado', details: error.message }); }
 });
