@@ -164,6 +164,7 @@ app.use('/api/communications', require('../src/communications')); // NOVO: Siste
 app.use('/api/chamados', require('../src/chamados')); // Chamados TI
 app.use('/api/planner', require('../src/planner')); // Planner Kanban
 app.use('/api/cron/email-pedidos', require('../src/cron-email-pedidos')); // Cron: Email diário de pedidos
+app.use('/api/sac', require('../src/sac'));
 
 // Rota temporária de diagnóstico do Firebird
 app.get('/api/test-firebird', (req, res) => {
