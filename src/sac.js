@@ -31,6 +31,25 @@ router.get('/list', async (req, res) => {
     } catch (error) { res.status(500).json({ error: 'Dados SAC ainda não sincronizados', details: error.message }); }
 });
 
+router.get('/:codigo/anexos', async (req, res) => {
+    try {
+        const codigo = Number(req.params.codigo);
+        if (!Number.isInteger(codigo)) return res.status(400).json({ error: 'Código inválido' });
+        const result = await pool.query('SELECT id, anexo_codigo, nome_arquivo, mime_type, tamanho_bytes, modificado_em FROM sac_anexos_sync WHERE sac_codigo=$1 ORDER BY anexo_codigo, nome_arquivo', [codigo]);
+        res.json(result.rows);
+    } catch (error) { res.status(500).json({ error: 'Anexos ainda não sincronizados', details: error.message }); }
+});
+
+router.get('/anexos/:id/download', async (req, res) => {
+    try {
+        const result = await pool.query('SELECT nome_arquivo, mime_type, conteudo FROM sac_anexos_sync WHERE id=$1', [Number(req.params.id)]);
+        if (!result.rows.length) return res.status(404).json({ error: 'Anexo não encontrado' });
+        const arquivo = result.rows[0];
+        res.set({ 'Content-Type': arquivo.mime_type, 'Content-Disposition': `inline; filename="${arquivo.nome_arquivo.replace(/["\\]/g, '')}"`, 'Cache-Control': 'private, max-age=3600' });
+        res.send(arquivo.conteudo);
+    } catch (error) { res.status(500).json({ error: 'Não foi possível abrir o anexo', details: error.message }); }
+});
+
 router.get('/detail/:codigo', async (req, res) => {
     try {
         res.set('Cache-Control', 'no-store');
