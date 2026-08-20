@@ -3,7 +3,7 @@ const router = express.Router();
 const pool = require('../lib/db');
 
 const situacoes = { 0: 'ABERTO', 1: 'RESOLVIDO', 2: 'CANCELADO' };
-const procedencias = { 0: 'NÃO DEFINIDO', 1: 'CLIENTE', 2: 'INTERNO' };
+const procedencias = { 0: 'NÃO DEFINIDO', 1: 'PROCEDENTE', 2: 'IMPROCEDENTE' };
 
 function normalizarRtf(value) {
     if (typeof value === 'string') {
