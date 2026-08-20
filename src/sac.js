@@ -6,7 +6,10 @@ const situacoes = { 0: 'ABERTO', 1: 'RESOLVIDO', 2: 'CANCELADO' };
 const procedencias = { 0: 'NÃO DEFINIDO', 1: 'CLIENTE', 2: 'INTERNO' };
 
 function normalizarRtf(value) {
-    if (typeof value === 'string' && /^\{\\rtf/i.test(value)) return value.replace(/\\par[d]?/gi, '\n').replace(/\\tab/gi, '\t').replace(/\\u(-?\d+)\??/g, (_, code) => String.fromCharCode((Number(code) + 65536) % 65536)).replace(/\\'([0-9a-f]{2})/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16))).replace(/\\[a-z]+-?\d* ?/gi, '').replace(/[{}]/g, '').replace(/\\([\\{}])/g, '$1').replace(/^[A-Za-z0-9 _-]+;\s*(?:;;\s*)?/, '').replace(/\n{3,}/g, '\n\n').trim();
+    if (typeof value === 'string') {
+        const texto = /^\{\\rtf/i.test(value) ? value.replace(/\\par[d]?/gi, '\n').replace(/\\tab/gi, '\t').replace(/\\u(-?\d+)\??/g, (_, code) => String.fromCharCode((Number(code) + 65536) % 65536)).replace(/\\'([0-9a-f]{2})/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16))).replace(/\\[a-z]+-?\d* ?/gi, '').replace(/[{}]/g, '').replace(/\\([\\{}])/g, '$1') : value;
+        return texto.replace(/(?:^|\n)\s*(?:[A-Za-z][\w -]{0,30};){1,8}\s*(?=\n|$)/g, '\n').replace(/(?:^|\n)\s*;;\s*(?=\n|$)/g, '\n').replace(/(^|\n)\s*["'](?=\S)/g, '$1').replace(/["']\s*(?=\n|$)/g, '').replace(/\n{3,}/g, '\n\n').trim();
+    }
     if (Array.isArray(value)) return value.map(normalizarRtf);
     if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, normalizarRtf(item)]));
     return value;
