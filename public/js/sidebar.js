@@ -410,6 +410,17 @@
                 '<a href="ordemdeproducao.html" data-stip="Ordens de Produção" class="erus-nav-link' + isActive('ordemdeproducao.html') + '">' +
                     '<i class="fa-solid fa-file-lines"></i><span>Ordens de Produção</span></a>' +
             '</div>' +
+            // SAC
+            '<div class="erus-nav-group-sep" data-stip="SAC" onclick="erusSidebarToggleGroup(\'eg-sac\')">' +
+                '<i class="fas fa-headset" style="font-size:0.8rem;color:#52525b;margin-right:8px;flex-shrink:0;"></i>' +
+                '<span class="erus-nav-group-label">SAC</span>' +
+                '<div class="erus-nav-group-line"></div>' +
+                '<i class="fa-solid fa-plus" id="icon-eg-sac"></i>' +
+            '</div>' +
+            '<div id="eg-sac" class="erus-nav-group-wrapper collapsed">' +
+                '<a href="sac.html" data-stip="Reclamações" class="erus-nav-link' + isActive('sac.html') + '">' +
+                    '<i class="fa-solid fa-headset"></i><span>Reclamações</span></a>' +
+            '</div>' +
             // PPCP
             '<div class="erus-nav-group-sep" data-stip="PPCP" onclick="erusSidebarToggleGroup(\'eg-ppcp\')">' +
                 '<i class="fas fa-calendar-check" style="font-size:0.8rem;color:#52525b;margin-right:8px;flex-shrink:0;"></i>' +
