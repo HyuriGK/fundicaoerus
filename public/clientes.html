@@ -3704,13 +3704,9 @@ function closeCrmActionDetailModal() {
     const observationWrap = document.getElementById('crmActionObservationWrap');
     const observationText = document.getElementById('crmActionObservationText');
     const addObservationBtn = document.getElementById('crmActionAddObservationBtn');
-    if (observationWrap) observationWrap.style.display = 'none';
     if (observationText) observationText.value = '';
-    if (addObservationBtn) {
-        addObservationBtn.style.display = '';
-        addObservationBtn.innerHTML = '<i class="fa-solid fa-plus"></i> Adicionar observação';
-        addObservationBtn.dataset.mode = 'open';
-    }
+    if (addObservationBtn) addObservationBtn.style.display = '';
+    resetCrmActionObservation();
     currentCrmActionDetailKey = '';
     currentCrmActionContact = null;
     document.getElementById('crmActionDetailModal').style.display = 'none';
@@ -3728,6 +3724,26 @@ async function completeCrmActionByKey(actionKey) {
     closeCrmActionDetailModal();
 }
 
+function resetCrmActionObservation() {
+    const wrap = document.getElementById('crmActionObservationWrap');
+    const button = document.getElementById('crmActionAddObservationBtn');
+    const controls = document.getElementById('crmActionObservationControls');
+    document.getElementById('crmActionObservationButtons')?.remove();
+    document.getElementById('crmActionCancelObservationBtn')?.remove();
+    if (wrap) wrap.style.display = 'none';
+    if (button) { button.innerHTML = '<i class="fa-solid fa-plus"></i> Adicionar observação'; button.dataset.mode = 'open'; button.style.flex = ''; }
+    if (controls && button) controls.append(button);
+}
+
+async function cancelCrmActionObservation() {
+    const text = String(document.getElementById('crmActionObservationText')?.value || '').trim();
+    const hasText = text.replace(getTodayBrDate(), '').trim();
+    if (hasText && !(await window.erusConfirm('Há uma observação preenchida. Deseja descartá-la?', { title:'Cancelar observação', okText:'Descartar', cancelText:'Continuar editando', variant:'danger' }))) return;
+    const textArea = document.getElementById('crmActionObservationText');
+    if (textArea) textArea.value = `${getTodayBrDate()}\n`;
+    resetCrmActionObservation();
+}
+
 async function saveCrmActionObservation() {
     const action = getCrmActionRecord(currentCrmActionDetailKey);
     const observationWrap = document.getElementById('crmActionObservationWrap');
@@ -3737,6 +3753,10 @@ async function saveCrmActionObservation() {
         if (addObservationBtn) {
             addObservationBtn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Salvar observação';
             addObservationBtn.dataset.mode = 'save';
+            const controls = document.getElementById('crmActionObservationControls');
+            const cancelButton = document.createElement('button');
+            cancelButton.type = 'button'; cancelButton.id = 'crmActionCancelObservationBtn'; cancelButton.className = 'btn-cancel'; cancelButton.textContent = 'Cancelar'; cancelButton.onclick = cancelCrmActionObservation;
+            if (controls) { const row = document.createElement('div'); row.id = 'crmActionObservationButtons'; row.style.cssText = 'display:flex;gap:10px;width:100%;'; addObservationBtn.style.flex = '1'; cancelButton.style.flex = '1'; row.append(addObservationBtn, cancelButton); controls.append(row); }
         }
         return;
     }
@@ -3754,11 +3774,7 @@ async function saveCrmActionObservation() {
     renderOpenActionDetailText(action);
     const observationText = document.getElementById('crmActionObservationText');
     if (observationText) observationText.value = `${getTodayBrDate()}\n`;
-    if (observationWrap) observationWrap.style.display = 'none';
-    if (addObservationBtn) {
-        addObservationBtn.innerHTML = '<i class="fa-solid fa-plus"></i> Adicionar observação';
-        addObservationBtn.dataset.mode = 'open';
-    }
+    resetCrmActionObservation();
     toast('Observação salva', 'Nova entrada adicionada à linha do tempo.', 'success');
 }
 
