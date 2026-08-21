@@ -348,12 +348,12 @@
         .chart-suggestion-item:hover { background:rgba(251,191,36,0.08); color:#fff; }
         /* Chart scroll wrapper */
         #chartScrollWrapper {
-            overflow-x:auto; overflow-y:hidden;
+            overflow-x:hidden; overflow-y:auto;
             flex:1; min-height:0;
             scrollbar-width:thin;
             scrollbar-color:rgba(255,255,255,0.15) transparent;
         }
-        #chartScrollWrapper::-webkit-scrollbar { height:5px; }
+        #chartScrollWrapper::-webkit-scrollbar { width:5px; }
         #chartScrollWrapper::-webkit-scrollbar-track { background:transparent; }
         #chartScrollWrapper::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.15); border-radius:3px; }
         #chartScrollWrapper::-webkit-scrollbar-thumb:hover { background:rgba(255,255,255,0.28); }
@@ -4244,7 +4244,7 @@ function renderCharts() {
     }
     setChartMapMode(false);
     const { label, color, colorDim } = cfg[type] || cfg.fat;
-    document.getElementById('activeChartLabel').textContent = label.replace('Pareto', 'Curva ABC');
+    document.getElementById('activeChartLabel').textContent = label.replace('Pareto', 'Curva ABC') + ' · A até 80% | B até 95% | C restante';
 
     const getValue = c => {
         if (type === 'fat')  return c.fat;
@@ -4275,10 +4275,13 @@ function renderCharts() {
     // Calcular largura do canvas para scroll horizontal
     const scrollWrapper = document.getElementById('chartScrollWrapper');
     const canvasInner   = document.getElementById('chartCanvasInner');
-    const wrapperW = scrollWrapper ? scrollWrapper.clientWidth : 800;
-    chartBarPx = Math.max(30, Math.floor(wrapperW / 12));
-    const canvasW = Math.max(wrapperW, sorted.length * chartBarPx);
-    if (canvasInner) canvasInner.style.width = canvasW + 'px';
+    const wrapperH = scrollWrapper ? scrollWrapper.clientHeight : 520;
+    chartBarPx = 46;
+    const canvasH = Math.max(wrapperH, sorted.length * chartBarPx);
+    if (canvasInner) {
+        canvasInner.style.width = '100%';
+        canvasInner.style.height = canvasH + 'px';
+    }
 
     const abcClasses = cumPct.map(pct => pct <= 80 ? 'A' : pct <= 95 ? 'B' : 'C');
     const bgColors = abcClasses.map(abc => abc === 'A' ? '#10b981' : abc === 'B' ? '#f59e0b' : '#ef4444');
@@ -4286,7 +4289,7 @@ function renderCharts() {
     if (charts.active) charts.active.destroy();
     charts.active = new Chart(document.getElementById('chartActive').getContext('2d'), {
         data: {
-            labels: sorted.map(c => c.name.split(' ')[0]),
+            labels: sorted.map(c => c.name),
             datasets: [
                 {
                     type: 'bar',
@@ -4294,7 +4297,7 @@ function renderCharts() {
                     backgroundColor: bgColors,
                     borderRadius: 4,
                     order: 2,
-                    yAxisID: 'y'
+                    xAxisID: 'x'
                 },
                 {
                     type: 'line',
@@ -4307,13 +4310,14 @@ function renderCharts() {
                     borderWidth: 1.5,
                     tension: 0.3,
                     order: 1,
-                    yAxisID: 'y1'
+                    xAxisID: 'x1'
                 }
             ]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            indexAxis: 'y',
             interaction: { mode: 'index', intersect: false },
             plugins: {
                 legend: { display: false },
@@ -4336,14 +4340,14 @@ function renderCharts() {
                 }
             },
             scales: {
-                x: { grid: { display: false }, ticks: { color: '#71717a', font: { size: 10 }, maxRotation: 45 } },
-                y: {
-                    position: 'left',
+                y: { grid: { display: false }, ticks: { color: '#a1a1aa', font: { size: 10 }, autoSkip: false } },
+                x: {
+                    position: 'bottom',
                     grid: { color: 'rgba(255,255,255,0.04)' },
                     ticks: { color: '#71717a', font: { size: 10 }, callback: fmtAxis }
                 },
-                y1: {
-                    position: 'right',
+                x1: {
+                    position: 'top',
                     min: 0, max: 100,
                     grid: { display: false },
                     ticks: { color: '#52525b', font: { size: 10 }, callback: v => v + '%' }
@@ -4568,15 +4572,15 @@ function selectChartClient(barIndex, name) {
     if (!wrapper || !chartAllLabels.length) return;
 
     const barCenter = barIndex * chartBarPx + chartBarPx / 2;
-    const targetScroll = Math.max(0, barCenter - wrapper.clientWidth / 2);
-    const startScroll = wrapper.scrollLeft;
+    const targetScroll = Math.max(0, barCenter - wrapper.clientHeight / 2);
+    const startScroll = wrapper.scrollTop;
     const distance = targetScroll - startScroll;
     const duration = Math.min(800, Math.max(300, Math.abs(distance) / 2));
     const startTime = performance.now();
     function ease(t) { return t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2,3)/2; }
     function animateScroll(now) {
         const progress = Math.min((now - startTime) / duration, 1);
-        wrapper.scrollLeft = startScroll + distance * ease(progress);
+        wrapper.scrollTop = startScroll + distance * ease(progress);
         if (progress < 1) requestAnimationFrame(animateScroll);
     }
     requestAnimationFrame(animateScroll);
