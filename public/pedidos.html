@@ -633,6 +633,17 @@
         #emissaoScrollWrapper::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.28); }
         #emissaoCanvasInner { position: relative; height: 100%; min-height: 220px; }
         #emissaoCanvasInner canvas { position: absolute; inset: 0; width: 100% !important; height: 100% !important; }
+        .emissao-choice-card { width:min(440px,calc(100vw - 32px)); background:linear-gradient(180deg,#18181d,#101014); border:1px solid rgba(255,255,255,.11); border-radius:16px; box-shadow:0 30px 90px rgba(0,0,0,.72); overflow:hidden; }
+        .emissao-choice-top { height:4px; background:linear-gradient(90deg,#f59e0b,#fbbf24,#f59e0b); }
+        .emissao-choice-body { padding:28px 30px 30px; text-align:center; }
+        .emissao-choice-icon { width:50px; height:50px; margin:0 auto 16px; border-radius:14px; display:flex; align-items:center; justify-content:center; color:#fbbf24; background:rgba(251,191,36,.11); border:1px solid rgba(251,191,36,.28); font-size:1.3rem; }
+        .emissao-choice-title { margin:0 0 9px; color:#fff; font-size:1.2rem; font-weight:900; }
+        .emissao-choice-text { margin:0; color:#a1a1aa; font-size:.84rem; line-height:1.5; }
+        .emissao-choice-actions { display:flex; gap:10px; margin-top:24px; }
+        .emissao-choice-actions button { flex:1; height:42px; border-radius:8px; font-weight:800; cursor:pointer; }
+        .emissao-choice-total { border:1px solid rgba(255,255,255,.13); background:rgba(255,255,255,.055); color:#e4e4e7; }
+        .emissao-choice-monthly { border:0; background:#fbbf24; color:#17120a; }
+        .emissao-choice-close { position:absolute; top:13px; right:13px; width:30px; height:30px; border:1px solid rgba(255,255,255,.12); border-radius:7px; background:rgba(255,255,255,.035); color:#d4d4d8; cursor:pointer; }
         #emissaoSearchWrapper {
             display: none; padding: 8px 10px 8px;
         }
@@ -2667,19 +2678,17 @@
     </div>
 
     <div id="emissaoClientChoiceModal" class="modal-overlay" style="z-index: 5000;">
-        <div class="modal-card" style="max-width:420px;width:92%;text-align:center;padding:30px 20px;border-radius:12px;background:#18181b;box-shadow:0 25px 50px -12px rgba(0,0,0,.5);border:1px solid #27272a;margin:auto;">
-            <div style="font-size:2.5rem;color:var(--color-primary);margin-bottom:20px;">
-                <i class="fa-solid fa-chart-column"></i>
-            </div>
-            <h2 style="font-family:var(--font-display);font-size:1.25rem;margin:0 0 10px;font-weight:700;color:#fff;">Como deseja visualizar?</h2>
-            <p id="emissaoClientChoiceText" style="color:var(--text-muted);font-size:.9rem;margin:0 0 30px;line-height:1.5;"></p>
-            <div style="display:flex;gap:15px;justify-content:center;">
-                <button class="btn-modern" onclick="resolveEmissaoClientChoice('total')" style="background:#3f3f46;color:#fff;flex:1;padding:10px;font-weight:600;border-radius:6px;">
-                    Total no período
-                </button>
-                <button class="btn-modern" onclick="resolveEmissaoClientChoice('mensal')" style="background:var(--color-primary);color:#09090b;flex:1;padding:10px;font-weight:700;border-radius:6px;">
-                    Mês a mês
-                </button>
+        <div class="emissao-choice-card" style="position:relative;">
+            <div class="emissao-choice-top"></div>
+            <button class="emissao-choice-close" type="button" onclick="closeEmissaoClientChoice()" title="Fechar"><i class="fa-solid fa-xmark"></i></button>
+            <div class="emissao-choice-body">
+                <div class="emissao-choice-icon"><i class="fa-solid fa-chart-column"></i></div>
+                <h2 class="emissao-choice-title">Como deseja visualizar?</h2>
+                <p id="emissaoClientChoiceText" class="emissao-choice-text"></p>
+                <div class="emissao-choice-actions">
+                    <button class="emissao-choice-total" type="button" onclick="resolveEmissaoClientChoice('total')">Total no período</button>
+                    <button class="emissao-choice-monthly" type="button" onclick="resolveEmissaoClientChoice('mensal')">Mês a mês</button>
+                </div>
             </div>
         </div>
     </div>
@@ -6396,7 +6405,7 @@ function flashConcentracaoBar(barIndex) {
 
         function askEmissaoClientChoice(name) {
             document.getElementById('emissaoClientChoiceText').textContent =
-                `Como deseja visualizar a emissão de ${name}?`;
+                `Escolha o período para visualizar a emissão de ${name}.`;
             document.getElementById('emissaoClientChoiceModal').style.display = 'flex';
             return new Promise(resolve => { emissaoClientChoiceResolver = resolve; });
         }
@@ -6496,6 +6505,8 @@ function flashConcentracaoBar(barIndex) {
         }
 
         async function showClientMonthlyEmissao(clientName) {
+            setInlineLoading('historicalChartLoading', true);
+            await waitForPaint();
             // Auto-switch to mensal when in diária + year (no month selected)
             if (currentDeliveryView === 'diaria' && activePillMonth === null) {
                 currentDeliveryView = 'mensal';
@@ -6522,6 +6533,7 @@ function flashConcentracaoBar(barIndex) {
                 }
                 renderClientChart();
             } catch (err) { console.error('Erro ao carregar visão do cliente:', err); }
+            finally { setInlineLoading('historicalChartLoading', false); }
         }
 
         async function resetEmissaoPareto() {
