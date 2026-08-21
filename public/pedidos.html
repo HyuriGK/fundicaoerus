@@ -1127,6 +1127,12 @@
             background: rgba(24, 24, 27, 0.94);
             flex-shrink: 0;
         }
+        .btn-mini-chart {
+            background:rgba(255,255,255,.05); border:1px solid var(--border-subtle); color:var(--text-muted);
+            padding:4px 12px; border-radius:6px; font-size:.75rem; cursor:pointer; transition:all .2s; font-weight:600;
+        }
+        .btn-mini-chart:hover { background:rgba(245,158,11,.1); color:var(--color-primary); }
+        .btn-mini-chart.active { background:var(--color-primary); color:#000; border-color:var(--color-primary); }
         #orderDetailsModal .modal-body {
             padding: 28px 32px;
             overflow-y: hidden;
@@ -2505,6 +2511,18 @@
                     <div class="chart-header-row" style="position: relative; display: flex; align-items: center; gap: 10px;">
                         <div class="chart-title-flex">Gráfico de Emissão de Pedidos</div>
                         <div style="position: absolute; right: 10px; display: flex; align-items: center; gap: 6px;">
+                            <div id="emissaoAbcMetricSelector" style="display:none;align-items:center;gap:15px;">
+                                <div style="display:flex;gap:8px;font-size:.7rem;color:var(--text-muted);text-transform:uppercase;font-weight:700;">
+                                    <span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:3px;background:#f59e0b;"></span>Classe A (70%)</span>
+                                    <span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:3px;background:#a1a1aa;"></span>Classe B (25%)</span>
+                                    <span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:3px;background:#3f3f46;"></span>Classe C (5%)</span>
+                                </div>
+                                <div style="width:1px;height:20px;background:var(--border-subtle);"></div>
+                                <div style="display:flex;gap:5px;">
+                                <button class="btn-mini-chart active" id="btnEmissaoAbcPeso" type="button" onclick="setEmissaoAbcMetric('peso')">Peso (kg)</button>
+                                <button class="btn-mini-chart" id="btnEmissaoAbcValor" type="button" onclick="setEmissaoAbcMetric('valor')">Valor (R$)</button>
+                                </div>
+                            </div>
                             <select id="modeFilterHistorical" onchange="updateHistoricalChart()"
                                 style="font-size: 0.7rem; padding: 5px 8px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-subtle); color: #a1a1aa; cursor: pointer; outline: none; border-radius: 4px;">
                                 <option value="month">Por Mês</option>
@@ -6507,6 +6525,7 @@ function flashConcentracaoBar(barIndex) {
         async function showClientMonthlyEmissao(clientName) {
             setInlineLoading('historicalChartLoading', true);
             await waitForPaint();
+            document.getElementById('emissaoAbcMetricSelector')?.style.setProperty('display', 'none');
             // Auto-switch to mensal when in diária + year (no month selected)
             if (currentDeliveryView === 'diaria' && activePillMonth === null) {
                 currentDeliveryView = 'mensal';
@@ -6570,6 +6589,7 @@ function flashConcentracaoBar(barIndex) {
         }
 
         let emissionDataCache = null;
+        let emissaoAbcMetric = 'peso';
         let emissionClientCache = {}; // Cache by "year-month"
         let selectedHistoricalDay = null;
         let selectedEmissionMonth = null;
@@ -6590,6 +6610,12 @@ function flashConcentracaoBar(barIndex) {
                     resolve();
                 }));
             });
+        }
+        function setEmissaoAbcMetric(metric) {
+            emissaoAbcMetric = metric === 'valor' ? 'valor' : 'peso';
+            document.getElementById('btnEmissaoAbcPeso')?.classList.toggle('active', emissaoAbcMetric === 'peso');
+            document.getElementById('btnEmissaoAbcValor')?.classList.toggle('active', emissaoAbcMetric === 'valor');
+            updateHistoricalChart();
         }
         async function waitForChartPaint(chart) {
             await waitForPaint();
@@ -6696,9 +6722,11 @@ function flashConcentracaoBar(barIndex) {
                 // Só limpa emissaoClientView ao sair do modo cliente — não ao mostrar overlay
                 if (viewMode !== 'client') { emissaoClientView = null; }
                 const emissaoSearchDiv = document.getElementById('emissaoSearchWrapper');
+                const emissaoAbcSelector = document.getElementById('emissaoAbcMetricSelector');
                 // Se está em visão de cliente (mensal ou diária), renderClientChart controla
                 // Usa viewMode !== 'client' para não precisar do isClientMode (overlay pode estar visível temporariamente)
                 if (viewMode === 'client' && emissaoClientView) {
+                    if (emissaoAbcSelector) emissaoAbcSelector.style.display = 'none';
                     if (emissaoSearchDiv) emissaoSearchDiv.style.display = 'block';
                     if (!isClientMode) return; // overlay ativo (diária+ANO sem cliente): aguarda seleção de mês
                     renderClientChart();
@@ -6707,6 +6735,7 @@ function flashConcentracaoBar(barIndex) {
                 if (emissaoMonthWrap) emissaoMonthWrap.style.display = isClientMode ? 'none' : '';
                 if (emissaoScrollWrap) emissaoScrollWrap.style.display = isClientMode ? 'block' : 'none';
                 if (emissaoSearchDiv) emissaoSearchDiv.style.display = isClientMode ? 'block' : 'none';
+                if (emissaoAbcSelector) emissaoAbcSelector.style.display = isClientMode ? 'flex' : 'none';
                 if (!isClientMode) { emissaoAllLabels = []; const si = document.getElementById('emissaoSearch'); if (si) si.value = ''; const sg = document.getElementById('emissaoSuggestions'); if (sg) sg.style.display = 'none'; }
                 const ctx = isClientMode
                     ? document.getElementById('chartEmissaoClient').getContext('2d')
@@ -6867,7 +6896,7 @@ function flashConcentracaoBar(barIndex) {
                         chartReady = true;
                     }
                 } else {
-                    if (titleEl) titleEl.innerText = 'Curva ABC - Emissão por Cliente · A até 80% | B até 95% | C restante';
+                    if (titleEl) titleEl.innerText = 'Curva ABC - Emissão por Cliente';
                     // MODO: POR CLIENTE (PARETO)
                     const cacheKey = `${selectedYear}-${selectedMonth}`;
                     let data = emissionClientCache[cacheKey];
@@ -6885,16 +6914,20 @@ function flashConcentracaoBar(barIndex) {
                     // Pareto Logic
                     const totalWeightAll = data.reduce((acc, row) => acc + row.totalPeso, 0);
                     const totalValueAll = data.reduce((acc, row) => acc + (row.totalValor || 0), 0);
-                    const sorted = [...data].sort((a, b) => b.totalPeso - a.totalPeso);
+                    const isValueMetric = emissaoAbcMetric === 'valor';
+                    const getMetricValue = row => isValueMetric ? Number(row.totalValor || 0) : Number(row.totalPeso || 0);
+                    const sorted = [...data].sort((a, b) => getMetricValue(b) - getMetricValue(a));
                     const labels = sorted.map(s => s.name);
                     const weightData = sorted.map(s => s.totalPeso);
                     const valueData = sorted.map(s => s.totalValor);
+                    const metricData = sorted.map(getMetricValue);
+                    const totalMetricAll = metricData.reduce((sum, value) => sum + value, 0);
                     let cumulative = 0;
-                    const dataPercent = sorted.map(s => {
-                        cumulative += s.totalPeso;
-                        return totalWeightAll > 0 ? (cumulative / totalWeightAll) * 100 : 0;
+                    const dataPercent = metricData.map(value => {
+                        cumulative += value;
+                        return totalMetricAll > 0 ? (cumulative / totalMetricAll) * 100 : 0;
                     });
-                    const abcClasses = dataPercent.map(percent => percent <= 80 ? 'A' : percent <= 95 ? 'B' : 'C');
+                    const abcClasses = dataPercent.map(percent => percent <= 70 ? 'A' : percent <= 95 ? 'B' : 'C');
                     emissaoAllLabels = labels;
                     const chartLabels = labels.map(name => name.length > 25 ? name.slice(0, 25) + '...' : name);
                     // Canvas height for vertical client list
@@ -6917,20 +6950,23 @@ function flashConcentracaoBar(barIndex) {
                             datasets: [
                                 {
                                     type: 'bar',
-                                    label: 'Peso (kg)',
-                                    data: weightData,
-                                    backgroundColor: abcClasses.map(abc => abc === 'A' ? '#10b981' : abc === 'B' ? '#f59e0b' : '#ef4444'),
+                                    label: isValueMetric ? 'Valor (R$)' : 'Peso (kg)',
+                                    data: metricData,
+                                    backgroundColor: abcClasses.map(abc => abc === 'A' ? '#f59e0b' : abc === 'B' ? '#a1a1aa' : '#3f3f46'),
                                     borderRadius: 4,
                                     xAxisID: 'x',
                                     extraData: valueData,
                                     extraTotalPeso: totalWeightAll,
                                     extraTotalValor: totalValueAll,
+                                    extraTotalMetric: totalMetricAll,
+                                    extraWeightData: weightData,
+                                    metric: emissaoAbcMetric,
                                     abcClasses,
                                     extraAccumulatedPercent: dataPercent
                                 }
                             ]
                         },
-                        options: getHistoricalOptions('kg', true, false, true)
+                        options: getHistoricalOptions(isValueMetric ? 'R$' : 'kg', true, false, true)
                     });
                     chartReady = true;
                     requestAnimationFrame(() => requestAnimationFrame(() => {
@@ -6964,7 +7000,7 @@ function flashConcentracaoBar(barIndex) {
                     position: 'bottom',
                     beginAtZero: true,
                     grid: { color: _gc() },
-                    ticks: { color: _tc() }
+                    ticks: { color: _tc(), callback: value => unit === 'R$' ? (valorVisible ? Number(value).toLocaleString('pt-BR', { style:'currency', currency:'BRL', maximumFractionDigits:0 }) : '-----') : formatNumber(value, 0) + ' kg' }
                 }
             };
             return {
@@ -7070,16 +7106,18 @@ function flashConcentracaoBar(barIndex) {
                                 const val = context.dataset.extraData ? context.dataset.extraData[context.dataIndex] : 0;
                                 const valStr = valorVisible ? val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-----';
                                 if (isPareto) {
+                                    const isValueMetric = context.dataset.metric === 'valor';
                                     const tPeso = context.dataset.extraTotalPeso || 0;
                                     const tValor = context.dataset.extraTotalValor || 0;
-                                    const pctPeso = tPeso > 0 ? (weight / tPeso * 100).toFixed(1) : '0.0';
-                                    const pctValor = (tValor > 0 && valorVisible) ? (val / tValor * 100).toFixed(1) : null;
+                                    const tMetric = context.dataset.extraTotalMetric || 0;
+                                    const pctMetric = tMetric > 0 ? (weight / tMetric * 100).toFixed(1) : '0.0';
+                                    const sourceWeight = Number(context.dataset.extraWeightData?.[context.dataIndex] || 0);
                                     const valorLine = valorVisible
-                                        ? `Valor: ${valStr} (${pctValor}%)`
+                                        ? `Valor: ${valStr}`
                                         : 'Valor: -----';
                                     return [
-                                        `Peso: ${weight.toLocaleString('pt-BR')} kg (${pctPeso}%)`,
-                                        valorLine,
+                                        isValueMetric ? `Valor: ${valorVisible ? weight.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-----'} (${pctMetric}%)` : `Peso: ${weight.toLocaleString('pt-BR')} kg (${pctMetric}%)`,
+                                        isValueMetric ? `Peso: ${sourceWeight.toLocaleString('pt-BR')} kg` : valorLine,
                                         `% Acumulada: ${Number(context.dataset.extraAccumulatedPercent?.[context.dataIndex] || 0).toFixed(1)}%`,
                                         `Classe ABC: ${context.dataset.abcClasses?.[context.dataIndex] || '-'}`,
                                         '',
