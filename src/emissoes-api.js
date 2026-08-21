@@ -96,6 +96,16 @@ const emissionUnitWeightSql = `
     )
 `;
 const emissionTotalWeightSql = `(${emissionUnitWeightSql} * ${emissionQtySql})`;
+const emissionModalTotalWeightSql = `(
+    COALESCE(
+        NULLIF(${emissionNumberSql('PESO_UNIT')}, 0),
+        NULLIF(${emissionNumberSql('PESO_PRODUTO')}, 0),
+        NULLIF(f.peso_liquido_pro, 0),
+        NULLIF(pp.peso_produto, 0),
+        pc.peso,
+        0
+    ) * ${emissionQtySql}
+)`;
 const emissionTotalValueSql = `
     (
         CASE
@@ -238,7 +248,7 @@ router.get('/client-summary', async (req, res) => {
             SELECT 
                 p.data->>'NOME_CLIENTE' as cliente,
                 p.data->>'ID_CLIENTE_CORE' as id_cliente,
-                SUM(${emissionTotalWeightSql}) as total_peso,
+                SUM(${emissionModalTotalWeightSql}) as total_peso,
                 SUM(
                     CASE
                         WHEN pc.peso IS NOT NULL AND CAST(COALESCE(p.data->>'PRECO_KG', '0') AS NUMERIC) > 0
