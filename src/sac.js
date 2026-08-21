@@ -47,7 +47,7 @@ router.get('/acoes', async (req, res) => {
     try {
         res.set('Cache-Control', 'no-store');
         await ensureAcoesStatusTable();
-        const result = await pool.query(`SELECT s.codigo AS "CODIGO_SAV", a.acao AS "ACAO",
+        const result = await pool.query(`SELECT s.codigo AS "CODIGO_SAV", s.situacao AS "SITUACAO_SAC", a.acao AS "ACAO",
             COALESCE(string_agg(DISTINCT concat_ws(' - ', r.responsavel->>'USU_CODIGO_SVU', r.responsavel->>'NOME_USUARIO_SVU'), ', '), '') AS "RESPONSAVEL",
             COALESCE(string_agg(DISTINCT NULLIF(r.responsavel->>'NOME_SETOR_SVU', ''), ', '), '') AS "SETOR_RESPONSAVEL",
             COALESCE(st.concluida, false) AS "CONCLUIDA"
@@ -56,9 +56,9 @@ router.get('/acoes', async (req, res) => {
             LEFT JOIN LATERAL jsonb_array_elements(COALESCE(s.data->'responsaveis', '[]'::jsonb)) r(responsavel)
                 ON NULLIF(r.responsavel->>'SVAC_ID_SVU', '')::integer = NULLIF(a.acao->>'ID_SVAC', '')::integer
             LEFT JOIN sac_acoes_status st ON st.sac_codigo = s.codigo AND st.acao_id = NULLIF(a.acao->>'ID_SVAC', '')::integer
-            GROUP BY s.codigo, a.acao, st.concluida
+            GROUP BY s.codigo, s.situacao, a.acao, st.concluida
             ORDER BY NULLIF(a.acao->>'DATA_PRAZO_SVAC', '') DESC NULLS LAST, s.codigo DESC`);
-        res.json(result.rows.map(row => ({ ...row, ACAO: normalizarRtf(row.ACAO) })));
+        res.json(result.rows.map(row => ({ ...row, ACAO: normalizarRtf(row.ACAO), SITUACAO_NOME: situacoes[row.SITUACAO_SAC] || 'NÃO DEFINIDO' })));
     } catch (error) { res.status(500).json({ error: 'Ações corretivas ainda não sincronizadas', details: error.message }); }
 });
 
