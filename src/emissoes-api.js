@@ -248,6 +248,7 @@ router.get('/client-summary', async (req, res) => {
             SELECT 
                 p.data->>'NOME_CLIENTE' as cliente,
                 p.data->>'ID_CLIENTE_CORE' as id_cliente,
+                COALESCE(NULLIF(TRIM(p.data->>'ID_CLIENTE_CORE'), ''), UPPER(TRIM(p.data->>'NOME_CLIENTE'))) as chave_cliente,
                 SUM(${emissionModalTotalWeightSql}) as total_peso,
                 SUM(
                     CASE
@@ -264,8 +265,8 @@ router.get('/client-summary', async (req, res) => {
             ${ownerScope.join}
             ${whereClause}
             ${ownerScope.condition}
-            GROUP BY 1, 2
-            ORDER BY 3 DESC
+            GROUP BY 1, 2, 3
+            ORDER BY 4 DESC
         `;
 
         const result = await pool.query(query, params);
@@ -273,6 +274,7 @@ router.get('/client-summary', async (req, res) => {
         const formatted = result.rows.map(row => ({
             id: row.id_cliente,
             name: row.cliente,
+            clientKey: row.chave_cliente,
             totalPeso: parseFloat(row.total_peso),
             totalValor: parseFloat(row.total_valor)
         }));
@@ -287,7 +289,7 @@ router.get('/client-summary', async (req, res) => {
 // GET /api/emissoes/list
 router.get('/list', async (req, res) => {
     try {
-        const { ano, mes, dia } = req.query;
+        const { ano, mes, dia, cliente } = req.query;
         if (!ano) {
             return res.status(400).json({ error: 'Ano é obrigatório.' });
         }
@@ -303,6 +305,11 @@ router.get('/list', async (req, res) => {
         if (dia) {
             whereClause += ` AND EXTRACT(DAY FROM (p.data->>'DATA_EMISSAO_PEDIDO')::date) = $${params.length + 1}`;
             params.push(dia);
+        }
+
+        if (cliente) {
+            whereClause += ` AND COALESCE(NULLIF(TRIM(p.data->>'ID_CLIENTE_CORE'), ''), UPPER(TRIM(p.data->>'NOME_CLIENTE'))) = $${params.length + 1}`;
+            params.push(String(cliente).trim());
         }
         whereClause += emissionServiceFilterSql;
         const ownerScope = addCommercialOwnerScope(req, params);

@@ -6963,6 +6963,7 @@ function flashConcentracaoBar(barIndex) {
                                     extraTotalMetric: totalMetricAll,
                                     extraWeightData: weightData,
                                     extraClientNames: labels,
+                                    extraClientKeys: sorted.map(item => item.clientKey || item.id || item.name),
                                     metric: emissaoAbcMetric,
                                     abcClasses,
                                     extraAccumulatedPercent: dataPercent
@@ -7214,6 +7215,7 @@ function flashConcentracaoBar(barIndex) {
                         // Pareto Click → abrir Registros filtrado pelo cliente
                         const chartDataset = chartHistorical.data.datasets[activeElements[0].datasetIndex];
                         const clientName = chartDataset?.extraClientNames?.[index] || emissaoAllLabels[index] || chartHistorical.data.labels[index];
+                        const clientKey = chartDataset?.extraClientKeys?.[index];
                         const mlbls = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
                         const mes = activePillMonth !== null ? activePillMonth + 1 : 'Todos';
                         try {
@@ -7222,14 +7224,17 @@ function flashConcentracaoBar(barIndex) {
                             openModal(true);
                             setInlineLoading('recordsLoadingOverlay', true);
                             await waitForPaint();
-                            const res = await fetch(`/api/emissoes/list?ano=${selectedYear}&mes=${mes}`);
+                            const clientParam = clientKey ? `&cliente=${encodeURIComponent(clientKey)}` : '';
+                            const res = await fetch(`/api/emissoes/list?ano=${selectedYear}&mes=${mes}${clientParam}`);
                             if (!res.ok) {
                                 setInlineLoading('recordsLoadingOverlay', false);
                                 return;
                             }
                             const allRecs = await res.json();
-                            const normalizeClient = value => String(value || '').trim().toUpperCase().replace(/s+/g, ' ');
-                            const clientRecs = allRecs.filter(r => normalizeClient(r.NOME_CLIENTE) === normalizeClient(clientName));
+                            const normalizeClient = value => String(value || '').trim().toUpperCase().replace(/\s+/g, ' ');
+                            const clientRecs = clientKey
+                                ? allRecs
+                                : allRecs.filter(r => normalizeClient(r.NOME_CLIENTE) === normalizeClient(clientName));
                             const periodoStr = mes !== 'Todos' ? `${mlbls[mes - 1]}/${selectedYear}` : String(selectedYear);
                             await showHistoricalDetails(clientRecs, `Emissão ${clientName} — ${periodoStr}`);
                         } catch (err) {
