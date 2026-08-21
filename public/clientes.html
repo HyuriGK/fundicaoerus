@@ -3665,10 +3665,11 @@ function openCrmActionDetailModal(actionKey, contact = null) {
     lockCrmActionModalScroll();
 }
 
-function openClosedCrmActionDetailModal(id) {
+function openClosedCrmActionDetailModal(id, contact = null, returnToHistory = true) {
     const action = (window.crmClosedActionsHistory || []).find(r => Number(r.id) === Number(id));
     if (!action) return;
-    window.returnToCrmActionHistory = true;
+    window.returnToCrmActionHistory = returnToHistory;
+    currentCrmActionContact = contact || getCrmActionLinkedContact(action);
     const stageLabels = {
         prospeccao: 'Prospeccao',
         cotacao: 'Cotacao',
@@ -3687,10 +3688,14 @@ function openClosedCrmActionDetailModal(id) {
         ['Criado em', action.createdAt ? formatDateTime(action.createdAt) : '-'],
         ['Atualizado por', action.updatedBy || '-']
     ].map(([label, value]) => `<div class="action-detail-field"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value || '-')}</strong></div>`).join('');
+    if (currentCrmActionContact) document.getElementById('crmActionDetailGrid').insertAdjacentHTML('beforeend', `<section id="crmActionContactInfo"><div style="color:#38bdf8;font-size:.72rem;font-weight:900;text-transform:uppercase;margin-bottom:10px;">Dados do contato</div><div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;font-size:.76rem;"><div><span class="muted">Data</span><br>${escapeHtml(formatDateTime(currentCrmActionContact.contato_em))}</div><div><span class="muted">Canal</span><br>${escapeHtml(currentCrmActionContact.canal || '-')}</div><div><span class="muted">Pedido</span><br>${escapeHtml(currentCrmActionContact.pedido || '-')}</div><div><span class="muted">Contato</span><br>${escapeHtml(currentCrmActionContact.pessoa_contatada || '-')}</div><div><span class="muted">Resultado</span><br>${escapeHtml(currentCrmActionContact.resultado || '-')}</div><div><span class="muted">Registrado por</span><br>${escapeHtml(currentCrmActionContact.crm_user || '-')}</div><div style="grid-column:1/-1;"><span class="muted">Resumo</span><br>${escapeHtml(currentCrmActionContact.resumo || '-')}</div></div></section>`);
+    const closingEntry = `<div class="action-notes-timeline"><div class="action-timeline-entry" style="border-color:rgba(16,185,129,.3);background:rgba(16,185,129,.08);"><strong style="display:block;color:#34d399;margin-bottom:4px;">Ação concluída</strong>${escapeHtml(action.updatedBy || action.crmUser || '-')} · ${escapeHtml(action.closedAt ? formatDateTime(action.closedAt) : '-')}</div></div>`;
     document.getElementById('crmActionDetailText').innerHTML = `
         <div style="color:#fbbf24;font-size:0.64rem;font-weight:900;text-transform:uppercase;margin-bottom:7px;">Ação encerrada</div>
         <div>${escapeHtml(action.nextAction || 'Sem descrição cadastrada.')}</div>
-        ${action.notes ? `<div style="margin-top:16px;color:#a1a1aa;font-size:0.72rem;font-weight:900;text-transform:uppercase;">Linha do tempo</div>${renderActionNotesTimeline(action.notes)}` : ''}
+        <div style="margin-top:16px;color:#a1a1aa;font-size:0.72rem;font-weight:900;text-transform:uppercase;">Linha do tempo</div>
+        ${renderActionNotesTimeline(action.notes)}
+        ${closingEntry}
     `;
     const observationWrap = document.getElementById('crmActionObservationWrap');
     const addObservationBtn = document.getElementById('crmActionAddObservationBtn');
@@ -4755,13 +4760,25 @@ function initContactsColumnFilters() {
     });
 }
 
-function openContactActionModal(id) {
+async function openContactActionModal(id) {
     const contact = [...(clientContactsHistory || []), ...(latestContactsByOrder || []), ...(latestContacts || [])].find(c => Number(c.id) === Number(id));
     if (!contact) return;
     const clientName = normalizeClientName(contact.cliente_nome || '');
     const owner = String(contact.crm_user || '').trim().toLowerCase();
     const actions = Object.entries(crmRecords || {}).map(([key, record]) => ({ key, clientName:record.clienteNome || key.split('::').pop(), ...record }));
     const action = actions.find(record => normalizeClientName(record.clientName) === clientName && (!owner || String(record.crmUser || '').trim().toLowerCase() === owner)) || actions.find(record => normalizeClientName(record.clientName) === clientName);
+    if (!action) {
+        try {
+            const res = await fetch('/api/clientes-firebird/crm/actions/history');
+            const json = await res.json();
+            if (!res.ok || !json.success) throw new Error(json.error || 'Falha ao consultar histórico');
+            window.crmClosedActionsHistory = json.data || [];
+            const closedAction = window.crmClosedActionsHistory.find(record => normalizeClientName(record.clienteNome) === clientName && (!owner || String(record.crmUser || '').trim().toLowerCase() === owner)) || window.crmClosedActionsHistory.find(record => normalizeClientName(record.clienteNome) === clientName);
+            if (closedAction) return openClosedCrmActionDetailModal(closedAction.id, contact, false);
+        } catch (e) {
+            console.error(e);
+        }
+    }
     if (!action) return toast('Ação não encontrada', 'Este contato não possui uma ação aberta vinculada.', 'info');
     openCrmActionDetailModal(action.key, contact);
 }
