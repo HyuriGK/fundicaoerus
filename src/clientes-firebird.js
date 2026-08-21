@@ -2742,6 +2742,35 @@ router.post('/crm', async (req, res) => {
     }
 });
 
+router.post('/crm/actions/date', async (req, res) => {
+    try {
+        await ensureClientesCrmTable();
+        const clienteNome = String(req.body.clienteNome || '').trim();
+        const crmUser = String(req.body.crmUser || '').trim();
+        const dueDate = String(req.body.dueDate || '').trim();
+        const updatedBy = String(req.user?.name || req.user?.user || '').trim();
+        const parsedDate = new Date(`${dueDate}T12:00:00`);
+        if (!clienteNome || !crmUser || !/^\d{4}-\d{2}-\d{2}$/.test(dueDate) || Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== dueDate) {
+            return res.status(400).json({ success: false, error: 'Data inválida.' });
+        }
+        const result = await pool.query(`
+            UPDATE clientes_crm
+            SET data_acao = $3, updated_by = NULLIF($4, ''), updated_at = NOW()
+            WHERE cliente_nome = $1 AND crm_user = $2
+            RETURNING cliente_nome, crm_user, empresa, codigo, status, proxima_acao, data_acao, notas, updated_by, created_at, updated_at
+        `, [clienteNome, crmUser, dueDate, updatedBy]);
+        if (!result.rowCount) return res.status(404).json({ success: false, error: 'Ação aberta não encontrada.' });
+        const row = result.rows[0];
+        res.json({ success: true, data: {
+            clienteNome: row.cliente_nome, crmUser: row.crm_user, empresa: row.empresa, codigo: row.codigo,
+            status: row.status || '', nextAction: row.proxima_acao || '', dueDate: row.data_acao.toISOString().slice(0, 10),
+            notes: row.notas || '', updatedBy: row.updated_by || '', createdAt: row.created_at, updatedAt: row.updated_at
+        }});
+    } catch (err) {
+        res.status(500).json({ success: false, error: 'Erro ao alterar data da ação', details: err.message });
+    }
+});
+
 router.get('/crm/actions/history', async (req, res) => {
     try {
         await ensureClientesCrmTable();
