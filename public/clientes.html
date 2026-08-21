@@ -840,6 +840,7 @@
         .action-timeline-tools button { width:28px; height:28px; border:1px solid rgba(255,255,255,.12); border-radius:6px; background:rgba(255,255,255,.04); color:#a1a1aa; cursor:pointer; }
         .action-timeline-tools button:hover { color:#fff; border-color:rgba(56,189,248,.5); background:rgba(56,189,248,.12); }
         .action-timeline-tools button.action-note-delete:hover { color:#fecaca; border-color:rgba(239,68,68,.5); background:rgba(239,68,68,.12); }
+        .action-timeline-edit { width:100%; min-height:72px; resize:vertical; border:1px solid rgba(56,189,248,.55); border-radius:6px; background:#09090b; color:#f4f4f5; padding:8px 10px; font:inherit; line-height:1.45; outline:none; }
         .action-detail-actions { display:flex; justify-content:flex-end; gap:10px; padding-top:16px; margin-top:auto; }
         .action-history-list { max-height:min(62vh, 560px); overflow:auto; display:flex; flex-direction:column; gap:10px; }
         .action-history-row { border:1px solid rgba(255,255,255,0.08); border-radius:9px; background:rgba(255,255,255,0.025); padding:12px; display:grid; grid-template-columns:minmax(0, 1fr) auto; gap:12px; align-items:start; }
@@ -3568,6 +3569,8 @@ function unlockCrmActionModalScroll() {
     delete document.body.dataset.crmActionScrollLocked;
 }
 
+let crmActionNoteEditing = null;
+
 function renderActionNotesTimeline(notes, actionKey = '') {
     const entries = String(notes || '').split(/\n{2,}/).map((value, index) => {
         const text = value.trim();
@@ -3576,7 +3579,15 @@ function renderActionNotesTimeline(notes, actionKey = '') {
         return { text, index, dateValue };
     }).filter(entry => entry.text).sort((a, b) => (a.dateValue - b.dateValue) || (a.index - b.index));
     if (!entries.length) return '';
-    return `<div class="action-notes-timeline">${entries.map(entry => `<div class="action-timeline-entry">${escapeHtml(entry.text)}${actionKey ? `<div class="action-timeline-tools"><button type="button" title="Editar observação" onclick="editCrmActionNote('${escapeJs(actionKey)}', ${entry.index})"><i class="fa-solid fa-pen"></i></button><button type="button" class="action-note-delete" title="Excluir observação" onclick="deleteCrmActionNote('${escapeJs(actionKey)}', ${entry.index})"><i class="fa-solid fa-xmark"></i></button></div>` : ''}</div>`).join('')}</div>`;
+    return `<div class="action-notes-timeline">${entries.map(entry => {
+        const editing = actionKey && crmActionNoteEditing?.actionKey === actionKey && crmActionNoteEditing?.index === entry.index;
+        const content = editing ? `<textarea class="action-timeline-edit" id="crmActionNoteEdit-${entry.index}">${escapeHtml(entry.text)}</textarea>` : escapeHtml(entry.text);
+        const controls = actionKey ? (editing
+            ? `<div class="action-timeline-tools"><button type="button" title="Confirmar edição" onclick="confirmCrmActionNoteEdit('${escapeJs(actionKey)}', ${entry.index})"><i class="fa-solid fa-check"></i></button><button type="button" class="action-note-delete" title="Cancelar edição" onclick="cancelCrmActionNoteEdit()"><i class="fa-solid fa-xmark"></i></button></div>`
+            : `<div class="action-timeline-tools"><button type="button" title="Editar observação" onclick="editCrmActionNote('${escapeJs(actionKey)}', ${entry.index})"><i class="fa-solid fa-pen"></i></button><button type="button" class="action-note-delete" title="Excluir observação" onclick="deleteCrmActionNote('${escapeJs(actionKey)}', ${entry.index})"><i class="fa-solid fa-xmark"></i></button></div>`)
+            : '';
+        return `<div class="action-timeline-entry">${content}${controls}</div>`;
+    }).join('')}</div>`;
 }
 
 function renderOpenActionDetailText(action) {
@@ -3599,16 +3610,32 @@ async function saveCrmActionNotes(action, entries, auditAction) {
     renderOpenActionDetailText(action);
 }
 
-async function editCrmActionNote(actionKey, index) {
+function editCrmActionNote(actionKey, index) {
     const action = getCrmActionRecord(actionKey);
     if (!action) return;
     const entries = String(action.notes || '').split(/\n{2,}/).map(value => value.trim()).filter(Boolean);
     if (!entries[index]) return;
-    const edited = await window.erusPrompt('Edite a observação da ação.', entries[index], { title:'Editar observação', okText:'Salvar', cancelText:'Cancelar', icon:'fa-solid fa-pen' });
-    if (edited === null) return;
-    if (!String(edited).trim()) return toast('Observação vazia', 'Digite um texto para salvar.', 'warning');
-    entries[index] = String(edited).trim();
+    crmActionNoteEditing = { actionKey, index };
+    renderOpenActionDetailText(action);
+    document.getElementById(`crmActionNoteEdit-${index}`)?.focus();
+}
+
+async function confirmCrmActionNoteEdit(actionKey, index) {
+    const action = getCrmActionRecord(actionKey);
+    const input = document.getElementById(`crmActionNoteEdit-${index}`);
+    if (!action || !input) return;
+    const entries = String(action.notes || '').split(/\n{2,}/).map(value => value.trim()).filter(Boolean);
+    const edited = String(input.value || '').trim();
+    if (!edited) return toast('Observação vazia', 'Digite um texto para salvar.', 'warning');
+    entries[index] = edited;
+    crmActionNoteEditing = null;
     await saveCrmActionNotes(action, entries, 'EDITAR_OBSERVACAO_ACAO_CRM');
+}
+
+function cancelCrmActionNoteEdit() {
+    const action = getCrmActionRecord(crmActionNoteEditing?.actionKey);
+    crmActionNoteEditing = null;
+    if (action) renderOpenActionDetailText(action);
 }
 
 async function deleteCrmActionNote(actionKey, index) {
@@ -3757,6 +3784,7 @@ function closeCrmActionDetailModal() {
     if (observationText) observationText.value = '';
     if (addObservationBtn) addObservationBtn.style.display = '';
     resetCrmActionObservation();
+    crmActionNoteEditing = null;
     currentCrmActionDetailKey = '';
     currentCrmActionContact = null;
     document.getElementById('crmActionDetailModal').style.display = 'none';
