@@ -17,6 +17,7 @@ function normalizarRtf(value) {
 
 router.get('/list', async (req, res) => {
     try {
+        res.set('Cache-Control', 'no-store');
         const { busca = '', situacao = '', origem = '' } = req.query;
         const filters = [], values = [];
         if (busca.trim()) {
