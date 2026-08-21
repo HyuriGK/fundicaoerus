@@ -3293,10 +3293,11 @@ function renderCrm() {
         const actionsCount = document.getElementById('crmActionsCount');
         if (actionsCount) actionsCount.textContent = actions.length;
         box.innerHTML = actions.map(r => {
-            const owner = r.crmUser ? `<span class="crm-action-owner">${escapeHtml(r.crmUser)}</span>` : '';
             const linkedContact = getCrmActionLinkedContact(r);
+            const responsible = String(linkedContact?.crm_user || r.crmUser || '').trim();
+            const owner = responsible ? `<span class="crm-action-owner">${escapeHtml(responsible)}</span>` : '';
             const order = String(r.pedido || linkedContact?.pedido || '').trim();
-            const completeButton = String(r.crmUser || getLoggedCrmUser()).toLowerCase() === getLoggedCrmUser()
+            const completeButton = String(responsible || getLoggedCrmUser()).toLowerCase() === getLoggedCrmUser()
                 ? `<button class="crm-action-check" onclick="completeCrmAction('${escapeJs(r.clientName)}')" title="Concluir a\u00e7\u00e3o"><i class="fa-solid fa-check"></i></button>`
                 : '<span></span>';
             const dueKey = String(r.dueDate || '').slice(0, 10);
@@ -3682,13 +3683,16 @@ function getCrmActionLinkedContact(action) {
     const clientName = normalizeClientName(action.clientName || '');
     const owner = String(action.crmUser || '').trim().toLowerCase();
     const contacts = [...(latestContacts || []), ...(latestContactsByOrder || [])];
-    return contacts.find(contact => normalizeClientName(contact.cliente_nome || '') === clientName && (!owner || String(contact.crm_user || '').trim().toLowerCase() === owner)) || contacts.find(contact => normalizeClientName(contact.cliente_nome || '') === clientName) || null;
+    const actionText = String(action.nextAction || '').trim();
+    const actionDate = String(action.dueDate || '').slice(0, 10);
+    return contacts.find(contact => normalizeClientName(contact.cliente_nome || '') === clientName && ((actionText && String(contact.proxima_acao || '').trim() === actionText) || (actionDate && String(contact.data_proxima_acao || '').slice(0, 10) === actionDate))) || contacts.find(contact => normalizeClientName(contact.cliente_nome || '') === clientName && (!owner || String(contact.crm_user || '').trim().toLowerCase() === owner)) || contacts.find(contact => normalizeClientName(contact.cliente_nome || '') === clientName) || null;
 }
 
 function openCrmActionDetailModal(actionKey, contact = null) {
     const action = getCrmActionRecord(actionKey);
     if (!action) return;
     currentCrmActionContact = contact || getCrmActionLinkedContact(action);
+    action.crmUser = currentCrmActionContact?.crm_user || action.crmUser || getLoggedCrmUser() || '-';
     const client = clientList.find(c => c.name === action.clientName);
     const stage = client ? getCrmStage(client).label : (action.status || '-');
     const dueDate = action.dueDate ? formatDateBRFull(action.dueDate) : 'Sem data definida';
@@ -4121,6 +4125,7 @@ async function saveCrmToDatabase(clientName, record, options = {}) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 clienteNome: clientName,
+                crmUser: record.crmUser || '',
                 empresa: cadastro?.empresa || null,
                 codigo: cadastro?.codigo || null,
                 status: record.status || '',
@@ -5177,6 +5182,7 @@ async function saveClientContact() {
             const currentRecord = crmRecords[crmKey] || {};
             await saveCrmToDatabase(crmKey, {
                 ...currentRecord,
+                crmUser: json.data.crm_user || '',
                 nextAction: payload.proximaAcao || currentRecord.nextAction || '',
                 dueDate: payload.dataProximaAcao || currentRecord.dueDate || '',
                 updatedAt: new Date().toISOString()

@@ -2674,7 +2674,7 @@ router.get('/crm', async (req, res) => {
 router.post('/crm', async (req, res) => {
     try {
         await ensureClientesCrmTable();
-        const crmUser = String(req.user?.user || req.user?.name || '').trim();
+        const crmUser = String(req.body.crmUser || req.user?.user || req.user?.name || '').trim();
         const userName = String(req.user?.name || req.user?.user || '').trim();
         const clienteNome = String(req.body.clienteNome || '').trim();
         const empresa = req.body.empresa === undefined || req.body.empresa === null || req.body.empresa === '' ? null : Number(req.body.empresa);
