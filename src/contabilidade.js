@@ -23,7 +23,8 @@ router.get('/notas-servico', async (req, res) => {
             notaFiscal: row.nota_fiscal,
             valor: Number(row.valor) || 0,
             cfop: row.cfop,
-            centroCusto: [row.centro_custo_codigo, row.centro_custo].filter(Boolean).join(' - ') || 'Sem centro de custo'
+            centroCustoCodigo: row.centro_custo_codigo || '',
+            centroCustoDescricao: row.centro_custo || 'Sem centro de custo'
         }));
         res.json({ success: true, dataInicio, dataFim, notas, total: notas.reduce((sum, nota) => sum + nota.valor, 0) });
     } catch (error) {
