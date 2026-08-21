@@ -1157,6 +1157,7 @@
             background:#18181b; color:#f4f4f5;
         }
         .client-filter-select option { background:#18181b; color:#f4f4f5; }
+        .client-status-badge.alert { background:rgba(245,158,11,0.14); color:#f59e0b; }
         .commercial-owner-select {
             width:100%; min-width:170px; height:30px;
             background:#18181d; border:1px solid rgba(255,255,255,0.13);
@@ -1652,7 +1653,7 @@
                     </tr>
                     <tr>
                         <th><input class="client-filter-input" data-col="0" placeholder="Código"></th>
-                        <th><input class="client-filter-input" data-col="1" placeholder="Status"></th>
+                        <th><select class="client-filter-input client-filter-select" data-col="1" data-exact="true" title="Status calculado pela última compra"><option value="">Todos os status</option><option value="ativo">ATIVO — compra nos últimos 45 dias</option><option value="alerta">ALERTA — sem compra entre 46 e 90 dias</option><option value="inativo">INATIVO — sem compra há mais de 90 dias</option></select></th>
                         <th><input class="client-filter-input" data-col="2" placeholder="Razão social"></th>
                         <th><input class="client-filter-input" data-col="3" placeholder="Fantasia"></th>
                         <th><input class="client-filter-input" data-col="4" placeholder="CNPJ"></th>
@@ -5089,8 +5090,9 @@ function renderClientsRecords() {
     const visibleRows = clientRecordsLimit === 'all' ? rows : rows.slice(0, clientRecordsLimit);
     tbody.innerHTML = visibleRows.map(c => {
         const values = getClientRecordValues(c);
-        const statusClass = c.bloqueado ? 'blocked' : c.ativo ? 'active' : 'inactive';
-        const statusText = c.bloqueado ? 'Bloq.' : c.ativo ? 'Ativo' : 'Inativo';
+        const portfolioStatus = getClientPortfolioStatus(c);
+        const statusClass = portfolioStatus.cls;
+        const statusText = portfolioStatus.label;
         return `<tr>
             ${clientCell(values[0], { style:'color:var(--color-primary);font-weight:800;' })}
             ${clientCell(statusText, { html:`<span class="client-status-badge ${statusClass}">${statusText}</span>` })}
@@ -5173,7 +5175,7 @@ function getClientRecordValues(c) {
     const address = [c.logradouro, c.numero, c.bairro, c.cep ? 'CEP ' + c.cep : null].filter(Boolean).join(', ');
     return [
         c.codigo || '-',
-        c.bloqueado ? 'bloqueado' : c.ativo ? 'ativo' : 'inativo',
+        getClientPortfolioStatus(c).key,
         c.razaoSocial || '-',
         c.fantasia || '-',
         c.cnpjCpf || '-',
@@ -5185,6 +5187,16 @@ function getClientRecordValues(c) {
         fmtDateShort(c.dataCadastro),
         address || '-'
     ];
+}
+
+function getClientPortfolioStatus(c) {
+    const code = String(c.codigo || '').trim();
+    const name = normalizeClientName(c.razaoSocial || c.fantasia || '');
+    const client = clientList.find(item => (code && String(item.code || '').trim() === code) || normalizeClientName(item.name) === name);
+    const days = client?.days;
+    if (Number.isFinite(days) && days <= 45) return { key:'ativo', label:'Ativo', cls:'active' };
+    if (Number.isFinite(days) && days <= 90) return { key:'alerta', label:'Alerta', cls:'alert' };
+    return { key:'inativo', label:'Inativo', cls:'inactive' };
 }
 
 function renderCommercialOwnerSelect(c) {
@@ -5598,6 +5610,7 @@ function copyClientCellText(text) {
 
 document.querySelectorAll('.client-filter-input').forEach(input => {
     input.addEventListener('input', renderClientsRecords);
+    input.addEventListener('change', renderClientsRecords);
 });
 
 document.addEventListener('keydown', e => {
