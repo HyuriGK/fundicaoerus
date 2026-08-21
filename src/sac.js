@@ -2,6 +2,17 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../lib/db');
 
+async function ensureAcoesStatusTable() {
+    await pool.query(`CREATE TABLE IF NOT EXISTS sac_acoes_status (
+        sac_codigo INTEGER NOT NULL,
+        acao_id INTEGER NOT NULL,
+        concluida BOOLEAN NOT NULL DEFAULT false,
+        concluida_em TIMESTAMPTZ,
+        atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (sac_codigo, acao_id)
+    )`);
+}
+
 const situacoes = { 0: 'ABERTO', 1: 'RESOLVIDO', 2: 'CANCELADO' };
 const procedencias = { 0: 'NÃO DEFINIDO', 1: 'PROCEDENTE', 2: 'IMPROCEDENTE' };
 
@@ -59,12 +70,32 @@ router.get('/detail/:codigo', async (req, res) => {
         const result = await pool.query('SELECT data FROM sac_firebird_sync WHERE codigo = $1', [codigo]);
         if (!result.rows.length) return res.status(404).json({ error: 'SAC não encontrado na sincronização' });
         const data = normalizarRtf(result.rows[0].data);
+        await ensureAcoesStatusTable();
+        const { rows: statuses } = await pool.query('SELECT acao_id, concluida, concluida_em FROM sac_acoes_status WHERE sac_codigo = $1', [codigo]);
+        const statusByAction = new Map(statuses.map(status => [Number(status.acao_id), status]));
         data.acoes = (data.acoes || []).map(acao => ({
             ...acao,
             RESPONSAVEIS: (data.responsaveis || []).filter(usuario => Number(usuario.SVAC_ID_SVU) === Number(acao.ID_SVAC)).map(usuario => `${usuario.USU_CODIGO_SVU} - ${usuario.NOME_USUARIO_SVU}`).filter(Boolean).join(', ') || '—'
         }));
+        data.acoes.forEach(acao => {
+            const status = statusByAction.get(Number(acao.ID_SVAC));
+            acao.CONCLUIDA = Boolean(status?.concluida);
+            acao.CONCLUIDA_EM = status?.concluida_em || null;
+        });
         res.json({ ...data, SITUACAO_NOME: situacoes[data.SITUACAO_SAV] || 'NÃO DEFINIDO', PROCEDENCIA_NOME: procedencias[data.PROCEDENCIA_SAV] || 'NÃO DEFINIDO' });
     } catch (error) { res.status(500).json({ error: 'Erro ao consultar SAC sincronizado', details: error.message }); }
+});
+
+router.post('/:codigo/acoes/:acaoId/status', express.json(), async (req, res) => {
+    try {
+        const sacCodigo = Number(req.params.codigo), acaoId = Number(req.params.acaoId), concluida = Boolean(req.body?.concluida);
+        if (!Number.isInteger(sacCodigo) || !Number.isInteger(acaoId)) return res.status(400).json({ error: 'Ação inválida' });
+        await ensureAcoesStatusTable();
+        await pool.query(`INSERT INTO sac_acoes_status (sac_codigo, acao_id, concluida, concluida_em)
+            VALUES ($1, $2, $3, CASE WHEN $3 THEN NOW() ELSE NULL END)
+            ON CONFLICT (sac_codigo, acao_id) DO UPDATE SET concluida = EXCLUDED.concluida, concluida_em = EXCLUDED.concluida_em, atualizado_em = NOW()`, [sacCodigo, acaoId, concluida]);
+        res.json({ success: true, concluida });
+    } catch (error) { res.status(500).json({ error: 'Não foi possível atualizar a ação' }); }
 });
 
 module.exports = router;
