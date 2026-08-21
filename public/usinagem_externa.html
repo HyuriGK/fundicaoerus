@@ -1284,7 +1284,7 @@
             <div class="modal-header">
                 <h2 class="modal-title">Registros de Envio</h2>
                 <div style="display: flex; align-items: center; gap: 10px;">
-                    <button class="month-btn" onclick="exportarRelatorioTerceirosAno()"><i class="fa-solid fa-file-excel"></i> RELATÓRIO ANUAL</button>
+                    <button class="month-btn" onclick="exportarRelatorioTerceirosPeriodo()"><i class="fa-solid fa-file-excel"></i> RELATÓRIO DO PERÍODO</button>
                     <input type="text" id="filterByCode" class="code-filter-input" placeholder="Filtrar por código..."
                         oninput="filtrarPorCodigo(this.value)" autocomplete="off">
                     <span class="modal-close" onclick="fecharModalTopo()"><i class="fa-solid fa-xmark"></i></span>
@@ -3117,9 +3117,13 @@
             const wb = XLSX.utils.book_new(); const ws = XLSX.utils.aoa_to_sheet(wsData);
             XLSX.utils.book_append_sheet(wb, ws, "Relatorio"); XLSX.writeFile(wb, `Relatorio_${mA.replace('/', '-')}.xlsx`);
         }
-        function exportarRelatorioTerceirosAno() {
+        function exportarRelatorioTerceirosPeriodo() {
             const grupos = new Map();
-            registros.filter(r => String(r.data || '').slice(0, 4) === String(selectedYear)).forEach(r => {
+            const periodo = selectedMonthIndex === -1 ? String(selectedYear) : `${MONTHS_SHORT[selectedMonthIndex]}_${selectedYear}`;
+            registros.filter(r => {
+                const data = new Date(`${String(r.data || '').slice(0, 10)}T12:00:00`);
+                return data.getFullYear() === Number(selectedYear) && (selectedMonthIndex === -1 || data.getMonth() === selectedMonthIndex);
+            }).forEach(r => {
                 const terceiro = String(r.terceiro || '').trim();
                 const codigo = String(r.codigo || '').trim();
                 if (!terceiro || !codigo) return;
@@ -3130,12 +3134,12 @@
                 grupos.set(key, grupo);
             });
             const linhas = [...grupos.values()].sort((a, b) => a.terceiro.localeCompare(b.terceiro, 'pt-BR') || a.codigo.localeCompare(b.codigo, 'pt-BR'));
-            if (!linhas.length) return alert(`Nenhum registro terceirizado encontrado em ${selectedYear}.`);
+            if (!linhas.length) return alert(`Nenhum registro terceirizado encontrado no período selecionado.`);
             const ws = XLSX.utils.aoa_to_sheet([['DATA', 'CÓDIGO', 'DESCRIÇÃO', 'TERCEIRO', 'QTD TOTAL TERCEIRIZADA', 'VALOR UNITÁRIO'], ...linhas.map(r => [formatDate(r.data), r.codigo, r.descricao, r.terceiro, r.quantidade, r.valorUnit])]);
             ws['!cols'] = [{ wch: 13 }, { wch: 16 }, { wch: 48 }, { wch: 34 }, { wch: 24 }, { wch: 18 }];
             const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, `Terceiros ${selectedYear}`);
-            XLSX.writeFile(wb, `Relatorio_Terceiros_${selectedYear}.xlsx`);
+            XLSX.utils.book_append_sheet(wb, ws, 'Terceiros');
+            XLSX.writeFile(wb, `Relatorio_Terceiros_${periodo}.xlsx`);
         }
         function applyColumnFilters() {
             const filters = Array.from(document.querySelectorAll('#terceiroTable .filter-input-table')).map(i => i.value.toUpperCase());
