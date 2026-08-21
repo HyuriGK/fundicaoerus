@@ -135,6 +135,7 @@
             flex-direction: column;
             height: 100vh;
             min-height: 100vh;
+            overflow: hidden;
         }
         /* --- SIDE NAVIGATION (PEDIDOS STANDARD) --- */
         .side-menu-trigger {
@@ -222,7 +223,8 @@
             color: #fff;
         }
         .dashboard-content {
-            flex-grow: 1;
+            flex: 1 1 auto;
+            min-height: 0;
             padding: 20px 32px 20px 32px;
             display: flex;
             flex-direction: column;
@@ -1281,6 +1283,7 @@
             <div class="modal-header">
                 <h2 class="modal-title">Registros de Envio</h2>
                 <div style="display: flex; align-items: center; gap: 10px;">
+                    <button class="month-btn" onclick="exportarRelatorioTerceirosAno()"><i class="fa-solid fa-file-excel"></i> RELATÓRIO ANUAL</button>
                     <input type="text" id="filterByCode" class="code-filter-input" placeholder="Filtrar por código..."
                         oninput="filtrarPorCodigo(this.value)" autocomplete="off">
                     <span class="modal-close" onclick="fecharModalTopo()"><i class="fa-solid fa-xmark"></i></span>
@@ -3112,6 +3115,26 @@
             filtrados.forEach(r => wsData.push([formatDate(r.data), r.carga, r.terceiro, r.codigo, r.cliente || '-', r.quant, r.valor]));
             const wb = XLSX.utils.book_new(); const ws = XLSX.utils.aoa_to_sheet(wsData);
             XLSX.utils.book_append_sheet(wb, ws, "Relatorio"); XLSX.writeFile(wb, `Relatorio_${mA.replace('/', '-')}.xlsx`);
+        }
+        function exportarRelatorioTerceirosAno() {
+            const grupos = new Map();
+            registros.filter(r => r.tipo === 'terceiro' && String(r.data || '').slice(0, 4) === String(selectedYear)).forEach(r => {
+                const terceiro = String(r.terceiro || '').trim();
+                const codigo = String(r.codigo || '').trim();
+                if (!terceiro || !codigo) return;
+                const valorUnit = Number(r.valor_unit || 0);
+                const key = [codigo, r.descricao || '', terceiro, valorUnit].join('|');
+                const grupo = grupos.get(key) || { codigo, descricao: r.descricao || '-', terceiro, quantidade: 0, valorUnit };
+                grupo.quantidade += Number(r.quant || 0);
+                grupos.set(key, grupo);
+            });
+            const linhas = [...grupos.values()].sort((a, b) => a.terceiro.localeCompare(b.terceiro, 'pt-BR') || a.codigo.localeCompare(b.codigo, 'pt-BR'));
+            if (!linhas.length) return alert(`Nenhum registro terceirizado encontrado em ${selectedYear}.`);
+            const ws = XLSX.utils.aoa_to_sheet([['CÓDIGO', 'DESCRIÇÃO', 'TERCEIRO', 'QTD TOTAL TERCEIRIZADA', 'VALOR UNITÁRIO'], ...linhas.map(r => [r.codigo, r.descricao, r.terceiro, r.quantidade, r.valorUnit])]);
+            ws['!cols'] = [{ wch: 16 }, { wch: 48 }, { wch: 34 }, { wch: 24 }, { wch: 18 }];
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, `Terceiros ${selectedYear}`);
+            XLSX.writeFile(wb, `Relatorio_Terceiros_${selectedYear}.xlsx`);
         }
         function applyColumnFilters() {
             const filters = Array.from(document.querySelectorAll('#terceiroTable .filter-input-table')).map(i => i.value.toUpperCase());
