@@ -506,6 +506,8 @@
             '<div id="eg-financeiro" class="erus-nav-group-wrapper collapsed">' +
                 '<a href="balanco.html" data-stip="Balanço" class="erus-nav-link' + isActive('balanco.html') + '">' +
                     '<i class="fa-solid fa-scale-balanced"></i><span>Balanço</span></a>' +
+                '<a href="contabilidade.html" data-stip="Contabilidade" class="erus-nav-link' + isActive('contabilidade.html') + '">' +
+                    '<i class="fa-solid fa-calculator"></i><span>Contabilidade</span></a>' +
             '</div>' +
             // RH
             '<div class="erus-nav-group-sep" data-stip="RH" onclick="erusSidebarToggleGroup(\'eg-rh\')">' +
