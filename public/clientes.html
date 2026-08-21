@@ -3530,6 +3530,7 @@ function buildActionCompletionObservation(action) {
 }
 
 let currentCrmActionDetailKey = '';
+let currentCrmActionContact = null;
 let crmActionModalPreviousBodyOverflow = '';
 let crmActionModalPreviousHtmlOverflow = '';
 
@@ -3572,6 +3573,7 @@ function renderOpenActionDetailText(action) {
         <div>${escapeHtml(action.nextAction || 'Sem descrição cadastrada.')}</div>
         <div style="margin-top:16px;color:#a1a1aa;font-size:0.72rem;font-weight:900;text-transform:uppercase;">Linha do tempo</div>
         ${renderActionNotesTimeline(action.notes)}
+        ${currentCrmActionContact ? `<div style="margin-top:18px;color:#38bdf8;font-size:0.72rem;font-weight:900;text-transform:uppercase;">Dados do contato</div><div style="margin-top:8px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;font-size:0.76rem;"><div><span class="muted">Data</span><br>${escapeHtml(formatDateTime(currentCrmActionContact.contato_em))}</div><div><span class="muted">Canal</span><br>${escapeHtml(currentCrmActionContact.canal || '-')}</div><div><span class="muted">Pedido</span><br>${escapeHtml(currentCrmActionContact.pedido || '-')}</div><div><span class="muted">Contato</span><br>${escapeHtml(currentCrmActionContact.pessoa_contatada || '-')}</div><div><span class="muted">Resultado</span><br>${escapeHtml(currentCrmActionContact.resultado || '-')}</div><div><span class="muted">Registrado por</span><br>${escapeHtml(currentCrmActionContact.crm_user || '-')}</div><div style="grid-column:1/-1;"><span class="muted">Resumo</span><br>${escapeHtml(currentCrmActionContact.resumo || '-')}</div></div>` : ''}
     `;
 }
 
@@ -3598,15 +3600,16 @@ async function confirmCrmActionDueDate() {
         const json = await res.json();
         if (!res.ok || !json.success) throw new Error(json.error || 'Erro ao alterar data');
         crmRecords[action.key] = { ...(crmRecords[action.key] || {}), ...json.data };
-        renderCrm(); renderDashboard(); openCrmActionDetailModal(action.key);
+        renderCrm(); renderDashboard(); openCrmActionDetailModal(action.key, currentCrmActionContact);
         if (window.erusAudit) window.erusAudit('ALTERAR_DATA_ACAO_CRM', { cliente:action.clientName, data_acao:dueDate });
         toast('Data alterada', 'A nova data foi salva no Neon.', 'success');
     } catch (e) { toast('Erro', e.message || 'Falha ao alterar data.', 'danger'); }
 }
 
-function openCrmActionDetailModal(actionKey) {
+function openCrmActionDetailModal(actionKey, contact = null) {
     const action = getCrmActionRecord(actionKey);
     if (!action) return;
+    currentCrmActionContact = contact;
     const client = clientList.find(c => c.name === action.clientName);
     const stage = client ? getCrmStage(client).label : (action.status || '-');
     const dueDate = action.dueDate ? formatDateBRFull(action.dueDate) : 'Sem data definida';
@@ -3700,6 +3703,7 @@ function closeCrmActionDetailModal() {
         addObservationBtn.dataset.mode = 'open';
     }
     currentCrmActionDetailKey = '';
+    currentCrmActionContact = null;
     document.getElementById('crmActionDetailModal').style.display = 'none';
     unlockCrmActionModalScroll();
     if (window.returnToCrmActionHistory) {
@@ -3942,7 +3946,7 @@ function renderDashboard() {
                 : '';
             const detail = [c.canal, c.resultado || c.motivo].filter(Boolean).join(' | ') || '-';
             return `
-            <div class="crm-feed-row" onclick="openClientContactViewModal(${Number(c.id)})">
+            <div class="crm-feed-row" onclick="openContactActionModal(${Number(c.id)})">
                 <div class="crm-feed-date">
                     ${c.contato_em ? fmtDateShort(c.contato_em) : '-'}
                     <span>${contactTime || 'Sem hor\u00e1rio'}</span>
@@ -4647,7 +4651,7 @@ function renderLatestContacts() {
     tbody.innerHTML = filteredContacts.map(c => {
         const date = c.contato_em ? formatDateBRFull(c.contato_em) : '-';
         const name = c.cliente_nome || 'Cliente';
-        return `<tr onclick="openClientContactViewModal(${Number(c.id)})" style="cursor:pointer;">
+        return `<tr onclick="openContactActionModal(${Number(c.id)})" style="cursor:pointer;">
             <td style="color:#38bdf8;font-weight:800;">${date}</td>
             <td style="color:#a1a1aa;font-weight:800;text-transform:uppercase;">${escapeHtml(c.crm_user || '-')}</td>
             <td style="font-weight:800;color:#fff;">${escapeHtml(name)}</td>
@@ -4704,6 +4708,17 @@ function initContactsColumnFilters() {
             else renderLatestContacts();
         });
     });
+}
+
+function openContactActionModal(id) {
+    const contact = [...(clientContactsHistory || []), ...(latestContactsByOrder || []), ...(latestContacts || [])].find(c => Number(c.id) === Number(id));
+    if (!contact) return;
+    const clientName = normalizeClientName(contact.cliente_nome || '');
+    const owner = String(contact.crm_user || '').trim().toLowerCase();
+    const actions = Object.entries(crmRecords || {}).map(([key, record]) => ({ key, clientName:record.clienteNome || key.split('::').pop(), ...record }));
+    const action = actions.find(record => normalizeClientName(record.clientName) === clientName && (!owner || String(record.crmUser || '').trim().toLowerCase() === owner)) || actions.find(record => normalizeClientName(record.clientName) === clientName);
+    if (!action) return toast('Ação não encontrada', 'Este contato não possui uma ação aberta vinculada.', 'info');
+    openCrmActionDetailModal(action.key, contact);
 }
 
 function openClientContactViewModal(id) {
