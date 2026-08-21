@@ -6884,6 +6884,7 @@ function flashConcentracaoBar(barIndex) {
                     });
                     const abcClasses = dataPercent.map(percent => percent <= 80 ? 'A' : percent <= 95 ? 'B' : 'C');
                     emissaoAllLabels = labels;
+                    const chartLabels = labels.map(name => name.length > 25 ? name.slice(0, 25) + '...' : name);
                     // Canvas height for vertical client list
                     const scrollWrapEl = document.getElementById('emissaoScrollWrapper');
                     const canvasInnerEl = document.getElementById('emissaoCanvasInner');
@@ -6900,19 +6901,8 @@ function flashConcentracaoBar(barIndex) {
                     chartHistorical = new Chart(ctx, {
                         type: 'bar',
                         data: {
-                            labels: labels,
+                            labels: chartLabels,
                             datasets: [
-                                {
-                                    type: 'line',
-                                    label: '% Acumulada',
-                                    data: dataPercent,
-                                    borderColor: '#fff',
-                                    backgroundColor: 'rgba(255,255,255,0.1)',
-                                    borderWidth: 2,
-                                    pointRadius: 3,
-                                    tension: 0.3,
-                                    xAxisID: 'xPercent'
-                                },
                                 {
                                     type: 'bar',
                                     label: 'Peso (kg)',
@@ -6923,7 +6913,8 @@ function flashConcentracaoBar(barIndex) {
                                     extraData: valueData,
                                     extraTotalPeso: totalWeightAll,
                                     extraTotalValor: totalValueAll,
-                                    abcClasses
+                                    abcClasses,
+                                    extraAccumulatedPercent: dataPercent
                                 }
                             ]
                         },
@@ -6962,14 +6953,6 @@ function flashConcentracaoBar(barIndex) {
                     beginAtZero: true,
                     grid: { color: _gc() },
                     ticks: { color: _tc() }
-                },
-                xPercent: {
-                    type: 'linear',
-                    position: 'top',
-                    beginAtZero: true,
-                    max: 100,
-                    grid: { drawOnChartArea: false },
-                    ticks: { color: _tc(), callback: value => value + '%' }
                 }
             };
             return {
@@ -7043,7 +7026,14 @@ function flashConcentracaoBar(barIndex) {
                         }
                     } : { display: false },
                     tooltip: {
+                        position: isHorizontalPareto ? 'nearest' : 'average',
+                        xAlign: isHorizontalPareto ? 'left' : undefined,
+                        yAlign: isHorizontalPareto ? 'center' : undefined,
                         callbacks: {
+                            title: function (contexts) {
+                                if (!contexts?.length) return '';
+                                return isPareto ? (emissaoAllLabels[contexts[0].dataIndex] || contexts[0].label) : contexts[0].label;
+                            },
                             beforeBody: function (contexts) {
                                 if (!isMoldagemMonthly || !contexts.length) return '';
                                 const dataset = contexts.find(context => context.dataset.moldagemType)?.dataset;
@@ -7078,6 +7068,7 @@ function flashConcentracaoBar(barIndex) {
                                     return [
                                         `Peso: ${weight.toLocaleString('pt-BR')} kg (${pctPeso}%)`,
                                         valorLine,
+                                        `% Acumulada: ${Number(context.dataset.extraAccumulatedPercent?.[context.dataIndex] || 0).toFixed(1)}%`,
                                         `Classe ABC: ${context.dataset.abcClasses?.[context.dataIndex] || '-'}`,
                                         '',
                                         '🖱 Clique para abrir os registros'
@@ -7093,7 +7084,8 @@ function flashConcentracaoBar(barIndex) {
                 },
                 interaction: {
                     mode: 'index',
-                    intersect: false
+                    intersect: false,
+                    axis: isHorizontalPareto ? 'y' : 'x'
                 },
                 onClick: async (e, elements) => {
                     const activeElements = chartHistorical.getElementsAtEventForMode(e, 'index', { intersect: false }, true);
