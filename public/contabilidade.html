@@ -28,7 +28,7 @@
         </header>
         <section class="cards">
             <article class="card"><i class="fa-solid fa-file-invoice"></i><div class="label">Notas de serviço</div><div class="value" id="qtd">—</div></article>
-            <article class="card"><i class="fa-solid fa-brazilian-real-sign"></i><div class="label">Valor total</div><div class="value" id="total">—</div></article>
+            <article class="card" style="cursor:pointer" onclick="toggleValorTotal()"><i id="totalEye" class="fa-solid fa-eye-slash"></i><div class="label">Valor total</div><div class="value" id="total" data-real-value="R$ 0,00">R$ -----</div></article>
             <article class="card"><i class="fa-solid fa-building"></i><div class="label">Prestadores</div><div class="value" id="prestadores">—</div></article>
         </section>
         <section class="report">
@@ -41,6 +41,8 @@
         document.addEventListener('dragstart', event => event.preventDefault());
         document.addEventListener('selectstart', event => { if (!event.target.closest('input, textarea')) event.preventDefault(); });
         const brl=v=>Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+        let valorTotalVisivel=false;
+        function toggleValorTotal(){valorTotalVisivel=!valorTotalVisivel;const valor=document.getElementById('total'),icone=document.getElementById('totalEye');valor.textContent=valorTotalVisivel?(valor.dataset.realValue||'R$ 0,00'):'R$ -----';icone.className=`fa-solid fa-eye${valorTotalVisivel?'':'-slash'}`;}
         const esc=v=>String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
         const data=v=>v?new Date(v).toLocaleDateString('pt-BR',{timeZone:'UTC'}):'—';
         const hoje=new Date(), primeiro=new Date(hoje.getFullYear(),hoje.getMonth(),1);
@@ -56,7 +58,7 @@
         async function carregar(){
             const body=document.getElementById('linhas'), status=document.getElementById('status'); body.innerHTML='<tr><td colspan="7" class="empty loading">Consultando Firebird...</td></tr>'; status.textContent='Consultando';
             try { const r=await fetch(`/api/contabilidade/notas-servico?dataInicio=${inicio.value}&dataFim=${fim.value}`), json=await r.json(); if(!r.ok||!json.success) throw new Error(json.error); const notas=json.notas||[];
-                qtd.textContent=notas.length; total.textContent=brl(json.total); prestadores.textContent=new Set(notas.map(n=>n.prestador).filter(Boolean)).size; status.textContent=`${notas.length} registros encontrados`;
+                qtd.textContent=notas.length; total.dataset.realValue=brl(json.total); total.textContent=valorTotalVisivel?total.dataset.realValue:'R$ -----'; prestadores.textContent=new Set(notas.map(n=>n.prestador).filter(Boolean)).size; status.textContent=`${notas.length} registros encontrados`;
                 body.innerHTML=notas.length?notas.map(n=>`<tr data-row><td>${data(n.data)}</td><td>${esc(n.cnpj||'—')}</td><td class="prestador" title="${esc(n.prestador||'—')}">${esc(n.prestador||'—')}</td><td>${esc(n.notaFiscal)}</td><td class="value">${brl(n.valor)}</td><td>${esc(n.cfop||'—')}</td><td>${esc(n.centroCustoCodigo||'—')}</td><td class="center" title="${esc(n.centroCustoDescricao)}">${esc(n.centroCustoDescricao)}</td></tr>`).join(''):'<tr><td colspan="8" class="empty">Nenhuma nota de serviço no período.</td></tr>';filtrar();requestAnimationFrame(alinharColunas);
             } catch(e) { status.textContent='Erro na consulta'; body.innerHTML=`<tr><td colspan="7" class="empty">${esc(e.message||'Falha ao consultar relatório.')}</td></tr>`; }
         }
