@@ -7,7 +7,7 @@ const queryFirebird = db => new Promise((resolve, reject) => db.query(`
         c.ID_COM AS COMPRA_ID,
         cp.ITEM_CPR AS ITEM,
         COALESCE(cpcc.CODIGO_CPCC, 0) AS CENTRO_ITEM_ID,
-        c.EMISSAO_COM AS DATA,
+        c.ENTRADA_COM AS DATA,
         f.CNPJ_CPF_FRN AS CNPJ,
         f.RAZAO_SOCIAL_FRN AS PRESTADOR,
         c.NOTA_COM AS NOTA_FISCAL,
