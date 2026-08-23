@@ -2336,7 +2336,10 @@
             const json = await adminRequest('/api/page-locks', { method:'GET' });
             const locks = {};
             (json.data || []).forEach(l => locks[l.page_id] = l);
+            const systemMaintenance = locks['__system_maintenance__'] || {};
+            const systemMaintenanceActive = systemMaintenance.is_locked === true;
             adminContent(`<div class="admin-skin">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:18px;padding:18px 20px;border:1px solid ${systemMaintenanceActive ? 'rgba(239,68,68,.35)' : 'rgba(255,255,255,.09)'};border-radius:12px;background:${systemMaintenanceActive ? 'rgba(239,68,68,.09)' : 'rgba(255,255,255,.025)'}"><div><div style="display:flex;align-items:center;gap:9px;font-weight:800;color:${systemMaintenanceActive ? '#f87171' : '#e4e4e7'}"><i class="fa-solid fa-screwdriver-wrench"></i> Manutenção geral do sistema</div><div style="margin-top:6px;font-size:.78rem;color:#a1a1aa">Quando ativada, todos os usuários serão redirecionados à página de manutenção. Apenas Desenvolvedor continua navegando.</div></div><button class="admin-action-btn" style="white-space:nowrap;color:${systemMaintenanceActive ? '#10b981' : '#f87171'};background:${systemMaintenanceActive ? 'rgba(16,185,129,.12)' : 'rgba(239,68,68,.12)'}" onclick="nativeToggleSystemMaintenance(${!systemMaintenanceActive})">${systemMaintenanceActive ? '<i class="fa-solid fa-lock-open"></i> Encerrar manutenção' : '<i class="fa-solid fa-screwdriver-wrench"></i> Ativar manutenção'}</button></div>
                 <div class="admin-info"><i class="fa-solid fa-circle-info"></i> Paginas bloqueadas mostrarao aviso de manutencao. Telas em desenvolvimento ficam ocultas no sidebar e aparecem em Desenvolvimentos.</div>
                 <div class="table-container"><table id="adminPageLocksTable"><thead><tr><th>Pagina (Arquivo)</th><th>Status Atual</th><th>Acao</th></tr></thead><tbody>
                     ${ADMIN_LOCKABLE_PAGES.map(page => {
@@ -2363,6 +2366,14 @@
             showToast(lock ? 'Pagina Bloqueada' : 'Pagina Liberada', `${page} agora esta ${label}.`, lock ? 'info' : 'success');
             await loadNativeLocks();
         } catch(e) { showToast('Erro', e.message || 'Falha ao alterar bloqueio.', 'danger'); }
+    }
+
+    async function nativeToggleSystemMaintenance(lock) {
+        try {
+            const data = await adminRequest('/api/page-locks/toggle', { method:'POST', body:JSON.stringify({ page_id:'__system_maintenance__', is_locked:lock, lock_reason:'system_maintenance' }) });
+            showToast(lock ? 'Manutenção Geral Ativada' : 'Manutenção Geral Encerrada', lock ? 'Usuários serão direcionados para a página de manutenção.' : 'O acesso ao sistema foi liberado.', lock ? 'warning' : 'success');
+            await loadNativeLocks();
+        } catch(e) { showToast('Erro', e.message || 'Falha ao alterar manutenção geral.', 'danger'); }
     }
 
     async function loadNativeCommunication() {

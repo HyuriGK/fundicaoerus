@@ -54,12 +54,20 @@
         const page = window.location.pathname.split('/').pop() || 'index.html';
         const role = (localStorage.getItem('erus_role') || 'Visitante').toLowerCase();
 
+        if (page === 'login.html' || page === 'manutencao.html') return;
+
         // Desenvolvedores e Admins ignoram bloqueios manuais, mas NÃO sync locks
         try {
             const response = await fetch('/api/page-locks');
             const result = await response.json();
 
             if (result.success && Array.isArray(result.data)) {
+                const systemMaintenance = result.data.find(l => l.page_id === '__system_maintenance__');
+                if (systemMaintenance && systemMaintenance.is_locked && role !== 'desenvolvedor') {
+                    logActivity('ACESSO_BLOQUEADO', { motivo: 'manutencao geral do sistema' });
+                    window.location.replace('manutencao.html');
+                    return;
+                }
                 const lock = result.data.find(l => l.page_id === page);
                 if (lock) {
                     // Sincronização: apenas indicador flutuante (toast), nunca bloqueia o acesso
