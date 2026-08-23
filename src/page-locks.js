@@ -28,7 +28,12 @@ router.get('/', async (req, res) => {
     try {
         await ensureSyncColumns();
         const result = await pool.query('SELECT * FROM page_locks');
-        res.json({ success: true, data: result.rows });
+        const role = String(req.user && req.user.role || '').toLowerCase();
+        res.json({
+            success: true,
+            data: result.rows,
+            can_bypass_system_maintenance: role === 'desenvolvedor'
+        });
     } catch (error) {
         console.error('Erro ao buscar bloqueios:', error);
         res.status(500).json({ success: false, message: 'Erro interno ao buscar bloqueios' });

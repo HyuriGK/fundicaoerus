@@ -1,4 +1,56 @@
 (function() {
+    var page = window.location.pathname.split('/').pop() || 'index.html';
+    if (page === 'login.html' || page === 'manutencao.html') return;
+
+    var authenticated = localStorage.getItem('erus_auth') === 'true';
+    var token = localStorage.getItem('erus_token');
+    var role = (localStorage.getItem('erus_role') || '').toLowerCase();
+    if (!authenticated || !token) return;
+
+    if (localStorage.getItem('erus_system_maintenance') === 'true' && role !== 'desenvolvedor') {
+        window.location.replace('manutencao.html');
+        return;
+    }
+
+    var style = document.createElement('style');
+    style.id = 'erus-maintenance-boot-guard';
+    style.textContent = 'html{visibility:hidden!important;background:#09090b!important}';
+    document.documentElement.appendChild(style);
+
+    function revealPage() {
+        if (style.parentNode) style.parentNode.removeChild(style);
+    }
+
+    fetch('/api/page-locks', {
+        cache: 'no-store',
+        headers: { 'Authorization': 'Bearer ' + token }
+    })
+        .then(function(response) {
+            if (response.status === 401) {
+                localStorage.removeItem('erus_auth');
+                localStorage.removeItem('erus_token');
+                window.location.replace('login.html');
+                return null;
+            }
+            return response.json();
+        })
+        .then(function(result) {
+            if (!result) return;
+            var lock = result.success && Array.isArray(result.data)
+                ? result.data.find(function(item) { return item.page_id === '__system_maintenance__'; })
+                : null;
+            if (lock && lock.is_locked && !result.can_bypass_system_maintenance) {
+                localStorage.setItem('erus_system_maintenance', 'true');
+                window.location.replace('manutencao.html');
+                return;
+            }
+            localStorage.removeItem('erus_system_maintenance');
+            revealPage();
+        })
+        .catch(revealPage);
+})();
+
+(function() {
     try {
         var pages = JSON.parse(localStorage.getItem('erus_monetary_pages') || '[]');
         var currentPage = (window.location.pathname.split('/').pop() || 'index.html');

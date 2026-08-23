@@ -63,8 +63,9 @@
 
             if (result.success && Array.isArray(result.data)) {
                 const systemMaintenance = result.data.find(l => l.page_id === '__system_maintenance__');
-                if (systemMaintenance && systemMaintenance.is_locked && role !== 'desenvolvedor') {
+                if (systemMaintenance && systemMaintenance.is_locked && !result.can_bypass_system_maintenance) {
                     logActivity('ACESSO_BLOQUEADO', { motivo: 'manutencao geral do sistema' });
+                    localStorage.setItem('erus_system_maintenance', 'true');
                     window.location.replace('manutencao.html');
                     return;
                 }

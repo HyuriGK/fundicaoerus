@@ -219,18 +219,22 @@
     </main>
     <script>
         function logout() {
-            ['erus_auth', 'erus_token', 'erus_username', 'erus_user', 'erus_role', 'erus_monetary_pages', 'erus_can_view_monetary'].forEach(key => localStorage.removeItem(key));
+            ['erus_auth', 'erus_token', 'erus_username', 'erus_user', 'erus_role', 'erus_monetary_pages', 'erus_can_view_monetary', 'erus_system_maintenance'].forEach(key => localStorage.removeItem(key));
             window.location.replace('login.html');
         }
 
         async function checkMaintenance() {
             if (!localStorage.getItem('erus_auth') || !localStorage.getItem('erus_token')) return logout();
-            if ((localStorage.getItem('erus_role') || '').toLowerCase() === 'desenvolvedor') return window.location.replace('index.html');
             try {
                 const response = await fetch('/api/page-locks', { headers: { Authorization: 'Bearer ' + localStorage.getItem('erus_token') } });
                 const data = await response.json();
                 const lock = (data.data || []).find(item => item.page_id === '__system_maintenance__');
-                if (!lock || !lock.is_locked) window.location.replace('index.html');
+                if (data.can_bypass_system_maintenance || !lock || !lock.is_locked) {
+                    localStorage.removeItem('erus_system_maintenance');
+                    window.location.replace('index.html');
+                } else {
+                    localStorage.setItem('erus_system_maintenance', 'true');
+                }
             } catch (_) {}
         }
 
