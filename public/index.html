@@ -1048,6 +1048,58 @@
 
         }
 
+        .system-insights {
+            min-width: 0;
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            overflow: hidden;
+            font-family: var(--font-main);
+        }
+
+        .system-insights-label {
+            flex: 0 0 auto;
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            color: var(--color-primary);
+            font-family: var(--font-mono);
+            font-size: 0.68rem;
+            font-weight: 700;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+        }
+
+        .system-insights-track { min-width: 0; overflow: hidden; }
+        .system-insights-list {
+            display: flex;
+            width: max-content;
+            animation: system-insights-scroll 42s linear infinite;
+        }
+        .system-insights-track:hover .system-insights-list { animation-play-state: paused; }
+        .system-insight {
+            display: inline-flex;
+            align-items: center;
+            gap: 9px;
+            padding-right: 48px;
+            color: var(--text-muted);
+            font-size: .82rem;
+            white-space: nowrap;
+        }
+        .system-insight i { color: var(--color-primary); font-size: .72rem; }
+        .system-insight.warning i { color: #fbbf24; }
+        .system-insight.danger i { color: #f87171; }
+        @keyframes system-insights-scroll { to { transform: translateX(-50%); } }
+
+        .top-header .index-header-tools,
+        .top-header > div:last-child { display: none !important; }
+
+        @media (max-width: 700px) {
+            .system-insights-label { font-size: .6rem; }
+            .system-insight { font-size: .72rem; padding-right: 32px; }
+        }
+
 
         .search-input {
 
@@ -5402,6 +5454,14 @@
 
 
             <header class="top-header">
+                <div class="system-insights" aria-label="Insights do sistema">
+                    <span class="system-insights-label"><i class="fa-solid fa-wand-magic-sparkles"></i> Insights</span>
+                    <div class="system-insights-track">
+                        <div class="system-insights-list" id="system-insights-list">
+                            <span class="system-insight"><i class="fa-solid fa-circle-notch fa-spin"></i> Carregando dados do sistema...</span>
+                        </div>
+                    </div>
+                </div>
 
 
                 <div class="index-header-tools" style="display: flex; align-items: center; gap: 15px;">
@@ -5839,6 +5899,7 @@
             <span style="display: flex; align-items: center; gap: 6px;"><span class="live-dot"></span> FUNDIÇÃO ERUS &copy; 2026</span>
 
 
+            <span id="footer-user-info" style="display:flex; align-items:center; gap:8px;"></span>
             <span id="clock-display"></span>
 
 
@@ -9749,6 +9810,8 @@
 
                     }
 
+                    updateSystemInsights(fatTotalWeight, fatPrev, metaVal, cartKg, totalRefWeight, scrapPct, dashboardData.carteira);
+
 
                 }
 
@@ -10605,18 +10668,36 @@
 
                     const isLight = (window.ErusTheme && window.ErusTheme.isLight());
                     const nameColor = isLight ? '#000000' : '#ffffff';
-                    document.getElementById('header-greeting').innerHTML = `${greeting}, <span style="color:${nameColor} !important; font-weight:700; opacity:1 !important;">${userName}</span>`;
-
-
                     const roleColor = (rawRole.toUpperCase() === 'GERENTE COMERCIAL') ? '#ef4444' : 'var(--color-primary)';
+                    const footerUser = document.getElementById('footer-user-info');
+                    if (footerUser) footerUser.innerHTML = `<span style="color:${nameColor}; font-family:var(--font-main); font-weight:700;">${userName}</span><span style="color:${roleColor}; font-size:.68rem; text-transform:uppercase; letter-spacing:.05em;">${rawRole}</span>`;
 
 
-                    document.getElementById('header-role').style.color = roleColor;
+                }
 
-
-                    document.getElementById('header-role').innerHTML = `<i class="fa-solid fa-id-badge" style="margin-right:4px;"></i> <span>${rawRole}</span>`;
-
-
+                function updateSystemInsights(fatTotalWeight, fatPrev, metaVal, cartKg, totalRefWeight, scrapPct, topClients) {
+                    const items = [];
+                    const ton = value => `${(Number(value || 0) / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} t`;
+                    if (metaVal > 0) {
+                        const pct = fatTotalWeight / metaVal * 100;
+                        items.push({ type: pct >= 100 ? 'success' : 'warning', text: `Faturamento atingiu ${pct.toFixed(1)}% da meta mensal (${ton(fatTotalWeight)} de ${ton(metaVal)}).` });
+                    }
+                    if (fatPrev > 0) {
+                        const diff = (fatTotalWeight - fatPrev) / fatPrev * 100;
+                        items.push({ type: diff >= 0 ? 'success' : 'warning', text: `Peso faturado está ${Math.abs(diff).toFixed(1)}% ${diff >= 0 ? 'acima' : 'abaixo'} do mês anterior.` });
+                    }
+                    if (cartKg > 0) items.push({ type: 'info', text: `Carteira atual: ${ton(cartKg)} em pedidos a atender.` });
+                    if (totalRefWeight > 0) items.push({ type: scrapPct > 3.5 ? 'danger' : 'warning', text: `Refugo no mês: ${ton(totalRefWeight)} (${scrapPct.toFixed(2)}% do volume apurado).` });
+                    const topClient = Array.isArray(topClients) ? topClients[0] : null;
+                    if (topClient?.cliente && Number(topClient.pesoKg) > 0 && cartKg > 0) {
+                        const concentration = Number(topClient.pesoKg) / cartKg * 100;
+                        items.push({ type: concentration >= 30 ? 'warning' : 'info', text: `${topClient.cliente} concentra ${concentration.toFixed(1)}% do peso da carteira.` });
+                    }
+                    const list = document.getElementById('system-insights-list');
+                    if (!list || !items.length) return;
+                    const icon = { success: 'fa-circle-check', warning: 'fa-triangle-exclamation', danger: 'fa-circle-exclamation', info: 'fa-chart-line' };
+                    const markup = items.map(item => `<span class="system-insight ${item.type}"><i class="fa-solid ${icon[item.type]}"></i>${item.text}</span>`).join('');
+                    list.innerHTML = markup + markup;
                 }
 
                 function applyClientConcentrationVisibility() {
