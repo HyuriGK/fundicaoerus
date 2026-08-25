@@ -30,7 +30,7 @@ const queryFirebird = db => new Promise((resolve, reject) => db.query(`
      AND cpcc.CPR_SERIE_CPCC = cp.SERIE_CPR
      AND cpcc.CPR_ITEM_CPCC = cp.ITEM_CPR
     LEFT JOIN CENTRO_CUSTO cc ON cc.CODIGO_CTU = cpcc.CTU_CODIGO_CPCC
-    WHERE c.TIPO_NOTA_COM IN ('57', '99')
+    WHERE c.TIPO_NOTA_COM IN ('55', '57', '99')
 `, (error, rows) => error ? reject(error) : resolve(rows || [])));
 
 async function syncNotasServico() {
