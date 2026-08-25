@@ -14,6 +14,10 @@ const queryFirebird = db => new Promise((resolve, reject) => db.query(`
         c.NOTA_COM AS NOTA_FISCAL,
         COALESCE(cpcc.VALOR_CPCC, cp.VALOR_PRODUTOS_CPR, 0) AS VALOR,
         COALESCE(cp.CFOP_CPR, c.CFOP_COM) AS CFOP,
+        COALESCE(cp.VALOR_ICMS_CPR, 0) AS ICMS,
+        COALESCE(cp.VALOR_IPI_CPR, 0) AS IPI,
+        COALESCE(cp.PIS_VALOR_CPR, 0) AS PIS,
+        COALESCE(cp.COFINS_VALOR_CPR, 0) AS COFINS,
         cc.CODIGO_CTU AS CENTRO_CUSTO_CODIGO,
         cc.NOME_CTU AS CENTRO_CUSTO
     FROM COMPRA c
@@ -47,6 +51,10 @@ async function syncNotasServico() {
                 nota_fiscal VARCHAR(80),
                 valor NUMERIC(15,2) NOT NULL DEFAULT 0,
                 cfop VARCHAR(30),
+                icms NUMERIC(15,2) NOT NULL DEFAULT 0,
+                ipi NUMERIC(15,2) NOT NULL DEFAULT 0,
+                pis NUMERIC(15,2) NOT NULL DEFAULT 0,
+                cofins NUMERIC(15,2) NOT NULL DEFAULT 0,
                 centro_custo_codigo VARCHAR(30),
                 centro_custo TEXT,
                 atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -54,17 +62,21 @@ async function syncNotasServico() {
             );
             CREATE INDEX IF NOT EXISTS idx_notas_servico_firebird_sync_data ON notas_servico_firebird_sync (data DESC);
             ALTER TABLE notas_servico_firebird_sync ADD COLUMN IF NOT EXISTS tipo_nota VARCHAR(10);
+            ALTER TABLE notas_servico_firebird_sync ADD COLUMN IF NOT EXISTS icms NUMERIC(15,2) NOT NULL DEFAULT 0;
+            ALTER TABLE notas_servico_firebird_sync ADD COLUMN IF NOT EXISTS ipi NUMERIC(15,2) NOT NULL DEFAULT 0;
+            ALTER TABLE notas_servico_firebird_sync ADD COLUMN IF NOT EXISTS pis NUMERIC(15,2) NOT NULL DEFAULT 0;
+            ALTER TABLE notas_servico_firebird_sync ADD COLUMN IF NOT EXISTS cofins NUMERIC(15,2) NOT NULL DEFAULT 0;
         `);
         await client.query('BEGIN');
         await client.query('TRUNCATE TABLE notas_servico_firebird_sync');
         for (let i = 0; i < rows.length; i += 250) {
             const chunk = rows.slice(i, i + 250), values = [], params = [];
             chunk.forEach((row, index) => {
-                const n = index * 12;
-                values.push(`($${n + 1},$${n + 2},$${n + 3},$${n + 4},$${n + 5},$${n + 6},$${n + 7},$${n + 8},$${n + 9},$${n + 10},$${n + 11},$${n + 12})`);
-                params.push(row.COMPRA_ID, row.TIPO_NOTA, row.ITEM, row.CENTRO_ITEM_ID, row.DATA, row.CNPJ, row.PRESTADOR, row.NOTA_FISCAL, row.VALOR, row.CFOP, row.CENTRO_CUSTO_CODIGO, row.CENTRO_CUSTO);
+                const n = index * 16;
+                values.push(`($${n + 1},$${n + 2},$${n + 3},$${n + 4},$${n + 5},$${n + 6},$${n + 7},$${n + 8},$${n + 9},$${n + 10},$${n + 11},$${n + 12},$${n + 13},$${n + 14},$${n + 15},$${n + 16})`);
+                params.push(row.COMPRA_ID, row.TIPO_NOTA, row.ITEM, row.CENTRO_ITEM_ID, row.DATA, row.CNPJ, row.PRESTADOR, row.NOTA_FISCAL, row.VALOR, row.CFOP, row.ICMS, row.IPI, row.PIS, row.COFINS, row.CENTRO_CUSTO_CODIGO, row.CENTRO_CUSTO);
             });
-            await client.query(`INSERT INTO notas_servico_firebird_sync (compra_id,tipo_nota,item,centro_item_id,data,cnpj,prestador,nota_fiscal,valor,cfop,centro_custo_codigo,centro_custo) VALUES ${values.join(',')}`, params);
+            await client.query(`INSERT INTO notas_servico_firebird_sync (compra_id,tipo_nota,item,centro_item_id,data,cnpj,prestador,nota_fiscal,valor,cfop,icms,ipi,pis,cofins,centro_custo_codigo,centro_custo) VALUES ${values.join(',')}`, params);
         }
         await client.query(`INSERT INTO sync_status (screen_name, last_sync_at) VALUES ('Contabilidade', NOW()) ON CONFLICT (screen_name) DO UPDATE SET last_sync_at = NOW()`);
         await client.query('COMMIT');
