@@ -9705,13 +9705,16 @@
                     // 2. Carteira & Refugo Parallel Fetch
 
 
-                    const [cartFetch, refFetch] = await Promise.allSettled([
+                    const [cartFetch, refFetch, refugoSnapshotFetch] = await Promise.allSettled([
 
 
                         fetchWithTimeout('/api/pedidos-sync/resumo-carteira'),
 
 
-                        fetchWithTimeout(`/api/refugos-new/resumo-dashboard?year=${curYear}&month=${curMonth + 1}`)
+                        fetchWithTimeout(`/api/refugos-new/resumo-dashboard?year=${curYear}&month=${curMonth + 1}`),
+
+
+                        fetchWithTimeout('/api/dashboard-snapshot/refugo')
 
 
                     ]);
@@ -9719,10 +9722,13 @@
 
                     const cartRes = cartFetch.status === 'fulfilled' ? cartFetch.value : null;
                     const refRes = refFetch.status === 'fulfilled' ? refFetch.value : null;
+                    const refugoSnapshotRes = refugoSnapshotFetch.status === 'fulfilled' ? refugoSnapshotFetch.value : null;
                     const cartData = cartRes && cartRes.ok ? await cartRes.json() : { success: false, totalKg: 0, topClientes: [] };
 
 
                     const refJson = refRes && refRes.ok ? await refRes.json() : { success: false, totalKg: 0, scrapPct: 0, byMotive: {} };
+                    const refugoSnapshotJson = refugoSnapshotRes && refugoSnapshotRes.ok ? await refugoSnapshotRes.json() : { success: false };
+                    const refugoSnapshot = refugoSnapshotJson.success ? refugoSnapshotJson.data : null;
                     const refRaw = [];
                     const monthlyProdData = {};
 
@@ -9746,10 +9752,10 @@
                     // 3. Scrap Calculation (Refugo) - Parity with refugos.html
 
 
-                    let totalRefWeight = refJson.success ? Number(refJson.totalKg || 0) : 0;
+                    let totalRefWeight = refugoSnapshot ? Number(refugoSnapshot.totalKg || 0) : (refJson.success ? Number(refJson.totalKg || 0) : 0);
 
 
-                    const motives = refJson.success ? { ...(refJson.byMotive || {}) } : {};
+                    const motives = refugoSnapshot ? { ...(refugoSnapshot.byMotive || {}) } : (refJson.success ? { ...(refJson.byMotive || {}) } : {});
 
 
                     refRaw.forEach(r => {
