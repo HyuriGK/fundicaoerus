@@ -126,6 +126,8 @@ const INDEPENDENT_BATS = [
 
 const INDEPENDENT_WAIT = 2 * 60 * 1000; // 2 minutos
 const INDEPENDENT_START_STAGGER = 15000;
+const HEAVY_SYNC_MODULES = new Set(['EMISSOES', 'FATURAMENTO', 'PEDIDOS', 'PRODUCAO', 'REFUGOS']);
+const LIGHT_SYNC_CONCURRENCY = 2;
 let nextRunAt = {};
 
 const DELAY_MS = 2000;
@@ -449,10 +451,20 @@ async function startForever() {
 }
 
 // ─── LOOP INDEPENDENTE FUSAO ─────────────────────────────────────────────────
-async function startIndependentLoop(bat) {
+async function startQueueWorker(bats) {
     while (true) {
         if (!isWithinSchedule()) {
             await new Promise(r => setTimeout(r, 60000));
+            continue;
+        }
+
+        const now = Date.now();
+        const bat = bats
+            .filter(item => scriptState[item.name] !== 'RUNNING' && (!nextRunAt[item.name] || nextRunAt[item.name] <= now))
+            .sort((a, b) => (nextRunAt[a.name] || 0) - (nextRunAt[b.name] || 0))[0];
+
+        if (!bat) {
+            await new Promise(r => setTimeout(r, 1000));
             continue;
         }
 
@@ -469,8 +481,6 @@ async function startIndependentLoop(bat) {
 
         nextRunAt[bat.name] = Date.now() + INDEPENDENT_WAIT;
         scriptState[bat.name] = 'IDLE';
-        await new Promise(r => setTimeout(r, INDEPENDENT_WAIT));
-        nextRunAt[bat.name] = null;
     }
 }
 
@@ -478,10 +488,10 @@ process.on('SIGINT', () => { process.stdout.write('\x1B[?25h'); process.exit(0);
 process.on('exit',   () => process.stdout.write('\x1B[?25h'));
 
 async function startIndependentLoops() {
-    for (const bat of INDEPENDENT_BATS) {
-        startIndependentLoop(bat);
-        await new Promise(r => setTimeout(r, INDEPENDENT_START_STAGGER));
-    }
+    const heavyBats = INDEPENDENT_BATS.filter(bat => HEAVY_SYNC_MODULES.has(bat.name));
+    const lightBats = INDEPENDENT_BATS.filter(bat => !HEAVY_SYNC_MODULES.has(bat.name));
+    startQueueWorker(heavyBats);
+    for (let i = 0; i < LIGHT_SYNC_CONCURRENCY; i++) startQueueWorker(lightBats);
 }
 
 startIndependentLoops();
