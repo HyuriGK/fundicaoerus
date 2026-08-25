@@ -72,7 +72,16 @@ router.get('/nfe-entrada', async (req, res) => {
 
     try {
         const { rows } = await pool.query(`
-            SELECT data, cnpj, prestador, nota_fiscal, valor, cfop, icms, ipi, pis, cofins, centro_custo_codigo, centro_custo
+            SELECT
+                data, cnpj, prestador, nota_fiscal,
+                SUM(valor) AS valor,
+                STRING_AGG(DISTINCT cfop::text, ', ') AS cfop,
+                SUM(icms) AS icms,
+                SUM(ipi) AS ipi,
+                SUM(pis) AS pis,
+                SUM(cofins) AS cofins,
+                COALESCE(STRING_AGG(DISTINCT NULLIF(centro_custo_codigo, ''), ', '), '') AS centro_custo_codigo,
+                COALESCE(STRING_AGG(DISTINCT NULLIF(centro_custo, ''), ', '), '') AS centro_custo
             FROM notas_nfe_entrada_firebird_sync nfe
             WHERE data BETWEEN $1::date AND $2::date
               AND tipo_nota = '55'
@@ -81,6 +90,7 @@ router.get('/nfe-entrada', async (req, res) => {
                   SELECT 1 FROM notas_servico_firebird_sync nfse
                   WHERE nfse.tipo_nota = '99' AND nfse.cfop = nfe.cfop
               )
+            GROUP BY data, cnpj, prestador, nota_fiscal
             ORDER BY data DESC, nota_fiscal DESC
         `, [dataInicio, dataFim, cfopsCte]);
         const notas = rows.map(row => ({
