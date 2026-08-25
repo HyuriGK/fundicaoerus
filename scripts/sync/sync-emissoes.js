@@ -51,6 +51,7 @@ async function syncEmissoes() {
 
     let pgClient;
     let db;
+    let pgTransactionOpen = false;
 
     try {
         pgClient = await pgPool.connect();
@@ -257,6 +258,8 @@ async function syncEmissoes() {
             }
 
             console.log('📤 Enviando para o Postgres em lotes...');
+            await pgClient.query('BEGIN');
+            pgTransactionOpen = true;
             const BATCH_SIZE = 500;
             for (let i = 0; i < results.length; i += BATCH_SIZE) {
                 const batch = results.slice(i, i + BATCH_SIZE);
@@ -395,8 +398,15 @@ async function syncEmissoes() {
             VALUES ('Pedidos', NOW()), ('Emissões', NOW())
             ON CONFLICT (screen_name) DO UPDATE SET last_sync_at = NOW();
         `);
+        if (pgTransactionOpen) {
+            await pgClient.query('COMMIT');
+            pgTransactionOpen = false;
+        }
 
     } catch (err) {
+        if (pgClient && pgTransactionOpen) {
+            try { await pgClient.query('ROLLBACK'); } catch (_) {}
+        }
         console.error('❌ ERRO NA SINCRONIZAÇÃO DE EMISSÕES:', (err && err.message) || '(sem mensagem)');
         if (err && err.code) console.error('   código:', err.code, '| rotina:', err.routine || '-');
         if (err && Array.isArray(err.errors)) err.errors.forEach((e, i) => console.error(`   causa[${i}]:`, e && (e.message || e)));
