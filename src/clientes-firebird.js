@@ -1619,14 +1619,15 @@ router.get('/list/all', async (req, res) => {
             rc.responsavel_comercial,
             COALESCE(cb.bloqueado, FALSE) AS bloqueado_crm,
             cb.motivo_bloqueio AS motivo_bloqueio_crm
-        FROM clientes_firebird_sync c
+        FROM clientes_firebird_sync_lotes c
         LEFT JOIN clientes_responsavel_comercial rc
             ON rc.empresa = c.empresa
             AND rc.codigo = c.codigo
         LEFT JOIN clientes_bloqueio_crm cb
             ON cb.empresa = c.empresa
             AND cb.codigo = c.codigo
-        ${commercialOwner ? 'WHERE rc.responsavel_comercial = $1' : ''}
+        WHERE c.batch_id = (SELECT batch_id FROM clientes_sync_batches WHERE status = 'completed' ORDER BY completed_at DESC LIMIT 1)
+        ${commercialOwner ? 'AND rc.responsavel_comercial = $1' : ''}
         ORDER BY c.razao_social NULLS LAST, c.codigo
         `, params);
 

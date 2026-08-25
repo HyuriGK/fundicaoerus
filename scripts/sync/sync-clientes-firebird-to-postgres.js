@@ -1,5 +1,6 @@
 const pool = require('../../lib/db');
 const { Firebird, options: firebirdOptions } = require('../../lib/firebird-helper');
+const { randomUUID } = require('crypto');
 
 const clean = value => {
     if (value === null || value === undefined) return null;
@@ -139,8 +140,22 @@ async function sync() {
     console.log(`${rows.length} clientes lidos do Firebird (somente SELECT).`);
 
     const client = await pool.connect();
+    const batchId = randomUUID();
     try {
         await ensureTable(client);
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS clientes_sync_batches (
+                batch_id UUID PRIMARY KEY,
+                status VARCHAR(20) NOT NULL,
+                started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                completed_at TIMESTAMPTZ
+            );
+            CREATE TABLE IF NOT EXISTS clientes_firebird_sync_lotes (LIKE clientes_firebird_sync INCLUDING DEFAULTS);
+            ALTER TABLE clientes_firebird_sync_lotes ADD COLUMN IF NOT EXISTS batch_id UUID;
+            CREATE UNIQUE INDEX IF NOT EXISTS clientes_firebird_sync_lotes_batch_uidx ON clientes_firebird_sync_lotes (batch_id, empresa, codigo);
+            CREATE INDEX IF NOT EXISTS clientes_firebird_sync_lotes_batch_razao_idx ON clientes_firebird_sync_lotes (batch_id, razao_social);
+        `);
+        await client.query(`INSERT INTO clientes_sync_batches (batch_id, status) VALUES ($1, 'running')`, [batchId]);
         await client.query('BEGIN');
         await client.query('TRUNCATE clientes_firebird_sync');
 
@@ -190,6 +205,11 @@ async function sync() {
             `, values);
         }
 
+        await client.query('COMMIT');
+        await client.query('BEGIN');
+        await client.query(`INSERT INTO clientes_firebird_sync_lotes SELECT clientes_firebird_sync.*, $1 FROM clientes_firebird_sync`, [batchId]);
+        await client.query(`UPDATE clientes_sync_batches SET status = 'completed', completed_at = NOW() WHERE batch_id = $1`, [batchId]);
+        await client.query(`DELETE FROM clientes_sync_batches WHERE batch_id <> $1 AND status = 'completed'`, [batchId]);
         await client.query('COMMIT');
         console.log(`Sync concluido: ${rows.length} clientes gravados no Postgres.`);
     } catch (err) {
