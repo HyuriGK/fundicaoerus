@@ -13,6 +13,7 @@ router.get('/notas-servico', async (req, res) => {
                 centro_custo_codigo, centro_custo
             FROM notas_servico_firebird_sync
             WHERE data BETWEEN $1::date AND $2::date
+              AND tipo_nota = '99'
             ORDER BY data DESC, nota_fiscal DESC
         `, [dataInicio, dataFim]);
 
@@ -43,6 +44,7 @@ router.get('/cte', async (req, res) => {
             SELECT data, cnpj, prestador, nota_fiscal, valor, cfop, centro_custo_codigo, centro_custo
             FROM notas_servico_firebird_sync
             WHERE data BETWEEN $1::date AND $2::date
+              AND tipo_nota = '57'
               AND cfop::text = ANY($3::text[])
             ORDER BY data DESC, nota_fiscal DESC
         `, [dataInicio, dataFim, cfops]);
