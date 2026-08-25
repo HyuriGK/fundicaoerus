@@ -316,17 +316,20 @@ async function sincronizarDetalhado(fbDb, janela) {
                 `, [vendedor.notaFiscal, vendedor.serie, vendedor.vendedorCodigo, vendedor.vendedorNome]);
             }
 
+            const publishClient = await pool.connect();
+            await publishClient.query('BEGIN');
+
             // DELETE da janela movel + reinsercao: preserva o historico fora dos ultimos 60 dias.
             // Se a busca no Firebird falhar, esta limpeza nao roda e o Neon fica intacto.
             console.log(`  Limpando faturamento_firebird de ${janela.inicioSql} ate ${janela.fimSql}...`);
-            await pool.query(`
+            await publishClient.query(`
                 DELETE FROM faturamento_firebird
                 WHERE data_faturamento >= $1 AND data_faturamento < $2
             `, [janela.inicioSql, janela.fimSql]);
 
 
             // BUSCAR PREFERÊNCIAS DE EXCLUSÃO (Tabela correta: faturamento_firebird_preferencias)
-            const prefsResult = await pool.query('SELECT nota_fiscal, codigo_item, pedido, data_faturamento, quantidade, excluido FROM faturamento_firebird_preferencias');
+            const prefsResult = await publishClient.query('SELECT nota_fiscal, codigo_item, pedido, data_faturamento, quantidade, excluido FROM faturamento_firebird_preferencias');
             const prefsMap = new Map();
             prefsResult.rows.forEach(r => {
                 const dateStr = r.data_faturamento ? r.data_faturamento.toISOString().split('T')[0] : '';
@@ -366,7 +369,7 @@ async function sincronizarDetalhado(fbDb, janela) {
                         const keyForPref = `${notaFiscal}-${String(codigoItem).trim()}-${pedidoFinal}-${dataFat}-${qStr}`;
                         const isExcluded = prefsMap.has(keyForPref) ? prefsMap.get(keyForPref) : false;
 
-                        await pool.query(`
+                        await publishClient.query(`
                             INSERT INTO faturamento_firebird
                             (nota_fiscal, serie, item_nota, data_faturamento, cliente_codigo, cliente_nome,
                              vendedor_codigo, vendedor_nome,
@@ -429,6 +432,8 @@ async function sincronizarDetalhado(fbDb, janela) {
                 }
             }
 
+            await publishClient.query('COMMIT');
+            publishClient.release();
             resolve();
         });
     });
