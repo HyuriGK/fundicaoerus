@@ -14,10 +14,10 @@ const queryFirebird = db => new Promise((resolve, reject) => db.query(`
         c.NOTA_COM AS NOTA_FISCAL,
         COALESCE(cpcc.VALOR_CPCC, cp.VALOR_PRODUTOS_CPR, 0) AS VALOR,
         COALESCE(cp.CFOP_CPR, c.CFOP_COM) AS CFOP,
-        COALESCE(cp.VALOR_ICMS_CPR, 0) AS ICMS,
-        COALESCE(cp.VALOR_IPI_CPR, 0) AS IPI,
-        COALESCE(cp.PIS_VALOR_CPR, 0) AS PIS,
-        COALESCE(cp.COFINS_VALOR_CPR, 0) AS COFINS,
+        COALESCE(cp.VALOR_ICMS_CPR, 0) AS IMPOSTO_ICMS,
+        COALESCE(cp.VALOR_IPI_CPR, 0) AS IMPOSTO_IPI,
+        COALESCE(cp.PIS_VALOR_CPR, 0) AS IMPOSTO_PIS,
+        COALESCE(cp.COFINS_VALOR_CPR, 0) AS IMPOSTO_COFINS,
         cc.CODIGO_CTU AS CENTRO_CUSTO_CODIGO,
         cc.NOME_CTU AS CENTRO_CUSTO
     FROM COMPRA c
@@ -74,7 +74,7 @@ async function syncNotasServico() {
             chunk.forEach((row, index) => {
                 const n = index * 16;
                 values.push(`($${n + 1},$${n + 2},$${n + 3},$${n + 4},$${n + 5},$${n + 6},$${n + 7},$${n + 8},$${n + 9},$${n + 10},$${n + 11},$${n + 12},$${n + 13},$${n + 14},$${n + 15},$${n + 16})`);
-                params.push(row.COMPRA_ID, row.TIPO_NOTA, row.ITEM, row.CENTRO_ITEM_ID, row.DATA, row.CNPJ, row.PRESTADOR, row.NOTA_FISCAL, row.VALOR, row.CFOP, row.ICMS, row.IPI, row.PIS, row.COFINS, row.CENTRO_CUSTO_CODIGO, row.CENTRO_CUSTO);
+                params.push(row.COMPRA_ID, row.TIPO_NOTA, row.ITEM, row.CENTRO_ITEM_ID, row.DATA, row.CNPJ, row.PRESTADOR, row.NOTA_FISCAL, row.VALOR, row.CFOP, row.IMPOSTO_ICMS, row.IMPOSTO_IPI, row.IMPOSTO_PIS, row.IMPOSTO_COFINS, row.CENTRO_CUSTO_CODIGO, row.CENTRO_CUSTO);
             });
             await client.query(`INSERT INTO notas_servico_firebird_sync (compra_id,tipo_nota,item,centro_item_id,data,cnpj,prestador,nota_fiscal,valor,cfop,icms,ipi,pis,cofins,centro_custo_codigo,centro_custo) VALUES ${values.join(',')}`, params);
         }
