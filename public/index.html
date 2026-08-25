@@ -9578,6 +9578,34 @@
 
                     const endOfMonth = new Date(curYear, curMonth + 1, 0).toISOString().split('T')[0];
 
+                    const snapshotResponse = await fetchWithTimeout('/api/dashboard-snapshot');
+                    const snapshotJson = snapshotResponse.ok ? await snapshotResponse.json() : null;
+                    const snapshot = snapshotJson?.success ? snapshotJson.data : null;
+
+                    if (snapshot) {
+                        const fatTotalWeight = Number(snapshot.faturamento?.totalKg || 0);
+                        const metaVal = Number(snapshot.meta?.pesoKg || 0);
+                        const cartKg = Number(snapshot.carteira?.totalKg || 0);
+                        const totalRefWeight = Number(snapshot.refugo?.totalKg || 0);
+                        dashboardData.billingDaily = snapshot.faturamento?.daily || [];
+                        dashboardData.carteira = snapshot.carteira?.topClientes || [];
+                        dashboardData.totalKg = cartKg;
+                        dashboardData.totalScrapKg = totalRefWeight;
+                        dashboardData.scrapPct = Number(snapshot.refugo?.scrapPct || 0);
+                        dashboardData.scrapByMotive = snapshot.refugo?.byMotive || {};
+                        dashboardData.sectorTotals = snapshot.producao?.totals || {};
+                        window.__metaPesoKg = metaVal;
+                        animateValue(document.querySelector('#live-faturamento .live-value'), fatTotalWeight / 1000, 1500, '', 'Ton');
+                        animateValue(document.querySelector('#live-meta .live-value'), metaVal / 1000, 1500, '', 'Ton');
+                        animateValue(document.querySelector('#live-carteira-peso .live-value'), cartKg / 1000, 1500, '', 'Ton');
+                        animateValue(document.querySelector('#live-refugo .live-value'), totalRefWeight, 1500, '', 'kg');
+                        const metaPctEl = document.getElementById('meta-progress-pct');
+                        if (metaPctEl) metaPctEl.innerText = `${metaVal > 0 ? (fatTotalWeight / metaVal * 100).toFixed(2) : '0.00'}%`;
+                        const refPctEl = document.getElementById('refugo-pct');
+                        if (refPctEl) refPctEl.innerText = `${dashboardData.scrapPct.toFixed(2)}%`;
+                        return;
+                    }
+
 
                     const [metaFetch, fatFetch] = await Promise.allSettled([
 
@@ -10293,10 +10321,9 @@
                     try {
 
 
-                        const response = await fetchWithTimeout(`/api/producao-postgres/resumo-setores?year=${new Date().getFullYear()}&month=${new Date().getMonth() + 1}`);
-
-
-                        const result = await response.json();
+                        const result = dashboardData.sectorTotals
+                            ? { success: true, totals: dashboardData.sectorTotals, data: [] }
+                            : await fetchWithTimeout(`/api/producao-postgres/resumo-setores?year=${new Date().getFullYear()}&month=${new Date().getMonth() + 1}`).then(response => response.json());
 
 
                         if (!result.success) throw new Error(result.error);
