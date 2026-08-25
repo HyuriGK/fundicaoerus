@@ -98,9 +98,6 @@ function chunkArray(myArray, chunk_size) {
         // Widen liga column if needed (was VARCHAR(50), now VARCHAR(255))
         await pool.query(`ALTER TABLE producao_apontada_sincronizada ALTER COLUMN liga TYPE VARCHAR(255)`);
 
-        await pool.query('TRUNCATE TABLE producao_apontada_sincronizada');
-        console.log('🧹 Tabela truncada.');
-
         Firebird.attach(fbOptions, function (err, db) {
             if (err) {
                 console.error('❌ Firebird Connection Error:', err);
@@ -356,6 +353,11 @@ function chunkArray(myArray, chunk_size) {
                 console.log('✅ Lookups fetched. Syncing to Postgres...');
 
 
+                const publishClient = await pool.connect();
+                await publishClient.query('BEGIN');
+                await publishClient.query('TRUNCATE TABLE producao_apontada_sincronizada');
+                console.log('🧹 Nova carga preparada para publicação.');
+
                 // 4. Transform & Insert
                 let inserted = 0;
                 let errors = 0;
@@ -399,7 +401,7 @@ function chunkArray(myArray, chunk_size) {
                             const liga = pcs._materialName || null;
                             const grupoMaterial = pcs._grupoMaterial || null;
 
-                            await pool.query(`
+                            await publishClient.query(`
                                 INSERT INTO producao_apontada_sincronizada
                                 (chave_origem, data_producao, setor, cliente, produto, liga, grupo_material, peso_un, quantidade, refugo, peso_total, op, codigo_peca, atualizado_em)
                                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, CURRENT_TIMESTAMP)
@@ -437,10 +439,19 @@ function chunkArray(myArray, chunk_size) {
                 console.log(`   Processed: ${inserted}`);
                 console.log(`   Errors: ${errors}`);
 
+                if (errors > 0) {
+                    await publishClient.query('ROLLBACK');
+                    publishClient.release();
+                    console.error('❌ Carga cancelada: nenhum dado parcial foi publicado.');
+                    db.detach();
+                    await pool.end();
+                    process.exit(1);
+                }
+
                 // MARK & SWEEP: Limpar registros "fantasma" (estornados/excluídos do ERP)
                 // Deleta registros dentro da janela de sync que NÃO foram atualizados nesta rodada
                 try {
-                    const sweepResult = await pool.query(
+                    const sweepResult = await publishClient.query(
                         `DELETE FROM producao_apontada_sincronizada 
                          WHERE data_producao >= $1 
                            AND atualizado_em < $2`,
@@ -458,8 +469,8 @@ function chunkArray(myArray, chunk_size) {
 
                 // ATUALIZAR STATUS DE SINCRONIZAÇÃO
                 try {
-                    await pool.query("SET TIME ZONE 'America/Sao_Paulo'");
-                    await pool.query(`
+                    await publishClient.query("SET TIME ZONE 'America/Sao_Paulo'");
+                    await publishClient.query(`
                         INSERT INTO sync_status (screen_name, last_sync_at)
                         VALUES ('Produção', NOW())
                         ON CONFLICT (screen_name) DO UPDATE SET last_sync_at = NOW();
@@ -469,6 +480,9 @@ function chunkArray(myArray, chunk_size) {
                     console.error('⚠️ Erro ao atualizar status de sincronização:', statusErr.message);
                 }
 
+                await publishClient.query('COMMIT');
+                publishClient.release();
+                console.log('✅ Carga publicada atomicamente.');
                 db.detach();
                 await pool.end();
                 process.exit(0);
