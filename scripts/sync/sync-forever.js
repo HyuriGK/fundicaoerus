@@ -125,7 +125,6 @@ const INDEPENDENT_BATS = [
 ];
 
 const INDEPENDENT_WAIT = 2 * 60 * 1000; // 2 minutos
-const INDEPENDENT_START_STAGGER = 15000;
 const HEAVY_SYNC_MODULES = new Set(['EMISSOES', 'FATURAMENTO', 'PEDIDOS', 'PRODUCAO', 'REFUGOS']);
 const LIGHT_SYNC_CONCURRENCY = 2;
 let nextRunAt = {};
@@ -220,10 +219,16 @@ function buildFrame(cycleStart) {
     const s2 = '  ' + C.muted+'HORA  '+reset + timeV +
                '    ' + C.dim+'LOG  scripts/sync/sync-errors.log'+reset;
     const s3 = '  ' + C.muted+'HORARIO COMERCIAL  '+reset + bold + C.green + 'Seg-Sex  06:30 - 18:00' + reset;
+    const heavyRunning = INDEPENDENT_BATS.filter(b => HEAVY_SYNC_MODULES.has(b.name) && scriptState[b.name] === 'RUNNING').length;
+    const lightRunning = INDEPENDENT_BATS.filter(b => !HEAVY_SYNC_MODULES.has(b.name) && scriptState[b.name] === 'RUNNING').length;
+    const s4 = '  ' + C.muted + 'FILAS  ' + reset + bold + C.amber + `PESADA ${heavyRunning}/1` + reset +
+               C.dim + '  |  ' + reset + bold + C.cyan + `LEVE ${lightRunning}/${LIGHT_SYNC_CONCURRENCY}` + reset +
+               C.dim + '  |  leitura das telas preservada por snapshots' + reset;
 
     out.push(B.row(s1, W));
     out.push(B.row(s2, W));
     out.push(B.row(s3, W));
+    out.push(B.row(s4, W));
 
     // ── MODULES ──────────────────────────────────────────────────────────────
     out.push(B.sep());
@@ -273,13 +278,15 @@ function buildFrame(cycleStart) {
         out.push(B.row(' ' + icon + ' ' + name + ' [' + bar + '] ' + pct + '  ' + badge + '  ' + ok + countdownStr, W));
     };
 
-    if (CYCLE_BATS.length) {
-        out.push(B.row(centerStr(bold + C.cyan + 'TELAS EM CICLO' + reset, W), W));
-        CYCLE_BATS.forEach(drawModuleRow);
-        out.push(B.sep());
-    }
-    out.push(B.row(centerStr(bold + C.gold + 'TELAS INDEPENDENTES' + reset, W), W));
-    INDEPENDENT_BATS.forEach(drawModuleRow);
+    const heavyBats = INDEPENDENT_BATS.filter(bat => HEAVY_SYNC_MODULES.has(bat.name));
+    const lightBats = INDEPENDENT_BATS.filter(bat => !HEAVY_SYNC_MODULES.has(bat.name));
+    out.push(B.row(centerStr(bold + C.amber + 'FILA PESADA  -  1 MODULO POR VEZ' + reset, W), W));
+    out.push(B.row(centerStr(dim + 'Emissoes  |  Faturamento  |  Pedidos  |  Producao  |  Refugos' + reset, W), W));
+    heavyBats.forEach(drawModuleRow);
+    out.push(B.sep());
+    out.push(B.row(centerStr(bold + C.cyan + `FILA LEVE  -  ATE ${LIGHT_SYNC_CONCURRENCY} MODULOS EM PARALELO` + reset, W), W));
+    out.push(B.row(centerStr(dim + 'Rotinas auxiliares, cadastros e relatorios' + reset, W), W));
+    lightBats.forEach(drawModuleRow);
 
     // ── ALERTS ───────────────────────────────────────────────────────────────
     out.push(B.sep());
