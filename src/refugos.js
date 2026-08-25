@@ -71,16 +71,15 @@ router.get('/', async (req, res) => {
             FROM refugo_apontado_sync r
             LEFT JOIN refugo_mapeamento_setores m ON r.motivo = m.motivo
             LEFT JOIN ficha_tecnica f ON r.codigo_peca = f.pro_codigo_fic
-            LEFT JOIN (
-                SELECT DISTINCT ON (TRIM(e.data->>'PRODUTO_PPR'))
-                    TRIM(e.data->>'PRODUTO_PPR') AS codigo_peca,
-                    REPLACE(TRIM(e.data->>'VALOR_PPR'), ',', '.')::numeric AS valor_ppr
+            LEFT JOIN LATERAL (
+                SELECT REPLACE(TRIM(e.data->>'VALOR_PPR'), ',', '.')::numeric AS valor_ppr
                 FROM firebird_sync_emissoes e
-                WHERE COALESCE(TRIM(e.data->>'PRODUTO_PPR'), '') <> ''
+                WHERE e.data->>'PRODUTO_PPR' = r.codigo_peca
                   AND TRIM(e.data->>'VALOR_PPR') ~ '^[0-9]+([,.][0-9]+)?$'
                   AND REPLACE(TRIM(e.data->>'VALOR_PPR'), ',', '.')::numeric > 0
-                ORDER BY TRIM(e.data->>'PRODUTO_PPR'), e.updated_at DESC
-            ) vp ON vp.codigo_peca = TRIM(r.codigo_peca)
+                ORDER BY e.updated_at DESC
+                LIMIT 1
+            ) vp ON true
             WHERE r.batch_id = (SELECT batch_id FROM refugos_sync_batches WHERE status = 'completed' ORDER BY completed_at DESC LIMIT 1)
             ${ownerFilter}
             ORDER BY r.data_refugo DESC
