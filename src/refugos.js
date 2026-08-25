@@ -39,7 +39,7 @@ router.get('/', async (req, res) => {
         const commercialOwner = getCommercialOwnerRestriction(req);
         const params = commercialOwner ? [commercialOwner] : [];
         const ownerFilter = commercialOwner ? `
-            WHERE EXISTS (
+            AND EXISTS (
                 SELECT 1
                 FROM clientes_firebird_sync c
                 JOIN clientes_responsavel_comercial rc
@@ -68,7 +68,7 @@ router.get('/', async (req, res) => {
                 m.setor_responsavel,
                 f.material_fic as material,
                 COALESCE(vp.valor_ppr, 0) as valor_unitario
-            FROM refugo_apontado_sincronizado r
+            FROM refugo_apontado_sync r
             LEFT JOIN refugo_mapeamento_setores m ON r.motivo = m.motivo
             LEFT JOIN ficha_tecnica f ON r.codigo_peca = f.pro_codigo_fic
             LEFT JOIN LATERAL (
@@ -79,6 +79,7 @@ router.get('/', async (req, res) => {
                 ORDER BY e.updated_at DESC
                 LIMIT 1
             ) vp ON true
+            WHERE r.batch_id = (SELECT batch_id FROM refugos_sync_batches WHERE status = 'completed' ORDER BY completed_at DESC LIMIT 1)
             ${ownerFilter}
             ORDER BY r.data_refugo DESC
         `, params);
@@ -151,9 +152,10 @@ router.get('/resumo-dashboard', async (req, res) => {
                 SELECT
                     UPPER(TRIM(COALESCE(r.motivo, 'NAO INFORMADO'))) AS motivo,
                     SUM(r.quantidade * COALESCE(pc.peso, r.peso_un, 0)) AS peso_total
-                FROM refugo_apontado_sincronizado r
+                FROM refugo_apontado_sync r
                 LEFT JOIN pesos_customizados pc ON r.codigo_peca = pc.codigo
-                WHERE r.data_refugo >= $1
+                WHERE r.batch_id = (SELECT batch_id FROM refugos_sync_batches WHERE status = 'completed' ORDER BY completed_at DESC LIMIT 1)
+                  AND r.data_refugo >= $1
                   AND r.data_refugo <= $2
                   ${ownerFilter}
                 GROUP BY 1
@@ -192,8 +194,9 @@ router.get('/motivos', async (req, res) => {
     try {
         const result = await pool.query(`
             SELECT DISTINCT motivo 
-            FROM refugo_apontado_sincronizado 
-            WHERE motivo IS NOT NULL 
+            FROM refugo_apontado_sync
+            WHERE batch_id = (SELECT batch_id FROM refugos_sync_batches WHERE status = 'completed' ORDER BY completed_at DESC LIMIT 1)
+              AND motivo IS NOT NULL
             ORDER BY motivo ASC
         `);
         res.json(result.rows.map(r => r.motivo));

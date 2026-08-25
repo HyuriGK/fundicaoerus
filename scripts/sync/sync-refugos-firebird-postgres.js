@@ -6,6 +6,7 @@
 require('dotenv').config({ path: require('path').resolve(__dirname, '../../.env.local') });
 
 const pool = require('../../lib/db');
+const { randomUUID } = require('crypto');
 
 const { Firebird, options: fbOptions } = require('../../lib/firebird-helper');
 
@@ -38,6 +39,7 @@ async function startSync() {
     console.log('🚀 Iniciando Sincronismo de Refugos (v2 - Triple Lookup)...');
 
     let db;
+    const batchId = randomUUID();
     try {
         db = await new Promise((resolve, reject) => {
             Firebird.attach(fbOptions, (err, db) => {
@@ -49,6 +51,33 @@ async function startSync() {
         console.log('✅ Conectado ao Firebird.');
 
         // 1. Preparar Tabela Postgres e limpar antes do sync
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS refugos_sync_batches (
+                batch_id UUID PRIMARY KEY,
+                status VARCHAR(20) NOT NULL,
+                started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                completed_at TIMESTAMPTZ
+            );
+            CREATE TABLE IF NOT EXISTS refugo_apontado_sync (
+                batch_id UUID NOT NULL REFERENCES refugos_sync_batches(batch_id) ON DELETE CASCADE,
+                chave_origem VARCHAR(100) NOT NULL,
+                data_refugo DATE,
+                setor VARCHAR(100),
+                cliente VARCHAR(255),
+                op VARCHAR(50),
+                codigo_peca VARCHAR(50),
+                produto TEXT,
+                peso_un DECIMAL(15,3),
+                quantidade DECIMAL(15,3),
+                peso_total DECIMAL(15,3),
+                motivo VARCHAR(100),
+                lote VARCHAR(100),
+                atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (batch_id, chave_origem)
+            );
+            CREATE INDEX IF NOT EXISTS idx_refugo_apontado_sync_batch_data ON refugo_apontado_sync (batch_id, data_refugo DESC);
+        `);
+        await pool.query(`INSERT INTO refugos_sync_batches (batch_id, status) VALUES ($1, 'running')`, [batchId]);
         await pool.query(`CREATE TABLE IF NOT EXISTS refugo_apontado_sincronizado (
             id SERIAL PRIMARY KEY,
             chave_origem VARCHAR(100) UNIQUE,
@@ -229,6 +258,26 @@ async function startSync() {
         console.log(`\n🎉 Sincronização Finalizada: ${inserted} registros inseridos/atualizados.`);
 
         // ATUALIZAR STATUS DE SINCRONIZAÇÃO
+        const publishClient = await pool.connect();
+        try {
+            await publishClient.query('BEGIN');
+            await publishClient.query(`
+                INSERT INTO refugo_apontado_sync
+                (batch_id, chave_origem, data_refugo, setor, cliente, op, codigo_peca, produto, peso_un, quantidade, peso_total, motivo, lote, atualizado_em)
+                SELECT $1, chave_origem, data_refugo, setor, cliente, op, codigo_peca, produto, peso_un, quantidade, peso_total, motivo, lote, atualizado_em
+                FROM refugo_apontado_sincronizado
+            `, [batchId]);
+            await publishClient.query(`UPDATE refugos_sync_batches SET status = 'completed', completed_at = NOW() WHERE batch_id = $1`, [batchId]);
+            await publishClient.query(`DELETE FROM refugos_sync_batches WHERE batch_id <> $1 AND status = 'completed'`, [batchId]);
+            await publishClient.query(`INSERT INTO sync_status (screen_name, last_sync_at) VALUES ('Refugos', NOW()) ON CONFLICT (screen_name) DO UPDATE SET last_sync_at = NOW()`);
+            await publishClient.query('COMMIT');
+        } catch (error) {
+            await publishClient.query('ROLLBACK').catch(() => {});
+            throw error;
+        } finally {
+            publishClient.release();
+        }
+
         try {
             await pool.query("SET TIME ZONE 'America/Sao_Paulo'");
             await pool.query(`
