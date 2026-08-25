@@ -355,6 +355,7 @@ function chunkArray(myArray, chunk_size) {
 
                 const publishClient = await pool.connect();
                 await publishClient.query('BEGIN');
+                await publishClient.query("SET LOCAL idle_in_transaction_session_timeout = '60 seconds'");
                 await publishClient.query('TRUNCATE TABLE producao_apontada_sincronizada');
                 console.log('🧹 Nova carga preparada para publicação.');
 
