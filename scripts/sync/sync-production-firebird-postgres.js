@@ -355,7 +355,6 @@ function chunkArray(myArray, chunk_size) {
 
                 const publishClient = await pool.connect();
                 await publishClient.query('BEGIN');
-                await publishClient.query("SET LOCAL idle_in_transaction_session_timeout = '60 seconds'");
                 await publishClient.query('TRUNCATE TABLE producao_apontada_sincronizada');
                 console.log('🧹 Nova carga preparada para publicação.');
 
@@ -367,7 +366,7 @@ function chunkArray(myArray, chunk_size) {
                 console.log(`🚀 Inserting ${productionRows.length} rows (Chunks of 100)...`);
 
                 for (const chunk of insertChunks) {
-                    const promises = chunk.map(async (pcs) => {
+                    for (const pcs of chunk) {
                         try {
                             const set = lookupSET[pcs.SETOR_PCS] || {};
 
@@ -427,9 +426,7 @@ function chunkArray(myArray, chunk_size) {
                             console.error('Row Error:', rowErr);
                             errors++;
                         }
-                    });
-
-                    await Promise.all(promises);
+                    }
                     if (inserted % 100 === 0 || inserted === productionRows.length) {
                         const pct = ((inserted / productionRows.length) * 100).toFixed(0);
                         process.stdout.write(`@PROG:PRODUÇÃO:${pct}%\n`);
