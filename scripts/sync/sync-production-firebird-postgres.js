@@ -361,6 +361,21 @@ function chunkArray(myArray, chunk_size) {
                 // 4. Transform & Insert
                 let inserted = 0;
                 let errors = 0;
+                const snapshotTotals = {
+                    'MOLDAGEM GERAL': 0, 'FUSAO': 0, 'ACABAMENTO': 0, 'TRATAMENTO TERMICO': 0,
+                    'USINAGEM EXPEDICAO': 0, 'INSPECAO DE QUALIDADE': 0, 'EXPEDICAO': 0,
+                    'MOLDAGEM LEVE': 0, 'MOLDAGEM MANUAL': 0, 'MOLDAGEM PESADA': 0, 'FECHAMENTO MANUAL': 0
+                };
+                const snapshotMonth = new Date();
+                const snapshotMonthKey = `${snapshotMonth.getFullYear()}-${String(snapshotMonth.getMonth() + 1).padStart(2, '0')}`;
+                const normalizeSnapshotSector = (value) => {
+                    const setor = String(value || '').trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                    return setor === 'FUNDICAO' ? 'FUSAO'
+                        : setor === 'TT' ? 'TRATAMENTO TERMICO'
+                        : setor === 'QUALIDADE' ? 'INSPECAO DE QUALIDADE'
+                        : setor === 'USINAGEM' || setor === '50' ? 'USINAGEM EXPEDICAO'
+                        : setor === 'REBARBACAO' ? 'ACABAMENTO' : setor;
+                };
 
                 const insertChunks = chunkArray(productionRows, 100); // Process 100 rows in parallel
                 console.log(`🚀 Inserting ${productionRows.length} rows (Chunks of 100)...`);
@@ -422,6 +437,15 @@ function chunkArray(myArray, chunk_size) {
                             `, [chaveOrigem, dataProd, setor, cliente, produto, liga, grupoMaterial, pesoUn, quantidade, refugo, pesoTotal, op, codigoPeca]);
 
                             inserted++;
+                            if (dataProd.toISOString().slice(0, 7) === snapshotMonthKey && !['18358', '801032102'].includes(String(codigoPeca || '').trim())) {
+                                const snapshotSector = normalizeSnapshotSector(setor);
+                                if (['MOLDAGEM LEVE', 'MOLDAGEM MANUAL', 'MOLDAGEM PESADA'].includes(snapshotSector)) {
+                                    snapshotTotals[snapshotSector] += pesoTotal;
+                                    snapshotTotals['MOLDAGEM GERAL'] += pesoTotal;
+                                } else if (Object.prototype.hasOwnProperty.call(snapshotTotals, snapshotSector)) {
+                                    snapshotTotals[snapshotSector] += pesoTotal;
+                                }
+                            }
                         } catch (rowErr) {
                             console.error('Row Error:', rowErr);
                             errors++;
@@ -467,6 +491,19 @@ function chunkArray(myArray, chunk_size) {
 
                 // ATUALIZAR STATUS DE SINCRONIZAÇÃO
                 try {
+                    await publishClient.query(`
+                        CREATE TABLE IF NOT EXISTS dashboard_snapshots (
+                            snapshot_key TEXT PRIMARY KEY,
+                            payload JSONB NOT NULL,
+                            source_status JSONB NOT NULL DEFAULT '{}'::jsonb,
+                            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                        )
+                    `);
+                    await publishClient.query(`
+                        INSERT INTO dashboard_snapshots (snapshot_key, payload, source_status, updated_at)
+                        VALUES ('producao_setores', $1, '{}'::jsonb, NOW())
+                        ON CONFLICT (snapshot_key) DO UPDATE SET payload = EXCLUDED.payload, updated_at = EXCLUDED.updated_at
+                    `, [JSON.stringify({ monthKey: snapshotMonthKey, totals: snapshotTotals })]);
                     await publishClient.query("SET TIME ZONE 'America/Sao_Paulo'");
                     await publishClient.query(`
                         INSERT INTO sync_status (screen_name, last_sync_at)

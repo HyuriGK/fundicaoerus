@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../lib/db');
 const { logActivity } = require('./lib/logger');
+const { getDashboardSnapshot } = require('../lib/dashboard-snapshot');
 
 let paradasTableReady = false;
 let producaoClienteColumnReady = false;
@@ -103,6 +104,13 @@ router.get('/resumo-setores', async (req, res) => {
         const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
         const endDate = new Date(year, month, 0).toISOString().split('T')[0];
         const commercialOwner = getCommercialOwnerRestriction(req);
+
+        if (!commercialOwner) {
+            const snapshot = await getDashboardSnapshot('producao_setores');
+            if (snapshot?.payload?.monthKey === `${year}-${String(month).padStart(2, '0')}`) {
+                return res.json({ success: true, totals: snapshot.payload.totals, snapshot: true });
+            }
+        }
 
         const params = [startDate, endDate];
         let ownerFilter = '';
