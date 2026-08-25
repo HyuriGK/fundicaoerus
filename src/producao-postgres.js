@@ -124,6 +124,40 @@ router.get('/resumo-setores', async (req, res) => {
             `;
         }
 
+        if (!commercialOwner) {
+            const result = await pool.query(`
+                SELECT UPPER(TRIM(t.setor)) AS setor,
+                       SUM(t.quantidade * COALESCE(NULLIF(t.peso_un, 0), pc.peso, p.peso, 0)) AS peso_total
+                FROM producao_apontada_sincronizada t
+                LEFT JOIN pesos_customizados pc ON t.codigo_peca = pc.codigo
+                LEFT JOIN produto_pesos_producao p ON t.codigo_peca = p.codigo_peca
+                WHERE t.data_producao >= $1 AND t.data_producao <= $2
+                  AND TRIM(t.codigo_peca) NOT IN ('18358', '801032102')
+                GROUP BY 1
+            `, params);
+            const totals = {
+                'MOLDAGEM GERAL': 0, 'FUSAO': 0, 'ACABAMENTO': 0, 'TRATAMENTO TERMICO': 0,
+                'USINAGEM EXPEDICAO': 0, 'INSPECAO DE QUALIDADE': 0, 'EXPEDICAO': 0,
+                'MOLDAGEM LEVE': 0, 'MOLDAGEM MANUAL': 0, 'MOLDAGEM PESADA': 0, 'FECHAMENTO MANUAL': 0
+            };
+            result.rows.forEach(row => {
+                const setor = String(row.setor || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                const peso = parseFloat(row.peso_total || 0);
+                const normalizado = setor === 'FUNDICAO' ? 'FUSAO'
+                    : setor === 'TT' ? 'TRATAMENTO TERMICO'
+                    : setor === 'QUALIDADE' ? 'INSPECAO DE QUALIDADE'
+                    : setor === 'USINAGEM' ? 'USINAGEM EXPEDICAO'
+                    : setor === 'REBARBACAO' ? 'ACABAMENTO' : setor;
+                if (['MOLDAGEM LEVE', 'MOLDAGEM MANUAL', 'MOLDAGEM PESADA'].includes(normalizado)) {
+                    totals[normalizado] += peso;
+                    totals['MOLDAGEM GERAL'] += peso;
+                } else if (Object.prototype.hasOwnProperty.call(totals, normalizado)) {
+                    totals[normalizado] += peso;
+                }
+            });
+            return res.json({ success: true, totals });
+        }
+
         const result = await pool.query(`
             WITH base AS (
                 SELECT
