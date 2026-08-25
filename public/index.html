@@ -9361,10 +9361,35 @@
                     totalScrapKg: 0,
 
 
-                    scrapPct: 0
+                    scrapPct: 0,
+
+
+                    refugoSnapshotLoaded: false
 
 
                 };
+
+
+                async function loadRefugoSnapshot() {
+                    try {
+                        const response = await fetchWithTimeout('/api/dashboard-snapshot/refugo', {}, 5000);
+                        const json = response.ok ? await response.json() : null;
+                        const snapshot = json?.success ? json.data : null;
+                        if (!snapshot) return;
+
+                        const totalKg = Number(snapshot.totalKg || 0);
+                        const byMotive = snapshot.byMotive || {};
+                        dashboardData.totalScrapKg = totalKg;
+                        dashboardData.scrapByMotive = byMotive;
+                        dashboardData.refugoSnapshotLoaded = true;
+                        animateValue(document.querySelector('#live-refugo .live-value'), totalKg, 1500, '', 'kg');
+
+                        const sorted = Object.entries(byMotive).sort((a, b) => b[1] - a[1]).slice(0, 5);
+                        renderScrapChart(sorted.map(item => item[0]), sorted.map(item => item[1]));
+                    } catch (error) {
+                        if (error?.name !== 'AbortError') console.warn('Snapshot de Refugos indisponível:', error);
+                    }
+                }
 
 
                 const serviceClients = [
@@ -9449,6 +9474,7 @@
                     try {
                         updateUserInfo();
                         applyClientConcentrationVisibility();
+                        void loadRefugoSnapshot();
 
 
                         // Load dependencies
@@ -9487,7 +9513,7 @@
                         // Initial Load
 
 
-                        await refreshDashboard();
+                        await refreshDashboard({ refreshRefugo: false });
 
 
                         scheduleDashboardRefresh();
@@ -9507,9 +9533,11 @@
                 }
 
 
-                async function refreshDashboard() {
+                async function refreshDashboard({ refreshRefugo = true } = {}) {
 
                     if (dashboardRefreshPromise) return dashboardRefreshPromise;
+
+                    if (refreshRefugo) void loadRefugoSnapshot();
 
                     dashboardRefreshPromise = (async () => {
 
@@ -9705,16 +9733,13 @@
                     // 2. Carteira & Refugo Parallel Fetch
 
 
-                    const [cartFetch, refFetch, refugoSnapshotFetch] = await Promise.allSettled([
+                    const [cartFetch, refFetch] = await Promise.allSettled([
 
 
                         fetchWithTimeout('/api/pedidos-sync/resumo-carteira'),
 
 
-                        fetchWithTimeout(`/api/refugos-new/resumo-dashboard?year=${curYear}&month=${curMonth + 1}`),
-
-
-                        fetchWithTimeout('/api/dashboard-snapshot/refugo')
+                        fetchWithTimeout(`/api/refugos-new/resumo-dashboard?year=${curYear}&month=${curMonth + 1}`)
 
 
                     ]);
@@ -9722,13 +9747,10 @@
 
                     const cartRes = cartFetch.status === 'fulfilled' ? cartFetch.value : null;
                     const refRes = refFetch.status === 'fulfilled' ? refFetch.value : null;
-                    const refugoSnapshotRes = refugoSnapshotFetch.status === 'fulfilled' ? refugoSnapshotFetch.value : null;
                     const cartData = cartRes && cartRes.ok ? await cartRes.json() : { success: false, totalKg: 0, topClientes: [] };
 
 
                     const refJson = refRes && refRes.ok ? await refRes.json() : { success: false, totalKg: 0, scrapPct: 0, byMotive: {} };
-                    const refugoSnapshotJson = refugoSnapshotRes && refugoSnapshotRes.ok ? await refugoSnapshotRes.json() : { success: false };
-                    const refugoSnapshot = refugoSnapshotJson.success ? refugoSnapshotJson.data : null;
                     const refRaw = [];
                     const monthlyProdData = {};
 
@@ -9752,10 +9774,10 @@
                     // 3. Scrap Calculation (Refugo) - Parity with refugos.html
 
 
-                    let totalRefWeight = refugoSnapshot ? Number(refugoSnapshot.totalKg || 0) : (refJson.success ? Number(refJson.totalKg || 0) : 0);
+                    let totalRefWeight = dashboardData.refugoSnapshotLoaded ? dashboardData.totalScrapKg : (refJson.success ? Number(refJson.totalKg || 0) : 0);
 
 
-                    const motives = refugoSnapshot ? { ...(refugoSnapshot.byMotive || {}) } : (refJson.success ? { ...(refJson.byMotive || {}) } : {});
+                    const motives = dashboardData.refugoSnapshotLoaded ? { ...dashboardData.scrapByMotive } : (refJson.success ? { ...(refJson.byMotive || {}) } : {});
 
 
                     refRaw.forEach(r => {
