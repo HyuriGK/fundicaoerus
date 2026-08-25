@@ -105,12 +105,14 @@ router.get('/resumo-setores', async (req, res) => {
         const endDate = new Date(year, month, 0).toISOString().split('T')[0];
         const commercialOwner = getCommercialOwnerRestriction(req);
 
-        if (!commercialOwner) {
-            const snapshot = await getDashboardSnapshot('producao_setores');
-            if (snapshot?.payload?.monthKey === `${year}-${String(month).padStart(2, '0')}`) {
-                return res.json({ success: true, totals: snapshot.payload.totals, snapshot: true });
-            }
+        if (commercialOwner) {
+            return res.status(503).json({ success: false, message: 'Snapshot de setores sem recorte comercial.' });
         }
+        const snapshot = await getDashboardSnapshot('producao_setores');
+        if (snapshot?.payload?.monthKey !== `${year}-${String(month).padStart(2, '0')}`) {
+            return res.status(503).json({ success: false, message: 'Aguardando snapshot de setores da próxima sincronização.' });
+        }
+        return res.json({ success: true, totals: snapshot.payload.totals, snapshot: true });
 
         const params = [startDate, endDate];
         let ownerFilter = '';
