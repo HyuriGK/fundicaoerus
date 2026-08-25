@@ -73,7 +73,7 @@ router.get('/nfe-entrada', async (req, res) => {
     try {
         const { rows } = await pool.query(`
             SELECT data, cnpj, prestador, nota_fiscal, valor, cfop, icms, ipi, pis, cofins, centro_custo_codigo, centro_custo
-            FROM notas_servico_firebird_sync nfe
+            FROM notas_nfe_entrada_firebird_sync nfe
             WHERE data BETWEEN $1::date AND $2::date
               AND tipo_nota = '55'
               AND cfop::text <> ALL($3::text[])

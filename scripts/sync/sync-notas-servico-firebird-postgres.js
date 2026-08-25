@@ -66,6 +66,7 @@ async function syncNotasServico() {
             ALTER TABLE notas_servico_firebird_sync ADD COLUMN IF NOT EXISTS ipi NUMERIC(15,2) NOT NULL DEFAULT 0;
             ALTER TABLE notas_servico_firebird_sync ADD COLUMN IF NOT EXISTS pis NUMERIC(15,2) NOT NULL DEFAULT 0;
             ALTER TABLE notas_servico_firebird_sync ADD COLUMN IF NOT EXISTS cofins NUMERIC(15,2) NOT NULL DEFAULT 0;
+            CREATE TABLE IF NOT EXISTS notas_nfe_entrada_firebird_sync (LIKE notas_servico_firebird_sync INCLUDING ALL);
         `);
         await client.query('BEGIN');
         await client.query('TRUNCATE TABLE notas_servico_firebird_sync');
@@ -78,6 +79,8 @@ async function syncNotasServico() {
             });
             await client.query(`INSERT INTO notas_servico_firebird_sync (compra_id,tipo_nota,item,centro_item_id,data,cnpj,prestador,nota_fiscal,valor,cfop,icms,ipi,pis,cofins,centro_custo_codigo,centro_custo) VALUES ${values.join(',')}`, params);
         }
+        await client.query('TRUNCATE TABLE notas_nfe_entrada_firebird_sync');
+        await client.query(`INSERT INTO notas_nfe_entrada_firebird_sync SELECT * FROM notas_servico_firebird_sync WHERE tipo_nota = '55'`);
         await client.query(`INSERT INTO sync_status (screen_name, last_sync_at) VALUES ('Contabilidade', NOW()) ON CONFLICT (screen_name) DO UPDATE SET last_sync_at = NOW()`);
         await client.query('COMMIT');
         console.log(`Sync de notas de serviço concluído: ${rows.length} registros.`);
