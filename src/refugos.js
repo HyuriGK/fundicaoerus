@@ -53,7 +53,7 @@ router.get('/', async (req, res) => {
         // Fetch synchronized scrap data JOINED with manual mapping
         const dados = await client.query(`
             SELECT 
-                r.id, 
+                r.chave_origem AS id, 
                 r.setor, 
                 to_char(r.data_refugo, 'YYYY-MM-DD') as data, 
                 r.produto as descricao, 
@@ -72,10 +72,11 @@ router.get('/', async (req, res) => {
             LEFT JOIN refugo_mapeamento_setores m ON r.motivo = m.motivo
             LEFT JOIN ficha_tecnica f ON r.codigo_peca = f.pro_codigo_fic
             LEFT JOIN LATERAL (
-                SELECT (e.data->>'VALOR_PPR')::numeric AS valor_ppr
+                SELECT REPLACE(TRIM(e.data->>'VALOR_PPR'), ',', '.')::numeric AS valor_ppr
                 FROM firebird_sync_emissoes e
                 WHERE e.data->>'PRODUTO_PPR' = r.codigo_peca
-                  AND (e.data->>'VALOR_PPR')::numeric > 0
+                  AND TRIM(e.data->>'VALOR_PPR') ~ '^[0-9]+([,.][0-9]+)?$'
+                  AND REPLACE(TRIM(e.data->>'VALOR_PPR'), ',', '.')::numeric > 0
                 ORDER BY e.updated_at DESC
                 LIMIT 1
             ) vp ON true
