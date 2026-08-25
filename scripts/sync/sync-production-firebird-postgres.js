@@ -366,6 +366,7 @@ function chunkArray(myArray, chunk_size) {
                     'USINAGEM EXPEDICAO': 0, 'INSPECAO DE QUALIDADE': 0, 'EXPEDICAO': 0,
                     'MOLDAGEM LEVE': 0, 'MOLDAGEM MANUAL': 0, 'MOLDAGEM PESADA': 0, 'FECHAMENTO MANUAL': 0
                 };
+                const monthlyProduction = {};
                 const snapshotMonth = new Date();
                 const snapshotMonthKey = `${snapshotMonth.getFullYear()}-${String(snapshotMonth.getMonth() + 1).padStart(2, '0')}`;
                 const normalizeSnapshotSector = (value) => {
@@ -446,6 +447,10 @@ function chunkArray(myArray, chunk_size) {
                                     snapshotTotals[snapshotSector] += pesoTotal;
                                 }
                             }
+                            if (normalizeSnapshotSector(setor) === 'FUSAO' && !['18358', '801032102'].includes(String(codigoPeca || '').trim())) {
+                                const monthKey = dataProd.toISOString().slice(0, 7);
+                                monthlyProduction[monthKey] = (monthlyProduction[monthKey] || 0) + pesoTotal;
+                            }
                         } catch (rowErr) {
                             console.error('Row Error:', rowErr);
                             errors++;
@@ -504,6 +509,11 @@ function chunkArray(myArray, chunk_size) {
                         VALUES ('producao_setores', $1, '{}'::jsonb, NOW())
                         ON CONFLICT (snapshot_key) DO UPDATE SET payload = EXCLUDED.payload, updated_at = EXCLUDED.updated_at
                     `, [JSON.stringify({ monthKey: snapshotMonthKey, totals: snapshotTotals })]);
+                    await publishClient.query(`
+                        INSERT INTO dashboard_snapshots (snapshot_key, payload, source_status, updated_at)
+                        VALUES ('producao_mensal', $1, '{}'::jsonb, NOW())
+                        ON CONFLICT (snapshot_key) DO UPDATE SET payload = EXCLUDED.payload, updated_at = EXCLUDED.updated_at
+                    `, [JSON.stringify({ monthlyProduction })]);
                     await publishClient.query("SET TIME ZONE 'America/Sao_Paulo'");
                     await publishClient.query(`
                         INSERT INTO sync_status (screen_name, last_sync_at)

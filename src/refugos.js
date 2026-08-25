@@ -2,6 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../lib/db');
+const { getDashboardSnapshot } = require('../lib/dashboard-snapshot');
 
 function getCommercialOwnerRestriction(req) {
     const role = String(req.user?.role || '').trim().toLowerCase();
@@ -85,22 +86,8 @@ router.get('/', async (req, res) => {
             ORDER BY r.data_refugo DESC
         `, params);
 
-        let prodMap = {};
-
-        const producaoAgg = await client.query(`
-            SELECT 
-                to_char(t.data_producao, 'YYYY-MM') as mes_ano, 
-                SUM(COALESCE(t.peso_total, 0)) as total_peso
-            FROM producao_apontada_sincronizada t
-            WHERE t.data_producao >= '2025-01-01'
-              AND UPPER(TRIM(t.setor)) = 'FUSAO'
-              AND TRIM(t.codigo_peca) NOT IN ('18358', '801032102')
-            GROUP BY 1
-        `);
-
-        producaoAgg.rows.forEach(r => {
-            prodMap[r.mes_ano] = parseFloat(r.total_peso);
-        });
+        const productionSnapshot = await getDashboardSnapshot('producao_mensal');
+        const prodMap = productionSnapshot?.payload?.monthlyProduction || {};
 
         return res.status(200).json({
             refugoRawData: dados.rows,
