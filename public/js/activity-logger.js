@@ -49,6 +49,13 @@
     // Exposto globalmente para auditoria de ações do usuário em qualquer tela
     window.erusAudit = logActivity;
 
+    function formatSyncTime(ms) {
+        const totalSeconds = Math.max(0, Math.round(ms / 1000));
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+        return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    }
+
     // --- SISTEMA DE BLOQUEIO DE PÁGINAS (ENFORCEMENT) ---
     async function checkPageLock() {
         const page = window.location.pathname.split('/').pop() || 'index.html';
