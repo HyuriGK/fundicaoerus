@@ -18,8 +18,9 @@ router.get('/notas-servico', async (req, res) => {
                 SUM(cofins) AS cofins,
                 COALESCE(STRING_AGG(DISTINCT NULLIF(centro_custo_codigo, ''), ', '), '') AS centro_custo_codigo,
                 COALESCE(STRING_AGG(DISTINCT NULLIF(centro_custo, ''), ', '), '') AS centro_custo
-            FROM notas_servico_firebird_sync
-            WHERE data BETWEEN $1::date AND $2::date
+            FROM notas_contabilidade_sync
+            WHERE batch_id = (SELECT batch_id FROM contabilidade_sync_batches WHERE status = 'completed' ORDER BY completed_at DESC LIMIT 1)
+              AND data BETWEEN $1::date AND $2::date
               AND tipo_nota = '99'
             GROUP BY data, cnpj, prestador, nota_fiscal
             ORDER BY data DESC, nota_fiscal DESC
@@ -63,8 +64,9 @@ router.get('/cte', async (req, res) => {
                 SUM(cofins) AS cofins,
                 COALESCE(STRING_AGG(DISTINCT NULLIF(centro_custo_codigo, ''), ', '), '') AS centro_custo_codigo,
                 COALESCE(STRING_AGG(DISTINCT NULLIF(centro_custo, ''), ', '), '') AS centro_custo
-            FROM notas_servico_firebird_sync
-            WHERE data BETWEEN $1::date AND $2::date
+            FROM notas_contabilidade_sync
+            WHERE batch_id = (SELECT batch_id FROM contabilidade_sync_batches WHERE status = 'completed' ORDER BY completed_at DESC LIMIT 1)
+              AND data BETWEEN $1::date AND $2::date
               AND tipo_nota = '57'
               AND cfop::text = ANY($3::text[])
             GROUP BY data, cnpj, prestador, nota_fiscal
@@ -100,13 +102,14 @@ router.get('/nfe-entrada', async (req, res) => {
                 SUM(cofins) AS cofins,
                 COALESCE(STRING_AGG(DISTINCT NULLIF(centro_custo_codigo, ''), ', '), '') AS centro_custo_codigo,
                 COALESCE(STRING_AGG(DISTINCT NULLIF(centro_custo, ''), ', '), '') AS centro_custo
-            FROM notas_nfe_entrada_firebird_sync nfe
-            WHERE data BETWEEN $1::date AND $2::date
+            FROM notas_contabilidade_sync nfe
+            WHERE nfe.batch_id = (SELECT batch_id FROM contabilidade_sync_batches WHERE status = 'completed' ORDER BY completed_at DESC LIMIT 1)
+              AND data BETWEEN $1::date AND $2::date
               AND tipo_nota = '55'
               AND cfop::text <> ALL($3::text[])
               AND NOT EXISTS (
-                  SELECT 1 FROM notas_servico_firebird_sync nfse
-                  WHERE nfse.tipo_nota = '99' AND nfse.cfop = nfe.cfop
+                  SELECT 1 FROM notas_contabilidade_sync nfse
+                  WHERE nfse.batch_id = nfe.batch_id AND nfse.tipo_nota = '99' AND nfse.cfop = nfe.cfop
               )
             GROUP BY data, cnpj, prestador, nota_fiscal
             ORDER BY data DESC, nota_fiscal DESC
