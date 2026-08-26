@@ -4,6 +4,14 @@ const fs = require('fs');
 const { Firebird, options: fbOptions } = require('../../lib/firebird-helper');
 const pool = require('../../lib/db');
 
+function failSync(error) {
+    console.error('❌ Falha controlada no sync de Produção:', error?.message || error);
+    process.exit(1);
+}
+
+process.once('unhandledRejection', failSync);
+process.once('uncaughtException', failSync);
+
 // --- Helper Functions ---
 function cleanString(str) {
     if (!str) return null;
