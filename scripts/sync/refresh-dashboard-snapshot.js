@@ -27,4 +27,8 @@ async function refreshDashboardSnapshot() {
     });
 }
 
-refreshDashboardSnapshot().then(() => console.log('Snapshot atualizado.')).catch(error => { console.error(error); process.exitCode = 1; }).finally(() => pool.end());
+if (require.main === module) {
+    refreshDashboardSnapshot().then(() => console.log('Snapshot atualizado.')).catch(error => { console.error(error); process.exitCode = 1; }).finally(() => pool.end());
+}
+
+module.exports = { refreshDashboardSnapshot };

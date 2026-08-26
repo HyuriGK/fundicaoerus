@@ -686,6 +686,13 @@
                         <div class="ti-panel-desc">Pendências e manutenções de dados do sistema.</div>
                     </div>
                 </div>
+                <div class="ti-panel-card" id="refreshDashboardSnapshotBtn" style="--ac:#06b6d4" onclick="refreshDashboardSnapshotManually()">
+                    <div class="ti-panel-icon"><i class="fa-solid fa-arrows-rotate"></i></div>
+                    <div>
+                        <div class="ti-panel-title">Atualizar Dashboard</div>
+                        <div class="ti-panel-desc">Gerar os dados resumidos do dashboard manualmente.</div>
+                    </div>
+                </div>
                 <div class="ti-panel-card" style="--ac:#10b981" onclick="openAdminFeature('serverStatus')">
                     <div class="ti-panel-icon"><i class="fa-solid fa-database"></i></div>
                     <div>
@@ -2112,6 +2119,33 @@
         const email = await classicPrompt(`Email para ${username}?`, currentEmail || '');
         if (email === null || typeof email === 'undefined') return;
         await nativeUpdateEmail(username, email);
+    }
+
+    async function refreshDashboardSnapshotManually() {
+        const card = document.getElementById('refreshDashboardSnapshotBtn');
+        if (card?.dataset.loading === 'true') return;
+        if (card) {
+            card.dataset.loading = 'true';
+            card.style.pointerEvents = 'none';
+            card.style.opacity = '0.55';
+        }
+        try {
+            const res = await fetch('/api/dashboard-snapshot/refresh', {
+                method: 'POST',
+                headers: { 'x-user': localStorage.getItem('erus_user') || 'Desconhecido' }
+            });
+            const data = await res.json();
+            if (!res.ok || !data.success) throw new Error(data.message || 'Falha ao atualizar dashboard');
+            showToast('Dashboard atualizado', 'Snapshot gerado com sucesso.', 'success');
+        } catch (error) {
+            showToast('Erro', error.message, 'danger');
+        } finally {
+            if (card) {
+                delete card.dataset.loading;
+                card.style.pointerEvents = '';
+                card.style.opacity = '';
+            }
+        }
     }
 
     function showToast(title, subtitle, type = 'info') {

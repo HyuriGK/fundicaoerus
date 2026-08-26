@@ -1,6 +1,16 @@
 const express = require('express');
 const router = express.Router();
 const { getDashboardSnapshot } = require('../lib/dashboard-snapshot');
+const { refreshDashboardSnapshot } = require('../scripts/sync/refresh-dashboard-snapshot');
+
+router.post('/refresh', async (req, res) => {
+    try {
+        await refreshDashboardSnapshot();
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
 
 router.get('/:key?', async (req, res) => {
     try {
