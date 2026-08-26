@@ -91,7 +91,17 @@ async function refreshDashboardSnapshot() {
               AND r.data_refugo BETWEEN $1 AND $2
             GROUP BY 1
         `, [start, end]),
-        pool.query("SELECT UPPER(TRIM(setor)) setor,SUM(quantidade*COALESCE(peso_un,0)) total FROM producao_apontada_sincronizada WHERE data_producao BETWEEN $1 AND $2 GROUP BY 1", [start,end]),
+        pool.query(`
+            SELECT
+                UPPER(TRANSLATE(TRIM(t.setor), 'ÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇáàâãäéèêëíìîïóòôõöúùûüç', 'AAAAAEEEEIIIIOOOOOUUUUCaaaaaeeeeiiiiooooouuuuc')) AS setor,
+                SUM(t.quantidade * COALESCE(NULLIF(t.peso_un, 0), pc.peso, p.peso, 0)) AS total
+            FROM producao_apontada_sincronizada t
+            LEFT JOIN pesos_customizados pc ON pc.codigo = t.codigo_peca
+            LEFT JOIN produto_pesos_producao p ON p.codigo_peca = t.codigo_peca
+            WHERE t.data_producao BETWEEN $1 AND $2
+              AND TRIM(t.codigo_peca) NOT IN ('18358', '801032102')
+            GROUP BY 1
+        `, [start, end]),
         pool.query('SELECT meta_peso FROM metas_faturamento WHERE mes_ano = $1', [start.slice(0, 7)])
     ]);
     let totalKg = 0, previousTotalKg = 0;
@@ -107,13 +117,33 @@ async function refreshDashboardSnapshot() {
     const topClientes = carteira.rows.map(row => ({ cliente: row.cliente, pesoKg: Number(row.peso_kg || 0), pedidosUnicos: 0 }));
     const refugoByMotive = Object.fromEntries(refugo.rows.map(row => [row.motivo, Number(row.total || 0)]));
     const refugoTotalKg = Object.values(refugoByMotive).reduce((total, peso) => total + peso, 0);
+    const producaoTotals = {
+        'MOLDAGEM GERAL': 0, 'MOLDAGEM LEVE': 0, 'MOLDAGEM MANUAL': 0, 'MOLDAGEM PESADA': 0,
+        FUSAO: 0, ACABAMENTO: 0, 'TRATAMENTO TERMICO': 0, 'USINAGEM EXPEDICAO': 0,
+        'INSPECAO DE QUALIDADE': 0, EXPEDICAO: 0
+    };
+    producao.rows.forEach(row => {
+        const setor = String(row.setor || '');
+        const peso = Number(row.total || 0);
+        const normalizado = setor === 'FUNDICAO' ? 'FUSAO'
+            : setor === 'TT' ? 'TRATAMENTO TERMICO'
+            : setor === 'QUALIDADE' ? 'INSPECAO DE QUALIDADE'
+            : setor === 'USINAGEM' || setor === '50' ? 'USINAGEM EXPEDICAO'
+            : setor === 'REBARBACAO' ? 'ACABAMENTO' : setor;
+        if (['MOLDAGEM LEVE', 'MOLDAGEM MANUAL', 'MOLDAGEM PESADA'].includes(normalizado)) {
+            producaoTotals[normalizado] += peso;
+            producaoTotals['MOLDAGEM GERAL'] += peso;
+        } else if (Object.prototype.hasOwnProperty.call(producaoTotals, normalizado)) {
+            producaoTotals[normalizado] += peso;
+        }
+    });
     await publishDashboardSnapshot('global', {
         version: 'complete',
         faturamento: { totalKg, previousTotalKg, daily },
         meta: { pesoKg: Number(meta.rows[0]?.meta_peso || 0) },
         carteira: { totalKg: Number(carteira.rows[0]?.total_kg || 0), topClientes },
         refugo: { totalKg: refugoTotalKg, scrapPct: 0, byMotive: refugoByMotive },
-        producao: { totals: Object.fromEntries(producao.rows.map(row => [row.setor, Number(row.total || 0)])) }
+        producao: { totals: producaoTotals }
     });
 }
 
