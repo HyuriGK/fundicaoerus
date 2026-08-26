@@ -25,6 +25,13 @@ const cleanString = (str) => {
     return str.toString().trim().replace(/['"\\\b\f\n\r\t]/g, '');
 };
 
+const formatSqlDate = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+
 const chunkArray = (myArray, chunk_size) => {
     var index = 0;
     var arrayLength = myArray.length;
@@ -94,13 +101,18 @@ async function startSync() {
             lote VARCHAR(100),
             atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )`);
-        await pool.query('TRUNCATE TABLE refugo_apontado_sincronizado RESTART IDENTITY');
-        console.log('✅ Tabela refugo_apontado_sincronizado verificada e limpa.');
+        console.log('✅ Tabela refugo_apontado_sincronizado verificada.');
 
-        // 2. Buscar Refugos no Firebird (Janela: 1º de jan do ano anterior até hoje)
-        const dataInicio = new Date(new Date().getFullYear() - 1, 0, 1);
-        const dataInicioStr = dataInicio.toISOString().split('T')[0];
-        console.log(`📅 Janela de Sincronização: ${dataInicioStr} até hoje.`);
+        // 2. Buscar Refugos no Firebird (janela móvel de 60 dias)
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const dataInicio = new Date(today);
+        dataInicio.setDate(dataInicio.getDate() - 60);
+        const dataFim = new Date(today);
+        dataFim.setDate(dataFim.getDate() + 1);
+        const dataInicioStr = formatSqlDate(dataInicio);
+        const dataFimStr = formatSqlDate(dataFim);
+        console.log(`📅 Janela de Sincronização: ${dataInicioStr} até ${dataFimStr} (60 dias).`);
 
         const queryRefugos = `
             SELECT 
@@ -108,17 +120,16 @@ async function startSync() {
                 DQUANTIDADE_REFUGO_PCS as QUANTIDADE, LOTE_PCS,
                 NOTA_NFE_PCS, SERIE_NFE_PCS
             FROM PRODUCAO_SETOR 
-            WHERE DATA_PCS >= ? AND REF_CODIGO_PCS IS NOT NULL AND DQUANTIDADE_REFUGO_PCS > 0
+            WHERE DATA_PCS >= ?
+              AND DATA_PCS < ?
+              AND REF_CODIGO_PCS IS NOT NULL
+              AND DQUANTIDADE_REFUGO_PCS > 0
             ORDER BY DATA_PCS DESC
         `;
-        const rows = await firebirdQuery(db, queryRefugos, [dataInicio]);
+        const rows = await firebirdQuery(db, queryRefugos, [dataInicio, dataFim]);
         console.log(`📦 Encontrados ${rows.length} registros de refugo no Firebird.`);
 
-        if (rows.length === 0) {
-            console.log('⚠️ Nenhum registro novo para sincronizar.');
-            db.detach();
-            process.exit(0);
-        }
+        if (rows.length === 0) console.log('⚠️ Nenhum refugo na janela; os registros locais desse período serão removidos.');
 
         // 3. Preparar Lookups para Performance
         const opIds = [...new Set(rows.map(r => r.CODIGO_PCS).filter(id => id))];
@@ -183,6 +194,12 @@ async function startSync() {
             ...Object.values(lookupPRODUTO).map(p => p.CLIENTE_PRO)
         ].filter(id => id))];
         await fillMap(cliIds, 'CLIENTE', 'CODIGO_CLI', 'CODIGO_CLI, RAZAO_SOCIAL_CLI', lookupCLIENTE);
+
+        await pool.query(`
+            DELETE FROM refugo_apontado_sincronizado
+            WHERE data_refugo >= $1
+              AND data_refugo < $2
+        `, [dataInicioStr, dataFimStr]);
 
         console.log('✅ Lookups concluídos. Iniciando Inserção...');
 
