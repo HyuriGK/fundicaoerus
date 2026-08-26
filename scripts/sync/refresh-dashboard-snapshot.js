@@ -15,25 +15,25 @@ async function refreshDashboardSnapshot() {
                     p.updated_at,
                     f.data_fic,
                     f.pro_codigo_fic AS has_ficha,
-                    CASE WHEN COALESCE(CASE WHEN p.data->>'SALDO_LIBERADO_FATURAR_PPR' ~ '^-?[0-9]+([.,][0-9]+)?$' THEN REPLACE(p.data->>'SALDO_LIBERADO_FATURAR_PPR', ',', '.')::numeric END, 0) > 0
-                        THEN COALESCE(CASE WHEN p.data->>'SALDO_LIBERADO_FATURAR_PPR' ~ '^-?[0-9]+([.,][0-9]+)?$' THEN REPLACE(p.data->>'SALDO_LIBERADO_FATURAR_PPR', ',', '.')::numeric END, 0)
+                    CASE WHEN COALESCE(CASE WHEN p.data->>'SALDO_LIBERADO_FATURAR_PPR' ~ '^-?[0-9]+(\\.[0-9]+)?$' THEN (p.data->>'SALDO_LIBERADO_FATURAR_PPR')::numeric END, 0) > 0
+                        THEN COALESCE(CASE WHEN p.data->>'SALDO_LIBERADO_FATURAR_PPR' ~ '^-?[0-9]+(\\.[0-9]+)?$' THEN (p.data->>'SALDO_LIBERADO_FATURAR_PPR')::numeric END, 0)
                         ELSE GREATEST(0,
-                            COALESCE(CASE WHEN p.data->>'QUANTIDADE_PPR' ~ '^-?[0-9]+([.,][0-9]+)?$' THEN REPLACE(p.data->>'QUANTIDADE_PPR', ',', '.')::numeric END, 0)
-                            - COALESCE(CASE WHEN p.data->>'QUANTIDADE_FATURADA_PPR' ~ '^-?[0-9]+([.,][0-9]+)?$' THEN REPLACE(p.data->>'QUANTIDADE_FATURADA_PPR', ',', '.')::numeric END, 0)
-                            - COALESCE(CASE WHEN p.data->>'QUANTIDADE_DESISTENCIA_PPR' ~ '^-?[0-9]+([.,][0-9]+)?$' THEN REPLACE(p.data->>'QUANTIDADE_DESISTENCIA_PPR', ',', '.')::numeric END, 0)
+                            COALESCE(CASE WHEN p.data->>'QUANTIDADE_PPR' ~ '^-?[0-9]+(\\.[0-9]+)?$' THEN (p.data->>'QUANTIDADE_PPR')::numeric END, 0)
+                            - COALESCE(CASE WHEN p.data->>'QUANTIDADE_FATURADA_PPR' ~ '^-?[0-9]+(\\.[0-9]+)?$' THEN (p.data->>'QUANTIDADE_FATURADA_PPR')::numeric END, 0)
+                            - COALESCE(CASE WHEN p.data->>'QUANTIDADE_DESISTENCIA_PPR' ~ '^-?[0-9]+(\\.[0-9]+)?$' THEN (p.data->>'QUANTIDADE_DESISTENCIA_PPR')::numeric END, 0)
                         ) END AS saldo,
                     COALESCE(
-                        NULLIF(CASE WHEN p.data->>'PESO_UNIT' ~ '^-?[0-9]+([.,][0-9]+)?$' THEN REPLACE(p.data->>'PESO_UNIT', ',', '.')::numeric END, 0),
+                        NULLIF(CASE WHEN p.data->>'PESO_UNIT' ~ '^-?[0-9]+(\\.[0-9]+)?$' THEN (p.data->>'PESO_UNIT')::numeric END, 0),
                         NULLIF(f.peso_liquido_pro, 0),
-                        NULLIF(CASE WHEN p.data->>'PESO_PRODUTO' ~ '^-?[0-9]+([.,][0-9]+)?$' THEN REPLACE(p.data->>'PESO_PRODUTO', ',', '.')::numeric END, 0),
+                        NULLIF(CASE WHEN p.data->>'PESO_PRODUTO' ~ '^-?[0-9]+(\\.[0-9]+)?$' THEN (p.data->>'PESO_PRODUTO')::numeric END, 0),
                         pc.peso, 0
                     ) AS peso_unit
                 FROM firebird_sync_emissoes p
                 LEFT JOIN ficha_tecnica f ON f.pro_codigo_fic = p.data->>'PRODUTO_PPR'
                 LEFT JOIN pesos_customizados pc ON pc.codigo = TRIM(p.data->>'PRODUTO_PPR')
-                WHERE (COALESCE(CASE WHEN p.data->>'QUANTIDADE_PPR' ~ '^-?[0-9]+([.,][0-9]+)?$' THEN REPLACE(p.data->>'QUANTIDADE_PPR', ',', '.')::numeric END, 0)
-                    - COALESCE(CASE WHEN p.data->>'QUANTIDADE_FATURADA_PPR' ~ '^-?[0-9]+([.,][0-9]+)?$' THEN REPLACE(p.data->>'QUANTIDADE_FATURADA_PPR', ',', '.')::numeric END, 0)
-                    - COALESCE(CASE WHEN p.data->>'QUANTIDADE_DESISTENCIA_PPR' ~ '^-?[0-9]+([.,][0-9]+)?$' THEN REPLACE(p.data->>'QUANTIDADE_DESISTENCIA_PPR', ',', '.')::numeric END, 0)) > 0
+                WHERE (COALESCE(CASE WHEN p.data->>'QUANTIDADE_PPR' ~ '^-?[0-9]+(\\.[0-9]+)?$' THEN (p.data->>'QUANTIDADE_PPR')::numeric END, 0)
+                    - COALESCE(CASE WHEN p.data->>'QUANTIDADE_FATURADA_PPR' ~ '^-?[0-9]+(\\.[0-9]+)?$' THEN (p.data->>'QUANTIDADE_FATURADA_PPR')::numeric END, 0)
+                    - COALESCE(CASE WHEN p.data->>'QUANTIDADE_DESISTENCIA_PPR' ~ '^-?[0-9]+(\\.[0-9]+)?$' THEN (p.data->>'QUANTIDADE_DESISTENCIA_PPR')::numeric END, 0)) > 0
                   AND p.data->>'STATUS_PPR' <> 'C'
                   AND COALESCE(p.data->>'STATUS_PCP', '') NOT IN ('C', 'E', 'F')
                   AND NOT EXISTS (
