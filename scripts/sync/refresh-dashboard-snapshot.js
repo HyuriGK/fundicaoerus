@@ -7,7 +7,36 @@ async function refreshDashboardSnapshot() {
     const end = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
     const previousStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().slice(0, 10);
     const [fat, carteira, refugo, producao, meta] = await Promise.all([
-        pool.query("SELECT data_faturamento::date data,SUM(COALESCE(NULLIF(peso_un,0),0)*COALESCE(quantidade,0)) total FROM faturamento_firebird WHERE data_faturamento BETWEEN $1 AND $2 AND gera_financeiro IS DISTINCT FROM 'N' AND COALESCE(excluido_manualmente,false)=false GROUP BY 1 ORDER BY 1", [previousStart,end]),
+        pool.query(`
+            WITH fat_peso_overrides AS (
+                SELECT fp.item_key, fp.item_value::boolean AS fat_peso
+                FROM app_preferences p
+                CROSS JOIN LATERAL jsonb_each_text(COALESCE(p.value, '{}'::jsonb)) AS fp(item_key, item_value)
+                WHERE p.key = 'fat_peso_overrides'
+            ), base AS (
+                SELECT f.data_faturamento::date AS data,
+                    CASE WHEN o.fat_peso IS NOT NULL THEN o.fat_peso
+                         WHEN f.gera_financeiro = 'N' THEN false
+                         ELSE NOT COALESCE(pref.excluido, f.excluido_manualmente, false) END AS fat_peso,
+                    COALESCE(NULLIF(f.peso_un, 0), pc.peso, 0) * COALESCE(f.quantidade, 0) AS peso_total
+                FROM faturamento_firebird f
+                LEFT JOIN faturamento_firebird_preferencias pref
+                    ON pref.nota_fiscal = f.nota_fiscal
+                    AND pref.codigo_item IS NOT DISTINCT FROM CAST(TRIM(f.codigo_item) AS VARCHAR)
+                    AND COALESCE(pref.pedido, '') = COALESCE(TRIM(f.pedido), '')
+                    AND pref.data_faturamento = f.data_faturamento
+                    AND pref.quantidade = f.quantidade
+                LEFT JOIN pesos_customizados pc ON pc.codigo = TRIM(f.codigo_item)
+                LEFT JOIN fat_peso_overrides o ON o.item_key = CONCAT(f.nota_fiscal, '-', COALESCE(TRIM(f.codigo_item), ''), '-', COALESCE(TRIM(f.pedido), ''), '-', f.data_faturamento::date, '-', COALESCE(f.quantidade, 0))
+                WHERE f.data_faturamento >= $3 AND f.data_faturamento <= $2
+                  AND f.cliente_codigo::text NOT IN ('257', '432', '2020', '316', '2283', '253')
+                  AND UPPER(TRIM(COALESCE(f.cliente_nome, ''))) NOT LIKE '%IMEPEL INDUSTRIA MECANICA LTDA%'
+                  AND UPPER(TRIM(COALESCE(f.cliente_nome, ''))) NOT LIKE '%STEELROOL INDUSTRIA METALURGICA%'
+                  AND UPPER(TRIM(COALESCE(f.cliente_nome, ''))) NOT LIKE '%SPILROD FUNDICAO DE FERRO E ACO LTDA%'
+            )
+            SELECT data, SUM(CASE WHEN fat_peso THEN peso_total ELSE 0 END) AS total
+            FROM base GROUP BY data ORDER BY data
+        `, [start, end, previousStart]),
         pool.query(`
             WITH base AS (
                 SELECT
@@ -58,7 +87,14 @@ async function refreshDashboardSnapshot() {
     ]);
     let totalKg = 0, previousTotalKg = 0;
     const daily = [];
-    fat.rows.forEach(row => { const peso = Number(row.total || 0); if (String(row.data).slice(0, 7) === start.slice(0, 7)) { totalKg += peso; daily.push({ data: String(row.data).slice(0, 10), pesoTotal: peso }); } else previousTotalKg += peso; });
+    fat.rows.forEach(row => {
+        const peso = Number(row.total || 0);
+        const data = row.data instanceof Date ? row.data.toISOString().slice(0, 10) : String(row.data).slice(0, 10);
+        if (data.slice(0, 7) === start.slice(0, 7)) {
+            totalKg += peso;
+            daily.push({ data, pesoTotal: peso });
+        } else previousTotalKg += peso;
+    });
     const topClientes = carteira.rows.map(row => ({ cliente: row.cliente, pesoKg: Number(row.peso_kg || 0), pedidosUnicos: 0 }));
     await publishDashboardSnapshot('global', {
         version: 'complete',
