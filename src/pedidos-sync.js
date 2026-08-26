@@ -250,45 +250,6 @@ router.get('/resumo-carteira', async (req, res) => {
     }
 });
 
-router.get('/delivery-monthly-summary', async (req, res) => {
-    try {
-        const year = parseInt(req.query.year, 10);
-        if (!year) return res.status(400).json({ error: 'Ano obrigatorio' });
-
-        const commercialOwner = getCommercialOwnerRestriction(req);
-        const params = [String(year)];
-        const ownerJoin = commercialOwner ? `
-            JOIN clientes_firebird_sync c ON c.codigo::text = p.data->>'ID_CLIENTE_CORE'
-            JOIN clientes_responsavel_comercial rc
-              ON rc.empresa = c.empresa AND rc.codigo = c.codigo AND rc.responsavel_comercial = $2
-        ` : '';
-        if (commercialOwner) params.push(commercialOwner);
-
-        const result = await pool.query(`
-            SELECT
-                SUBSTRING(COALESCE(NULLIF(p.data->>'ENTREGA_PETR', ''), NULLIF(p.data->>'DATA_ENTREGA_PPR', '')), 6, 2)::int AS month,
-                SUM(GREATEST(0, (p.data->>'QUANTIDADE_PPR')::numeric - COALESCE((p.data->>'QUANTIDADE_FATURADA_PPR')::numeric, 0) - COALESCE((p.data->>'QUANTIDADE_DESISTENCIA_PPR')::numeric, 0)) *
-                    COALESCE(NULLIF(p.data->>'PESO_UNIT', '')::numeric, NULLIF(p.data->>'PESO_PRODUTO', '')::numeric, pc.peso, f.peso_liquido_pro, 0)) AS peso,
-                SUM(GREATEST(0, (p.data->>'QUANTIDADE_PPR')::numeric - COALESCE((p.data->>'QUANTIDADE_FATURADA_PPR')::numeric, 0) - COALESCE((p.data->>'QUANTIDADE_DESISTENCIA_PPR')::numeric, 0)) *
-                    COALESCE(NULLIF(p.data->>'VALOR_PPR', '')::numeric, 0)) AS valor
-            FROM firebird_sync_emissoes p
-            LEFT JOIN pesos_customizados pc ON pc.codigo = p.data->>'PRODUTO_PPR'
-            LEFT JOIN ficha_tecnica f ON f.pro_codigo_fic = p.data->>'PRODUTO_PPR'
-            ${ownerJoin}
-            WHERE SUBSTRING(COALESCE(NULLIF(p.data->>'ENTREGA_PETR', ''), NULLIF(p.data->>'DATA_ENTREGA_PPR', '')), 1, 4) = $1
-              AND (p.data->>'STATUS_PPR') <> 'C'
-              AND COALESCE(p.data->>'STATUS_PCP', '') NOT IN ('C', 'E', 'F')
-              AND COALESCE(p.data->>'ID_CLIENTE_CORE', '') NOT IN ('253', '257', '316', '432', '2020', '2283')
-            GROUP BY 1
-            ORDER BY 1
-        `, params);
-        res.json({ success: true, months: result.rows.map(row => ({ month: row.month, peso: Number(row.peso || 0), valor: Number(row.valor || 0) })) });
-    } catch (error) {
-        console.error('Erro resumo mensal de entrega:', error);
-        res.status(500).json({ error: 'Erro ao buscar resumo mensal de entrega.' });
-    }
-});
-
 // Rota para buscar os pedidos sincronizados
 router.get('/', async (req, res) => {
     const { carteiraOnly } = req.query;
@@ -310,6 +271,11 @@ router.get('/', async (req, res) => {
                     AND rc.responsavel_comercial = $1
         ` : '';
         const ownerParams = commercialOwner ? [commercialOwner] : [];
+        const deliveryYear = parseInt(req.query.deliveryYear, 10);
+        const deliveryFilter = Number.isInteger(deliveryYear) ? `
+                    AND SUBSTRING(COALESCE(NULLIF(p.data->>'ENTREGA_PETR', ''), NULLIF(p.data->>'DATA_ENTREGA_PPR', '')), 1, 4) = $${ownerParams.length + 1}
+                ` : '';
+        if (Number.isInteger(deliveryYear)) ownerParams.push(String(deliveryYear));
         let query;
         if (carteiraOnly === 'true') {
             query = `
@@ -334,6 +300,7 @@ router.get('/', async (req, res) => {
                     ((p.data->>'QUANTIDADE_PPR')::numeric - COALESCE((p.data->>'QUANTIDADE_FATURADA_PPR')::numeric, 0) - COALESCE((p.data->>'QUANTIDADE_DESISTENCIA_PPR')::numeric, 0)) > 0
                     AND (p.data->>'STATUS_PPR') <> 'C'
                     AND COALESCE(p.data->>'STATUS_PCP', '') NOT IN ('C', 'E', 'F')
+                    ${deliveryFilter}
                 ORDER BY
                     (f.pro_codigo_fic IS NOT NULL) DESC,
                     f.data_fic DESC NULLS LAST,
