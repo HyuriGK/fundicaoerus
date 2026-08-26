@@ -2192,13 +2192,11 @@
             container.appendChild(sel);
         }
 
-        function selectMonth(idx) {
+        async function selectMonth(idx) {
             currentMonthFilter = idx;
             if (window.erusAudit) window.erusAudit('SELECT_PERIODO_APONTAMENTOS', { ano: currentYearFilter, mes: idx === 0 ? 'ANO' : idx });
             updateMonthButtonsUI();
-            refreshGrupoLigaFilters();
-            applyFilters();
-            fetchGoal(); fetchFuncionarios();
+            await fetchData();
         }
 
         function updateMonthButtonsUI() {
@@ -2299,12 +2297,11 @@
         function setupEventListeners() {
 
             // Year Select
-            yearFilterSelect.addEventListener('change', (e) => {
+            yearFilterSelect.addEventListener('change', async (e) => {
                 currentYearFilter = e.target.value;
                 if (window.erusAudit) window.erusAudit('SELECT_ANO_APONTAMENTOS', { ano: currentYearFilter });
                 refreshGrupoLigaFilters(); // Atualiza os grupos/ligas disponíveis para o novo período
-                applyFilters();
-                fetchGoal(); fetchFuncionarios(); // Fetch goal for new year
+                await fetchData();
             });
 
             // Meta de Peso é somente leitura aqui — definida pelo Desenvolvedor no index.html
@@ -2320,9 +2317,19 @@
 
         async function fetchData() {
             try {
+                const params = new URLSearchParams();
+                if (currentYearFilter !== 'TODOS') {
+                    const year = Number(currentYearFilter);
+                    const month = Number(currentMonthFilter);
+                    params.set('startDate', month ? `${year}-${String(month).padStart(2, '0')}-01` : `${year}-01-01`);
+                    params.set('endDate', month
+                        ? `${year}-${String(month).padStart(2, '0')}-${String(new Date(year, month, 0).getDate()).padStart(2, '0')}`
+                        : `${year}-12-31`);
+                }
+                setInlineLoading('dailyChartLoading', true);
                 const [response, figurasRes] = await Promise.all([
-                    fetch('/api/producao-postgres'),
-                    fetch('/api/producao-postgres/figuras')
+                    fetch(`/api/producao-postgres?${params}`),
+                    fetch(`/api/producao-postgres/figuras?${params}`)
                 ]);
                 const result = await response.json();
                 const figurasResult = await figurasRes.json();
@@ -2331,7 +2338,7 @@
 
                 if (result.success) {
                     allData = result.data;
-                    populateFilters();
+                    populateFilters(result.years || []);
 
                     renderMonthButtons();
 
@@ -2347,11 +2354,12 @@
                 console.error('Fetch error:', error);
                 alert('Erro ao conectar com o servidor.');
             } finally {
+                setInlineLoading('dailyChartLoading', false);
                 loadingScreen.style.display = 'none';
             }
         }
 
-        function populateFilters() {
+        function populateFilters(yearsFromApi = []) {
             // Sectors
             // Sectors - Explicit Order requested
             const orderedSectors = [
@@ -2385,7 +2393,7 @@
             renderSectorButtons(visibleSectors);
 
             // Years
-            const years = [...new Set(allData.map(d => d.data.substring(0, 4)))].sort().reverse();
+            const years = yearsFromApi.length ? yearsFromApi : [...new Set(allData.map(d => d.data.substring(0, 4)))].sort().reverse();
             yearFilterSelect.innerHTML = '<option value="TODOS">TODOS</option>';
             years.forEach(y => {
                 const option = document.createElement('option');

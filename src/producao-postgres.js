@@ -660,10 +660,19 @@ router.get('/', async (req, res) => {
         query += ` ORDER BY t.data_producao DESC, t.id DESC LIMIT $${paramIndex}`;
         params.push(parseInt(limit));
 
-        const result = await pool.query(query, params);
+        const [result, yearsResult] = await Promise.all([
+            pool.query(query, params),
+            pool.query(`
+                SELECT DISTINCT EXTRACT(YEAR FROM data_producao)::int AS year
+                FROM producao_apontada_sincronizada
+                WHERE data_producao IS NOT NULL
+                ORDER BY year DESC
+            `)
+        ]);
 
         res.json({
             success: true,
+            years: yearsResult.rows.map(row => String(row.year)),
             data: result.rows.map(row => ({
                 id: row.id,
                 data: row.data, // YYYY-MM-DD
@@ -947,11 +956,27 @@ router.post('/peso', async (req, res) => {
 // Returns a map of { codigo_peca: qtde_figuras } for all codes in ficha_tecnica
 router.get('/figuras', async (req, res) => {
     try {
+        const { startDate, endDate } = req.query;
+        const params = [];
+        let periodFilter = '';
+        if (startDate) {
+            params.push(startDate);
+            periodFilter += ` AND t.data_producao >= $${params.length}`;
+        }
+        if (endDate) {
+            params.push(endDate);
+            periodFilter += ` AND t.data_producao <= $${params.length}`;
+        }
         const result = await pool.query(`
-            SELECT pro_codigo_fic as codigo_peca, qtde_figuras
-            FROM ficha_tecnica
-            WHERE qtde_figuras IS NOT NULL AND qtde_figuras > 0
-        `);
+            SELECT f.pro_codigo_fic as codigo_peca, f.qtde_figuras
+            FROM ficha_tecnica f
+            JOIN (
+                SELECT DISTINCT t.codigo_peca
+                FROM producao_apontada_sincronizada t
+                WHERE 1=1 ${periodFilter}
+            ) t ON t.codigo_peca = f.pro_codigo_fic
+            WHERE f.qtde_figuras IS NOT NULL AND f.qtde_figuras > 0
+        `, params);
         const map = {};
         result.rows.forEach(r => { map[r.codigo_peca] = parseInt(r.qtde_figuras); });
         res.json({ success: true, figuras: map });
