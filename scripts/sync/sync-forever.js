@@ -395,7 +395,7 @@ function runBat(bat) {
             logEvent(bat.name, err, true);
         });
 
-        child.on('close', code => {
+        child.on('close', async code => {
             if (hadFatal || code !== 0) {
                 scriptState[bat.name] = 'ERROR';
                 if (code !== 0) logEvent(bat.name, `Falha - codigo de saida ${code}`, true);
@@ -405,6 +405,16 @@ function runBat(bat) {
                 lastOkAt[bat.name]    = nowTime();
                 delete activeIssues[bat.name];
                 logEvent(bat.name, 'Sincronizacao concluida com sucesso', false);
+                if (bat.name === 'REFUGOS') {
+                    await new Promise(snapshotResolve => {
+                        const snapshot = spawn(process.execPath, [path.join(__dirname, 'refresh-refugo-kpi-snapshot.js')], { stdio: 'ignore' });
+                        snapshot.on('close', snapshotCode => {
+                            if (snapshotCode !== 0) logEvent(bat.name, 'Falha ao atualizar snapshot de refugos', true);
+                            else logEvent(bat.name, 'Snapshot de refugos atualizado', false);
+                            snapshotResolve();
+                        });
+                    });
+                }
             }
             resolve();
         });
