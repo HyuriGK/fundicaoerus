@@ -81,7 +81,16 @@ async function refreshDashboardSnapshot() {
             SELECT cliente, peso_kg, SUM(peso_kg) OVER () AS total_kg
             FROM por_cliente ORDER BY peso_kg DESC LIMIT 10
         `),
-        pool.query("SELECT SUM(r.quantidade * COALESCE(pc.peso, r.peso_un, 0)) total FROM refugo_apontado_sync r LEFT JOIN pesos_customizados pc ON pc.codigo = r.codigo_peca WHERE r.batch_id=(SELECT batch_id FROM refugos_sync_batches WHERE status='completed' ORDER BY completed_at DESC LIMIT 1) AND r.data_refugo BETWEEN $1 AND $2", [start,end]),
+        pool.query(`
+            SELECT
+                UPPER(TRIM(COALESCE(r.motivo, 'NAO INFORMADO'))) AS motivo,
+                SUM(r.quantidade * COALESCE(pc.peso, r.peso_un, 0)) AS total
+            FROM refugo_apontado_sync r
+            LEFT JOIN pesos_customizados pc ON pc.codigo = r.codigo_peca
+            WHERE r.batch_id = (SELECT batch_id FROM refugos_sync_batches WHERE status = 'completed' ORDER BY completed_at DESC LIMIT 1)
+              AND r.data_refugo BETWEEN $1 AND $2
+            GROUP BY 1
+        `, [start, end]),
         pool.query("SELECT UPPER(TRIM(setor)) setor,SUM(quantidade*COALESCE(peso_un,0)) total FROM producao_apontada_sincronizada WHERE data_producao BETWEEN $1 AND $2 GROUP BY 1", [start,end]),
         pool.query('SELECT meta_peso FROM metas_faturamento WHERE mes_ano = $1', [start.slice(0, 7)])
     ]);
@@ -96,12 +105,14 @@ async function refreshDashboardSnapshot() {
         } else previousTotalKg += peso;
     });
     const topClientes = carteira.rows.map(row => ({ cliente: row.cliente, pesoKg: Number(row.peso_kg || 0), pedidosUnicos: 0 }));
+    const refugoByMotive = Object.fromEntries(refugo.rows.map(row => [row.motivo, Number(row.total || 0)]));
+    const refugoTotalKg = Object.values(refugoByMotive).reduce((total, peso) => total + peso, 0);
     await publishDashboardSnapshot('global', {
         version: 'complete',
         faturamento: { totalKg, previousTotalKg, daily },
         meta: { pesoKg: Number(meta.rows[0]?.meta_peso || 0) },
         carteira: { totalKg: Number(carteira.rows[0]?.total_kg || 0), topClientes },
-        refugo: { totalKg: Number(refugo.rows[0].total || 0), scrapPct: 0, byMotive: {} },
+        refugo: { totalKg: refugoTotalKg, scrapPct: 0, byMotive: refugoByMotive },
         producao: { totals: Object.fromEntries(producao.rows.map(row => [row.setor, Number(row.total || 0)])) }
     });
 }
