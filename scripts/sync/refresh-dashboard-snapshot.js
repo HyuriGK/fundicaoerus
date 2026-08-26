@@ -18,6 +18,7 @@ async function refreshDashboardSnapshot() {
     fat.rows.forEach(row => { const peso = Number(row.total || 0); if (String(row.data).slice(0, 7) === start.slice(0, 7)) { totalKg += peso; daily.push({ data: String(row.data).slice(0, 10), pesoTotal: peso }); } else previousTotalKg += peso; });
     const topClientes = carteira.rows.map(row => ({ cliente: row.cliente, pesoKg: Number(row.total || 0), pedidosUnicos: 0 }));
     await publishDashboardSnapshot('global', {
+        version: 'complete',
         faturamento: { totalKg, previousTotalKg, daily },
         meta: { pesoKg: Number(meta.rows[0]?.meta_peso || 0) },
         carteira: { totalKg: topClientes.reduce((sum, row) => sum + row.pesoKg, 0), topClientes },
