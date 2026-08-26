@@ -127,6 +127,7 @@ const INDEPENDENT_BATS = [
 const INDEPENDENT_WAIT = 2 * 60 * 1000; // 2 minutos
 const LIGHT_SYNC_WAIT = 5 * 60 * 1000; // 5 minutos após concluir
 const HEAVY_SYNC_MODULES = new Set(['EMISSOES', 'FATURAMENTO', 'PEDIDOS', 'PRODUCAO', 'REFUGOS']);
+const SNAPSHOT_SCRIPTS = { EMISSOES: 'refresh-carteira-dashboard-snapshot.js', REFUGOS: 'refresh-refugo-kpi-snapshot.js' };
 const TECHNICAL_SYNC_MODULES = new Set(['MOLDAGEM FT', 'FUSAO FT']);
 const LIGHT_SYNC_CONCURRENCY = 2;
 let nextRunAt = {};
@@ -405,12 +406,12 @@ function runBat(bat) {
                 lastOkAt[bat.name]    = nowTime();
                 delete activeIssues[bat.name];
                 logEvent(bat.name, 'Sincronizacao concluida com sucesso', false);
-                if (bat.name === 'REFUGOS') {
+                if (SNAPSHOT_SCRIPTS[bat.name]) {
                     await new Promise(snapshotResolve => {
-                        const snapshot = spawn(process.execPath, [path.join(__dirname, 'refresh-refugo-kpi-snapshot.js')], { stdio: 'ignore' });
+                        const snapshot = spawn(process.execPath, [path.join(__dirname, SNAPSHOT_SCRIPTS[bat.name])], { stdio: 'ignore' });
                         snapshot.on('close', snapshotCode => {
-                            if (snapshotCode !== 0) logEvent(bat.name, 'Falha ao atualizar snapshot de refugos', true);
-                            else logEvent(bat.name, 'Snapshot de refugos atualizado', false);
+                            if (snapshotCode !== 0) logEvent(bat.name, 'Falha ao atualizar snapshot', true);
+                            else logEvent(bat.name, 'Snapshot atualizado', false);
                             snapshotResolve();
                         });
                     });
