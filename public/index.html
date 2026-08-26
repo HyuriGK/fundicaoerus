@@ -9538,17 +9538,31 @@
                     const snapshot = snapshotJson?.success ? snapshotJson.data : null;
 
                     if (snapshot) {
-                        const fatTotalWeight = Number(snapshot.faturamento?.totalKg || 0);
+                        let fatTotalWeight = Number(snapshot.faturamento?.totalKg || 0);
                         const metaVal = Number(snapshot.meta?.pesoKg || 0);
                         let cartKg = Number(snapshot.carteira?.totalKg || 0);
                         try {
-                            const carteiraOriginalRes = await fetchWithTimeout('/api/producao-postgres/kpi-snapshot/latest');
-                            const carteiraOriginal = carteiraOriginalRes.ok ? await carteiraOriginalRes.json() : null;
-                            if (carteiraOriginal?.success) cartKg = Number(carteiraOriginal.totalKg || 0);
+                            const context = `${curYear}-${String(curMonth + 1).padStart(2, '0')}`;
+                            const [carteiraRes, faturamentoRes, refugoPesoRes, refugoPctRes] = await Promise.all([
+                                fetchWithTimeout('/api/producao-postgres/kpi-snapshot/latest'),
+                                fetchWithTimeout(`/api/producao-postgres/kpi-snapshot/latest?metricKey=faturamento_peso&contextKey=${context}`),
+                                fetchWithTimeout(`/api/producao-postgres/kpi-snapshot/latest?metricKey=refugo_peso&contextKey=${context}`),
+                                fetchWithTimeout(`/api/producao-postgres/kpi-snapshot/latest?metricKey=refugo_percentual&contextKey=${context}`)
+                            ]);
+                            const [carteiraOriginal, faturamentoOriginal, refugoPesoOriginal, refugoPctOriginal] = await Promise.all([
+                                carteiraRes.ok ? carteiraRes.json() : null,
+                                faturamentoRes.ok ? faturamentoRes.json() : null,
+                                refugoPesoRes.ok ? refugoPesoRes.json() : null,
+                                refugoPctRes.ok ? refugoPctRes.json() : null
+                            ]);
+                            if (carteiraOriginal?.success) cartKg = Number(carteiraOriginal.value || 0);
+                            if (faturamentoOriginal?.success) fatTotalWeight = Number(faturamentoOriginal.value || 0);
+                            if (refugoPesoOriginal?.success) totalRefWeight = Number(refugoPesoOriginal.value || 0);
+                            if (refugoPctOriginal?.success) dashboardData.scrapPct = Number(refugoPctOriginal.value || 0);
                         } catch (error) {
-                            console.warn('Snapshot original da carteira indisponivel:', error);
+                            console.warn('Snapshot de KPI indisponível:', error);
                         }
-                        const totalRefWeight = Number(snapshot.refugo?.totalKg || 0);
+                        let totalRefWeight = Number(snapshot.refugo?.totalKg || 0);
                         dashboardData.billingDaily = snapshot.faturamento?.daily || [];
                         dashboardData.carteira = snapshot.carteira?.topClientes || [];
                         dashboardData.totalKg = cartKg;

@@ -319,17 +319,23 @@ router.get('/kpi-snapshot/latest', async (req, res) => {
         await ensureKpiSnapshotsTable();
         const commercialOwner = getCommercialOwnerRestriction(req);
         const scopeKey = commercialOwner ? `comercial:${commercialOwner.toLowerCase()}` : 'global';
+        const metricKey = String(req.query.metricKey || 'carteira_peso').trim();
+        const contextKey = String(req.query.contextKey || (metricKey === 'carteira_peso' ? 'carteira-atual' : '')).trim();
+        const allowedMetrics = ['carteira_peso', 'faturamento_peso', 'refugo_peso', 'refugo_percentual'];
+        if (!allowedMetrics.includes(metricKey) || !contextKey) {
+            return res.status(400).json({ success: false, message: 'Métrica inválida.' });
+        }
         const result = await pool.query(`
             SELECT metric_value, updated_at
             FROM kpi_screen_snapshots_v2
-            WHERE metric_key = 'carteira_peso'
+            WHERE metric_key = $1
               AND source_key = 'original'
-              AND context_key = 'carteira-atual'
-              AND scope_key = $1
+              AND context_key = $2
+              AND scope_key = $3
             LIMIT 1
-        `, [scopeKey]);
+        `, [metricKey, contextKey, scopeKey]);
         const row = result.rows[0];
-        res.json({ success: !!row, totalKg: Number(row?.metric_value || 0), updatedAt: row?.updated_at || null });
+        res.json({ success: !!row, value: Number(row?.metric_value || 0), totalKg: Number(row?.metric_value || 0), updatedAt: row?.updated_at || null });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
