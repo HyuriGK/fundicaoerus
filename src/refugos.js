@@ -37,16 +37,32 @@ router.get('/', async (req, res) => {
     const client = await pool.connect();
 
     try {
+        const year = Number.parseInt(req.query.year, 10);
+        const month = Number.parseInt(req.query.month, 10);
         const commercialOwner = getCommercialOwnerRestriction(req);
-        const params = commercialOwner ? [commercialOwner] : [];
+        const params = [];
+        let periodFilter = '';
+
+        if (year && month >= 1 && month <= 12) {
+            const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+            const endDate = new Date(year, month, 1).toISOString().slice(0, 10);
+            params.push(startDate, endDate);
+            periodFilter = 'AND r.data_refugo >= $1 AND r.data_refugo < $2';
+        } else if (year) {
+            params.push(`${year}-01-01`, `${year + 1}-01-01`);
+            periodFilter = 'AND r.data_refugo >= $1 AND r.data_refugo < $2';
+        }
+
+        if (commercialOwner) params.push(commercialOwner);
+        const ownerParam = `$${params.length}`;
         const ownerFilter = commercialOwner ? `
             AND EXISTS (
                 SELECT 1
                 FROM clientes_firebird_sync c
                 JOIN clientes_responsavel_comercial rc
-                  ON rc.empresa = c.empresa
+                 ON rc.empresa = c.empresa
                  AND rc.codigo = c.codigo
-                 AND rc.responsavel_comercial = $1
+                 AND rc.responsavel_comercial = ${ownerParam}
                 WHERE UPPER(TRIM(c.razao_social)) = UPPER(TRIM(r.cliente))
             )
         ` : '';
@@ -82,6 +98,7 @@ router.get('/', async (req, res) => {
                 LIMIT 1
             ) vp ON true
             WHERE r.batch_id = (SELECT batch_id FROM refugos_sync_batches WHERE status = 'completed' ORDER BY completed_at DESC LIMIT 1)
+            ${periodFilter}
             ${ownerFilter}
             ORDER BY r.data_refugo DESC
         `, params);

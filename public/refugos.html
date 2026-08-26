@@ -1326,6 +1326,7 @@
         const MONTHS_SHORT = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
         let rawData = [];
         let customWeights = {}; // NOVO: Pesos customizados (sincronizados com pedidos.html)
+        let customWeightsLoaded = false;
         let monthlyProduction = {};
         let selectedYear = 2026;
         let selectedMonthIndex = new Date().getMonth(); // 0-based
@@ -1397,10 +1398,11 @@
         }
         async function fetchData() {
             try {
-                const [, res] = await Promise.all([
-                    fetchCustomWeights(),
-                    fetch('/api/refugos-new')
-                ]);
+                const params = new URLSearchParams({ year: selectedYear });
+                if (selectedMonthIndex !== -1) params.set('month', selectedMonthIndex + 1);
+                const requests = [fetch(`/api/refugos-new?${params}`)];
+                if (!customWeightsLoaded) requests.push(fetchCustomWeights());
+                const [res] = await Promise.all(requests);
                 const json = await res.json();
                 rawData = json.refugoRawData || [];
                 monthlyProduction = json.refugoMonthlyProduction || {};
@@ -1414,6 +1416,7 @@
                 const res = await fetch('/api/weights/list');
                 if (res.ok) {
                     customWeights = await res.json();
+                    customWeightsLoaded = true;
                 }
             } catch (e) {
                 console.error('Erro ao buscar pesos customizados:', e);
@@ -1456,12 +1459,12 @@
                 input.disabled = false;
             }
         }
-        function changeYear() {
+        async function changeYear() {
             selectedYear = parseInt(document.getElementById('yearSelect').value);
             if (window.erusAudit) window.erusAudit('SELECT_ANO_REFUGOS', { ano: selectedYear, mes: selectedMonthIndex });
-            processData();
+            await fetchData();
         }
-        function selectMonth(idx) {
+        async function selectMonth(idx) {
             selectedMonthIndex = idx;
             if (window.erusAudit) window.erusAudit('SELECT_MES_REFUGOS', { ano: selectedYear, mes: selectedMonthIndex });
             updateMonthButtonsUI();
@@ -1473,7 +1476,7 @@
                 switchPeriod('diario');
                 return;
             }
-            processData();
+            await fetchData();
         }
         function updateMonthButtonsUI() {
             const sel = document.getElementById('monthSelect');
@@ -1482,7 +1485,7 @@
         // --- VIEW TOGGLE ---
         let dailyBarChartInstance = null;
         let currentPeriod = 'diario';
-        function switchPeriod(period) {
+        async function switchPeriod(period) {
             currentPeriod = period;
             currentView = 'apontamentos';
             document.getElementById('chartViewSelect').value = 'apontamentos';
@@ -1510,7 +1513,7 @@
             } else {
                 document.getElementById('viewDay-day').style.display = '';
             }
-            processData();
+            await fetchData();
         }
         function switchView(view) {
             currentView = view;
