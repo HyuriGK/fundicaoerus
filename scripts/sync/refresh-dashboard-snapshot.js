@@ -45,8 +45,6 @@ async function refreshDashboardSnapshot() {
                   )
             ), limite AS (
                 SELECT * FROM base
-                ORDER BY (has_ficha IS NOT NULL) DESC, data_fic DESC NULLS LAST, updated_at DESC
-                LIMIT 1500
             ), por_cliente AS (
                 SELECT cliente, SUM(saldo * peso_unit) AS peso_kg
                 FROM limite GROUP BY cliente
