@@ -142,12 +142,13 @@ async function refreshDashboardSnapshot() {
         ...(producaoMensalSnapshot?.payload?.monthlyProduction || {}),
         [start.slice(0, 7)]: producaoTotals.FUSAO
     };
+    const refugoPct = producaoTotals.FUSAO > 0 ? (refugoTotalKg / producaoTotals.FUSAO) * 100 : 0;
     await publishDashboardSnapshot('global', {
         version: 'complete',
         faturamento: { totalKg, previousTotalKg, daily },
         meta: { pesoKg: Number(meta.rows[0]?.meta_peso || 0) },
         carteira: { totalKg: Number(carteira.rows[0]?.total_kg || 0), topClientes },
-        refugo: { totalKg: refugoTotalKg, scrapPct: 0, byMotive: refugoByMotive },
+        refugo: { totalKg: refugoTotalKg, scrapPct: refugoPct, byMotive: refugoByMotive },
         producao: { totals: producaoTotals }
     });
     await publishDashboardSnapshot('producao_mensal', { monthlyProduction });
