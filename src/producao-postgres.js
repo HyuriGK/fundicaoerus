@@ -314,6 +314,27 @@ router.post('/kpi-snapshot', async (req, res) => {
     }
 });
 
+router.get('/kpi-snapshot/latest', async (req, res) => {
+    try {
+        await ensureKpiSnapshotsTable();
+        const commercialOwner = getCommercialOwnerRestriction(req);
+        const scopeKey = commercialOwner ? `comercial:${commercialOwner.toLowerCase()}` : 'global';
+        const result = await pool.query(`
+            SELECT metric_value, updated_at
+            FROM kpi_screen_snapshots_v2
+            WHERE metric_key = 'carteira_peso'
+              AND source_key = 'original'
+              AND context_key = 'carteira-atual'
+              AND scope_key = $1
+            LIMIT 1
+        `, [scopeKey]);
+        const row = result.rows[0];
+        res.json({ success: !!row, totalKg: Number(row?.metric_value || 0), updatedAt: row?.updated_at || null });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
 router.get('/', async (req, res) => {
     try {
         // 2. Verificar tarefas (registros com peso zero na tabela sincronizada - Agrupado por Setor)
