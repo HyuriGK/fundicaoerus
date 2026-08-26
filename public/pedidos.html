@@ -3261,6 +3261,7 @@
         let activeBlockReasonFilter = null;
         let chartPCP = null, chartPareto = null, chartPending = null, chartHistorical = null, chartConcentracao = null, chartVariacao = null;
         const localChartCache = new Map();
+        const deliveryChartDataCache = new Map();
         let activeMonthFilter = null, activeClientFilter = null; // Legacy vars, replacing with object below
         let activeChartFilters = { month: null, client: null, stage: null, day: null, moldagemTipo: null }; // New PowerBI-style filters
         let chartDaily = null;
@@ -4238,6 +4239,7 @@
                 if (!resPedidos || !resPedidos.ok) throw new Error('Erro na API Pedidos');
                 allData = await resPedidos.json();
                 localChartCache.clear();
+                deliveryChartDataCache.clear();
                 updatePedidosPageLoader('graficos', 'Montando indicadores e graficos', 78);
                 if (resCarteira && resCarteira.ok) {
                     carteiraData = await resCarteira.json();
@@ -5755,12 +5757,32 @@
         initYearFilter();
         // Replaced logic for chart updates
         // function toggleChartMode() ... removed
-        function updatePCPChart(list) {
+        async function getDeliveryChartData(year) {
+            if (!deliveryChartDataCache.has(year)) {
+                deliveryChartDataCache.set(year, fetch(`/api/pedidos-sync?carteiraOnly=true&deliveryYear=${year}`)
+                    .then(res => {
+                        if (!res.ok) throw new Error('Falha ao carregar entregas');
+                        return res.json();
+                    })
+                    .catch(error => {
+                        deliveryChartDataCache.delete(year);
+                        throw error;
+                    }));
+            }
+            return deliveryChartDataCache.get(year);
+        }
+        async function updatePCPChart(list) {
+            const yearEl = document.getElementById('yearFilterPCP');
+            const selectedYear = yearEl ? (parseInt(yearEl.value) || new Date().getFullYear()) : new Date().getFullYear();
+            setChartLoading('chartPCP', true, 'Carregando entregas');
+            try {
+                list = await getDeliveryChartData(selectedYear);
+            } catch (error) {
+                console.error(error);
+            }
             list = getChartOrders(list);
             const mData = Array(12).fill(0);
             const mDataValue = Array(12).fill(0);
-            const yearEl = document.getElementById('yearFilterPCP');
-            const selectedYear = yearEl ? (parseInt(yearEl.value) || new Date().getFullYear()) : new Date().getFullYear();
             const deliveryCacheKey = `delivery:${selectedYear}:${list.length}`;
             const deliveryCached = localChartCache.get(deliveryCacheKey);
             if (deliveryCached) {

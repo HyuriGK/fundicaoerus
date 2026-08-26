@@ -271,6 +271,11 @@ router.get('/', async (req, res) => {
                     AND rc.responsavel_comercial = $1
         ` : '';
         const ownerParams = commercialOwner ? [commercialOwner] : [];
+        const deliveryYear = parseInt(req.query.deliveryYear, 10);
+        const deliveryFilter = Number.isInteger(deliveryYear) ? `
+                    AND SUBSTRING(COALESCE(NULLIF(p.data->>'ENTREGA_PETR', ''), NULLIF(p.data->>'DATA_ENTREGA_PPR', '')), 1, 4) = $${ownerParams.length + 1}
+                ` : '';
+        if (Number.isInteger(deliveryYear)) ownerParams.push(String(deliveryYear));
         let query;
         if (carteiraOnly === 'true') {
             query = `
@@ -295,6 +300,7 @@ router.get('/', async (req, res) => {
                     ((p.data->>'QUANTIDADE_PPR')::numeric - COALESCE((p.data->>'QUANTIDADE_FATURADA_PPR')::numeric, 0) - COALESCE((p.data->>'QUANTIDADE_DESISTENCIA_PPR')::numeric, 0)) > 0
                     AND (p.data->>'STATUS_PPR') <> 'C'
                     AND COALESCE(p.data->>'STATUS_PCP', '') NOT IN ('C', 'E', 'F')
+                    ${deliveryFilter}
                 ORDER BY
                     (f.pro_codigo_fic IS NOT NULL) DESC,
                     f.data_fic DESC NULLS LAST,
