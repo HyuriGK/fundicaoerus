@@ -12,6 +12,9 @@ async function refreshDashboardSnapshot() {
             WITH base AS (
                 SELECT
                     UPPER(TRIM(COALESCE(p.data->>'NOME_CLIENTE', 'Desconhecido'))) AS cliente,
+                    p.updated_at,
+                    f.data_fic,
+                    f.pro_codigo_fic AS has_ficha,
                     CASE WHEN COALESCE(CASE WHEN p.data->>'SALDO_LIBERADO_FATURAR_PPR' ~ '^-?[0-9]+([.,][0-9]+)?$' THEN REPLACE(p.data->>'SALDO_LIBERADO_FATURAR_PPR', ',', '.')::numeric END, 0) > 0
                         THEN COALESCE(CASE WHEN p.data->>'SALDO_LIBERADO_FATURAR_PPR' ~ '^-?[0-9]+([.,][0-9]+)?$' THEN REPLACE(p.data->>'SALDO_LIBERADO_FATURAR_PPR', ',', '.')::numeric END, 0)
                         ELSE GREATEST(0,
@@ -40,11 +43,13 @@ async function refreshDashboardSnapshot() {
                         AND COALESCE(fp.data->>'STATUS_PCP', '') IN ('C', 'E', 'F')
                         AND TRIM(fp.data->>'OP_PCS') = TRIM(p.data->>'OP_PCS')
                   )
-                  AND RIGHT(TRIM(p.data->>'PRODUTO_PPR'), 1) <> '1'
-                  AND UPPER(TRIM(COALESCE(p.data->>'FATURADO_PPR', ''))) <> 'T'
+            ), limite AS (
+                SELECT * FROM base
+                ORDER BY (has_ficha IS NOT NULL) DESC, data_fic DESC NULLS LAST, updated_at DESC
+                LIMIT 1500
             ), por_cliente AS (
                 SELECT cliente, SUM(saldo * peso_unit) AS peso_kg
-                FROM base GROUP BY cliente
+                FROM limite GROUP BY cliente
             )
             SELECT cliente, peso_kg, SUM(peso_kg) OVER () AS total_kg
             FROM por_cliente ORDER BY peso_kg DESC LIMIT 10
