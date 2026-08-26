@@ -28,7 +28,7 @@ async function refreshDashboardSnapshot() {
                     AND pref.quantidade = f.quantidade
                 LEFT JOIN pesos_customizados pc ON pc.codigo = TRIM(f.codigo_item)
                 LEFT JOIN fat_peso_overrides o ON o.item_key = CONCAT(f.nota_fiscal, '-', COALESCE(TRIM(f.codigo_item), ''), '-', COALESCE(TRIM(f.pedido), ''), '-', f.data_faturamento::date, '-', COALESCE(f.quantidade, 0))
-                WHERE f.data_faturamento >= $3 AND f.data_faturamento <= $2
+                WHERE f.data_faturamento >= $2 AND f.data_faturamento <= $1
                   AND f.cliente_codigo::text NOT IN ('257', '432', '2020', '316', '2283', '253')
                   AND UPPER(TRIM(COALESCE(f.cliente_nome, ''))) NOT LIKE '%IMEPEL INDUSTRIA MECANICA LTDA%'
                   AND UPPER(TRIM(COALESCE(f.cliente_nome, ''))) NOT LIKE '%STEELROOL INDUSTRIA METALURGICA%'
@@ -36,7 +36,7 @@ async function refreshDashboardSnapshot() {
             )
             SELECT data, SUM(CASE WHEN fat_peso THEN peso_total ELSE 0 END) AS total
             FROM base GROUP BY data ORDER BY data
-        `, [start, end, previousStart]),
+        `, [end, previousStart]),
         pool.query(`
             WITH base AS (
                 SELECT
