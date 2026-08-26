@@ -1397,18 +1397,21 @@
             container.appendChild(sel);
         }
         async function fetchData() {
+            showCurrentChartLoading('Consultando dados');
             try {
                 const params = new URLSearchParams({ year: selectedYear });
                 if (selectedMonthIndex !== -1) params.set('month', selectedMonthIndex + 1);
                 const requests = [fetch(`/api/refugos-new?${params}`)];
                 if (!customWeightsLoaded) requests.push(fetchCustomWeights());
                 const [res] = await Promise.all(requests);
+                if (!res.ok) throw new Error('Falha ao carregar dados de refugo');
                 const json = await res.json();
                 rawData = json.refugoRawData || [];
                 monthlyProduction = json.refugoMonthlyProduction || {};
                 processData();
             } catch (e) {
                 console.error(e);
+                hideCurrentChartLoading();
             }
         }
         async function fetchCustomWeights() {
@@ -1517,6 +1520,7 @@
         }
         function switchView(view) {
             currentView = view;
+            showCurrentChartLoading('Carregando grafico');
             const labels = { apontamentos: 'Apontamentos', reasonSector: 'Motivo / Setor / Material', client: 'Cliente', item: 'Item' };
             if (window.erusAudit) window.erusAudit('SELECT_GRAFICO_REFUGOS', { grafico: labels[view] || view, ano: selectedYear, mes: selectedMonthIndex });
             document.getElementById('btnRefugoDiario').classList.toggle('active', view === 'apontamentos' && currentPeriod === 'diario');
@@ -2187,6 +2191,18 @@
         }
         function finishChartLoading(canvasId) {
             requestAnimationFrame(() => setTimeout(() => setChartLoading(canvasId, false), 120));
+        }
+        function getCurrentChartIds() {
+            if (currentView === 'reasonSector') return ['sectorChart', 'reasonChart', 'materialChart'];
+            if (currentView === 'client') return ['paretoChart'];
+            if (currentView === 'item') return ['itemParetoChart'];
+            return [currentPeriod === 'mensal' ? 'barChart' : 'dailyBarChart'];
+        }
+        function showCurrentChartLoading(text) {
+            getCurrentChartIds().forEach(id => setChartLoading(id, true, text));
+        }
+        function hideCurrentChartLoading() {
+            getCurrentChartIds().forEach(id => setChartLoading(id, false));
         }
         let barChartInstance = null;
         let apontamentosChartInstance = null;
