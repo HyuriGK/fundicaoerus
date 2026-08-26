@@ -562,12 +562,14 @@ function chunkArray(myArray, chunk_size) {
                     `, [JSON.stringify({ monthKey: snapshotMonthKey, totals: snapshotTotals })]);
                     const monthlyProductionResult = await publishClient.query(`
                         SELECT
-                            TO_CHAR(data_producao, 'YYYY-MM') AS month_key,
-                            COALESCE(SUM(peso_total), 0) AS total
-                        FROM producao_apontada_sincronizada
+                            TO_CHAR(t.data_producao, 'YYYY-MM') AS month_key,
+                            COALESCE(SUM(t.quantidade * COALESCE(NULLIF(t.peso_un, 0), pc.peso, p.peso, 0)), 0) AS total
+                        FROM producao_apontada_sincronizada t
+                        LEFT JOIN pesos_customizados pc ON pc.codigo = t.codigo_peca
+                        LEFT JOIN produto_pesos_producao p ON p.codigo_peca = t.codigo_peca
                         WHERE UPPER(TRIM(COALESCE(setor, ''))) IN ('FUSAO', 'FUSÃO', 'FUNDICAO', 'FUNDIÇÃO')
-                          AND COALESCE(codigo_peca, '') NOT IN ('18358', '801032102')
-                        GROUP BY TO_CHAR(data_producao, 'YYYY-MM')
+                          AND COALESCE(t.codigo_peca, '') NOT IN ('18358', '801032102')
+                        GROUP BY TO_CHAR(t.data_producao, 'YYYY-MM')
                     `);
                     const fullMonthlyProduction = {};
                     monthlyProductionResult.rows.forEach(row => {
