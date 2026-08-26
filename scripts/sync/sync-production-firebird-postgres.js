@@ -355,6 +355,8 @@ function chunkArray(myArray, chunk_size) {
 
                 const publishClient = await pool.connect();
                 await publishClient.query('BEGIN');
+                await publishClient.query("SET LOCAL lock_timeout = '15 seconds'");
+                await publishClient.query("SET LOCAL statement_timeout = '45 seconds'");
                 await publishClient.query('TRUNCATE TABLE producao_apontada_sincronizada');
                 console.log('🧹 Nova carga preparada para publicação.');
 
