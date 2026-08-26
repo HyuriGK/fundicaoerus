@@ -375,7 +375,12 @@ function chunkArray(myArray, chunk_size) {
 
                 const publishClient = await pool.connect();
                 await publishClient.query('BEGIN');
-                // Preserva o historico anterior e atualiza apenas a janela movel.
+                await publishClient.query(`
+                    DELETE FROM producao_apontada_sincronizada
+                    WHERE data_producao >= $1
+                      AND data_producao < $2
+                `, [startDate, endDate]);
+                // Recarrega somente a janela movel, preservando o historico anterior.
                 console.log('🧹 Nova carga preparada para publicação.');
 
                 // 4. Transform & Insert
