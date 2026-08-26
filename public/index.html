@@ -9316,11 +9316,6 @@
 
                 let clientChart = null;
 
-                const DASHBOARD_REFRESH_INTERVAL_MS = 15 * 60 * 1000;
-                let dashboardRefreshTimer = null;
-                let dashboardRefreshPromise = null;
-
-
                 function fetchWithTimeout(url, options = {}, timeoutMs = 20000) {
                     const controller = new AbortController();
                     const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -9506,75 +9501,14 @@
 
                         } catch (e) { console.error('Error loading config:', e); }
 
-                        await refreshDashboard({ refreshRefugo: false });
+                        await updateKpis();
+                        await updateCharts();
                     } finally {
                         if (typeof window.erusPageLoaderDone === 'function') window.erusPageLoaderDone();
                     }
 
 
                 }
-
-                function scheduleDashboardRefresh() {
-                    clearTimeout(dashboardRefreshTimer);
-                    dashboardRefreshTimer = setTimeout(async () => {
-                        if (!document.hidden) {
-                            void updateSectorProductionTable();
-                            await refreshDashboard();
-                        }
-                        scheduleDashboardRefresh();
-                    }, DASHBOARD_REFRESH_INTERVAL_MS);
-                }
-
-
-                async function refreshDashboard({ refreshRefugo = true } = {}) {
-
-                    if (dashboardRefreshPromise) return dashboardRefreshPromise;
-
-                    if (refreshRefugo) void loadRefugoSnapshot();
-
-                    dashboardRefreshPromise = (async () => {
-
-
-                    try {
-
-
-                        console.log('Refreshing dashboard data...');
-
-
-                        // Run updates sequentially to ensure data dependencies are met
-
-
-                        // (updateCharts depends on data fetched in updateKpis)
-
-
-                        await updateKpis();
-
-
-                        await updateCharts();
-
-
-                        console.log('Dashboard updated successfully.');
-
-
-                    } catch (e) {
-
-
-                        console.error('Error refreshing dashboard:', e);
-
-
-                    }
-
-                    })();
-
-                    try {
-                        return await dashboardRefreshPromise;
-                    } finally {
-                        dashboardRefreshPromise = null;
-                    }
-
-
-                }
-
 
                 async function updateKpis() {
 
