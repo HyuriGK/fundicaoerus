@@ -5759,7 +5759,7 @@
         // function toggleChartMode() ... removed
         async function getDeliveryChartData(year) {
             if (!deliveryChartDataCache.has(year)) {
-                deliveryChartDataCache.set(year, fetch(`/api/pedidos-sync?carteiraOnly=true&deliveryYear=${year}`)
+                deliveryChartDataCache.set(year, fetch(`/api/pedidos-sync/delivery-monthly-summary?year=${year}`)
                     .then(res => {
                         if (!res.ok) throw new Error('Falha ao carregar entregas');
                         return res.json();
@@ -5775,8 +5775,9 @@
             const yearEl = document.getElementById('yearFilterPCP');
             const selectedYear = yearEl ? (parseInt(yearEl.value) || new Date().getFullYear()) : new Date().getFullYear();
             setChartLoading('chartPCP', true, 'Carregando entregas');
+            let deliverySummary = null;
             try {
-                list = await getDeliveryChartData(selectedYear);
+                deliverySummary = await getDeliveryChartData(selectedYear);
             } catch (error) {
                 console.error(error);
             }
@@ -5788,6 +5789,13 @@
             if (deliveryCached) {
                 mData.splice(0, 12, ...deliveryCached.mData);
                 mDataValue.splice(0, 12, ...deliveryCached.mDataValue);
+            } else if (deliverySummary?.success) {
+                deliverySummary.months.forEach(item => {
+                    if (item.month >= 1 && item.month <= 12) {
+                        mData[item.month - 1] = item.peso;
+                        mDataValue[item.month - 1] = item.valor;
+                    }
+                });
             } else list.forEach(item => {
                 const isBlockReasonStatus = (
                     item.STATUS_PED === 'B' ||
