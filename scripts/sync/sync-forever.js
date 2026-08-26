@@ -127,6 +127,7 @@ const INDEPENDENT_BATS = [
 const INDEPENDENT_WAIT = 2 * 60 * 1000; // 2 minutos
 const LIGHT_SYNC_WAIT = 5 * 60 * 1000; // 5 minutos após concluir
 const HEAVY_SYNC_MODULES = new Set(['EMISSOES', 'FATURAMENTO', 'PEDIDOS', 'PRODUCAO', 'REFUGOS']);
+const TECHNICAL_SYNC_MODULES = new Set(['MOLDAGEM FT', 'FUSAO FT']);
 const LIGHT_SYNC_CONCURRENCY = 2;
 let nextRunAt = {};
 
@@ -221,10 +222,11 @@ function buildFrame(cycleStart) {
                '    ' + C.dim+'LOG  scripts/sync/sync-errors.log'+reset;
     const s3 = '  ' + C.muted+'HORARIO COMERCIAL  '+reset + bold + C.green + 'Seg-Sex  06:30 - 18:00' + reset;
     const heavyRunning = INDEPENDENT_BATS.filter(b => HEAVY_SYNC_MODULES.has(b.name) && scriptState[b.name] === 'RUNNING').length;
-    const lightRunning = INDEPENDENT_BATS.filter(b => !HEAVY_SYNC_MODULES.has(b.name) && scriptState[b.name] === 'RUNNING').length;
+    const lightRunning = INDEPENDENT_BATS.filter(b => !HEAVY_SYNC_MODULES.has(b.name) && !TECHNICAL_SYNC_MODULES.has(b.name) && scriptState[b.name] === 'RUNNING').length;
+    const technicalRunning = INDEPENDENT_BATS.filter(b => TECHNICAL_SYNC_MODULES.has(b.name) && scriptState[b.name] === 'RUNNING').length;
     const s4 = '  ' + C.muted + 'FILAS  ' + reset + bold + C.amber + `PESADA ${heavyRunning}/1` + reset +
                C.dim + '  |  ' + reset + bold + C.cyan + `LEVE ${lightRunning}/${LIGHT_SYNC_CONCURRENCY}` + reset +
-               C.dim + '  |  leitura das telas preservada por snapshots' + reset;
+               C.dim + '  |  ' + reset + bold + C.muted + `TECNICA ${technicalRunning}/1` + reset;
 
     out.push(B.row(s1, W));
     out.push(B.row(s2, W));
@@ -279,7 +281,8 @@ function buildFrame(cycleStart) {
     };
 
     const heavyBats = INDEPENDENT_BATS.filter(bat => HEAVY_SYNC_MODULES.has(bat.name));
-    const lightBats = INDEPENDENT_BATS.filter(bat => !HEAVY_SYNC_MODULES.has(bat.name));
+    const technicalBats = INDEPENDENT_BATS.filter(bat => TECHNICAL_SYNC_MODULES.has(bat.name));
+    const lightBats = INDEPENDENT_BATS.filter(bat => !HEAVY_SYNC_MODULES.has(bat.name) && !TECHNICAL_SYNC_MODULES.has(bat.name));
     out.push(B.row(centerStr(bold + C.amber + 'FILA PESADA  -  1 MODULO POR VEZ' + reset, W), W));
     out.push(B.row(centerStr(dim + 'Emissoes  |  Faturamento  |  Pedidos  |  Producao  |  Refugos' + reset, W), W));
     heavyBats.forEach(drawModuleRow);
@@ -287,6 +290,10 @@ function buildFrame(cycleStart) {
     out.push(B.row(centerStr(bold + C.cyan + `FILA LEVE  -  ATE ${LIGHT_SYNC_CONCURRENCY} MODULOS EM PARALELO` + reset, W), W));
     out.push(B.row(centerStr(dim + 'Rotinas auxiliares, cadastros e relatorios' + reset, W), W));
     lightBats.forEach(drawModuleRow);
+    out.push(B.sep());
+    out.push(B.row(centerStr(bold + C.muted + 'FILA TECNICA  -  1 MODULO POR VEZ' + reset, W), W));
+    out.push(B.row(centerStr(dim + 'Fichas tecnicas de Moldagem e Fusao' + reset, W), W));
+    technicalBats.forEach(drawModuleRow);
 
     // ── ALERTS ───────────────────────────────────────────────────────────────
     out.push(B.sep());
@@ -497,9 +504,11 @@ process.on('exit',   () => process.stdout.write('\x1B[?25h'));
 
 async function startIndependentLoops() {
     const heavyBats = INDEPENDENT_BATS.filter(bat => HEAVY_SYNC_MODULES.has(bat.name));
-    const lightBats = INDEPENDENT_BATS.filter(bat => !HEAVY_SYNC_MODULES.has(bat.name));
+    const technicalBats = INDEPENDENT_BATS.filter(bat => TECHNICAL_SYNC_MODULES.has(bat.name));
+    const lightBats = INDEPENDENT_BATS.filter(bat => !HEAVY_SYNC_MODULES.has(bat.name) && !TECHNICAL_SYNC_MODULES.has(bat.name));
     startQueueWorker(heavyBats);
     for (let i = 0; i < LIGHT_SYNC_CONCURRENCY; i++) startQueueWorker(lightBats);
+    startQueueWorker(technicalBats);
 }
 
 startIndependentLoops();
