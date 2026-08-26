@@ -24,6 +24,13 @@ function parseDate(dateVal) {
     return new Date(dateVal);
 }
 
+function formatSqlDate(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
 function chunkArray(myArray, chunk_size) {
     var index = 0;
     var arrayLength = myArray.length;
@@ -67,9 +74,18 @@ function chunkArray(myArray, chunk_size) {
         `);
         console.log('✅ Postgres ready.');
 
-        let startDate = '2025-01-01';
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const start = new Date(today);
+        start.setDate(start.getDate() - 60);
+        const minimumStart = new Date('2025-01-01T00:00:00');
+        if (start < minimumStart) start.setTime(minimumStart.getTime());
+        const end = new Date(today);
+        end.setDate(end.getDate() + 1);
+        const startDate = formatSqlDate(start);
+        const endDate = formatSqlDate(end);
 
-        console.log(`📅 Janela de Sincronização: ${startDate} até hoje.`);
+        console.log(`📅 Janela de Sincronização: ${startDate} até ${endDate} (60 dias).`);
 
         // Add columns if they don't exist (migration for existing table)
         await pool.query(`
@@ -126,7 +142,9 @@ function chunkArray(myArray, chunk_size) {
                     LOTE_PCS,
                     SETOR_PCS
                 FROM PRODUCAO_SETOR
-                WHERE EMPRESA_PCS = 10 AND DATA_PCS >= '${startDate}' AND DATA_PCS <= '2026-12-31'
+                WHERE EMPRESA_PCS = 10
+                  AND DATA_PCS >= '${startDate}'
+                  AND DATA_PCS < '${endDate}'
                 ORDER BY DATA_PCS DESC
             `;
 
@@ -137,12 +155,6 @@ function chunkArray(myArray, chunk_size) {
                     return;
                 }
                 console.log(`📦 Production records (PCS) fetched: ${productionRows.length}`);
-
-                if (productionRows.length === 0) {
-                    console.log('No production records found.');
-                    db.detach();
-                    process.exit(0);
-                }
 
                 // 2. Collect IDs (Only Setor ID needed for name lookup)
                 const setIds = [...new Set(productionRows.map(p => p.SETOR_PCS).filter(id => id))];
@@ -363,7 +375,7 @@ function chunkArray(myArray, chunk_size) {
 
                 const publishClient = await pool.connect();
                 await publishClient.query('BEGIN');
-                await publishClient.query('TRUNCATE TABLE producao_apontada_sincronizada');
+                // Preserva o historico anterior e atualiza apenas a janela movel.
                 console.log('🧹 Nova carga preparada para publicação.');
 
                 // 4. Transform & Insert
@@ -374,7 +386,6 @@ function chunkArray(myArray, chunk_size) {
                     'USINAGEM EXPEDICAO': 0, 'INSPECAO DE QUALIDADE': 0, 'EXPEDICAO': 0,
                     'MOLDAGEM LEVE': 0, 'MOLDAGEM MANUAL': 0, 'MOLDAGEM PESADA': 0, 'FECHAMENTO MANUAL': 0
                 };
-                const monthlyProduction = {};
                 const snapshotMonth = new Date();
                 const snapshotMonthKey = `${snapshotMonth.getFullYear()}-${String(snapshotMonth.getMonth() + 1).padStart(2, '0')}`;
                 const normalizeSnapshotSector = (value) => {
@@ -455,10 +466,6 @@ function chunkArray(myArray, chunk_size) {
                                     snapshotTotals[snapshotSector] += pesoTotal;
                                 }
                             }
-                            if (normalizeSnapshotSector(setor) === 'FUSAO' && !['18358', '801032102'].includes(String(codigoPeca || '').trim())) {
-                                const monthKey = dataProd.toISOString().slice(0, 7);
-                                monthlyProduction[monthKey] = (monthlyProduction[monthKey] || 0) + pesoTotal;
-                            }
                         } catch (rowErr) {
                             console.error('Row Error:', rowErr);
                             errors++;
@@ -488,9 +495,10 @@ function chunkArray(myArray, chunk_size) {
                 try {
                     const sweepResult = await publishClient.query(
                         `DELETE FROM producao_apontada_sincronizada 
-                         WHERE data_producao >= $1 
-                           AND atualizado_em < $2`,
-                        [startDate, syncStartTime]
+                         WHERE data_producao >= $1
+                           AND data_producao < $2
+                           AND atualizado_em < $3`,
+                        [startDate, endDate, syncStartTime]
                     );
                     const swept = sweepResult.rowCount || 0;
                     if (swept > 0) {
@@ -517,11 +525,24 @@ function chunkArray(myArray, chunk_size) {
                         VALUES ('producao_setores', $1, '{}'::jsonb, NOW())
                         ON CONFLICT (snapshot_key) DO UPDATE SET payload = EXCLUDED.payload, updated_at = EXCLUDED.updated_at
                     `, [JSON.stringify({ monthKey: snapshotMonthKey, totals: snapshotTotals })]);
+                    const monthlyProductionResult = await publishClient.query(`
+                        SELECT
+                            TO_CHAR(data_producao, 'YYYY-MM') AS month_key,
+                            COALESCE(SUM(peso_total), 0) AS total
+                        FROM producao_apontada_sincronizada
+                        WHERE UPPER(TRIM(COALESCE(setor, ''))) IN ('FUSAO', 'FUSÃO', 'FUNDICAO', 'FUNDIÇÃO')
+                          AND COALESCE(codigo_peca, '') NOT IN ('18358', '801032102')
+                        GROUP BY TO_CHAR(data_producao, 'YYYY-MM')
+                    `);
+                    const fullMonthlyProduction = {};
+                    monthlyProductionResult.rows.forEach(row => {
+                        fullMonthlyProduction[row.month_key] = Number(row.total) || 0;
+                    });
                     await publishClient.query(`
                         INSERT INTO dashboard_snapshots (snapshot_key, payload, source_status, updated_at)
                         VALUES ('producao_mensal', $1, '{}'::jsonb, NOW())
                         ON CONFLICT (snapshot_key) DO UPDATE SET payload = EXCLUDED.payload, updated_at = EXCLUDED.updated_at
-                    `, [JSON.stringify({ monthlyProduction })]);
+                    `, [JSON.stringify({ monthlyProduction: fullMonthlyProduction })]);
                     await publishClient.query("SET TIME ZONE 'America/Sao_Paulo'");
                     await publishClient.query(`
                         INSERT INTO sync_status (screen_name, last_sync_at)
