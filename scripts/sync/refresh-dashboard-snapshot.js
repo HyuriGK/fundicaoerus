@@ -1,5 +1,5 @@
 const pool = require('../../lib/db');
-const { publishDashboardSnapshot } = require('../../lib/dashboard-snapshot');
+const { publishDashboardSnapshot, getDashboardSnapshot } = require('../../lib/dashboard-snapshot');
 
 async function refreshDashboardSnapshot() {
     const now = new Date();
@@ -137,6 +137,11 @@ async function refreshDashboardSnapshot() {
             producaoTotals[normalizado] += peso;
         }
     });
+    const producaoMensalSnapshot = await getDashboardSnapshot('producao_mensal');
+    const monthlyProduction = {
+        ...(producaoMensalSnapshot?.payload?.monthlyProduction || {}),
+        [start.slice(0, 7)]: producaoTotals.FUSAO
+    };
     await publishDashboardSnapshot('global', {
         version: 'complete',
         faturamento: { totalKg, previousTotalKg, daily },
@@ -145,6 +150,7 @@ async function refreshDashboardSnapshot() {
         refugo: { totalKg: refugoTotalKg, scrapPct: 0, byMotive: refugoByMotive },
         producao: { totals: producaoTotals }
     });
+    await publishDashboardSnapshot('producao_mensal', { monthlyProduction });
 }
 
 if (require.main === module) {
