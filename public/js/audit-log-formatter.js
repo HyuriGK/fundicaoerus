@@ -14,7 +14,7 @@
         'acabamneto_interno.html': 'Acabamento Interno', 'usinagem_externa.html': 'Usinagem Externa',
         'usinagem_externo.html': 'Usinagem Externa', usinagem_externo: 'Usinagem Externa',
         'programacaofusao.html': 'Programacao da Fusao', 'programacaodesmoldagem.html': 'Programacao da Desmoldagem',
-        'aderencia.html': 'Aderencia', 'balanco.html': 'Balanco', 'otif.html': 'OTIF', 'centrocusto.html': 'Centro de Custo',
+        'aderencia.html': 'Aderencia', 'balanco.html': 'Balanco', 'centrocusto.html': 'Centro de Custo',
         'custos.html': 'Custos Gerais', 'custopeca.html': 'Custo por Peca', 'devolucoes.html': 'Devolucoes',
         'fichatecmoldagem.html': 'Ficha Tecnica de Moldagem', 'fichatecfusao.html': 'Ficha Tecnica de Fusao',
         'fichatecacabamento.html': 'Ficha Tecnica de Acabamento', 'fichatecnica.html': 'Ficha Tecnica',

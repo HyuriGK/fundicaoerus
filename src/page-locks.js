@@ -183,7 +183,6 @@ router.get('/last-sync', async (req, res) => {
         'Custos':       'custos.html',
         'Centro de Custo': 'centrocusto.html',
         'Devoluções':   'devolucoes.html',
-        'Assertividade':'comparativo.html',
         'Balanco':      'balanco.html',
     };
     try {

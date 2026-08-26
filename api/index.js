@@ -97,7 +97,6 @@ const faturamentoPostgres = require('../src/faturamento-postgres'); // NOVO: API
 const faturamentoNeon = require('../src/faturamento-neon');
 const faturamentoFiltros = require('../src/faturamento-filtros');
 const usinagemExterno = require('../src/usinagem-externo'); // NOVO: Usinagem Externa
-const assertividade = require('../src/assertividade'); // NOVA: Assertividade Sincronizada
 const devolucoes = require('../src/devolucoes'); // NOVA: Devoluções Sincronizadas
 const emissoes = require('../src/emissoes-api'); // NOVO: Histórico de Emissões
 const pedidosObservacoes = require('../src/pedidos-observacoes'); // NOVO: Observações de Pedidos
@@ -135,7 +134,6 @@ app.use('/api/custos', custosRoutes);
 app.use('/api/pedidos-sync', require('../src/pedidos-sync'));
 app.use('/api/pedidos-modelo-status', pedidosModeloStatus);
 app.use('/api/pedidos-conferencia', pedidosConferencia);
-app.use('/api/assertividade', assertividade); // NOVA: Assertividade Sincronizada
 app.use('/api/usinagem-externo', usinagemExterno); // NOVO: Usinagem Externa
 app.use('/api/devolucoes', devolucoes); // NOVA: Devoluções Sincronizadas
 app.use('/api/emissoes', emissoes); // NOVO: Histórico de Emissões
@@ -154,7 +152,6 @@ app.use('/api/ai-assistant', aiLimiter, require('../src/ai-assistant')); // NOVO
 app.use('/api/audit-logger', require('../src/audit-logger')); // NOVO: Log de Atividades
 app.use('/api/page-locks', require('../src/page-locks')); // NOVO: Bloqueio de Telas
 app.use('/api/permissions', require('../src/admin-permissions')); // Permissões por role
-app.use('/api/otif', require('../src/otif')); // NOVO: OTIF - Indicador de Entrega
 app.use('/api/custos-dashboard', require('../src/custos-dashboard')); // NOVO: Painel de Produção
 app.use('/api/custos-detalhados', require('../src/custos-detalhados-firebird')); // NOVO: Detalhamento de Custos (Postgres Sync)
 app.use('/api/centro-custos', require('../src/centro-custos')); // NOVO: Centro de Custos (Mapeamento)
