@@ -33,6 +33,13 @@ async function refreshDashboardSnapshot() {
                     - COALESCE(CASE WHEN p.data->>'QUANTIDADE_DESISTENCIA_PPR' ~ '^-?[0-9]+([.,][0-9]+)?$' THEN REPLACE(p.data->>'QUANTIDADE_DESISTENCIA_PPR', ',', '.')::numeric END, 0)) > 0
                   AND p.data->>'STATUS_PPR' <> 'C'
                   AND COALESCE(p.data->>'STATUS_PCP', '') NOT IN ('C', 'E', 'F')
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM firebird_sync_pedidos fp
+                      WHERE fp.sync_key LIKE 'OP-%'
+                        AND COALESCE(fp.data->>'STATUS_PCP', '') IN ('C', 'E', 'F')
+                        AND TRIM(fp.data->>'OP_PCS') = TRIM(p.data->>'OP_PCS')
+                  )
                   AND RIGHT(TRIM(p.data->>'PRODUTO_PPR'), 1) <> '1'
                   AND UPPER(TRIM(COALESCE(p.data->>'FATURADO_PPR', ''))) <> 'T'
             ), por_cliente AS (
