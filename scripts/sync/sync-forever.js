@@ -291,7 +291,7 @@ function buildFrame(cycleStart) {
     out.push(B.row(centerStr(dim + 'Rotinas auxiliares, cadastros e relatorios' + reset, W), W));
     lightBats.forEach(drawModuleRow);
     out.push(B.sep());
-    out.push(B.row(centerStr(bold + C.muted + 'FILA TECNICA  -  1 MODULO POR VEZ' + reset, W), W));
+    out.push(B.row(centerStr(bold + C.muted + 'MODULOS TECNICOS  -  1 MODULO POR VEZ' + reset, W), W));
     out.push(B.row(centerStr(dim + 'Fichas tecnicas de Moldagem e Fusao' + reset, W), W));
     technicalBats.forEach(drawModuleRow);
 
