@@ -22,6 +22,19 @@ function updateSyncProgress(pageId, progress) {
     req.end();
 }
 
+function unlockSyncPage(pageId) {
+    if (!pageId) return;
+    const data = JSON.stringify({ page_id: pageId });
+    const req = https.request({
+        hostname: 'fundicaoerus.vercel.app', port: 443,
+        path: '/api/page-locks/sync-unlock', method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) }
+    });
+    req.on('error', () => {});
+    req.write(data);
+    req.end();
+}
+
 require('dotenv').config({ path: path.join(__dirname, '../../.env.local'), override: true });
 
 // ─── ANSI ────────────────────────────────────────────────────────────────────
@@ -417,6 +430,8 @@ function runBat(bat) {
                     });
                 }
             }
+            updateSyncProgress(bat.pageId, 100);
+            unlockSyncPage(bat.pageId);
             resolve();
         });
     });
