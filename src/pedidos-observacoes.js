@@ -6,7 +6,8 @@ const OBSERVACOES_PERMITIDAS = new Set([
     'BLOQUEIO COMERCIAL',
     'SEM FICHA TÉCNICA',
     'AGUARD. RETORNO COMERCIAL',
-    'RODANDO AMOSTRA'
+    'RODANDO AMOSTRA',
+    'MODELO NÃO CHEGOU'
 ]);
 
 // POST /save - Salva ou atualiza uma observação
