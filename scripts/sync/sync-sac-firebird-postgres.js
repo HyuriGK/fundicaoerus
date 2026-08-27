@@ -52,13 +52,18 @@ async function sync() {
     try {
         await client.query(`CREATE TABLE IF NOT EXISTS sac_firebird_sync (codigo INTEGER PRIMARY KEY, situacao INTEGER, data_cadastro DATE, data_limite DATE, data_resolvido DATE, cliente_codigo INTEGER, cliente TEXT, reclamante TEXT, origem TEXT, procedencia INTEGER, disposicao TEXT, total_produtos INTEGER DEFAULT 0, total_acoes INTEGER DEFAULT 0, data JSONB NOT NULL, synced_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
         await client.query('CREATE INDEX IF NOT EXISTS idx_sac_sync_lista ON sac_firebird_sync (situacao, data_cadastro DESC)');
+        await client.query(`CREATE TABLE IF NOT EXISTS sac_firebird_sync_staging (codigo INTEGER PRIMARY KEY, situacao INTEGER, data_cadastro DATE, data_limite DATE, data_resolvido DATE, cliente_codigo INTEGER, cliente TEXT, reclamante TEXT, origem TEXT, procedencia INTEGER, disposicao TEXT, total_produtos INTEGER DEFAULT 0, total_acoes INTEGER DEFAULT 0, data JSONB NOT NULL, synced_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
         await client.query('BEGIN');
-        await client.query('TRUNCATE sac_firebird_sync');
+        await client.query('TRUNCATE sac_firebird_sync_staging');
         for (const row of cabecalhos) {
             const codigo = row.CODIGO_SAV;
             const data = sanitize({ ...row, produtos: by.produtos[codigo] || [], acoes: by.acoes[codigo] || [], responsaveis: by.responsaveis[codigo] || [], causas: by.causas[codigo] || [], anexos: by.anexos[codigo] || [], historico: by.historico[codigo] || [], custos: by.custos[codigo] || [] });
-            await client.query(`INSERT INTO sac_firebird_sync (codigo,situacao,data_cadastro,data_limite,data_resolvido,cliente_codigo,cliente,reclamante,origem,procedencia,disposicao,total_produtos,total_acoes,data) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`, [codigo,row.SITUACAO_SAV,row.DATA_CADASTRO_SAV,row.DATA_LIMITE_SAV,row.DATA_RESOLVIDO_SAV,row.CLI_CODIGO_SAV,row.NOME_CLIENTE_SAV,row.RECLAMANTE_NOME_SAV,row.ORIGEM_SAV,row.PROCEDENCIA_SAV,row.DISPOSICAO_SAV,data.produtos.length,data.acoes.length,JSON.stringify(data)]);
+            await client.query(`INSERT INTO sac_firebird_sync_staging (codigo,situacao,data_cadastro,data_limite,data_resolvido,cliente_codigo,cliente,reclamante,origem,procedencia,disposicao,total_produtos,total_acoes,data) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`, [codigo,row.SITUACAO_SAV,row.DATA_CADASTRO_SAV,row.DATA_LIMITE_SAV,row.DATA_RESOLVIDO_SAV,row.CLI_CODIGO_SAV,row.NOME_CLIENTE_SAV,row.RECLAMANTE_NOME_SAV,row.ORIGEM_SAV,row.PROCEDENCIA_SAV,row.DISPOSICAO_SAV,data.produtos.length,data.acoes.length,JSON.stringify(data)]);
         }
+        await client.query('COMMIT');
+        await client.query('BEGIN');
+        await client.query('TRUNCATE sac_firebird_sync');
+        await client.query('INSERT INTO sac_firebird_sync (codigo,situacao,data_cadastro,data_limite,data_resolvido,cliente_codigo,cliente,reclamante,origem,procedencia,disposicao,total_produtos,total_acoes,data,synced_at) SELECT codigo,situacao,data_cadastro,data_limite,data_resolvido,cliente_codigo,cliente,reclamante,origem,procedencia,disposicao,total_produtos,total_acoes,data,synced_at FROM sac_firebird_sync_staging');
         await client.query('COMMIT');
         console.log(`SAC sincronizado: ${cabecalhos.length} atendimentos.`);
     } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
