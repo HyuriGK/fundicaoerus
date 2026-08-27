@@ -4412,19 +4412,22 @@
                 input.focus();
             }
         }
-        async function saveObservation(event, syncKey) {
-            if (event.key !== 'Enter') return;
-            
-            const input = event.target;
-            const newObs = input.value.trim();
-            const originalObs = input.getAttribute('data-original') || '';
+        const OBSERVACAO_OPTIONS = [
+            'AGUARD. APROVAÇÃO DE AMOSTRA',
+            'BLOQUEIO COMERCIAL',
+            'SEM FICHA TÉCNICA',
+            'AGUARD. RETORNO COMERCIAL',
+            'RODANDO AMOSTRA'
+        ];
+        async function saveObservation(select, syncKey) {
+            const newObs = select.value;
+            const originalObs = select.getAttribute('data-original') || '';
 
             if (newObs === originalObs) {
-                input.blur();
                 return;
             }
 
-            input.disabled = true;
+            select.disabled = true;
             try {
                 const res = await fetch('/api/pedidos-observacoes/save', {
                     method: 'POST',
@@ -4435,16 +4438,16 @@
                 
                 const item = allData.find(d => d.sync_key === syncKey);
                 if (window.erusAudit) window.erusAudit('UPDATE_OBSERVACAO', { pedido: item ? (item.CODIGO_PPR || '') : '', antes: originalObs || '(vazio)', depois: newObs || '(vazio)' });
-                input.setAttribute('data-original', newObs);
+                select.setAttribute('data-original', newObs);
                 if (item) item.observacao = newObs;
 
                 showToast("Sucesso", "Observação salva!", "success");
             } catch (err) {
                 console.error(err);
                 showToast("Erro", "Erro ao salvar observação.", "danger");
+                select.value = originalObs;
             } finally {
-                input.disabled = false;
-                input.blur();
+                select.disabled = false;
             }
         }
         const MODELO_STATUS_OPTIONS = [
@@ -4743,17 +4746,17 @@
                     <td class="value-total-column" style="text-align:center; color:var(--status-purple); font-weight:bold;">${valorVisible ? formatCurrency(valorTotal) : '-----'}</td>
                     <td class="modelo-column" style="text-align:center;" onclick="event.stopPropagation()">${renderModeloStatusSelect(item)}</td>
                     <td class="observations-column" style="text-align:center;">
-                        <input 
-                            type="text" 
+                        <select
                             class="obs-edit-input" 
-                            value="${String(item.observacao || '').toUpperCase()}" 
                             data-original="${item.observacao || ''}"
-                            placeholder="..."
-                            onkeydown="saveObservation(event, '${item.sync_key}')"
+                            onchange="saveObservation(this, '${item.sync_key}')"
                             style="width: 100%; background: transparent; border: 1px solid transparent; color: var(--text-muted); font-size: 0.8rem; padding: 4px 8px; border-radius: 4px; transition: all 0.2s; text-transform: uppercase;"
                             onfocus="this.style.borderColor='var(--color-primary)'; this.style.background='rgba(255,255,255,0.05)'; this.style.color='#fff';"
                             onblur="this.style.borderColor='transparent'; this.style.background='transparent'; this.style.color='var(--text-muted)';"
-                        />
+                        >
+                            <option value="">...</option>
+                            ${OBSERVACAO_OPTIONS.map(option => `<option value="${option}" ${item.observacao === option ? 'selected' : ''}>${option}</option>`).join('')}
+                        </select>
                     </td>
                 </tr>
                 `;
