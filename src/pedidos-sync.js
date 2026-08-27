@@ -299,6 +299,7 @@ router.get('/', async (req, res) => {
                     (f.pro_codigo_fic IS NOT NULL) DESC,
                     f.data_fic DESC NULLS LAST,
                     p.updated_at DESC
+                LIMIT 1500
             `;
         } else {
             query = `
@@ -323,6 +324,7 @@ router.get('/', async (req, res) => {
                     (f.pro_codigo_fic IS NOT NULL) DESC,
                     f.data_fic DESC NULLS LAST,
                     p.updated_at DESC
+                LIMIT 1500
             `;
         }
 
