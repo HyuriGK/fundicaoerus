@@ -588,12 +588,12 @@
         }
         /* --- CONCENTRAÇÃO CHART SCROLL & SEARCH --- */
         #concentracaoScrollWrapper {
-            overflow-x: auto; overflow-y: hidden;
+            overflow-x: hidden; overflow-y: auto;
             flex: 1; min-height: 0;
             scrollbar-width: thin;
             scrollbar-color: rgba(255,255,255,0.15) transparent;
         }
-        #concentracaoScrollWrapper::-webkit-scrollbar { height: 5px; }
+        #concentracaoScrollWrapper::-webkit-scrollbar { width: 5px; }
         #concentracaoScrollWrapper::-webkit-scrollbar-track { background: transparent; }
         #concentracaoScrollWrapper::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
         #concentracaoScrollWrapper::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.28); }
@@ -6249,27 +6249,25 @@
             });
             const abcClasses = dataPercent.map(percent => percent <= 70 ? 'A' : percent <= 95 ? 'B' : 'C');
             const bgColors = abcClasses.map(abc => abc === 'A' ? '#f59e0b' : abc === 'B' ? '#a1a1aa' : '#3f3f46');
-            // Top 10 cabem na área visível; demais exigem scroll
             const scrollWrapper = document.getElementById('concentracaoScrollWrapper');
             const canvasInner = document.getElementById('concentracaoCanvasInner');
-            const wrapperW = scrollWrapper ? scrollWrapper.clientWidth : 800;
-            const barPx = Math.max(1, Math.floor(wrapperW / 10));
+            const wrapperH = scrollWrapper ? scrollWrapper.clientHeight : 520;
+            const barPx = 46;
             concentracaoBarPx = barPx;
-            const canvasW = Math.max(wrapperW, labels.length * barPx);
-            if (canvasInner) canvasInner.style.width = canvasW + 'px';
+            const canvasH = Math.max(wrapperH, labels.length * barPx);
+            if (canvasInner) {
+                canvasInner.style.width = '100%';
+                canvasInner.style.height = canvasH + 'px';
+            }
             if (chartConcentracao) chartConcentracao.destroy();
             chartConcentracao = new Chart(document.getElementById('chartConcentracao').getContext('2d'), {
+                type: 'bar',
                 data: {
-                    labels: labels,
+                    labels: labels.map(name => name.length > 25 ? name.slice(0, 25) + '...' : name),
                     datasets: [
                         {
-                            type: 'line', label: '% Acumulada', data: dataPercent,
-                            borderColor: '#fff', backgroundColor: 'rgba(255,255,255,0.08)',
-                            borderWidth: 2, pointRadius: 3, tension: 0.3, yAxisID: 'yPercent'
-                        },
-                        {
-                            type: 'bar', label: isValueMetric ? 'Valor (R$)' : 'Peso (kg)', data: metricData,
-                            backgroundColor: bgColors, borderRadius: 4, yAxisID: 'y',
+                            label: isValueMetric ? 'Valor (R$)' : 'Peso (kg)', data: metricData,
+                            backgroundColor: bgColors, borderRadius: 4, xAxisID: 'x',
                             extraVal: dataVal, extraWeightData: dataKg, extraTotal: totalMetricAll,
                             extraTotalPeso: totalWeightAll, extraTotalValor: totalValueAll,
                             abcClasses, metric: concentracaoAbcMetric
@@ -6279,25 +6277,15 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    indexAxis: 'y',
                     scales: {
                         y: {
-                            type: 'linear', display: true, position: 'left', beginAtZero: true,
-                            grid: { color: _gc() },
-                            ticks: { font: { size: 8 }, color: _tc() }
-                        },
-                        yPercent: {
-                            type: 'linear', display: true, position: 'right', beginAtZero: true, max: 100,
-                            grid: { drawOnChartArea: false },
-                            ticks: { font: { size: 8 }, color: _tc(), callback: v => v + '%' }
+                            type: 'category', grid: { display: false },
+                            ticks: { color: _tc(), font: { size: 11 }, autoSkip: false }
                         },
                         x: {
-                            ticks: {
-                                font: { size: 11 }, color: _tc(), autoSkip: true,
-                                callback: function (value) {
-                                    const label = this.getLabelForValue(value);
-                                    return typeof label === 'string' ? label.split(' ')[0] : label;
-                                }
-                            }
+                            type: 'linear', beginAtZero: true, grid: { color: _gc() },
+                            ticks: { color: _tc(), callback: value => isValueMetric ? (valorVisible ? Number(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }) : '-----') : `${formatNumber(value, 0)} kg` }
                         }
                     },
                     plugins: {
@@ -6317,7 +6305,7 @@
                                         return lines;
                                     }
                                     // dataset bar
-                                    const metric = context.parsed.y;
+                                    const metric = context.parsed.x;
                                     const kg = (context.dataset.extraWeightData || [])[idx] || 0;
                                     const val = (context.dataset.extraVal || [])[idx] || 0;
                                     const total = context.dataset.extraTotal || 1;
@@ -6392,8 +6380,8 @@
             if (!wrapper || concentracaoAllLabels.length === 0) return;
 
             const barCenter = barIndex * concentracaoBarPx + concentracaoBarPx / 2;
-            const targetScroll = Math.max(0, barCenter - wrapper.clientWidth / 2);
-            const startScroll = wrapper.scrollLeft;
+            const targetScroll = Math.max(0, barCenter - wrapper.clientHeight / 2);
+            const startScroll = wrapper.scrollTop;
             const distance = targetScroll - startScroll;
             const duration = Math.min(800, Math.max(300, Math.abs(distance) / 2));
             const startTime = performance.now();
@@ -6401,7 +6389,7 @@
             function animateScroll(now) {
                 const elapsed = now - startTime;
                 const progress = Math.min(elapsed / duration, 1);
-                wrapper.scrollLeft = startScroll + distance * easeInOutCubic(progress);
+                wrapper.scrollTop = startScroll + distance * easeInOutCubic(progress);
                 if (progress < 1) requestAnimationFrame(animateScroll);
             }
             requestAnimationFrame(animateScroll);
