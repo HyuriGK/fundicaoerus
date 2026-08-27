@@ -35,6 +35,22 @@ function unlockSyncPage(pageId) {
     req.end();
 }
 
+function lockSyncPage(pageId) {
+    if (!pageId) return Promise.resolve();
+    const data = JSON.stringify({ page_id: pageId });
+    return new Promise(resolve => {
+        const req = https.request({
+            hostname: 'fundicaoerus.vercel.app', port: 443,
+            path: '/api/page-locks/sync-lock', method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) }
+        }, res => { res.resume(); res.on('end', resolve); });
+        req.on('error', resolve);
+        req.setTimeout(5000, () => { req.destroy(); resolve(); });
+        req.write(data);
+        req.end();
+    });
+}
+
 require('dotenv').config({ path: path.join(__dirname, '../../.env.local'), override: true });
 
 // ─── ANSI ────────────────────────────────────────────────────────────────────
@@ -510,6 +526,7 @@ async function startQueueWorker(bats) {
 
         const startedAt = Date.now();
         nextRunAt[bat.name] = null;
+        await lockSyncPage(bat.pageId);
         await runBat(bat);
 
         const duration = (Date.now() - startedAt) / 1000;
