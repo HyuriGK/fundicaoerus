@@ -240,7 +240,7 @@ function buildFrame(cycleStart) {
     out.push(B.sep());
 
     // Reserva espaço para mostrar a próxima execução sem cortar o contador.
-    const FIXED = 1 + 4 + 1 + 11 + 2 + 2 + 4 + 2 + 10 + 5 + 8 + 7;
+    const FIXED = 1 + 4 + 1 + 11 + 2 + 2 + 4 + 2 + 10 + 5 + 8 + 7 + 9;
     const BAR = Math.max(10, W - FIXED - 2);
 
     const drawModuleRow = (bat) => {
