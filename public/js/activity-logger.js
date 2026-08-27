@@ -926,6 +926,11 @@
             if (fill) { fill.style.width = '100%'; fill.style.background = '#10b981'; }
             if (pctText) { pctText.textContent = '100%'; pctText.style.color = '#10b981'; }
             if (statusText) statusText.innerHTML = '<i class="fa-solid fa-circle-check" style="color: #10b981;"></i> <span style="color: #10b981;">Sincronização Finalizada</span>';
+            if (toastFill) {
+                toastFill.style.width = '0%';
+                toastFill.style.background = 'linear-gradient(90deg,#22c55e,#86efac)';
+                requestAnimationFrame(() => { toastFill.style.width = '100%'; });
+            }
             autoHideTimer = setTimeout(() => hideIndicator(false), SYNC_TOAST_EXPOSURE_MS);
         }
 
@@ -935,6 +940,7 @@
                 indicator.style.maxHeight = SYNC_FLOAT_VISIBLE_HEIGHT + 'px';
                 indicator.style.opacity = '1';
                 if (toastFill) requestAnimationFrame(() => { toastFill.style.width = '100%'; });
+                autoHideTimer = setTimeout(() => hideIndicator(true), SYNC_TOAST_EXPOSURE_MS);
             });
         }, SYNC_TOAST_SHOW_DELAY_MS);
 
@@ -944,9 +950,7 @@
                 const result = await resp.json();
                 if (result.success && Array.isArray(result.data)) {
                     const lock = result.data.find(l => l.page_id === page);
-                    if (!lock || !lock.is_syncing) {
-                        finalizeSyncIndicator();
-                    }
+                    if (!lock || !lock.is_syncing) clearInterval(checkInterval);
                 }
             } catch (e) {}
         }, 2000);
