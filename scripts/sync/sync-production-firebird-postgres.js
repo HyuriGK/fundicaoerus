@@ -121,6 +121,14 @@ function chunkArray(myArray, chunk_size) {
 
         // Widen liga column if needed (was VARCHAR(50), now VARCHAR(255))
         await pool.query(`ALTER TABLE producao_apontada_sincronizada ALTER COLUMN liga TYPE VARCHAR(255)`);
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS producao_apontada_sincronizada_staging
+            (LIKE producao_apontada_sincronizada INCLUDING DEFAULTS);
+            ALTER TABLE producao_apontada_sincronizada_staging ADD COLUMN IF NOT EXISTS refugo NUMERIC(10,2) DEFAULT 0;
+            ALTER TABLE producao_apontada_sincronizada_staging ADD COLUMN IF NOT EXISTS grupo_material VARCHAR(100);
+            ALTER TABLE producao_apontada_sincronizada_staging ALTER COLUMN liga TYPE VARCHAR(255);
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_producao_staging_chave ON producao_apontada_sincronizada_staging(chave_origem);
+        `);
 
         Firebird.attach(fbOptions, function (err, db) {
             if (err) {
@@ -373,13 +381,9 @@ function chunkArray(myArray, chunk_size) {
                 console.log('✅ Lookups fetched. Syncing to Postgres...');
 
 
-                const publishClient = await pool.connect();
-                await publishClient.query('BEGIN');
-                await publishClient.query(`
-                    DELETE FROM producao_apontada_sincronizada
-                    WHERE data_producao >= $1
-                      AND data_producao < $2
-                `, [startDate, endDate]);
+                const stagingClient = await pool.connect();
+                await stagingClient.query('BEGIN');
+                await stagingClient.query('TRUNCATE producao_apontada_sincronizada_staging');
                 // Recarrega somente a janela movel, preservando o historico anterior.
                 console.log('🧹 Nova carga preparada para publicação.');
 
@@ -441,8 +445,8 @@ function chunkArray(myArray, chunk_size) {
                             const liga = pcs._materialName || null;
                             const grupoMaterial = pcs._grupoMaterial || null;
 
-                            await publishClient.query(`
-                                INSERT INTO producao_apontada_sincronizada
+                            await stagingClient.query(`
+                                INSERT INTO producao_apontada_sincronizada_staging
                                 (chave_origem, data_producao, setor, cliente, produto, liga, grupo_material, peso_un, quantidade, refugo, peso_total, op, codigo_peca, atualizado_em)
                                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, CURRENT_TIMESTAMP)
                                 ON CONFLICT (chave_origem) DO UPDATE SET
@@ -487,13 +491,30 @@ function chunkArray(myArray, chunk_size) {
                 console.log(`   Errors: ${errors}`);
 
                 if (errors > 0) {
-                    await publishClient.query('ROLLBACK');
-                    publishClient.release();
+                    await stagingClient.query('ROLLBACK');
+                    stagingClient.release();
                     console.error('❌ Carga cancelada: nenhum dado parcial foi publicado.');
                     db.detach();
                     await pool.end();
                     process.exit(1);
                 }
+
+                await stagingClient.query('COMMIT');
+                stagingClient.release();
+
+                const publishClient = await pool.connect();
+                await publishClient.query('BEGIN');
+                await publishClient.query(`
+                    DELETE FROM producao_apontada_sincronizada
+                    WHERE data_producao >= $1
+                      AND data_producao < $2
+                `, [startDate, endDate]);
+                await publishClient.query(`
+                    INSERT INTO producao_apontada_sincronizada
+                    (chave_origem, data_producao, setor, cliente, produto, liga, grupo_material, peso_un, quantidade, refugo, peso_total, op, codigo_peca, atualizado_em)
+                    SELECT chave_origem, data_producao, setor, cliente, produto, liga, grupo_material, peso_un, quantidade, refugo, peso_total, op, codigo_peca, atualizado_em
+                    FROM producao_apontada_sincronizada_staging
+                `);
 
                 // MARK & SWEEP: Limpar registros "fantasma" (estornados/excluídos do ERP)
                 // Deleta registros dentro da janela de sync que NÃO foram atualizados nesta rodada
