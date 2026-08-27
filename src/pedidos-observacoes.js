@@ -9,13 +9,18 @@ const OBSERVACOES_PERMITIDAS = new Set([
     'RODANDO AMOSTRA',
     'MODELO NÃO CHEGOU'
 ]);
+const EDIT_ROLES = new Set(['ppcp', 'desenvolvedor']);
 
 // POST /save - Salva ou atualiza uma observação
 router.post('/save', async (req, res) => {
     const { sync_key, observacao } = req.body;
+    const role = String((req.user && req.user.role) || req.headers['x-role'] || '').trim().toLowerCase();
 
     if (!sync_key) {
         return res.status(400).json({ error: 'Sync Key é obrigatório' });
+    }
+    if (!EDIT_ROLES.has(role)) {
+        return res.status(403).json({ error: 'Sem permissão para alterar observação' });
     }
 
     const valor = String(observacao || '').trim().toUpperCase();

@@ -4433,7 +4433,7 @@
             try {
                 const res = await fetch('/api/pedidos-observacoes/save', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/json', 'x-role': localStorage.getItem('erus_role') || '' },
                     body: JSON.stringify({ sync_key: syncKey, observacao: newObs })
                 });
                 if (!res.ok) throw new Error('Falha ao salvar observação');
@@ -4467,6 +4467,9 @@
         function canEditModeloStatus() {
             return ['ppcp', 'desenvolvedor', 'diretor'].includes(String(localStorage.getItem('erus_role') || '').toLowerCase());
         }
+        function canEditObservation() {
+            return ['ppcp', 'desenvolvedor'].includes(String(localStorage.getItem('erus_role') || '').toLowerCase());
+        }
         function canEditUnitWeight() {
             return ['desenvolvedor', 'gerente comercial'].includes(String(localStorage.getItem('erus_role') || '').toLowerCase());
         }
@@ -4481,6 +4484,11 @@
                 <option value="">...</option>
                 ${MODELO_STATUS_OPTIONS.map(opt => `<option value="${opt}" ${current === opt ? 'selected' : ''}>${opt}</option>`).join('')}
             </select>`;
+        }
+        function renderObservationSelect(item) {
+            const current = item.observacao || '';
+            if (!canEditObservation()) return `<span class="modelo-status-readonly">${current || '-'}</span>`;
+            return `<select class="obs-edit-input" data-original="${current}" onchange="saveObservation(this, '${item.sync_key}')" style="width: 100%; background: transparent; border: 1px solid transparent; color: var(--text-muted); font-size: 0.8rem; padding: 4px 8px; border-radius: 4px; transition: all 0.2s; text-transform: uppercase;" onfocus="this.style.borderColor='var(--color-primary)'; this.style.background='rgba(255,255,255,0.05)'; this.style.color='#fff';" onblur="this.style.borderColor='transparent'; this.style.background='transparent'; this.style.color='var(--text-muted)';"><option value="">...</option>${OBSERVACAO_OPTIONS.map(option => `<option value="${option}" ${current === option ? 'selected' : ''}>${option}</option>`).join('')}</select>`;
         }
         function shouldShowConferenciaColumn() {
             return String(localStorage.getItem('erus_role') || '').toLowerCase() === 'desenvolvedor' && !isEmissionHistoryModal();
@@ -4543,7 +4551,7 @@
             if (!item.ENTREGA_PETR) reasons.push({ key: 'no_date', label: 'SEM ENTREGA PCP', css: 'block-reason-no-date' });
             if (item.STATUS_PED === 'B' || item.STATUS_PPR === 'B' || statusDesc.includes('BLOQ')) reasons.push({ key: 'status', label: 'STATUS BLOQ.', css: 'block-reason-status' });
             if (modeloStatus && modeloStatus !== MODELO_STATUS_OPTIONS[0]) reasons.push({ key: 'model', label: 'MODELO NÃO LIB.', css: 'block-reason-model' });
-            if (item.LINK_STATUS === 'sugerido' && /^\d{1,4}$/.test(op)) reasons.push({ key: 'suggested', label: 'OP SUGERIDA', css: 'block-reason-suggested' });
+            if (String(localStorage.getItem('erus_role') || '').toLowerCase() === 'desenvolvedor' && item.LINK_STATUS === 'sugerido' && /^\d{1,4}$/.test(op)) reasons.push({ key: 'suggested', label: 'OP SUGERIDA', css: 'block-reason-suggested' });
             return reasons;
         }
         function getPedidoBlockReasonText(item) {
@@ -4576,6 +4584,8 @@
             set('blockCountStatus', counts.status);
             set('blockCountModel', counts.model);
             set('blockCountSuggested', counts.suggested);
+            const suggestedCard = document.querySelector('[data-block-reason="suggested"]');
+            if (suggestedCard) suggestedCard.style.display = String(localStorage.getItem('erus_role') || '').toLowerCase() === 'desenvolvedor' ? '' : 'none';
             const locked = isEmissionHistoryModal();
             if (locked) activeBlockReasonFilter = null;
             document.querySelectorAll('.block-reason-card').forEach(card => {
@@ -4624,7 +4634,7 @@
                 const valorQty = chartMode === 'emission_total' ? qtdOriginal : saldoReal;
                 const valorTotal = item._sectorValue !== undefined ? item._sectorValue : (valorUnit * valorQty);
                 const valStr = formatNumber(unitWeight);
-                const isDev = localStorage.getItem('erus_role') === 'desenvolvedor';
+                const isDev = String(localStorage.getItem('erus_role') || '').toLowerCase() === 'desenvolvedor';
                 let weightInputHtml = canEditUnitWeight() ? `
                     <input 
                         type="text" 
@@ -4672,7 +4682,7 @@
                     linkStatus: item.LINK_STATUS,
                     syncKey: item.sync_key
                 }).replace(/'/g, "&apos;");
-                const opHtml = (item.OP_PCS && item.OP_PCS !== '-') ? `
+                const opHtml = (item.OP_PCS && item.OP_PCS !== '-' && (item.LINK_STATUS !== 'sugerido' || isDev)) ? `
                     <span class="clickable-op ${item.LINK_STATUS === 'sugerido' ? 'sugerida' : (item.LINK_STATUS === 'confirmado' ? 'confirmada' : '')}"
                           title="${item.LINK_STATUS === 'sugerido' ? 'Sugestão automática pendente de confirmação' : (item.LINK_STATUS === 'confirmado' ? 'Vínculo confirmado manualmente' : 'Vínculo oficial ERP')}"
                           onclick='showOPDetails(${opDetailsPayload})'>
@@ -4748,17 +4758,7 @@
                     <td class="value-total-column" style="text-align:center; color:var(--status-purple); font-weight:bold;">${valorVisible ? formatCurrency(valorTotal) : '-----'}</td>
                     <td class="modelo-column" style="text-align:center;" onclick="event.stopPropagation()">${renderModeloStatusSelect(item)}</td>
                     <td class="observations-column" style="text-align:center;">
-                        <select
-                            class="obs-edit-input" 
-                            data-original="${item.observacao || ''}"
-                            onchange="saveObservation(this, '${item.sync_key}')"
-                            style="width: 100%; background: transparent; border: 1px solid transparent; color: var(--text-muted); font-size: 0.8rem; padding: 4px 8px; border-radius: 4px; transition: all 0.2s; text-transform: uppercase;"
-                            onfocus="this.style.borderColor='var(--color-primary)'; this.style.background='rgba(255,255,255,0.05)'; this.style.color='#fff';"
-                            onblur="this.style.borderColor='transparent'; this.style.background='transparent'; this.style.color='var(--text-muted)';"
-                        >
-                            <option value="">...</option>
-                            ${OBSERVACAO_OPTIONS.map(option => `<option value="${option}" ${item.observacao === option ? 'selected' : ''}>${option}</option>`).join('')}
-                        </select>
+                        ${renderObservationSelect(item)}
                     </td>
                 </tr>
                 `;
@@ -5317,7 +5317,7 @@
                 if (isModelosHidden && isModelo) return false;
                 if (isFaturado && chartMode !== 'emission_total') return false; // Consistent with index.html "Carteira", except for historical full view
                 // Filtro: apenas linhas com vínculos sugeridos (pendentes de aceite)
-                const hasValidSuggestedOP = item.LINK_STATUS === 'sugerido' && /^\d{1,4}$/.test(String(item.OP_PCS || '').trim());
+                const hasValidSuggestedOP = String(localStorage.getItem('erus_role') || '').toLowerCase() === 'desenvolvedor' && item.LINK_STATUS === 'sugerido' && /^\d{1,4}$/.test(String(item.OP_PCS || '').trim());
                 if (onlySugeridos && !hasValidSuggestedOP) return false;
                 if (activeBlockReasonFilter && !hasPedidoBlockReason(item, activeBlockReasonFilter)) return false;
                 // 1. Chart Filters (PowerBI Style)
