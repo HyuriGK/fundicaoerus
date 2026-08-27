@@ -2567,8 +2567,20 @@
             <!-- GRÁFICOS - LINHA 3 (CONCENTRAÇÃO DA CARTEIRA) -->
             <div id="chartRow3" class="charts-row" style="display: none;">
                 <div class="chart-panel" style="flex: 1;">
-                    <div class="chart-header-row" style="padding: 0 10px; flex-shrink: 0;">
+                    <div class="chart-header-row" style="padding: 0 10px; flex-shrink: 0; position:relative; display:flex; align-items:center; gap:10px;">
                         <div class="chart-title-flex">Concentração da Carteira - Peso por Cliente (Total)</div>
+                        <div id="concentracaoAbcMetricSelector" style="position:absolute;right:10px;display:flex;align-items:center;gap:15px;">
+                            <div style="display:flex;gap:8px;font-size:.7rem;color:var(--text-muted);text-transform:uppercase;font-weight:700;">
+                                <span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:3px;background:#f59e0b;"></span>Classe A (70%)</span>
+                                <span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:3px;background:#a1a1aa;"></span>Classe B (25%)</span>
+                                <span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:3px;background:#3f3f46;"></span>Classe C (5%)</span>
+                            </div>
+                            <div style="width:1px;height:20px;background:var(--border-subtle);"></div>
+                            <div style="display:flex;gap:5px;">
+                                <button class="btn-mini-chart active" id="btnConcentracaoAbcPeso" type="button" onclick="setConcentracaoAbcMetric('peso')">Peso (kg)</button>
+                                <button class="btn-mini-chart" id="btnConcentracaoAbcValor" type="button" onclick="setConcentracaoAbcMetric('valor')">Valor (R$)</button>
+                            </div>
+                        </div>
                     </div>
                     <div style="padding: 0 0 8px; position: relative; flex-shrink: 0;">
                         <input id="concentracaoSearch" type="text" autocomplete="off"
@@ -4551,7 +4563,7 @@
             if (!item.ENTREGA_PETR) reasons.push({ key: 'no_date', label: 'SEM ENTREGA PCP', css: 'block-reason-no-date' });
             if (item.STATUS_PED === 'B' || item.STATUS_PPR === 'B' || statusDesc.includes('BLOQ')) reasons.push({ key: 'status', label: 'STATUS BLOQ.', css: 'block-reason-status' });
             if (modeloStatus && modeloStatus !== MODELO_STATUS_OPTIONS[0]) reasons.push({ key: 'model', label: 'MODELO NÃO LIB.', css: 'block-reason-model' });
-            if (String(localStorage.getItem('erus_role') || '').toLowerCase() === 'desenvolvedor' && item.LINK_STATUS === 'sugerido' && /^\d{1,4}$/.test(op)) reasons.push({ key: 'suggested', label: 'OP SUGERIDA', css: 'block-reason-suggested' });
+            if (canShowSuggestedLinks() && item.LINK_STATUS === 'sugerido' && /^\d{1,4}$/.test(op)) reasons.push({ key: 'suggested', label: 'OP SUGERIDA', css: 'block-reason-suggested' });
             return reasons;
         }
         function getPedidoBlockReasonText(item) {
@@ -4570,6 +4582,10 @@
             const modal = document.getElementById('recordsModal');
             return modal?.classList.contains('hide-op-column') || chartMode === 'client';
         }
+        function canShowSuggestedLinks() {
+            return String(localStorage.getItem('erus_role') || '').toLowerCase() === 'desenvolvedor'
+                && !['emission_total', 'client'].includes(chartMode);
+        }
         function setBlockReasonFilter(reason) {
             if (isEmissionHistoryModal()) return;
             activeBlockReasonFilter = activeBlockReasonFilter === reason ? null : reason;
@@ -4585,7 +4601,7 @@
             set('blockCountModel', counts.model);
             set('blockCountSuggested', counts.suggested);
             const suggestedCard = document.querySelector('[data-block-reason="suggested"]');
-            if (suggestedCard) suggestedCard.style.display = String(localStorage.getItem('erus_role') || '').toLowerCase() === 'desenvolvedor' ? '' : 'none';
+            if (suggestedCard) suggestedCard.style.display = canShowSuggestedLinks() ? '' : 'none';
             const locked = isEmissionHistoryModal();
             if (locked) activeBlockReasonFilter = null;
             document.querySelectorAll('.block-reason-card').forEach(card => {
@@ -4682,13 +4698,13 @@
                     linkStatus: item.LINK_STATUS,
                     syncKey: item.sync_key
                 }).replace(/'/g, "&apos;");
-                const opHtml = (item.OP_PCS && item.OP_PCS !== '-' && (item.LINK_STATUS !== 'sugerido' || isDev)) ? `
+                const opHtml = (item.OP_PCS && item.OP_PCS !== '-' && (item.LINK_STATUS !== 'sugerido' || canShowSuggestedLinks())) ? `
                     <span class="clickable-op ${item.LINK_STATUS === 'sugerido' ? 'sugerida' : (item.LINK_STATUS === 'confirmado' ? 'confirmada' : '')}"
                           title="${item.LINK_STATUS === 'sugerido' ? 'Sugestão automática pendente de confirmação' : (item.LINK_STATUS === 'confirmado' ? 'Vínculo confirmado manualmente' : 'Vínculo oficial ERP')}"
                           onclick='showOPDetails(${opDetailsPayload})'>
                         ${item.LINK_STATUS === 'sugerido' ? `<i class="fa-solid fa-wand-magic-sparkles" style="font-size:0.8em; margin-right:4px;"></i>` : ''}${item.OP_PCS}
                     </span>
-                ` : isDev ? `
+                ` : item.LINK_STATUS === 'sugerido' ? '<span style="color:var(--text-muted);opacity:.55;">-</span>' : isDev ? `
                     <span class="manual-op-wrap" onclick="event.stopPropagation()">
                         <input class="manual-op-input" type="text" maxlength="4" placeholder="OP"
                             title="Indicar OP manualmente"
@@ -5317,7 +5333,7 @@
                 if (isModelosHidden && isModelo) return false;
                 if (isFaturado && chartMode !== 'emission_total') return false; // Consistent with index.html "Carteira", except for historical full view
                 // Filtro: apenas linhas com vínculos sugeridos (pendentes de aceite)
-                const hasValidSuggestedOP = String(localStorage.getItem('erus_role') || '').toLowerCase() === 'desenvolvedor' && item.LINK_STATUS === 'sugerido' && /^\d{1,4}$/.test(String(item.OP_PCS || '').trim());
+                const hasValidSuggestedOP = canShowSuggestedLinks() && item.LINK_STATUS === 'sugerido' && /^\d{1,4}$/.test(String(item.OP_PCS || '').trim());
                 if (onlySugeridos && !hasValidSuggestedOP) return false;
                 if (activeBlockReasonFilter && !hasPedidoBlockReason(item, activeBlockReasonFilter)) return false;
                 // 1. Chart Filters (PowerBI Style)
@@ -6113,7 +6129,7 @@
                         y: {
                             type: 'linear', display: true, position: 'left', beginAtZero: true,
                             grid: { color: _gc() },
-                            ticks: { font: { size: 8 }, color: _tc() }
+                            ticks: { font: { size: 8 }, color: _tc(), callback: value => isValueMetric ? (valorVisible ? Number(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }) : '-----') : formatNumber(value, 0) + ' kg' }
                         },
                         yPercent: {
                             type: 'linear', display: true, position: 'right', beginAtZero: true, max: 100,
@@ -6170,7 +6186,15 @@
         let emissaoClientYearRecords = []; // cache dos registros anuais do cliente ativo
         let concentracaoAllIds = [];
         let concentracaoBarPx = 80;
+        let concentracaoAbcMetric = 'peso';
         let emissaoBarPx = 80;
+
+        function setConcentracaoAbcMetric(metric) {
+            concentracaoAbcMetric = metric === 'valor' ? 'valor' : 'peso';
+            document.getElementById('btnConcentracaoAbcPeso')?.classList.toggle('active', concentracaoAbcMetric === 'peso');
+            document.getElementById('btnConcentracaoAbcValor')?.classList.toggle('active', concentracaoAbcMetric === 'valor');
+            updateConcentracaoChart(allData);
+        }
 
         function updateConcentracaoChart(list) {
             list = getChartOrders(list);
@@ -6202,23 +6226,24 @@
             );
             const valueMap = clientValue;
             const totalWeightAll = Object.values(cMap).reduce((a, b) => a + b.val, 0);
-            const sorted = Object.entries(cMap).sort((a, b) => b[1].val - a[1].val);
+            const totalValueAll = Object.values(valueMap).reduce((sum, value) => sum + Number(value || 0), 0);
+            const isValueMetric = concentracaoAbcMetric === 'valor';
+            const sorted = Object.entries(cMap).sort((a, b) => (isValueMetric ? Number(valueMap[b[0]] || 0) - Number(valueMap[a[0]] || 0) : b[1].val - a[1].val));
             const labels = sorted.map(s => s[0]);
             const dataKg = sorted.map(s => s[1].val);
             const dataVal = sorted.map(s => valueMap[s[0]] || 0);
+            const metricData = isValueMetric ? dataVal : dataKg;
             const ids = sorted.map(s => clientId[s[0]] || s[0]);
             concentracaoAllLabels = labels;
             concentracaoAllIds = ids;
             let cumulative = 0;
-            const dataPercent = sorted.map(s => {
-                cumulative += s[1].val;
-                return totalWeightAll > 0 ? (cumulative / totalWeightAll) * 100 : 0;
+            const totalMetricAll = metricData.reduce((sum, value) => sum + Number(value || 0), 0);
+            const dataPercent = metricData.map(value => {
+                cumulative += Number(value || 0);
+                return totalMetricAll > 0 ? (cumulative / totalMetricAll) * 100 : 0;
             });
-            const bgColors = ids.map(id =>
-                activeChartFilters.client != null && activeChartFilters.client == id
-                    ? '#fff'
-                    : chartColorAmber
-            );
+            const abcClasses = dataPercent.map(percent => percent <= 70 ? 'A' : percent <= 95 ? 'B' : 'C');
+            const bgColors = abcClasses.map(abc => abc === 'A' ? '#f59e0b' : abc === 'B' ? '#a1a1aa' : '#3f3f46');
             // Top 10 cabem na área visível; demais exigem scroll
             const scrollWrapper = document.getElementById('concentracaoScrollWrapper');
             const canvasInner = document.getElementById('concentracaoCanvasInner');
@@ -6238,9 +6263,11 @@
                             borderWidth: 2, pointRadius: 3, tension: 0.3, yAxisID: 'yPercent'
                         },
                         {
-                            type: 'bar', label: 'Peso (kg)', data: dataKg,
+                            type: 'bar', label: isValueMetric ? 'Valor (R$)' : 'Peso (kg)', data: metricData,
                             backgroundColor: bgColors, borderRadius: 4, yAxisID: 'y',
-                            extraVal: dataVal, extraTotal: totalWeightAll
+                            extraVal: dataVal, extraWeightData: dataKg, extraTotal: totalMetricAll,
+                            extraTotalPeso: totalWeightAll, extraTotalValor: totalValueAll,
+                            abcClasses, metric: concentracaoAbcMetric
                         }
                     ]
                 },
@@ -6285,10 +6312,13 @@
                                         return lines;
                                     }
                                     // dataset bar
-                                    const kg = context.parsed.y;
+                                    const metric = context.parsed.y;
+                                    const kg = (context.dataset.extraWeightData || [])[idx] || 0;
                                     const val = (context.dataset.extraVal || [])[idx] || 0;
                                     const total = context.dataset.extraTotal || 1;
-                                    const lines = [`Peso: ${formatNumber(kg)} kg`];
+                                    const lines = [context.dataset.metric === 'valor'
+                                        ? `Valor: ${valorVisible ? metric.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-----'}`
+                                        : `Peso: ${formatNumber(metric)} kg`];
                                     if (canViewValores()) {
                                         if (valorVisible) {
                                             const pkgStr = kg > 0 && val > 0 ? (val / kg).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0,00';
@@ -6299,6 +6329,7 @@
                                             lines.push(`R$/kg: -----`);
                                         }
                                     }
+                                    lines.push(`Classe ABC: ${(context.dataset.abcClasses || [])[idx] || '-'}`);
                                     return lines;
                                 }
                             }
