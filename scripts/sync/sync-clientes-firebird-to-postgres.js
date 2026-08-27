@@ -1,6 +1,5 @@
 const pool = require('../../lib/db');
 const { Firebird, options: firebirdOptions } = require('../../lib/firebird-helper');
-const { randomUUID } = require('crypto');
 
 const clean = value => {
     if (value === null || value === undefined) return null;
@@ -121,6 +120,14 @@ async function ensureTable(client) {
     await client.query('CREATE INDEX IF NOT EXISTS idx_clientes_firebird_status ON clientes_firebird_sync (ativo, bloqueado)');
 }
 
+async function ensureStagingTable(client) {
+    await client.query('CREATE TABLE IF NOT EXISTS clientes_firebird_sync_staging (LIKE clientes_firebird_sync INCLUDING DEFAULTS)');
+    await client.query('ALTER TABLE clientes_firebird_sync_staging ADD COLUMN IF NOT EXISTS cidade_nome TEXT');
+    await client.query('ALTER TABLE clientes_firebird_sync_staging ADD COLUMN IF NOT EXISTS cidade_uf TEXT');
+    await client.query('ALTER TABLE clientes_firebird_sync_staging ADD COLUMN IF NOT EXISTS cidade_latitude NUMERIC');
+    await client.query('ALTER TABLE clientes_firebird_sync_staging ADD COLUMN IF NOT EXISTS cidade_longitude NUMERIC');
+}
+
 function fetchFirebirdClientes() {
     return new Promise((resolve, reject) => {
         Firebird.attach(firebirdOptions, (err, db) => {
@@ -140,24 +147,11 @@ async function sync() {
     console.log(`${rows.length} clientes lidos do Firebird (somente SELECT).`);
 
     const client = await pool.connect();
-    const batchId = randomUUID();
     try {
         await ensureTable(client);
-        await client.query(`
-            CREATE TABLE IF NOT EXISTS clientes_sync_batches (
-                batch_id UUID PRIMARY KEY,
-                status VARCHAR(20) NOT NULL,
-                started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                completed_at TIMESTAMPTZ
-            );
-            CREATE TABLE IF NOT EXISTS clientes_firebird_sync_lotes (LIKE clientes_firebird_sync INCLUDING DEFAULTS);
-            ALTER TABLE clientes_firebird_sync_lotes ADD COLUMN IF NOT EXISTS batch_id UUID;
-            CREATE UNIQUE INDEX IF NOT EXISTS clientes_firebird_sync_lotes_batch_uidx ON clientes_firebird_sync_lotes (batch_id, empresa, codigo);
-            CREATE INDEX IF NOT EXISTS clientes_firebird_sync_lotes_batch_razao_idx ON clientes_firebird_sync_lotes (batch_id, razao_social);
-        `);
-        await client.query(`INSERT INTO clientes_sync_batches (batch_id, status) VALUES ($1, 'running')`, [batchId]);
+        await ensureStagingTable(client);
         await client.query('BEGIN');
-        await client.query('TRUNCATE clientes_firebird_sync');
+        await client.query('TRUNCATE clientes_firebird_sync_staging');
 
         const batchSize = 250;
         for (let i = 0; i < rows.length; i += batchSize) {
@@ -196,7 +190,7 @@ async function sync() {
             });
 
             await client.query(`
-                INSERT INTO clientes_firebird_sync (
+                INSERT INTO clientes_firebird_sync_staging (
                     empresa, codigo, razao_social, fantasia, ativo, bloqueado,
                     cnpj_cpf, ie_rg, contato, telefone1, telefone2, email,
                     cidade_codigo, cidade_nome, cidade_uf, cidade_latitude, cidade_longitude, cep, logradouro, numero, bairro,
@@ -207,9 +201,21 @@ async function sync() {
 
         await client.query('COMMIT');
         await client.query('BEGIN');
-        await client.query(`INSERT INTO clientes_firebird_sync_lotes SELECT clientes_firebird_sync.*, $1 FROM clientes_firebird_sync`, [batchId]);
-        await client.query(`UPDATE clientes_sync_batches SET status = 'completed', completed_at = NOW() WHERE batch_id = $1`, [batchId]);
-        await client.query(`DELETE FROM clientes_sync_batches WHERE batch_id <> $1 AND status = 'completed'`, [batchId]);
+        await client.query('TRUNCATE clientes_firebird_sync');
+        await client.query(`
+            INSERT INTO clientes_firebird_sync (
+                empresa, codigo, razao_social, fantasia, ativo, bloqueado,
+                cnpj_cpf, ie_rg, contato, telefone1, telefone2, email,
+                cidade_codigo, cidade_nome, cidade_uf, cidade_latitude, cidade_longitude, cep, logradouro, numero, bairro,
+                data_cadastro, data_inativacao, motivo_bloqueio, observacao, synced_at
+            )
+            SELECT
+                empresa, codigo, razao_social, fantasia, ativo, bloqueado,
+                cnpj_cpf, ie_rg, contato, telefone1, telefone2, email,
+                cidade_codigo, cidade_nome, cidade_uf, cidade_latitude, cidade_longitude, cep, logradouro, numero, bairro,
+                data_cadastro, data_inativacao, motivo_bloqueio, observacao, synced_at
+            FROM clientes_firebird_sync_staging
+        `);
         await client.query('COMMIT');
         console.log(`Sync concluido: ${rows.length} clientes gravados no Postgres.`);
     } catch (err) {
