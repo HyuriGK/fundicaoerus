@@ -516,7 +516,7 @@ async function startQueueWorker(bats) {
 
         const now = Date.now();
         const bat = bats
-            .filter(item => scriptState[item.name] !== 'RUNNING' && (!nextRunAt[item.name] || nextRunAt[item.name] <= now))
+            .filter(item => scriptState[item.name] === 'IDLE' && (!nextRunAt[item.name] || nextRunAt[item.name] <= now))
             .sort((a, b) => (nextRunAt[a.name] || 0) - (nextRunAt[b.name] || 0))[0];
 
         if (!bat) {
@@ -526,6 +526,7 @@ async function startQueueWorker(bats) {
 
         const startedAt = Date.now();
         nextRunAt[bat.name] = null;
+        scriptState[bat.name] = 'STARTING';
         await lockSyncPage(bat.pageId);
         await runBat(bat);
 
