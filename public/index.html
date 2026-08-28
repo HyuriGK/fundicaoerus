@@ -9543,25 +9543,31 @@
                     }
                     {
                         let fatTotalWeight = Number(snapshot.faturamento?.totalKg || 0);
+                        let fatPrev = Number(snapshot.faturamento?.previousTotalKg || 0);
                         const metaVal = Number(snapshot.meta?.pesoKg || 0);
                         let cartKg = Number(snapshot.carteira?.totalKg || 0);
                         let totalRefWeight = Number(snapshot.refugo?.totalKg || 0);
                         try {
                             const context = `${curYear}-${String(curMonth + 1).padStart(2, '0')}`;
-                            const [carteiraRes, faturamentoRes, refugoPesoRes, refugoPctRes] = await Promise.all([
+                            const previousDate = new Date(curYear, curMonth - 1, 1);
+                            const previousContext = `${previousDate.getFullYear()}-${String(previousDate.getMonth() + 1).padStart(2, '0')}`;
+                            const [carteiraRes, faturamentoRes, faturamentoAnteriorRes, refugoPesoRes, refugoPctRes] = await Promise.all([
                                 fetchWithTimeout('/api/producao-postgres/kpi-snapshot/latest'),
                                 fetchWithTimeout(`/api/producao-postgres/kpi-snapshot/latest?metricKey=faturamento_peso&contextKey=${context}`),
+                                fetchWithTimeout(`/api/producao-postgres/kpi-snapshot/latest?metricKey=faturamento_peso&contextKey=${previousContext}`),
                                 fetchWithTimeout(`/api/producao-postgres/kpi-snapshot/latest?metricKey=refugo_peso&contextKey=${context}`),
                                 fetchWithTimeout(`/api/producao-postgres/kpi-snapshot/latest?metricKey=refugo_percentual&contextKey=${context}`)
                             ]);
-                            const [carteiraOriginal, faturamentoOriginal, refugoPesoOriginal, refugoPctOriginal] = await Promise.all([
+                            const [carteiraOriginal, faturamentoOriginal, faturamentoAnteriorOriginal, refugoPesoOriginal, refugoPctOriginal] = await Promise.all([
                                 carteiraRes.ok ? carteiraRes.json() : null,
                                 faturamentoRes.ok ? faturamentoRes.json() : null,
+                                faturamentoAnteriorRes.ok ? faturamentoAnteriorRes.json() : null,
                                 refugoPesoRes.ok ? refugoPesoRes.json() : null,
                                 refugoPctRes.ok ? refugoPctRes.json() : null
                             ]);
                             if (!snapshot.carteira?.sync && carteiraOriginal?.success) cartKg = Number(carteiraOriginal.value || 0);
                             if (!snapshot.faturamento?.sync && faturamentoOriginal?.success) fatTotalWeight = Number(faturamentoOriginal.value || 0);
+                            if (!fatPrev && faturamentoAnteriorOriginal?.success) fatPrev = Number(faturamentoAnteriorOriginal.value || 0);
                             if (refugoPesoOriginal?.success) totalRefWeight = Number(refugoPesoOriginal.value || 0);
                             if (refugoPctOriginal?.success) dashboardData.scrapPct = Number(refugoPctOriginal.value || 0);
                         } catch (error) {
@@ -9576,7 +9582,6 @@
                         dashboardData.sectorTotals = snapshot.producao?.totals || {};
                         window.__metaPesoKg = metaVal;
                         animateValue(document.querySelector('#live-faturamento .live-value'), fatTotalWeight / 1000, 1500, '', 'Ton');
-                        const fatPrev = Number(snapshot.faturamento?.previousTotalKg || 0);
                         const fatDiff = fatPrev > 0 ? (fatTotalWeight - fatPrev) / fatPrev * 100 : 0;
                         const fatTrendEl = document.querySelector('#live-faturamento .kpi-trend');
                         if (fatTrendEl) {
