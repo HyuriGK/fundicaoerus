@@ -1328,11 +1328,33 @@
                 const notesPg1 = document.getElementById('notesPg1Wrapper');
                 const notesPg2 = document.getElementById('notesPg2Wrapper');
                 const normalizarFoto = (foto) => String(foto || '').replace(/^data:image\/[a-z0-9+.-]+;base64,/i, '').replace(/\s/g, '');
-                const fotoPrincipal = normalizarFoto(data.FOTO_BASE64);
-                const fotosCroqui = fotosData.filter((foto, indice, lista) => {
-                    const atual = normalizarFoto(foto.FOTO_BASE64);
-                    return atual && atual !== fotoPrincipal && lista.findIndex(item => normalizarFoto(item.FOTO_BASE64) === atual) === indice;
+                const assinaturaFoto = (foto) => new Promise(resolve => {
+                    const imagem = new Image();
+                    imagem.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = 24;
+                        canvas.height = 24;
+                        const contexto = canvas.getContext('2d', { willReadFrequently: true });
+                        contexto.drawImage(imagem, 0, 0, 24, 24);
+                        const pixels = contexto.getImageData(0, 0, 24, 24).data;
+                        resolve(Array.from({ length: 576 }, (_, i) => pixels[i * 4] * 0.299 + pixels[i * 4 + 1] * 0.587 + pixels[i * 4 + 2] * 0.114));
+                    };
+                    imagem.onerror = () => resolve(null);
+                    imagem.src = `data:image/jpeg;base64,${foto}`;
                 });
+                const imagensParecidas = (a, b) => a && b && a.reduce((total, valor, indice) => total + Math.abs(valor - b[indice]), 0) / a.length < 8;
+                const fotoPrincipal = normalizarFoto(data.FOTO_BASE64);
+                const assinaturaPrincipal = await assinaturaFoto(fotoPrincipal);
+                const assinaturasCroqui = [];
+                const fotosCroqui = [];
+                for (const foto of fotosData) {
+                    const atual = normalizarFoto(foto.FOTO_BASE64);
+                    if (!atual || atual === fotoPrincipal) continue;
+                    const assinaturaAtual = await assinaturaFoto(atual);
+                    if (imagensParecidas(assinaturaPrincipal, assinaturaAtual) || assinaturasCroqui.some(assinatura => imagensParecidas(assinatura, assinaturaAtual))) continue;
+                    fotosCroqui.push(foto);
+                    assinaturasCroqui.push(assinaturaAtual);
+                }
 
                 if (fotosCroqui.length > 0 && fotosContainer && fotosSection) {
                     fotosContainer.innerHTML = '';
