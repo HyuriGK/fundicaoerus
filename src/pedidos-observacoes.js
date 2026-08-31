@@ -28,6 +28,19 @@ router.post('/save', async (req, res) => {
         return res.status(400).json({ error: 'Observação inválida' });
     }
 
+    if (valor === 'SEM FICHA TÉCNICA') {
+        const ficha = await pool.query(`
+            SELECT 1
+            FROM firebird_sync_emissoes p
+            JOIN ficha_tecnica f ON f.pro_codigo_fic = p.data->>'PRODUTO_PPR'
+            WHERE p.sync_key = $1
+            LIMIT 1
+        `, [String(sync_key)]);
+        if (ficha.rowCount) {
+            return res.status(409).json({ error: 'Este item já possui ficha técnica' });
+        }
+    }
+
     try {
         await pool.query(`
             INSERT INTO pedidos_observacoes (sync_key, observacao, updated_at) 

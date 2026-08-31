@@ -173,6 +173,14 @@ router.get('/resumo-carteira', async (req, res) => {
         res.set('Cache-Control', 'no-store');
         await ensureModeloStatusTable();
         await ensureConferenciaTable();
+        await pool.query(`
+            UPDATE pedidos_observacoes obs
+            SET observacao = '', updated_at = NOW()
+            FROM firebird_sync_emissoes p
+            JOIN ficha_tecnica f ON f.pro_codigo_fic = p.data->>'PRODUTO_PPR'
+            WHERE obs.sync_key = p.sync_key
+              AND UPPER(TRIM(obs.observacao)) = 'SEM FICHA TÉCNICA'
+        `);
         const commercialOwner = getCommercialOwnerRestriction(req);
         const ownerJoin = commercialOwner ? `
                 JOIN clientes_firebird_sync c
