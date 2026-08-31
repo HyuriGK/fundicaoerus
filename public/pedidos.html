@@ -2667,7 +2667,7 @@
                 <table id="dataTable">
                     <thead>
                         <tr>
-                            <th class="conferencia-col dev-conferencia-col" style="display:none;" title="Conferido"></th>
+                            <th class="conferencia-col dev-conferencia-col" style="display:none;" title="Marcar/desmarcar todos"><input id="toggleAllConferencia" class="conferencia-check" type="checkbox" onclick="event.stopPropagation()" onchange="toggleAllConferencias(this)" aria-label="Marcar ou desmarcar todos"></th>
                             <th class="sortable-th" id="th-pedido" onclick="toggleSort('pedido')" style="width: 110px;">PEDIDO</th>
                             <th class="sortable-th op-column" id="th-op" onclick="toggleSort('op')" style="width: 105px;">OP</th>
                             <th class="sortable-th history-pedido-header block-reason-column" id="th-bloqueio" onclick="toggleSort('bloqueio')" style="width: 175px;">BLOCK / SEM DATA</th>
@@ -4534,12 +4534,44 @@
                 if (!res.ok) throw new Error('Falha ao salvar conferencia');
                 const item = allData.find(d => d.sync_key === syncKey);
                 if (item) item.conferido = checked;
+                updateToggleAllConferencia(currentFilteredData || []);
             } catch (err) {
                 console.error(err);
                 checkbox.checked = !checked;
                 showToast("Erro", "Erro ao salvar conferência.", "danger");
             } finally {
                 checkbox.disabled = false;
+            }
+        }
+        function updateToggleAllConferencia(list) {
+            const toggle = document.getElementById('toggleAllConferencia');
+            if (!toggle) return;
+            toggle.checked = list.length > 0 && list.every(item => item.conferido);
+            toggle.indeterminate = list.some(item => item.conferido) && !toggle.checked;
+        }
+        async function toggleAllConferencias(toggle) {
+            const items = currentFilteredData || [];
+            const conferido = toggle.checked;
+            const previous = items.map(item => ({ item, conferido: item.conferido }));
+            toggle.disabled = true;
+            document.querySelectorAll('.conferencia-check:not(#toggleAllConferencia)').forEach(checkbox => { checkbox.disabled = true; checkbox.checked = conferido; });
+            try {
+                const res = await fetch('/api/pedidos-conferencia/save-batch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'x-role': localStorage.getItem('erus_role') || '' },
+                    body: JSON.stringify({ sync_keys: items.map(item => item.sync_key), conferido })
+                });
+                if (!res.ok) throw new Error('Falha ao salvar conferências');
+                items.forEach(item => { item.conferido = conferido; });
+                updateToggleAllConferencia(items);
+            } catch (err) {
+                console.error(err);
+                previous.forEach(({ item, conferido }) => { item.conferido = conferido; });
+                renderTable(items);
+                showToast("Erro", "Erro ao salvar conferências.", "danger");
+            } finally {
+                toggle.disabled = false;
+                document.querySelectorAll('.conferencia-check:not(#toggleAllConferencia)').forEach(checkbox => { checkbox.disabled = false; });
             }
         }
         async function saveModeloStatus(syncKey, select) {
@@ -4629,6 +4661,7 @@
             const tbody = document.getElementById('table-body');
             const showConferencia = shouldShowConferenciaColumn();
             updateConferenciaColumnVisibility(showConferencia);
+            updateToggleAllConferencia(list);
             if (list.length === 0) {
                 tbody.innerHTML = `<tr><td colspan="${showConferencia ? 18 : 17}" style="text-align:center; padding:20px;">Nenhum registro encontrado.</td></tr>`;
                 return;

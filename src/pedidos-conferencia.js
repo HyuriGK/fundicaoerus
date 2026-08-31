@@ -40,4 +40,28 @@ router.post('/save', async (req, res) => {
     }
 });
 
+router.post('/save-batch', async (req, res) => {
+    const { sync_keys, conferido } = req.body;
+    const role = String((req.user && req.user.role) || req.headers['x-role'] || '').trim().toLowerCase();
+    const user = String((req.user && (req.user.user || req.user.username || req.user.name)) || '').trim();
+
+    if (role !== 'desenvolvedor') return res.status(403).json({ error: 'Apenas desenvolvedor pode alterar conferencia' });
+    if (!Array.isArray(sync_keys) || !sync_keys.length) return res.status(400).json({ error: 'Nenhum pedido informado' });
+
+    try {
+        await ensureTable();
+        const keys = [...new Set(sync_keys.map(String).filter(Boolean))];
+        await pool.query(`
+            INSERT INTO pedidos_conferencia (sync_key, conferido, updated_at, updated_by)
+            SELECT UNNEST($1::text[]), $2, NOW(), $3
+            ON CONFLICT (sync_key)
+            DO UPDATE SET conferido = EXCLUDED.conferido, updated_at = NOW(), updated_by = EXCLUDED.updated_by
+        `, [keys, !!conferido, user || null]);
+        res.json({ success: true, count: keys.length });
+    } catch (err) {
+        console.error('Erro ao salvar conferencias em lote:', err);
+        res.status(500).json({ error: 'Erro interno ao salvar conferencias' });
+    }
+});
+
 module.exports = router;
