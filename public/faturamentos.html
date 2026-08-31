@@ -1524,6 +1524,34 @@
                 min-height: 360px !important;
             }
         }
+
+        #reportsSelect { width: 142px; min-width: 142px; }
+        #salesProductReportModal { z-index: 4500; }
+        #salesProductReportModal .modal-card { width: min(1100px, 96vw); height: min(760px, 90vh); padding: 0; display: flex; flex-direction: column; overflow: hidden; }
+        #salesProductReportModal .modal-header { margin: 0; padding: 20px 26px; }
+        #salesProductReportContent { padding: 22px 26px; overflow: auto; flex: 1; }
+        .sales-report-filters { display: flex; align-items: end; gap: 12px; flex-wrap: wrap; padding: 15px; border: 1px solid var(--border-subtle); border-radius: 9px; background: rgba(255,255,255,.025); }
+        .sales-report-field { display: flex; flex-direction: column; gap: 6px; min-width: 150px; }
+        .sales-report-field label { font-size: .68rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase; }
+        .sales-report-field input { height: 34px; color: #fff; background: #17171a; border: 1px solid var(--border-subtle); border-radius: 6px; padding: 0 9px; font: inherit; }
+        .sales-report-client { min-width: 260px; flex: 1; }
+        .sales-report-client-selected { height: 34px; display: flex; align-items: center; justify-content: space-between; gap: 8px; color: #e4e4e7; background: #17171a; border: 1px solid var(--border-subtle); border-radius: 6px; padding: 0 9px; font-size: .8rem; }
+        .sales-report-client-picker { display: none; margin-top: 10px; border: 1px solid var(--border-subtle); border-radius: 8px; overflow: hidden; background: #17171a; }
+        .sales-report-client-picker.open { display: block; }
+        .sales-report-client-picker input { width: 100%; box-sizing: border-box; padding: 11px; color: #fff; background: #202024; border: 0; border-bottom: 1px solid var(--border-subtle); font: inherit; }
+        .sales-report-client-results { max-height: 190px; overflow: auto; }
+        .sales-report-client-result { width: 100%; display: flex; justify-content: space-between; gap: 12px; padding: 10px 12px; color: #e4e4e7; background: transparent; border: 0; border-bottom: 1px solid rgba(255,255,255,.06); cursor: pointer; text-align: left; font: inherit; font-size: .8rem; }
+        .sales-report-client-result:hover { background: rgba(251,191,36,.1); }
+        .sales-report-client-result small { color: var(--text-muted); }
+        .sales-report-table { width: 100%; border-collapse: collapse; margin-top: 18px; font-size: .82rem; }
+        .sales-report-table th { color: var(--text-muted); font-size: .67rem; text-transform: uppercase; text-align: left; padding: 10px; border-bottom: 1px solid var(--border-subtle); }
+        .sales-report-table td { padding: 11px 10px; border-bottom: 1px solid rgba(255,255,255,.06); color: #e4e4e7; }
+        .sales-report-table .numeric { text-align: right; font-family: var(--font-mono); }
+
+        @media (max-width: 650px) {
+            #salesProductReportContent { padding: 15px; }
+            .sales-report-field, .sales-report-client { min-width: 100%; }
+        }
     </style>
 </head>
 <body class="faturamentos-page">
@@ -1673,6 +1701,24 @@
                 ESC para fechar</div>
         </div>
     </div>
+    <div id="salesProductReportModal" class="modal-overlay">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h2 class="modal-title"><i class="fa-solid fa-chart-bar" style="margin-right:12px;"></i>Vendas por produto</h2>
+                <span class="modal-close" onclick="closeSalesProductReport()" title="Fechar (ESC)">&times;</span>
+            </div>
+            <div id="salesProductReportContent">
+                <div class="sales-report-filters">
+                    <div class="sales-report-field"><label>Data inicial</label><input id="salesReportStart" type="date"></div>
+                    <div class="sales-report-field"><label>Data final</label><input id="salesReportEnd" type="date"></div>
+                    <div class="sales-report-field sales-report-client"><label>Cliente (opcional)</label><div class="sales-report-client-selected"><span id="salesReportClientLabel">Todos os clientes</span><button class="month-btn" type="button" onclick="toggleSalesReportClientPicker()">BUSCAR</button></div></div>
+                    <button class="btn-modern" type="button" onclick="loadSalesProductReport()"><i class="fa-solid fa-magnifying-glass"></i> Gerar relatório</button>
+                </div>
+                <div id="salesReportClientPicker" class="sales-report-client-picker"><input id="salesReportClientSearch" type="text" placeholder="Digite nome ou código do cliente" oninput="renderSalesReportClientResults()"><div id="salesReportClientResults" class="sales-report-client-results"></div></div>
+                <div id="salesProductReportResults" style="margin-top:18px;color:var(--text-muted);">Selecione o período e gere o relatório.</div>
+            </div>
+        </div>
+    </div>
     <div id="fatContextMenu" class="fat-context-menu">
         <button type="button" onclick="openPedidosCarteiraFromContext()">
             <i class="fa-solid fa-magnifying-glass-chart"></i>
@@ -1758,7 +1804,7 @@
                     <option value="vendedor">FATURAMENTO POR VENDEDOR</option>
                     <option value="mapa">MAPA DE CALOR</option>
                 </select>
-                <select id="reportsSelect" class="year-select view-select" onchange="this.blur()" aria-label="Relatórios">
+                <select id="reportsSelect" class="year-select view-select" onchange="handleReportsSelect(this.value)" aria-label="Relatórios">
                     <option value="" selected>RELATÓRIOS</option>
                     <option value="produto">VENDAS POR PRODUTO</option>
                     <option value="vendedor">VENDAS POR VENDEDOR</option>
@@ -2174,6 +2220,86 @@
         }
         function getCalculatedQuantity(item) {
             return item.quantidadeOriginal ?? item.quantidade ?? 0;
+        }
+        let salesReportSelectedClient = null;
+        let salesReportClientOptions = [];
+        function handleReportsSelect(value) {
+            const select = document.getElementById('reportsSelect');
+            select.value = '';
+            select.blur();
+            if (value === 'produto') openSalesProductReport();
+            else if (value) showToast('Relatório em preparação', 'Esta opção será disponibilizada em breve.', 'info');
+        }
+        function openSalesProductReport() {
+            const now = new Date();
+            const year = selectedDashboardYear || now.getFullYear();
+            const month = selectedDashboardMonthIndex >= 0 ? selectedDashboardMonthIndex : now.getMonth();
+            const first = new Date(year, month, 1);
+            const last = new Date(year, month + 1, 0);
+            const iso = date => date.toISOString().slice(0, 10);
+            document.getElementById('salesReportStart').value = iso(first);
+            document.getElementById('salesReportEnd').value = iso(last);
+            salesReportSelectedClient = null;
+            document.getElementById('salesReportClientLabel').textContent = 'Todos os clientes';
+            document.getElementById('salesReportClientPicker').classList.remove('open');
+            document.getElementById('salesProductReportResults').textContent = 'Selecione o período e gere o relatório.';
+            document.getElementById('salesProductReportModal').style.display = 'flex';
+        }
+        function closeSalesProductReport() { document.getElementById('salesProductReportModal').style.display = 'none'; }
+        function toggleSalesReportClientPicker() {
+            const picker = document.getElementById('salesReportClientPicker');
+            picker.classList.toggle('open');
+            if (picker.classList.contains('open')) {
+                document.getElementById('salesReportClientSearch').value = '';
+                renderSalesReportClientResults();
+                document.getElementById('salesReportClientSearch').focus();
+            }
+        }
+        function renderSalesReportClientResults() {
+            const query = document.getElementById('salesReportClientSearch').value.trim().toLowerCase();
+            const clients = [...new Map(allData.map(item => {
+                const code = String(item.clienteCodigo || '').trim();
+                const name = String(item.clienteNome || '').trim();
+                return [`${code}|${name}`, { code, name }];
+            })).values()].filter(client => client.name && (!query || client.name.toLowerCase().includes(query) || client.code.toLowerCase().includes(query))).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')).slice(0, 80);
+            salesReportClientOptions = clients;
+            const container = document.getElementById('salesReportClientResults');
+            container.innerHTML = `<button class="sales-report-client-result" type="button" onclick="selectSalesReportClient(null)"><span>Todos os clientes</span><small>Remover filtro</small></button>${clients.map((client, index) => `<button class="sales-report-client-result" type="button" onclick="selectSalesReportClientByIndex(${index})"><span>${client.name}</span><small>${client.code || '-'}</small></button>`).join('') || '<div style="padding:12px;color:var(--text-muted);font-size:.8rem;">Nenhum cliente encontrado.</div>'}`;
+        }
+        function selectSalesReportClientByIndex(index) { selectSalesReportClient(salesReportClientOptions[index] || null); }
+        function selectSalesReportClient(client) {
+            salesReportSelectedClient = client;
+            document.getElementById('salesReportClientLabel').textContent = client ? `${client.name}${client.code ? ` · ${client.code}` : ''}` : 'Todos os clientes';
+            document.getElementById('salesReportClientPicker').classList.remove('open');
+        }
+        async function loadSalesProductReport() {
+            const start = document.getElementById('salesReportStart').value;
+            const end = document.getElementById('salesReportEnd').value;
+            const result = document.getElementById('salesProductReportResults');
+            if (!start || !end || start > end) { showToast('Período inválido', 'Informe uma data inicial e final válidas.', 'danger'); return; }
+            result.innerHTML = '<div style="text-align:center;padding:34px;"><i class="fa-solid fa-spinner fa-spin" style="color:var(--color-primary);"></i> Gerando relatório...</div>';
+            try {
+                const res = await fetch(`/api/faturamento-postgres/detalhado?limit=100000&startDate=${start}&endDate=${end}`);
+                const json = await res.json();
+                if (!res.ok || !json.success) throw new Error(json.error || 'Falha ao consultar faturamentos.');
+                const grouped = new Map();
+                (json.data || []).filter(item => item.gera_financeiro !== 'N').filter(item => !salesReportSelectedClient || (salesReportSelectedClient.code && String(item.clienteCodigo || '').trim() === salesReportSelectedClient.code) || String(item.clienteNome || '').trim() === salesReportSelectedClient.name).forEach(item => {
+                    const code = String(item.codigoItem || '-').trim();
+                    const name = String(item.descricao || 'Sem descrição').trim();
+                    const key = `${code}|${name}`;
+                    const entry = grouped.get(key) || { code, name, quantity: 0, weight: 0, value: 0 };
+                    // O endpoint já devolve os valores líquidos, considerando devoluções.
+                    entry.quantity += Number(item.quantidade) || 0;
+                    entry.weight += Number(item.pesoTotal) || 0;
+                    entry.value += Number(item.valorTotal) || 0;
+                    grouped.set(key, entry);
+                });
+                const rows = [...grouped.values()].sort((a, b) => b.value - a.value);
+                const totals = rows.reduce((acc, row) => ({ quantity: acc.quantity + row.quantity, weight: acc.weight + row.weight, value: acc.value + row.value }), { quantity: 0, weight: 0, value: 0 });
+                result.innerHTML = rows.length ? `<div style="color:var(--text-muted);font-size:.78rem;margin-bottom:8px;">${rows.length} produto(s) vendidos no período.</div><table class="sales-report-table"><thead><tr><th>Código</th><th>Produto</th><th class="numeric">Quantidade</th><th class="numeric">Peso</th><th class="numeric">Valor</th></tr></thead><tbody>${rows.map(row => `<tr><td>${row.code}</td><td>${row.name}</td><td class="numeric">${formatNumber(row.quantity, 0)}</td><td class="numeric">${formatWeight(row.weight)}</td><td class="numeric">${formatCurrency(row.value)}</td></tr>`).join('')}</tbody><tfoot><tr><td colspan="2" style="font-weight:800;color:#fbbf24;">TOTAL</td><td class="numeric" style="font-weight:800;">${formatNumber(totals.quantity, 0)}</td><td class="numeric" style="font-weight:800;">${formatWeight(totals.weight)}</td><td class="numeric" style="font-weight:800;color:#fbbf24;">${formatCurrency(totals.value)}</td></tr></tfoot></table>` : '<div style="text-align:center;padding:34px;color:var(--text-muted);">Nenhuma venda encontrada para os filtros informados.</div>';
+            } catch (error) {
+                result.innerHTML = `<div style="text-align:center;padding:34px;color:var(--status-danger);">${error.message}</div>`;
+            }
         }
         function maskTopKpis() {
             [
@@ -4583,7 +4709,9 @@ async function loadRecordsData() {
             // Esc key listener
             document.addEventListener('keydown', (e) => {
                 if (e.key === 'Escape') {
-                    if (document.getElementById('clientModal').style.display === 'flex') {
+                    if (document.getElementById('salesProductReportModal').style.display === 'flex') {
+                        closeSalesProductReport();
+                    } else if (document.getElementById('clientModal').style.display === 'flex') {
                         closeClientModal();
                     } else if (document.getElementById('deliveryTimeModal').style.display === 'flex') {
                         closeDeliveryTimeModal();
