@@ -389,6 +389,53 @@ async function syncEmissoes() {
             }
         }
 
+            await pgClient.query(`
+                CREATE TABLE IF NOT EXISTS pedidos_observacoes_historico (
+                    id BIGSERIAL PRIMARY KEY,
+                    sync_key TEXT NOT NULL,
+                    observacao TEXT NOT NULL,
+                    started_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                    ended_at TIMESTAMP,
+                    updated_by TEXT
+                );
+                CREATE INDEX IF NOT EXISTS idx_pedidos_observacoes_historico_sync_key
+                    ON pedidos_observacoes_historico (sync_key, started_at DESC);
+
+                UPDATE pedidos_observacoes_historico h
+                SET ended_at = NOW()
+                WHERE h.observacao = 'SEM FICHA TÉCNICA'
+                  AND h.ended_at IS NULL
+                  AND EXISTS (
+                      SELECT 1 FROM firebird_sync_emissoes p
+                      JOIN ficha_tecnica f ON f.pro_codigo_fic = p.data->>'PRODUTO_PPR'
+                      WHERE p.sync_key = h.sync_key
+                  );
+
+                UPDATE pedidos_observacoes o
+                SET observacao = '', updated_at = NOW()
+                FROM firebird_sync_emissoes p
+                JOIN ficha_tecnica f ON f.pro_codigo_fic = p.data->>'PRODUTO_PPR'
+                WHERE o.sync_key = p.sync_key
+                  AND UPPER(TRIM(o.observacao)) = 'SEM FICHA TÉCNICA';
+
+                WITH inserted AS (
+                    INSERT INTO pedidos_observacoes (sync_key, observacao, updated_at)
+                    SELECT p.sync_key, 'SEM FICHA TÉCNICA', NOW()
+                    FROM firebird_sync_emissoes p
+                    LEFT JOIN ficha_tecnica f ON f.pro_codigo_fic = p.data->>'PRODUTO_PPR'
+                    LEFT JOIN pedidos_observacoes o ON o.sync_key = p.sync_key
+                    WHERE f.pro_codigo_fic IS NULL
+                      AND COALESCE(TRIM(o.observacao), '') = ''
+                      AND ((p.data->>'QUANTIDADE_PPR')::numeric - COALESCE((p.data->>'QUANTIDADE_FATURADA_PPR')::numeric, 0) - COALESCE((p.data->>'QUANTIDADE_DESISTENCIA_PPR')::numeric, 0)) > 0
+                      AND COALESCE(p.data->>'STATUS_PPR', '') <> 'C'
+                      AND COALESCE(p.data->>'STATUS_PCP', '') NOT IN ('C', 'E', 'F')
+                    ON CONFLICT (sync_key) DO NOTHING
+                    RETURNING sync_key, observacao, updated_at
+                )
+                INSERT INTO pedidos_observacoes_historico (sync_key, observacao, started_at)
+                SELECT sync_key, observacao, updated_at FROM inserted;
+            `);
+
         console.log(`\n\n✅ Sincronização de EMISSÕES concluída em ${((Date.now() - startTime)/1000).toFixed(1)}s!`);
 
         // ATUALIZAR STATUS
