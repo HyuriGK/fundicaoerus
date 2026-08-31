@@ -1550,7 +1550,7 @@
         .sales-report-client-result { width: 100%; display: flex; justify-content: space-between; gap: 12px; padding: 10px 12px; color: #e4e4e7; background: transparent; border: 0; border-bottom: 1px solid rgba(255,255,255,.06); cursor: pointer; text-align: left; font: inherit; font-size: .8rem; }
         .sales-report-client-result:hover { background: rgba(251,191,36,.1); }
         .sales-report-client-result small { color: var(--text-muted); }
-        .sales-report-options { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .sales-report-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
         .sales-report-financial { min-width: 0; }
         .sales-report-financial label { display: flex; flex-direction: row; align-items: center; gap: 8px; height: 34px; color: #e4e4e7; text-transform: none; font-size: .78rem; cursor: pointer; }
         .sales-report-financial input { accent-color: #fbbf24; width: 15px; height: 15px; }
@@ -1760,6 +1760,7 @@
                     </div>
                     <div class="sales-report-field sales-report-client"><label>Cliente (opcional)</label><div class="sales-report-client-selected"><span id="salesReportClientLabel">Todos os clientes</span><button class="month-btn" type="button" onclick="toggleSalesReportClientPicker()">BUSCAR</button></div></div>
                     <div class="sales-report-options">
+                        <div class="sales-report-field sales-report-financial"><label>Visualização</label><label><input id="salesReportAccumulateProducts" type="checkbox" checked onchange="renderSalesProductReport()"> Acumular por produto</label></div>
                         <div class="sales-report-field sales-report-financial"><label>Itens</label><label><input id="salesReportIncludeModels" type="checkbox" checked onchange="renderSalesProductReport()"> Incluir modelos</label></div>
                         <div class="sales-report-field sales-report-financial"><label>Dados financeiros</label><label><input id="salesReportIncludeFinancial" type="checkbox" checked onchange="renderSalesProductReport()"> Incluir valores financeiros</label></div>
                     </div>
@@ -2275,6 +2276,7 @@
         let salesReportSelectedClient = null;
         let salesReportClientOptions = [];
         let salesProductReportRows = [];
+        let salesProductReportDetails = [];
         let salesProductReportMeta = null;
         function handleReportsSelect(value) {
             const select = document.getElementById('reportsSelect');
@@ -2297,7 +2299,9 @@
             document.getElementById('salesReportClientPicker').classList.remove('open');
             document.getElementById('salesProductReportResults').textContent = 'Selecione o período e gere o relatório.';
             salesProductReportRows = [];
+            salesProductReportDetails = [];
             salesProductReportMeta = null;
+            document.getElementById('salesReportAccumulateProducts').checked = true;
             document.getElementById('salesReportIncludeModels').checked = true;
             document.getElementById('salesReportIncludeFinancial').checked = true;
             document.getElementById('salesReportExcelBtn').disabled = true;
@@ -2341,10 +2345,17 @@
                 const res = await fetch(`/api/faturamento-postgres/detalhado?limit=100000&startDate=${start}&endDate=${end}`);
                 const json = await res.json();
                 if (!res.ok || !json.success) throw new Error(json.error || 'Falha ao consultar faturamentos.');
+                salesProductReportDetails = [];
                 const grouped = new Map();
                 (json.data || []).filter(item => item.gera_financeiro !== 'N').filter(item => !salesReportSelectedClient || (salesReportSelectedClient.code && String(item.clienteCodigo || '').trim() === salesReportSelectedClient.code) || String(item.clienteNome || '').trim() === salesReportSelectedClient.name).forEach(item => {
                     const code = String(item.codigoItem || '-').trim();
                     const name = String(item.descricao || 'Sem descrição').trim();
+                    salesProductReportDetails.push({
+                        date: item.data || '', code, name,
+                        quantity: Number(item.quantidade) || 0,
+                        weight: Number(item.pesoTotal) || 0,
+                        value: Number(item.valorTotal) || 0
+                    });
                     const key = `${code}|${name}`;
                     const entry = grouped.get(key) || { code, name, quantity: 0, weight: 0, value: 0 };
                     // O endpoint já devolve os valores líquidos, considerando devoluções.
@@ -2370,7 +2381,10 @@
         }
         function getVisibleSalesProductReportRows() {
             const includeModels = document.getElementById('salesReportIncludeModels').checked;
-            return includeModels ? salesProductReportRows : salesProductReportRows.filter(row => !(String(row.code || '').trim().endsWith('1') && /^MODELO\b/i.test(String(row.name || '').trim())));
+            const accumulate = document.getElementById('salesReportAccumulateProducts').checked;
+            const source = accumulate ? salesProductReportRows : salesProductReportDetails;
+            const visible = includeModels ? source : source.filter(row => !(String(row.code || '').trim().endsWith('1') && /^MODELO\b/i.test(String(row.name || '').trim())));
+            return accumulate ? visible : [...visible].sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')) || b.value - a.value);
         }
         function formatSalesReportDate(value) {
             return value ? new Date(`${value}T12:00:00`).toLocaleDateString('pt-BR') : '-';
@@ -2383,15 +2397,19 @@
                 return;
             }
             const includeFinancial = document.getElementById('salesReportIncludeFinancial').checked;
+            const accumulate = document.getElementById('salesReportAccumulateProducts').checked;
             const totals = getSalesProductReportTotals();
             const valueSummary = includeFinancial ? `<div class="sales-report-summary-card emphasis"><span>Valor faturado</span><strong>${formatCurrency(totals.value)}</strong></div>` : '';
             const valueHeader = includeFinancial ? '<th class="numeric">Valor</th>' : '';
-            const rows = visibleRows.map(row => `<tr><td>${escapeSalesReportHtml(row.code)}</td><td>${escapeSalesReportHtml(row.name)}</td><td class="numeric">${formatNumber(row.quantity, 0)}</td><td class="numeric">${formatWeight(row.weight)}</td>${includeFinancial ? `<td class="numeric">${formatCurrency(row.value)}</td>` : ''}</tr>`).join('');
-            result.innerHTML = `<div class="sales-report-summary"><div class="sales-report-summary-card"><span>Produtos vendidos</span><strong>${formatNumber(visibleRows.length, 0)}</strong></div><div class="sales-report-summary-card"><span>Peso acumulado</span><strong>${formatWeight(totals.weight)}</strong></div>${valueSummary}</div><div style="color:var(--text-muted);font-size:.78rem;margin:12px 0 0;">Período: <strong style="color:#e4e4e7;">${formatSalesReportDate(salesProductReportMeta.start)} até ${formatSalesReportDate(salesProductReportMeta.end)}</strong>${salesProductReportMeta.client ? ` · Cliente: <strong style="color:#e4e4e7;">${escapeSalesReportHtml(salesProductReportMeta.client.name)}</strong>` : ''}</div><table class="sales-report-table"><thead><tr><th>Código</th><th>Produto</th><th class="numeric">Quantidade</th><th class="numeric">Peso</th>${valueHeader}</tr></thead><tbody>${rows}</tbody><tfoot><tr><td colspan="2" style="font-weight:800;color:#fbbf24;">TOTAL</td><td class="numeric" style="font-weight:800;">${formatNumber(totals.quantity, 0)}</td><td class="numeric" style="font-weight:800;">${formatWeight(totals.weight)}</td>${includeFinancial ? `<td class="numeric" style="font-weight:800;color:#fbbf24;">${formatCurrency(totals.value)}</td>` : ''}</tr></tfoot></table>`;
+            const dateHeader = accumulate ? '' : '<th>Data faturamento</th>';
+            const rows = visibleRows.map(row => `<tr>${accumulate ? '' : `<td>${formatSalesReportDate(row.date)}</td>`}<td>${escapeSalesReportHtml(row.code)}</td><td>${escapeSalesReportHtml(row.name)}</td><td class="numeric">${formatNumber(row.quantity, 0)}</td><td class="numeric">${formatWeight(row.weight)}</td>${includeFinancial ? `<td class="numeric">${formatCurrency(row.value)}</td>` : ''}</tr>`).join('');
+            const totalColspan = accumulate ? 2 : 3;
+            result.innerHTML = `<div class="sales-report-summary"><div class="sales-report-summary-card"><span>${accumulate ? 'Produtos vendidos' : 'Faturamentos'}</span><strong>${formatNumber(visibleRows.length, 0)}</strong></div><div class="sales-report-summary-card"><span>Peso acumulado</span><strong>${formatWeight(totals.weight)}</strong></div>${valueSummary}</div><div style="color:var(--text-muted);font-size:.78rem;margin:12px 0 0;">Período: <strong style="color:#e4e4e7;">${formatSalesReportDate(salesProductReportMeta.start)} até ${formatSalesReportDate(salesProductReportMeta.end)}</strong>${salesProductReportMeta.client ? ` · Cliente: <strong style="color:#e4e4e7;">${escapeSalesReportHtml(salesProductReportMeta.client.name)}</strong>` : ''}</div><table class="sales-report-table"><thead><tr>${dateHeader}<th>Código</th><th>Produto</th><th class="numeric">Quantidade</th><th class="numeric">Peso</th>${valueHeader}</tr></thead><tbody>${rows}</tbody><tfoot><tr><td colspan="${totalColspan}" style="font-weight:800;color:#fbbf24;">TOTAL</td><td class="numeric" style="font-weight:800;">${formatNumber(totals.quantity, 0)}</td><td class="numeric" style="font-weight:800;">${formatWeight(totals.weight)}</td>${includeFinancial ? `<td class="numeric" style="font-weight:800;color:#fbbf24;">${formatCurrency(totals.value)}</td>` : ''}</tr></tfoot></table>`;
         }
         function getSalesProductExportRows(includeFinancial) {
+            const accumulate = document.getElementById('salesReportAccumulateProducts').checked;
             return getVisibleSalesProductReportRows().map(row => {
-                const exportRow = { 'Código': row.code, 'Produto': row.name, 'Quantidade': row.quantity, 'Peso (kg)': Number(row.weight.toFixed(2)) };
+                const exportRow = { ...(accumulate ? {} : { 'Data faturamento': formatSalesReportDate(row.date) }), 'Código': row.code, 'Produto': row.name, 'Quantidade': row.quantity, 'Peso (kg)': Number(row.weight.toFixed(2)) };
                 if (includeFinancial) exportRow['Valor (R$)'] = Number(row.value.toFixed(2));
                 return exportRow;
             });
@@ -2405,7 +2423,8 @@
             const totalRow = { 'Código': 'TOTAL', 'Produto': '', 'Quantidade': totals.quantity, 'Peso (kg)': Number(totals.weight.toFixed(2)) };
             if (includeFinancial) totalRow['Valor (R$)'] = Number(totals.value.toFixed(2));
             const ws = XLSX.utils.json_to_sheet([...rows, totalRow]);
-            ws['!cols'] = [{ wch: 16 }, { wch: 48 }, { wch: 14 }, { wch: 16 }, ...(includeFinancial ? [{ wch: 18 }] : [])];
+            const accumulate = document.getElementById('salesReportAccumulateProducts').checked;
+            ws['!cols'] = [...(accumulate ? [] : [{ wch: 16 }]), { wch: 16 }, { wch: 48 }, { wch: 14 }, { wch: 16 }, ...(includeFinancial ? [{ wch: 18 }] : [])];
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, 'Vendas por produto');
             const fileName = `Vendas_por_produto_${salesProductReportMeta.start}_${salesProductReportMeta.end}.xlsx`;
@@ -2417,17 +2436,20 @@
             const visibleRows = getVisibleSalesProductReportRows();
             if (!visibleRows.length || !jsPdfCtor) return showToast('Exportação indisponível', 'Gere o relatório e tente novamente.', 'warning');
             const includeFinancial = document.getElementById('salesReportIncludeFinancial').checked;
+            const accumulate = document.getElementById('salesReportAccumulateProducts').checked;
             const totals = getSalesProductReportTotals();
             const headers = ['Código', 'Produto', 'Quantidade', 'Peso (kg)', ...(includeFinancial ? ['Valor (R$)'] : [])];
-            const body = visibleRows.map(row => [row.code, row.name, formatNumber(row.quantity, 0), formatNumber(row.weight, 2), ...(includeFinancial ? [formatCurrency(row.value)] : [])]);
-            body.push(['TOTAL', '', formatNumber(totals.quantity, 0), formatNumber(totals.weight, 2), ...(includeFinancial ? [formatCurrency(totals.value)] : [])]);
+            if (!accumulate) headers.unshift('Data faturamento');
+            const body = visibleRows.map(row => [...(accumulate ? [] : [formatSalesReportDate(row.date)]), row.code, row.name, formatNumber(row.quantity, 0), formatNumber(row.weight, 2), ...(includeFinancial ? [formatCurrency(row.value)] : [])]);
+            body.push([...(accumulate ? [] : ['']), 'TOTAL', '', formatNumber(totals.quantity, 0), formatNumber(totals.weight, 2), ...(includeFinancial ? [formatCurrency(totals.value)] : [])]);
             const doc = new jsPdfCtor({ orientation: 'landscape', unit: 'pt', format: 'a4' });
             doc.setFontSize(15);
             doc.text('Vendas por produto', 34, 34);
             doc.setFontSize(8);
             doc.text(`Período: ${formatSalesReportDate(salesProductReportMeta.start)} até ${formatSalesReportDate(salesProductReportMeta.end)}${salesProductReportMeta.client ? ` | Cliente: ${salesProductReportMeta.client.name}` : ''}`, 34, 49);
             doc.text(`Gerado em ${new Date().toLocaleString('pt-BR')}`, 34, 61);
-            doc.autoTable({ head: [headers], body, startY: 72, theme: 'grid', styles: { fontSize: 7, cellPadding: 5 }, headStyles: { fillColor: [32, 32, 36], textColor: [255, 255, 255] }, columnStyles: { 2: { halign: 'right' }, 3: { halign: 'right' }, ...(includeFinancial ? { 4: { halign: 'right' } } : {}) }, margin: { left: 28, right: 28 } });
+            const numericStart = accumulate ? 2 : 3;
+            doc.autoTable({ head: [headers], body, startY: 72, theme: 'grid', styles: { fontSize: 7, cellPadding: 5 }, headStyles: { fillColor: [32, 32, 36], textColor: [255, 255, 255] }, columnStyles: { [numericStart]: { halign: 'right' }, [numericStart + 1]: { halign: 'right' }, ...(includeFinancial ? { [numericStart + 2]: { halign: 'right' } } : {}) }, margin: { left: 28, right: 28 } });
             const fileName = `Vendas_por_produto_${salesProductReportMeta.start}_${salesProductReportMeta.end}.pdf`;
             doc.save(fileName);
             if (window.erusAudit) window.erusAudit('EXPORTAR_PDF', { relatorio: 'vendas_por_produto', registros: visibleRows.length, financeiro: includeFinancial });
