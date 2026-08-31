@@ -20,6 +20,9 @@
     <script src="js/activity-logger.js?v=20260605e"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
     <script>
         if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
         if (sessionStorage.getItem('faturamentosMobileRefreshTop') === '1') {
@@ -1527,10 +1530,12 @@
 
         #reportsSelect { width: 142px; min-width: 142px; }
         #salesProductReportModal { z-index: 4500; }
-        #salesProductReportModal .modal-card { width: min(1100px, 96vw); height: min(760px, 90vh); padding: 0; display: flex; flex-direction: column; overflow: hidden; }
-        #salesProductReportModal .modal-header { margin: 0; padding: 20px 26px; }
-        #salesProductReportContent { padding: 22px 26px; overflow: auto; flex: 1; }
-        .sales-report-filters { display: flex; align-items: end; gap: 12px; flex-wrap: wrap; padding: 15px; border: 1px solid var(--border-subtle); border-radius: 9px; background: rgba(255,255,255,.025); }
+        #salesProductReportModal .modal-card { width: min(1160px, 96vw); height: min(790px, 90vh); padding: 0; display: flex; flex-direction: column; overflow: hidden; background: #18181b; border: 1px solid #3f3f46; box-shadow: 0 28px 80px rgba(0,0,0,.55); }
+        #salesProductReportModal .modal-header { margin: 0; padding: 20px 26px; border-bottom: 1px solid var(--border-subtle); background: linear-gradient(105deg, #202025, #18181b 75%); }
+        #salesProductReportContent { padding: 22px 26px 28px; overflow: auto; flex: 1; }
+        .sales-report-intro { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 18px; }
+        .sales-report-intro p { margin: 4px 0 0; color: var(--text-muted); font-size: .8rem; }
+        .sales-report-filters { display: flex; align-items: end; gap: 12px; flex-wrap: wrap; padding: 16px; border: 1px solid #3f3f46; border-radius: 10px; background: #202024; }
         .sales-report-field { display: flex; flex-direction: column; gap: 6px; min-width: 150px; }
         .sales-report-field label { font-size: .68rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase; }
         .sales-report-field input { height: 34px; color: #fff; background: #17171a; border: 1px solid var(--border-subtle); border-radius: 6px; padding: 0 9px; font: inherit; }
@@ -1543,14 +1548,28 @@
         .sales-report-client-result { width: 100%; display: flex; justify-content: space-between; gap: 12px; padding: 10px 12px; color: #e4e4e7; background: transparent; border: 0; border-bottom: 1px solid rgba(255,255,255,.06); cursor: pointer; text-align: left; font: inherit; font-size: .8rem; }
         .sales-report-client-result:hover { background: rgba(251,191,36,.1); }
         .sales-report-client-result small { color: var(--text-muted); }
+        .sales-report-financial { min-width: 174px; }
+        .sales-report-financial label { display: flex; flex-direction: row; align-items: center; gap: 8px; height: 34px; color: #e4e4e7; text-transform: none; font-size: .78rem; cursor: pointer; }
+        .sales-report-financial input { accent-color: #fbbf24; width: 15px; height: 15px; }
+        .sales-report-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+        .sales-report-action { height: 34px; border-radius: 6px; border: 1px solid #4b5563; background: #27272a; color: #e4e4e7; padding: 0 11px; font: 800 .72rem var(--font-main); letter-spacing: .02em; cursor: pointer; }
+        .sales-report-action:hover { border-color: #fbbf24; color: #fbbf24; }
+        .sales-report-action:disabled { opacity: .4; cursor: not-allowed; }
+        .sales-report-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 18px 0 8px; }
+        .sales-report-summary-card { padding: 13px 15px; border: 1px solid var(--border-subtle); border-radius: 8px; background: #202024; }
+        .sales-report-summary-card span { display: block; color: var(--text-muted); text-transform: uppercase; font-size: .65rem; font-weight: 800; letter-spacing: .05em; }
+        .sales-report-summary-card strong { display: block; margin-top: 6px; color: #f4f4f5; font-family: var(--font-mono); font-size: 1rem; }
+        .sales-report-summary-card.emphasis strong { color: #fbbf24; }
         .sales-report-table { width: 100%; border-collapse: collapse; margin-top: 18px; font-size: .82rem; }
-        .sales-report-table th { color: var(--text-muted); font-size: .67rem; text-transform: uppercase; text-align: left; padding: 10px; border-bottom: 1px solid var(--border-subtle); }
-        .sales-report-table td { padding: 11px 10px; border-bottom: 1px solid rgba(255,255,255,.06); color: #e4e4e7; }
+        .sales-report-table th { color: var(--text-muted); font-size: .67rem; text-transform: uppercase; text-align: left; padding: 11px 10px; border-bottom: 1px solid var(--border-subtle); background: #202024; }
+        .sales-report-table td { padding: 12px 10px; border-bottom: 1px solid rgba(255,255,255,.06); color: #e4e4e7; }
+        .sales-report-table tbody tr:hover { background: rgba(251,191,36,.045); }
         .sales-report-table .numeric { text-align: right; font-family: var(--font-mono); }
 
         @media (max-width: 650px) {
             #salesProductReportContent { padding: 15px; }
-            .sales-report-field, .sales-report-client { min-width: 100%; }
+            .sales-report-field, .sales-report-client, .sales-report-financial { min-width: 100%; }
+            .sales-report-summary { grid-template-columns: 1fr; }
         }
     </style>
 </head>
@@ -1708,10 +1727,21 @@
                 <span class="modal-close" onclick="closeSalesProductReport()" title="Fechar (ESC)">&times;</span>
             </div>
             <div id="salesProductReportContent">
+                <div class="sales-report-intro">
+                    <div>
+                        <strong>Relatório acumulado de itens faturados</strong>
+                        <p>Defina o período, aplique o cliente se necessário e gere o resultado.</p>
+                    </div>
+                    <div class="sales-report-actions">
+                        <button id="salesReportExcelBtn" class="sales-report-action" type="button" onclick="exportSalesProductExcel()" disabled><i class="fa-solid fa-file-excel"></i> EXCEL</button>
+                        <button id="salesReportPdfBtn" class="sales-report-action" type="button" onclick="exportSalesProductPdf()" disabled><i class="fa-solid fa-file-pdf"></i> PDF</button>
+                    </div>
+                </div>
                 <div class="sales-report-filters">
                     <div class="sales-report-field"><label>Data inicial</label><input id="salesReportStart" type="date"></div>
                     <div class="sales-report-field"><label>Data final</label><input id="salesReportEnd" type="date"></div>
                     <div class="sales-report-field sales-report-client"><label>Cliente (opcional)</label><div class="sales-report-client-selected"><span id="salesReportClientLabel">Todos os clientes</span><button class="month-btn" type="button" onclick="toggleSalesReportClientPicker()">BUSCAR</button></div></div>
+                    <div class="sales-report-field sales-report-financial"><label>Dados financeiros</label><label><input id="salesReportIncludeFinancial" type="checkbox" checked onchange="renderSalesProductReport()"> Incluir valores financeiros</label></div>
                     <button class="btn-modern" type="button" onclick="loadSalesProductReport()"><i class="fa-solid fa-magnifying-glass"></i> Gerar relatório</button>
                 </div>
                 <div id="salesReportClientPicker" class="sales-report-client-picker"><input id="salesReportClientSearch" type="text" placeholder="Digite nome ou código do cliente" oninput="renderSalesReportClientResults()"><div id="salesReportClientResults" class="sales-report-client-results"></div></div>
@@ -2223,6 +2253,8 @@
         }
         let salesReportSelectedClient = null;
         let salesReportClientOptions = [];
+        let salesProductReportRows = [];
+        let salesProductReportMeta = null;
         function handleReportsSelect(value) {
             const select = document.getElementById('reportsSelect');
             select.value = '';
@@ -2243,6 +2275,11 @@
             document.getElementById('salesReportClientLabel').textContent = 'Todos os clientes';
             document.getElementById('salesReportClientPicker').classList.remove('open');
             document.getElementById('salesProductReportResults').textContent = 'Selecione o período e gere o relatório.';
+            salesProductReportRows = [];
+            salesProductReportMeta = null;
+            document.getElementById('salesReportIncludeFinancial').checked = true;
+            document.getElementById('salesReportExcelBtn').disabled = true;
+            document.getElementById('salesReportPdfBtn').disabled = true;
             document.getElementById('salesProductReportModal').style.display = 'flex';
         }
         function closeSalesProductReport() { document.getElementById('salesProductReportModal').style.display = 'none'; }
@@ -2294,12 +2331,77 @@
                     entry.value += Number(item.valorTotal) || 0;
                     grouped.set(key, entry);
                 });
-                const rows = [...grouped.values()].sort((a, b) => b.value - a.value);
-                const totals = rows.reduce((acc, row) => ({ quantity: acc.quantity + row.quantity, weight: acc.weight + row.weight, value: acc.value + row.value }), { quantity: 0, weight: 0, value: 0 });
-                result.innerHTML = rows.length ? `<div style="color:var(--text-muted);font-size:.78rem;margin-bottom:8px;">${rows.length} produto(s) vendidos no período.</div><table class="sales-report-table"><thead><tr><th>Código</th><th>Produto</th><th class="numeric">Quantidade</th><th class="numeric">Peso</th><th class="numeric">Valor</th></tr></thead><tbody>${rows.map(row => `<tr><td>${row.code}</td><td>${row.name}</td><td class="numeric">${formatNumber(row.quantity, 0)}</td><td class="numeric">${formatWeight(row.weight)}</td><td class="numeric">${formatCurrency(row.value)}</td></tr>`).join('')}</tbody><tfoot><tr><td colspan="2" style="font-weight:800;color:#fbbf24;">TOTAL</td><td class="numeric" style="font-weight:800;">${formatNumber(totals.quantity, 0)}</td><td class="numeric" style="font-weight:800;">${formatWeight(totals.weight)}</td><td class="numeric" style="font-weight:800;color:#fbbf24;">${formatCurrency(totals.value)}</td></tr></tfoot></table>` : '<div style="text-align:center;padding:34px;color:var(--text-muted);">Nenhuma venda encontrada para os filtros informados.</div>';
+                salesProductReportRows = [...grouped.values()].sort((a, b) => b.value - a.value);
+                salesProductReportMeta = { start, end, client: salesReportSelectedClient ? { ...salesReportSelectedClient } : null };
+                document.getElementById('salesReportExcelBtn').disabled = !salesProductReportRows.length;
+                document.getElementById('salesReportPdfBtn').disabled = !salesProductReportRows.length;
+                renderSalesProductReport();
             } catch (error) {
                 result.innerHTML = `<div style="text-align:center;padding:34px;color:var(--status-danger);">${error.message}</div>`;
             }
+        }
+        function escapeSalesReportHtml(value) {
+            return String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[char]);
+        }
+        function getSalesProductReportTotals() {
+            return salesProductReportRows.reduce((acc, row) => ({ quantity: acc.quantity + row.quantity, weight: acc.weight + row.weight, value: acc.value + row.value }), { quantity: 0, weight: 0, value: 0 });
+        }
+        function formatSalesReportDate(value) {
+            return value ? new Date(`${value}T12:00:00`).toLocaleDateString('pt-BR') : '-';
+        }
+        function renderSalesProductReport() {
+            const result = document.getElementById('salesProductReportResults');
+            if (!salesProductReportRows.length) {
+                result.innerHTML = '<div style="text-align:center;padding:34px;color:var(--text-muted);">Nenhuma venda encontrada para os filtros informados.</div>';
+                return;
+            }
+            const includeFinancial = document.getElementById('salesReportIncludeFinancial').checked;
+            const totals = getSalesProductReportTotals();
+            const valueSummary = includeFinancial ? `<div class="sales-report-summary-card emphasis"><span>Valor faturado</span><strong>${formatCurrency(totals.value)}</strong></div>` : '';
+            const valueHeader = includeFinancial ? '<th class="numeric">Valor</th>' : '';
+            const rows = salesProductReportRows.map(row => `<tr><td>${escapeSalesReportHtml(row.code)}</td><td>${escapeSalesReportHtml(row.name)}</td><td class="numeric">${formatNumber(row.quantity, 0)}</td><td class="numeric">${formatWeight(row.weight)}</td>${includeFinancial ? `<td class="numeric">${formatCurrency(row.value)}</td>` : ''}</tr>`).join('');
+            result.innerHTML = `<div class="sales-report-summary"><div class="sales-report-summary-card"><span>Produtos vendidos</span><strong>${formatNumber(salesProductReportRows.length, 0)}</strong></div><div class="sales-report-summary-card"><span>Peso acumulado</span><strong>${formatWeight(totals.weight)}</strong></div>${valueSummary}</div><div style="color:var(--text-muted);font-size:.78rem;margin:12px 0 0;">Período: <strong style="color:#e4e4e7;">${formatSalesReportDate(salesProductReportMeta.start)} até ${formatSalesReportDate(salesProductReportMeta.end)}</strong>${salesProductReportMeta.client ? ` · Cliente: <strong style="color:#e4e4e7;">${escapeSalesReportHtml(salesProductReportMeta.client.name)}</strong>` : ''}</div><table class="sales-report-table"><thead><tr><th>Código</th><th>Produto</th><th class="numeric">Quantidade</th><th class="numeric">Peso</th>${valueHeader}</tr></thead><tbody>${rows}</tbody><tfoot><tr><td colspan="2" style="font-weight:800;color:#fbbf24;">TOTAL</td><td class="numeric" style="font-weight:800;">${formatNumber(totals.quantity, 0)}</td><td class="numeric" style="font-weight:800;">${formatWeight(totals.weight)}</td>${includeFinancial ? `<td class="numeric" style="font-weight:800;color:#fbbf24;">${formatCurrency(totals.value)}</td>` : ''}</tr></tfoot></table>`;
+        }
+        function getSalesProductExportRows(includeFinancial) {
+            return salesProductReportRows.map(row => {
+                const exportRow = { 'Código': row.code, 'Produto': row.name, 'Quantidade': row.quantity, 'Peso (kg)': Number(row.weight.toFixed(2)) };
+                if (includeFinancial) exportRow['Valor (R$)'] = Number(row.value.toFixed(2));
+                return exportRow;
+            });
+        }
+        function exportSalesProductExcel() {
+            if (!salesProductReportRows.length || typeof XLSX === 'undefined') return showToast('Exportação indisponível', 'Gere o relatório e tente novamente.', 'warning');
+            const includeFinancial = document.getElementById('salesReportIncludeFinancial').checked;
+            const rows = getSalesProductExportRows(includeFinancial);
+            const totals = getSalesProductReportTotals();
+            const totalRow = { 'Código': 'TOTAL', 'Produto': '', 'Quantidade': totals.quantity, 'Peso (kg)': Number(totals.weight.toFixed(2)) };
+            if (includeFinancial) totalRow['Valor (R$)'] = Number(totals.value.toFixed(2));
+            const ws = XLSX.utils.json_to_sheet([...rows, totalRow]);
+            ws['!cols'] = [{ wch: 16 }, { wch: 48 }, { wch: 14 }, { wch: 16 }, ...(includeFinancial ? [{ wch: 18 }] : [])];
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Vendas por produto');
+            const fileName = `Vendas_por_produto_${salesProductReportMeta.start}_${salesProductReportMeta.end}.xlsx`;
+            XLSX.writeFile(wb, fileName);
+            if (window.erusAudit) window.erusAudit('EXPORTAR_EXCEL', { relatorio: 'vendas_por_produto', registros: rows.length, financeiro: includeFinancial });
+        }
+        function exportSalesProductPdf() {
+            const jsPdfCtor = window.jspdf && window.jspdf.jsPDF;
+            if (!salesProductReportRows.length || !jsPdfCtor) return showToast('Exportação indisponível', 'Gere o relatório e tente novamente.', 'warning');
+            const includeFinancial = document.getElementById('salesReportIncludeFinancial').checked;
+            const totals = getSalesProductReportTotals();
+            const headers = ['Código', 'Produto', 'Quantidade', 'Peso (kg)', ...(includeFinancial ? ['Valor (R$)'] : [])];
+            const body = salesProductReportRows.map(row => [row.code, row.name, formatNumber(row.quantity, 0), formatNumber(row.weight, 2), ...(includeFinancial ? [formatCurrency(row.value)] : [])]);
+            body.push(['TOTAL', '', formatNumber(totals.quantity, 0), formatNumber(totals.weight, 2), ...(includeFinancial ? [formatCurrency(totals.value)] : [])]);
+            const doc = new jsPdfCtor({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+            doc.setFontSize(15);
+            doc.text('Vendas por produto', 34, 34);
+            doc.setFontSize(8);
+            doc.text(`Período: ${formatSalesReportDate(salesProductReportMeta.start)} até ${formatSalesReportDate(salesProductReportMeta.end)}${salesProductReportMeta.client ? ` | Cliente: ${salesProductReportMeta.client.name}` : ''}`, 34, 49);
+            doc.text(`Gerado em ${new Date().toLocaleString('pt-BR')}`, 34, 61);
+            doc.autoTable({ head: [headers], body, startY: 72, theme: 'grid', styles: { fontSize: 7, cellPadding: 5 }, headStyles: { fillColor: [32, 32, 36], textColor: [255, 255, 255] }, columnStyles: { 2: { halign: 'right' }, 3: { halign: 'right' }, ...(includeFinancial ? { 4: { halign: 'right' } } : {}) }, margin: { left: 28, right: 28 } });
+            const fileName = `Vendas_por_produto_${salesProductReportMeta.start}_${salesProductReportMeta.end}.pdf`;
+            doc.save(fileName);
+            if (window.erusAudit) window.erusAudit('EXPORTAR_PDF', { relatorio: 'vendas_por_produto', registros: salesProductReportRows.length, financeiro: includeFinancial });
         }
         function maskTopKpis() {
             [
