@@ -1741,6 +1741,7 @@
                     <div class="sales-report-field"><label>Data inicial</label><input id="salesReportStart" type="date"></div>
                     <div class="sales-report-field"><label>Data final</label><input id="salesReportEnd" type="date"></div>
                     <div class="sales-report-field sales-report-client"><label>Cliente (opcional)</label><div class="sales-report-client-selected"><span id="salesReportClientLabel">Todos os clientes</span><button class="month-btn" type="button" onclick="toggleSalesReportClientPicker()">BUSCAR</button></div></div>
+                    <div class="sales-report-field sales-report-financial"><label>Itens</label><label><input id="salesReportIncludeModels" type="checkbox" checked onchange="renderSalesProductReport()"> Incluir modelos</label></div>
                     <div class="sales-report-field sales-report-financial"><label>Dados financeiros</label><label><input id="salesReportIncludeFinancial" type="checkbox" checked onchange="renderSalesProductReport()"> Incluir valores financeiros</label></div>
                     <button class="btn-modern" type="button" onclick="loadSalesProductReport()"><i class="fa-solid fa-magnifying-glass"></i> Gerar relatório</button>
                 </div>
@@ -2277,6 +2278,7 @@
             document.getElementById('salesProductReportResults').textContent = 'Selecione o período e gere o relatório.';
             salesProductReportRows = [];
             salesProductReportMeta = null;
+            document.getElementById('salesReportIncludeModels').checked = true;
             document.getElementById('salesReportIncludeFinancial').checked = true;
             document.getElementById('salesReportExcelBtn').disabled = true;
             document.getElementById('salesReportPdfBtn').disabled = true;
@@ -2344,14 +2346,19 @@
             return String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[char]);
         }
         function getSalesProductReportTotals() {
-            return salesProductReportRows.reduce((acc, row) => ({ quantity: acc.quantity + row.quantity, weight: acc.weight + row.weight, value: acc.value + row.value }), { quantity: 0, weight: 0, value: 0 });
+            return getVisibleSalesProductReportRows().reduce((acc, row) => ({ quantity: acc.quantity + row.quantity, weight: acc.weight + row.weight, value: acc.value + row.value }), { quantity: 0, weight: 0, value: 0 });
+        }
+        function getVisibleSalesProductReportRows() {
+            const includeModels = document.getElementById('salesReportIncludeModels').checked;
+            return includeModels ? salesProductReportRows : salesProductReportRows.filter(row => !(String(row.code || '').trim().endsWith('1') && /^MODELO\b/i.test(String(row.name || '').trim())));
         }
         function formatSalesReportDate(value) {
             return value ? new Date(`${value}T12:00:00`).toLocaleDateString('pt-BR') : '-';
         }
         function renderSalesProductReport() {
             const result = document.getElementById('salesProductReportResults');
-            if (!salesProductReportRows.length) {
+            const visibleRows = getVisibleSalesProductReportRows();
+            if (!visibleRows.length) {
                 result.innerHTML = '<div style="text-align:center;padding:34px;color:var(--text-muted);">Nenhuma venda encontrada para os filtros informados.</div>';
                 return;
             }
@@ -2359,18 +2366,19 @@
             const totals = getSalesProductReportTotals();
             const valueSummary = includeFinancial ? `<div class="sales-report-summary-card emphasis"><span>Valor faturado</span><strong>${formatCurrency(totals.value)}</strong></div>` : '';
             const valueHeader = includeFinancial ? '<th class="numeric">Valor</th>' : '';
-            const rows = salesProductReportRows.map(row => `<tr><td>${escapeSalesReportHtml(row.code)}</td><td>${escapeSalesReportHtml(row.name)}</td><td class="numeric">${formatNumber(row.quantity, 0)}</td><td class="numeric">${formatWeight(row.weight)}</td>${includeFinancial ? `<td class="numeric">${formatCurrency(row.value)}</td>` : ''}</tr>`).join('');
-            result.innerHTML = `<div class="sales-report-summary"><div class="sales-report-summary-card"><span>Produtos vendidos</span><strong>${formatNumber(salesProductReportRows.length, 0)}</strong></div><div class="sales-report-summary-card"><span>Peso acumulado</span><strong>${formatWeight(totals.weight)}</strong></div>${valueSummary}</div><div style="color:var(--text-muted);font-size:.78rem;margin:12px 0 0;">Período: <strong style="color:#e4e4e7;">${formatSalesReportDate(salesProductReportMeta.start)} até ${formatSalesReportDate(salesProductReportMeta.end)}</strong>${salesProductReportMeta.client ? ` · Cliente: <strong style="color:#e4e4e7;">${escapeSalesReportHtml(salesProductReportMeta.client.name)}</strong>` : ''}</div><table class="sales-report-table"><thead><tr><th>Código</th><th>Produto</th><th class="numeric">Quantidade</th><th class="numeric">Peso</th>${valueHeader}</tr></thead><tbody>${rows}</tbody><tfoot><tr><td colspan="2" style="font-weight:800;color:#fbbf24;">TOTAL</td><td class="numeric" style="font-weight:800;">${formatNumber(totals.quantity, 0)}</td><td class="numeric" style="font-weight:800;">${formatWeight(totals.weight)}</td>${includeFinancial ? `<td class="numeric" style="font-weight:800;color:#fbbf24;">${formatCurrency(totals.value)}</td>` : ''}</tr></tfoot></table>`;
+            const rows = visibleRows.map(row => `<tr><td>${escapeSalesReportHtml(row.code)}</td><td>${escapeSalesReportHtml(row.name)}</td><td class="numeric">${formatNumber(row.quantity, 0)}</td><td class="numeric">${formatWeight(row.weight)}</td>${includeFinancial ? `<td class="numeric">${formatCurrency(row.value)}</td>` : ''}</tr>`).join('');
+            result.innerHTML = `<div class="sales-report-summary"><div class="sales-report-summary-card"><span>Produtos vendidos</span><strong>${formatNumber(visibleRows.length, 0)}</strong></div><div class="sales-report-summary-card"><span>Peso acumulado</span><strong>${formatWeight(totals.weight)}</strong></div>${valueSummary}</div><div style="color:var(--text-muted);font-size:.78rem;margin:12px 0 0;">Período: <strong style="color:#e4e4e7;">${formatSalesReportDate(salesProductReportMeta.start)} até ${formatSalesReportDate(salesProductReportMeta.end)}</strong>${salesProductReportMeta.client ? ` · Cliente: <strong style="color:#e4e4e7;">${escapeSalesReportHtml(salesProductReportMeta.client.name)}</strong>` : ''}</div><table class="sales-report-table"><thead><tr><th>Código</th><th>Produto</th><th class="numeric">Quantidade</th><th class="numeric">Peso</th>${valueHeader}</tr></thead><tbody>${rows}</tbody><tfoot><tr><td colspan="2" style="font-weight:800;color:#fbbf24;">TOTAL</td><td class="numeric" style="font-weight:800;">${formatNumber(totals.quantity, 0)}</td><td class="numeric" style="font-weight:800;">${formatWeight(totals.weight)}</td>${includeFinancial ? `<td class="numeric" style="font-weight:800;color:#fbbf24;">${formatCurrency(totals.value)}</td>` : ''}</tr></tfoot></table>`;
         }
         function getSalesProductExportRows(includeFinancial) {
-            return salesProductReportRows.map(row => {
+            return getVisibleSalesProductReportRows().map(row => {
                 const exportRow = { 'Código': row.code, 'Produto': row.name, 'Quantidade': row.quantity, 'Peso (kg)': Number(row.weight.toFixed(2)) };
                 if (includeFinancial) exportRow['Valor (R$)'] = Number(row.value.toFixed(2));
                 return exportRow;
             });
         }
         function exportSalesProductExcel() {
-            if (!salesProductReportRows.length || typeof XLSX === 'undefined') return showToast('Exportação indisponível', 'Gere o relatório e tente novamente.', 'warning');
+            const visibleRows = getVisibleSalesProductReportRows();
+            if (!visibleRows.length || typeof XLSX === 'undefined') return showToast('Exportação indisponível', 'Gere o relatório e tente novamente.', 'warning');
             const includeFinancial = document.getElementById('salesReportIncludeFinancial').checked;
             const rows = getSalesProductExportRows(includeFinancial);
             const totals = getSalesProductReportTotals();
@@ -2386,11 +2394,12 @@
         }
         function exportSalesProductPdf() {
             const jsPdfCtor = window.jspdf && window.jspdf.jsPDF;
-            if (!salesProductReportRows.length || !jsPdfCtor) return showToast('Exportação indisponível', 'Gere o relatório e tente novamente.', 'warning');
+            const visibleRows = getVisibleSalesProductReportRows();
+            if (!visibleRows.length || !jsPdfCtor) return showToast('Exportação indisponível', 'Gere o relatório e tente novamente.', 'warning');
             const includeFinancial = document.getElementById('salesReportIncludeFinancial').checked;
             const totals = getSalesProductReportTotals();
             const headers = ['Código', 'Produto', 'Quantidade', 'Peso (kg)', ...(includeFinancial ? ['Valor (R$)'] : [])];
-            const body = salesProductReportRows.map(row => [row.code, row.name, formatNumber(row.quantity, 0), formatNumber(row.weight, 2), ...(includeFinancial ? [formatCurrency(row.value)] : [])]);
+            const body = visibleRows.map(row => [row.code, row.name, formatNumber(row.quantity, 0), formatNumber(row.weight, 2), ...(includeFinancial ? [formatCurrency(row.value)] : [])]);
             body.push(['TOTAL', '', formatNumber(totals.quantity, 0), formatNumber(totals.weight, 2), ...(includeFinancial ? [formatCurrency(totals.value)] : [])]);
             const doc = new jsPdfCtor({ orientation: 'landscape', unit: 'pt', format: 'a4' });
             doc.setFontSize(15);
@@ -2401,7 +2410,7 @@
             doc.autoTable({ head: [headers], body, startY: 72, theme: 'grid', styles: { fontSize: 7, cellPadding: 5 }, headStyles: { fillColor: [32, 32, 36], textColor: [255, 255, 255] }, columnStyles: { 2: { halign: 'right' }, 3: { halign: 'right' }, ...(includeFinancial ? { 4: { halign: 'right' } } : {}) }, margin: { left: 28, right: 28 } });
             const fileName = `Vendas_por_produto_${salesProductReportMeta.start}_${salesProductReportMeta.end}.pdf`;
             doc.save(fileName);
-            if (window.erusAudit) window.erusAudit('EXPORTAR_PDF', { relatorio: 'vendas_por_produto', registros: salesProductReportRows.length, financeiro: includeFinancial });
+            if (window.erusAudit) window.erusAudit('EXPORTAR_PDF', { relatorio: 'vendas_por_produto', registros: visibleRows.length, financeiro: includeFinancial });
         }
         function maskTopKpis() {
             [
