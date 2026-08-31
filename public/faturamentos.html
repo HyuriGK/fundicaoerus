@@ -1581,6 +1581,7 @@
         .sales-report-table .numeric { text-align: right; font-family: var(--font-mono); }
         .sales-report-table th:nth-child(2), .sales-report-table td:nth-child(2) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .sales-report-table th:nth-child(3), .sales-report-table td:nth-child(3) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .sales-order-report-table th, .sales-order-report-table td { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
         @media (max-width: 1120px) {
             .sales-report-filters { grid-template-columns: 1fr 1fr; }
@@ -1842,8 +1843,8 @@
             <div class="modal-header"><h2 class="modal-title"><i class="fa-solid fa-file-invoice" style="margin-right:12px;"></i>Vendas por pedido</h2><span class="modal-close" onclick="closeSalesOrderReport()" title="Fechar (ESC)">&times;</span></div>
             <div id="salesOrderReportContent">
                 <div class="sales-report-intro"><div><strong>Faturamentos por pedido ou ordem de compra</strong><p>Consulta toda a base: 01/01/0001 até 31/12/9999.</p></div><div class="sales-report-actions"><button id="salesOrderExcelBtn" class="sales-report-action" type="button" onclick="exportSalesOrderExcel()" disabled><i class="fa-solid fa-file-excel"></i> EXCEL</button><button id="salesOrderPdfBtn" class="sales-report-action" type="button" onclick="exportSalesOrderPdf()" disabled><i class="fa-solid fa-file-pdf"></i> PDF</button></div></div>
-                <div class="sales-report-filters" style="grid-template-columns:minmax(420px,1fr) auto;">
-                    <div class="sales-report-field"><label>Pedido ou OC</label><input id="salesOrderSearch" type="text" placeholder="Digite o número do pedido ou da OC"></div>
+                <div class="sales-report-filters" style="grid-template-columns:minmax(520px,1fr) auto;">
+                    <div class="sales-report-date-range"><div class="sales-report-field"><label>Pedido</label><input id="salesOrderPedidoSearch" type="text" placeholder="Número exato do pedido"></div><div class="sales-report-field"><label>OC</label><input id="salesOrderOcSearch" type="text" placeholder="Número exato da OC"></div></div>
                     <button class="btn-modern sales-report-generate" type="button" onclick="loadSalesOrderReport()"><i class="fa-solid fa-magnifying-glass"></i> Buscar faturamentos</button>
                 </div>
                 <div class="sales-report-options"><div class="sales-report-field sales-report-financial"><label>Dados financeiros</label><label><input id="salesOrderIncludeFinancial" type="checkbox" checked onchange="renderSalesOrderReport()"> Incluir valores financeiros</label></div></div>
@@ -2734,28 +2735,29 @@
         let salesOrderReportRows = [];
         let salesOrderReportSearch = '';
         function openSalesOrderReport() {
-            document.getElementById('salesOrderSearch').value = '';
+            document.getElementById('salesOrderPedidoSearch').value = '';
+            document.getElementById('salesOrderOcSearch').value = '';
             document.getElementById('salesOrderIncludeFinancial').checked = true;
             document.getElementById('salesOrderReportResults').textContent = 'Informe um pedido ou OC para consultar os faturamentos.';
             salesOrderReportRows = []; salesOrderReportSearch = '';
             document.getElementById('salesOrderExcelBtn').disabled = true;
             document.getElementById('salesOrderPdfBtn').disabled = true;
             document.getElementById('salesOrderReportModal').style.display = 'flex';
-            document.getElementById('salesOrderSearch').focus();
+            document.getElementById('salesOrderPedidoSearch').focus();
         }
         function closeSalesOrderReport() { document.getElementById('salesOrderReportModal').style.display = 'none'; }
         async function loadSalesOrderReport() {
-            const search = document.getElementById('salesOrderSearch').value.trim();
+            const pedidoSearch = document.getElementById('salesOrderPedidoSearch').value.trim();
+            const ocSearch = document.getElementById('salesOrderOcSearch').value.trim();
             const result = document.getElementById('salesOrderReportResults');
-            if (!search) return showToast('Informe um pedido ou OC', 'Digite o número do pedido ou da ordem de compra.', 'warning');
+            if (!pedidoSearch && !ocSearch) return showToast('Informe um pedido ou OC', 'Digite o número exato do pedido ou da ordem de compra.', 'warning');
             result.innerHTML = '<div style="text-align:center;padding:34px;">Consultando faturamentos...</div>';
             try {
                 const res = await fetch('/api/faturamento-postgres/detalhado?limit=100000&startDate=0001-01-01&endDate=9999-12-31');
                 const json = await res.json();
                 if (!res.ok || !json.success) throw new Error(json.error || 'Falha ao consultar faturamentos.');
-                const term = search.toLowerCase();
-                salesOrderReportRows = (json.data || []).filter(isSalesProductReportInternalItem).filter(item => String(item.pedido || '').toLowerCase().includes(term) || String(item.ordemCompra || '').toLowerCase().includes(term)).map(item => ({ date: item.data || '', pedido: String(item.pedido || ''), oc: String(item.ordemCompra || ''), client: String(item.clienteNome || ''), code: String(item.codigoItem || ''), product: String(item.descricao || ''), quantity: Number(getCalculatedQuantity(item)) || 0, weight: Number(calculateCalculatedWeight(item)) || 0, value: Number(calculateCalculatedTotal(item)) || 0 })).sort((a,b) => String(b.date).localeCompare(String(a.date)));
-                salesOrderReportSearch = search;
+                salesOrderReportRows = (json.data || []).filter(isSalesProductReportInternalItem).filter(item => (!pedidoSearch || String(item.pedido || '').trim() === pedidoSearch) && (!ocSearch || String(item.ordemCompra || '').trim() === ocSearch)).map(item => ({ date: item.data || '', pedido: String(item.pedido || ''), oc: String(item.ordemCompra || ''), client: String(item.clienteNome || ''), code: String(item.codigoItem || ''), product: String(item.descricao || ''), quantity: Number(getCalculatedQuantity(item)) || 0, weight: Number(calculateCalculatedWeight(item)) || 0, value: Number(calculateCalculatedTotal(item)) || 0 })).sort((a,b) => String(b.date).localeCompare(String(a.date)));
+                salesOrderReportSearch = `Pedido: ${pedidoSearch || '-'} | OC: ${ocSearch || '-'}`;
                 document.getElementById('salesOrderExcelBtn').disabled = !salesOrderReportRows.length;
                 document.getElementById('salesOrderPdfBtn').disabled = !salesOrderReportRows.length;
                 renderSalesOrderReport();
@@ -2766,7 +2768,7 @@
             if (!salesOrderReportRows.length) { result.textContent = 'Nenhum faturamento encontrado para o pedido ou OC informado.'; return; }
             const includeFinancial = document.getElementById('salesOrderIncludeFinancial').checked;
             const rows = salesOrderReportRows.map(row => `<tr><td>${formatSalesReportDate(row.date)}</td><td>${escapeSalesReportHtml(row.pedido || '-')}</td><td>${escapeSalesReportHtml(row.oc || '-')}</td><td>${escapeSalesReportHtml(row.client || '-')}</td><td>${escapeSalesReportHtml(row.code || '-')}</td><td>${escapeSalesReportHtml(row.product || '-')}</td><td class="numeric">${formatNumber(row.quantity, 0)}</td><td class="numeric">${formatWeight(row.weight)}</td>${includeFinancial ? `<td class="numeric">${formatCurrency(row.value)}</td>` : ''}</tr>`).join('');
-            result.innerHTML = `<div style="color:var(--text-muted);font-size:.78rem;margin:0 0 12px;">Busca: <strong style="color:#e4e4e7;">${escapeSalesReportHtml(salesOrderReportSearch)}</strong> · Período fixo: 01/01/0001 até 31/12/9999</div><div class="sales-report-table-wrap"><table class="sales-report-table" style="min-width:1150px;"><thead><tr><th>Data</th><th>Pedido</th><th>OC</th><th>Cliente</th><th>Código</th><th>Produto</th><th class="numeric">Quantidade</th><th class="numeric">Peso</th>${includeFinancial ? '<th class="numeric">Valor</th>' : ''}</tr></thead><tbody>${rows}</tbody></table></div>`;
+            result.innerHTML = `<div style="color:var(--text-muted);font-size:.78rem;margin:0 0 12px;">Busca: <strong style="color:#e4e4e7;">${escapeSalesReportHtml(salesOrderReportSearch)}</strong> · Período fixo: 01/01/0001 até 31/12/9999</div><div class="sales-report-table-wrap"><table class="sales-report-table sales-order-report-table" style="min-width:1280px;"><colgroup><col style="width:9%"><col style="width:9%"><col style="width:10%"><col style="width:16%"><col style="width:10%"><col style="width:${includeFinancial ? '23' : '30'}%"><col style="width:8%"><col style="width:8%">${includeFinancial ? '<col style="width:7%">' : ''}</colgroup><thead><tr><th>Data</th><th>Pedido</th><th>OC</th><th>Cliente</th><th>Código</th><th>Produto</th><th class="numeric">Quantidade</th><th class="numeric">Peso</th>${includeFinancial ? '<th class="numeric">Valor</th>' : ''}</tr></thead><tbody>${rows}</tbody></table></div>`;
         }
         function exportSalesOrderExcel() {
             if (!salesOrderReportRows.length || typeof XLSX === 'undefined') return;
@@ -2774,7 +2776,7 @@
             const data = salesOrderReportRows.map(row => ({ Data: formatSalesReportDate(row.date), Pedido: row.pedido, OC: row.oc, Cliente: row.client, Código: row.code, Produto: row.product, Quantidade: row.quantity, 'Peso (kg)': row.weight, ...(includeFinancial ? { 'Valor (R$)': row.value } : {}) }));
             const ws = XLSX.utils.json_to_sheet(data), wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, 'Vendas por pedido');
-            XLSX.writeFile(wb, `Vendas_por_pedido_${salesOrderReportSearch}.xlsx`);
+            XLSX.writeFile(wb, `Vendas_por_pedido_${salesOrderReportSearch.replace(/[\\/:*?"<>|]/g, '-')}.xlsx`);
         }
         function exportSalesOrderPdf() {
             const jsPdfCtor = window.jspdf && window.jspdf.jsPDF;
@@ -2785,7 +2787,7 @@
             const doc = new jsPdfCtor({ orientation: 'landscape', unit: 'pt', format: 'a3' });
             doc.setFontSize(14); doc.text('Vendas por pedido / OC', 34, 34); doc.setFontSize(8); doc.text(`Busca: ${salesOrderReportSearch} | Período: 01/01/0001 até 31/12/9999`, 34, 49);
             doc.autoTable({ head: [headers], body, startY: 62, theme: 'grid', styles: { fontSize: 6, cellPadding: 4 }, headStyles: { fillColor: [32, 32, 36], textColor: [255, 255, 255] }, margin: { left: 28, right: 28 } });
-            doc.save(`Vendas_por_pedido_${salesOrderReportSearch}.pdf`);
+            doc.save(`Vendas_por_pedido_${salesOrderReportSearch.replace(/[\\/:*?"<>|]/g, '-')}.pdf`);
         }
         function maskTopKpis() {
             [
