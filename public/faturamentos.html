@@ -2351,21 +2351,21 @@
                 if (!res.ok || !json.success) throw new Error(json.error || 'Falha ao consultar faturamentos.');
                 salesProductReportDetails = [];
                 const grouped = new Map();
-                (json.data || []).filter(item => item.gera_financeiro !== 'N').filter(item => !salesReportSelectedClient || (salesReportSelectedClient.code && String(item.clienteCodigo || '').trim() === salesReportSelectedClient.code) || String(item.clienteNome || '').trim() === salesReportSelectedClient.name).forEach(item => {
+                (json.data || []).filter(item => isSalesProductReportInternalItem(item)).filter(item => !salesReportSelectedClient || (salesReportSelectedClient.code && String(item.clienteCodigo || '').trim() === salesReportSelectedClient.code) || String(item.clienteNome || '').trim() === salesReportSelectedClient.name).forEach(item => {
                     const code = String(item.codigoItem || '-').trim();
                     const name = String(item.descricao || 'Sem descrição').trim();
                     salesProductReportDetails.push({
                         date: item.data || '', code, name,
-                        quantity: Number(item.quantidade) || 0,
-                        weight: Number(item.pesoTotal) || 0,
-                        value: Number(item.valorTotal) || 0
+                        quantity: Number(getCalculatedQuantity(item)) || 0,
+                        weight: Number(calculateCalculatedWeight(item)) || 0,
+                        value: Number(calculateCalculatedTotal(item)) || 0
                     });
                     const key = `${code}|${name}`;
                     const entry = grouped.get(key) || { code, name, quantity: 0, weight: 0, value: 0 };
                     // O endpoint já devolve os valores líquidos, considerando devoluções.
-                    entry.quantity += Number(item.quantidade) || 0;
-                    entry.weight += Number(item.pesoTotal) || 0;
-                    entry.value += Number(item.valorTotal) || 0;
+                    entry.quantity += Number(getCalculatedQuantity(item)) || 0;
+                    entry.weight += Number(calculateCalculatedWeight(item)) || 0;
+                    entry.value += Number(calculateCalculatedTotal(item)) || 0;
                     grouped.set(key, entry);
                 });
                 salesProductReportRows = [...grouped.values()].sort((a, b) => b.value - a.value);
@@ -2376,6 +2376,14 @@
             } catch (error) {
                 result.innerHTML = `<div style="text-align:center;padding:34px;color:var(--status-danger);">${error.message}</div>`;
             }
+        }
+        function isSalesProductReportInternalItem(item) {
+            // Mesmas regras aplicadas em dataToSum, base do KPI TOTAL FATURADO - INTERNO.
+            if (item.gera_financeiro === 'N') return false;
+            if (isServiceClient(item)) return showServices;
+            const clientName = (item.clienteNome || 'Desconhecido').trim();
+            if (excludedClients.has(clientName) || item.excluido_manualmente === true) return false;
+            return !selectedVendor || item.vendedorNome === selectedVendor;
         }
         function escapeSalesReportHtml(value) {
             return String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[char]);
