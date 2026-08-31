@@ -1888,11 +1888,23 @@
         .modelo-status-readonly { display:block; color:var(--text-muted); font-size:0.72rem; font-weight:700; text-transform:uppercase; line-height:1.25; }
         .conferencia-col { width: 44px; min-width: 44px; text-align: center; }
         .conferencia-check { width: 16px; height: 16px; accent-color: var(--color-primary); cursor: pointer; }
-        .obs-history-btn { border: 0; background: transparent; color: var(--color-primary); cursor: pointer; padding: 5px; margin-left: 5px; }
-        .obs-history-btn:hover { color: #fff; }
-        .observation-timeline { display: flex; flex-direction: column; gap: 14px; }
-        .observation-timeline-item { position: relative; padding: 13px 16px; border: 1px solid var(--border-subtle); border-left: 3px solid var(--color-primary); border-radius: 8px; background: rgba(255,255,255,.025); }
-        .observation-timeline-meta { display: flex; justify-content: space-between; gap: 12px; margin-top: 7px; color: var(--text-muted); font-size: .78rem; }
+        .obs-history-btn { width:28px; height:28px; border:1px solid rgba(251,191,36,.25); border-radius:6px; background:rgba(251,191,36,.06); color:var(--color-primary); cursor:pointer; padding:0; margin-left:7px; flex-shrink:0; }
+        .obs-history-btn:hover { color:#fff; background:rgba(251,191,36,.18); border-color:var(--color-primary); }
+        #observationHistoryModal { background:rgba(0,0,0,.84); backdrop-filter:blur(7px); }
+        #observationHistoryModal .modal-card { width:min(680px,94vw); max-height:80vh; padding:0; overflow:hidden; background:#19191c; border:1px solid #36363b; box-shadow:0 24px 70px rgba(0,0,0,.65); }
+        #observationHistoryModal .modal-header { margin:0; padding:19px 26px; background:#1d1d20; border-bottom:1px solid #303035; }
+        #observationHistoryModal .modal-title { color:#fbbf24; font-size:1.12rem; }
+        #observationHistoryModal .modal-close { font-size:2rem; line-height:1; }
+        #observationHistoryContent { padding:22px 32px 28px; overflow-y:auto; }
+        .observation-item-label { color:#c5c5ca; font-size:.82rem; margin-bottom:18px; }
+        .observation-item-label strong { color:#f4f4f5; letter-spacing:.02em; }
+        .observation-timeline { display:flex; flex-direction:column; gap:12px; }
+        .observation-timeline-item { position:relative; padding:14px 18px; border:1px solid #38383e; border-left:3px solid var(--color-primary); border-radius:8px; background:#202024; }
+        .observation-timeline-item.current { border-left-color:#fbbf24; }
+        .observation-timeline-title { color:#f4f4f5; font-size:.9rem; font-weight:800; text-transform:uppercase; }
+        .observation-timeline-meta { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-top:8px; color:#b2b2b8; font-size:.78rem; }
+        .observation-timeline-duration { color:#fbbf24; font-weight:800; white-space:nowrap; }
+        @media (max-width:640px) { #observationHistoryContent { padding:18px; } .observation-timeline-meta { align-items:flex-start; flex-direction:column; gap:4px; } }
         .clickable-op:hover {
             background: rgba(234, 88, 12, 0.1);
             transform: scale(1.1);
@@ -2841,12 +2853,12 @@
     </div>
     <!-- MODAL DE FILTROS -->
     <div id="observationHistoryModal" class="modal-overlay" style="z-index:4000;">
-        <div class="modal-card" style="width:min(680px,94vw); max-height:80vh;">
+        <div class="modal-card">
             <div class="modal-header">
                 <h2 class="modal-title"><i class="fa-solid fa-timeline" style="margin-right:12px;"></i>Histórico de observações</h2>
                 <span class="modal-close" onclick="closeObservationHistory()">&times;</span>
             </div>
-            <div id="observationHistoryContent" class="modal-body" style="overflow-y:auto;"></div>
+            <div id="observationHistoryContent" class="modal-body"></div>
         </div>
     </div>
     <style>
@@ -4525,8 +4537,8 @@
         }
         function renderObservationSelect(item) {
             const current = item.observacao || '';
-            const historyButton = `<button type="button" class="obs-history-btn" title="Ver linha do tempo" onclick="event.stopPropagation(); showObservationHistory('${item.sync_key}')"><i class="fa-solid fa-clock-rotate-left"></i></button>`;
-            if (!canEditObservation()) return `<span class="modelo-status-readonly">${current || '-'}</span>${historyButton}`;
+            const historyButton = canViewObservationHistory() ? `<button type="button" class="obs-history-btn" title="Ver linha do tempo" onclick="event.stopPropagation(); showObservationHistory('${item.sync_key}')"><i class="fa-solid fa-clock-rotate-left"></i></button>` : '';
+            if (!canEditObservation()) return `<div style="display:flex;align-items:center;width:100%;text-align:left;"><span class="modelo-status-readonly" style="flex:1;">${current || '-'}</span>${historyButton}</div>`;
             return `<div style="display:flex;align-items:center;"><select class="obs-edit-input" data-original="${current}" onchange="saveObservation(this, '${item.sync_key}')" style="width: 100%; background: transparent; border: 1px solid transparent; color: var(--text-muted); font-size: 0.8rem; padding: 4px 8px; border-radius: 4px; transition: all 0.2s; text-transform: uppercase;" onfocus="this.style.borderColor='var(--color-primary)'; this.style.background='rgba(255,255,255,0.05)'; this.style.color='#fff';" onblur="this.style.borderColor='transparent'; this.style.background='transparent'; this.style.color='var(--text-muted)';"><option value="">...</option>${OBSERVACAO_OPTIONS.map(option => `<option value="${option}" ${current === option ? 'selected' : ''}>${option}</option>`).join('')}</select>${historyButton}</div>`;
         }
         function formatObservationDate(value) {
@@ -4538,7 +4550,11 @@
             const hours = totalHours % 24;
             return days ? `${days} dia${days === 1 ? '' : 's'}${hours ? ` e ${hours}h` : ''}` : `${hours}h`;
         }
+        function canViewObservationHistory() {
+            return ['desenvolvedor', 'diretor'].includes(String(localStorage.getItem('erus_role') || '').toLowerCase());
+        }
         async function showObservationHistory(syncKey) {
+            if (!canViewObservationHistory()) return;
             const modal = document.getElementById('observationHistoryModal');
             const content = document.getElementById('observationHistoryContent');
             const item = allData.find(row => row.sync_key === syncKey);
@@ -4550,10 +4566,10 @@
                 const history = await res.json();
                 const itemLabel = item ? `${item.CODIGO_PPR || '-'} · ${item.PRODUTO_PPR || ''}` : syncKey;
                 if (!history.length) {
-                    content.innerHTML = `<div style="color:var(--text-muted);text-align:center;padding:28px;">${itemLabel}<br><br>Nenhuma observação registrada.</div>`;
+                    content.innerHTML = `<div class="observation-item-label">Pedido / item: <strong>${itemLabel}</strong></div><div style="color:var(--text-muted);text-align:center;padding:28px;">Nenhuma observação registrada.</div>`;
                     return;
                 }
-                content.innerHTML = `<div style="color:var(--text-muted);font-size:.82rem;margin-bottom:16px;">Pedido / item: <strong style="color:#fff;">${itemLabel}</strong></div><div class="observation-timeline">${history.map(entry => `<div class="observation-timeline-item"><strong style="color:#fff;">${entry.observacao}</strong><div class="observation-timeline-meta"><span>${formatObservationDate(entry.started_at)}${entry.ended_at ? ` até ${formatObservationDate(entry.ended_at)}` : ' · Atual'}</span><strong style="color:var(--color-primary);white-space:nowrap;">${formatObservationDuration(entry.started_at, entry.ended_at)}</strong></div></div>`).join('')}</div>`;
+                content.innerHTML = `<div class="observation-item-label">Pedido / item: <strong>${itemLabel}</strong></div><div class="observation-timeline">${history.map(entry => `<div class="observation-timeline-item ${entry.ended_at ? '' : 'current'}"><div class="observation-timeline-title">${entry.observacao}</div><div class="observation-timeline-meta"><span>${formatObservationDate(entry.started_at)}${entry.ended_at ? ` até ${formatObservationDate(entry.ended_at)}` : ' · Atual'}</span><span class="observation-timeline-duration">${formatObservationDuration(entry.started_at, entry.ended_at)}</span></div></div>`).join('')}</div>`;
             } catch (err) {
                 console.error(err);
                 content.innerHTML = '<div style="color:var(--status-danger);text-align:center;padding:28px;">Não foi possível carregar o histórico.</div>';
@@ -8011,6 +8027,7 @@ function flashConcentracaoBar(barIndex) {
         }
         window.addEventListener('keydown', (e) => {
             if (e.key === "Escape") {
+                const observationHistoryModal = document.getElementById('observationHistoryModal'); // 4000
                 const hModal = document.getElementById('opSectorHistoryModal'); // 4000
                 const dModal = document.getElementById('opDetailsModal');       // 3000
                 const emailModal = document.getElementById('emailModal');       // 3000
@@ -8020,7 +8037,8 @@ function flashConcentracaoBar(barIndex) {
                 const industrialContainer = document.getElementById('industrialProgressContainer');
                 const iHistoryModal = document.getElementById('industrialHistoryModal');
                 const isVisible = el => el && (el.style.display === 'flex' || el.style.display === 'block');
-                if (isVisible(iHistoryModal)) { e.stopImmediatePropagation(); closeIndustrialHistoryModal(); }
+                if (isVisible(observationHistoryModal)) { e.stopImmediatePropagation(); closeObservationHistory(); }
+                else if (isVisible(iHistoryModal)) { e.stopImmediatePropagation(); closeIndustrialHistoryModal(); }
                 else if (isVisible(hModal)) { e.stopImmediatePropagation(); closeSectorHistory(); }
                 else if (isVisible(dModal)) { e.stopImmediatePropagation(); closeOPDetails(); }
                 else if (isVisible(emailModal)) { e.stopImmediatePropagation(); closeEmailModal(); }
