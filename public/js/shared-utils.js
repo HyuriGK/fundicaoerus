@@ -54,6 +54,7 @@ function getItemSectorMetrics(item) {
     let targetTotalQty = (linkedOp && linkedOp !== '-' && opQty > 0)
         ? Math.max(opQty, commercialBalance)
         : commercialBalance;
+    const industrialCapacity = Math.min(targetTotalQty, commercialBalance);
     const ignoreSuggestedOp = linkStatus === 'sugerido';
 
     // REFUGOS POR SETOR (peças que morreram em cada etapa)
@@ -91,10 +92,10 @@ function getItemSectorMetrics(item) {
     const hasOwnBilling = rawFaturamento > 0 || rawExpedicao > 0;
     const chainErpFat = hasOwnBilling ? erpFat : 0;
 
-    let cFat = Math.max(rawFaturamento, chainErpFat);
+    let cFat = Math.min(industrialCapacity, Math.max(rawFaturamento, chainErpFat));
 
-    if (String(item.FATURADO_PPR || '').trim().toUpperCase() === 'T' || (targetTotalQty > 0 && cFat >= targetTotalQty)) {
-        cFat = targetTotalQty;
+    if (String(item.FATURADO_PPR || '').trim().toUpperCase() === 'T' || (industrialCapacity > 0 && cFat >= industrialCapacity)) {
+        cFat = industrialCapacity;
     }
 
     // Ghost residue suppression
@@ -103,23 +104,23 @@ function getItemSectorMetrics(item) {
     }
 
     // Cadeia de saída (PRODUZIDO) — quanto pode avançar para o setor seguinte
-    const cExp  = Math.max(cFat,  rawExpedicao);
-    const cQual = Math.max(cExp,  rawQualidade);
-    const cUsi  = Math.max(cQual, rawUsinagem);
-    const cTT   = Math.max(cUsi,  rawTT);
-    const cAcab = Math.max(cTT,   rawAcabamento);
-    const cFus  = Math.max(cAcab, rawFusao);
+    const cExp  = Math.min(industrialCapacity, Math.max(cFat,  rawExpedicao));
+    const cQual = Math.min(industrialCapacity, Math.max(cExp,  rawQualidade));
+    const cUsi  = Math.min(industrialCapacity, Math.max(cQual, rawUsinagem));
+    const cTT   = Math.min(industrialCapacity, Math.max(cUsi,  rawTT));
+    const cAcab = Math.min(industrialCapacity, Math.max(cTT,   rawAcabamento));
+    const cFus  = Math.min(industrialCapacity, Math.max(cAcab, rawFusao));
 
     // Cadeia de entrada (APONTADO) — quantas peças já entraram em cada setor
     // cAcabIn é capado em apontadoFusao: garante cFusIn = apontadoFusao sempre,
     // tornando qMoldada imune a inconsistências de dados nos setores downstream
     const cExpIn  = cExp;
-    const cQualIn = Math.max(cExpIn,  apontadoQualidade);
-    const cUsiIn  = Math.max(cQualIn, apontadoUsinagem);
-    const cTTIn   = Math.max(cUsiIn,  apontadoTT);
-    const cAcabIn = Math.min(apontadoFusao, Math.max(cTTIn, apontadoAcabamento));
-    const cFusIn  = Math.max(cAcabIn, apontadoFusao); // = apontadoFusao sempre
-    const cMold   = Math.max(cFusIn,  rawMoldada);
+    const cQualIn = Math.min(industrialCapacity, Math.max(cExpIn,  apontadoQualidade));
+    const cUsiIn  = Math.min(industrialCapacity, Math.max(cQualIn, apontadoUsinagem));
+    const cTTIn   = Math.min(industrialCapacity, Math.max(cUsiIn,  apontadoTT));
+    const cAcabIn = Math.min(industrialCapacity, apontadoFusao, Math.max(cTTIn, apontadoAcabamento));
+    const cFusIn  = Math.min(industrialCapacity, Math.max(cAcabIn, apontadoFusao));
+    const cMold   = Math.min(industrialCapacity, Math.max(cFusIn, rawMoldada));
 
     const res = {
         // SALDO POR SETOR: PRODUZIDO do setor atual − APONTADO do setor seguinte
@@ -130,7 +131,7 @@ function getItemSectorMetrics(item) {
         qAcabamento: Math.max(0, cAcab - cTTIn),
         qFusao:      Math.max(0, cFus  - cAcabIn),
         qMoldada:    Math.max(0, cMold - cFusIn),
-        qAguardando: Math.max(0, targetTotalQty - cMold),
+        qAguardando: Math.max(0, industrialCapacity - cMold),
 
         // REFUGOS POR SETOR
         refugoMoldagem, refugoFusao, refugoAcabamento, refugoTT,
@@ -146,7 +147,7 @@ function getItemSectorMetrics(item) {
         rawFusao,
         rawMoldada,
 
-        targetTotalQty,
+        targetTotalQty: industrialCapacity,
         originalTarget: qtdOrig
     };
 
