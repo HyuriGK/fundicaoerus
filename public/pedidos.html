@@ -5233,10 +5233,9 @@
                 const saldo = getCommercialBalance(item);
                 if (saldo <= 0) return;
                 const stages = [metrics.qAguardando, metrics.qMoldada, metrics.qFusao, metrics.qAcabamento, metrics.qTT, metrics.qUsinagem, metrics.qQualidade, metrics.qExpedicao];
-                const totalIndustrial = stages.reduce((sum, qty) => sum + qty, 0);
-                const factor = totalIndustrial > saldo ? saldo / totalIndustrial : 1;
-                const comercial = stages.map(qty => qty * factor);
-                comercial[0] += Math.max(0, saldo - comercial.reduce((sum, qty) => sum + qty, 0));
+                const comercial = Array(8).fill(0);
+                const commercialStage = stages.reduce((selected, qty, index) => qty > 0 ? index : selected, -1);
+                comercial[commercialStage >= 0 ? commercialStage : 0] = saldo;
                 const unitWeight = getResolvedUnitWeight(item, customWeights, metrics.targetTotalQty);
                 let unitPrice = Number(item.VALOR_PPR || 0);
                 if (item.PRECO_KG && Number(item.PRECO_KG) > 0 && customWeights[item.PRODUTO_PPR]) unitPrice = Number(item.PRECO_KG) * unitWeight;
@@ -5270,18 +5269,21 @@
                 if (el) el.innerHTML = render(group);
             });
             window.commercialPositionRows = rows;
-            const setWidth = (id, value, total) => {
+            const setWidth = (id, value, total, label) => {
                 const el = document.getElementById(id);
-                if (el) el.style.width = total > 0 ? `${(value / total) * 100}%` : '0%';
+                if (!el) return;
+                el.style.width = total > 0 ? `${(value / total) * 100}%` : '0%';
+                el.setAttribute('data-tooltip', `<div class="tooltip-header">${label}</div><div class="tooltip-row"><span class="tooltip-label">Saldo comercial</span><span class="tooltip-value">${formatNumber(value, 0)} pçs</span></div>`);
             };
             const commercialMoldagemTotal = groups.aguardando.qtd;
-            setWidth('commercialBarMoldPesada', moldagemTypes.pesada, commercialMoldagemTotal);
-            setWidth('commercialBarMoldLeve', moldagemTypes.leve, commercialMoldagemTotal);
-            setWidth('commercialBarMoldManual', moldagemTypes.manual, commercialMoldagemTotal);
-            setWidth('commercialBarMoldOutros', moldagemTypes.outros, commercialMoldagemTotal);
-            setWidth('commercialBarMoldado', groups.moldagem.qtd, groups.moldagem.qtd);
+            setWidth('commercialBarMoldPesada', moldagemTypes.pesada, commercialMoldagemTotal, 'Moldagem Pesada');
+            setWidth('commercialBarMoldLeve', moldagemTypes.leve, commercialMoldagemTotal, 'Moldagem Leve');
+            setWidth('commercialBarMoldManual', moldagemTypes.manual, commercialMoldagemTotal, 'Moldagem Manual');
+            setWidth('commercialBarMoldOutros', moldagemTypes.outros, commercialMoldagemTotal, 'Sem tipo cadastrado');
+            setWidth('commercialBarMoldado', groups.moldagem.qtd, groups.moldagem.qtd, 'Fusão');
             const processBarIds = ['commercialBarFusao', 'commercialBarAcabamento', 'commercialBarTTUsinagem', 'commercialBarTTQualidade', 'commercialBarUsinagem', 'commercialBarQualidade', 'commercialBarExpedicao'];
-            processBarIds.forEach((id, index) => setWidth(id, processosStages[index], groups.processos.qtd));
+            const processLabels = ['Acabamento', 'Tratamento Térmico', 'Aguardando Usinagem Externa', 'Aguardando Qualidade', 'Usinagem Externa', 'Qualidade', 'Expedição'];
+            processBarIds.forEach((id, index) => setWidth(id, processosStages[index], groups.processos.qtd, processLabels[index]));
         }
 
         function openCommercialStageRecords(stage) {
