@@ -155,6 +155,7 @@ const INDEPENDENT_BATS = [
 ];
 
 const INDEPENDENT_WAIT = 2 * 60 * 1000; // 2 minutos
+const FATURAMENTO_WAIT = 2 * 60 * 1000; // 2 minutos após concluir
 const LIGHT_SYNC_WAIT = 5 * 60 * 1000; // 5 minutos após concluir
 const HEAVY_SYNC_MODULES = new Set(['EMISSOES', 'PEDIDOS', 'PRODUCAO', 'REFUGOS']);
 const SNAPSHOT_SCRIPTS = { EMISSOES: 'refresh-carteira-dashboard-snapshot.js', FATURAMENTO: 'refresh-faturamento-dashboard-snapshot.js', PRODUCAO: 'refresh-producao-dashboard-snapshot.js', REFUGOS: 'refresh-refugo-kpi-snapshot.js' };
@@ -538,7 +539,9 @@ async function startQueueWorker(bats) {
         try { fs.appendFileSync(CYCLE_LOG, line); } catch(e) {}
         logEvent(bat.name, `Ciclo concluido em ${duration.toFixed(1)}s`, false);
 
-        const nextWait = HEAVY_SYNC_MODULES.has(bat.name) ? INDEPENDENT_WAIT : LIGHT_SYNC_WAIT;
+        const nextWait = bat.name === 'FATURAMENTO'
+            ? FATURAMENTO_WAIT
+            : HEAVY_SYNC_MODULES.has(bat.name) ? INDEPENDENT_WAIT : LIGHT_SYNC_WAIT;
         nextRunAt[bat.name] = Date.now() + nextWait;
         scriptState[bat.name] = 'IDLE';
     }
