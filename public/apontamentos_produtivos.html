@@ -1647,6 +1647,7 @@
 
         let allData = [];
         let filteredData = [];
+        let acabamentoExternoData = [];
         let figurasMap = {};
         let chartViewMode = 'peso';
         const MONTHS_SHORT = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
@@ -2331,14 +2332,17 @@
                         : `${year}-12-31`);
                 }
                 setInlineLoading('dailyChartLoading', true);
-                const [response, figurasRes] = await Promise.all([
+                const [response, figurasRes, acabamentoRes] = await Promise.all([
                     fetch(`/api/producao-postgres?${params}`),
-                    fetch(`/api/producao-postgres/figuras?${params}`)
+                    fetch(`/api/producao-postgres/figuras?${params}`),
+                    fetch('/api/acabamento-externo')
                 ]);
                 const result = await response.json();
                 const figurasResult = await figurasRes.json();
+                const acabamentoResult = await acabamentoRes.json();
 
                 if (figurasResult.success) figurasMap = figurasResult.figuras || {};
+                acabamentoExternoData = acabamentoResult.registros || acabamentoResult.data || [];
 
                 if (result.success) {
                     allData = result.data;
@@ -2860,7 +2864,54 @@
             return diff > 0 ? diff / 60 : 0;
         }
 
+        function renderAllSectorsChart() {
+            const sectorOrder = ['MOLDAGEM GERAL', 'MOLDAGEM PESADA', 'MOLDAGEM MANUAL', 'MOLDAGEM LEVE', 'FUSAO', 'ACABAMENTO', 'EXPEDICAO'];
+            const hiddenSectors = ['FECHAMENTO MANUAL', 'TRATAMENTO TERMICO', 'INSPECAO DE QUALIDADE', 'USINAGEM', 'USINAGEM EXPEDICAO'];
+            const totals = {};
+            filteredData.forEach(item => {
+                const sector = String(item.setor || '').trim().toUpperCase();
+                if (!sector || hiddenSectors.includes(sector)) return;
+                totals[sector] = (totals[sector] || 0) + Number(item.pesoTotal || item.peso_total || 0);
+            });
+            const externalWeight = acabamentoExternoData.reduce((sum, item) => {
+                const date = String(item.data || '').slice(0, 10);
+                const year = date.slice(0, 4);
+                const month = Number(date.slice(5, 7));
+                if ((currentYearFilter !== 'TODOS' && year !== currentYearFilter) || (currentMonthFilter && month !== currentMonthFilter)) return sum;
+                return sum + Number(item.quant || item.quantidade || 0) * Number(item.peso || 0);
+            }, 0);
+            const labels = sectorOrder.filter(sector => sector === 'MOLDAGEM GERAL' || totals[sector] > 0 || (sector === 'ACABAMENTO' && externalWeight > 0));
+            const totalFor = sector => sector === 'MOLDAGEM GERAL'
+                ? MOLDAGEM_GERAL_TYPES.reduce((sum, type) => sum + Number(totals[type] || 0), 0)
+                : Number(totals[sector] || 0);
+            const internal = labels.map(sector => sector === 'ACABAMENTO' ? Math.max(totalFor(sector) - externalWeight, 0) : totalFor(sector));
+            const external = labels.map(sector => sector === 'ACABAMENTO' ? Math.min(totalFor(sector), externalWeight) : 0);
+            const titleEl = document.getElementById('chart-main-title');
+            if (titleEl) titleEl.innerText = 'Produção por Setor (KG)';
+            if (chartInstance) chartInstance.destroy();
+            chartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: { labels, datasets: [
+                    { label: 'ACAB. INTERNO', data: internal, backgroundColor: '#f59e0b', borderRadius: 5, borderSkipped: false },
+                    { label: 'ACAB. EXTERNO', data: external, backgroundColor: '#3b82f6', borderRadius: 5, borderSkipped: false }
+                ] },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    scales: {
+                        x: { stacked: true, grid: { color: 'rgba(255,255,255,.05)' }, ticks: { color: '#d4d4d8', font: { size: 11 } } },
+                        y: { stacked: true, beginAtZero: true, grid: { color: 'rgba(255,255,255,.05)' }, ticks: { color: '#a1a1aa', callback: value => (value / 1000).toLocaleString('pt-BR') + 't' } }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { callbacks: { label: context => `${context.dataset.label}: ${Number(context.parsed.y || 0).toLocaleString('pt-BR', { maximumFractionDigits: 0 })} kg` } },
+                        datalabels: { display: false }
+                    }
+                }
+            });
+        }
+
         function renderChart() {
+            if (currentSectorFilter === 'TODOS' && chartViewMode === 'peso') return renderAllSectorsChart();
             updateMaquinaFilterUI();
             let labels = [];
             let dataDaily = [];
