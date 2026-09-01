@@ -2502,9 +2502,9 @@
                     <div class="commercial-position-section">
                     <div class="commercial-position-title">POSIÇÃO COMERCIAL — SALDO PENDENTE EM CARTEIRA</div>
                     <div class="industrial-groups-grid">
-                        <div class="industrial-group" onclick="openCommercialStageRecords('aguardando')"><div id="commercialAguardandoContent"></div><div class="industrial-bar-mini"><div id="commercialBarMoldPesada" class="bar-segment" style="background:#f97316;width:0%"></div><div id="commercialBarMoldLeve" class="bar-segment" style="background:#3b82f6;width:0%"></div><div id="commercialBarMoldManual" class="bar-segment" style="background:#a855f7;width:0%"></div><div id="commercialBarMoldOutros" class="bar-segment" style="background:#6b7280;width:0%"></div></div></div>
-                        <div class="industrial-group" onclick="openCommercialStageRecords('moldagem')"><div id="commercialMoldagemContent"></div><div class="industrial-bar-mini"><div id="commercialBarMoldado" class="bar-segment segment-moldado" style="width:100%"></div></div></div>
-                        <div class="industrial-group" onclick="openCommercialStageRecords('processos')"><div id="commercialProcessosContent"></div><div class="industrial-bar-mini"><div id="commercialBarFusao" class="bar-segment segment-fusao" style="width:0%"></div><div id="commercialBarAcabamento" class="bar-segment segment-acabamento" style="width:0%"></div><div id="commercialBarTTUsinagem" class="bar-segment segment-tt-usi" style="width:0%"></div><div id="commercialBarTTQualidade" class="bar-segment segment-tt-qual" style="width:0%"></div><div id="commercialBarUsinagem" class="bar-segment segment-usinagem" style="width:0%"></div><div id="commercialBarQualidade" class="bar-segment segment-qualidade" style="width:0%"></div><div id="commercialBarExpedicao" class="bar-segment segment-expedicao" style="width:0%"></div></div></div>
+                        <div class="industrial-group" onclick="openCommercialStageRecords('aguardando')"><div id="commercialAguardandoContent"></div><div class="industrial-bar-mini"><div id="commercialBarMoldPesada" class="bar-segment" style="background:#f97316;width:0%" onclick="event.stopPropagation();openCommercialSegmentRecords('moldPesada')"></div><div id="commercialBarMoldLeve" class="bar-segment" style="background:#3b82f6;width:0%" onclick="event.stopPropagation();openCommercialSegmentRecords('moldLeve')"></div><div id="commercialBarMoldManual" class="bar-segment" style="background:#a855f7;width:0%" onclick="event.stopPropagation();openCommercialSegmentRecords('moldManual')"></div><div id="commercialBarMoldOutros" class="bar-segment" style="background:#6b7280;width:0%" onclick="event.stopPropagation();openCommercialSegmentRecords('moldOutros')"></div></div></div>
+                        <div class="industrial-group" onclick="openCommercialStageRecords('moldagem')"><div id="commercialMoldagemContent"></div><div class="industrial-bar-mini"><div id="commercialBarMoldado" class="bar-segment segment-moldado" style="width:100%" onclick="event.stopPropagation();openCommercialSegmentRecords('moldado')"></div></div></div>
+                        <div class="industrial-group" onclick="openCommercialStageRecords('processos')"><div id="commercialProcessosContent"></div><div class="industrial-bar-mini"><div id="commercialBarFusao" class="bar-segment segment-fusao" style="width:0%" onclick="event.stopPropagation();openCommercialSegmentRecords('fusao')"></div><div id="commercialBarAcabamento" class="bar-segment segment-acabamento" style="width:0%" onclick="event.stopPropagation();openCommercialSegmentRecords('acabamento')"></div><div id="commercialBarTTUsinagem" class="bar-segment segment-tt-usi" style="width:0%" onclick="event.stopPropagation();openCommercialSegmentRecords('ttUsinagem')"></div><div id="commercialBarTTQualidade" class="bar-segment segment-tt-qual" style="width:0%" onclick="event.stopPropagation();openCommercialSegmentRecords('ttQualidade')"></div><div id="commercialBarUsinagem" class="bar-segment segment-usinagem" style="width:0%" onclick="event.stopPropagation();openCommercialSegmentRecords('usinagem')"></div><div id="commercialBarQualidade" class="bar-segment segment-qualidade" style="width:0%" onclick="event.stopPropagation();openCommercialSegmentRecords('qualidade')"></div><div id="commercialBarExpedicao" class="bar-segment segment-expedicao" style="width:0%" onclick="event.stopPropagation();openCommercialSegmentRecords('expedicao')"></div></div></div>
                     </div>
                     </div>
                 </div>
@@ -5236,6 +5236,9 @@
                 const comercial = Array(8).fill(0);
                 const commercialStage = stages.reduce((selected, qty, index) => qty > 0 ? index : selected, -1);
                 comercial[commercialStage >= 0 ? commercialStage : 0] = saldo;
+                const moldagemType = String(item._tipo_moldagem_procedimento || '').trim().toUpperCase();
+                const moldagemKey = moldagemType === 'MOLDAGEM PESADA' ? 'moldPesada' : moldagemType === 'MOLDAGEM LEVE' ? 'moldLeve' : moldagemType === 'MOLDAGEM MANUAL' ? 'moldManual' : 'moldOutros';
+                const processKeys = ['fusao','acabamento','ttUsinagem','ttQualidade','usinagem','qualidade','expedicao'];
                 const unitWeight = getResolvedUnitWeight(item, customWeights, metrics.targetTotalQty);
                 let unitPrice = Number(item.VALOR_PPR || 0);
                 if (item.PRECO_KG && Number(item.PRECO_KG) > 0 && customWeights[item.PRODUTO_PPR]) unitPrice = Number(item.PRECO_KG) * unitWeight;
@@ -5247,16 +5250,15 @@
                 add(groups.aguardando, comercial[0]);
                 add(groups.moldagem, comercial[1]);
                 comercial.slice(2).forEach(qty => add(groups.processos, qty));
-                const addRow = (key, qty) => {
+                const addRow = (key, qty, segment) => {
                     if (qty <= 0) return;
-                    rows[key].push({ ...item, _sectorQty: qty, _sectorWeight: qty * unitWeight, _sectorValue: qty * unitPrice });
+                    rows[key].push({ ...item, _commercialSegment: segment, _sectorQty: qty, _sectorWeight: qty * unitWeight, _sectorValue: qty * unitPrice });
                 };
-                addRow('aguardando', comercial[0]);
-                addRow('moldagem', comercial[1]);
-                addRow('processos', comercial.slice(2).reduce((sum, qty) => sum + qty, 0));
-                const moldagemType = String(item._tipo_moldagem_procedimento || '').trim().toUpperCase();
-                const moldagemKey = moldagemType === 'MOLDAGEM PESADA' ? 'pesada' : moldagemType === 'MOLDAGEM LEVE' ? 'leve' : moldagemType === 'MOLDAGEM MANUAL' ? 'manual' : 'outros';
-                moldagemTypes[moldagemKey] += comercial[0];
+                addRow('aguardando', comercial[0], moldagemKey);
+                addRow('moldagem', comercial[1], 'moldado');
+                processKeys.forEach((segment, index) => addRow('processos', comercial[index + 2], segment));
+                const moldagemTypeKey = moldagemKey.replace('mold', '').toLowerCase() || 'outros';
+                moldagemTypes[moldagemTypeKey] += comercial[0];
                 comercial.slice(2).forEach((qty, index) => { processosStages[index] += qty; });
             });
             const render = group => {
@@ -5297,6 +5299,18 @@
             const title = document.getElementById('recordsModalTitle');
             if (title) title.innerHTML = `<i class="fa-solid fa-briefcase" style="margin-right:15px;"></i>Posição Comercial: ${names[stage] || stage}`;
         }
+        function openCommercialSegmentRecords(segment) {
+            const group = ['moldPesada','moldLeve','moldManual','moldOutros'].includes(segment) ? 'aguardando' : (segment === 'moldado' ? 'moldagem' : 'processos');
+            const rows = ((window.commercialPositionRows || {})[group] || []).filter(item => item._commercialSegment === segment);
+            const names = { moldPesada:'Moldagem Pesada', moldLeve:'Moldagem Leve', moldManual:'Moldagem Manual', moldOutros:'Sem Tipo', moldado:'Fusão', fusao:'Acabamento', acabamento:'Tratamento Térmico', ttUsinagem:'Aguardando Usinagem Externa', ttQualidade:'Aguardando Qualidade', usinagem:'Usinagem Externa', qualidade:'Qualidade', expedicao:'Expedição' };
+            activeChartFilters.stage = null;
+            currentFilteredData = rows;
+            renderTable(rows);
+            openModal();
+            const title = document.getElementById('recordsModalTitle');
+            if (title) title.innerHTML = `<i class="fa-solid fa-briefcase" style="margin-right:15px;"></i>Posição Comercial: ${names[segment] || segment}`;
+        }
+
         function updateTotals(list) {
             // Legacy function kept if called elsewhere, but we moved logic to calculateKPIs
             // to avoid double iteration.
