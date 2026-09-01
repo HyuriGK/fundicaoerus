@@ -461,6 +461,8 @@
         .native-admin-shell{flex:1;min-height:0;display:flex;flex-direction:column;gap:14px}
         .native-admin-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
         .native-admin-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+        .native-log-screen-search{width:min(320px,100%);padding:10px 12px;border:1px solid var(--border-subtle);border-radius:9px;background:rgba(0,0,0,.2);color:#f4f4f5;font:inherit;font-size:.8rem;outline:none}
+        .native-log-screen-search:focus{border-color:var(--color-primary)}
         .native-admin-tablewrap{flex:1;min-height:0;overflow:auto;border:1px solid var(--border-subtle);border-radius:14px;background:rgba(255,255,255,0.025)}
         .native-admin-table{width:100%;border-collapse:collapse}
         .native-admin-table th{position:sticky;top:0;z-index:1;background:#111113;color:#71717a;font-size:.66rem;font-weight:800;text-transform:uppercase;letter-spacing:.09em;text-align:left;padding:11px 13px;border-bottom:1px solid var(--border-subtle);white-space:nowrap}
@@ -2329,6 +2331,23 @@
         }).join('');
     }
 
+    function nativeLogScreenOptions(logs) {
+        const fixedScreens = [...ADMIN_LOCKABLE_PAGES.map(page => page.name), 'Administracao', 'Bloqueio de Telas', 'Comunicacao', 'Chamados TI'];
+        const logScreens = (logs || []).map(log => formatLogAction(log).tela);
+        return [...new Set([...fixedScreens, ...logScreens].filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    }
+
+    function filterNativeLogsScreen(value, exact = false) {
+        const query = String(value || '').trim().toLocaleLowerCase('pt-BR');
+        const logs = window.__nativeLogs || [];
+        const filtered = !query ? logs : logs.filter(log => {
+            const screen = formatLogAction(log).tela.toLocaleLowerCase('pt-BR');
+            return exact ? screen === query : screen.includes(query);
+        });
+        const body = document.querySelector('#adminLogsTable tbody');
+        if (body) body.innerHTML = adminLogRows(filtered, true, '__nativeLogsFiltered');
+    }
+
     async function loadNativeLogs() {
         adminContent('<div class="native-empty">Carregando logs...</div>');
         try {
@@ -2337,7 +2356,7 @@
             const logs = await r.json();
             if (!Array.isArray(logs)) throw new Error('Resposta invalida');
             adminContent(`<div class="admin-skin">
-                <div class="native-admin-toolbar"><button class="native-btn" onclick="loadNativeLogs()"><i class="fa-solid fa-rotate"></i> Atualizar</button></div>
+                <div class="native-admin-toolbar"><button class="native-btn" onclick="loadNativeLogs()"><i class="fa-solid fa-rotate"></i> Atualizar</button><input id="nativeLogsScreenSearch" class="native-log-screen-search" list="nativeLogsScreenOptions" placeholder="Pesquisar tela..." autocomplete="off" oninput="filterNativeLogsScreen(this.value)" onchange="filterNativeLogsScreen(this.value, true)"><datalist id="nativeLogsScreenOptions">${nativeLogScreenOptions(logs).map(screen => `<option value="${escapeHtml(screen)}"></option>`).join('')}</datalist></div>
                 <div class="table-container"><table id="adminLogsTable"><thead><tr><th>Data/Hora</th><th>Usuario</th><th>Dispositivo</th><th>Acao</th><th>Tela</th><th>Detalhes</th></tr></thead><tbody>${adminLogRows(logs, true, '__nativeLogs')}</tbody></table></div>
             </div>`);
         } catch(e) { showToast('Erro', 'Nao foi possivel carregar os logs.', 'danger'); }
