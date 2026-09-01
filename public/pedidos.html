@@ -9204,9 +9204,11 @@ function flashConcentracaoBar(barIndex) {
             const emptyDiv = document.getElementById('historyEmpty');
             const moldagemTypeSelect = document.getElementById('historyMoldagemTypeSelect');
             const selectedStage = currentHistoryMoldagemType ? moldagemTypeSelect.value : currentHistoryDataStage;
-            const selectedStageName = currentHistoryMoldagemType
-                ? moldagemTypeSelect.options[moldagemTypeSelect.selectedIndex].text
-                : (historyStageNames[currentHistoryStage] || currentHistoryStage);
+            const selectedStageName = currentHistoryStage === 'processos_qualidade'
+                ? 'Processos e Qualidade'
+                : (currentHistoryMoldagemType
+                    ? moldagemTypeSelect.options[moldagemTypeSelect.selectedIndex].text
+                    : (historyStageNames[currentHistoryStage] || currentHistoryStage));
             const monthName = document.getElementById('historyMonthSelect').options[document.getElementById('historyMonthSelect').selectedIndex].text;
             const periodLabel = industrialHistoryView === 'daily' ? `${monthName}/${year}` : year;
             title.innerText = `Histórico: ${selectedStageName} — ${periodLabel}`;
@@ -9255,6 +9257,10 @@ function flashConcentracaoBar(barIndex) {
             const qtyData = [];
             const weightData = [];
             const valueData = [];
+            const processQualityStages = ['fusao', 'acabamento', 'tt_usinagem', 'tt_qualidade', 'usinagem', 'qualidade', 'expedicao'];
+            const historyValue = (entry, field) => stage === 'processos_qualidade'
+                ? processQualityStages.reduce((sum, currentStage) => sum + parseFloat(entry[`${currentStage}_${field}`] || 0), 0)
+                : parseFloat(entry[`${stage}_${field}`] || 0);
             const periods = view === 'monthly'
                 ? Array.from({ length: 12 }, (_, i) => ({ label: ['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'][i], month: i + 1 }))
                 : Array.from({ length: new Date(year, month, 0).getDate() }, (_, i) => ({ label: `${String(i + 1).padStart(2, '0')}/${String(month).padStart(2, '0')}`, day: i + 1 }));
@@ -9264,9 +9270,9 @@ function flashConcentracaoBar(barIndex) {
                     ? historyLogs.find(h => Number(h.date.split('-')[1]) === period.month)
                     : historyLogs.find(h => h.date === `${year}-${String(month).padStart(2, '0')}-${String(period.day).padStart(2, '0')}`);
                 if (entry) {
-                    qtyData.push(parseFloat(entry[`${stage}_qty`] || 0));
-                    weightData.push(parseFloat(entry[`${stage}_weight`] || 0));
-                    valueData.push(parseFloat(entry[`${stage}_value`] || 0));
+                    qtyData.push(historyValue(entry, 'qty'));
+                    weightData.push(historyValue(entry, 'weight'));
+                    valueData.push(historyValue(entry, 'value'));
                 } else {
                     qtyData.push(0);
                     weightData.push(0);
@@ -9398,7 +9404,7 @@ function flashConcentracaoBar(barIndex) {
                 { id: 'barMoldOutros',          stage: 'moldagem_tipo', dataStage: 'moldagem_outros', type: 'moldagem_outros' },
                 { id: 'groupMoldadoContent',    stage: 'moldagem', dataStage: 'moldagem' },
                 { id: 'barMoldado',             stage: 'moldagem', dataStage: 'moldagem' },
-                { id: 'groupFundidoContainer',  stage: 'fusao', dataStage: 'fusao' },
+                { id: 'groupFundidoContainer',  stage: 'processos_qualidade', dataStage: 'processos_qualidade' },
                 { id: 'barFusao',               stage: 'fusao', dataStage: 'fusao' },
                 { id: 'barAcabamento',          stage: 'acabamento', dataStage: 'acabamento' },
                 { id: 'barTT_Usinagem',         stage: 'tt_usinagem', dataStage: 'tt' },
