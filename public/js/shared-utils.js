@@ -151,6 +151,11 @@ function getItemSectorMetrics(item, limitToCommercial = false) {
         originalTarget: qtdOrig
     };
 
+    if (limitToCommercial) {
+        const allocated = res.qExpedicao + res.qQualidade + res.qUsinagem + res.qTT + res.qAcabamento + res.qFusao + res.qMoldada;
+        res.qAguardando = Math.max(0, commercialBalance - allocated);
+    }
+
     // Total balance = saldo comercial
     res.totalBalance = getCommercialBalance(item);
 
