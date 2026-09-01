@@ -5271,11 +5271,17 @@
                 if (el) el.innerHTML = render(group);
             });
             window.commercialPositionRows = rows;
+            const segmentByBar = { commercialBarMoldPesada:'moldPesada', commercialBarMoldLeve:'moldLeve', commercialBarMoldManual:'moldManual', commercialBarMoldOutros:'moldOutros', commercialBarMoldado:'moldado', commercialBarFusao:'fusao', commercialBarAcabamento:'acabamento', commercialBarTTUsinagem:'ttUsinagem', commercialBarTTQualidade:'ttQualidade', commercialBarUsinagem:'usinagem', commercialBarQualidade:'qualidade', commercialBarExpedicao:'expedicao' };
+            const allCommercialRows = Object.values(rows).flat();
+            const totalCommercialWeight = allCommercialRows.reduce((sum, item) => sum + Number(item._sectorWeight || 0), 0);
             const setWidth = (id, value, total, label) => {
                 const el = document.getElementById(id);
                 if (!el) return;
                 el.style.width = total > 0 ? `${(value / total) * 100}%` : '0%';
-                el.setAttribute('data-tooltip', `<div class="tooltip-header">${label}</div><div class="tooltip-row"><span class="tooltip-label">Saldo comercial</span><span class="tooltip-value">${formatNumber(value, 0)} pçs</span></div>`);
+                const segment = segmentByBar[id];
+                const details = allCommercialRows.filter(item => item._commercialSegment === segment).reduce((acc, item) => ({ qtd: acc.qtd + Number(item._sectorQty || 0), peso: acc.peso + Number(item._sectorWeight || 0), valor: acc.valor + Number(item._sectorValue || 0) }), { qtd: 0, peso: 0, valor: 0 });
+                const pct = totalCommercialWeight > 0 ? ((details.peso / totalCommercialWeight) * 100).toFixed(1) : '0.0';
+                el.setAttribute('data-tooltip', `<div class="tooltip-header">${label}</div><div class="tooltip-row"><span class="tooltip-label">Representatividade (Total)</span><span class="tooltip-value">${pct}%</span></div><div class="tooltip-row"><span class="tooltip-label">Saldo no Setor</span><span class="tooltip-value">${formatNumber(details.qtd, 0)} pçs</span></div><div class="tooltip-row"><span class="tooltip-label">Peso Total</span><span class="tooltip-value">${formatNumber(details.peso, 0)} kg</span></div><div class="tooltip-row"><span class="tooltip-label">Valor total (do Saldo)</span><span class="tooltip-value">${valorVisible ? formatCurrency(details.valor) : '-----'}</span></div><div class="tooltip-footer">Clique para ver as OPs desta etapa comercial.</div>`);
             };
             const commercialMoldagemTotal = groups.aguardando.qtd;
             setWidth('commercialBarMoldPesada', moldagemTypes.pesada, commercialMoldagemTotal, 'Moldagem Pesada');
