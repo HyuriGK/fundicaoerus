@@ -2502,9 +2502,9 @@
                     <div class="commercial-position-section">
                     <div class="commercial-position-title">POSIÇÃO COMERCIAL — SALDO PENDENTE EM CARTEIRA</div>
                     <div class="industrial-groups-grid">
-                        <div class="industrial-group"><div id="commercialAguardandoContent"></div></div>
-                        <div class="industrial-group"><div id="commercialMoldagemContent"></div></div>
-                        <div class="industrial-group"><div id="commercialProcessosContent"></div></div>
+                        <div class="industrial-group" onclick="openCommercialStageRecords('aguardando')"><div id="commercialAguardandoContent"></div></div>
+                        <div class="industrial-group" onclick="openCommercialStageRecords('moldagem')"><div id="commercialMoldagemContent"></div></div>
+                        <div class="industrial-group" onclick="openCommercialStageRecords('processos')"><div id="commercialProcessosContent"></div></div>
                     </div>
                     </div>
                 </div>
@@ -5225,6 +5225,7 @@
                 moldagem: { nome: 'Fusão', qtd: 0, peso: 0, valor: 0 },
                 processos: { nome: 'Processos e Qualidade', qtd: 0, peso: 0, valor: 0 }
             };
+            const rows = { aguardando: [], moldagem: [], processos: [] };
             (list || []).forEach(item => {
                 const metrics = getItemSectorMetrics(item);
                 const saldo = getCommercialBalance(item);
@@ -5245,6 +5246,13 @@
                 add(groups.aguardando, comercial[0]);
                 add(groups.moldagem, comercial[1]);
                 comercial.slice(2).forEach(qty => add(groups.processos, qty));
+                const addRow = (key, qty) => {
+                    if (qty <= 0) return;
+                    rows[key].push({ ...item, _sectorQty: qty, _sectorWeight: qty * unitWeight, _sectorValue: qty * unitPrice });
+                };
+                addRow('aguardando', comercial[0]);
+                addRow('moldagem', comercial[1]);
+                addRow('processos', comercial.slice(2).reduce((sum, qty) => sum + qty, 0));
             });
             const render = group => {
                 const pct = totalValue > 0 ? ((group.valor / totalValue) * 100).toFixed(1) : '0.0';
@@ -5255,6 +5263,19 @@
                 const el = document.getElementById(id);
                 if (el) el.innerHTML = render(group);
             });
+            window.commercialPositionRows = rows;
+        }
+
+        function openCommercialStageRecords(stage) {
+            const rows = (window.commercialPositionRows || {})[stage] || [];
+            const names = { aguardando: 'Aguardando Moldagem', moldagem: 'Fusão', processos: 'Processos e Qualidade' };
+            activeChartFilters.stage = null;
+            activeChartFilters.moldagemTipo = null;
+            currentFilteredData = rows;
+            renderTable(rows);
+            openModal();
+            const title = document.getElementById('recordsModalTitle');
+            if (title) title.innerHTML = `<i class="fa-solid fa-briefcase" style="margin-right:15px;"></i>Posição Comercial: ${names[stage] || stage}`;
         }
         function updateTotals(list) {
             // Legacy function kept if called elsewhere, but we moved logic to calculateKPIs
