@@ -3499,6 +3499,7 @@
             });
         });
         function filterByStage(stage) {
+            window.commercialPositionFilterRows = null;
             const industrialClickEvent = window.event;
             const clickedIndustrialBar = industrialClickEvent && industrialClickEvent.target && industrialClickEvent.target.closest && industrialClickEvent.target.closest('.bar-segment');
             if (shouldWaitSecondIndustrialTap(stage, null)) return;
@@ -3509,6 +3510,7 @@
             openModal();
         }
         function filterByMoldagemTipo(tipo) {
+            window.commercialPositionFilterRows = null;
             const industrialClickEvent = window.event;
             const clickedIndustrialBar = industrialClickEvent && industrialClickEvent.target && industrialClickEvent.target.closest && industrialClickEvent.target.closest('.bar-segment');
             if (shouldWaitSecondIndustrialTap('aguardando', tipo)) return;
@@ -5296,6 +5298,7 @@
             const rows = (window.commercialPositionRows || {})[stage] || [];
             const names = { aguardando: 'Aguardando Moldagem', moldagem: 'Fusão', processos: 'Processos e Qualidade' };
             activeChartFilters.stage = null;
+            window.commercialPositionFilterRows = rows;
             activeChartFilters.moldagemTipo = null;
             currentFilteredData = rows;
             renderTable(rows);
@@ -5308,6 +5311,7 @@
             const rows = ((window.commercialPositionRows || {})[group] || []).filter(item => item._commercialSegment === segment);
             const names = { moldPesada:'Moldagem Pesada', moldLeve:'Moldagem Leve', moldManual:'Moldagem Manual', moldOutros:'Sem Tipo', moldado:'Fusão', fusao:'Acabamento', acabamento:'Tratamento Térmico', ttUsinagem:'Aguardando Usinagem Externa', ttQualidade:'Aguardando Qualidade', usinagem:'Usinagem Externa', qualidade:'Qualidade', expedicao:'Expedição' };
             activeChartFilters.stage = null;
+            window.commercialPositionFilterRows = rows;
             currentFilteredData = rows;
             renderTable(rows);
             openModal();
@@ -5609,12 +5613,16 @@
             const filterEmissionStart = document.getElementById('filterEmissionStart')?.value || '';
             const filterEmissionEnd = document.getElementById('filterEmissionEnd')?.value || '';
             const onlySugeridos = document.getElementById('filterSugeridos')?.checked;
-            const filtered = allData.filter(item => {
+            const commercialView = Array.isArray(window.commercialPositionFilterRows);
+            const sourceData = commercialView ? window.commercialPositionFilterRows : allData;
+            const filtered = sourceData.filter(item => {
                 // Always clear sector-specific display fields so they don't bleed into non-stage views
-                delete item._sectorQty;
-                delete item._sectorRaw;
-                delete item._sectorWeight;
-                delete item._sectorValue;
+                if (!commercialView) {
+                    delete item._sectorQty;
+                    delete item._sectorRaw;
+                    delete item._sectorWeight;
+                    delete item._sectorValue;
+                }
                 // 0. Filter Modelos (Ends with '1') and Billed Items
                 const prodCode = String(item.PRODUTO_PPR || '').trim();
                 const isModelo = prodCode.endsWith('1');
@@ -5737,7 +5745,7 @@
                         return getPedidoBlockReasonText(item).toLowerCase().includes(value);
                     }
                     if (key === 'SALDO_REAL') {
-                        const val = activeChartFilters.stage ? getItemSectorMetrics(item).totalBalance : getCommercialBalance(item);
+                        const val = item._sectorQty !== undefined ? item._sectorQty : (activeChartFilters.stage ? getItemSectorMetrics(item).totalBalance : getCommercialBalance(item));
                         return String(val).includes(value);
                     }
                     if (key === 'FATURAMENTO_STATUS') {
