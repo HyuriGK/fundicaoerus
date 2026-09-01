@@ -985,6 +985,10 @@
 
         // Load page-locks and permissions together, apply group-hiding after both finish
         function showPageMaintenance(lock) {
+            if (typeof window.showMaintenanceOverlay === 'function') {
+                window.showMaintenanceOverlay();
+                return;
+            }
             if (document.getElementById('erus-page-maintenance-lock')) return;
             var overlay = document.createElement('div');
             overlay.id = 'erus-page-maintenance-lock';

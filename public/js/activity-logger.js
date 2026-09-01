@@ -332,6 +332,8 @@
         }, true);
     }
 
+    window.showMaintenanceOverlay = showMaintenanceOverlay;
+
     function showDevelopmentOverlay() {
         if (document.getElementById('development-overlay')) return;
 
