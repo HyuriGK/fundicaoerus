@@ -2502,9 +2502,9 @@
                     <div class="commercial-position-section">
                     <div class="commercial-position-title">POSIÇÃO COMERCIAL — SALDO PENDENTE EM CARTEIRA</div>
                     <div class="industrial-groups-grid">
-                        <div class="industrial-group" onclick="openCommercialStageRecords('aguardando')"><div id="commercialAguardandoContent"></div></div>
-                        <div class="industrial-group" onclick="openCommercialStageRecords('moldagem')"><div id="commercialMoldagemContent"></div></div>
-                        <div class="industrial-group" onclick="openCommercialStageRecords('processos')"><div id="commercialProcessosContent"></div></div>
+                        <div class="industrial-group" onclick="openCommercialStageRecords('aguardando')"><div id="commercialAguardandoContent"></div><div class="industrial-bar-mini"><div id="commercialBarMoldPesada" class="bar-segment" style="background:#f97316;width:0%"></div><div id="commercialBarMoldLeve" class="bar-segment" style="background:#3b82f6;width:0%"></div><div id="commercialBarMoldManual" class="bar-segment" style="background:#a855f7;width:0%"></div><div id="commercialBarMoldOutros" class="bar-segment" style="background:#6b7280;width:0%"></div></div></div>
+                        <div class="industrial-group" onclick="openCommercialStageRecords('moldagem')"><div id="commercialMoldagemContent"></div><div class="industrial-bar-mini"><div id="commercialBarMoldado" class="bar-segment segment-moldado" style="width:100%"></div></div></div>
+                        <div class="industrial-group" onclick="openCommercialStageRecords('processos')"><div id="commercialProcessosContent"></div><div class="industrial-bar-mini"><div id="commercialBarFusao" class="bar-segment segment-fusao" style="width:0%"></div><div id="commercialBarAcabamento" class="bar-segment segment-acabamento" style="width:0%"></div><div id="commercialBarTTUsinagem" class="bar-segment segment-tt-usi" style="width:0%"></div><div id="commercialBarTTQualidade" class="bar-segment segment-tt-qual" style="width:0%"></div><div id="commercialBarUsinagem" class="bar-segment segment-usinagem" style="width:0%"></div><div id="commercialBarQualidade" class="bar-segment segment-qualidade" style="width:0%"></div><div id="commercialBarExpedicao" class="bar-segment segment-expedicao" style="width:0%"></div></div></div>
                     </div>
                     </div>
                 </div>
@@ -5226,6 +5226,8 @@
                 processos: { nome: 'Processos e Qualidade', qtd: 0, peso: 0, valor: 0 }
             };
             const rows = { aguardando: [], moldagem: [], processos: [] };
+            const moldagemTypes = { pesada: 0, leve: 0, manual: 0, outros: 0 };
+            const processosStages = [0, 0, 0, 0, 0, 0, 0];
             (list || []).forEach(item => {
                 const metrics = getItemSectorMetrics(item);
                 const saldo = getCommercialBalance(item);
@@ -5253,6 +5255,10 @@
                 addRow('aguardando', comercial[0]);
                 addRow('moldagem', comercial[1]);
                 addRow('processos', comercial.slice(2).reduce((sum, qty) => sum + qty, 0));
+                const moldagemType = String(item._tipo_moldagem_procedimento || '').trim().toUpperCase();
+                const moldagemKey = moldagemType === 'MOLDAGEM PESADA' ? 'pesada' : moldagemType === 'MOLDAGEM LEVE' ? 'leve' : moldagemType === 'MOLDAGEM MANUAL' ? 'manual' : 'outros';
+                moldagemTypes[moldagemKey] += comercial[0];
+                comercial.slice(2).forEach((qty, index) => { processosStages[index] += qty; });
             });
             const render = group => {
                 const pct = totalValue > 0 ? ((group.valor / totalValue) * 100).toFixed(1) : '0.0';
@@ -5264,6 +5270,18 @@
                 if (el) el.innerHTML = render(group);
             });
             window.commercialPositionRows = rows;
+            const setWidth = (id, value, total) => {
+                const el = document.getElementById(id);
+                if (el) el.style.width = total > 0 ? `${(value / total) * 100}%` : '0%';
+            };
+            const commercialMoldagemTotal = groups.aguardando.qtd;
+            setWidth('commercialBarMoldPesada', moldagemTypes.pesada, commercialMoldagemTotal);
+            setWidth('commercialBarMoldLeve', moldagemTypes.leve, commercialMoldagemTotal);
+            setWidth('commercialBarMoldManual', moldagemTypes.manual, commercialMoldagemTotal);
+            setWidth('commercialBarMoldOutros', moldagemTypes.outros, commercialMoldagemTotal);
+            setWidth('commercialBarMoldado', groups.moldagem.qtd, groups.moldagem.qtd);
+            const processBarIds = ['commercialBarFusao', 'commercialBarAcabamento', 'commercialBarTTUsinagem', 'commercialBarTTQualidade', 'commercialBarUsinagem', 'commercialBarQualidade', 'commercialBarExpedicao'];
+            processBarIds.forEach((id, index) => setWidth(id, processosStages[index], groups.processos.qtd));
         }
 
         function openCommercialStageRecords(stage) {
