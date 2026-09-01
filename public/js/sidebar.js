@@ -984,28 +984,41 @@
         }
 
         // Load page-locks and permissions together, apply group-hiding after both finish
+        function showPageMaintenance(lock) {
+            if (document.getElementById('erus-page-maintenance-lock')) return;
+            var overlay = document.createElement('div');
+            overlay.id = 'erus-page-maintenance-lock';
+            overlay.style.cssText = 'position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(9,9,11,.82);backdrop-filter:blur(8px);';
+            overlay.innerHTML = '<div style="width:min(440px,100%);padding:30px;border:1px solid rgba(245,158,11,.38);border-radius:16px;background:#18181b;box-shadow:0 24px 70px rgba(0,0,0,.6);text-align:center;color:#f4f4f5"><i class="fa-solid fa-screwdriver-wrench" style="display:block;margin-bottom:16px;color:#f59e0b;font-size:2rem"></i><div style="font-size:1.15rem;font-weight:800">Tela em manutenção</div><p style="margin:10px 0 0;color:#a1a1aa;font-size:.86rem;line-height:1.55">Esta tela está temporariamente indisponível para manutenção. Tente novamente em breve.</p></div>';
+            document.body.appendChild(overlay);
+        }
+
         var pageLocksPromise = fetch('/api/page-locks')
             .then(function(r) { return r.json(); })
             .then(function(result) {
                 if (!result.success) return;
                 var blocked = {};
+                var locks = {};
                 result.data.forEach(function(l) {
                     if (l.is_locked) blocked[l.page_id] = true;
+                    if (l.is_locked) locks[l.page_id] = l;
                     var isDevelopment = l.is_locked && l.lock_reason === 'development';
-                    if (l.is_locked && (isDevelopment || !isPrivilegedRole)) {
+                    if (isDevelopment) {
                         var blockedLink = document.querySelector('#erus-sidebar .erus-nav-link[href="' + l.page_id + '"]');
                         if (!blockedLink) blockedLink = document.querySelector('#erus-sidebar .erus-nav-link[data-page-key="' + l.page_id + '"]');
                         if (blockedLink) blockedLink.classList.add('erus-role-hidden');
                     }
                 });
-                if (restrictedPageMap[roleNorm]) {
-                    var currentPage = window.location.pathname.split('/').pop() || 'index.html';
+                var currentPage = window.location.pathname.split('/').pop() || 'index.html';
+                if (locks[currentPage] && locks[currentPage].lock_reason === 'maintenance') {
+                    showPageMaintenance(locks[currentPage]);
+                } else if (restrictedPageMap[roleNorm]) {
                     if (blocked[currentPage]) {
                         var fallback = restrictedPageMap[roleNorm].find(function(page) { return !blocked[page]; }) || 'index.html';
                         window.location.href = fallback;
                     }
                 } else if (!isPrivilegedRole) {
-                    var lockedCurrentPage = window.location.pathname.split('/').pop() || 'index.html';
+                    var lockedCurrentPage = currentPage;
                     if (blocked[lockedCurrentPage]) window.location.href = 'index.html';
                 }
             })
