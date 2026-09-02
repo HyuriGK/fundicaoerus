@@ -3045,6 +3045,22 @@ router.put('/crm/contatos/:id', async (req, res) => {
     }
 });
 
+router.delete('/crm/contatos/:id', async (req, res) => {
+    try {
+        await ensureClientesContatosTable();
+        const role = String(req.user?.role || '').trim().toLowerCase();
+        const id = Number(req.params.id);
+        if (role !== 'desenvolvedor') return res.status(403).json({ success: false, error: 'Apenas desenvolvedores podem excluir atendimentos.' });
+        if (!Number.isInteger(id)) return res.status(400).json({ success: false, error: 'Atendimento invalido.' });
+
+        const result = await pool.query('DELETE FROM clientes_contatos_crm WHERE id = $1 RETURNING id', [id]);
+        if (!result.rows.length) return res.status(404).json({ success: false, error: 'Atendimento nao encontrado.' });
+        res.json({ success: true, data: result.rows[0] });
+    } catch (err) {
+        res.status(500).json({ success: false, error: 'Erro ao excluir atendimento', details: err.message });
+    }
+});
+
 router.get('/crm/contatos', async (req, res) => {
     try {
         await ensureClientesContatosTable();

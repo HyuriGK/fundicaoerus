@@ -1945,6 +1945,7 @@
             </div>
             <div class="contact-edit-actions">
                 <button class="btn-save" id="contactViewEditBtn" onclick="enableClientContactEdit()" title="Editar atendimento" style="height:32px;padding:0 12px;"><i class="fa-solid fa-pen"></i> Editar</button>
+                <button class="btn-cancel" id="contactViewDeleteBtn" onclick="deleteClientContact()" title="Excluir atendimento" style="display:none;height:32px;padding:0 12px;color:#fca5a5;"><i class="fa-solid fa-trash"></i> Excluir</button>
                 <button class="btn-save" id="contactViewSaveBtn" onclick="saveClientContactEdit()" title="Salvar atendimento" style="display:none;height:32px;padding:0 12px;"><i class="fa-solid fa-check"></i> Salvar</button>
                 <button class="btn-cancel" id="contactViewCancelBtn" onclick="cancelClientContactEdit()" title="Cancelar edi&ccedil;&atilde;o" style="display:none;height:32px;padding:0 12px;">Cancelar</button>
                 <button class="crm-close" onclick="closeClientContactViewModal()" title="Fechar (ESC)"><i class="fa-solid fa-xmark"></i></button>
@@ -2143,22 +2144,6 @@
                 </div>
                 <div class="crm-actions" id="crmActions"></div>
             </div>
-            <div class="crm-dashboard-card">
-                <div class="crm-dashboard-head">
-                    <div class="crm-dashboard-heading">
-                        <div class="crm-dashboard-icon activity"><i class="fa-solid fa-clock-rotate-left"></i></div>
-                        <div style="min-width:0;">
-                            <div class="crm-dashboard-title">Atividade recente</div>
-                            <div class="crm-dashboard-description">Hist&oacute;rico dos &uacute;ltimos contatos comerciais</div>
-                        </div>
-                    </div>
-                    <div class="crm-dashboard-tools">
-                        <span class="crm-dashboard-count" id="crmDashFeedCount">0</span>
-                        <select class="chart-pill-select crm-scope-select" id="crmContactsScope" onchange="setCrmContactsScope(this.value)" title="Filtrar por respons&aacute;vel"></select>
-                    </div>
-                </div>
-                <div class="crm-feed-list" id="crmDashFeed"></div>
-            </div>
         </div>
         <div class="dashboard-grid">
             <div class="dashboard-card">
@@ -2195,7 +2180,10 @@
     <div class="table-container" id="contactsSection" style="margin-bottom:18px;display:none;">
         <div class="table-header-bar">
             <div class="table-title-text"><i class="fa-solid fa-clock-rotate-left" style="color:#38bdf8;margin-right:8px;"></i>Últimos Contatos</div>
-            <div style="font-size:0.7rem;color:var(--text-muted);" id="contactsCount">—</div>
+            <div style="display:flex;align-items:center;gap:10px;">
+                <select class="chart-pill-select crm-scope-select" id="crmContactsScope" onchange="setCrmContactsScope(this.value)" title="Filtrar por responsável"></select>
+                <div style="font-size:0.7rem;color:var(--text-muted);" id="contactsCount">—</div>
+            </div>
         </div>
         <div class="table-scroll">
             <table>
@@ -4831,6 +4819,8 @@ function initContactsColumnFilters() {
 }
 
 async function openContactActionModal(id) {
+    openClientContactViewModal(id);
+    return;
     const contact = [...(clientContactsHistory || []), ...(latestContactsByOrder || []), ...(latestContacts || [])].find(c => Number(c.id) === Number(id));
     if (!contact) return;
     const clientName = normalizeClientName(contact.cliente_nome || '');
@@ -4867,6 +4857,7 @@ function renderClientContactView() {
     if (!contact) return;
     document.getElementById('contactViewClientName').textContent = contact.cliente_nome || 'Cliente';
     document.getElementById('contactViewEditBtn').style.display = contactViewEditing ? 'none' : '';
+    document.getElementById('contactViewDeleteBtn').style.display = !contactViewEditing && String(localStorage.getItem('erus_role') || '').trim().toLowerCase() === 'desenvolvedor' ? '' : 'none';
     document.getElementById('contactViewSaveBtn').style.display = contactViewEditing ? '' : 'none';
     document.getElementById('contactViewCancelBtn').style.display = contactViewEditing ? '' : 'none';
     if (contactViewEditing) {
@@ -5011,6 +5002,25 @@ async function saveClientContactEdit() {
         toast('Salvo', 'Atendimento atualizado.', 'success');
     } catch (e) {
         toast('Erro', e.message || 'Falha ao editar atendimento.', 'danger');
+    }
+}
+
+async function deleteClientContact() {
+    if (!currentContactView || !confirm('Excluir este atendimento registrado?')) return;
+    try {
+        const res = await fetch(`/api/clientes-firebird/crm/contatos/${Number(currentContactView.id)}`, { method: 'DELETE' });
+        const json = await res.json();
+        if (!res.ok || !json.success) throw new Error(json.error || 'Erro ao excluir atendimento');
+        const id = Number(currentContactView.id);
+        latestContacts = (latestContacts || []).filter(c => Number(c.id) !== id);
+        clientContactsHistory = (clientContactsHistory || []).filter(c => Number(c.id) !== id);
+        latestContactsByOrder = latestContactsByOrder === null ? null : latestContactsByOrder.filter(c => Number(c.id) !== id);
+        closeClientContactViewModal();
+        renderLatestContacts();
+        renderClientContactsHistory();
+        toast('ExcluÃ­do', 'Atendimento removido.', 'success');
+    } catch (e) {
+        toast('Erro', e.message || 'Falha ao excluir atendimento.', 'danger');
     }
 }
 
