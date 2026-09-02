@@ -3062,7 +3062,7 @@ router.get('/crm/contatos', async (req, res) => {
         let whereClause = 'WHERE crm_user = $1';
         let params = [crmUser];
         if (canViewAll && requestedUser === 'all') {
-            whereClause = "WHERE LOWER(crm_user) IN ('geruza', 'guilherme', 'elisangela')";
+            whereClause = 'WHERE 1 = 1';
             params = [];
         } else if (canViewAll && ['geruza', 'guilherme', 'elisangela'].includes(requestedUser)) {
             params = [requestedUser];
