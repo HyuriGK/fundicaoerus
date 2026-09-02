@@ -8,6 +8,8 @@ const queryFirebird = db => new Promise((resolve, reject) => db.query(`
         c.ID_COM AS COMPRA_ID,
         c.TIPO_NOTA_COM AS TIPO_NOTA,
         cp.ITEM_CPR AS ITEM,
+        cp.PRODUTO_CPR AS PRODUTO_CODIGO,
+        cp.NOME_PRODUTO_CPR AS PRODUTO,
         COALESCE(cpcc.CODIGO_CPCC, 0) AS CENTRO_ITEM_ID,
         c.ENTRADA_COM AS DATA,
         f.CNPJ_CPF_FRN AS CNPJ,
@@ -53,6 +55,8 @@ async function syncNotasServico() {
                 compra_id BIGINT NOT NULL,
                 tipo_nota VARCHAR(10),
                 item INTEGER NOT NULL,
+                produto_codigo VARCHAR(50),
+                produto TEXT,
                 centro_item_id BIGINT NOT NULL,
                 data DATE,
                 cnpj VARCHAR(30),
@@ -70,17 +74,19 @@ async function syncNotasServico() {
                 PRIMARY KEY (batch_id, compra_id, item, centro_item_id)
             );
             CREATE INDEX IF NOT EXISTS idx_notas_contabilidade_sync_batch_data ON notas_contabilidade_sync (batch_id, data DESC);
+            ALTER TABLE notas_contabilidade_sync ADD COLUMN IF NOT EXISTS produto_codigo VARCHAR(50);
+            ALTER TABLE notas_contabilidade_sync ADD COLUMN IF NOT EXISTS produto TEXT;
         `);
         await client.query(`INSERT INTO contabilidade_sync_batches (batch_id, status) VALUES ($1, 'running')`, [batchId]);
         await client.query('BEGIN');
         for (let i = 0; i < rows.length; i += 250) {
             const chunk = rows.slice(i, i + 250), values = [], params = [];
             chunk.forEach((row, index) => {
-                const n = index * 17;
-                values.push(`($${n + 1},$${n + 2},$${n + 3},$${n + 4},$${n + 5},$${n + 6},$${n + 7},$${n + 8},$${n + 9},$${n + 10},$${n + 11},$${n + 12},$${n + 13},$${n + 14},$${n + 15},$${n + 16},$${n + 17})`);
-                params.push(batchId, row.COMPRA_ID, row.TIPO_NOTA, row.ITEM, row.CENTRO_ITEM_ID, row.DATA, row.CNPJ, row.PRESTADOR, row.NOTA_FISCAL, row.VALOR, row.CFOP, row.IMPOSTO_ICMS, row.IMPOSTO_IPI, row.IMPOSTO_PIS, row.IMPOSTO_COFINS, row.CENTRO_CUSTO_CODIGO, row.CENTRO_CUSTO);
+                const n = index * 19;
+                values.push(`($${n + 1},$${n + 2},$${n + 3},$${n + 4},$${n + 5},$${n + 6},$${n + 7},$${n + 8},$${n + 9},$${n + 10},$${n + 11},$${n + 12},$${n + 13},$${n + 14},$${n + 15},$${n + 16},$${n + 17},$${n + 18},$${n + 19})`);
+                params.push(batchId, row.COMPRA_ID, row.TIPO_NOTA, row.ITEM, row.PRODUTO_CODIGO, row.PRODUTO, row.CENTRO_ITEM_ID, row.DATA, row.CNPJ, row.PRESTADOR, row.NOTA_FISCAL, row.VALOR, row.CFOP, row.IMPOSTO_ICMS, row.IMPOSTO_IPI, row.IMPOSTO_PIS, row.IMPOSTO_COFINS, row.CENTRO_CUSTO_CODIGO, row.CENTRO_CUSTO);
             });
-            await client.query(`INSERT INTO notas_contabilidade_sync (batch_id,compra_id,tipo_nota,item,centro_item_id,data,cnpj,prestador,nota_fiscal,valor,cfop,icms,ipi,pis,cofins,centro_custo_codigo,centro_custo) VALUES ${values.join(',')}`, params);
+            await client.query(`INSERT INTO notas_contabilidade_sync (batch_id,compra_id,tipo_nota,item,produto_codigo,produto,centro_item_id,data,cnpj,prestador,nota_fiscal,valor,cfop,icms,ipi,pis,cofins,centro_custo_codigo,centro_custo) VALUES ${values.join(',')}`, params);
         }
         await client.query(`UPDATE contabilidade_sync_batches SET status = 'completed', completed_at = NOW() WHERE batch_id = $1`, [batchId]);
         await client.query(`DELETE FROM contabilidade_sync_batches WHERE batch_id <> $1 AND status = 'completed'`, [batchId]);
