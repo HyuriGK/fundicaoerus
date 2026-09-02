@@ -5358,6 +5358,29 @@ function getClientPortfolioStatus(c) {
     return { key:'inativo', label:'Inativo', cls:'inactive' };
 }
 
+function getCurrentCommercialOwner() {
+    const user = getLoggedCrmUser();
+    if (user.includes('elis')) return 'ELISANGELA';
+    if (user.includes('geruza')) return 'GERUZA MENDES';
+    return '';
+}
+
+function canManageCommercialOwner() {
+    return canSelectCrmContactScope() || Boolean(getCurrentCommercialOwner());
+}
+
+function renderSummaryCommercialOwnerSelect(c) {
+    const current = String(c.responsavelComercial || '').trim().toUpperCase();
+    if (!canManageCommercialOwner()) return escapeHtml(current || '-');
+    const ownOwner = getCurrentCommercialOwner();
+    const options = (canSelectCrmContactScope() ? COMMERCIAL_OWNER_OPTIONS : [ownOwner]).filter(Boolean);
+    if (current && !options.includes(current)) options.unshift(current);
+    return `<select class="commercial-owner-select ${current ? 'assigned' : 'unassigned'}" data-previous="${escapeHtml(current)}" onchange="saveCommercialOwner(${Number(c.empresa)},${Number(c.codigo)},this)">
+        <option value="">NÃO É UM POSSÍVEL CLIENTE</option>
+        ${options.map(name => `<option value="${name}"${current === name ? ' selected' : ''}>${name}</option>`).join('')}
+    </select>`;
+}
+
 function renderCommercialOwnerSelect(c) {
     const current = String(c.responsavelComercial || '').trim().toUpperCase();
     const canAssignOwner = canSelectCrmContactScope();
@@ -5456,7 +5479,7 @@ function renderClientSummary(client) {
         ['Código', client.codigo],
         ['Status', client.bloqueado ? 'Bloqueado' : client.ativo ? 'Ativo' : 'Inativo'],
         ['CNPJ', client.cnpjCpf],
-        ['Responsável comercial', client.responsavelComercial],
+        ['Responsável comercial', renderSummaryCommercialOwnerSelect(client)],
         ['Contato', client.contato],
         ['Telefone principal', client.telefone1],
         ['Telefone alternativo', client.telefone2],
@@ -5467,7 +5490,8 @@ function renderClientSummary(client) {
         ['Primeira compra no histórico', firstDate ? firstDate.toLocaleDateString('pt-BR') : '-']
     ].map(([label, value]) => {
         const full = ['Razão social', 'E-mail', 'Endereço', 'Primeira compra no histórico'].includes(label) ? ' full' : '';
-        return `<div class="summary-field${full}"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value || '-')}</strong></div>`;
+        const content = label === 'Responsável comercial' ? value : escapeHtml(value || '-');
+        return `<div class="summary-field${full}"><span>${escapeHtml(label)}</span><strong>${content}</strong></div>`;
     }).join('');
 
     const blockedToggle = document.getElementById('clientBlockedToggle');

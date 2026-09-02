@@ -2570,6 +2570,11 @@ router.post('/responsavel-comercial', async (req, res) => {
         const empresa = Number(req.body.empresa);
         const codigo = Number(req.body.codigo);
         const responsavel = String(req.body.responsavelComercial || '').trim().toUpperCase();
+        const role = String(req.user?.role || '').trim().toLowerCase();
+        const commercialOwner = getCommercialOwnerRestriction(req);
+        const canManageOwner = Boolean(commercialOwner) || ['admin', 'desenvolvedor', 'gerente comercial', 'diretor'].includes(role);
+        if (!canManageOwner) return res.status(403).json({ success: false, error: 'Sem permissao para alterar responsavel comercial.' });
+        if (commercialOwner && responsavel && responsavel !== commercialOwner) return res.status(403).json({ success: false, error: 'Voce so pode assumir clientes para a sua carteira.' });
 
         if (!Number.isInteger(empresa) || !Number.isInteger(codigo)) {
             return res.status(400).json({ success: false, error: 'Cliente inválido.' });
