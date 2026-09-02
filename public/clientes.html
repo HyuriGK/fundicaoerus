@@ -5467,6 +5467,19 @@ function normalizeClientName(value) {
     return String(value || '').trim().toUpperCase().replace(/\s+/g, ' ');
 }
 
+function openCnpjLookup(cnpj) {
+    const digits = String(cnpj || '').replace(/\D/g, '');
+    if (digits.length !== 14) return toast('CNPJ inv\u00e1lido', 'N\u00e3o foi poss\u00edvel consultar este documento.', 'danger');
+    window.open(`https://cnpj.biz/procura/${digits}`, '_blank', 'noopener');
+}
+
+function renderCnpjLookup(cnpj) {
+    const digits = String(cnpj || '').replace(/\D/g, '');
+    const value = escapeHtml(cnpj || '-');
+    if (digits.length !== 14) return value;
+    return `<span style="display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;">${value}<button type="button" class="btn-act" onclick="event.stopPropagation();openCnpjLookup('${digits}')" style="height:25px;padding:0 8px;font-size:.62rem;color:#38bdf8;border-color:rgba(56,189,248,.35);" title="Consultar CNPJ"><i class="fa-solid fa-magnifying-glass"></i> CONSULTAR</button></span>`;
+}
+
 function renderClientSummary(client) {
     const rows = getClientSummaryRows(client);
     const dates = rows.map(item => parseFatDateLocal(item.data)).filter(d => d && !isNaN(d)).sort((a, b) => a - b);
@@ -5489,7 +5502,11 @@ function renderClientSummary(client) {
         ['Primeira compra no histórico', firstDate ? firstDate.toLocaleDateString('pt-BR') : '-']
     ].map(([label, value]) => {
         const full = ['Razão social', 'E-mail', 'Endereço', 'Primeira compra no histórico'].includes(label) ? ' full' : '';
-        const content = label === 'Responsável comercial' ? value : escapeHtml(value || '-');
+        const content = label === 'Responsável comercial'
+            ? value
+            : label === 'CNPJ'
+                ? renderCnpjLookup(value)
+                : escapeHtml(value || '-');
         return `<div class="summary-field${full}"><span>${escapeHtml(label)}</span><strong>${content}</strong></div>`;
     }).join('');
 
