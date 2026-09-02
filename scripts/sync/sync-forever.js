@@ -36,14 +36,25 @@ function unlockSyncPage(pageId) {
 }
 
 function lockSyncPage(pageId) {
-    if (!pageId) return Promise.resolve();
+    if (!pageId) return Promise.resolve(120000);
     const data = JSON.stringify({ page_id: pageId });
     return new Promise(resolve => {
         const req = https.request({
             hostname: 'fundicaoerus.vercel.app', port: 443,
             path: '/api/page-locks/sync-lock', method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) }
-        }, res => { res.resume(); res.on('end', resolve); });
+        }, res => {
+            let body = '';
+            res.on('data', chunk => { body += chunk; });
+            res.on('end', () => {
+                try {
+                    const { estimated_ms } = JSON.parse(body);
+                    resolve(Number(estimated_ms) || 120000);
+                } catch (e) {
+                    resolve(120000);
+                }
+            });
+        });
         req.on('error', resolve);
         req.setTimeout(5000, () => { req.destroy(); resolve(); });
         req.write(data);
@@ -376,10 +387,21 @@ function logEvent(script, message, isError = true) {
 }
 
 // ─── RUN BAT ─────────────────────────────────────────────────────────────────
-function runBat(bat) {
+function runBat(bat, estimatedMs = 120000) {
     return new Promise(resolve => {
         scriptState[bat.name] = 'RUNNING';
         currentProg[bat.name] = 0;
+
+        const startedAt = Date.now();
+        const updateEstimatedProgress = () => {
+            const progress = Math.min(95, Math.floor(((Date.now() - startedAt) / estimatedMs) * 100));
+            if (progress > currentProg[bat.name]) {
+                currentProg[bat.name] = progress;
+                updateSyncProgress(bat.pageId, progress);
+            }
+        };
+        updateEstimatedProgress();
+        const estimatedProgressTimer = setInterval(updateEstimatedProgress, 1000);
 
         const child = spawn('cmd.exe', ['/c', path.join(ROOT_DIR, bat.file)], { stdio: ['ignore','pipe','pipe'] });
 
@@ -397,8 +419,8 @@ function runBat(bat) {
                         const progressName = parts[1];
                         const pct = parseInt(parts[2]) || 0;
                         const targetName = (progressName === bat.name || progressName === bat.progressAlias) ? bat.name : progressName;
-                        currentProg[targetName] = pct;
-                        updateSyncProgress(bat.pageId, pct);
+                        currentProg[targetName] = Math.max(currentProg[targetName] || 0, pct);
+                        updateSyncProgress(bat.pageId, currentProg[targetName]);
                     }
                 } else if (l.includes('Falha definitiva')) {
                     // Só conta erro após esgotar todas as tentativas do firebird-helper
@@ -428,6 +450,7 @@ function runBat(bat) {
         });
 
         child.on('close', async code => {
+            clearInterval(estimatedProgressTimer);
             if (hadFatal || code !== 0) {
                 scriptState[bat.name] = 'ERROR';
                 if (code !== 0) logEvent(bat.name, `Falha - codigo de saida ${code}`, true);
@@ -529,8 +552,8 @@ async function startQueueWorker(bats) {
         const startedAt = Date.now();
         nextRunAt[bat.name] = null;
         scriptState[bat.name] = 'STARTING';
-        await lockSyncPage(bat.pageId);
-        await runBat(bat);
+        const estimatedMs = await lockSyncPage(bat.pageId);
+        await runBat(bat, estimatedMs);
 
         const duration = (Date.now() - startedAt) / 1000;
         const startDate = new Date(startedAt);
