@@ -43,11 +43,10 @@ router.post('/log', async (req, res) => {
 // GET /api/audit-logger/recent (Optional: for admin view)
 router.get('/recent', async (req, res) => {
     try {
-        const limit = parseInt(req.query.limit) || 100;
-        const result = await pool.query(
-            `SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT $1`,
-            [limit]
-        );
+        const requestedLimit = String(req.query.limit || '100').toLowerCase();
+        const result = requestedLimit === 'all'
+            ? await pool.query('SELECT * FROM audit_logs ORDER BY created_at DESC')
+            : await pool.query('SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT $1', [parseInt(requestedLimit) || 100]);
         res.json(result.rows);
     } catch (error) {
         console.error('Error fetching logs:', error);

@@ -2348,30 +2348,36 @@
         if (body) body.innerHTML = adminLogRows(filtered, true, '__nativeLogsFiltered');
     }
 
-    async function loadNativeLogs() {
+    function nativeLogLimitOptions(selected) {
+        return ['50', '100', '200', 'all'].map(value => `<option value="${value}"${value === selected ? ' selected' : ''}>${value === 'all' ? 'Todos' : `Ultimos ${value}`}</option>`).join('');
+    }
+
+    async function loadNativeLogs(limit) {
+        const selectedLimit = limit || document.getElementById('nativeLogsLimit')?.value || '200';
         adminContent('<div class="native-empty">Carregando logs...</div>');
         try {
-            const r = await fetch('/api/audit-logger/recent?limit=200', { headers: adminHeaders() });
+            const r = await fetch(`/api/audit-logger/recent?limit=${selectedLimit}`, { headers: adminHeaders() });
             if (!r.ok) throw new Error('Erro ao carregar logs');
             const logs = await r.json();
             if (!Array.isArray(logs)) throw new Error('Resposta invalida');
             adminContent(`<div class="admin-skin">
-                <div class="native-admin-toolbar"><button class="native-btn" onclick="loadNativeLogs()"><i class="fa-solid fa-rotate"></i> Atualizar</button><input id="nativeLogsScreenSearch" class="native-log-screen-search" list="nativeLogsScreenOptions" placeholder="Pesquisar tela..." autocomplete="off" oninput="filterNativeLogsScreen(this.value)" onchange="filterNativeLogsScreen(this.value, true)"><datalist id="nativeLogsScreenOptions">${nativeLogScreenOptions(logs).map(screen => `<option value="${escapeHtml(screen)}"></option>`).join('')}</datalist></div>
+                <div class="native-admin-toolbar"><button class="native-btn" onclick="loadNativeLogs()"><i class="fa-solid fa-rotate"></i> Atualizar</button><select id="nativeLogsLimit" class="native-btn" onchange="loadNativeLogs(this.value)">${nativeLogLimitOptions(selectedLimit)}</select><input id="nativeLogsScreenSearch" class="native-log-screen-search" list="nativeLogsScreenOptions" placeholder="Pesquisar tela..." autocomplete="off" oninput="filterNativeLogsScreen(this.value)" onchange="filterNativeLogsScreen(this.value, true)"><datalist id="nativeLogsScreenOptions">${nativeLogScreenOptions(logs).map(screen => `<option value="${escapeHtml(screen)}"></option>`).join('')}</datalist></div>
                 <div class="table-container"><table id="adminLogsTable"><thead><tr><th>Data/Hora</th><th>Usuario</th><th>Dispositivo</th><th>Acao</th><th>Tela</th><th>Detalhes</th></tr></thead><tbody>${adminLogRows(logs, true, '__nativeLogs')}</tbody></table></div>
             </div>`);
         } catch(e) { showToast('Erro', 'Nao foi possivel carregar os logs.', 'danger'); }
     }
 
-    async function nativeOpenUserLogs(username) {
+    async function nativeOpenUserLogs(username, limit) {
+        const selectedLimit = limit || document.getElementById('nativeUserLogsLimit')?.value || '200';
         currentAdminFeature = 'userLogs';
         document.getElementById('tiAdminNativeTitle').innerHTML = `<i class="fa-solid fa-clock-rotate-left" style="color:#818cf8"></i> Logs de ${escapeHtml(username)}`;
         switchTiView('admin');
         adminContent('<div class="native-empty">Carregando logs do usuario...</div>');
         try {
-            const json = await adminRequest(`/api/admin/users/${encodeURIComponent(username)}/logs?limit=200`, { method:'GET' });
+            const json = await adminRequest(`/api/admin/users/${encodeURIComponent(username)}/logs?limit=${selectedLimit}`, { method:'GET' });
             const logs = json.logs || [];
             adminContent(`<div class="admin-skin">
-                <div class="native-admin-toolbar"><button class="native-btn" onclick="openAdminFeature('users')"><i class="fa-solid fa-arrow-left"></i> Usuarios</button><button class="native-btn" onclick="nativeOpenUserLogs('${jsAttr(username)}')"><i class="fa-solid fa-rotate"></i> Atualizar</button></div>
+                <div class="native-admin-toolbar"><button class="native-btn" onclick="openAdminFeature('users')"><i class="fa-solid fa-arrow-left"></i> Usuarios</button><button class="native-btn" onclick="nativeOpenUserLogs('${jsAttr(username)}')"><i class="fa-solid fa-rotate"></i> Atualizar</button><select id="nativeUserLogsLimit" class="native-btn" onchange="nativeOpenUserLogs('${jsAttr(username)}',this.value)">${nativeLogLimitOptions(selectedLimit)}</select></div>
                 <div class="table-container"><table id="userLogsTable" class="logs-table"><thead><tr><th>Data/Hora</th><th>Dispositivo</th><th>Acao</th><th>Tela</th><th>Detalhes</th></tr></thead><tbody>${adminLogRows(logs, false, '__nativeUserLogs')}</tbody></table></div>
             </div>`);
         } catch(e) { showToast('Erro', e.message || 'Erro ao carregar logs.', 'danger'); }
