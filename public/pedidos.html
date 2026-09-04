@@ -6560,7 +6560,10 @@
             chartConcentracao = new Chart(document.getElementById('chartConcentracao').getContext('2d'), {
                 type: 'bar',
                 data: {
-                    labels: labels.map(name => name.length > 25 ? name.slice(0, 25) + '...' : name),
+                    labels: labels.map(name => {
+                        if (isIndustrialTouchMode()) return name.trim().split(/\s+/)[0] || name;
+                        return name.length > 25 ? name.slice(0, 25) + '...' : name;
+                    }),
                     datasets: [
                         {
                             label: isValueMetric ? 'Valor (R$)' : 'Peso (kg)', data: metricData,
@@ -7348,14 +7351,14 @@ function flashConcentracaoBar(barIndex) {
                 responsive: true,
                 maintainAspectRatio: false,
                 indexAxis: isHorizontalPareto ? 'y' : 'x',
-                layout: isMoldagemMonthly ? { padding: { top: 30 } } : undefined,
+                layout: isMoldagemMonthly ? { padding: { top: 8 } } : undefined,
                 scales: isHorizontalPareto ? horizontalScales : {
                     y: {
                         type: 'linear',
                         display: true,
                         position: 'left',
                         beginAtZero: true,
-                        grace: isMoldagemMonthly ? '20%' : undefined,
+                        grace: isMoldagemMonthly ? '10%' : undefined,
                         grid: { color: _gc() },
                         ticks: { color: _tc() },
                         title: { display: !isPareto, text: unit, color: _tc() },
@@ -7385,39 +7388,17 @@ function flashConcentracaoBar(barIndex) {
                 },
                 plugins: {
                     legend: { display: isPareto || isMoldagemMonthly, labels: { color: _tc() } },
-                    datalabels: isMoldagemMonthly ? {
-                        labels: {
-                            percent: {
-                                color: '#ffffff',
-                                font: { size: 9, weight: '700' },
-                                formatter: function (value, context) {
-                                    const total = Number(context.dataset.extraMonthlyTotal?.[context.dataIndex] || 0);
-                                    const pct = total > 0 ? Number(value || 0) / total * 100 : 0;
-                                    return pct >= 7 ? `${pct.toFixed(0)}%` : '';
-                                }
-                            },
-                            total: {
-                                anchor: 'end',
-                                align: 'top',
-                                offset: 5,
-                                color: _ltPed ? '#111827' : '#ffffff',
-                                font: { size: 12, weight: '800' },
-                                display: function (context) {
-                                    const datasets = context.chart.data.datasets;
-                                    const total = Number(context.dataset.extraMonthlyTotal?.[context.dataIndex] || 0);
-                                    return context.datasetIndex === datasets.length - 1 && total > 0;
-                                },
-                                formatter: function (value, context) {
-                                    const total = Number(context.dataset.extraMonthlyTotal?.[context.dataIndex] || 0);
-                                    return `${formatNumber(total / 1000, 1)} TON`;
-                                }
-                            }
-                        }
-                    } : { display: false },
+                    datalabels: { display: false },
                     tooltip: {
-                        position: isHorizontalPareto ? 'nearest' : 'average',
-                        xAlign: isHorizontalPareto ? 'left' : undefined,
-                        yAlign: isHorizontalPareto ? 'center' : undefined,
+                        position: isIndustrialTouchMode() ? 'nearest' : (isHorizontalPareto ? 'nearest' : 'average'),
+                        xAlign: isIndustrialTouchMode() ? 'center' : (isHorizontalPareto ? 'left' : undefined),
+                        yAlign: isIndustrialTouchMode() ? 'bottom' : (isHorizontalPareto ? 'center' : undefined),
+                        caretPadding: isIndustrialTouchMode() ? 10 : 2,
+                        padding: isIndustrialTouchMode() ? 12 : 6,
+                        titleFont: isIndustrialTouchMode() ? { size: 13, weight: '700' } : undefined,
+                        bodyFont: isIndustrialTouchMode() ? { size: 12 } : undefined,
+                        boxPadding: isIndustrialTouchMode() ? 5 : 2,
+                        displayColors: !isIndustrialTouchMode(),
                         callbacks: {
                             title: function (contexts) {
                                 if (!contexts?.length) return '';
