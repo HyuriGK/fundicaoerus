@@ -745,6 +745,7 @@
         .acabamento-visual img { width:100%; height:330px; object-fit:contain; }
         .acabamento-visual-empty { color:var(--text-muted); text-align:center; }
         .acabamento-visual-empty i { display:block; margin-bottom:10px; color:var(--color-primary); font-size:2.6rem; opacity:.65; }
+        .acabamento-observacao { min-height:84px; margin-top:10px; padding:12px; border:1px solid var(--border-subtle); border-radius:8px; background:rgba(255,255,255,.025); color:#fff; font-size:.9rem; white-space:pre-wrap; }
         @media (max-width:700px) { .acabamento-sheet { padding:20px 14px; } .acabamento-title { grid-template-columns:44px 1fr 44px; } .acabamento-title img { width:40px; } .acabamento-grid, .acabamento-fields { grid-template-columns:1fr 1fr; } .acabamento-grid .acabamento-field:nth-child(2) { grid-column:span 2; } }
         @media (max-width:650px) { .container { padding:28px 16px 42px; } .tipo-switcher { width:100% !important; justify-content:center; } .month-btn { flex:1 1 calc(50% - 7px); padding:0 12px !important; } .search-container input { padding:14px; } .status-empty { min-height:300px; } }
     </style>
@@ -813,6 +814,18 @@
             </div>
 
             <div class="acabamento-panel" style="margin-top:18px;">
+                <div class="acabamento-section-title">Tratamento Térmico</div>
+                <div class="acabamento-fields" id="tratamentoTermicoCampos"></div>
+            </div>
+
+            <div class="acabamento-panel" style="margin-top:18px;">
+                <div class="acabamento-section-title">Acabamento</div>
+                <div class="acabamento-fields" id="acabamentoCampos"></div>
+                <div class="acabamento-label" style="margin-top:16px;">Observação de acabamento</div>
+                <div class="acabamento-observacao" id="valObsAcabamento">-</div>
+            </div>
+
+            <div class="acabamento-panel" style="margin-top:18px;">
                 <div class="acabamento-section-title">Visual do Modelo / Conjunto</div>
                 <div class="acabamento-visual" id="visualModelo">
                     <div class="acabamento-visual-empty" id="visualModeloVazio"><i class="fa-solid fa-image"></i>Sem imagem cadastrada</div>
@@ -854,6 +867,51 @@
                 : '-';
         };
 
+        function renderField(container, label, value) {
+            const field = document.createElement('div');
+            field.className = 'acabamento-field';
+            const labelEl = document.createElement('span');
+            labelEl.className = 'acabamento-label';
+            labelEl.textContent = label;
+            const valueEl = document.createElement('span');
+            valueEl.className = 'acabamento-value';
+            valueEl.textContent = value || '-';
+            field.append(labelEl, valueEl);
+            container.appendChild(field);
+        }
+
+        function yesNo(value) {
+            return String(value || '').trim().toUpperCase() === 'S' ? 'Sim' : 'Não';
+        }
+
+        function renderDadosAcabamento(dados) {
+            const tratamento = document.getElementById('tratamentoTermicoCampos');
+            const acabamento = document.getElementById('acabamentoCampos');
+            tratamento.replaceChildren();
+            acabamento.replaceChildren();
+
+            const tratamentos = dados.tratamentos || {};
+            const resfriamentos = dados.resfriamentos || {};
+            const temperaturas = dados.temperaturas || {};
+            [
+                ['Normalização', 'normalizacao'], ['Revenimento', 'revenimento'], ['Têmpera', 'tempera'],
+                ['Austenitização / Solubilização', 'solubilizacao'], ['Recozimento', 'recozimento']
+            ].forEach(([nome, chave]) => {
+                const ativo = yesNo(tratamentos[chave]);
+                const detalhes = [resfriamentos[chave], temperaturas[chave] ? `Programa: ${temperaturas[chave]}` : ''].filter(Boolean).join(' • ');
+                renderField(tratamento, nome, ativo === 'Sim' ? `Sim${detalhes ? ` — ${detalhes}` : ''}` : 'Não');
+            });
+            renderField(tratamento, 'Tratamento localizado', temperaturas.localizada ? `Programa: ${temperaturas.localizada}` : 'Não informado');
+            renderField(tratamento, 'Tipo de têmpera', dados.tipoTempera || '-');
+            renderField(tratamento, 'Dureza da peça', [dados.durezaPecaMin, dados.durezaPecaMax].filter(value => value !== null && value !== undefined && value !== '').join(' a ') + (dados.durezaPecaUnidade ? ` ${dados.durezaPecaUnidade}` : '') || '-');
+            renderField(tratamento, 'Dureza localizada', [dados.durezaLocalizadaMin, dados.durezaLocalizadaMax].filter(value => value !== null && value !== undefined && value !== '').join(' a ') + (dados.durezaLocalizadaUnidade ? ` ${dados.durezaLocalizadaUnidade}` : '') || '-');
+
+            renderField(acabamento, 'Corte de canal', dados.corteCanal || '-');
+            renderField(acabamento, 'Desbaste', dados.desbaste || '-');
+            renderField(acabamento, 'Jateamento', dados.jateamento || '-');
+            document.getElementById('valObsAcabamento').textContent = dados.observacao || 'Nenhuma observação cadastrada.';
+        }
+
         async function searchSheet() {
             const codigo = document.getElementById('searchInput').value.trim();
             if (!codigo) return document.getElementById('searchInput').focus();
@@ -879,6 +937,7 @@
                 document.getElementById('valPesoMachos').textContent = formatKg(data.PESO_MACHOS);
                 document.getElementById('valPesoBolo').textContent = formatKg(data.PESO_BOLO_FIC);
                 document.getElementById('valRelacao').textContent = data.RELACAO_MOLDE_METAL ?? '-';
+                renderDadosAcabamento(data.ACABAMENTO_DADOS || {});
 
                 const foto = document.getElementById('valFoto');
                 const semFoto = document.getElementById('visualModeloVazio');

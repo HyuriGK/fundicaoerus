@@ -182,13 +182,14 @@ function getMaterial(db, produtoCodigo) {
 // Fetch BLOBs for a single ficha via individual query (avoids invalidation)
 function getBlobs(db, fichaCodigo) {
     return new Promise((resolve) => {
-        db.query('SELECT MOLDAGEM_OBS_FIC, MINIATURA_FIC FROM FICHA_TECNICA WHERE CODIGO_FIC = ?', [fichaCodigo], async (err, rows) => {
-            if (err || !rows || rows.length === 0) return resolve({ descricao: '', fotoBuffer: null });
+        db.query('SELECT MOLDAGEM_OBS_FIC, OBS_ACABAMENTO_FIC, MINIATURA_FIC FROM FICHA_TECNICA WHERE CODIGO_FIC = ?', [fichaCodigo], async (err, rows) => {
+            if (err || !rows || rows.length === 0) return resolve({ descricao: '', observacaoAcabamento: '', fotoBuffer: null });
             const r = rows[0];
             const obsRaw = await readBlob(r.MOLDAGEM_OBS_FIC);
+            const obsAcabamentoRaw = await readBlob(r.OBS_ACABAMENTO_FIC);
             const fotoBuffer = await readBlobBuffer(r.MINIATURA_FIC);
             const descricao = obsRaw ? parseObservation(obsRaw) : '';
-            resolve({ descricao, fotoBuffer });
+            resolve({ descricao, observacaoAcabamento: obsAcabamentoRaw ? parseObservation(obsAcabamentoRaw) : '', fotoBuffer });
         });
     });
 }
@@ -211,6 +212,13 @@ async function syncFichas() {
                 F.PESO_TAMPA_FIC, F.PESO_FUNDO_FIC, F.CAVIDADE_QTDE_FIGURAS_FIC, F.TIPO_MODELO_FIC,
                 F.PESO_MACHOS_FIC, F.DATA_FIC, F.TINTA_REFRATARIA_FIC, F.TIPO_FERRAMENTAL_FIC,
                 F.NORMALIZACAO_FIC, F.REVENIMENTO_FIC, F.TEMPERA_FIC, F.SOLUBILIZACAO_FIC, F.RECOZIMENTO_FIC,
+                F.RESFRIAMENTO_NORMALIZACAO_FIC, F.RESFRIAMENTO_REVENIMENTO_FIC, F.RESFRIAMENTO_TEMPERA_FIC,
+                F.RESFRIAMENTO_SOLUBILIZACAO_FIC, F.RESFRIAMENTO_RECOZIMENTO_FIC,
+                F.TEMPERATURA_NORMALIZACAO_FIC, F.TEMPERATURA_REVENIMENTO_FIC, F.TEMPERATURA_TEMPERA_FIC,
+                F.TEMPERATURA_SOLUBILIZACAO_FIC, F.TEMPERATURA_RECOZIMENTO_FIC, F.TEMPERATURA_LOCALIZADA_FIC,
+                F.TIPO_TEMPERA_FIC, F.DUREZA_PECA_FIC, F.DUREZA_PECA_MAX_FIC, F.DUREZA_PECA_UN_FIC,
+                F.DUREZA_LOCALIZADA_MIN_FIC, F.DUREZA_LOCALIZADA_MAX_FIC, F.DUREZA_LOCALIZADA_UND_MED_FIC,
+                F.CORTE_CANAL_FIC, F.DESBASTE_FIC, F.JATEAMENTO_FIC,
                 P.NOME_PRO, P.PESO_LIQUIDO_PRO, P.PESO_BRUTO_PRO, P.SITUACAO_PRO, P.REFERENCIA_PRO,
                 C.RAZAO_SOCIAL_CLI as NOME_CLIENTE
             FROM FICHA_TECNICA F
@@ -241,6 +249,7 @@ async function syncFichas() {
             await pool.query(`ALTER TABLE ficha_tecnica ADD COLUMN IF NOT EXISTS tempera_fic CHAR(1)`);
             await pool.query(`ALTER TABLE ficha_tecnica ADD COLUMN IF NOT EXISTS solubilizacao_fic CHAR(1)`);
             await pool.query(`ALTER TABLE ficha_tecnica ADD COLUMN IF NOT EXISTS recozimento_fic CHAR(1)`);
+            await pool.query(`ALTER TABLE ficha_tecnica ADD COLUMN IF NOT EXISTS acabamento_dados JSONB NOT NULL DEFAULT '{}'::jsonb`);
 
             // Garantir tabela de fotos do relatório existe
             await pool.query(`
@@ -268,6 +277,41 @@ async function syncFichas() {
                     const blobs = await getBlobs(db, row.CODIGO_FIC);
                     const descricao = blobs.descricao || '';
                     const fotoBase64 = blobs.fotoBuffer ? blobs.fotoBuffer.toString('base64') : null;
+                    const acabamentoDados = {
+                        tratamentos: {
+                            normalizacao: row.NORMALIZACAO_FIC,
+                            revenimento: row.REVENIMENTO_FIC,
+                            tempera: row.TEMPERA_FIC,
+                            solubilizacao: row.SOLUBILIZACAO_FIC,
+                            recozimento: row.RECOZIMENTO_FIC
+                        },
+                        resfriamentos: {
+                            normalizacao: row.RESFRIAMENTO_NORMALIZACAO_FIC,
+                            revenimento: row.RESFRIAMENTO_REVENIMENTO_FIC,
+                            tempera: row.RESFRIAMENTO_TEMPERA_FIC,
+                            solubilizacao: row.RESFRIAMENTO_SOLUBILIZACAO_FIC,
+                            recozimento: row.RESFRIAMENTO_RECOZIMENTO_FIC
+                        },
+                        temperaturas: {
+                            normalizacao: row.TEMPERATURA_NORMALIZACAO_FIC,
+                            revenimento: row.TEMPERATURA_REVENIMENTO_FIC,
+                            tempera: row.TEMPERATURA_TEMPERA_FIC,
+                            solubilizacao: row.TEMPERATURA_SOLUBILIZACAO_FIC,
+                            recozimento: row.TEMPERATURA_RECOZIMENTO_FIC,
+                            localizada: row.TEMPERATURA_LOCALIZADA_FIC
+                        },
+                        tipoTempera: row.TIPO_TEMPERA_FIC,
+                        durezaPecaMin: row.DUREZA_PECA_FIC,
+                        durezaPecaMax: row.DUREZA_PECA_MAX_FIC,
+                        durezaPecaUnidade: row.DUREZA_PECA_UN_FIC,
+                        durezaLocalizadaMin: row.DUREZA_LOCALIZADA_MIN_FIC,
+                        durezaLocalizadaMax: row.DUREZA_LOCALIZADA_MAX_FIC,
+                        durezaLocalizadaUnidade: row.DUREZA_LOCALIZADA_UND_MED_FIC,
+                        corteCanal: row.CORTE_CANAL_FIC,
+                        desbaste: row.DESBASTE_FIC,
+                        jateamento: row.JATEAMENTO_FIC,
+                        observacao: blobs.observacaoAcabamento
+                    };
 
                     // Fetch Material + Lote
                     const { material: materialReal, lote: loteReal } = await getMaterial(db, row.PRO_CODIGO_FIC);
@@ -336,8 +380,9 @@ async function syncFichas() {
                             peso_machos, detalhes_machos, tinta_refrataria_fic, detalhes_luvas, tipo_ferramental_fic,
                             lote_pmt, tipo_moldagem_procedimento,
                             normalizacao_fic, revenimento_fic, tempera_fic, solubilizacao_fic, recozimento_fic,
+                            acabamento_dados,
                             updated_at
-                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, NOW())
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, NOW())
                         ON CONFLICT (pro_codigo_fic) DO UPDATE SET
                             material_fic = EXCLUDED.material_fic,
                             peso_liquido_fic = EXCLUDED.peso_liquido_fic,
@@ -375,6 +420,7 @@ async function syncFichas() {
                             tempera_fic = EXCLUDED.tempera_fic,
                             solubilizacao_fic = EXCLUDED.solubilizacao_fic,
                             recozimento_fic = EXCLUDED.recozimento_fic,
+                            acabamento_dados = EXCLUDED.acabamento_dados,
                             updated_at = NOW();
                     `, [
                         sanitize(row.PRO_CODIGO_FIC), sanitize(materialReal || row.MAT_NOMENCLATURA_FIC), row.PESO_LIQUIDO_FIC, row.PESO_UNIT_PCP_FIC,
@@ -388,6 +434,7 @@ async function syncFichas() {
                         sanitize(loteReal), moldagemProcedimento,
                         sanitize(row.NORMALIZACAO_FIC), sanitize(row.REVENIMENTO_FIC),
                         sanitize(row.TEMPERA_FIC), sanitize(row.SOLUBILIZACAO_FIC), sanitize(row.RECOZIMENTO_FIC)
+                        , JSON.stringify(acabamentoDados)
                     ]);
                     count++;
                     if (count % 10 === 0) {

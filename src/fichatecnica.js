@@ -93,7 +93,8 @@ router.get('/:codigo', async (req, res) => {
                 tipo_ferramental_fic as "TIPO_FERRAMENTAL_FIC",
                 miniatura_link as "MINIATURA_LINK",
                 lote_pmt as "LOTE_PMT",
-                tipo_moldagem_procedimento as "TIPO_MOLDAGEM_PROCEDIMENTO"
+                tipo_moldagem_procedimento as "TIPO_MOLDAGEM_PROCEDIMENTO",
+                acabamento_dados as "ACABAMENTO_DADOS"
             FROM ficha_tecnica
             WHERE pro_codigo_fic = $1
             LIMIT 1
