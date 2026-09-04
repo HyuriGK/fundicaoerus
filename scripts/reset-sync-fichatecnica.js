@@ -212,13 +212,16 @@ async function syncFichas() {
                 F.PESO_TAMPA_FIC, F.PESO_FUNDO_FIC, F.CAVIDADE_QTDE_FIGURAS_FIC, F.TIPO_MODELO_FIC,
                 F.PESO_MACHOS_FIC, F.DATA_FIC, F.TINTA_REFRATARIA_FIC, F.TIPO_FERRAMENTAL_FIC,
                 F.NORMALIZACAO_FIC, F.REVENIMENTO_FIC, F.TEMPERA_FIC, F.SOLUBILIZACAO_FIC, F.RECOZIMENTO_FIC,
+                F.TRATAMENTO_NAO_APLICAVEL_FIC, F.LOCALIZADA_FIC, F.TIPO_LOCALIZADA_FIC, F.ORIENTACAO_TIPO_LOCALIZADA_FIC,
                 F.RESFRIAMENTO_NORMALIZACAO_FIC, F.RESFRIAMENTO_REVENIMENTO_FIC, F.RESFRIAMENTO_TEMPERA_FIC,
-                F.RESFRIAMENTO_SOLUBILIZACAO_FIC, F.RESFRIAMENTO_RECOZIMENTO_FIC,
+                F.RESFRIAMENTO_SOLUBILIZACAO_FIC, F.RESFRIAMENTO_RECOZIMENTO_FIC, F.RESFRIAMENTO_LOCALIZADA_FIC,
+                F.RESFRIAMENTO_NORMALIZ_DESC_FIC, F.RESFRIAMENTO_REVENIME_DESC_FIC, F.RESFRIAMENTO_TEMPERA_DESC_FIC,
+                F.RESFRIAMENTO_SOLUBILI_DESC_FIC, F.RESFRIAMENTO_RECOZIME_DESC_FIC, F.RESFRIAMENTO_LOCALIZA_DESC_FIC,
                 F.TEMPERATURA_NORMALIZACAO_FIC, F.TEMPERATURA_REVENIMENTO_FIC, F.TEMPERATURA_TEMPERA_FIC,
                 F.TEMPERATURA_SOLUBILIZACAO_FIC, F.TEMPERATURA_RECOZIMENTO_FIC, F.TEMPERATURA_LOCALIZADA_FIC,
                 F.TIPO_TEMPERA_FIC, F.DUREZA_PECA_FIC, F.DUREZA_PECA_MAX_FIC, F.DUREZA_PECA_UN_FIC,
                 F.DUREZA_LOCALIZADA_MIN_FIC, F.DUREZA_LOCALIZADA_MAX_FIC, F.DUREZA_LOCALIZADA_UND_MED_FIC,
-                F.CORTE_CANAL_FIC, F.DESBASTE_FIC, F.JATEAMENTO_FIC,
+                F.CORTE_CANAL_FIC, F.DESBASTE_FIC, F.DESBASTE_DESC_FIC, F.JATEAMENTO_FIC,
                 P.NOME_PRO, P.PESO_LIQUIDO_PRO, P.PESO_BRUTO_PRO, P.SITUACAO_PRO, P.REFERENCIA_PRO,
                 C.RAZAO_SOCIAL_CLI as NOME_CLIENTE
             FROM FICHA_TECNICA F
@@ -285,12 +288,25 @@ async function syncFichas() {
                             solubilizacao: row.SOLUBILIZACAO_FIC,
                             recozimento: row.RECOZIMENTO_FIC
                         },
+                        naoAplicavel: row.TRATAMENTO_NAO_APLICAVEL_FIC,
+                        localizada: row.LOCALIZADA_FIC,
+                        tipoLocalizada: row.TIPO_LOCALIZADA_FIC,
+                        orientacaoLocalizada: row.ORIENTACAO_TIPO_LOCALIZADA_FIC,
                         resfriamentos: {
                             normalizacao: row.RESFRIAMENTO_NORMALIZACAO_FIC,
                             revenimento: row.RESFRIAMENTO_REVENIMENTO_FIC,
                             tempera: row.RESFRIAMENTO_TEMPERA_FIC,
                             solubilizacao: row.RESFRIAMENTO_SOLUBILIZACAO_FIC,
                             recozimento: row.RESFRIAMENTO_RECOZIMENTO_FIC
+                            , localizada: row.RESFRIAMENTO_LOCALIZADA_FIC
+                        },
+                        resfriamentosDescricao: {
+                            normalizacao: row.RESFRIAMENTO_NORMALIZ_DESC_FIC,
+                            revenimento: row.RESFRIAMENTO_REVENIME_DESC_FIC,
+                            tempera: row.RESFRIAMENTO_TEMPERA_DESC_FIC,
+                            solubilizacao: row.RESFRIAMENTO_SOLUBILI_DESC_FIC,
+                            recozimento: row.RESFRIAMENTO_RECOZIME_DESC_FIC,
+                            localizada: row.RESFRIAMENTO_LOCALIZA_DESC_FIC
                         },
                         temperaturas: {
                             normalizacao: row.TEMPERATURA_NORMALIZACAO_FIC,
@@ -308,7 +324,7 @@ async function syncFichas() {
                         durezaLocalizadaMax: row.DUREZA_LOCALIZADA_MAX_FIC,
                         durezaLocalizadaUnidade: row.DUREZA_LOCALIZADA_UND_MED_FIC,
                         corteCanal: row.CORTE_CANAL_FIC,
-                        desbaste: row.DESBASTE_FIC,
+                        desbaste: row.DESBASTE_DESC_FIC || row.DESBASTE_FIC,
                         jateamento: row.JATEAMENTO_FIC,
                         observacao: blobs.observacaoAcabamento
                     };
