@@ -739,6 +739,12 @@
         .acabamento-section-title { margin:25px 0 12px; }
         .acabamento-section-title span { display:block; color:var(--color-primary); font-family:'Outfit',sans-serif; font-size:1rem; font-weight:700; letter-spacing:.04em; }
         .acabamento-fields { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+        .acabamento-opcoes { display:grid; grid-template-columns:1.2fr 1.45fr 1fr; gap:14px; }
+        .acabamento-opcao { min-height:76px; }
+        .acabamento-opcao-titulo { display:block; margin-bottom:6px; color:var(--text-main); font-size:.78rem; font-weight:700; }
+        .acabamento-opcoes-lista { display:flex; flex-wrap:wrap; gap:4px 12px; }
+        .acabamento-opcoes-lista label { display:flex; align-items:center; gap:4px; color:var(--text-muted); font-size:.78rem; white-space:nowrap; }
+        .acabamento-opcoes-lista input { width:14px; height:14px; margin:0; accent-color:var(--color-primary); }
         .acabamento-field { min-height:66px; padding:10px; border:1px solid var(--border-subtle); border-radius:8px; background:rgba(255,255,255,.025); }
         .acabamento-label { display:block; color:var(--text-muted); font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; }
         .acabamento-value { display:block; margin-top:6px; color:#fff; font-size:.9rem; font-weight:600; overflow-wrap:anywhere; }
@@ -753,7 +759,7 @@
             @page { size:A4 portrait; margin:1mm 6mm 6mm; }
             #pdf-btn-wrapper, .tipo-switcher, .search-wrapper, #initialStatus, #loader { display:none !important; }
             .container { width:100% !important; max-width:none !important; padding:0 !important; }
-            #sheetContent { display:block !important; width:100% !important; zoom:1; }
+            #sheetContent { display:block !important; width:calc(100% - 36px) !important; margin:22px auto 0 !important; zoom:1; }
             .acabamento-sheet { border:1px solid #000 !important; box-shadow:none !important; background:#fff !important; border-radius:0 !important; padding:4px 12px 8px !important; min-height:0 !important; height:auto !important; color:#000 !important; overflow:visible !important; }
             .acabamento-title { display:flex !important; justify-content:center !important; gap:12px !important; width:calc(100% - 24px) !important; margin:0 12px 12px !important; padding-bottom:10px !important; border-bottom:2px solid #000 !important; }
             .acabamento-title img { width:46px !important; height:46px !important; }
@@ -770,6 +776,12 @@
             .acabamento-section-title { margin:14px 0 9px !important; }
             .acabamento-section-title span { padding:0 !important; font-size:.76rem !important; letter-spacing:.12em !important; }
             .acabamento-fields { gap:7px !important; }
+            .acabamento-opcoes { gap:10px !important; }
+            .acabamento-opcao { min-height:54px !important; }
+            .acabamento-opcao-titulo { margin-bottom:3px !important; font-size:.62rem !important; }
+            .acabamento-opcoes-lista { gap:2px 7px !important; }
+            .acabamento-opcoes-lista label { font-size:.59rem !important; }
+            .acabamento-opcoes-lista input { width:10px !important; height:10px !important; }
             .acabamento-field { min-height:52px !important; padding:7px 9px !important; border-radius:5px !important; }
             #tratamentoTermicoCampos .acabamento-field, #acabamentoCampos .acabamento-field { min-height:44px !important; padding:5px 7px !important; }
             .acabamento-label { font-size:.56rem !important; }
@@ -856,7 +868,11 @@
 
             <div class="acabamento-panel" style="margin-top:18px;">
                 <div class="acabamento-section-title"><span>ACABAMENTO</span></div>
-                <div class="acabamento-fields" id="acabamentoCampos"></div>
+                <div class="acabamento-opcoes" id="acabamentoCampos">
+                    <div class="acabamento-opcao"><span class="acabamento-opcao-titulo">CORTE DE CANAL</span><div class="acabamento-opcoes-lista" id="opcoesCorteCanal"></div></div>
+                    <div class="acabamento-opcao"><span class="acabamento-opcao-titulo">DESBASTE</span><div class="acabamento-opcoes-lista" id="opcoesDesbaste"></div></div>
+                    <div class="acabamento-opcao"><span class="acabamento-opcao-titulo">JATEAMENTO</span><div class="acabamento-opcoes-lista" id="opcoesJateamento"></div></div>
+                </div>
                 <div class="acabamento-label" style="margin-top:16px;">Observação de acabamento</div>
                 <div class="acabamento-observacao" id="valObsAcabamento">-</div>
             </div>
@@ -919,15 +935,29 @@
             container.appendChild(field);
         }
 
+        function renderOpcao(container, label, marcada) {
+            const item = document.createElement('label');
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.disabled = true;
+            checkbox.checked = marcada;
+            item.append(checkbox, document.createTextNode(label));
+            container.appendChild(item);
+        }
+
         function yesNo(value) {
             return String(value || '').trim().toUpperCase() === 'S' ? 'Sim' : 'Não';
         }
 
         function renderDadosAcabamento(dados) {
             const tratamento = document.getElementById('tratamentoTermicoCampos');
-            const acabamento = document.getElementById('acabamentoCampos');
             tratamento.replaceChildren();
-            acabamento.replaceChildren();
+            const corteCanal = document.getElementById('opcoesCorteCanal');
+            const desbaste = document.getElementById('opcoesDesbaste');
+            const jateamento = document.getElementById('opcoesJateamento');
+            corteCanal.replaceChildren();
+            desbaste.replaceChildren();
+            jateamento.replaceChildren();
 
             const tratamentos = dados.tratamentos || {};
             const resfriamentos = dados.resfriamentos || {};
@@ -948,9 +978,18 @@
             renderField(tratamento, 'Dureza da peça', [dados.durezaPecaMin, dados.durezaPecaMax].filter(value => value !== null && value !== undefined && value !== '').join(' a ') + (dados.durezaPecaUnidade ? ` ${dados.durezaPecaUnidade}` : '') || '-');
             renderField(tratamento, 'Dureza localizada', [dados.durezaLocalizadaMin, dados.durezaLocalizadaMax].filter(value => value !== null && value !== undefined && value !== '').join(' a ') + (dados.durezaLocalizadaUnidade ? ` ${dados.durezaLocalizadaUnidade}` : '') || '-');
 
-            renderField(acabamento, 'Corte de canal', dados.corteCanal || '-');
-            renderField(acabamento, 'Desbaste', dados.desbaste || '-');
-            renderField(acabamento, 'Jateamento', dados.jateamento || '-');
+            const corte = String(dados.corteCanal || '').trim().toLowerCase();
+            const descDesbaste = String(dados.desbaste || '').trim().toLowerCase();
+            const codDesbaste = String(dados.desbasteCodigo || '').trim();
+            const jato = String(dados.jateamento || '').trim().toLowerCase();
+            renderOpcao(corteCanal, 'Disco de corte', corte === '0' || corte.includes('disco'));
+            renderOpcao(corteCanal, 'Maçarico', corte === '1' || corte.includes('maçarico'));
+            renderOpcao(desbaste, 'Disco de desbaste', descDesbaste.includes('disco') || codDesbaste === '0');
+            renderOpcao(desbaste, 'Rebolo pendular', descDesbaste.includes('rebolo') || codDesbaste === '1');
+            renderOpcao(desbaste, 'Retífica de mesa', descDesbaste.includes('mesa') || codDesbaste === '2');
+            renderOpcao(desbaste, 'Retífica manual', descDesbaste.includes('manual') || codDesbaste === '3');
+            renderOpcao(jateamento, 'Granalha de aço', jato === '0' || jato.includes('granalha'));
+            renderOpcao(jateamento, 'Areia', jato === '1' || jato.includes('areia'));
             document.getElementById('valObsAcabamento').textContent = dados.observacao || 'Nenhuma observação cadastrada.';
         }
 

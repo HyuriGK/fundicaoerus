@@ -325,6 +325,7 @@ async function syncFichas() {
                         durezaLocalizadaUnidade: row.DUREZA_LOCALIZADA_UND_MED_FIC,
                         corteCanal: row.CORTE_CANAL_FIC,
                         desbaste: row.DESBASTE_DESC_FIC || row.DESBASTE_FIC,
+                        desbasteCodigo: row.DESBASTE_FIC,
                         jateamento: row.JATEAMENTO_FIC,
                         observacao: blobs.observacaoAcabamento
                     };
