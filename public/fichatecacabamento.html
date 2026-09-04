@@ -746,6 +746,18 @@
         .acabamento-visual-empty { color:var(--text-muted); text-align:center; }
         .acabamento-visual-empty i { display:block; margin-bottom:10px; color:var(--color-primary); font-size:2.6rem; opacity:.65; }
         .acabamento-observacao { min-height:84px; margin-top:10px; padding:12px; border:1px solid var(--border-subtle); border-radius:8px; background:rgba(255,255,255,.025); color:#fff; font-size:.9rem; white-space:pre-wrap; }
+        #pdf-btn-wrapper { width:100%; margin:0 0 14px !important; }
+        #pdf-btn-wrapper button { width:100%; min-height:56px; justify-content:center; border-radius:14px !important; font-size:.9rem !important; letter-spacing:.06em; box-shadow:0 12px 26px rgba(var(--color-primary-rgb),.24); }
+        @media print {
+            #pdf-btn-wrapper, .tipo-switcher, .search-wrapper, #initialStatus, #loader { display:none !important; }
+            #sheetContent { display:block !important; }
+            .acabamento-sheet { border:1px solid #000 !important; box-shadow:none !important; background:#fff !important; border-radius:0 !important; padding:15px !important; color:#000 !important; }
+            .acabamento-title { display:flex !important; justify-content:center !important; gap:14px !important; border-bottom:2px solid #000 !important; }
+            .acabamento-title h1, .acabamento-name, .acabamento-value, .acabamento-observacao { color:#000 !important; }
+            .acabamento-field, .acabamento-panel, .acabamento-observacao { border-color:#ccc !important; background:#fff !important; }
+            .acabamento-section-title { color:#000 !important; border-color:#000 !important; }
+            .acabamento-visual { min-height:250px; border-color:#ccc !important; background:#fff !important; }
+        }
         @media (max-width:700px) { .acabamento-sheet { padding:20px 14px; } .acabamento-title { grid-template-columns:44px 1fr 44px; } .acabamento-title img { width:40px; } .acabamento-grid, .acabamento-fields { grid-template-columns:1fr 1fr; } .acabamento-grid .acabamento-field:nth-child(2) { grid-column:span 2; } }
         @media (max-width:650px) { .container { padding:28px 16px 42px; } .tipo-switcher { width:100% !important; justify-content:center; } .month-btn { flex:1 1 calc(50% - 7px); padding:0 12px !important; } .search-container input { padding:14px; } .status-empty { min-height:300px; } }
     </style>
@@ -782,7 +794,13 @@
             <p>Informe o código do produto para carregar os dados técnicos.</p>
         </div>
 
-        <section id="sheetContent" class="acabamento-sheet">
+        <div id="pdf-btn-wrapper" data-no-print="true" style="display:none; justify-content:flex-end; margin-bottom:12px;">
+            <button onclick="gerarFichaPDF()" style="display:flex;align-items:center;gap:8px;padding:9px 18px;background:var(--color-primary);color:#000;border:none;border-radius:8px;font-size:0.8rem;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif;transition:all 0.2s;">
+                <i class="fa-solid fa-file-pdf"></i> GERAR PDF
+            </button>
+        </div>
+
+        <section id="sheetContent" class="sheet-container acabamento-sheet">
             <div class="acabamento-title">
                 <img src="logo-centered.png" alt="Erus">
                 <h1>FICHA TÉCNICA DE ACABAMENTO</h1>
@@ -918,6 +936,7 @@
 
             document.getElementById('initialStatus').style.display = 'none';
             document.getElementById('sheetContent').style.display = 'none';
+            document.getElementById('pdf-btn-wrapper').style.display = 'none';
             document.getElementById('loader').style.display = 'block';
 
             try {
@@ -953,9 +972,11 @@
 
                 document.getElementById('loader').style.display = 'none';
                 document.getElementById('sheetContent').style.display = 'block';
+                document.getElementById('pdf-btn-wrapper').style.display = 'flex';
                 window.erusAudit?.('ABRIR_FICHA_TECNICA_ACABAMENTO', { codigo: data.PRO_CODIGO_FIC || codigo, produto: data.NOME_PRO || '-', cliente: data.CLIENTE_NOME || '-' });
             } catch (error) {
                 document.getElementById('loader').style.display = 'none';
+                document.getElementById('pdf-btn-wrapper').style.display = 'none';
                 const status = document.getElementById('initialStatus');
                 status.style.display = 'flex';
                 status.querySelector('i').className = 'fa-solid fa-circle-exclamation';
@@ -968,6 +989,13 @@
         document.getElementById('searchInput').addEventListener('keydown', event => {
             if (event.key === 'Enter') searchSheet();
         });
+
+        function gerarFichaPDF() {
+            const codigo = (document.getElementById('valCodigoHeader').textContent || '').split(' / ')[0].trim();
+            const produto = document.getElementById('valDescricao').textContent || '-';
+            window.erusAudit?.('GERAR_PDF_FICHA', { ficha: 'Acabamento', codigo, produto });
+            window.print();
+        }
 
         const codigoInicial = new URLSearchParams(window.location.search).get('codigo');
         if (codigoInicial) {
