@@ -33,7 +33,8 @@
         try {
             await fetch('/api/audit-logger/log', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('erus_token') || ''}` },
+                keepalive: true,
                 body: JSON.stringify({
                     user_name: user,
                     action: action,
@@ -48,6 +49,48 @@
 
     // Exposto globalmente para auditoria de ações do usuário em qualquer tela
     window.erusAudit = logActivity;
+
+    function auditTarget(target) {
+        return target && target.closest && target.closest('button, a, select, input, textarea, [role="button"]');
+    }
+
+    function auditLabel(element) {
+        const label = element?.getAttribute('aria-label') || element?.getAttribute('title') || element?.innerText || element?.value || element?.name || element?.id || element?.tagName || 'ação';
+        return String(label).replace(/\s+/g, ' ').trim().slice(0, 120);
+    }
+
+    function auditIdentifier(element) {
+        return String(element?.id || element?.name || element?.getAttribute('data-action') || element?.tagName || 'element').slice(0, 100);
+    }
+
+    const recentUiAudits = new Map();
+    function auditUi(action, details) {
+        const key = `${action}|${details?.element || ''}|${details?.label || ''}`;
+        const now = Date.now();
+        if (now - (recentUiAudits.get(key) || 0) < 700) return;
+        recentUiAudits.set(key, now);
+        logActivity(action, details);
+    }
+
+    function auditApiPath(url) {
+        try { return new URL(typeof url === 'string' ? url : url.url, window.location.origin).pathname; }
+        catch (_) { return String(url || '').split('?')[0]; }
+    }
+
+    const activityFetch = window.fetch;
+    window.fetch = function (url, options = {}) {
+        const method = String(options.method || (url && url.method) || 'GET').toUpperCase();
+        const path = auditApiPath(url);
+        const isAuditRequest = path === '/api/audit-logger/log';
+        const isSensitiveRequest = /^\/api\/(?:auth|register)(?:\/|$)/.test(path) || /senha|password/i.test(path);
+        const result = activityFetch.call(this, url, options);
+        if (!isAuditRequest && !isSensitiveRequest && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+            result.then(response => {
+                auditUi(response.ok ? 'API_MUTATION' : 'API_FAILURE', { method, endpoint: path, status: response.status });
+            }).catch(error => auditUi('API_FAILURE', { method, endpoint: path, error: String(error?.message || 'network_error').slice(0, 120) }));
+        }
+        return result;
+    };
 
     function formatSyncTime(ms) {
         const totalSeconds = Math.max(0, Math.round(ms / 1000));
@@ -1392,6 +1435,82 @@
                 });
             }, true);
         }
+
+        document.addEventListener('click', (event) => {
+            const element = auditTarget(event.target);
+            if (!element || element.matches('input, textarea, select')) return;
+            const href = element.getAttribute('href') || '';
+            const label = auditLabel(element);
+            const isDownload = element.hasAttribute('download') || /(?:export|download|excel|pdf|\.xlsx?|\.csv)(?:\?|$)/i.test(href);
+            auditUi(isDownload ? 'DOWNLOAD' : 'UI_ACTION', {
+                element: auditIdentifier(element),
+                label,
+                destination: href ? href.slice(0, 255) : undefined
+            });
+        }, true);
+
+        document.addEventListener('change', (event) => {
+            const element = auditTarget(event.target);
+            if (!element || !element.matches('select, input, textarea')) return;
+            const type = String(element.type || '').toLowerCase();
+            if (type === 'password' || /senha|password/i.test(auditIdentifier(element))) return;
+            const selected = element.matches('select')
+                ? element.options[element.selectedIndex]?.text
+                : (type === 'checkbox' || type === 'radio' ? String(element.checked) : 'preenchido');
+            auditUi('FIELD_CHANGE', {
+                element: auditIdentifier(element),
+                label: auditLabel(element),
+                value: String(selected || '').slice(0, 120)
+            });
+        }, true);
+
+        document.addEventListener('submit', (event) => {
+            const form = event.target;
+            if (!(form instanceof HTMLFormElement)) return;
+            auditUi('FORM_SUBMIT', {
+                element: auditIdentifier(form),
+                label: auditLabel(form),
+                fields: Array.from(form.elements).filter(field => field.name && field.type !== 'password').map(field => field.name).slice(0, 25)
+            });
+        }, true);
+
+        document.addEventListener('copy', event => {
+            const element = auditTarget(event.target);
+            auditUi('COPY', { element: auditIdentifier(element), label: auditLabel(element) });
+        }, true);
+
+        document.addEventListener('paste', event => {
+            const element = auditTarget(event.target);
+            if (String(element?.type || '').toLowerCase() === 'password' || /senha|password/i.test(auditIdentifier(element))) return;
+            auditUi('PASTE', { element: auditIdentifier(element), label: auditLabel(element) });
+        }, true);
+
+        document.addEventListener('contextmenu', event => {
+            const element = auditTarget(event.target);
+            auditUi('CONTEXT_MENU', { element: auditIdentifier(element), label: auditLabel(element) });
+        }, true);
+
+        const observedModals = new WeakSet();
+        const modalObserver = new MutationObserver(records => {
+            records.forEach(record => {
+                const element = record.target;
+                if (!(element instanceof HTMLElement) || observedModals.has(element)) return;
+                if (!element.matches('.modal, .modal-overlay, [role="dialog"]')) return;
+                const style = getComputedStyle(element);
+                if (style.display === 'none' || style.visibility === 'hidden') return;
+                observedModals.add(element);
+                auditUi('MODAL_OPEN', { element: auditIdentifier(element), label: auditLabel(element) });
+                setTimeout(() => observedModals.delete(element), 400);
+            });
+        });
+        modalObserver.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['class', 'style'] });
+    });
+
+    window.addEventListener('error', event => {
+        auditUi('JAVASCRIPT_ERROR', { message: String(event.message || 'Erro desconhecido').slice(0, 180), source: String(event.filename || '').split('/').pop(), line: event.lineno || 0 });
+    });
+    window.addEventListener('unhandledrejection', event => {
+        auditUi('PROMISE_REJECTION', { message: String(event.reason?.message || event.reason || 'Erro desconhecido').slice(0, 180) });
     });
 
     // 3. Monitorar interações para resetar cronômetro de inatividade

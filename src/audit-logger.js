@@ -16,9 +16,10 @@ function getDeviceDetails(req, details) {
 // POST /api/audit-logger/log
 router.post('/log', async (req, res) => {
     try {
-        const { user_name, action, table_name, details } = req.body;
+        const { action, table_name, details } = req.body;
+        const userName = String(req.user?.name || req.user?.user || '').trim();
 
-        if (!user_name || !action) {
+        if (!userName || !action) {
             return res.status(400).json({ error: 'Missing required fields: user_name, action' });
         }
 
@@ -30,7 +31,7 @@ router.post('/log', async (req, res) => {
         await pool.query(
             `INSERT INTO audit_logs (user_name, action, table_name, details) 
              VALUES ($1, $2, $3, $4)`,
-            [user_name, action, table_name || null, JSON.stringify(enrichedDetails)]
+            [userName, String(action).slice(0, 100), table_name ? String(table_name).slice(0, 255) : null, JSON.stringify(enrichedDetails)]
         );
 
         res.json({ success: true });
