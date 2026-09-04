@@ -3,6 +3,14 @@ const router = express.Router();
 const pool = require('../lib/db');
 const { logActivity } = require('./lib/logger');
 
+function isTiAdmin(req) {
+    return ['admin', 'desenvolvedor', 'ti'].includes(String(req.user?.role || '').trim().toLowerCase());
+}
+
+function currentUser(req) {
+    return String(req.user?.name || req.user?.user || '').trim();
+}
+
 async function ensureTable(client) {
     await client.query(`
         CREATE TABLE IF NOT EXISTS ti_chamados (
@@ -48,9 +56,10 @@ router.get('/', async (req, res) => {
     const client = await pool.connect();
     try {
         await ensureTable(client);
-        const { usuario, todos } = req.query;
+        const { todos } = req.query;
+        const usuario = currentUser(req);
         let result;
-        if (todos === '1') {
+        if (todos === '1' && isTiAdmin(req)) {
             result = await client.query(
                 'SELECT * FROM ti_chamados ORDER BY CASE urgencia WHEN \'critica\' THEN 1 WHEN \'alta\' THEN 2 WHEN \'media\' THEN 3 ELSE 4 END, criado_em DESC'
             );
@@ -72,14 +81,16 @@ router.get('/', async (req, res) => {
 
 // POST /api/chamados — abrir chamado
 router.post('/', async (req, res) => {
-    const { titulo, descricao, urgencia, usuario, anexo_base64, anexo_nome } = req.body;
+    const { titulo, descricao, urgencia, anexo_base64, anexo_nome } = req.body;
+    const usuario = currentUser(req);
     if (!titulo || !usuario) return res.status(400).json({ error: 'titulo e usuario são obrigatórios' });
+    if (!['baixa', 'media', 'alta', 'critica'].includes(String(urgencia || 'media').toLowerCase())) return res.status(400).json({ error: 'Urgência inválida.' });
     const client = await pool.connect();
     try {
         await ensureTable(client);
         const r = await client.query(
             'INSERT INTO ti_chamados (titulo, descricao, urgencia, usuario, anexo_base64, anexo_nome) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
-            [titulo, descricao || '', urgencia || 'media', usuario, anexo_base64 || null, anexo_nome || null]
+            [String(titulo).slice(0, 255), String(descricao || '').slice(0, 10000), String(urgencia || 'media').toLowerCase(), usuario, anexo_base64 || null, String(anexo_nome || '').slice(0, 255) || null]
         );
         logActivity(usuario || req.user && req.user.name || 'Sistema', 'ABRIR_CHAMADO', 'ti_chamados', { id: r.rows[0].id, titulo, urgencia: urgencia || 'media' });
         res.json(r.rows[0]);
@@ -91,6 +102,7 @@ router.post('/', async (req, res) => {
 });
 
 router.get('/senhas', async (req, res) => {
+    if (!isTiAdmin(req)) return res.status(403).json({ error: 'Acesso restrito à equipe de TI.' });
     const client = await pool.connect();
     try {
         await ensureSenhasTable(client);
@@ -104,6 +116,7 @@ router.get('/senhas', async (req, res) => {
 });
 
 router.post('/senhas', async (req, res) => {
+    if (!isTiAdmin(req)) return res.status(403).json({ error: 'Acesso restrito à equipe de TI.' });
     const { tipo, titulo, sistema, usuario_acesso, senha, computador, url, observacoes, criado_por } = req.body;
     if (!titulo || !senha) return res.status(400).json({ error: 'titulo e senha são obrigatórios' });
     const client = await pool.connect();
@@ -124,6 +137,7 @@ router.post('/senhas', async (req, res) => {
 });
 
 router.put('/senhas/:id', async (req, res) => {
+    if (!isTiAdmin(req)) return res.status(403).json({ error: 'Acesso restrito à equipe de TI.' });
     const { tipo, titulo, sistema, usuario_acesso, senha, computador, url, observacoes, criado_por } = req.body;
     if (!titulo || !senha) return res.status(400).json({ error: 'titulo e senha são obrigatórios' });
     const client = await pool.connect();
@@ -146,6 +160,7 @@ router.put('/senhas/:id', async (req, res) => {
 });
 
 router.delete('/senhas/:id', async (req, res) => {
+    if (!isTiAdmin(req)) return res.status(403).json({ error: 'Acesso restrito à equipe de TI.' });
     const client = await pool.connect();
     try {
         const r = await client.query('DELETE FROM ti_senhas WHERE id=$1 RETURNING titulo', [req.params.id]);
@@ -160,14 +175,16 @@ router.delete('/senhas/:id', async (req, res) => {
 
 // PATCH /api/chamados/:id — atualizar status/resolução
 router.patch('/:id', async (req, res) => {
+    if (!isTiAdmin(req)) return res.status(403).json({ error: 'Acesso restrito à equipe de TI.' });
     const { id } = req.params;
     const { status, resolucao } = req.body;
+    if (!['aberto', 'em_andamento', 'resolvido', 'cancelado'].includes(String(status || '').toLowerCase())) return res.status(400).json({ error: 'Status inválido.' });
     const client = await pool.connect();
     try {
         const resolvido_em = status === 'resolvido' ? new Date() : null;
         const r = await client.query(
             `UPDATE ti_chamados SET status=$1, resolucao=$2, resolvido_em=$3 WHERE id=$4 RETURNING *`,
-            [status, resolucao || null, resolvido_em, id]
+            [String(status).toLowerCase(), String(resolucao || '').slice(0, 10000) || null, resolvido_em, id]
         );
         if (r.rows.length === 0) return res.status(404).json({ error: 'Chamado não encontrado' });
         logActivity(req.user && req.user.name || 'Sistema', 'ATUALIZAR_CHAMADO', 'ti_chamados', { id, status, titulo: r.rows[0].titulo });
@@ -181,6 +198,7 @@ router.patch('/:id', async (req, res) => {
 
 // DELETE /api/chamados/:id
 router.delete('/:id', async (req, res) => {
+    if (!isTiAdmin(req)) return res.status(403).json({ error: 'Acesso restrito à equipe de TI.' });
     const client = await pool.connect();
     try {
         await client.query('DELETE FROM ti_chamados WHERE id=$1', [req.params.id]);

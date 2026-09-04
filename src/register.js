@@ -8,13 +8,20 @@ router.post('/', async (req, res) => {
     const { fullName, user, pass } = req.body;
 
     // Validação básica
-    if (!fullName || !user || !pass) {
+    const username = String(user || '').trim().toLowerCase();
+    if (!fullName || !username || !pass) {
         return res.status(400).json({ success: false, message: "Preencha todos os campos." });
+    }
+    if (!/^[a-z0-9._-]{3,50}$/.test(username)) {
+        return res.status(400).json({ success: false, message: "Usuário deve ter de 3 a 50 caracteres: letras, números, ponto, hífen ou sublinhado." });
+    }
+    if (String(pass).length < 10 || !/[a-z]/i.test(pass) || !/\d/.test(pass)) {
+        return res.status(400).json({ success: false, message: "Senha deve ter ao menos 10 caracteres, incluindo letras e números." });
     }
 
     try {
         // 1. Verifica se o usuário já existe no banco
-        const userCheck = await pool.query('SELECT id FROM users WHERE username = $1', [user]);
+        const userCheck = await pool.query('SELECT id FROM users WHERE username = $1', [username]);
         
         if (userCheck.rows.length > 0) {
             return res.status(400).json({ success: false, message: "Usuário já existe. Escolha outro." });
@@ -26,8 +33,8 @@ router.post('/', async (req, res) => {
 
         // 3. Insere no Neon (Role padrão será 'visitante' definido no banco)
         await pool.query(
-            'INSERT INTO users (name, username, password) VALUES ($1, $2, $3)',
-            [fullName, user, hashPass]
+            "INSERT INTO users (name, username, password, approved, role) VALUES ($1, $2, $3, FALSE, 'visitante')",
+            [String(fullName).trim().slice(0, 255), username, hashPass]
         );
 
         return res.status(200).json({ success: true });

@@ -192,7 +192,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (data.reply) {
                 // Format Markdown to HTML (Simple conversion)
                 // Bold
-                let formattedReply = data.reply.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                const safeReply = String(data.reply).replace(/[&<>"']/g, char => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#039;' })[char]);
+                let formattedReply = safeReply.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
                 // Lists
                 formattedReply = formattedReply.replace(/^\* (.*$)/gm, '<li>$1</li>');
                 formattedReply = formattedReply.replace(/^- (.*$)/gm, '<li>$1</li>');

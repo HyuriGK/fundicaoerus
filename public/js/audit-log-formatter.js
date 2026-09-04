@@ -32,6 +32,17 @@
     const META = {
         PAGE_VISIT: ['Acessou tela', 'fa-arrow-up-right-from-square', '#38bdf8'],
         MODAL_OPEN: ['Abriu janela', 'fa-window-maximize', '#38bdf8'],
+        UI_ACTION: ['Interagiu com a tela', 'fa-hand-pointer', '#a1a1aa'],
+        FIELD_CHANGE: ['Alterou campo', 'fa-sliders', '#3b82f6'],
+        FORM_SUBMIT: ['Enviou formulário', 'fa-paper-plane', '#10b981'],
+        DOWNLOAD: ['Baixou arquivo', 'fa-download', '#10b981'],
+        COPY: ['Copiou informação', 'fa-copy', '#38bdf8'],
+        PASTE: ['Colou informação', 'fa-paste', '#38bdf8'],
+        CONTEXT_MENU: ['Abriu menu de opções', 'fa-ellipsis', '#a1a1aa'],
+        API_MUTATION: ['Concluiu operação', 'fa-cloud-arrow-up', '#10b981'],
+        API_FAILURE: ['Operação não concluída', 'fa-triangle-exclamation', '#ef4444'],
+        JAVASCRIPT_ERROR: ['Erro na tela', 'fa-bug', '#ef4444'],
+        PROMISE_REJECTION: ['Falha na tela', 'fa-triangle-exclamation', '#ef4444'],
         LOGIN: ['Entrou no sistema', 'fa-right-to-bracket', '#10b981'],
         LOGOUT: ['Saiu do sistema', 'fa-right-from-bracket', '#a1a1aa'],
         LOGOUT_MANUAL: ['Saiu do sistema', 'fa-right-from-bracket', '#a1a1aa'],
@@ -155,11 +166,41 @@
         return match ? `${match[3]}/${match[2]}/${match[1]}` : value;
     }
 
+    function apiDescription(endpoint) {
+        const parts = String(endpoint || '').replace(/^\/api\//, '').split('/').filter(Boolean);
+        const resources = {
+            chamados: 'chamado de TI', 'faturamento-postgres': 'faturamento', 'pedidos-sync': 'carteira de pedidos',
+            'producao-postgres': 'produção', 'clientes-firebird': 'cliente', emissoes: 'emissão de pedidos',
+            refugos: 'refugos', rh: 'cadastro de RH', custos: 'custos', 'centro-custos': 'centro de custo',
+            communications: 'comunicação', planner: 'planejador', 'page-locks': 'bloqueio de tela'
+        };
+        const resource = resources[parts[0]] || portuguese(parts[0] || 'sistema').replace(/-/g, ' ');
+        const identifier = parts.find(part => /^\d+$/.test(part));
+        return `${resource}${identifier ? ` (registro ${identifier})` : ''}`;
+    }
+
     function sentence(action, d, tela, actionMeta) {
         const value = (...keys) => keys.map(key => d[key]).find(v => v !== undefined && v !== null && v !== '');
         const selectedPeriod = period(d, action);
         const target = value('affected_user','cliente','titulo','codigo','produto','pedido','op');
         if (action === 'PAGE_VISIT') return `Acessou a tela ${tela}.`;
+        if (action === 'UI_ACTION') {
+            const label = value('label') || 'uma opção';
+            const destination = value('destination');
+            return `Clicou em “${label}”${destination ? ` e navegou para ${screen(String(destination).split('/').pop())}` : ''}.`;
+        }
+        if (action === 'FIELD_CHANGE') return `Alterou o campo “${value('label','element') || 'não identificado'}” para “${value('value') || 'novo valor'}”.`;
+        if (action === 'FORM_SUBMIT') return `Enviou o formulário “${value('label','element') || 'não identificado'}”.`;
+        if (action === 'DOWNLOAD') return `Baixou o arquivo ou relatório “${value('label','element') || 'selecionado'}”.`;
+        if (action === 'COPY') return `Copiou uma informação de “${value('label','element') || 'campo selecionado'}”.`;
+        if (action === 'PASTE') return `Colou uma informação em “${value('label','element') || 'campo selecionado'}”.`;
+        if (action === 'CONTEXT_MENU') return `Abriu as opções de “${value('label','element') || 'item selecionado'}”.`;
+        if (action === 'API_MUTATION') {
+            const verbs = { POST:'Criou ou enviou', PUT:'Atualizou', PATCH:'Atualizou', DELETE:'Excluiu' };
+            return `${verbs[d.method] || 'Processou'} ${apiDescription(d.endpoint)} com sucesso.`;
+        }
+        if (action === 'API_FAILURE') return `Não foi possível concluir ${apiDescription(d.endpoint)}${d.status ? ` (erro ${d.status})` : ''}.`;
+        if (action === 'JAVASCRIPT_ERROR' || action === 'PROMISE_REJECTION') return `Ocorreu uma falha: ${d.message || 'erro não identificado'}.`;
         if (/^Acessou Painel de Emiss/i.test(action)) return 'Acessou a tela Painel de Emissoes.';
         if (action === 'MODAL_OPEN') return `Abriu ${value('modal_title','modal_id') || 'uma janela'} na tela ${tela}.`;
         if (action === 'LOGIN') return `Entrou no sistema${d.name ? ` como ${d.name}` : ''}${d.role ? `, com o cargo ${d.role}` : ''}.`;

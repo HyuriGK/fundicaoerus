@@ -37,7 +37,7 @@ const registerLimiter = rateLimit({
 
 const apiLimiter = rateLimit({
     windowMs: 60 * 1000,
-    max: 100,
+    max: 300,
     message: { success: false, message: 'Limite de requisicoes excedido.' }
 });
 
@@ -54,6 +54,8 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Servir arquivos estáticos do frontend em desenvolvimento local
 app.use(express.static(require('path').join(__dirname, '../public')));
+app.set('trust proxy', 1);
+app.use('/api', apiLimiter);
 
 // Middleware de logging para debug
 app.use((req, res, next) => {

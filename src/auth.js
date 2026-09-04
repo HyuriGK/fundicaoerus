@@ -3,7 +3,7 @@ const router = express.Router();
 const pool = require('../lib/db'); // Importa o db convertido
 const bcrypt = require('bcryptjs');
 const { logActivity } = require('./lib/logger');
-const { generateToken, canAccessOutsideHours, isWithinAllowedAccessHours, getAccessHoursMessage } = require('../lib/middleware');
+const { generateToken, authenticateToken, canAccessOutsideHours, isWithinAllowedAccessHours, getAccessHoursMessage } = require('../lib/middleware');
 const rateLimit = require('express-rate-limit');
 
 const loginLimiter = rateLimit({
@@ -100,9 +100,8 @@ const token = generateToken(userData);
 });
 
 // Rota: GET /api/auth/check?username=xxx — polling de sessão forçada
-router.get('/check', async (req, res) => {
-    const { username } = req.query;
-    if (!username) return res.json({ force_logout: false });
+router.get('/check', authenticateToken, async (req, res) => {
+    const username = req.user?.user;
     try {
         const result = await pool.query('SELECT force_logout, role, name, can_access_after_hours FROM users WHERE username = $1', [username]);
         if (!result.rows.length) return res.json({ force_logout: true }); // usuário deletado
