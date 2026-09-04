@@ -690,15 +690,18 @@
                 gap: 6px !important;
             }
             #emissaoAbcMetricSelector > div:first-child {
-                flex: 1;
+                flex: 0 0 100%;
                 justify-content: space-between;
                 gap: 4px !important;
                 font-size: .58rem !important;
                 white-space: nowrap;
             }
             #emissaoAbcMetricSelector > div:nth-child(2) { display: none; }
+            #emissaoAbcMetricSelector > div:last-child {
+                width: 100%;
+            }
             #emissaoAbcMetricSelector .btn-mini-chart {
-                min-width: 74px;
+                flex: 1;
                 min-height: 38px;
                 padding: 7px 9px;
                 font-size: .68rem;
@@ -7329,13 +7332,22 @@ function flashConcentracaoBar(barIndex) {
                     // Canvas height for vertical client list
                     const scrollWrapEl = document.getElementById('emissaoScrollWrapper');
                     const canvasInnerEl = document.getElementById('emissaoCanvasInner');
-                    const wrapH = scrollWrapEl ? scrollWrapEl.clientHeight : 520;
                     const barPx = 46;
+                    const mobileEmissionAbc = isIndustrialTouchMode();
+                    const viewportH = mobileEmissionAbc ? (barPx * 6 + 24) : (scrollWrapEl ? scrollWrapEl.clientHeight : 520);
                     emissaoBarPx = barPx;
-                    const canvasH = Math.max(wrapH, labels.length * barPx);
+                    const canvasH = Math.max(viewportH, labels.length * barPx);
+                    if (scrollWrapEl && mobileEmissionAbc) {
+                        scrollWrapEl.style.flex = `0 0 ${viewportH}px`;
+                        scrollWrapEl.style.height = `${viewportH}px`;
+                    } else if (scrollWrapEl) {
+                        scrollWrapEl.style.flex = '';
+                        scrollWrapEl.style.height = '';
+                    }
                     if (canvasInnerEl) {
                         canvasInnerEl.style.width = '100%';
                         canvasInnerEl.style.height = canvasH + 'px';
+                        canvasInnerEl.style.minHeight = canvasH + 'px';
                     }
                     if (requestSeq !== historicalChartRequestSeq) return;
                     if (chartHistorical) chartHistorical.destroy();
@@ -7405,14 +7417,14 @@ function flashConcentracaoBar(barIndex) {
                 responsive: true,
                 maintainAspectRatio: false,
                 indexAxis: isHorizontalPareto ? 'y' : 'x',
-                layout: isMoldagemMonthly ? { padding: { top: 8 } } : undefined,
+                layout: isMoldagemMonthly ? { padding: { top: isIndustrialTouchMode() ? 8 : 30 } } : undefined,
                 scales: isHorizontalPareto ? horizontalScales : {
                     y: {
                         type: 'linear',
                         display: true,
                         position: 'left',
                         beginAtZero: true,
-                        grace: isMoldagemMonthly ? '10%' : undefined,
+                        grace: isMoldagemMonthly ? (isIndustrialTouchMode() ? '10%' : '20%') : undefined,
                         grid: { color: _gc() },
                         ticks: { color: _tc() },
                         title: { display: !isPareto, text: unit, color: _tc() },
@@ -7441,8 +7453,36 @@ function flashConcentracaoBar(barIndex) {
                     }
                 },
                 plugins: {
-                    legend: { display: isMoldagemMonthly, labels: { color: _tc() } },
-                    datalabels: { display: false },
+                    legend: { display: isMoldagemMonthly || (!isIndustrialTouchMode() && isPareto), labels: { color: _tc() } },
+                    datalabels: isMoldagemMonthly && !isIndustrialTouchMode() ? {
+                        labels: {
+                            percent: {
+                                color: '#ffffff',
+                                font: { size: 9, weight: '700' },
+                                formatter: function (value, context) {
+                                    const total = Number(context.dataset.extraMonthlyTotal?.[context.dataIndex] || 0);
+                                    const pct = total > 0 ? Number(value || 0) / total * 100 : 0;
+                                    return pct >= 7 ? `${pct.toFixed(0)}%` : '';
+                                }
+                            },
+                            total: {
+                                anchor: 'end',
+                                align: 'top',
+                                offset: 5,
+                                color: _ltPed ? '#111827' : '#ffffff',
+                                font: { size: 12, weight: '800' },
+                                display: function (context) {
+                                    const datasets = context.chart.data.datasets;
+                                    const total = Number(context.dataset.extraMonthlyTotal?.[context.dataIndex] || 0);
+                                    return context.datasetIndex === datasets.length - 1 && total > 0;
+                                },
+                                formatter: function (value, context) {
+                                    const total = Number(context.dataset.extraMonthlyTotal?.[context.dataIndex] || 0);
+                                    return `${formatNumber(total / 1000, 1)} TON`;
+                                }
+                            }
+                        }
+                    } : { display: false },
                     tooltip: {
                         position: isIndustrialTouchMode() ? 'nearest' : (isHorizontalPareto ? 'nearest' : 'average'),
                         xAlign: isIndustrialTouchMode() ? 'center' : (isHorizontalPareto ? 'left' : undefined),
