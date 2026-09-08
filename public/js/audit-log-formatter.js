@@ -179,6 +179,18 @@
         return `${resource}${identifier ? ` (registro ${identifier})` : ''}`;
     }
 
+    function apiMutationMeta(d) {
+        const endpoint = String(d.endpoint || '');
+        if (/^\/api\/page-locks\/toggle/.test(endpoint)) return { label:'Alterou bloqueio de tela', icon:'fa-lock', color:'#fbbf24' };
+        if (/^\/api\/permissions/.test(endpoint)) return { label:'Alterou permissao por role', icon:'fa-key', color:'#a855f7' };
+        if (/^\/api\/admin\/users/.test(endpoint)) return { label:'Alterou usuario', icon:'fa-user-gear', color:'#a855f7' };
+        if (/^\/api\/communications/.test(endpoint)) return { label:'Enviou comunicado', icon:'fa-bullhorn', color:'#3b82f6' };
+        if (/^\/api\/dashboard-snapshot\/refresh/.test(endpoint)) return { label:'Atualizou dashboard', icon:'fa-rotate', color:'#10b981' };
+        if (/^\/api\/chamados/.test(endpoint)) return { label:'Alterou chamados TI', icon:'fa-ticket', color:'#06b6d4' };
+        const labels = { POST:'Enviou dados', PUT:'Atualizou dados', PATCH:'Atualizou dados', DELETE:'Excluiu dados' };
+        return { label:labels[d.method] || 'Processou dados', icon:'fa-cloud-arrow-up', color:'#10b981' };
+    }
+
     function sentence(action, d, tela, actionMeta) {
         const value = (...keys) => keys.map(key => d[key]).find(v => v !== undefined && v !== null && v !== '');
         const selectedPeriod = period(d, action);
@@ -196,8 +208,17 @@
         if (action === 'PASTE') return `Colou uma informação em “${value('label','element') || 'campo selecionado'}”.`;
         if (action === 'CONTEXT_MENU') return `Abriu as opções de “${value('label','element') || 'item selecionado'}”.`;
         if (action === 'API_MUTATION') {
+            const body = d.request_body || {};
+            if (String(d.endpoint || '') === '/api/page-locks/toggle') {
+                const estado = body.is_locked === true ? (body.lock_reason === 'development' ? 'desenvolvimento' : 'manutencao') : 'liberada';
+                return `Alterou o bloqueio da tela ${screen(body.page_id)} para ${estado}.`;
+            }
+            if (String(d.endpoint || '') === '/api/permissions') return `Alterou permissao da role ${body.role || '?'} na tela ${screen(body.page_key)} para ${body.allowed ? 'liberado' : 'bloqueado'}.`;
+            if (/^\/api\/admin\/users/.test(String(d.endpoint || ''))) return `Alterou cadastro/permissao do usuario ${body.username || d.endpoint.split('/').filter(Boolean).pop() || '?'}.`;
+            if (String(d.endpoint || '') === '/api/dashboard-snapshot/refresh') return `Atualizou manualmente os dados do dashboard${body.scope ? ` (${body.scope})` : ''}.`;
             const verbs = { POST:'Criou ou enviou', PUT:'Atualizou', PATCH:'Atualizou', DELETE:'Excluiu' };
-            return `${verbs[d.method] || 'Processou'} ${apiDescription(d.endpoint)} com sucesso.`;
+            const payload = Object.entries(body).filter(([key, item]) => item !== null && item !== '' && item !== undefined && typeof item !== 'object').slice(0, 4).map(([key, item]) => `${key.replace(/_/g, ' ')}: ${item}`).join(', ');
+            return `${verbs[d.method] || 'Processou'} ${apiDescription(d.endpoint)} com sucesso${payload ? `. Dados: ${payload}` : ''}.`;
         }
         if (action === 'API_FAILURE') return `Não foi possível concluir ${apiDescription(d.endpoint)}${d.status ? ` (erro ${d.status})` : ''}.`;
         if (action === 'JAVASCRIPT_ERROR' || action === 'PROMISE_REJECTION') return `Ocorreu uma falha: ${d.message || 'erro não identificado'}.`;
@@ -299,7 +320,7 @@
         const action = String(log && log.action || 'ATIVIDADE');
         const details = parse(log && log.details);
         const tela = screen(log && log.table_name);
-        const actionMeta = meta(action);
+        const actionMeta = action === 'API_MUTATION' ? apiMutationMeta(details) : meta(action);
         return {
             label: portuguese(actionMeta.label), icon: actionMeta.icon, color: actionMeta.color, tela,
             details: portuguese(sentence(action, details, tela, actionMeta))

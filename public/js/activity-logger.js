@@ -77,17 +77,45 @@
         catch (_) { return String(url || '').split('?')[0]; }
     }
 
+    function auditApiQuery(url) {
+        try { return new URL(typeof url === 'string' ? url : url.url, window.location.origin).searchParams.toString(); }
+        catch (_) { return ''; }
+    }
+
+    function sanitizeAuditPayload(value, depth = 0) {
+        if (depth > 2) return '[objeto]';
+        if (value === null || value === undefined) return value;
+        if (Array.isArray(value)) return value.slice(0, 8).map(item => sanitizeAuditPayload(item, depth + 1));
+        if (typeof value === 'object') {
+            return Object.fromEntries(Object.entries(value).slice(0, 20).map(([key, item]) => {
+                if (/senha|password|token|authorization|secret/i.test(key)) return [key, '[oculto]'];
+                return [key, sanitizeAuditPayload(item, depth + 1)];
+            }));
+        }
+        return String(value).slice(0, 180);
+    }
+
+    function auditApiBody(options = {}) {
+        const body = options.body;
+        if (!body || typeof body !== 'string') return undefined;
+        try { return sanitizeAuditPayload(JSON.parse(body)); }
+        catch (_) { return body.slice(0, 180); }
+    }
+
     const activityFetch = window.fetch;
     window.fetch = function (url, options = {}) {
         const method = String(options.method || (url && url.method) || 'GET').toUpperCase();
         const path = auditApiPath(url);
+        const query = auditApiQuery(url);
+        const request_body = auditApiBody(options);
         const isAuditRequest = path === '/api/audit-logger/log';
         const isSensitiveRequest = /^\/api\/(?:auth|register)(?:\/|$)/.test(path) || /senha|password/i.test(path);
         const result = activityFetch.call(this, url, options);
         if (!isAuditRequest && !isSensitiveRequest && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+            const details = { method, endpoint: path, query, request_body };
             result.then(response => {
-                auditUi(response.ok ? 'API_MUTATION' : 'API_FAILURE', { method, endpoint: path, status: response.status });
-            }).catch(error => auditUi('API_FAILURE', { method, endpoint: path, error: String(error?.message || 'network_error').slice(0, 120) }));
+                auditUi(response.ok ? 'API_MUTATION' : 'API_FAILURE', Object.assign({}, details, { status: response.status }));
+            }).catch(error => auditUi('API_FAILURE', Object.assign({}, details, { error: String(error?.message || 'network_error').slice(0, 120) })));
         }
         return result;
     };
