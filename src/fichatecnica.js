@@ -94,6 +94,8 @@ router.get('/:codigo', async (req, res) => {
                 miniatura_link as "MINIATURA_LINK",
                 lote_pmt as "LOTE_PMT",
                 tipo_moldagem_procedimento as "TIPO_MOLDAGEM_PROCEDIMENTO",
+                (SELECT ftf.hb_mat FROM ficha_tecnica_fusao ftf WHERE ftf.pro_codigo = ficha_tecnica.pro_codigo_fic LIMIT 1) as "HB_MAT",
+                (SELECT ftf.hb_max_mat FROM ficha_tecnica_fusao ftf WHERE ftf.pro_codigo = ficha_tecnica.pro_codigo_fic LIMIT 1) as "HB_MAX_MAT",
                 acabamento_dados as "ACABAMENTO_DADOS"
             FROM ficha_tecnica
             WHERE pro_codigo_fic = $1
