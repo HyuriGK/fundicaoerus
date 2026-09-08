@@ -288,10 +288,11 @@ router.get('/resumo-periodo', async (req, res) => {
                 WHERE f.data_faturamento >= $1
                   AND f.data_faturamento <= $2
                   ${ownerFilter}
-                  AND f.cliente_codigo::text NOT IN ('257', '432', '2020', '316', '2283', '253')
+                  AND f.cliente_codigo::text NOT IN ('257', '432', '2020', '316', '2283', '253', '270')
                   AND UPPER(TRIM(COALESCE(f.cliente_nome, ''))) NOT LIKE '%IMEPEL INDUSTRIA MECANICA LTDA%'
                   AND UPPER(TRIM(COALESCE(f.cliente_nome, ''))) NOT LIKE '%STEELROOL INDUSTRIA METALURGICA%'
                   AND UPPER(TRIM(COALESCE(f.cliente_nome, ''))) NOT LIKE '%SPILROD FUNDICAO DE FERRO E ACO LTDA%'
+                  AND UPPER(TRIM(COALESCE(f.cliente_nome, ''))) NOT LIKE '%SULACO%'
             )
             SELECT
                 data,
@@ -385,10 +386,11 @@ router.get('/resumo-dashboard', async (req, res) => {
                 WHERE f.data_faturamento >= $3
                   AND f.data_faturamento <= $2
                   ${ownerFilter}
-                  AND f.cliente_codigo::text NOT IN ('257', '432', '2020', '316', '2283', '253')
+                  AND f.cliente_codigo::text NOT IN ('257', '432', '2020', '316', '2283', '253', '270')
                   AND UPPER(TRIM(COALESCE(f.cliente_nome, ''))) NOT LIKE '%IMEPEL INDUSTRIA MECANICA LTDA%'
                   AND UPPER(TRIM(COALESCE(f.cliente_nome, ''))) NOT LIKE '%STEELROOL INDUSTRIA METALURGICA%'
                   AND UPPER(TRIM(COALESCE(f.cliente_nome, ''))) NOT LIKE '%SPILROD FUNDICAO DE FERRO E ACO LTDA%'
+                  AND UPPER(TRIM(COALESCE(f.cliente_nome, ''))) NOT LIKE '%SULACO%'
             ),
             clean AS (
                 SELECT data, CASE WHEN fat_peso THEN peso_total ELSE 0 END AS peso_total
