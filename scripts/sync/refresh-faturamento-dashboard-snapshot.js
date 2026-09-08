@@ -19,10 +19,11 @@ const { getDashboardSnapshot, publishDashboardSnapshot } = require('../../lib/da
             LEFT JOIN pesos_customizados pc ON pc.codigo = TRIM(f.codigo_item)
             LEFT JOIN fat_peso_overrides o ON o.item_key = CONCAT(f.nota_fiscal, '-', COALESCE(TRIM(f.codigo_item), ''), '-', COALESCE(TRIM(f.pedido), ''), '-', f.data_faturamento::date, '-', COALESCE(f.quantidade, 0))
             WHERE f.data_faturamento BETWEEN $1 AND $2
-              AND f.cliente_codigo::text NOT IN ('257', '432', '2020', '316', '2283', '253')
+              AND f.cliente_codigo::text NOT IN ('257', '432', '2020', '316', '2283', '253', '270')
               AND UPPER(TRIM(COALESCE(f.cliente_nome, ''))) NOT LIKE '%IMEPEL INDUSTRIA MECANICA LTDA%'
               AND UPPER(TRIM(COALESCE(f.cliente_nome, ''))) NOT LIKE '%STEELROOL INDUSTRIA METALURGICA%'
               AND UPPER(TRIM(COALESCE(f.cliente_nome, ''))) NOT LIKE '%SPILROD FUNDICAO DE FERRO E ACO LTDA%'
+              AND UPPER(TRIM(COALESCE(f.cliente_nome, ''))) NOT LIKE '%SULACO%'
         ) SELECT data, SUM(CASE WHEN fat_peso THEN peso_total ELSE 0 END) AS total FROM base GROUP BY data ORDER BY data
     `, [start, end]);
     const daily = result.rows.map(row => ({ data: row.data instanceof Date ? row.data.toISOString().slice(0, 10) : String(row.data).slice(0, 10), pesoTotal: Number(row.total || 0) }));
