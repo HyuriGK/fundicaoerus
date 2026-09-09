@@ -384,6 +384,16 @@
                 '<a href="clientes.html" data-stip="Clientes" class="erus-nav-link' + isActive('clientes.html') + '">' +
                     '<i class="fa-solid fa-users"></i><span>Clientes</span></a>' +
             '</div>' +
+            '<div class="erus-nav-group-sep" data-stip="Produtos" onclick="erusSidebarToggleGroup(\'eg-produtos\')">' +
+                '<i class="fa-solid fa-boxes-stacked" style="font-size:0.8rem;color:#52525b;margin-right:8px;flex-shrink:0;"></i>' +
+                '<span class="erus-nav-group-label">Produtos</span>' +
+                '<div class="erus-nav-group-line"></div>' +
+                '<i class="fa-solid fa-plus" id="icon-eg-produtos"></i>' +
+            '</div>' +
+            '<div id="eg-produtos" class="erus-nav-group-wrapper collapsed">' +
+                '<a href="produtos.html" data-stip="Cadastro de Produtos" class="erus-nav-link' + isActive('produtos.html') + '">' +
+                    '<i class="fa-solid fa-box"></i><span>Cadastro de Produtos</span></a>' +
+            '</div>' +
             // FATURAMENTO
             '<div class="erus-nav-group-sep" data-stip="Faturamento" onclick="erusSidebarToggleGroup(\'eg-faturamento\')">' +
                 '<i class="fas fa-sack-dollar" style="font-size:0.8rem;color:#52525b;margin-right:8px;flex-shrink:0;"></i>' +
