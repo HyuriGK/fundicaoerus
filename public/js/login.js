@@ -13,7 +13,6 @@ updateConnectionStatus();
 window.addEventListener('online', updateConnectionStatus);
 window.addEventListener('offline', updateConnectionStatus);
 
-document.getElementById('currentYear').textContent = new Date().getFullYear();
 const rememberedUser = localStorage.getItem('erus_remember_user');
 if (rememberedUser) {
     document.getElementById('loginUser').value = rememberedUser;
