@@ -107,5 +107,8 @@
   search.addEventListener('keydown', event => { if (event.key === 'Enter') { clearTimeout(timer); searchProducts(); } });
   document.getElementById('closeProductDialog').addEventListener('click', () => dialog.close());
   dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close(); });
-  document.querySelectorAll('.product-tabs button').forEach(button => button.addEventListener('click', event => { event.preventDefault(); showTab(button.dataset.tab); }));
+  document.querySelectorAll('.product-tabs button').forEach(button => {
+    button.addEventListener('pointerdown', event => { event.preventDefault(); showTab(button.dataset.tab); });
+    button.addEventListener('click', event => { event.preventDefault(); showTab(button.dataset.tab); });
+  });
 })();
