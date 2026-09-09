@@ -8,7 +8,7 @@
             ink: value('--text-main'),
             grid: value('--border-subtle'),
             surface: value('--bg-card'),
-            amber: '#c69a45',
+            amber: value('--chart-billing'),
             scrap: value('--status-danger')
         };
     };
@@ -71,15 +71,6 @@
             home.href = 'index1.html';
             home.classList.add('active');
             home.setAttribute('aria-current', 'page');
-        }
-        const originalToggle = window.erusSidebarToggleTheme;
-        if (originalToggle) {
-            window.erusSidebarToggleTheme = () => {
-                const current = ErusTheme.current();
-                const isDeveloper = (localStorage.getItem('erus_role') || '').toLowerCase() === 'desenvolvedor';
-                const next = current === 'dark' ? 'light' : current === 'light' && isDeveloper ? 'classic' : 'dark';
-                window.erusSidebarSetTheme(next);
-            };
         }
     }
     if (document.readyState !== 'complete') document.addEventListener('DOMContentLoaded', prepareSidebar);

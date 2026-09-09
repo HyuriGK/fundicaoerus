@@ -4,8 +4,13 @@
  * Include in <head> of every page — applies before paint to avoid FOUC.
  */
 (function () {
-    var KEY = 'erus_theme';
+    var KEY = document.documentElement.getAttribute('data-theme-key') || 'erus_theme';
     var defaultTheme = document.documentElement.getAttribute('data-theme-default') || 'dark';
+    var lockedTheme = document.documentElement.getAttribute('data-theme-lock');
+
+    function currentTheme() {
+        return lockedTheme || localStorage.getItem(KEY) || defaultTheme;
+    }
 
     var CHART_DARK = {
         color:       '#a1a1aa',
@@ -58,6 +63,7 @@
     }
 
     function applyTheme(theme) {
+        theme = lockedTheme || theme;
         document.documentElement.setAttribute('data-theme', theme);
 
         // Remove existing theme overrides
@@ -103,15 +109,23 @@
         });
     }
 
+    function setTheme(theme) {
+        theme = lockedTheme || theme;
+        if (!lockedTheme) localStorage.setItem(KEY, theme);
+        applyTheme(theme);
+        return theme;
+    }
+
     function toggle() {
-        var current = localStorage.getItem(KEY) || defaultTheme;
+        if (lockedTheme) return;
+        var current = currentTheme();
         var next    = current === 'dark' ? 'light' : 'dark';
-        localStorage.setItem(KEY, next);
+        setTheme(next);
         location.reload();
     }
 
     function init() {
-        var saved = localStorage.getItem(KEY) || defaultTheme;
+        var saved = currentTheme();
         applyTheme(saved);
     }
 
@@ -120,7 +134,8 @@
         toggle:  toggle,
         init:    init,
         apply:   applyTheme,
-        current: function() { return localStorage.getItem(KEY) || defaultTheme; }
+        set:     setTheme,
+        current: currentTheme
     };
 
     // Apply immediately (before paint) to avoid FOUC
@@ -138,7 +153,7 @@
         if (document.getElementById('erus-classic-dialog-js')) return;
         var s = document.createElement('script');
         s.id  = 'erus-classic-dialog-js';
-        s.src = 'js/classic-dialog.js';
+        s.src = 'js/classic-dialog.js?v=20260909-theme-scope';
         document.head.appendChild(s);
     }
     if (document.readyState === 'loading') {
@@ -149,7 +164,7 @@
 
     // Re-apply chart defaults AFTER all inline scripts run
     function lateChartSync() {
-        var theme = localStorage.getItem(KEY) || defaultTheme;
+        var theme = currentTheme();
         applyChartDefaults(theme);
         setTimeout(function() { applyChartDefaults(theme); }, 300);
     }
@@ -157,17 +172,17 @@
 
     // Expose helpers so pages can read theme-aware colors
     window.ErusTheme.chartColor = function() {
-        var t = localStorage.getItem(KEY) || defaultTheme;
+        var t = currentTheme();
         return t === 'classic' ? '#555555' : t === 'light' ? '#4b5563' : '#a1a1aa';
     };
     window.ErusTheme.chartGridColor = function() {
-        var t = localStorage.getItem(KEY) || defaultTheme;
+        var t = currentTheme();
         return t === 'classic' ? 'rgba(0,0,0,0.08)' : t === 'light' ? 'rgba(0,0,0,0.07)' : 'rgba(255,255,255,0.05)';
     };
     window.ErusTheme.isLight = function() {
-        return (localStorage.getItem(KEY) || defaultTheme) === 'light';
+        return currentTheme() === 'light';
     };
     window.ErusTheme.isClassic = function() {
-        return (localStorage.getItem(KEY) || defaultTheme) === 'classic';
+        return currentTheme() === 'classic';
     };
 })();

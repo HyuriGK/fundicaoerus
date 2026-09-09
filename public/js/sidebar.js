@@ -700,7 +700,7 @@
                 '<div style="font-size:0.7rem;font-weight:700;color:#a1a1aa;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:14px;display:flex;align-items:center;gap:6px;"><i class="fa-solid fa-palette" style="color:#d97706;"></i> Aparência</div>' +
                 '<div style="display:flex;align-items:center;justify-content:space-between;gap:16px;">' +
                     '<div><div style="font-size:0.85rem;font-weight:600;color:#fafafa;margin-bottom:3px;">Tema de Interface</div>' +
-                    '<div style="font-size:0.75rem;color:#a1a1aa;">Alterne entre o tema escuro e o tema claro.</div></div>' +
+                    '<div id="erus-theme-description" style="font-size:0.75rem;color:#a1a1aa;">Alterne entre o tema escuro e o tema claro.</div></div>' +
                     '<button id="erus-theme-btn" onclick="erusSidebarToggleTheme()" style="flex-shrink:0;display:flex;align-items:center;gap:10px;padding:10px 16px;border-radius:24px;border:1px solid rgba(217,119,6,0.25);background:rgba(217,119,6,0.08);color:#d97706;cursor:pointer;font-size:0.8rem;font-weight:600;white-space:nowrap;min-width:148px;justify-content:center;">' +
                         '<i class="fa-solid fa-sun" style="font-size:0.95rem;"></i><span>Tema Claro</span></button>' +
                 '</div>' +
@@ -1161,7 +1161,7 @@
     };
 
     window.erusSidebarToggleTheme = function() {
-        var current = localStorage.getItem('erus_theme') || 'dark';
+        var current = window.ErusTheme ? ErusTheme.current() : localStorage.getItem('erus_theme') || 'dark';
         var role = (localStorage.getItem('erus_role') || '').toLowerCase();
         var next;
         if (role === 'desenvolvedor') {
@@ -1173,10 +1173,13 @@
     };
 
     window.erusSidebarSetTheme = function(theme) {
-        var anterior = localStorage.getItem('erus_theme') || 'dark';
-        localStorage.setItem('erus_theme', theme);
-        if (typeof ErusTheme !== 'undefined') ErusTheme.apply(theme);
-        else document.documentElement.setAttribute('data-theme', theme);
+        var anterior = window.ErusTheme ? ErusTheme.current() : localStorage.getItem('erus_theme') || 'dark';
+        if (window.ErusTheme && ErusTheme.set) theme = ErusTheme.set(theme);
+        else {
+            localStorage.setItem('erus_theme', theme);
+            if (window.ErusTheme) ErusTheme.apply(theme);
+            else document.documentElement.setAttribute('data-theme', theme);
+        }
         erusSidebarUpdateThemeUI();
         if (theme !== anterior && window.erusAudit) {
             var nomes = { dark: 'Escuro', light: 'Claro', classic: 'Clássico' };
@@ -1185,7 +1188,9 @@
     };
 
     window.erusSidebarUpdateThemeUI = function() {
-        var theme = localStorage.getItem('erus_theme') || 'dark';
+        var theme = window.ErusTheme ? ErusTheme.current() : localStorage.getItem('erus_theme') || 'dark';
+        var description = document.getElementById('erus-theme-description');
+        if (description && document.documentElement.getAttribute('data-theme-lock')) description.textContent = 'Somente o tema escuro está disponível nesta página.';
         var btn = document.getElementById('erus-theme-btn');
         var chipDark    = document.getElementById('erus-chip-dark');
         var chipLight   = document.getElementById('erus-chip-light');

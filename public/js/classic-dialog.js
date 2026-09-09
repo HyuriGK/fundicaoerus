@@ -16,7 +16,7 @@
     window._nativePrompt  = _nativePrompt;
 
     function isClassic() {
-        return (localStorage.getItem('erus_theme') || 'dark') === 'classic';
+        return window.ErusTheme ? ErusTheme.isClassic() : (localStorage.getItem('erus_theme') || 'dark') === 'classic';
     }
 
     /* ---- shared CSS injected once ---- */
