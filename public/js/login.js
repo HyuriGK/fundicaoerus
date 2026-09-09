@@ -3,6 +3,16 @@ const registerForm = document.getElementById('registerForm');
 let authenticating = false;
 let registering = false;
 
+function updateConnectionStatus() {
+    const online = navigator.onLine;
+    document.getElementById('connectionStatus').classList.toggle('is-offline', !online);
+    document.getElementById('connectionLabel').textContent = online ? 'Online' : 'Offline';
+}
+
+updateConnectionStatus();
+window.addEventListener('online', updateConnectionStatus);
+window.addEventListener('offline', updateConnectionStatus);
+
 document.getElementById('currentYear').textContent = new Date().getFullYear();
 const rememberedUser = localStorage.getItem('erus_remember_user');
 if (rememberedUser) {
