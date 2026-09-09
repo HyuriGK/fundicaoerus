@@ -1,7 +1,6 @@
 (() => {
   const search = document.getElementById('productSearch');
   const grid = document.getElementById('productsGrid');
-  const initial = document.getElementById('productsInitial');
   const status = document.getElementById('productsResultStatus');
   const count = document.getElementById('productsResultCount');
   const dialog = document.getElementById('productDialog');
@@ -41,9 +40,9 @@
   async function searchProducts() {
     const query = search.value.trim();
     if (query.length < 2) {
-      grid.innerHTML = ''; initial.hidden = false; status.textContent = 'Digite ao menos 2 caracteres para pesquisar'; count.textContent = ''; return;
+      grid.innerHTML = ''; status.textContent = 'Digite ao menos 2 caracteres para pesquisar'; count.textContent = ''; return;
     }
-    initial.hidden = true; status.textContent = 'Buscando produtos…'; count.textContent = '';
+    status.textContent = 'Buscando produtos…'; count.textContent = '';
     try {
       const { produtos } = await request(`/api/produtos?q=${encodeURIComponent(query)}`);
       renderResults(produtos);
