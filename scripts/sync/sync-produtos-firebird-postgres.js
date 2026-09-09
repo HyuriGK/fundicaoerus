@@ -199,7 +199,7 @@ async function syncDetails(db, client, code) {
         const propriedades = {
             limite_resistencia: numeric(m.LIMITE_RESISTENCIA_MAT), limite_escoamento: numeric(m.LIMITE_ESCOAMENTO_MAT),
             alongamento: numeric(m.ALONGAMENTO_MAT), estriccao: numeric(m.ESTRICCAO_MAT), reducao_area: numeric(m.REDUCAO_AREA_MAT),
-            impacto_charpy: numeric(m.IMPACTO_TESTE_CHARPY_MAT)
+            impacto_charpy: numeric(m.IMPACTO_TESTE_CHARPY_MAT), local_modelo: clean(m.LOCAL_MODELO_PMT), local_produto: clean(m.LOCAL_PMT)
         };
         await client.query(`INSERT INTO produtos_firebird_sync_materiais (produto_codigo,material_id,material,lote,modelo,processo,local,peso_estimado,contracao,dureza_min,dureza_max,observacao,documento,revisao,composicao,propriedades)
             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`, [
