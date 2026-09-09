@@ -5,6 +5,7 @@ const { Firebird, options } = require('../../lib/firebird-helper');
 
 const codeArg = process.argv.find(arg => arg.startsWith('--codigo='));
 const onlyCode = codeArg ? codeArg.slice('--codigo='.length).trim() : '';
+const catalogOnly = process.argv.includes('--catalogo');
 const ELEMENTOS = ['C', 'SI', 'MN', 'P', 'S', 'CR', 'NI', 'MO', 'AL', 'V', 'CU', 'MG', 'W', 'B', 'CO', 'TI', 'NB', 'PB', 'SN', 'ZN', 'AS', 'BI', 'CA', 'CE', 'ZR', 'LA', 'FE'];
 
 function clean(value) {
@@ -118,6 +119,44 @@ function productData(row) {
     };
 }
 
+function productRecord(row) {
+    return {
+        codigo: String(row.CODIGO_PRO).trim(), empresa: numeric(row.EMPRESA_PRO), nome: clean(row.NOME_PRO), apelido: clean(row.APELIDO_PRO),
+        nome_tecnico: clean(row.NOME_TECNICO_PRO), cliente_codigo: clean(row.CLIENTE_PRO), cliente_nome: clean(row.CLIENTE_NOME),
+        grupo: clean(row.GRUPO_NOME), subgrupo: clean(row.SUBGRUPO_NOME), divisao: clean(row.DIVISAO_NOME), situacao: clean(row.SITUACAO_PRO),
+        tipo: clean(row.TIPO_PRO), unidade: clean(row.UNIDADE_PRO), unidade_producao: clean(row.UNIDADE_PRODUCAO_PRO),
+        data_cadastro: row.DATA_CADASTRO_PRO || null, atualizado_origem: row.DATA_HORA_ALTERACAO_PRO || null,
+        peso_liquido: numeric(row.PESO_LIQUIDO_PRO), peso_bruto: numeric(row.PESO_BRUTO_PRO), ncm: clean(row.NCM_PRO), ipi: numeric(row.IPI_PRO),
+        custo_medio: numeric(row.MEDIO_PRO), custo_compra: numeric(row.COMPRA_PRO), custo_sem_impostos: numeric(row.CUSTO_SEM_IMPOSTOS_PRO),
+        preco_venda: numeric(row.VENDA_PRO), preco_venda_2: numeric(row.VENDA2_PRO), preco_venda_3: numeric(row.VENDA3_PRO),
+        observacao: clean(row.OBSERVACAO_PRO), observacao_fiscal: clean(row.OBSERVACAO_FISCAL_PRO), dados: productData(row)
+    };
+}
+
+async function syncProductCatalog(client, rows) {
+    const chunkSize = 500;
+    for (let start = 0; start < rows.length; start += chunkSize) {
+        const records = rows.slice(start, start + chunkSize).map(productRecord);
+        await client.query(`
+            INSERT INTO produtos_firebird_sync (
+                codigo,empresa,nome,apelido,nome_tecnico,cliente_codigo,cliente_nome,grupo,subgrupo,divisao,situacao,tipo,unidade,unidade_producao,
+                data_cadastro,atualizado_origem,peso_liquido,peso_bruto,ncm,ipi,custo_medio,custo_compra,custo_sem_impostos,preco_venda,preco_venda_2,preco_venda_3,observacao,observacao_fiscal,dados,synced_at
+            ) SELECT codigo,empresa,nome,apelido,nome_tecnico,cliente_codigo,cliente_nome,grupo,subgrupo,divisao,situacao,tipo,unidade,unidade_producao,
+                data_cadastro,atualizado_origem,peso_liquido,peso_bruto,ncm,ipi,custo_medio,custo_compra,custo_sem_impostos,preco_venda,preco_venda_2,preco_venda_3,observacao,observacao_fiscal,dados,NOW()
+            FROM jsonb_to_recordset($1::jsonb) AS x(
+                codigo TEXT,empresa INTEGER,nome TEXT,apelido TEXT,nome_tecnico TEXT,cliente_codigo TEXT,cliente_nome TEXT,grupo TEXT,subgrupo TEXT,divisao TEXT,situacao TEXT,tipo TEXT,unidade TEXT,unidade_producao TEXT,
+                data_cadastro DATE,atualizado_origem TIMESTAMPTZ,peso_liquido NUMERIC,peso_bruto NUMERIC,ncm TEXT,ipi NUMERIC,custo_medio NUMERIC,custo_compra NUMERIC,custo_sem_impostos NUMERIC,preco_venda NUMERIC,preco_venda_2 NUMERIC,preco_venda_3 NUMERIC,observacao TEXT,observacao_fiscal TEXT,dados JSONB
+            ) ON CONFLICT (codigo) DO UPDATE SET
+                empresa=EXCLUDED.empresa,nome=EXCLUDED.nome,apelido=EXCLUDED.apelido,nome_tecnico=EXCLUDED.nome_tecnico,cliente_codigo=EXCLUDED.cliente_codigo,cliente_nome=EXCLUDED.cliente_nome,
+                grupo=EXCLUDED.grupo,subgrupo=EXCLUDED.subgrupo,divisao=EXCLUDED.divisao,situacao=EXCLUDED.situacao,tipo=EXCLUDED.tipo,unidade=EXCLUDED.unidade,unidade_producao=EXCLUDED.unidade_producao,
+                data_cadastro=EXCLUDED.data_cadastro,atualizado_origem=EXCLUDED.atualizado_origem,peso_liquido=EXCLUDED.peso_liquido,peso_bruto=EXCLUDED.peso_bruto,ncm=EXCLUDED.ncm,ipi=EXCLUDED.ipi,
+                custo_medio=EXCLUDED.custo_medio,custo_compra=EXCLUDED.custo_compra,custo_sem_impostos=EXCLUDED.custo_sem_impostos,preco_venda=EXCLUDED.preco_venda,preco_venda_2=EXCLUDED.preco_venda_2,preco_venda_3=EXCLUDED.preco_venda_3,
+                observacao=EXCLUDED.observacao,observacao_fiscal=EXCLUDED.observacao_fiscal,dados=EXCLUDED.dados,synced_at=NOW()
+        `, [JSON.stringify(records)]);
+        process.stdout.write(`@PROG:PRODUTOS:${Math.min(99, Math.round((start + records.length) / rows.length * 98) + 1)}%\n`);
+    }
+}
+
 async function upsertProduct(client, row) {
     const code = String(row.CODIGO_PRO).trim();
     await client.query(`
@@ -217,6 +256,58 @@ async function syncDetails(db, client, code) {
     }
 }
 
+async function findProductsInFirebird(query) {
+    const db = await connectFirebird();
+    try {
+        const term = `%${String(query || '').trim().toUpperCase()}%`;
+        const rows = await fbQuery(db, `
+            SELECT FIRST 20 P.CODIGO_PRO, P.NOME_PRO, P.APELIDO_PRO, P.SITUACAO_PRO, P.UNIDADE_PRO,
+                G.NOME_GRU AS GRUPO_NOME, C.RAZAO_SOCIAL_CLI AS CLIENTE_NOME
+            FROM PRODUTO P
+            LEFT JOIN GRUPO G ON G.EMPRESA_GRU=P.GRU_EMPRESA_PRO AND G.CODIGO_GRU=P.GRUPO_PRO
+            LEFT JOIN CLIENTE C ON C.EMPRESA_CLI=P.EMPRESA_PRO AND C.CODIGO_CLI=P.CLIENTE_PRO
+            WHERE P.CODIGO_PRO LIKE ?
+            ORDER BY P.CODIGO_PRO
+        `, [term]);
+        return rows.map(row => ({
+            codigo: String(row.CODIGO_PRO).trim(), nome: clean(row.NOME_PRO), apelido: clean(row.APELIDO_PRO),
+            situacao: clean(row.SITUACAO_PRO), unidade: clean(row.UNIDADE_PRO), grupo: clean(row.GRUPO_NOME),
+            cliente_nome: clean(row.CLIENTE_NOME), foto: null
+        }));
+    } finally {
+        db.detach();
+    }
+}
+
+async function syncProductByCode(productCode) {
+    const db = await connectFirebird();
+    const client = await pool.connect();
+    try {
+        await ensureTables(client);
+        const products = await fbQuery(db, `
+            SELECT P.*, C.RAZAO_SOCIAL_CLI AS CLIENTE_NOME, G.NOME_GRU AS GRUPO_NOME, SG.NOME_SUB AS SUBGRUPO_NOME, D.NOME_DIV AS DIVISAO_NOME
+            FROM PRODUTO P
+            LEFT JOIN CLIENTE C ON C.EMPRESA_CLI=P.EMPRESA_PRO AND C.CODIGO_CLI=P.CLIENTE_PRO
+            LEFT JOIN GRUPO G ON G.EMPRESA_GRU=P.GRU_EMPRESA_PRO AND G.CODIGO_GRU=P.GRUPO_PRO
+            LEFT JOIN SUB_GRUPO SG ON SG.EMPRESA_SUB=P.SUB_EMPRESA_PRO AND SG.CODIGO_SUB=P.SUB_GRUPO_PRO
+            LEFT JOIN DIVISAO D ON D.EMPRESA_DIV=P.DIV_EMPRESA_PRO AND D.CODIGO_DIV=P.DIV_CODIGO_PRO
+            WHERE P.CODIGO_PRO=?
+        `, [productCode]);
+        if (!products[0]) return false;
+        const code = await upsertProduct(client, products[0]);
+        await syncDetails(db, client, code);
+        return true;
+    } finally {
+        client.release();
+        db.detach();
+    }
+}
+
+if (require.main !== module) {
+    module.exports = { findProductsInFirebird, syncProductByCode };
+    main = async () => {};
+}
+
 async function main() {
     const db = await connectFirebird();
     const client = await pool.connect();
@@ -235,6 +326,14 @@ async function main() {
         `, onlyCode ? [onlyCode] : []);
         console.log(`Sincronizando ${products.length} produto(s)...`);
         process.stdout.write('@PROG:PRODUTOS:1%\n');
+        if (catalogOnly) {
+            await syncProductCatalog(client, products);
+            await client.query('DELETE FROM produtos_firebird_sync WHERE synced_at < $1', [startedAt]);
+            await client.query(`INSERT INTO sync_status (screen_name,last_sync_at) VALUES ('Produtos',NOW()) ON CONFLICT (screen_name) DO UPDATE SET last_sync_at=NOW()`);
+            process.stdout.write('@PROG:PRODUTOS:100%\n');
+            console.log(`Catálogo de produtos sincronizado: ${products.length}.`);
+            return;
+        }
         let completed = 0;
         for (const row of products) {
             const code = await upsertProduct(client, row);
