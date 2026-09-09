@@ -5,6 +5,7 @@
  */
 (function () {
     var KEY = 'erus_theme';
+    var defaultTheme = document.documentElement.getAttribute('data-theme-default') || 'dark';
 
     var CHART_DARK = {
         color:       '#a1a1aa',
@@ -65,7 +66,7 @@
         if (lightLink)   lightLink.remove();
         if (classicLink) classicLink.remove();
 
-        if (theme === 'light') {
+        if (theme === 'light' && document.documentElement.getAttribute('data-theme-styles') !== 'local') {
             var el = document.createElement('link');
             el.id   = 'erus-light-theme-css';
             el.rel  = 'stylesheet';
@@ -103,14 +104,14 @@
     }
 
     function toggle() {
-        var current = localStorage.getItem(KEY) || 'dark';
+        var current = localStorage.getItem(KEY) || defaultTheme;
         var next    = current === 'dark' ? 'light' : 'dark';
         localStorage.setItem(KEY, next);
         location.reload();
     }
 
     function init() {
-        var saved = localStorage.getItem(KEY) || 'dark';
+        var saved = localStorage.getItem(KEY) || defaultTheme;
         applyTheme(saved);
     }
 
@@ -119,7 +120,7 @@
         toggle:  toggle,
         init:    init,
         apply:   applyTheme,
-        current: function() { return localStorage.getItem(KEY) || 'dark'; }
+        current: function() { return localStorage.getItem(KEY) || defaultTheme; }
     };
 
     // Apply immediately (before paint) to avoid FOUC
@@ -148,7 +149,7 @@
 
     // Re-apply chart defaults AFTER all inline scripts run
     function lateChartSync() {
-        var theme = localStorage.getItem(KEY) || 'dark';
+        var theme = localStorage.getItem(KEY) || defaultTheme;
         applyChartDefaults(theme);
         setTimeout(function() { applyChartDefaults(theme); }, 300);
     }
@@ -156,17 +157,17 @@
 
     // Expose helpers so pages can read theme-aware colors
     window.ErusTheme.chartColor = function() {
-        var t = localStorage.getItem(KEY) || 'dark';
+        var t = localStorage.getItem(KEY) || defaultTheme;
         return t === 'classic' ? '#555555' : t === 'light' ? '#4b5563' : '#a1a1aa';
     };
     window.ErusTheme.chartGridColor = function() {
-        var t = localStorage.getItem(KEY) || 'dark';
+        var t = localStorage.getItem(KEY) || defaultTheme;
         return t === 'classic' ? 'rgba(0,0,0,0.08)' : t === 'light' ? 'rgba(0,0,0,0.07)' : 'rgba(255,255,255,0.05)';
     };
     window.ErusTheme.isLight = function() {
-        return (localStorage.getItem(KEY) || 'dark') === 'light';
+        return (localStorage.getItem(KEY) || defaultTheme) === 'light';
     };
     window.ErusTheme.isClassic = function() {
-        return (localStorage.getItem(KEY) || 'dark') === 'classic';
+        return (localStorage.getItem(KEY) || defaultTheme) === 'classic';
     };
 })();
