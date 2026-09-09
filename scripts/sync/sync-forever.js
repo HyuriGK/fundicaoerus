@@ -158,12 +158,12 @@ const INDEPENDENT_BATS = [
     { name: 'INSUMOS',     file: path.join('sync', 'sincronizar_insumos.bat'),       icon: '[IN]', pageId: 'insumosmoldagem.html' },
     { name: 'DEVOLUCOES',  file: path.join('sync', 'sincronizar_adevolucoes.bat'),   icon: '[<<]', pageId: 'devolucoes.html', progressAlias: 'DEVOLUÇÕES' },
     { name: 'CLIENTES',    file: path.join('sync', 'sincronizar_aclientes.bat'),     icon: '[CL]', pageId: 'clientes.html' },
-    { name: 'PRODUTOS',    file: path.join('sync', 'sincronizar_aprodutos.bat'),     icon: '[PD]', pageId: 'produtos.html' },
     { name: 'REFUGOS',     file: path.join('sync', 'sincronizar_arefugo.bat'),       icon: '[RF]', pageId: 'refugos.html' },
     { name: 'SAC',         file: path.join('sync', 'sincronizar_asac.bat'),          icon: '[SC]', pageId: 'sac.html' },
     { name: 'SNAPSHOTS',   file: path.join('sync', 'sincronizar_asnapshots.bat'),    icon: '[SS]', pageId: 'pedidos.html' },
     { name: 'MOLDAGEM FT', file: path.join('sync', 'sincronizar_fichatecmoldagem.bat'), icon: '[ML]', pageId: 'fichatecmoldagem.html', progressAlias: 'MOLDAGEM' },
     { name: 'FUSAO FT',    file: path.join('sync', 'sincronizar_fichatecfusao.bat'),   icon: '[FU]', pageId: 'fichatecfusao.html' },
+    { name: 'PRODUTOS',    file: path.join('sync', 'sincronizar_aprodutos.bat'),     icon: '[PD]', pageId: 'produtos.html' },
 ];
 
 const INDEPENDENT_WAIT = 2 * 60 * 1000; // 2 minutos
@@ -171,8 +171,9 @@ const FATURAMENTO_WAIT = 2 * 60 * 1000; // 2 minutos após concluir
 const LIGHT_SYNC_WAIT = 5 * 60 * 1000; // 5 minutos após concluir
 const HEAVY_SYNC_MODULES = new Set(['EMISSOES', 'PEDIDOS', 'PRODUCAO', 'REFUGOS']);
 const SNAPSHOT_SCRIPTS = { EMISSOES: 'refresh-carteira-dashboard-snapshot.js', FATURAMENTO: 'refresh-faturamento-dashboard-snapshot.js', PRODUCAO: 'refresh-producao-dashboard-snapshot.js', REFUGOS: 'refresh-refugo-kpi-snapshot.js' };
-const TECHNICAL_SYNC_MODULES = new Set(['MOLDAGEM FT', 'FUSAO FT']);
+const TECHNICAL_SYNC_MODULES = new Set(['MOLDAGEM FT', 'FUSAO FT', 'PRODUTOS']);
 const LIGHT_SYNC_CONCURRENCY = 2;
+const TECHNICAL_SYNC_CONCURRENCY = 2;
 let nextRunAt = {};
 
 const DELAY_MS = 2000;
@@ -270,7 +271,7 @@ function buildFrame(cycleStart) {
     const technicalRunning = INDEPENDENT_BATS.filter(b => TECHNICAL_SYNC_MODULES.has(b.name) && scriptState[b.name] === 'RUNNING').length;
     const s4 = '  ' + C.muted + 'FILAS  ' + reset + bold + C.amber + `PESADA ${heavyRunning}/1` + reset +
                C.dim + '  |  ' + reset + bold + C.cyan + `LEVE ${lightRunning}/${LIGHT_SYNC_CONCURRENCY}` + reset +
-               C.dim + '  |  ' + reset + bold + C.muted + `TECNICA ${technicalRunning}/1` + reset;
+               C.dim + '  |  ' + reset + bold + C.muted + `TECNICA ${technicalRunning}/${TECHNICAL_SYNC_CONCURRENCY}` + reset;
 
     out.push(B.row(s1, W));
     out.push(B.row(s2, W));
@@ -335,8 +336,8 @@ function buildFrame(cycleStart) {
     out.push(B.row(centerStr(dim + 'Rotinas auxiliares, cadastros e relatorios' + reset, W), W));
     lightBats.forEach(drawModuleRow);
     out.push(B.sep());
-    out.push(B.row(centerStr(bold + C.muted + 'MODULOS TECNICOS  -  1 MODULO POR VEZ' + reset, W), W));
-    out.push(B.row(centerStr(dim + 'Fichas tecnicas de Moldagem e Fusao' + reset, W), W));
+    out.push(B.row(centerStr(bold + C.muted + `MODULOS TECNICOS  -  ATE ${TECHNICAL_SYNC_CONCURRENCY} MODULOS EM PARALELO` + reset, W), W));
+    out.push(B.row(centerStr(dim + 'Fichas tecnicas de Moldagem, Fusao e Produtos' + reset, W), W));
     technicalBats.forEach(drawModuleRow);
 
     // ── ALERTS ───────────────────────────────────────────────────────────────
@@ -580,7 +581,7 @@ async function startIndependentLoops() {
     const lightBats = INDEPENDENT_BATS.filter(bat => !HEAVY_SYNC_MODULES.has(bat.name) && !TECHNICAL_SYNC_MODULES.has(bat.name));
     startQueueWorker(heavyBats);
     for (let i = 0; i < LIGHT_SYNC_CONCURRENCY; i++) startQueueWorker(lightBats);
-    startQueueWorker(technicalBats);
+    for (let i = 0; i < TECHNICAL_SYNC_CONCURRENCY; i++) startQueueWorker(technicalBats);
 }
 
 startIndependentLoops();

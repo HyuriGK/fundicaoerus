@@ -315,6 +315,7 @@ async function main() {
     try {
         await ensureTables(client);
         const where = onlyCode ? 'WHERE P.CODIGO_PRO=?' : '';
+        const queryParams = onlyCode ? [onlyCode] : [];
         const products = await fbQuery(db, `
             SELECT P.*, C.RAZAO_SOCIAL_CLI AS CLIENTE_NOME, G.NOME_GRU AS GRUPO_NOME, SG.NOME_SUB AS SUBGRUPO_NOME, D.NOME_DIV AS DIVISAO_NOME
             FROM PRODUTO P
@@ -323,7 +324,7 @@ async function main() {
             LEFT JOIN SUB_GRUPO SG ON SG.EMPRESA_SUB=P.SUB_EMPRESA_PRO AND SG.CODIGO_SUB=P.SUB_GRUPO_PRO
             LEFT JOIN DIVISAO D ON D.EMPRESA_DIV=P.DIV_EMPRESA_PRO AND D.CODIGO_DIV=P.DIV_CODIGO_PRO
             ${where} ORDER BY P.CODIGO_PRO
-        `, onlyCode ? [onlyCode] : []);
+        `, queryParams);
         console.log(`Sincronizando ${products.length} produto(s)...`);
         process.stdout.write('@PROG:PRODUTOS:1%\n');
         if (catalogOnly) {
