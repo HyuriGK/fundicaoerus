@@ -1,4 +1,3 @@
-const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 const loginForm = document.getElementById('loginForm');
 const registerForm = document.getElementById('registerForm');
 let authenticating = false;
@@ -85,7 +84,7 @@ function playLoginTransition(displayName) {
     main.classList.add('is-leaving');
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     main.inert = true;
-    setTimeout(() => window.location.replace('index.html'), reducedMotion.matches ? 250 : 3400);
+    setTimeout(() => window.location.replace('index.html'), 3400);
 }
 
 const loginNotice = sessionStorage.getItem('erus_login_notice');
