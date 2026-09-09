@@ -14,7 +14,12 @@
   const text = value => value === null || value === undefined || value === '' ? '—' : esc(value);
   const num = value => value === null || value === undefined || value === '' ? '—' : new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 4 }).format(Number(value));
   const money = value => value === null || value === undefined || value === '' ? '—' : new Intl.NumberFormat('pt-BR', { style:'currency', currency:'BRL' }).format(Number(value));
-  const date = value => value ? new Intl.DateTimeFormat('pt-BR').format(new Date(`${value}T00:00:00`)) : '—';
+  const date = value => {
+    if (!value) return '—';
+    const raw = String(value);
+    const parsed = new Date(raw.includes('T') ? raw : `${raw}T00:00:00`);
+    return Number.isNaN(parsed.getTime()) ? esc(raw) : new Intl.DateTimeFormat('pt-BR').format(parsed);
+  };
   const field = (label, value, size = '') => `<div class="info-field ${size}"><label>${esc(label)}</label><strong title="${String(value ?? '').replace(/"/g, '&quot;')}">${text(value)}</strong></div>`;
   const empty = message => `<div class="empty-tab">${esc(message)}</div>`;
 
