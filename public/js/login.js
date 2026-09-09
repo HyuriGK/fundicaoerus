@@ -85,10 +85,8 @@ function setBusy(form, busy) {
     document.querySelectorAll('[data-mode]').forEach(element => { element.disabled = busy; });
 }
 
-function playLoginTransition(displayName) {
+function playLoginTransition() {
     sessionStorage.setItem('erus_post_login_loader', '1');
-    const first = (displayName || '').trim().split(/\s+/)[0];
-    document.getElementById('transferWelcome').textContent = first ? `Bom trabalho, ${first}.` : 'Bom trabalho.';
     document.getElementById('success-transfer-overlay').hidden = false;
     const main = document.getElementById('mainCard');
     main.classList.add('is-leaving');
@@ -139,7 +137,7 @@ loginForm.addEventListener('submit', async event => {
             localStorage.setItem('erus_monetary_pages', JSON.stringify(monetaryPages));
             localStorage.setItem('erus_can_view_monetary', monetaryPages.includes(currentPage) ? 'true' : 'false');
             localStorage.setItem('erus_last_activity', Date.now().toString());
-            playLoginTransition(data.name || user);
+            playLoginTransition();
             return;
         }
         feedback('login', data.message || 'Não foi possível entrar. Confira seu usuário e senha.');
