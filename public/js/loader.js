@@ -327,7 +327,7 @@
 
     const injectLoader = () => {
         const path = window.location.pathname;
-        const isExcluded = path.endsWith('login.html') || postLoginIndexLoader;
+        const isExcluded = path.endsWith('login.html') || path.endsWith('login1.html') || postLoginIndexLoader;
 
         if (isExcluded || document.getElementById('global-loader')) {
             document.body.style.overflow = '';

@@ -132,7 +132,7 @@
         const page = window.location.pathname.split('/').pop() || 'index.html';
         const role = (localStorage.getItem('erus_role') || 'Visitante').toLowerCase();
 
-        if (page === 'login.html' || page === 'manutencao.html') return;
+        if (page === 'login.html' || page === 'login1.html' || page === 'manutencao.html') return;
 
         // Desenvolvedores e Admins ignoram bloqueios manuais, mas NÃO sync locks
         try {
@@ -1034,7 +1034,7 @@
 
     // --- ROLE ENFORCEMENT ---
     async function enforceRoleAccess() {
-        if (window.location.pathname.includes('login.html')) return;
+        if (['login.html', 'login1.html'].includes(window.location.pathname.split('/').pop())) return;
 
         const page = window.location.pathname.split('/').pop() || 'index.html';
         const role = (localStorage.getItem('erus_role') || 'Visitante').toLowerCase();
@@ -1087,7 +1087,7 @@
 
     function verificarSessao() {
         // Ignorar na página de login
-        if (window.location.pathname.includes('login.html')) return;
+        if (['login.html', 'login1.html'].includes(window.location.pathname.split('/').pop())) return;
 
         const logado = localStorage.getItem('erus_auth');
         const ultimaAtividade = localStorage.getItem('erus_last_activity');
@@ -1348,7 +1348,7 @@
     // --- INICIALIZAÇÃO ---
 
     // Verificar sessão IMEDIATAMENTE (antes de qualquer renderização)
-    if (!window.location.pathname.includes('login.html')) {
+    if (!['login.html', 'login1.html'].includes(window.location.pathname.split('/').pop())) {
         verificarSessao();
         enforceRoleAccess();
     }
