@@ -64,6 +64,8 @@
         }
         const image = document.querySelector('#erus-sidebar .erus-brand-icon img');
         if (image) image.src = 'logo-centered.png';
+        const brandLink = document.getElementById('erus-brand');
+        if (brandLink) brandLink.href = 'index1.html';
         const home = document.querySelector('#erus-sidebar .erus-nav-link[href="index.html"]');
         if (home) {
             home.href = 'index1.html';

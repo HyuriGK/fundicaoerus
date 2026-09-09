@@ -796,7 +796,7 @@
         document.body.insertAdjacentHTML('beforeend', logoutModalHTML);
         document.body.insertAdjacentHTML('beforeend', prefsModalHTML);
 
-        var isIndex = currentPage === 'index.html';
+        var isIndex = currentPage === 'index.html' || currentPage === 'index1.html';
         if (isIndex) {
             document.body.classList.add('erus-is-index');
             document.body.classList.remove('erus-sidebar-collapsed');
