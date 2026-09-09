@@ -161,6 +161,7 @@ app.use('/api/contabilidade', require('../src/contabilidade'));
 app.use('/api/fichatecnica', require('../src/fichatecnica'));
 app.use('/api/insumos-moldagem', require('../src/insumos-moldagem')); // NOVO: Ficha Técnica (Firebird Read-Only)
 app.use('/api/fichatecnicafusao', require('../src/fichatecnicafusao')); // Ficha Técnica de Fusão
+app.use('/api/produtos', require('../src/produtos'));
 app.use('/api/communications', require('../src/communications')); // NOVO: Sistema de Comunicação
 app.use('/api/chamados', require('../src/chamados')); // Chamados TI
 app.use('/api/planner', require('../src/planner')); // Planner Kanban
