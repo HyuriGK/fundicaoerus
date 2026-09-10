@@ -71,11 +71,29 @@ test('modal renders only actual stages, including unpointed and unknown stages',
     const rendered = elements.get('opDetailsContent').innerHTML;
     assert(rendered.includes('FECHAMENTO MANUAL'));
     assert(rendered.includes('ETAPA ESPECIAL'));
-    assert(rendered.includes('>FUSÃO</span>'));
-    assert(rendered.indexOf('>MOLDAGEM</span>') < rendered.indexOf('>FECHAMENTO MANUAL</span>'));
+    assert(rendered.includes('>FUSAO</span>'));
+    assert(rendered.indexOf('>MOLDAGEM MANUAL</span>') < rendered.indexOf('>FECHAMENTO MANUAL</span>'));
     for (const absent of ['USINAGEM', 'EXPEDIÇÃO', 'FATURAMENTO']) assert(!rendered.includes(absent));
     assert.equal(requests.length, 1);
     assert(requests[0].includes('/op-roteiro-operacional?'));
+});
+
+test('modal separates remaining quantity from pieces physically in each stage', async () => {
+    const { context, elements } = modalContext(route);
+    await context.window.showOPDetails({ op: '5450', productCode: '226200700', desc: 'PECA', originalQty: 10, delivery: '25/09/2026' });
+    const rendered = elements.get('opDetailsContent').innerHTML;
+    const headers = [...rendered.matchAll(/<th>(.*?)<\/th>/g)].map(match => match[1]);
+    assert.deepEqual(headers, ['Etapa', 'Quantidade', 'Quant. Apontada', 'Refugo', 'Saldo', 'No Setor', 'Meta (Prazo)', 'Observação']);
+    const rows = [...rendered.matchAll(/<tr class="op-detail-row[\s\S]*?<\/tr>/g)].map(match => match[0]);
+    const closure = rows.find(row => row.includes('>FECHAMENTO MANUAL</span>'));
+    const cells = [...closure.matchAll(/<td(?:\s[^>]*)?>([\s\S]*?)<\/td>/g)].map(match => match[1].replace(/<[^>]+>/g, '').trim());
+    assert.equal(cells[1], '10 PÇS');
+    assert.equal(cells[2], '2 PÇS');
+    assert.equal(cells[4], '8 PÇS');
+    assert.equal(cells[5], '2 PÇS');
+    assert.match(cells[6], /^\d{2}\/\d{2}\/2026$/);
+    assert.equal(elements.get('opModalDesc').textContent, '226200700 - PECA');
+    assert.equal(elements.get('opModalQty').textContent, '10');
 });
 
 test('empty or failed operational API never loads a substitute route', async () => {
