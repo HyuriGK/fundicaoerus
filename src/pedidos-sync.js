@@ -349,8 +349,18 @@ router.get('/', async (req, res) => {
               AND COALESCE(data->>'STATUS_PCP', '') IN ('C', 'E', 'F')
         `);
         const closedOps = new Set(closedOpsResult.rows.map(row => String(row.op || '').trim()).filter(Boolean));
-        const fechamentoOpsResult = await pool.query('SELECT DISTINCT op FROM producao_roteiro_operacional_sync WHERE setor_codigo = 116').catch(() => ({ rows: [] }));
-        const fechamentoOps = new Set(fechamentoOpsResult.rows.map(row => String(row.op || '').trim()));
+        const fechamentoOpsResult = await pool.query(`
+            SELECT
+                op,
+                SUM(produzido) FILTER (WHERE setor_codigo = 116) AS fechamento_apontado,
+                SUM(produzido) FILTER (WHERE setor_codigo IN (1, 10, 11, 12)) AS moldagem_apontada,
+                SUM(refugado) FILTER (WHERE setor_codigo IN (1, 10, 11, 12)) AS moldagem_refugada
+            FROM producao_roteiro_operacional_sync
+            WHERE setor_codigo IN (1, 10, 11, 12, 116)
+            GROUP BY op
+            HAVING BOOL_OR(setor_codigo = 116)
+        `).catch(() => ({ rows: [] }));
+        const fechamentoOps = new Map(fechamentoOpsResult.rows.map(row => [String(row.op || '').trim(), row]));
         const produtoPesoResult = await pool.query(`
             SELECT
                 data->>'PRODUTO_PPR' AS produto,
@@ -400,7 +410,15 @@ router.get('/', async (req, res) => {
                 item.PESO_PRODUTO = produtoPesoMap[produtoKey];
             }
             const opValue = String(item.OP_PCS || '').trim();
-            if (opValue && fechamentoOps.has(opValue)) item.TEM_FECHAMENTO_MANUAL = true;
+            const fechamento = fechamentoOps.get(opValue);
+            if (fechamento) {
+                item.TEM_FECHAMENTO_MANUAL = true;
+                item.QTY_FECHAMENTO_MANUAL = num(fechamento.fechamento_apontado);
+                if (fechamento.moldagem_apontada !== null) {
+                    item.QTY_MOLDADA = num(fechamento.moldagem_apontada);
+                    item.REFUGO_MOLDAGEM = num(fechamento.moldagem_refugada);
+                }
+            }
             if (item.LINK_STATUS === 'sugerido' && !/^\d{1,4}$/.test(opValue)) {
                 item.LINK_STATUS = null;
                 item.OP_PCS = null;
