@@ -190,16 +190,23 @@ async function syncDetails(db, client, code) {
     const materialRows = await fbQuery(db, `
         SELECT FIRST 1 PM.*, M.MATERIAL_MAT, M.HB_MAT, M.HB_MAX_MAT, M.LIMITE_RESISTENCIA_MAT, M.LIMITE_ESCOAMENTO_MAT,
             M.ALONGAMENTO_MAT, M.ESTRICCAO_MAT, M.REDUCAO_AREA_MAT, M.IMPACTO_TESTE_CHARPY_MAT
-        FROM PRODUTO_MATERIAL PM LEFT JOIN MATERIAL M ON M.ID_MAT=PM.MAT_ID_PMT WHERE PM.PRODUTO_PMT=?
+            , P.LOCAL_SETOR_PRO AS PROD_LOCAL_SETOR, P.LOCAL_CORREDOR_PRO AS PROD_LOCAL_CORREDOR, P.LOCAL_COMPLEMENTO_PRO AS PROD_LOCAL_COMPLEMENTO
+            , PMOD.LOCAL_SETOR_PRO AS MOD_LOCAL_SETOR, PMOD.LOCAL_CORREDOR_PRO AS MOD_LOCAL_CORREDOR, PMOD.LOCAL_COMPLEMENTO_PRO AS MOD_LOCAL_COMPLEMENTO
+        FROM PRODUTO_MATERIAL PM
+        LEFT JOIN MATERIAL M ON M.ID_MAT=PM.MAT_ID_PMT
+        LEFT JOIN PRODUTO P ON P.CODIGO_PRO=PM.PRODUTO_PMT
+        LEFT JOIN PRODUTO PMOD ON PMOD.CODIGO_PRO=PM.PRODUTO_MODELO_PMT
+        WHERE PM.PRODUTO_PMT=?
     `, [code]);
     await client.query('DELETE FROM produtos_firebird_sync_materiais WHERE produto_codigo=$1', [code]);
     if (materialRows[0]) {
         const m = materialRows[0];
+        const location = (prefix) => [m[`${prefix}_SETOR`], m[`${prefix}_CORREDOR`], m[`${prefix}_COMPLEMENTO`]].map(clean).filter(Boolean).join(' - ') || null;
         const composicao = ELEMENTOS.map(elemento => ({ elemento, min: numeric(m[`${elemento}_MIN_PMT`]), max: numeric(m[`${elemento}_MAX_PMT`]) })).filter(item => item.min !== null || item.max !== null);
         const propriedades = {
             limite_resistencia: numeric(m.LIMITE_RESISTENCIA_MAT), limite_escoamento: numeric(m.LIMITE_ESCOAMENTO_MAT),
             alongamento: numeric(m.ALONGAMENTO_MAT), estriccao: numeric(m.ESTRICCAO_MAT), reducao_area: numeric(m.REDUCAO_AREA_MAT),
-            impacto_charpy: numeric(m.IMPACTO_TESTE_CHARPY_MAT), local_modelo: clean(m.LOCAL_MODELO_PMT), local_produto: clean(m.LOCAL_PMT)
+            impacto_charpy: numeric(m.IMPACTO_TESTE_CHARPY_MAT), local_modelo: location('MOD_LOCAL'), local_produto: location('PROD_LOCAL')
         };
         await client.query(`INSERT INTO produtos_firebird_sync_materiais (produto_codigo,material_id,material,lote,modelo,processo,local,peso_estimado,contracao,dureza_min,dureza_max,observacao,documento,revisao,composicao,propriedades)
             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`, [
