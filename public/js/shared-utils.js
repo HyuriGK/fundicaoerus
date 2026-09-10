@@ -76,6 +76,7 @@ function getItemSectorMetrics(item, limitToCommercial = false) {
     const rawFusao       = ignoreSuggestedOp ? 0 : Math.max(0, (Number(item.QTY_FUSAO)       || 0) - refugoFusao);
     const rawMoldada     = ignoreSuggestedOp ? 0 : Math.max(0, (Number(item.QTY_MOLDADA)     || 0) - refugoMoldagem);
     const rawFechamento  = ignoreSuggestedOp ? 0 : Math.max(0, Number(item.QTY_FECHAMENTO_MANUAL) || 0);
+    const hasFechamento = item.TEM_FECHAMENTO_MANUAL === true || String(item.ROTEIRO_PRODUCAO || '').toUpperCase().includes('FECHAMENTO');
 
     // APONTADO por setor (bruto, sem deduzir refugo — barreira de entrada no setor)
     // Peça apontada em X já saiu da fila do setor anterior, independente do resultado
@@ -130,9 +131,9 @@ function getItemSectorMetrics(item, limitToCommercial = false) {
         qUsinagem:   Math.max(0, cUsi  - cQualIn),
         qTT:         Math.max(0, cTT   - cUsiIn),
         qAcabamento: Math.max(0, cAcab - cTTIn),
-        qFusao:      Math.max(0, cFus - cAcabIn, rawFechamento - rawFusao),
-        qMoldada:    Math.max(0, rawMoldada - Math.max(rawFechamento, cFusIn)),
-        qFechamento: Math.max(0, rawMoldada - rawFechamento),
+        qFusao:      hasFechamento ? Math.max(0, rawFechamento - rawFusao) : Math.max(0, cFus - cAcabIn),
+        qMoldada:    hasFechamento ? 0 : Math.max(0, rawMoldada - cFusIn),
+        qFechamento: hasFechamento ? Math.max(0, rawMoldada - rawFechamento) : 0,
         qAguardando: Math.max(0, Math.min(industrialCapacity, targetTotalQty) - cMold),
 
         // REFUGOS POR SETOR
