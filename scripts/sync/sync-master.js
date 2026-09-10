@@ -170,6 +170,7 @@ async function syncMaster() {
                     )
                 `);
                 await pgClient.query('TRUNCATE TABLE producao_roteiro_operacional_sync');
+                const fechamentoManualOps = new Set();
 
                 if (allOpIds.length > 0) {
                     console.log(`🧭 [2.1/4] Sincronizando roteiro operacional completo de ${allOpIds.length} OPs...`);
@@ -224,6 +225,9 @@ async function syncMaster() {
                         });
 
                         routeRows.forEach(row => {
+                            if (Number(row.SETOR_PCS) === 116 || String(row.NOME_SET || '').trim().toUpperCase().includes('FECHAMENTO MANUAL')) {
+                                fechamentoManualOps.add(String(row.CODIGO_PCS).trim());
+                            }
                             const opEmissao = opEmissaoMap[row.CODIGO_PCS];
                             const producedQty = Number(row.DQUANTIDADE_PCS) || 0;
                             const rejectedQty = Number(row.DQUANTIDADE_REFUGO_PCS) || 0;
@@ -276,6 +280,7 @@ async function syncMaster() {
                     const syncKey = `OP-${op.OP_PCS}`;
                     op.OP_QUANTIDADE = op.OP_QUANTIDADE || 0;
                     op.QUANTIDADE_PPR = op.OP_QUANTIDADE;
+                    op.TEM_FECHAMENTO_MANUAL = fechamentoManualOps.has(String(op.OP_PCS).trim());
 
                     const opsData = pointingsMap[op.OP_PCS] || {};
                     const totals = { 1: 0, 10: 0, 11: 0, 12: 0, 20: 0, 30: 0, 40: 0, 50: 0, 60: 0, 100: 0, 101: 0, 105: 0, 116: 0 };

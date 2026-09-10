@@ -300,7 +300,7 @@ async function syncEmissoes() {
                         }
                     }
                     
-                    const totals = { 10: 0, 11: 0, 12: 0, 20: 0, 30: 0, 40: 0, 50: 0, 60: 0, 100: 0, 101: 0, 105: 0 };
+                    const totals = { 1: 0, 10: 0, 11: 0, 12: 0, 20: 0, 30: 0, 40: 0, 50: 0, 60: 0, 100: 0, 101: 0, 105: 0, 116: 0 };
                     
                     linkedOps.forEach(opId => {
                         const opsData = pointingsMap[opId] || {};
@@ -336,7 +336,8 @@ async function syncEmissoes() {
                         STATUS_PCP: selectedOpInfo?.STATUS_PCP || r.STATUS_PCP || null,
                         LINK_STATUS: linkStatus,
                         OP_SUGERIDA_INFO: suggestedOp,
-                        QTY_MOLDADA: totals[10] + totals[11] + totals[12],
+                        QTY_MOLDADA: totals[1] + totals[10] + totals[11] + totals[12],
+                        QTY_FECHAMENTO_MANUAL: totals[116],
                         QTY_FUSAO: totals[20],
                         QTY_ACABAMENTO: totals[30],
                         QTY_TT: totals[40],
