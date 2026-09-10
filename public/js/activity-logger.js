@@ -1045,13 +1045,22 @@
 
         if (!isPrivilegedRole && !alwaysAllowed.includes(page)) {
             let isBlocked = false;
+            let pageLock = null;
             try {
                 const response = await fetch('/api/page-locks');
                 const result = await response.json();
                 if (result.success && Array.isArray(result.data)) {
-                    isBlocked = result.data.some(lock => lock.page_id === page && lock.is_locked);
+                    pageLock = result.data.find(lock => lock.page_id === page && lock.is_locked) || null;
+                    isBlocked = !!pageLock;
                 }
             } catch (e) {}
+            if (pageLock && pageLock.lock_reason === 'maintenance') {
+                showMaintenanceOverlay();
+                isBlocked = false;
+            } else if (pageLock && pageLock.lock_reason === 'development') {
+                showDevelopmentOverlay();
+                isBlocked = false;
+            }
             try {
                 const presp = await fetch('/api/permissions', { cache: 'no-store' });
                 const prows = await presp.json();

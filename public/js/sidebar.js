@@ -1002,8 +1002,18 @@
             if (document.getElementById('erus-page-maintenance-lock')) return;
             var overlay = document.createElement('div');
             overlay.id = 'erus-page-maintenance-lock';
-            overlay.style.cssText = 'position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(9,9,11,.82);backdrop-filter:blur(8px);';
-            overlay.innerHTML = '<div style="width:min(440px,100%);padding:30px;border:1px solid rgba(245,158,11,.38);border-radius:16px;background:#18181b;box-shadow:0 24px 70px rgba(0,0,0,.6);text-align:center;color:#f4f4f5"><i class="fa-solid fa-screwdriver-wrench" style="display:block;margin-bottom:16px;color:#f59e0b;font-size:2rem"></i><div style="font-size:1.15rem;font-weight:800">Tela em manutenção</div><p style="margin:10px 0 0;color:#a1a1aa;font-size:.86rem;line-height:1.55">Esta tela está temporariamente indisponível para manutenção. Tente novamente em breve.</p></div>';
+            var blurTarget = document.querySelector('.app-layout');
+            if (!blurTarget) {
+                blurTarget = document.createElement('div');
+                blurTarget.id = 'erus-maintenance-blur-wrapper';
+                while (document.body.firstChild) blurTarget.appendChild(document.body.firstChild);
+                document.body.appendChild(blurTarget);
+            }
+            blurTarget.style.filter = 'blur(8px) saturate(.5)';
+            blurTarget.style.pointerEvents = 'none';
+            blurTarget.style.userSelect = 'none';
+            overlay.style.cssText = 'position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(9,9,11,.58);backdrop-filter:blur(3px);';
+            overlay.innerHTML = '<div role="dialog" aria-modal="true" style="width:min(440px,100%);padding:32px;border:1px solid rgba(245,158,11,.38);border-radius:16px;background:#18181b;box-shadow:0 24px 70px rgba(0,0,0,.6);text-align:center;color:#f4f4f5"><i class="fa-solid fa-screwdriver-wrench" style="display:block;margin-bottom:16px;color:#f59e0b;font-size:2rem"></i><div style="font-size:1.15rem;font-weight:800">Tela em manutenção</div><p style="margin:10px 0 24px;color:#a1a1aa;font-size:.86rem;line-height:1.55">Esta tela está temporariamente indisponível para manutenção. Tente novamente em breve.</p><a href="index.html" style="display:inline-flex;align-items:center;gap:8px;padding:11px 20px;border-radius:10px;background:#f59e0b;color:#18181b;font-weight:700;text-decoration:none"><i class="fa-solid fa-arrow-left"></i> Voltar para o início</a></div>';
             document.body.appendChild(overlay);
         }
 
@@ -1024,7 +1034,7 @@
                     }
                 });
                 var currentPage = window.location.pathname.split('/').pop() || 'index.html';
-                if (locks[currentPage] && locks[currentPage].lock_reason === 'maintenance') {
+                if (!isPrivilegedRole && locks[currentPage] && locks[currentPage].lock_reason === 'maintenance') {
                     showPageMaintenance(locks[currentPage]);
                 } else if (restrictedPageMap[roleNorm]) {
                     if (blocked[currentPage]) {
