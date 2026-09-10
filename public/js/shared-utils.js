@@ -182,7 +182,8 @@ function getItemSectorMetrics(item, limitToCommercial = false) {
     res.totalBalance = getCommercialBalance(item);
     res.operationalRouteAvailable = operationalRoute.length > 0;
     if (operationalOnly && linkedOp && linkedOp !== '-' && !res.operationalRouteAvailable) {
-        ['qExpedicao', 'qQualidade', 'qUsinagem', 'qTT', 'qAcabamento', 'qFusao', 'qMoldada', 'qFechamento', 'qAguardando'].forEach(key => { res[key] = 0; });
+        ['qExpedicao', 'qQualidade', 'qUsinagem', 'qTT', 'qAcabamento', 'qFusao', 'qMoldada', 'qFechamento'].forEach(key => { res[key] = 0; });
+        res.qAguardando = Math.max(0, Math.min(industrialCapacity, targetTotalQty));
     }
 
     // Threshold filter

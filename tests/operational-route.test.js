@@ -24,10 +24,11 @@ test('operational quantities override conflicting legacy quantities', () => {
     assert.equal(metrics.qFechamento, 2);
 });
 
-test('missing operational route cannot fall back to the legacy route', () => {
+test('missing operational route stays in awaiting molding without fallback', () => {
     for (const missing of [undefined, [], null]) {
         const metrics = getItemSectorMetrics({ ...order, ROTEIRO_OPERACIONAL: missing });
-        for (const key of ['qFechamento', 'qAguardando', 'qMoldada', 'qFusao', 'qAcabamento', 'qTT', 'qUsinagem', 'qQualidade', 'qExpedicao']) {
+        assert.equal(metrics.qAguardando, 10);
+        for (const key of ['qFechamento', 'qMoldada', 'qFusao', 'qAcabamento', 'qTT', 'qUsinagem', 'qQualidade', 'qExpedicao']) {
             assert.equal(metrics[key], 0, key);
         }
         assert.equal(metrics.totalBalance, 10);
