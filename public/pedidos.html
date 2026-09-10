@@ -8417,6 +8417,7 @@ function flashConcentracaoBar(barIndex) {
             moldagem: 2, fusao: 1, acabamento: 3, tratamento: 2, usinagem: 5, qualidade: 1, expedicao: 1, faturamento: 1
         };
         const sectorGroups = {
+            'FECHAMENTO MANUAL': ['FECHAMENTO MANUAL'],
             'MOLDAGEM': ['MOLDAGEM', 'MOLDAGEM MANUAL', 'MOLDAGEM PESADA', 'MOLDAGEM LEVE', 'MOLDAGEM MECANIZADA', 'MOLDAGEM AUTOMÁTICA', 'MOLDAGEM EM AREIA'],
             'FUSÃO': ['FUSÃO', 'FUSAO', 'FUNDICAO', 'FUNDIÇÃO'],
             'ACABAMENTO': ['ACABAMENTO', 'REBARBAÇÃO', 'REBARBACAO', 'GRALHA', 'SUBSTITUICAO', 'RETRABALHO DE ACABAMENTO'],
@@ -8522,6 +8523,14 @@ function flashConcentracaoBar(barIndex) {
             try {
                 const res = await fetch(`/api/pedidos-firebird/op-apontamentos?op=${op}`);
                 const pointingData = await res.json();
+                let operationalRoute = [];
+                try {
+                    const routeRes = await fetch(`/api/pedidos-firebird/op-roteiro-operacional?op=${encodeURIComponent(op)}`);
+                    if (routeRes.ok) operationalRoute = await routeRes.json();
+                } catch (_) {}
+                if (operationalRoute.length) {
+                    pointingData.splice(0, pointingData.length, ...operationalRoute.map(row => ({ setor: row.setor, quantidade: Number(row.produzido || 0), refugo: Number(row.refugado || 0), data: row.ultima_data })));
+                }
                 if (pointingData.error) throw new Error(pointingData.error);
                 const totalQtyNum = Number(originalQty) || 0;
                 const allGroups = Object.keys(sectorGroups); // 'USINAGEM EXPEDIÇÃO', etc.
@@ -8537,11 +8546,12 @@ function flashConcentracaoBar(barIndex) {
                         if (!lastPointingDate[category] || date > lastPointingDate[category]) lastPointingDate[category] = date;
                     }
                 });
-                const routeExists = route !== null && route !== undefined && String(route).trim() !== '';
+                const effectiveRoute = operationalRoute.length ? operationalRoute.map(row => row.setor).join(',') : route;
+                const routeExists = effectiveRoute !== null && effectiveRoute !== undefined && String(effectiveRoute).trim() !== '';
                 const normalize = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '');
                 let orderedSectors;
                 if (routeExists) {
-                    const routeNames = String(route).split(',').map(s => normalize(s.trim().toUpperCase()));
+                    const routeNames = String(effectiveRoute).split(',').map(s => normalize(s.trim().toUpperCase()));
                     orderedSectors = allGroups.filter(stage => {
                         const aliases = sectorGroups[stage].map(a => normalize(a.toUpperCase()));
                         return stage === 'EXPEDIÇÃO' || stage === 'FATURAMENTO' || routeNames.some(name => name.length > 0 && aliases.some(alias => name === alias || name.includes(alias))) || aggregatedData[stage] > 0;
