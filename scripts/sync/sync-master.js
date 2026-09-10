@@ -278,13 +278,13 @@ async function syncMaster() {
                     op.QUANTIDADE_PPR = op.OP_QUANTIDADE;
 
                     const opsData = pointingsMap[op.OP_PCS] || {};
-                    const totals = { 10: 0, 11: 0, 12: 0, 20: 0, 30: 0, 40: 0, 50: 0, 60: 0, 100: 0, 101: 0, 105: 0, 116: 0 };
+                    const totals = { 1: 0, 10: 0, 11: 0, 12: 0, 20: 0, 30: 0, 40: 0, 50: 0, 60: 0, 100: 0, 101: 0, 105: 0, 116: 0 };
                     Object.keys(opsData).forEach(sector => {
                         const sId = Number(sector);
                         if (totals[sId] !== undefined) totals[sId] += opsData[sector];
                     });
 
-                    op.QTY_MOLDADA = totals[10] + totals[11] + totals[12];
+                    op.QTY_MOLDADA = totals[1] + totals[10] + totals[11] + totals[12];
                     op.QTY_FECHAMENTO_MANUAL = totals[116];
                     op.QTY_FUSAO = totals[20];
                     op.QTY_ACABAMENTO = totals[30];

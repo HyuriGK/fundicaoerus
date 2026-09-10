@@ -131,7 +131,7 @@ function getItemSectorMetrics(item, limitToCommercial = false) {
         qTT:         Math.max(0, cTT   - cUsiIn),
         qAcabamento: Math.max(0, cAcab - cTTIn),
         qFusao:      Math.max(0, cFus  - cAcabIn),
-        qMoldada:    Math.max(0, cMold - cFusIn),
+        qMoldada:    Math.max(0, rawMoldada - Math.max(rawFechamento, cFusIn)),
         qFechamento: Math.max(0, rawMoldada - rawFechamento),
         qAguardando: Math.max(0, Math.min(industrialCapacity, targetTotalQty) - cMold),
 
