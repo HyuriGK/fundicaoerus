@@ -75,6 +75,7 @@ function getItemSectorMetrics(item, limitToCommercial = false) {
     const rawAcabamento  = ignoreSuggestedOp ? 0 : Math.max(0, (Number(item.QTY_ACABAMENTO)  || 0) - refugoAcabamento);
     const rawFusao       = ignoreSuggestedOp ? 0 : Math.max(0, (Number(item.QTY_FUSAO)       || 0) - refugoFusao);
     const rawMoldada     = ignoreSuggestedOp ? 0 : Math.max(0, (Number(item.QTY_MOLDADA)     || 0) - refugoMoldagem);
+    const rawFechamento  = ignoreSuggestedOp ? 0 : Math.max(0, Number(item.QTY_FECHAMENTO_MANUAL) || 0);
 
     // APONTADO por setor (bruto, sem deduzir refugo — barreira de entrada no setor)
     // Peça apontada em X já saiu da fila do setor anterior, independente do resultado
@@ -109,7 +110,7 @@ function getItemSectorMetrics(item, limitToCommercial = false) {
     const cUsi  = Math.min(industrialCapacity, Math.max(cQual, rawUsinagem));
     const cTT   = Math.min(industrialCapacity, Math.max(cUsi,  rawTT));
     const cAcab = Math.min(industrialCapacity, Math.max(cTT,   rawAcabamento));
-    const cFus  = Math.min(industrialCapacity, Math.max(cAcab, rawFusao));
+    const cFus  = Math.min(industrialCapacity, Math.max(cAcab, rawFusao, rawFechamento));
 
     // Cadeia de entrada (APONTADO) — quantas peças já entraram em cada setor
     // cAcabIn é capado em apontadoFusao: garante cFusIn = apontadoFusao sempre,
@@ -131,6 +132,7 @@ function getItemSectorMetrics(item, limitToCommercial = false) {
         qAcabamento: Math.max(0, cAcab - cTTIn),
         qFusao:      Math.max(0, cFus  - cAcabIn),
         qMoldada:    Math.max(0, cMold - cFusIn),
+        qFechamento: Math.max(0, rawMoldada - rawFechamento),
         qAguardando: Math.max(0, Math.min(industrialCapacity, targetTotalQty) - cMold),
 
         // REFUGOS POR SETOR
