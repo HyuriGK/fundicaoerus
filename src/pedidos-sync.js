@@ -353,7 +353,7 @@ router.get('/', async (req, res) => {
             SELECT op, produzido
             FROM producao_roteiro_operacional_sync
             WHERE setor_codigo = 116 OR UPPER(setor) LIKE '%FECHAMENTO MANUAL%'
-        `);
+        `).catch(() => ({ rows: [] }));
         const fechamentoManualMap = new Map(fechamentoManualResult.rows.map(row => [
             String(row.op || '').trim(),
             Number(row.produzido || 0)
