@@ -1034,7 +1034,7 @@
                     }
                 });
                 var currentPage = window.location.pathname.split('/').pop() || 'index.html';
-                if (!isPrivilegedRole && locks[currentPage] && locks[currentPage].lock_reason === 'maintenance') {
+                if (roleNorm !== 'desenvolvedor' && locks[currentPage] && locks[currentPage].lock_reason === 'maintenance') {
                     showPageMaintenance(locks[currentPage]);
                 } else if (restrictedPageMap[roleNorm]) {
                     if (blocked[currentPage]) {

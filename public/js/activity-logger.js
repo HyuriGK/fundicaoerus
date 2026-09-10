@@ -154,7 +154,7 @@
                         showFloatingSyncIndicator(lock);
                     }
                     // Bloqueio manual (independente do sync) — apenas não-devs
-                    if (lock.is_locked && role !== 'desenvolvedor' && role !== 'admin') {
+                    if (lock.is_locked && role !== 'desenvolvedor') {
                         logActivity('ACESSO_BLOQUEADO', { motivo: lock.lock_reason || 'manutenção' });
                         if (lock.lock_reason === 'development') {
                             showDevelopmentOverlay();
@@ -1040,10 +1040,11 @@
         const role = (localStorage.getItem('erus_role') || 'Visitante').toLowerCase();
         const stripAccentsCurrentRole = s => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
         const roleNormCurrent = stripAccentsCurrentRole(role);
-        const isPrivilegedRole = roleNormCurrent === 'desenvolvedor' || roleNormCurrent === 'admin';
+        const isDeveloperRole = roleNormCurrent === 'desenvolvedor';
+        const isPrivilegedRole = isDeveloperRole || roleNormCurrent === 'admin';
         const alwaysAllowed = ['index.html'];
 
-        if (!isPrivilegedRole && !alwaysAllowed.includes(page)) {
+        if (!isDeveloperRole && !alwaysAllowed.includes(page)) {
             let isBlocked = false;
             let pageLock = null;
             try {
@@ -1057,7 +1058,7 @@
             if (pageLock && pageLock.lock_reason === 'maintenance') {
                 showMaintenanceOverlay();
                 isBlocked = false;
-            } else if (pageLock && pageLock.lock_reason === 'development') {
+            } else if (pageLock && pageLock.lock_reason === 'development' && !isPrivilegedRole) {
                 showDevelopmentOverlay();
                 isBlocked = false;
             }
