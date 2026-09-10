@@ -349,6 +349,8 @@ router.get('/', async (req, res) => {
               AND COALESCE(data->>'STATUS_PCP', '') IN ('C', 'E', 'F')
         `);
         const closedOps = new Set(closedOpsResult.rows.map(row => String(row.op || '').trim()).filter(Boolean));
+        const fechamentoOpsResult = await pool.query('SELECT DISTINCT op FROM producao_roteiro_operacional_sync WHERE setor_codigo = 116').catch(() => ({ rows: [] }));
+        const fechamentoOps = new Set(fechamentoOpsResult.rows.map(row => String(row.op || '').trim()));
         const produtoPesoResult = await pool.query(`
             SELECT
                 data->>'PRODUTO_PPR' AS produto,
@@ -398,6 +400,7 @@ router.get('/', async (req, res) => {
                 item.PESO_PRODUTO = produtoPesoMap[produtoKey];
             }
             const opValue = String(item.OP_PCS || '').trim();
+            if (opValue && fechamentoOps.has(opValue)) item.TEM_FECHAMENTO_MANUAL = true;
             if (item.LINK_STATUS === 'sugerido' && !/^\d{1,4}$/.test(opValue)) {
                 item.LINK_STATUS = null;
                 item.OP_PCS = null;
