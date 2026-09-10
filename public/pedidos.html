@@ -6002,6 +6002,37 @@
                 }
                 return true;
             });
+            if (activeChartFilters.stage && !commercialView) {
+                const opGroups = new Map();
+                filtered.forEach(item => {
+                    const op = String(item.OP_PCS || '').trim();
+                    if (op && op !== '-') {
+                        if (!opGroups.has(op)) opGroups.set(op, []);
+                        opGroups.get(op).push(item);
+                    }
+                });
+                opGroups.forEach(items => {
+                    if (items.length < 2) return;
+                    const physicalQty = Math.max(...items.map(item => Number(item._sectorQty) || 0));
+                    const weights = items.map(item => Math.max(0, Number(item.QUANTIDADE_PPR) || Number(getCommercialBalance(item)) || 0));
+                    const totalWeight = weights.reduce((sum, value) => sum + value, 0);
+                    if (physicalQty <= 0 || totalWeight <= 0) return;
+                    let assigned = 0;
+                    items.forEach((item, index) => {
+                        const qty = index === items.length - 1
+                            ? Math.max(0, physicalQty - assigned)
+                            : Math.min(physicalQty - assigned, Math.floor((physicalQty * weights[index]) / totalWeight));
+                        assigned += qty;
+                        item._sectorQty = qty;
+                        const unitWeight = getResolvedUnitWeight(item, customWeights, getItemSectorMetrics(item).targetTotalQty);
+                        item._sectorWeight = unitWeight * qty;
+                        item._sectorValue = Number(item.VALOR_PPR || 0) * unitWeight * qty;
+                    });
+                });
+                for (let i = filtered.length - 1; i >= 0; i--) {
+                    if (filtered[i]._sectorQty !== undefined && Number(filtered[i]._sectorQty) <= 0) filtered.splice(i, 1);
+                }
+            }
             // 5. SORTING
             if (sortConfig.column) {
                 filtered.sort((a, b) => {
