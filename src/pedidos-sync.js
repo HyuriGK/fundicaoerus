@@ -211,7 +211,13 @@ router.get('/resumo-carteira', async (req, res) => {
                         0
                     ) AS peso_unit
                 FROM firebird_sync_emissoes p
-                LEFT JOIN ficha_tecnica f ON f.pro_codigo_fic = (p.data->>'PRODUTO_PPR')
+                LEFT JOIN LATERAL (
+                    SELECT data_fic, pro_codigo_fic, peso_liquido_pro, tipo_moldagem_procedimento
+                    FROM ficha_tecnica
+                    WHERE pro_codigo_fic = (p.data->>'PRODUTO_PPR')
+                    ORDER BY data_fic DESC NULLS LAST, updated_at DESC NULLS LAST
+                    LIMIT 1
+                ) f ON TRUE
                 LEFT JOIN pesos_customizados pc ON pc.codigo = TRIM(p.data->>'PRODUTO_PPR')
                 ${ownerJoin}
                 WHERE
@@ -294,7 +300,13 @@ router.get('/', async (req, res) => {
                     ms.modelo_status,
                     COALESCE(pc.conferido, false) AS conferido
                 FROM firebird_sync_emissoes p
-                LEFT JOIN ficha_tecnica f ON f.pro_codigo_fic = (p.data->>'PRODUTO_PPR')
+                LEFT JOIN LATERAL (
+                    SELECT data_fic, pro_codigo_fic, peso_liquido_pro, tipo_moldagem_procedimento
+                    FROM ficha_tecnica
+                    WHERE pro_codigo_fic = (p.data->>'PRODUTO_PPR')
+                    ORDER BY data_fic DESC NULLS LAST, updated_at DESC NULLS LAST
+                    LIMIT 1
+                ) f ON TRUE
                 LEFT JOIN pedidos_observacoes obs ON obs.sync_key = p.sync_key
                 LEFT JOIN pedidos_modelo_status ms ON ms.sync_key = p.sync_key
                 LEFT JOIN pedidos_conferencia pc ON pc.sync_key = p.sync_key
