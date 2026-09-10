@@ -4411,44 +4411,40 @@
         // ==========================================================================
         // DADOS E SERVIDOR
         // ==========================================================================
-        let carteiraData = []; // Store carteira data for comparison
-        async function loadDataFromServer() {
-            updatePedidosPageLoader('dados', 'Buscando pedidos e carteira', 42);
+        async function fetchPedidosJson(url, timeoutMs) {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), timeoutMs);
             try {
-                // 1. Fetch Custom Weights
-                try {
-                    const wRes = await fetch('/api/weights/list');
-                    if (wRes.ok) customWeights = await wRes.json();
-                } catch (err) { console.warn('Falha ao carregar pesos customizados', err); }
-                // 2. Fetch Pedidos AND Carteira in parallel
-                const [pedidosFetch, carteiraFetch] = await Promise.allSettled([
-                    fetch('/api/pedidos-sync?carteiraOnly=true'),
-                    fetch('/api/carteira')
+                const response = await fetch(url, { signal: controller.signal });
+                if (!response.ok) throw new Error(`Erro na API ${url}: ${response.status}`);
+                return await response.json();
+            } finally {
+                clearTimeout(timeout);
+            }
+        }
+        async function loadDataFromServer() {
+            updatePedidosPageLoader('dados', 'Buscando pedidos', 42);
+            try {
+                const [pedidos, weights] = await Promise.all([
+                    fetchPedidosJson('/api/pedidos-sync?carteiraOnly=true', 30000),
+                    fetchPedidosJson('/api/weights/list', 10000).catch(err => {
+                        console.warn('Falha ao carregar pesos customizados', err);
+                        showToast('Atenção', 'Pesos personalizados indisponíveis. Confira os pesos antes de usar os totais.', 'warning');
+                        return customWeights;
+                    })
                 ]);
-                const resPedidos = pedidosFetch.status === 'fulfilled' ? pedidosFetch.value : null;
-                const resCarteira = carteiraFetch.status === 'fulfilled' ? carteiraFetch.value : null;
-                if (!resPedidos || !resPedidos.ok) throw new Error('Erro na API Pedidos');
-                allData = await resPedidos.json();
+                allData = pedidos;
+                customWeights = weights;
                 localChartCache.clear();
                 updatePedidosPageLoader('graficos', 'Montando indicadores e graficos', 78);
-                if (resCarteira && resCarteira.ok) {
-                    carteiraData = await resCarteira.json();
-                } else {
-                    carteiraData = [];
-                }
-                // Apply filters after a short delay to ensure Grid layout is stable
-                setTimeout(() => {
-                    applyColumnFilters();
-                    // Extra verification to ensure charts are properly sized after first paint
-                    requestAnimationFrame(() => {
-                        if (chartPCP) chartPCP.resize();
-                        if (chartPareto) chartPareto.resize();
-                        if (chartDaily) chartDaily.resize();
-                        if (chartPending) chartPending.resize();
-                        if (chartHistorical) chartHistorical.resize();
-                        hidePedidosPageLoader();
-                    });
-                }, 150);
+                await new Promise(resolve => setTimeout(resolve, 150));
+                applyColumnFilters();
+                await new Promise(resolve => requestAnimationFrame(resolve));
+                if (chartPCP) chartPCP.resize();
+                if (chartPareto) chartPareto.resize();
+                if (chartDaily) chartDaily.resize();
+                if (chartPending) chartPending.resize();
+                if (chartHistorical) chartHistorical.resize();
                 // Populate material suggestions for autocomplete
                 populateMaterialSuggestions();
                 // REDIRECTION LOGIC: Check for specific filters from Task Center
@@ -4491,8 +4487,9 @@
                 }
             } catch (e) {
                 console.error(e);
-                hidePedidosPageLoader();
                 showToast("Erro", "Falha ao carregar dados do servidor.", "danger");
+            } finally {
+                hidePedidosPageLoader();
             }
         }
         let materialOptions = [];
@@ -5260,6 +5257,7 @@
                     { key: 'MOLDAGEM PESADA', barId: 'barMoldPesada', label: 'Moldagem Pesada', icon: 'fa-industry',      desc: 'Peças aguardando moldagem no setor de moldagem pesada.' },
                     { key: 'MOLDAGEM LEVE',   barId: 'barMoldLeve',   label: 'Moldagem Leve',   icon: 'fa-cubes',          desc: 'Peças aguardando moldagem no setor de moldagem leve.' },
                     { key: 'MOLDAGEM MANUAL', barId: 'barMoldManual', label: 'Moldagem Manual', icon: 'fa-hand-sparkles',  desc: 'Peças aguardando moldagem no setor de moldagem manual.' },
+                    { key: 'FECHAMENTO MANUAL', barId: 'barFechamentoManual', label: 'Fechamento Manual', icon: 'fa-arrows-rotate', desc: 'Peças aguardando moldagem no processo de fechamento de molde.' },
                     { key: 'OUTROS',          barId: 'barMoldOutros', label: 'Sem Tipo',        icon: 'fa-circle-question',desc: 'Peças sem tipo de moldagem cadastrado na ficha técnica.' },
                 ];
                 const groupPeso = kpiAguardando.peso || 0;
@@ -5304,13 +5302,6 @@
             if (document.getElementById('groupAguardandoContent'))
                 document.getElementById('groupAguardandoContent').innerHTML = formatG('Aguardando Moldagem', kpiAguardando, 'stat-value-accent');
             updateMoldagemSubcrowns(moldagemBreakdown, kpiAguardando);
-            const fechamentoBar = document.getElementById('barFechamentoManual');
-            if (fechamentoBar) {
-                const pct = kpiAguardando.peso > 0 ? (moldagemBreakdown['FECHAMENTO MANUAL'].peso / kpiAguardando.peso) * 100 : 0;
-                fechamentoBar.style.width = pct.toFixed(1) + '%';
-                const fechamento = moldagemBreakdown['FECHAMENTO MANUAL'];
-                fechamentoBar.setAttribute('data-tooltip', `<div class="tooltip-header"><i class="fa-solid fa-arrows-rotate"></i>Fechamento Manual</div><div class="tooltip-row"><span class="tooltip-label">% do Aguardando Moldagem</span><span class="tooltip-value">${pct.toFixed(1)}%</span></div><div class="tooltip-row" style="background:rgba(6,182,212,0.1);border-radius:4px;padding:4px 0;"><span class="tooltip-label">Saldo no Setor</span><span class="tooltip-value" style="font-weight:bold;">${formatNumber(fechamento.qtd, 0)} pÃ§s</span></div><div class="tooltip-row"><span class="tooltip-label">Peso Total</span><span class="tooltip-value">${formatNumber(fechamento.peso, 0)} kg</span></div><div class="tooltip-row"><span class="tooltip-label">Valor total (do Saldo)</span><span class="tooltip-value">${valorVisible ? formatCurrency(fechamento.valor) : '-----'}</span></div><div class="tooltip-footer">PeÃ§as aguardando moldagem no processo de fechamento de molde.</div>`);
-            }
             if (document.getElementById('groupMoldadoContent')) 
                 document.getElementById('groupMoldadoContent').innerHTML = formatG('FUSÃO', kpiMoldagem, 'stat-value-blue');
             if (document.getElementById('groupFundidoContent')) 
