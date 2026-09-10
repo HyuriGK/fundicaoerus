@@ -110,7 +110,7 @@ function getItemSectorMetrics(item, limitToCommercial = false) {
     const cUsi  = Math.min(industrialCapacity, Math.max(cQual, rawUsinagem));
     const cTT   = Math.min(industrialCapacity, Math.max(cUsi,  rawTT));
     const cAcab = Math.min(industrialCapacity, Math.max(cTT,   rawAcabamento));
-    const cFus  = Math.min(industrialCapacity, Math.max(cAcab, rawFusao, rawFechamento));
+    const cFus  = Math.min(industrialCapacity, Math.max(cAcab, rawFusao));
 
     // Cadeia de entrada (APONTADO) — quantas peças já entraram em cada setor
     // cAcabIn é capado em apontadoFusao: garante cFusIn = apontadoFusao sempre,
@@ -130,7 +130,7 @@ function getItemSectorMetrics(item, limitToCommercial = false) {
         qUsinagem:   Math.max(0, cUsi  - cQualIn),
         qTT:         Math.max(0, cTT   - cUsiIn),
         qAcabamento: Math.max(0, cAcab - cTTIn),
-        qFusao:      Math.max(0, cFus  - cAcabIn),
+        qFusao:      Math.max(0, cFus - cAcabIn, rawFechamento - rawFusao),
         qMoldada:    Math.max(0, rawMoldada - Math.max(rawFechamento, cFusIn)),
         qFechamento: Math.max(0, rawMoldada - rawFechamento),
         qAguardando: Math.max(0, Math.min(industrialCapacity, targetTotalQty) - cMold),
