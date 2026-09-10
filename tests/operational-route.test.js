@@ -46,6 +46,18 @@ test('partial and completed closure use only operational pointings', () => {
     }
 });
 
+test('closure tooltip quantity is not inflated by the order waiting for molding', () => {
+    const route = [{ setor_codigo: 12, setor: 'MOLDAGEM MANUAL', produzido: 10, refugado: 0 }, { setor_codigo: 116, setor: 'FECHAMENTO MANUAL', produzido: 2, refugado: 0 }];
+    const item = { OP_PCS: '5450', ROTEIRO_OPERACIONAL_OBRIGATORIO: true, ROTEIRO_OPERACIONAL: route, QUANTIDADE_PPR: 12, OP_QUANTIDADE: 12 };
+    const metrics = getItemSectorMetrics(item);
+    assert.equal(metrics.qFechamento, 8);
+    assert.equal(metrics.qAguardando, 2);
+    const itemWithUnmoldedBalance = { ...item, QUANTIDADE_PPR: 20, OP_QUANTIDADE: 20 };
+    const secondMetrics = getItemSectorMetrics(itemWithUnmoldedBalance);
+    assert.equal(secondMetrics.qFechamento, 8);
+    assert.equal(secondMetrics.qAguardando, 10);
+});
+
 const html = fs.readFileSync(path.join(__dirname, '../public/pedidos.html'), 'utf8');
 function modalContext(rows, failure) {
     const elements = new Map();
