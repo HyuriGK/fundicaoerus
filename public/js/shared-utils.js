@@ -42,6 +42,24 @@ function getCommercialBalance(item) {
  * Logic synchronized with the Orders Dashboard.
  */
 function getItemSectorMetrics(item, limitToCommercial = false) {
+    const operationalOnly = item.ROTEIRO_OPERACIONAL_OBRIGATORIO === true ||
+        (typeof window !== 'undefined' && window.erusRequireOperationalRoute === true);
+    const operationalRoute = Array.isArray(item.ROTEIRO_OPERACIONAL) ? item.ROTEIRO_OPERACIONAL : [];
+    if (operationalOnly) {
+        item = { ...item };
+        const sectorFields = {
+            MOLDADA: [1, 10, 11, 12], FECHAMENTO_MANUAL: [116], FUSAO: [20],
+            ACABAMENTO: [30], TT: [40], USINAGEM: [50, 105], QUALIDADE: [60],
+            EXPEDICAO: [100], FATURAMENTO: [101]
+        };
+        Object.entries(sectorFields).forEach(([field, codes]) => {
+            const rows = operationalRoute.filter(row => codes.includes(Number(row.setor_codigo)));
+            item[`QTY_${field}`] = rows.reduce((sum, row) => sum + (Number(row.produzido) || 0), 0);
+            item[`REFUGO_${field === 'MOLDADA' ? 'MOLDAGEM' : field}`] = rows.reduce((sum, row) => sum + (Number(row.refugado) || 0), 0);
+        });
+        item.TEM_FECHAMENTO_MANUAL = operationalRoute.some(row => Number(row.setor_codigo) === 116);
+        item.ROTEIRO_PRODUCAO = operationalRoute.map(row => row.setor).join(',');
+    }
     const saldoLib = Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0;
     const qtdOrig = Number(item.QUANTIDADE_PPR) || 0;
     const erpFat = Number(item.QUANTIDADE_FATURADO_PPR || item.QUANTIDADE_FATURADA_PPR) || 0;
@@ -76,7 +94,8 @@ function getItemSectorMetrics(item, limitToCommercial = false) {
     const rawFusao       = ignoreSuggestedOp ? 0 : Math.max(0, (Number(item.QTY_FUSAO)       || 0) - refugoFusao);
     const rawMoldada     = ignoreSuggestedOp ? 0 : Math.max(0, (Number(item.QTY_MOLDADA)     || 0) - refugoMoldagem);
     const rawFechamento  = ignoreSuggestedOp ? 0 : Math.max(0, Number(item.QTY_FECHAMENTO_MANUAL) || 0);
-    const hasFechamento = item.TEM_FECHAMENTO_MANUAL === true || String(item.ROTEIRO_PRODUCAO || '').toUpperCase().includes('FECHAMENTO');
+    const hasFechamento = operationalOnly ? item.TEM_FECHAMENTO_MANUAL :
+        item.TEM_FECHAMENTO_MANUAL === true || String(item.ROTEIRO_PRODUCAO || '').toUpperCase().includes('FECHAMENTO');
 
     // APONTADO por setor (bruto, sem deduzir refugo — barreira de entrada no setor)
     // Peça apontada em X já saiu da fila do setor anterior, independente do resultado
@@ -161,6 +180,10 @@ function getItemSectorMetrics(item, limitToCommercial = false) {
 
     // Total balance = saldo comercial
     res.totalBalance = getCommercialBalance(item);
+    res.operationalRouteAvailable = operationalRoute.length > 0;
+    if (operationalOnly && linkedOp && linkedOp !== '-' && !res.operationalRouteAvailable) {
+        ['qExpedicao', 'qQualidade', 'qUsinagem', 'qTT', 'qAcabamento', 'qFusao', 'qMoldada', 'qFechamento', 'qAguardando'].forEach(key => { res[key] = 0; });
+    }
 
     // Threshold filter
     for (let k in res) {

@@ -45,7 +45,7 @@
         }
     </script>
     <script src="js/activity-logger.js?v=20260901b"></script>
-    <script src="js/shared-utils.js?v=20260901b"></script>
+    <script src="js/shared-utils.js?v=20260910-operational-only"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script
         src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
@@ -4423,6 +4423,7 @@
             }
         }
         async function loadDataFromServer() {
+            window.erusRequireOperationalRoute = true;
             updatePedidosPageLoader('dados', 'Buscando pedidos', 42);
             try {
                 const [pedidos, weights] = await Promise.all([
@@ -4434,6 +4435,10 @@
                     })
                 ]);
                 allData = pedidos;
+                const missingRoutes = allData.filter(item => item.OP_PCS && item.OP_PCS !== '-' && item.LINK_STATUS !== 'sugerido' && !item.ROTEIRO_OPERACIONAL?.length);
+                if (missingRoutes.length) {
+                    showToast('Roteiro operacional indisponível', `${new Set(missingRoutes.map(item => item.OP_PCS)).size} OP(s) sem roteiro operacional sincronizado. Essas OPs não serão distribuídas nos setores.`, 'warning');
+                }
                 customWeights = weights;
                 localChartCache.clear();
                 updatePedidosPageLoader('graficos', 'Montando indicadores e graficos', 78);
@@ -5134,7 +5139,7 @@
                 addKpi(kpiExpedicao, qExpedicao, item.OP_PCS);
                 addKpi(kpiQualidade, qQualidade, item.OP_PCS);
                 addKpi(kpiUsinagem, qUsinagem, item.OP_PCS);
-                const hasUsinagem = String(item.ROTEIRO_PRODUCAO || '').toUpperCase().includes('USINAGEM');
+                const hasUsinagem = (item.ROTEIRO_OPERACIONAL || []).some(row => String(row.setor).toUpperCase().includes('USINAGEM'));
                 if (hasUsinagem) {
                     addKpi(kpiTT_Usinagem, qTT, item.OP_PCS);
                 } else {
@@ -5926,11 +5931,11 @@
                     else if (s === 'fusao') { sectorQty = qFusao; rawQty = metrics.rawFusao; }
                     else if (s === 'acabamento') { sectorQty = qAcabamento; rawQty = metrics.rawAcabamento; }
                     else if (s === 'tt_usinagem') { 
-                        const isUsi = String(item.ROTEIRO_PRODUCAO || '').toUpperCase().includes('USINAGEM');
+                        const isUsi = (item.ROTEIRO_OPERACIONAL || []).some(row => String(row.setor).toUpperCase().includes('USINAGEM'));
                         sectorQty = isUsi ? qTT : 0; rawQty = metrics.rawTT; 
                     }
                     else if (s === 'tt_qualidade') { 
-                        const isUsi = String(item.ROTEIRO_PRODUCAO || '').toUpperCase().includes('USINAGEM');
+                        const isUsi = (item.ROTEIRO_OPERACIONAL || []).some(row => String(row.setor).toUpperCase().includes('USINAGEM'));
                         sectorQty = (!isUsi) ? qTT : 0; rawQty = metrics.rawTT; 
                     }
                     else if (s === 'usinagem') { sectorQty = qUsinagem; rawQty = metrics.rawUsinagem; }
@@ -8543,58 +8548,31 @@ function flashConcentracaoBar(barIndex) {
             modal.style.display = 'flex';
             content.innerHTML = `<div style="text-align: center; padding: 40px;"><i class="fa-solid fa-circle-notch fa-spin" style="font-size: 2rem; color: var(--color-primary);"></i><p style="margin-top: 15px; color: var(--text-muted);">Buscando apontamentos...</p></div>`;
             try {
-                const res = await fetch(`/api/pedidos-firebird/op-apontamentos?op=${op}`);
-                const pointingData = await res.json();
-                let operationalRoute = [];
-                try {
-                    const routeRes = await fetch(`/api/pedidos-firebird/op-roteiro-operacional?op=${encodeURIComponent(op)}`);
-                    if (routeRes.ok) operationalRoute = await routeRes.json();
-                } catch (_) {}
-                if (operationalRoute.length) {
-                    pointingData.splice(0, pointingData.length, ...operationalRoute.map(row => ({ setor: row.setor, quantidade: Number(row.produzido || 0), refugo: Number(row.refugado || 0), data: row.ultima_data })));
+                const operationalRoute = await fetchPedidosJson(`/api/pedidos-firebird/op-roteiro-operacional?op=${encodeURIComponent(op)}`, 15000);
+                if (!Array.isArray(operationalRoute) || !operationalRoute.length) {
+                    content.textContent = 'Roteiro operacional indisponível para esta OP. Atualize a sincronização para consultar as etapas.';
+                    return;
                 }
-                if (pointingData.error) throw new Error(pointingData.error);
+                const pointingData = operationalRoute.map(row => ({ setor: row.setor, quantidade: Number(row.produzido || 0), refugo: Number(row.refugado || 0), data: row.ultima_data }));
                 const totalQtyNum = Number(originalQty) || 0;
-                const allGroups = Object.keys(sectorGroups); // 'USINAGEM EXPEDIÇÃO', etc.
+                const getRouteCategory = name => {
+                    const normalized = String(name || '').trim().toUpperCase();
+                    return Object.keys(sectorGroups).find(cat => sectorGroups[cat].some(sub => normalized === sub.toUpperCase()) || normalized === cat.toUpperCase()) || normalized;
+                };
+                const allGroups = [...new Set(operationalRoute.map(row => getRouteCategory(row.setor)))];
                 const aggregatedData = {};
                 const lastPointingDate = {};
                 allGroups.forEach(s => { aggregatedData[s] = 0; lastPointingDate[s] = null; });
                 pointingData.forEach(row => {
                     const rowSetor = String(row.setor || '').trim().toUpperCase();
-                    const category = allGroups.find(cat => sectorGroups[cat].some(sub => rowSetor === String(sub).trim().toUpperCase()) || rowSetor === String(cat).trim().toUpperCase());
+                    const category = getRouteCategory(rowSetor);
                     if (category) {
                         aggregatedData[category] += row.quantidade;
                         const date = toLocalDate(row.data);
                         if (!lastPointingDate[category] || date > lastPointingDate[category]) lastPointingDate[category] = date;
                     }
                 });
-                const effectiveRoute = operationalRoute.length ? operationalRoute.map(row => row.setor).join(',') : route;
-                const routeExists = effectiveRoute !== null && effectiveRoute !== undefined && String(effectiveRoute).trim() !== '';
-                const normalize = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '');
-                let orderedSectors;
-                if (routeExists) {
-                    const routeNames = String(effectiveRoute).split(',').map(s => normalize(s.trim().toUpperCase()));
-                    orderedSectors = allGroups.filter(stage => {
-                        const aliases = sectorGroups[stage].map(a => normalize(a.toUpperCase()));
-                        return stage === 'EXPEDIÇÃO' || stage === 'FATURAMENTO' || routeNames.some(name => name.length > 0 && aliases.some(alias => name === alias || name.includes(alias))) || aggregatedData[stage] > 0;
-                    });
-                } else {
-                    // Sem roteiro: exibe apenas setores com apontamentos reais + EXPEDIÇÃO e FATURAMENTO
-                    orderedSectors = allGroups.filter(stage =>
-                        stage === 'EXPEDIÇÃO' || stage === 'FATURAMENTO' || aggregatedData[stage] > 0
-                    );
-                }
-                // Ocultar setores "pulados": sem apontamento E algum setor posterior já tem apontamento
-                orderedSectors = orderedSectors.filter((sector, idx) => {
-                    if (sector === 'EXPEDIÇÃO' || sector === 'FATURAMENTO') return true;
-                    if (aggregatedData[sector] > 0) return true;
-                    const hasLaterPointing = orderedSectors.slice(idx + 1).some(s => aggregatedData[s] > 0);
-                    return !hasLaterPointing;
-                });
-                if (operationalRoute.some(row => Number(row.setor_codigo) === 116 || String(row.setor || '').trim().toUpperCase() === 'FECHAMENTO MANUAL') && !orderedSectors.includes('FECHAMENTO MANUAL')) {
-                    const moldIndex = orderedSectors.indexOf('MOLDAGEM');
-                    orderedSectors.splice(moldIndex >= 0 ? moldIndex + 1 : 0, 0, 'FECHAMENTO MANUAL');
-                }
+                let orderedSectors = [...allGroups];
                 if (orderedSectors.includes('FECHAMENTO MANUAL')) {
                     orderedSectors = orderedSectors.filter(stage => stage !== 'FECHAMENTO MANUAL');
                     const moldIndex = orderedSectors.indexOf('MOLDAGEM');
@@ -8623,7 +8601,7 @@ function flashConcentracaoBar(barIndex) {
                 const refugoData = {};
                 pointingData.forEach(row => {
                     const rowSetor = String(row.setor || '').trim().toUpperCase();
-                    const category = allGroups.find(cat => sectorGroups[cat].some(sub => rowSetor === String(sub).trim().toUpperCase()) || rowSetor === String(cat).trim().toUpperCase());
+                    const category = getRouteCategory(rowSetor);
                     if (category && row.refugo > 0) refugoData[category] = (refugoData[category] || 0) + row.refugo;
                 });
 

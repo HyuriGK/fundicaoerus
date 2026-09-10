@@ -349,18 +349,21 @@ router.get('/', async (req, res) => {
               AND COALESCE(data->>'STATUS_PCP', '') IN ('C', 'E', 'F')
         `);
         const closedOps = new Set(closedOpsResult.rows.map(row => String(row.op || '').trim()).filter(Boolean));
-        const fechamentoOpsResult = await pool.query(`
-            SELECT
-                op,
-                SUM(produzido) FILTER (WHERE setor_codigo = 116) AS fechamento_apontado,
-                SUM(produzido) FILTER (WHERE setor_codigo IN (1, 10, 11, 12)) AS moldagem_apontada,
-                SUM(refugado) FILTER (WHERE setor_codigo IN (1, 10, 11, 12)) AS moldagem_refugada
+        const routeOpIds = [...new Set(result.rows.map(row =>
+            String(linksMap[row.sync_key]?.status === 'confirmado' ? linksMap[row.sync_key].op : row.data.OP_PCS || '').trim()
+        ).filter(Boolean))];
+        const operationalRoutesResult = await pool.query(`
+            SELECT op, sequencia, setor_codigo, setor, produzido, refugado
             FROM producao_roteiro_operacional_sync
-            WHERE setor_codigo IN (1, 10, 11, 12, 116)
-            GROUP BY op
-            HAVING BOOL_OR(setor_codigo = 116)
-        `).catch(() => ({ rows: [] }));
-        const fechamentoOps = new Map(fechamentoOpsResult.rows.map(row => [String(row.op || '').trim(), row]));
+            WHERE op = ANY($1::text[])
+            ORDER BY op, COALESCE(sequencia, 999), setor_codigo
+        `, [routeOpIds]);
+        const operationalRoutes = new Map();
+        operationalRoutesResult.rows.forEach(row => {
+            const op = String(row.op).trim();
+            if (!operationalRoutes.has(op)) operationalRoutes.set(op, []);
+            operationalRoutes.get(op).push(row);
+        });
         const produtoPesoResult = await pool.query(`
             SELECT
                 data->>'PRODUTO_PPR' AS produto,
@@ -410,15 +413,10 @@ router.get('/', async (req, res) => {
                 item.PESO_PRODUTO = produtoPesoMap[produtoKey];
             }
             const opValue = String(item.OP_PCS || '').trim();
-            const fechamento = fechamentoOps.get(opValue);
-            if (fechamento) {
-                item.TEM_FECHAMENTO_MANUAL = true;
-                item.QTY_FECHAMENTO_MANUAL = num(fechamento.fechamento_apontado);
-                if (fechamento.moldagem_apontada !== null) {
-                    item.QTY_MOLDADA = num(fechamento.moldagem_apontada);
-                    item.REFUGO_MOLDAGEM = num(fechamento.moldagem_refugada);
-                }
-            }
+            item.ROTEIRO_OPERACIONAL_OBRIGATORIO = true;
+            item.ROTEIRO_OPERACIONAL = operationalRoutes.get(opValue) || [];
+            item.ROTEIRO_PRODUCAO = item.ROTEIRO_OPERACIONAL.map(row => row.setor).join(',');
+            item.TEM_FECHAMENTO_MANUAL = item.ROTEIRO_OPERACIONAL.some(row => Number(row.setor_codigo) === 116);
             if (item.LINK_STATUS === 'sugerido' && !/^\d{1,4}$/.test(opValue)) {
                 item.LINK_STATUS = null;
                 item.OP_PCS = null;
