@@ -1654,8 +1654,7 @@
         // Default Month: Current Month
         let currentMonthFilter = new Date().getMonth() + 1;
         let currentYearFilter = new Date().getFullYear().toString();
-        // Default Sector: MOLDAGEM GERAL (Requested by User)
-        let currentSectorFilter = 'MOLDAGEM GERAL';
+        let currentSectorFilter = 'TODOS';
         let currentLigaFilter = 'TODAS';
         let currentGrupoFilter = 'TODOS';
 
@@ -1674,6 +1673,7 @@
         const TOTAL_MOLDAGEM_SECTOR_KEY = 'TOTAL MOLDAGEM';
         const MOLDAGEM_ROLE_SECTORS = ['MOLDAGEM GERAL', 'MOLDAGEM LEVE', 'MOLDAGEM MANUAL', 'MOLDAGEM PESADA'];
         const FUSAO_ROLE_SECTORS = ['FUSAO'];
+        const ACABAMENTO_ROLE_SECTORS = ['ACABAMENTO'];
 
         function setInlineLoading(id, active) {
             const el = document.getElementById(id);
@@ -1743,6 +1743,10 @@
             return r === 'fusao' || r === 'fusão';
         }
 
+        function isAcabamentoRole() {
+            return getCurrentRole() === 'acabamento';
+        }
+
         function normalizeSectorName(value) {
             return String(value || '').trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
         }
@@ -1750,6 +1754,21 @@
         function isMoldagemRoleAllowedSector(value) {
             const sector = normalizeSectorName(value);
             return sector === 'MOLDAGEM GERAL' || MOLDAGEM_GERAL_TYPES.includes(sector);
+        }
+
+        function getDefaultSectorForRole() {
+            if (isMoldagemRole()) return 'MOLDAGEM GERAL';
+            if (isFusaoRole()) return 'FUSAO';
+            if (isAcabamentoRole()) return 'ACABAMENTO';
+            return 'TODOS';
+        }
+
+        function isRoleAllowedSector(value) {
+            const sector = normalizeSectorName(value);
+            if (isMoldagemRole()) return isMoldagemRoleAllowedSector(sector);
+            if (isFusaoRole()) return sector === 'FUSAO';
+            if (isAcabamentoRole()) return sector === 'ACABAMENTO';
+            return true;
         }
 
         // Setores permitidos no relatório
@@ -2166,7 +2185,7 @@
             // Defaults (No longer using localStorage as requested)
             currentMonthFilter = new Date().getMonth() + 1;
             currentYearFilter = new Date().getFullYear().toString();
-            currentSectorFilter = 'MOLDAGEM GERAL';
+            currentSectorFilter = getDefaultSectorForRole();
             currentGrupoFilter = 'TODOS';
             currentLigaFilter = 'TODAS';
 
@@ -2393,10 +2412,11 @@
             // I will add them exactly as requested. 
 
             const visibleSectors = isMoldagemRole() ? MOLDAGEM_ROLE_SECTORS
-                : (isFusaoRole() ? FUSAO_ROLE_SECTORS : orderedSectors);
+                : (isFusaoRole() ? FUSAO_ROLE_SECTORS
+                    : (isAcabamentoRole() ? ACABAMENTO_ROLE_SECTORS : orderedSectors));
 
             if (!visibleSectors.includes(currentSectorFilter)) {
-                currentSectorFilter = isFusaoRole() ? 'FUSAO' : 'MOLDAGEM GERAL';
+                currentSectorFilter = getDefaultSectorForRole();
             }
             renderSectorButtons(visibleSectors);
 
@@ -2478,7 +2498,7 @@
 
                 let matchSector = false;
                 if (currentSectorFilter === 'TODOS') {
-                    matchSector = isMoldagemRole() ? isMoldagemRoleAllowedSector(item.setor) : true;
+                    matchSector = isRoleAllowedSector(item.setor);
                 } else if (currentSectorFilter === 'MOLDAGEM GERAL') {
                     matchSector = MOLDAGEM_GERAL_TYPES.includes(item.setor);
                 } else {
@@ -2892,7 +2912,7 @@
             chartInstance = new Chart(ctx, {
                 type: 'bar',
                 data: { labels, datasets: [
-                    { label: 'ACAB. INTERNO', data: internal, backgroundColor: '#f59e0b', borderRadius: context => labels[context.dataIndex] === 'ACABAMENTO' && external[context.dataIndex] > 0 ? { topLeft: 0, topRight: 0, bottomLeft: 5, bottomRight: 5 } : 5, borderSkipped: false },
+                    { label: 'ACAB. INTERNO', data: internal, backgroundColor: '#ea580c', borderRadius: context => labels[context.dataIndex] === 'ACABAMENTO' && external[context.dataIndex] > 0 ? { topLeft: 0, topRight: 0, bottomLeft: 5, bottomRight: 5 } : 5, borderSkipped: false },
                     { label: 'ACAB. EXTERNO', data: external, backgroundColor: '#3b82f6', borderRadius: { topLeft: 5, topRight: 5, bottomLeft: 0, bottomRight: 0 }, borderSkipped: false }
                 ] },
                 options: {
