@@ -84,16 +84,9 @@ async function takeSnapshot() {
             if (String(item.FATURADO_PPR || '').trim().toUpperCase() === 'T') continue;
 
             const metrics = getItemSectorMetrics(item);
-            const targetTotalQty = metrics.targetTotalQty;
-
-            // Calculo de peso unitario: ERP primeiro, customizado apenas como fallback
-            let unitWeight = 0;
-            if (item.PESO_UNIT && Number(item.PESO_UNIT) > 0) {
-                unitWeight = Number(item.PESO_UNIT);
-            } else {
-                const erpUnit = targetTotalQty > 0 ? (Number(item.PESO_LIQUIDO_NPR) || 0) / targetTotalQty : 0;
-                unitWeight = erpUnit > 0 ? erpUnit : (customWeights[prodCode] || 0);
-            }
+            const unitWeight = Number(item.PESO_PRODUTO) > 0
+                ? Number(item.PESO_PRODUTO)
+                : (customWeights[prodCode] || 0);
 
             const op = item.OP_PCS;
             const moldagemTipo = String(item._tipo_moldagem_procedimento || '').trim().toUpperCase();
