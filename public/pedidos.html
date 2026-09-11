@@ -2717,6 +2717,7 @@
                                 <div style="display:flex;gap:5px;">
                                 <button class="btn-mini-chart active" id="btnEmissaoAbcPeso" type="button" onclick="setEmissaoAbcMetric('peso')">Peso (kg)</button>
                                 <button class="btn-mini-chart" id="btnEmissaoAbcValor" type="button" onclick="setEmissaoAbcMetric('valor')">Valor (R$)</button>
+                                <button class="btn-mini-chart" id="btnEmissaoAbcValorKg" type="button" onclick="setEmissaoAbcMetric('valorKg')">R$ / kg</button>
                                 </div>
                             </div>
                             <select id="modeFilterHistorical" onchange="updateHistoricalChart()"
@@ -7217,9 +7218,10 @@ function flashConcentracaoBar(barIndex) {
             });
         }
         function setEmissaoAbcMetric(metric) {
-            emissaoAbcMetric = metric === 'valor' ? 'valor' : 'peso';
+            emissaoAbcMetric = metric === 'valorKg' ? 'valorKg' : (metric === 'valor' ? 'valor' : 'peso');
             document.getElementById('btnEmissaoAbcPeso')?.classList.toggle('active', emissaoAbcMetric === 'peso');
             document.getElementById('btnEmissaoAbcValor')?.classList.toggle('active', emissaoAbcMetric === 'valor');
+            document.getElementById('btnEmissaoAbcValorKg')?.classList.toggle('active', emissaoAbcMetric === 'valorKg');
             updateHistoricalChart();
         }
         async function waitForChartPaint(chart) {
@@ -7520,11 +7522,16 @@ function flashConcentracaoBar(barIndex) {
                     const totalWeightAll = data.reduce((acc, row) => acc + row.totalPeso, 0);
                     const totalValueAll = data.reduce((acc, row) => acc + (row.totalValor || 0), 0);
                     const isValueMetric = emissaoAbcMetric === 'valor';
-                    const getMetricValue = row => isValueMetric ? Number(row.totalValor || 0) : Number(row.totalPeso || 0);
+                    const isValuePerKgMetric = emissaoAbcMetric === 'valorKg';
+                    const getMetricValue = row => {
+                        const weight = Number(row.totalPeso || 0);
+                        const value = Number(row.totalValor || 0);
+                        return isValuePerKgMetric ? (weight > 0 ? value / weight : 0) : (isValueMetric ? value : weight);
+                    };
                     const sorted = [...data].sort((a, b) => getMetricValue(b) - getMetricValue(a));
                     const labels = sorted.map(s => s.name);
-                    const weightData = sorted.map(s => s.totalPeso);
-                    const valueData = sorted.map(s => s.totalValor);
+                    const weightData = sorted.map(s => Number(s.totalPeso || 0));
+                    const valueData = sorted.map(s => Number(s.totalValor || 0));
                     const metricData = sorted.map(getMetricValue);
                     const totalMetricAll = metricData.reduce((sum, value) => sum + value, 0);
                     let cumulative = 0;
@@ -7583,7 +7590,7 @@ function flashConcentracaoBar(barIndex) {
                             datasets: [
                                 {
                                     type: 'bar',
-                                    label: isValueMetric ? 'Valor (R$)' : 'Peso (kg)',
+                                    label: isValueMetric ? 'Valor (R$)' : (isValuePerKgMetric ? 'R$ / kg' : 'Peso (kg)'),
                                     data: metricData,
                                     backgroundColor: abcClasses.map(abc => abc === 'A' ? '#f59e0b' : abc === 'B' ? '#a1a1aa' : '#3f3f46'),
                                     borderRadius: 4,
@@ -7593,6 +7600,7 @@ function flashConcentracaoBar(barIndex) {
                                     extraTotalValor: totalValueAll,
                                     extraTotalMetric: totalMetricAll,
                                     extraWeightData: weightData,
+                                    extraValueData: valueData,
                                     extraClientNames: labels,
                                     extraClientKeys: sorted.map(item => item.clientKey || item.id || item.name),
                                     metric: emissaoAbcMetric,
@@ -7601,7 +7609,7 @@ function flashConcentracaoBar(barIndex) {
                                 }
                             ]
                         },
-                        options: getHistoricalOptions(isValueMetric ? 'R$' : 'kg', true, false, true)
+                        options: getHistoricalOptions(isValueMetric ? 'R$' : (isValuePerKgMetric ? 'R$/kg' : 'kg'), true, false, true)
                     });
                     chartReady = true;
                     requestAnimationFrame(() => requestAnimationFrame(() => {
@@ -7635,7 +7643,12 @@ function flashConcentracaoBar(barIndex) {
                     position: 'bottom',
                     beginAtZero: true,
                     grid: { color: _gc() },
-                    ticks: { color: _tc(), callback: value => unit === 'R$' ? (valorVisible ? Number(value).toLocaleString('pt-BR', { style:'currency', currency:'BRL', maximumFractionDigits:0 }) : '-----') : formatNumber(value, 0) + ' kg' }
+                    ticks: { color: _tc(), callback: value => {
+                        if (unit === 'R$' || unit === 'R$/kg') {
+                            return valorVisible ? `${Number(value).toLocaleString('pt-BR', { style:'currency', currency:'BRL', maximumFractionDigits: unit === 'R$' ? 0 : 2 })}${unit === 'R$/kg' ? '/kg' : ''}` : '-----';
+                        }
+                        return formatNumber(value, 0) + ' kg';
+                    } }
                 }
             };
             return {
@@ -7748,17 +7761,22 @@ function flashConcentracaoBar(barIndex) {
                                 const valStr = valorVisible ? val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-----';
                                 if (isPareto) {
                                     const isValueMetric = context.dataset.metric === 'valor';
+                                    const isValuePerKgMetric = context.dataset.metric === 'valorKg';
                                     const tPeso = context.dataset.extraTotalPeso || 0;
                                     const tValor = context.dataset.extraTotalValor || 0;
                                     const tMetric = context.dataset.extraTotalMetric || 0;
                                     const pctMetric = tMetric > 0 ? (weight / tMetric * 100).toFixed(1) : '0.0';
                                     const sourceWeight = Number(context.dataset.extraWeightData?.[context.dataIndex] || 0);
-                                    const valorLine = valorVisible
-                                        ? `Valor: ${valStr}`
-                                        : 'Valor: -----';
+                                    const sourceValue = Number(context.dataset.extraValueData?.[context.dataIndex] || 0);
+                                    const pesoLine = `Peso: ${sourceWeight.toLocaleString('pt-BR')} kg`;
+                                    const valorLine = valorVisible ? `Valor: ${sourceValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}` : 'Valor: -----';
+                                    const metricLine = isValuePerKgMetric
+                                        ? `R$ / kg: ${valorVisible ? weight.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-----'}`
+                                        : null;
                                     return [
-                                        isValueMetric ? `Valor: ${valorVisible ? weight.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-----'} (${pctMetric}%)` : `Peso: ${weight.toLocaleString('pt-BR')} kg (${pctMetric}%)`,
-                                        isValueMetric ? `Peso: ${sourceWeight.toLocaleString('pt-BR')} kg` : valorLine,
+                                        isValueMetric ? pesoLine : (isValuePerKgMetric ? metricLine : `Peso: ${weight.toLocaleString('pt-BR')} kg (${pctMetric}%)`),
+                                        isValueMetric ? `${valorLine} (${pctMetric}%)` : (isValuePerKgMetric ? pesoLine : valorLine),
+                                        ...(isValuePerKgMetric ? [valorLine] : []),
                                         `% Acumulada: ${Number(context.dataset.extraAccumulatedPercent?.[context.dataIndex] || 0).toFixed(1)}%`,
                                         `Classe ABC: ${context.dataset.abcClasses?.[context.dataIndex] || '-'}`,
                                         '',
