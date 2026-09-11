@@ -3360,6 +3360,10 @@
                                 <input type="checkbox" id="filterSugeridos" onchange="applyColumnFilters()">
                                 <span>Apenas vínculos sugeridos (pendentes)</span>
                             </label>
+                            <label class="filter-toggle">
+                                <input type="checkbox" id="filterPesosManuais" onchange="applyColumnFilters()">
+                                <span>Apenas pesos estimados cadastrados manualmente</span>
+                            </label>
                         </div>
                     </div>
                     <!-- COLUNA DIREITA: campos de busca + datas -->
@@ -4116,6 +4120,8 @@
             // Resetar opções (vínculos sugeridos e modelos)
             const cbSug = document.getElementById('filterSugeridos');
             if (cbSug) cbSug.checked = false;
+            const cbPesosManuais = document.getElementById('filterPesosManuais');
+            if (cbPesosManuais) cbPesosManuais.checked = false;
             const cbMod = document.getElementById('filterShowModelos');
             if (cbMod) cbMod.checked = false;
             isModelosHidden = true;
@@ -5805,6 +5811,7 @@
             const filterEmissionStart = document.getElementById('filterEmissionStart')?.value || '';
             const filterEmissionEnd = document.getElementById('filterEmissionEnd')?.value || '';
             const onlySugeridos = document.getElementById('filterSugeridos')?.checked;
+            const onlyManualWeights = document.getElementById('filterPesosManuais')?.checked;
             const commercialView = Array.isArray(window.commercialPositionFilterRows);
             const sourceData = commercialView ? window.commercialPositionFilterRows : allData;
             const filtered = sourceData.filter(item => {
@@ -5821,6 +5828,9 @@
                 const isFaturado = String(item.FATURADO_PPR || '').trim().toUpperCase() === 'T';
                 if (isModelosHidden && isModelo) return false;
                 if (isFaturado && chartMode !== 'emission_total') return false; // Consistent with index.html "Carteira", except for historical full view
+                const hasOfficialWeight = Number(item.PESO_PRODUTO) > 0;
+                const hasManualWeightFallback = !hasOfficialWeight && Number(customWeights[prodCode]) > 0;
+                if (onlyManualWeights && !hasManualWeightFallback) return false;
                 // Filtro: apenas linhas com vínculos sugeridos (pendentes de aceite)
                 const hasValidSuggestedOP = canShowSuggestedLinks() && item.LINK_STATUS === 'sugerido' && /^\d{1,4}$/.test(String(item.OP_PCS || '').trim());
                 if (onlySugeridos && !hasValidSuggestedOP) return false;
