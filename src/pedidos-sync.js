@@ -205,7 +205,6 @@ router.get('/resumo-carteira', async (req, res) => {
                     ) AS saldo,
                     COALESCE(
                         NULLIF(f.peso_liquido_pro, 0),
-                        NULLIF(CASE WHEN p.data->>'PESO_UNIT' ~ '^-?[0-9]+([.,][0-9]+)?$' THEN REPLACE(p.data->>'PESO_UNIT', ',', '.')::numeric END, 0),
                         NULLIF(CASE WHEN p.data->>'PESO_PRODUTO' ~ '^-?[0-9]+([.,][0-9]+)?$' THEN REPLACE(p.data->>'PESO_PRODUTO', ',', '.')::numeric END, 0),
                         pc.peso,
                         0

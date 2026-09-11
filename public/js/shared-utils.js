@@ -207,9 +207,6 @@ function getErpUnitWeight(item) {
 }
 
 function getResolvedUnitWeight(item, weightsMap = {}, targetQty) {
-    const fixedUnit = getPositiveNumber(item.PESO_UNIT);
-    if (fixedUnit > 0) return fixedUnit;
-
     const prodCode = String(item.PRODUTO_PPR || '').trim();
     const erpUnit = getErpUnitWeight(item);
     if (erpUnit > 0) return erpUnit;
