@@ -5091,6 +5091,7 @@
                     client: item.NOME_CLIENTE || '-',
                     emission: formatDateLocal(item.OP_EMISSAO || item.DATA_EMISSAO_PEDIDO),
                     delivery: formatDateLocal(item.OP_ENTREGA) || entrega,
+                    metaDelivery: item.ENTREGA_PETR || item.DATA_ENTREGA_PPR || null,
                     originalQty: qtdOP,
                     currentSaldo: saldoReal,
                     route: item.ROTEIRO_PRODUCAO,
@@ -5132,6 +5133,7 @@
                                 client: item.NOME_CLIENTE || '-',
                                 emission: formatDateLocal(item.OP_EMISSAO || item.DATA_EMISSAO_PEDIDO),
                                 delivery: formatDateLocal(item.OP_ENTREGA) || entrega,
+                                metaDelivery: item.ENTREGA_PETR || item.DATA_ENTREGA_PPR || null,
                                 originalQty: qtdOP,
                                 currentSaldo: saldoReal,
                                 route: item.ROTEIRO_PRODUCAO,
@@ -8567,8 +8569,16 @@ function flashConcentracaoBar(barIndex) {
             }
         });
         // --- CONSTANTES E HELPERS DE ROTEIRO DINÂMICO ---
-        let leadTimes = JSON.parse(localStorage.getItem('erus_monitoramento_lt')) || {
-            moldagem: 2, fusao: 1, acabamento: 3, tratamento: 2, usinagem: 5, qualidade: 1, expedicao: 1, faturamento: 1
+        let leadTimes = {
+            moldagem: 2,
+            fusao: 1,
+            acabamento: 3,
+            tratamento: 2,
+            aguardandoUsinagem: 5,
+            aguardandoQualidade: 1,
+            emUsinagem: 5,
+            aguardandoExpedicao: 1,
+            aguardandoFaturamento: 1
         };
         const sectorGroups = {
             'FECHAMENTO MANUAL': ['FECHAMENTO MANUAL'],
@@ -8587,6 +8597,38 @@ function flashConcentracaoBar(barIndex) {
             'QUALIDADE': 'qualidade', 'EXPEDIÇÃO': 'expedicao',
             'FATURAMENTO': 'faturamento'
         };
+        const monitorMetaKeyMap = {
+            'FECHAMENTO MANUAL': 'fechamento-mold',
+            'MOLDAGEM': 'moldagem',
+            'FUSAO': 'fusao',
+            'ACABAMENTO': 'acabamento',
+            'TRATAMENTO TERMICO TT': 'tratamento',
+            'TRATAMENTO TERMICO': 'tratamento',
+            'USINAGEM': 'emUsinagem',
+            'QUALIDADE': 'aguardandoQualidade',
+            'EXPEDICAO': 'aguardandoExpedicao',
+            'FATURAMENTO': 'aguardandoFaturamento'
+        };
+        function normalizeMetaSector(value) {
+            return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Z0-9 ]/gi, '').replace(/\s+/g, ' ').trim().toUpperCase();
+        }
+        function loadMonitoramentoLeadTimes() {
+            const savedLT = localStorage.getItem('erus_monitoramento_lt');
+            if (!savedLT) return;
+            const parsedLT = JSON.parse(savedLT);
+            leadTimes = { ...leadTimes, ...parsedLT };
+            if (parsedLT.usinagem !== undefined) {
+                if (parsedLT.aguardandoUsinagem === undefined) leadTimes.aguardandoUsinagem = parsedLT.usinagem;
+                if (parsedLT.emUsinagem === undefined) leadTimes.emUsinagem = parsedLT.usinagem;
+            }
+            if (parsedLT.qualidade !== undefined) {
+                if (parsedLT.aguardandoQualidade === undefined) leadTimes.aguardandoQualidade = parsedLT.qualidade;
+                if (parsedLT.aguardandoExpedicao === undefined) leadTimes.aguardandoExpedicao = parsedLT.qualidade;
+            }
+            if (parsedLT.expedicao !== undefined && parsedLT.aguardandoFaturamento === undefined) {
+                leadTimes.aguardandoFaturamento = parsedLT.expedicao;
+            }
+        }
         function toLocalDate(val) {
             if (!val) return new Date();
             if (val instanceof Date) return new Date(val.getFullYear(), val.getMonth(), val.getDate());
@@ -8597,6 +8639,15 @@ function flashConcentracaoBar(barIndex) {
             if (parts.length === 3) return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
             const d = new Date(val);
             return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+        }
+        function subtractBusinessDays(date, days) {
+            let result = new Date(date);
+            let count = 0;
+            while (count < days) {
+                result.setDate(result.getDate() - 1);
+                if (result.getDay() !== 0 && result.getDay() !== 6) count++;
+            }
+            return toLocalDate(result);
         }
         function getBusinessDaysDiff(date1, date2) {
             const d1 = toLocalDate(date1);
@@ -8622,7 +8673,7 @@ function flashConcentracaoBar(barIndex) {
             }).catch(err => { console.error('Failed to copy: ', err); });
         };
         window.showOPDetails = async function (data) {
-            const { op, desc, client, emission, delivery, originalQty, currentSaldo, route, linkStatus, syncKey, productCode } = data;
+            const { op, desc, client, emission, delivery, metaDelivery, originalQty, currentSaldo, route, linkStatus, syncKey, productCode } = data;
             const modal = document.getElementById('opDetailsModal');
             const content = document.getElementById('opDetailsContent');
             const opSpan = document.getElementById('opModalNumber');
@@ -8675,6 +8726,7 @@ function flashConcentracaoBar(barIndex) {
             if (clientSpan) clientSpan.innerText = client;
             if (emissionSpan) emissionSpan.innerText = emission;
             if (deliverySpan) deliverySpan.innerText = delivery;
+            loadMonitoramentoLeadTimes();
             modal.style.display = 'flex';
             content.innerHTML = `<div style="text-align: center; padding: 40px;"><i class="fa-solid fa-circle-notch fa-spin" style="font-size: 2rem; color: var(--color-primary);"></i><p style="margin-top: 15px; color: var(--text-muted);">Buscando apontamentos...</p></div>`;
             try {
@@ -8704,24 +8756,18 @@ function flashConcentracaoBar(barIndex) {
                     }
                 });
                 let orderedSectors = [...allGroups];
-                if (orderedSectors.includes('FECHAMENTO MANUAL')) {
-                    orderedSectors = orderedSectors.filter(stage => stage !== 'FECHAMENTO MANUAL');
-                    const moldIndex = orderedSectors.map(stage => stage.includes('MOLDAGEM')).lastIndexOf(true);
-                    orderedSectors.splice(moldIndex >= 0 ? moldIndex + 1 : 0, 0, 'FECHAMENTO MANUAL');
-                }
-
                 const metaDates = {};
-                let deadline = delivery && delivery !== '-' ? toLocalDate(delivery) : null;
+                const metaDeliveryValue = metaDelivery || delivery;
+                let deadline = metaDeliveryValue && metaDeliveryValue !== '-' ? toLocalDate(metaDeliveryValue) : null;
                 if (deadline && !Number.isNaN(deadline.getTime())) {
                     for (let i = orderedSectors.length - 1; i >= 0; i--) {
                         const sector = orderedSectors[i];
                         metaDates[sector] = toLocalDate(deadline);
                         const group = Object.keys(sectorGroups).find(key => key === sector || sectorGroups[key].includes(sector));
-                        let days = Number(leadTimes[configKeyMap[group]] || 0);
-                        while (days > 0) {
-                            deadline.setDate(deadline.getDate() - 1);
-                            if (deadline.getDay() !== 0 && deadline.getDay() !== 6) days--;
-                        }
+                        const normalizedSector = normalizeMetaSector(sector);
+                        const normalizedGroup = normalizeMetaSector(group);
+                        const configKey = monitorMetaKeyMap[normalizedSector] || monitorMetaKeyMap[normalizedGroup];
+                        deadline = subtractBusinessDays(deadline, Number(leadTimes[configKey] || 0));
                     }
                 }
                 const maxForward = {};
@@ -8759,11 +8805,11 @@ function flashConcentracaoBar(barIndex) {
                     const hasPointing = pointed > 0;
                     let status = meta ? 'Aguardando' : 'Sem data de entrega';
                     if (hasPointing && meta) {
-                        const lastDate = lastPointingDate[sector];
-                        if (!lastDate) {
-                            status = 'Sem data de apontamento';
-                        } else if (lastDate > meta) {
-                            const days = Math.abs(getBusinessDaysDiff(meta, lastDate));
+                        const referenceDate = toLocalDate(lastPointingDate[sector]);
+                        const timeDiff = referenceDate.getTime() - meta.getTime();
+                        const daysDiff = Math.round(timeDiff / (1000 * 3600 * 24));
+                        if (daysDiff > 0) {
+                            const days = Math.abs(getBusinessDaysDiff(meta, referenceDate));
                             status = `<span style="color:var(--status-danger);font-weight:600;"><i class="fa-solid fa-clock"></i> Atrasou (${days} d)</span>`;
                         } else {
                             status = '<span style="color:var(--status-success);font-weight:600;"><i class="fa-solid fa-check"></i> No Prazo</span>';
