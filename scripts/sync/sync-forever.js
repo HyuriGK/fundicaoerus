@@ -172,7 +172,7 @@ const HEAVY_SYNC_MODULES = new Set(['EMISSOES', 'PEDIDOS', 'PRODUCAO', 'REFUGOS'
 const SNAPSHOT_SCRIPTS = { EMISSOES: 'refresh-carteira-dashboard-snapshot.js', FATURAMENTO: 'refresh-faturamento-dashboard-snapshot.js', PRODUCAO: 'refresh-producao-dashboard-snapshot.js', REFUGOS: 'refresh-refugo-kpi-snapshot.js' };
 const TECHNICAL_SYNC_MODULES = new Set(['MOLDAGEM FT', 'FUSAO FT']);
 const LIGHT_SYNC_CONCURRENCY = 2;
-const TECHNICAL_SYNC_CONCURRENCY = 2;
+const TECHNICAL_SYNC_CONCURRENCY = 1;
 let nextRunAt = {};
 
 const DELAY_MS = 2000;
