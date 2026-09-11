@@ -164,6 +164,7 @@ const INDEPENDENT_BATS = [
     { name: 'EMISSOES',    file: path.join('sync', 'sincronizar_aemissoes.bat'),     icon: '[>>]', pageId: 'pedidos.html', progressAlias: 'EMISSÕES' },
     { name: 'FATURAMENTO', file: path.join('sync', 'sincronizar_afaturamento.bat'),  icon: '[NF]', pageId: 'faturamentos.html' },
     { name: 'PEDIDOS',     file: path.join('sync', 'sincronizar_apedidos.bat'),      icon: '[PD]', pageId: 'pedidos.html' },
+    { name: 'SNAPSHOTS',   file: path.join('sync', 'sincronizar_asnapshots.bat'),    icon: '[SS]', pageId: 'pedidos.html' },
     { name: 'PRODUCAO',    file: path.join('sync', 'sincronizar_aproducao.bat'),     icon: '[PR]', pageId: 'apontamentos_produtivos.html', progressAlias: 'PRODUÇÃO' },
     { name: 'CUSTOS',      file: path.join('sync', 'sincronizar_acustos.bat'),       icon: '[$$]', pageId: 'custos.html' },
     { name: 'CONTABIL',    file: path.join('sync', 'sincronizar_acontabilidade.bat'), icon: '[CT]', pageId: 'contabilidade.html' },
@@ -174,7 +175,6 @@ const INDEPENDENT_BATS = [
     { name: 'CLIENTES',    file: path.join('sync', 'sincronizar_aclientes.bat'),     icon: '[CL]', pageId: 'clientes.html' },
     { name: 'REFUGOS',     file: path.join('sync', 'sincronizar_arefugo.bat'),       icon: '[RF]', pageId: 'refugos.html' },
     { name: 'SAC',         file: path.join('sync', 'sincronizar_asac.bat'),          icon: '[SC]', pageId: 'sac.html' },
-    { name: 'SNAPSHOTS',   file: path.join('sync', 'sincronizar_asnapshots.bat'),    icon: '[SS]', pageId: 'pedidos.html' },
     { name: 'MOLDAGEM FT', file: path.join('sync', 'sincronizar_fichatecmoldagem.bat'), icon: '[ML]', pageId: 'fichatecmoldagem.html', progressAlias: 'MOLDAGEM' },
     { name: 'FUSAO FT',    file: path.join('sync', 'sincronizar_fichatecfusao.bat'),   icon: '[FU]', pageId: 'fichatecfusao.html' },
 ];
