@@ -29,7 +29,7 @@ function getCommercialBalance(item) {
     const qtdDesistencia = Number(item.QUANTIDADE_DESISTENCIA_PPR) || 0;
 
     const saldoLib = Number(item.SALDO_LIBERADO_FATURAR_PPR) || 0;
-    if (saldoLib > 0) return Math.max(0, saldoLib - qtdDesistencia);
+    if (saldoLib > 0) return saldoLib;
 
     // Fallback: Total quantity - Billed quantity - Desistência
     const qtdOrig = Number(item.QUANTIDADE_PPR) || 0;
