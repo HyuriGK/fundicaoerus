@@ -37,6 +37,13 @@ function getCommercialBalance(item) {
     return Math.max(0, qtdOrig - qtdFat - qtdDesistencia);
 }
 
+function getAdjustedOpQuantity(item, baseQty = 0) {
+    const pointedQty = Object.keys(item || {})
+        .filter(key => key.startsWith('QTY_'))
+        .reduce((max, key) => Math.max(max, Number(item[key]) || 0), 0);
+    return Math.max(Number(item?.OP_QUANTIDADE) || 0, pointedQty, Number(baseQty) || 0);
+}
+
 /**
  * Calculates industrial metrics (balances per sector) for a given item.
  * Logic synchronized with the Orders Dashboard.
@@ -72,6 +79,7 @@ function getItemSectorMetrics(item, limitToCommercial = false) {
     let targetTotalQty = (linkedOp && linkedOp !== '-' && opQty > 0)
         ? Math.max(opQty, commercialBalance)
         : commercialBalance;
+    targetTotalQty = getAdjustedOpQuantity(item, targetTotalQty);
     const industrialCapacity = limitToCommercial ? commercialBalance : Infinity;
     const ignoreSuggestedOp = linkStatus === 'sugerido';
 
@@ -150,6 +158,7 @@ function getItemSectorMetrics(item, limitToCommercial = false) {
         qUsinagem:   Math.max(0, cUsi  - cQualIn),
         qTT:         Math.max(0, cTT   - cUsiIn),
         qAcabamento: Math.max(0, cAcab - cTTIn),
+        qFusionToAcabamento: Math.max(0, cFus - cAcabIn),
         qFusao:      hasFechamento ? Math.max(0, rawFechamento - rawFusao) : Math.max(0, cMold - cFusIn),
         qMoldada:    hasFechamento ? 0 : Math.max(0, cMold - cMold),
         qFechamento: hasFechamento ? Math.max(0, rawMoldada - rawFechamento) : 0,
@@ -232,5 +241,5 @@ function getCorrectedWeight(item, weightsMap = {}) {
 
 // Export for Node environments (like analysis scripts) if needed
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { getCommercialBalance, getItemSectorMetrics, getCorrectedWeight, getResolvedUnitWeight, getErpUnitWeight };
+    module.exports = { getCommercialBalance, getAdjustedOpQuantity, getItemSectorMetrics, getCorrectedWeight, getResolvedUnitWeight, getErpUnitWeight };
 }
