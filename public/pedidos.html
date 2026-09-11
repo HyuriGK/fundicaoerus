@@ -1051,6 +1051,24 @@
             border: 1px solid rgba(255, 255, 255, 0.08);
             transition: opacity 0.2s ease;
         }
+        #manualWeightTooltip {
+            position: fixed;
+            display: none;
+            z-index: 100001;
+            max-width: 260px;
+            padding: 7px 10px;
+            border: 1px solid var(--color-primary);
+            border-radius: 5px;
+            background: #18181b;
+            color: #fde68a;
+            font-family: var(--font-main);
+            font-size: 0.72rem;
+            font-weight: 600;
+            line-height: 1.2;
+            white-space: nowrap;
+            pointer-events: none;
+            box-shadow: 0 5px 16px rgba(0, 0, 0, 0.45);
+        }
         .tooltip-header {
             font-size: 0.68rem;
             font-weight: 700;
@@ -1969,37 +1987,6 @@
             padding: 4px;
             border: 1px dotted var(--color-primary);
             border-radius: 4px;
-        }
-        .weight-tooltip-wrap,
-        .weight-value.weight-manual-fallback {
-            position: relative;
-        }
-        .weight-tooltip-wrap::after,
-        .weight-value.weight-manual-fallback::after {
-            content: attr(data-weight-tooltip);
-            position: absolute;
-            left: 50%;
-            bottom: calc(100% + 8px);
-            transform: translateX(-50%);
-            z-index: 2000;
-            padding: 7px 10px;
-            border: 1px solid var(--color-primary);
-            border-radius: 5px;
-            background: #18181b;
-            color: #fde68a;
-            font-family: var(--font-main);
-            font-size: 0.72rem;
-            font-weight: 600;
-            line-height: 1.2;
-            white-space: nowrap;
-            pointer-events: none;
-            opacity: 0;
-            visibility: hidden;
-        }
-        .weight-tooltip-wrap:hover::after,
-        .weight-value.weight-manual-fallback:hover::after {
-            opacity: 1;
-            visibility: visible;
         }
         .modelo-status-select {
             width: 100%;
@@ -3420,6 +3407,7 @@
     </div>
     <!-- TOOLTIP DINÂMICO (NOVO) -->
     <div id="floatingIndustrialTooltip"></div>
+    <div id="manualWeightTooltip"></div>
     <div id="emailModal" class="modal-overlay" style="z-index: 3000;">
         <div class="modal-card fullscreen" style="background: #09090b;">
             <div class="modal-header"
@@ -3516,8 +3504,42 @@
         let chartMode = 'delivery'; // Default mode for date filtering
         // Tooltip Dinâmico Logic
         const dynamicTooltip = document.getElementById('floatingIndustrialTooltip');
+        const manualWeightTooltip = document.getElementById('manualWeightTooltip');
+        let manualWeightTooltipTarget = null;
         let industrialTapState = { key: null, time: 0, timer: null };
         let mobileChartTapState = { key: null, time: 0 };
+
+        function hideManualWeightTooltip() {
+            if (!manualWeightTooltip) return;
+            manualWeightTooltip.style.display = 'none';
+            manualWeightTooltipTarget = null;
+        }
+
+        function showManualWeightTooltip(target) {
+            if (!manualWeightTooltip || !target) return;
+            manualWeightTooltip.textContent = target.getAttribute('data-weight-tooltip') || '';
+            manualWeightTooltip.style.display = 'block';
+            const targetRect = target.getBoundingClientRect();
+            const tooltipRect = manualWeightTooltip.getBoundingClientRect();
+            const gap = 8;
+            let left = targetRect.left + (targetRect.width / 2) - (tooltipRect.width / 2);
+            let top = targetRect.top - tooltipRect.height - gap;
+            if (top < 8) top = targetRect.bottom + gap;
+            left = Math.max(8, Math.min(left, window.innerWidth - tooltipRect.width - 8));
+            top = Math.max(8, Math.min(top, window.innerHeight - tooltipRect.height - 8));
+            manualWeightTooltip.style.left = `${left}px`;
+            manualWeightTooltip.style.top = `${top}px`;
+            manualWeightTooltipTarget = target;
+        }
+
+        document.addEventListener('mouseover', event => {
+            const target = event.target.closest?.('[data-weight-tooltip]');
+            if (target) showManualWeightTooltip(target);
+        });
+        document.addEventListener('mouseout', event => {
+            const target = event.target.closest?.('[data-weight-tooltip]');
+            if (target && !target.contains(event.relatedTarget)) hideManualWeightTooltip();
+        });
 
         function isIndustrialTouchMode() {
             return window.matchMedia && window.matchMedia('(max-width: 900px)').matches;
