@@ -163,7 +163,6 @@ const INDEPENDENT_BATS = [
     { name: 'SNAPSHOTS',   file: path.join('sync', 'sincronizar_asnapshots.bat'),    icon: '[SS]', pageId: 'pedidos.html' },
     { name: 'MOLDAGEM FT', file: path.join('sync', 'sincronizar_fichatecmoldagem.bat'), icon: '[ML]', pageId: 'fichatecmoldagem.html', progressAlias: 'MOLDAGEM' },
     { name: 'FUSAO FT',    file: path.join('sync', 'sincronizar_fichatecfusao.bat'),   icon: '[FU]', pageId: 'fichatecfusao.html' },
-    { name: 'PRODUTOS',    file: path.join('sync', 'sincronizar_aprodutos.bat'),     icon: '[PD]', pageId: 'produtos.html' },
 ];
 
 const INDEPENDENT_WAIT = 2 * 60 * 1000; // 2 minutos
@@ -171,7 +170,7 @@ const FATURAMENTO_WAIT = 2 * 60 * 1000; // 2 minutos após concluir
 const LIGHT_SYNC_WAIT = 5 * 60 * 1000; // 5 minutos após concluir
 const HEAVY_SYNC_MODULES = new Set(['EMISSOES', 'PEDIDOS', 'PRODUCAO', 'REFUGOS']);
 const SNAPSHOT_SCRIPTS = { EMISSOES: 'refresh-carteira-dashboard-snapshot.js', FATURAMENTO: 'refresh-faturamento-dashboard-snapshot.js', PRODUCAO: 'refresh-producao-dashboard-snapshot.js', REFUGOS: 'refresh-refugo-kpi-snapshot.js' };
-const TECHNICAL_SYNC_MODULES = new Set(['MOLDAGEM FT', 'FUSAO FT', 'PRODUTOS']);
+const TECHNICAL_SYNC_MODULES = new Set(['MOLDAGEM FT', 'FUSAO FT']);
 const LIGHT_SYNC_CONCURRENCY = 2;
 const TECHNICAL_SYNC_CONCURRENCY = 2;
 let nextRunAt = {};
