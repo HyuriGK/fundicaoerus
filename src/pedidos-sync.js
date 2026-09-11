@@ -205,7 +205,6 @@ router.get('/resumo-carteira', async (req, res) => {
                     ) AS saldo,
                     COALESCE(
                         NULLIF(f.peso_liquido_pro, 0),
-                        NULLIF(CASE WHEN p.data->>'PESO_PRODUTO' ~ '^-?[0-9]+([.,][0-9]+)?$' THEN REPLACE(p.data->>'PESO_PRODUTO', ',', '.')::numeric END, 0),
                         pc.peso,
                         0
                     ) AS peso_unit
@@ -375,21 +374,6 @@ router.get('/', async (req, res) => {
             if (!operationalRoutes.has(op)) operationalRoutes.set(op, []);
             operationalRoutes.get(op).push(row);
         });
-        const produtoPesoResult = await pool.query(`
-            SELECT
-                data->>'PRODUTO_PPR' AS produto,
-                data->>'PESO_PRODUTO' AS peso_produto
-            FROM firebird_sync_pedidos
-            WHERE sync_key LIKE 'OP-%'
-              AND NULLIF(data->>'PRODUTO_PPR', '') IS NOT NULL
-              AND NULLIF(data->>'PESO_PRODUTO', '') IS NOT NULL
-        `);
-        const produtoPesoMap = {};
-        produtoPesoResult.rows.forEach(row => {
-            const produto = String(row.produto || '').trim();
-            if (produto && !produtoPesoMap[produto]) produtoPesoMap[produto] = Number(row.peso_produto);
-        });
-
         // Extrair o JSONB para o nível raiz para facilitar o frontend
         const pedidos = result.rows.map(row => {
             const item = {
@@ -416,12 +400,10 @@ router.get('/', async (req, res) => {
                     }
                 }
             }
-            const produtoKey = String(item.PRODUTO_PPR || '').trim();
+            delete item.PESO_UNIT;
+            delete item.PESO_PRODUTO;
             if (Number(row.ficha_peso_liquido_pro) > 0) {
                 item.PESO_PRODUTO = Number(row.ficha_peso_liquido_pro);
-            }
-            if ((!item.PESO_PRODUTO || Number(item.PESO_PRODUTO) <= 0) && produtoKey && produtoPesoMap[produtoKey]) {
-                item.PESO_PRODUTO = produtoPesoMap[produtoKey];
             }
             const opValue = String(item.OP_PCS || '').trim();
             item.ROTEIRO_OPERACIONAL_OBRIGATORIO = true;
