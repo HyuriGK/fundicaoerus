@@ -259,11 +259,15 @@ async function syncMaster() {
                     await pgClient.query('BEGIN');
                     await pgClient.query('TRUNCATE TABLE producao_roteiro_operacional_sync');
 
-                    for (const row of routeRowsByOpSector.values()) {
+                    if (routeRowsByOpSector.size > 0) {
                         await pgClient.query(`
                             INSERT INTO producao_roteiro_operacional_sync
                                 (op, sequencia, setor_codigo, setor, produzido, refugado, ultima_data, atualizado_em)
-                            VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
+                            SELECT op, sequencia, setor_codigo, setor, produzido, refugado, ultima_data, CURRENT_TIMESTAMP
+                            FROM jsonb_to_recordset($1::jsonb) AS rows(
+                                op TEXT, sequencia INTEGER, setor_codigo INTEGER, setor TEXT,
+                                produzido NUMERIC, refugado NUMERIC, ultima_data DATE
+                            )
                             ON CONFLICT (op, setor_codigo) DO UPDATE SET
                                 sequencia = EXCLUDED.sequencia,
                                 setor = EXCLUDED.setor,
@@ -271,7 +275,7 @@ async function syncMaster() {
                                 refugado = EXCLUDED.refugado,
                                 ultima_data = EXCLUDED.ultima_data,
                                 atualizado_em = CURRENT_TIMESTAMP
-                        `, [row.op, row.sequencia, row.setor_codigo, row.setor, row.produzido, row.refugado, row.ultima_data]);
+                        `, [JSON.stringify([...routeRowsByOpSector.values()])]);
                     }
 
                     console.log(`✅ [2.1/4] Roteiro operacional sincronizado: ${routeRowsByOpSector.size} linhas.`);

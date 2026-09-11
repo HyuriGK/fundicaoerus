@@ -196,13 +196,17 @@ router.get('/resumo-carteira', async (req, res) => {
                 SELECT
                     UPPER(TRIM(COALESCE(p.data->>'NOME_CLIENTE', 'Desconhecido'))) AS cliente,
                     NULLIF(TRIM(COALESCE(p.data->>'CODIGO_PPR', p.data->>'PEDIDO_PPR', p.data->>'NUMERO_PEDIDO', '')), '') AS pedido,
-                    GREATEST(
-                        0,
-                        COALESCE(CASE WHEN p.data->>'SALDO_LIBERADO_FATURAR_PPR' ~ '^-?[0-9]+([.,][0-9]+)?$' THEN REPLACE(p.data->>'SALDO_LIBERADO_FATURAR_PPR', ',', '.')::numeric END, 0),
-                        COALESCE(CASE WHEN p.data->>'QUANTIDADE_PPR' ~ '^-?[0-9]+([.,][0-9]+)?$' THEN REPLACE(p.data->>'QUANTIDADE_PPR', ',', '.')::numeric END, 0)
-                        - COALESCE(CASE WHEN p.data->>'QUANTIDADE_FATURADA_PPR' ~ '^-?[0-9]+([.,][0-9]+)?$' THEN REPLACE(p.data->>'QUANTIDADE_FATURADA_PPR', ',', '.')::numeric END, 0)
-                        - COALESCE(CASE WHEN p.data->>'QUANTIDADE_DESISTENCIA_PPR' ~ '^-?[0-9]+([.,][0-9]+)?$' THEN REPLACE(p.data->>'QUANTIDADE_DESISTENCIA_PPR', ',', '.')::numeric END, 0)
-                    ) AS saldo,
+                    CASE
+                        WHEN p.data->>'SALDO_LIBERADO_FATURAR_PPR' ~ '^[0-9]+([.,][0-9]+)?$'
+                             AND REPLACE(p.data->>'SALDO_LIBERADO_FATURAR_PPR', ',', '.')::numeric > 0
+                            THEN GREATEST(0,
+                                REPLACE(p.data->>'SALDO_LIBERADO_FATURAR_PPR', ',', '.')::numeric
+                                - COALESCE(CASE WHEN p.data->>'QUANTIDADE_DESISTENCIA_PPR' ~ '^-?[0-9]+([.,][0-9]+)?$' THEN REPLACE(p.data->>'QUANTIDADE_DESISTENCIA_PPR', ',', '.')::numeric END, 0))
+                        ELSE GREATEST(0,
+                            COALESCE(CASE WHEN p.data->>'QUANTIDADE_PPR' ~ '^-?[0-9]+([.,][0-9]+)?$' THEN REPLACE(p.data->>'QUANTIDADE_PPR', ',', '.')::numeric END, 0)
+                            - COALESCE(CASE WHEN p.data->>'QUANTIDADE_FATURADA_PPR' ~ '^-?[0-9]+([.,][0-9]+)?$' THEN REPLACE(p.data->>'QUANTIDADE_FATURADA_PPR', ',', '.')::numeric END, 0)
+                            - COALESCE(CASE WHEN p.data->>'QUANTIDADE_DESISTENCIA_PPR' ~ '^-?[0-9]+([.,][0-9]+)?$' THEN REPLACE(p.data->>'QUANTIDADE_DESISTENCIA_PPR', ',', '.')::numeric END, 0))
+                    END AS saldo,
                     COALESCE(
                         NULLIF(f.peso_liquido_pro, 0),
                         NULLIF(CASE WHEN p.data->>'PESO_UNIT' ~ '^-?[0-9]+([.,][0-9]+)?$' THEN REPLACE(p.data->>'PESO_UNIT', ',', '.')::numeric END, 0),
@@ -221,9 +225,15 @@ router.get('/resumo-carteira', async (req, res) => {
                 LEFT JOIN pesos_customizados pc ON pc.codigo = TRIM(p.data->>'PRODUTO_PPR')
                 ${ownerJoin}
                 WHERE
-                    (COALESCE(CASE WHEN p.data->>'QUANTIDADE_PPR' ~ '^-?[0-9]+([.,][0-9]+)?$' THEN REPLACE(p.data->>'QUANTIDADE_PPR', ',', '.')::numeric END, 0)
-                    - COALESCE(CASE WHEN p.data->>'QUANTIDADE_FATURADA_PPR' ~ '^-?[0-9]+([.,][0-9]+)?$' THEN REPLACE(p.data->>'QUANTIDADE_FATURADA_PPR', ',', '.')::numeric END, 0)
-                    - COALESCE(CASE WHEN p.data->>'QUANTIDADE_DESISTENCIA_PPR' ~ '^-?[0-9]+([.,][0-9]+)?$' THEN REPLACE(p.data->>'QUANTIDADE_DESISTENCIA_PPR', ',', '.')::numeric END, 0)) > 0
+                    (CASE
+                        WHEN p.data->>'SALDO_LIBERADO_FATURAR_PPR' ~ '^[0-9]+([.,][0-9]+)?$'
+                             AND REPLACE(p.data->>'SALDO_LIBERADO_FATURAR_PPR', ',', '.')::numeric > 0
+                            THEN REPLACE(p.data->>'SALDO_LIBERADO_FATURAR_PPR', ',', '.')::numeric
+                                 - COALESCE(CASE WHEN p.data->>'QUANTIDADE_DESISTENCIA_PPR' ~ '^-?[0-9]+([.,][0-9]+)?$' THEN REPLACE(p.data->>'QUANTIDADE_DESISTENCIA_PPR', ',', '.')::numeric END, 0)
+                        ELSE COALESCE(CASE WHEN p.data->>'QUANTIDADE_PPR' ~ '^-?[0-9]+([.,][0-9]+)?$' THEN REPLACE(p.data->>'QUANTIDADE_PPR', ',', '.')::numeric END, 0)
+                             - COALESCE(CASE WHEN p.data->>'QUANTIDADE_FATURADA_PPR' ~ '^-?[0-9]+([.,][0-9]+)?$' THEN REPLACE(p.data->>'QUANTIDADE_FATURADA_PPR', ',', '.')::numeric END, 0)
+                             - COALESCE(CASE WHEN p.data->>'QUANTIDADE_DESISTENCIA_PPR' ~ '^-?[0-9]+([.,][0-9]+)?$' THEN REPLACE(p.data->>'QUANTIDADE_DESISTENCIA_PPR', ',', '.')::numeric END, 0)
+                    END) > 0
                     AND (p.data->>'STATUS_PPR') <> 'C'
                     AND RIGHT(TRIM(p.data->>'PRODUTO_PPR'), 1) <> '1'
                     AND UPPER(TRIM(COALESCE(p.data->>'FATURADO_PPR', ''))) <> 'T'
@@ -312,7 +322,11 @@ router.get('/', async (req, res) => {
                 LEFT JOIN pedidos_conferencia pc ON pc.sync_key = p.sync_key
                 ${ownerJoin}
                 WHERE
-                    ((p.data->>'QUANTIDADE_PPR')::numeric - COALESCE((p.data->>'QUANTIDADE_FATURADA_PPR')::numeric, 0) - COALESCE((p.data->>'QUANTIDADE_DESISTENCIA_PPR')::numeric, 0)) > 0
+                    (CASE
+                        WHEN (p.data->>'SALDO_LIBERADO_FATURAR_PPR')::numeric > 0
+                            THEN (p.data->>'SALDO_LIBERADO_FATURAR_PPR')::numeric - COALESCE((p.data->>'QUANTIDADE_DESISTENCIA_PPR')::numeric, 0)
+                        ELSE (p.data->>'QUANTIDADE_PPR')::numeric - COALESCE((p.data->>'QUANTIDADE_FATURADA_PPR')::numeric, 0) - COALESCE((p.data->>'QUANTIDADE_DESISTENCIA_PPR')::numeric, 0)
+                    END) > 0
                     AND (p.data->>'STATUS_PPR') <> 'C'
                     AND COALESCE(p.data->>'STATUS_PCP', '') NOT IN ('C', 'E', 'F')
                 ORDER BY
