@@ -77,7 +77,7 @@ function getCommercialBalance(item) {
 
 function getItemWeight(item, weightsMap) {
     const produto = String(item.PRODUTO_PPR || '').trim();
-    const unitWeight = num(item.PESO_UNIT) || num(item.PESO_PRODUTO) || num(weightsMap[produto]);
+    const unitWeight = num(item.PESO_PRODUTO) || num(weightsMap[produto]);
     return unitWeight * getCommercialBalance(item);
 }
 
@@ -204,7 +204,10 @@ router.get('/resumo-carteira', async (req, res) => {
                         - COALESCE(CASE WHEN p.data->>'QUANTIDADE_DESISTENCIA_PPR' ~ '^-?[0-9]+([.,][0-9]+)?$' THEN REPLACE(p.data->>'QUANTIDADE_DESISTENCIA_PPR', ',', '.')::numeric END, 0)
                     ) AS saldo,
                     COALESCE(
-                        NULLIF(f.peso_liquido_pro, 0),
+                        CASE
+                            WHEN p.data->>'PESO_PRODUTO' ~ '^-?[0-9]+([.,][0-9]+)?$'
+                            THEN REPLACE(p.data->>'PESO_PRODUTO', ',', '.')::numeric
+                        END,
                         pc.peso,
                         0
                     ) AS peso_unit
@@ -401,10 +404,6 @@ router.get('/', async (req, res) => {
                 }
             }
             delete item.PESO_UNIT;
-            delete item.PESO_PRODUTO;
-            if (Number(row.ficha_peso_liquido_pro) > 0) {
-                item.PESO_PRODUTO = Number(row.ficha_peso_liquido_pro);
-            }
             const opValue = String(item.OP_PCS || '').trim();
             item.ROTEIRO_OPERACIONAL_OBRIGATORIO = true;
             item.ROTEIRO_OPERACIONAL = operationalRoutes.get(opValue) || [];
