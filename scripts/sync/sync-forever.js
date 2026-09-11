@@ -182,7 +182,7 @@ const INDEPENDENT_BATS = [
 const INDEPENDENT_WAIT = 2 * 60 * 1000; // 2 minutos
 const FATURAMENTO_WAIT = 2 * 60 * 1000; // 2 minutos após concluir
 const LIGHT_SYNC_WAIT = 5 * 60 * 1000; // 5 minutos após concluir
-const HEAVY_SYNC_MODULES = new Set(['EMISSOES', 'PEDIDOS', 'PRODUCAO', 'REFUGOS']);
+const HEAVY_SYNC_MODULES = new Set(['EMISSOES', 'PEDIDOS', 'PRODUCAO', 'REFUGOS', 'SNAPSHOTS']);
 const SNAPSHOT_SCRIPTS = { EMISSOES: 'refresh-carteira-dashboard-snapshot.js', FATURAMENTO: 'refresh-faturamento-dashboard-snapshot.js', PRODUCAO: 'refresh-producao-dashboard-snapshot.js', REFUGOS: 'refresh-refugo-kpi-snapshot.js' };
 const TECHNICAL_SYNC_MODULES = new Set(['MOLDAGEM FT', 'FUSAO FT']);
 const LIGHT_SYNC_CONCURRENCY = 2;
@@ -342,7 +342,7 @@ function buildFrame(cycleStart) {
     const technicalBats = INDEPENDENT_BATS.filter(bat => TECHNICAL_SYNC_MODULES.has(bat.name));
     const lightBats = INDEPENDENT_BATS.filter(bat => !HEAVY_SYNC_MODULES.has(bat.name) && !TECHNICAL_SYNC_MODULES.has(bat.name));
     out.push(B.row(centerStr(bold + C.amber + 'FILA PESADA  -  1 MODULO POR VEZ' + reset, W), W));
-    out.push(B.row(centerStr(dim + 'Emissoes  |  Faturamento  |  Pedidos  |  Producao  |  Refugos' + reset, W), W));
+    out.push(B.row(centerStr(dim + 'Emissoes  |  Faturamento  |  Pedidos  |  Producao  |  Refugos  |  Snapshots' + reset, W), W));
     heavyBats.forEach(drawModuleRow);
     out.push(B.sep());
     out.push(B.row(centerStr(bold + C.cyan + `FILA LEVE  -  ATE ${LIGHT_SYNC_CONCURRENCY} MODULOS EM PARALELO` + reset, W), W));
