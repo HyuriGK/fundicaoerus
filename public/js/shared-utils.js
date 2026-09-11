@@ -44,6 +44,87 @@ function getAdjustedOpQuantity(item, baseQty = 0) {
     return Math.max(Number(item?.OP_QUANTIDADE) || 0, pointedQty, Number(baseQty) || 0);
 }
 
+function getOpDeliveryDate(item) {
+    return item?.OP_ENTREGA || item?.ENTREGA_PETR || item?.DATA_ENTREGA_PPR || null;
+}
+
+function normalizeOpStage(value) {
+    return String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^A-Z0-9 ]/gi, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toUpperCase();
+}
+
+function getOpStageLeadTimeKey(stage, sectorGroups = {}) {
+    const normalized = normalizeOpStage(stage);
+    if (normalized.includes('MOLDAGEM') || normalized === 'FECHAMENTO MANUAL') return 'moldagem';
+    if (normalized.includes('FUSAO')) return 'fusao';
+    if (normalized.includes('ACABAMENTO') || normalized.includes('REBARBA') || normalized.includes('GRALHA')) return 'acabamento';
+    if (normalized.includes('TRATAMENTO')) return 'tratamento';
+    if (normalized === 'AGUARDANDO USINAGEM EXTERNA') return 'aguardandoUsinagem';
+    if (normalized === 'EM USINAGEM EXTERNA' || normalized === 'USINAGEM') return 'emUsinagem';
+    if (normalized === 'AGUARDANDO QUALIDADE') return 'aguardandoQualidade';
+    if (normalized === 'AGUARDANDO EXPEDICAO' || normalized === 'INSP QUALIDADE') return 'aguardandoExpedicao';
+    if (normalized === 'AGUARDANDO FATURAMENTO' || normalized === 'EXPEDICAO' || normalized === 'FATURAMENTO') return 'aguardandoFaturamento';
+
+    const group = Object.keys(sectorGroups).find(key => normalizeOpStage(key) === normalized ||
+        (sectorGroups[key] || []).some(value => normalizeOpStage(value) === normalized));
+    return group ? getOpStageLeadTimeKey(group) : null;
+}
+
+function getSharedLocalDate(value) {
+    if (value instanceof Date) return new Date(value.getFullYear(), value.getMonth(), value.getDate());
+    const raw = String(value || '').trim();
+    const brazilian = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (brazilian) return new Date(Number(brazilian[3]), Number(brazilian[2]) - 1, Number(brazilian[1]));
+    const datePart = raw.split(/T| /)[0];
+    const parts = datePart.split('-');
+    if (parts.length === 3) return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+    const parsed = new Date(value);
+    return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+}
+
+function subtractSharedBusinessDays(date, days) {
+    const result = getSharedLocalDate(date);
+    let remaining = Number(days) || 0;
+    while (remaining > 0) {
+        result.setDate(result.getDate() - 1);
+        if (result.getDay() !== 0 && result.getDay() !== 6) remaining--;
+    }
+    return result;
+}
+
+function calculateOpMetaDates(stages, deliveryDate, leadTimes = {}, sectorGroups = {}) {
+    if (!deliveryDate) return null;
+    const metaDates = {};
+    let deadline = getSharedLocalDate(deliveryDate);
+    if (Number.isNaN(deadline.getTime())) return null;
+    for (let i = stages.length - 1; i >= 0; i--) {
+        const stage = stages[i];
+        metaDates[stage] = getSharedLocalDate(deadline);
+        const key = getOpStageLeadTimeKey(stage, sectorGroups);
+        deadline = subtractSharedBusinessDays(deadline, leadTimes[key] || 0);
+    }
+    return metaDates;
+}
+
+function getOpDelayBusinessDays(metaDate, pointingDate) {
+    const meta = getSharedLocalDate(metaDate);
+    const pointing = getSharedLocalDate(pointingDate);
+    const calendarDiff = Math.round((pointing.getTime() - meta.getTime()) / 86400000);
+    if (calendarDiff <= 0) return 0;
+    let current = new Date(meta);
+    let days = 0;
+    while (current < pointing) {
+        current.setDate(current.getDate() + 1);
+        if (current.getDay() !== 0 && current.getDay() !== 6) days++;
+    }
+    return days;
+}
+
 /**
  * Calculates industrial metrics (balances per sector) for a given item.
  * Logic synchronized with the Orders Dashboard.
@@ -241,5 +322,5 @@ function getCorrectedWeight(item, weightsMap = {}) {
 
 // Export for Node environments (like analysis scripts) if needed
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { getCommercialBalance, getAdjustedOpQuantity, getItemSectorMetrics, getCorrectedWeight, getResolvedUnitWeight, getErpUnitWeight };
+    module.exports = { getCommercialBalance, getAdjustedOpQuantity, getOpDeliveryDate, calculateOpMetaDates, getOpDelayBusinessDays, getItemSectorMetrics, getCorrectedWeight, getResolvedUnitWeight, getErpUnitWeight };
 }

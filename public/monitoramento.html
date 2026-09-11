@@ -2678,18 +2678,7 @@
         }
 
         function calculateBackwardMetaDates(stages, deliveryDate, keyMap = stageLeadTimeKeyMap) {
-            if (!deliveryDate) return null;
-            const metaDates = {};
-            let deadline = toLocalDate(deliveryDate);
-
-            for (let i = stages.length - 1; i >= 0; i--) {
-                const stage = stages[i];
-                metaDates[stage] = toLocalDate(deadline);
-                const configKey = keyMap[stage] || configKeyMap[stage];
-                deadline = subtractBusinessDays(deadline, leadTimes[configKey] || 0);
-            }
-
-            return metaDates;
+            return calculateOpMetaDates(stages, deliveryDate, leadTimes, sectorGroups);
         }
 
         function renderKanbanColumns() {
@@ -3259,7 +3248,7 @@
             const routeStages = getMonitoringRouteStages(op);
             const backwardMetaDates = calculateBackwardMetaDates(
                 routeStages,
-                op.ENTREGA_PETR || op.DATA_ENTREGA_PPR
+                getOpDeliveryDate(op)
             );
             const hasOp = !!String(op.OP_PCS || '').trim() && String(op.OP_PCS || '').trim() !== '-';
             if (!hasOp) {
@@ -3402,7 +3391,7 @@
                     valueSums[stage] += vAgregado;
 
                     // Collect data for sorting
-                    const deliveryRaw = op.ENTREGA_PETR || op.DATA_ENTREGA_PPR;
+                    const deliveryRaw = getOpDeliveryDate(op);
                     const deliveryDateObj = toLocalDate(deliveryRaw);
                     const todayObj = toLocalDate(new Date());
                     const daysUntilDeadline = getBusinessDaysDiff(todayObj, deliveryDateObj);
@@ -3715,7 +3704,7 @@
                     return;
                 }
 
-                const deliveryDate = opData.ENTREGA_PETR || opData.DATA_ENTREGA_PPR;
+                const deliveryDate = getOpDeliveryDate(opData);
                 const metaDates = calculateBackwardMetaDates(ordered, deliveryDate, configKeyMap);
 
                 // --- 3. Robust Flow Logic (Modal) ---
@@ -3767,11 +3756,9 @@
 
                     if (hasPointing && metaMidnight) {
                         const referenceDate = toLocalDate(lastPointingDate[sector]);
-                        const timeDiff = referenceDate.getTime() - metaMidnight.getTime();
-                        const daysDiff = Math.round(timeDiff / (1000 * 3600 * 24));
+                        const bizDelay = getOpDelayBusinessDays(metaMidnight, referenceDate);
 
-                        if (daysDiff > 0) {
-                            const bizDelay = Math.abs(getBusinessDaysDiff(metaMidnight, referenceDate));
+                        if (bizDelay > 0) {
                             statusHtml = `<span style="color: var(--status-danger); font-weight: 600;"><i class="fa-solid fa-clock"></i> Atrasou (${bizDelay} d)</span>`;
                         } else {
                             statusHtml = `<span style="color: var(--status-success); font-weight: 600;"><i class="fa-solid fa-check"></i> No Prazo</span>`;
