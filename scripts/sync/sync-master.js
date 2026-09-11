@@ -155,7 +155,6 @@ async function syncMaster() {
                 const totalOPs = opsResults.length;
                 let processed = 0;
 
-                await pgClient.query('BEGIN');
                 await pgClient.query(`
                     CREATE TABLE IF NOT EXISTS producao_roteiro_operacional_sync (
                         op TEXT NOT NULL,
@@ -169,7 +168,6 @@ async function syncMaster() {
                         PRIMARY KEY (op, setor_codigo)
                     )
                 `);
-                await pgClient.query('TRUNCATE TABLE producao_roteiro_operacional_sync');
                 const fechamentoManualOps = new Set();
 
                 if (allOpIds.length > 0) {
@@ -258,6 +256,9 @@ async function syncMaster() {
                         });
                     }
 
+                    await pgClient.query('BEGIN');
+                    await pgClient.query('TRUNCATE TABLE producao_roteiro_operacional_sync');
+
                     for (const row of routeRowsByOpSector.values()) {
                         await pgClient.query(`
                             INSERT INTO producao_roteiro_operacional_sync
@@ -274,6 +275,14 @@ async function syncMaster() {
                     }
 
                     console.log(`✅ [2.1/4] Roteiro operacional sincronizado: ${routeRowsByOpSector.size} linhas.`);
+                }
+
+                if (allOpIds.length > 0) {
+                    await pgClient.query('COMMIT');
+                    await pgClient.query('BEGIN');
+                } else {
+                    await pgClient.query('BEGIN');
+                    await pgClient.query('TRUNCATE TABLE producao_roteiro_operacional_sync');
                 }
 
                 for (const op of opsResults) {

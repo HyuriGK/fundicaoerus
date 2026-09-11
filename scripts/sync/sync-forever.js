@@ -8,9 +8,23 @@ const path      = require('path');
 const readline  = require('readline');
 const fs        = require('fs');
 const https     = require('https');
+const progressDispatch = {};
 
 function updateSyncProgress(pageId, progress) {
     if (!pageId) return;
+    const now = Date.now();
+    const state = progressDispatch[pageId] || (progressDispatch[pageId] = { lastSentAt: 0, timer: null, latest: 0 });
+    state.latest = progress;
+    if (state.timer || now - state.lastSentAt < 1000) {
+        if (!state.timer) {
+            state.timer = setTimeout(() => {
+                state.timer = null;
+                updateSyncProgress(pageId, state.latest);
+            }, Math.max(50, 1000 - (now - state.lastSentAt)));
+        }
+        return;
+    }
+    state.lastSentAt = now;
     const data = JSON.stringify({ page_id: pageId, progress });
     const req = https.request({
         hostname: 'fundicaoerus.vercel.app', port: 443,
