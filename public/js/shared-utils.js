@@ -67,6 +67,7 @@ function getOpStageLeadTimeKey(stage, sectorGroups = {}) {
     if (normalized === 'AGUARDANDO USINAGEM EXTERNA') return 'aguardandoUsinagem';
     if (normalized === 'EM USINAGEM EXTERNA' || normalized === 'USINAGEM') return 'emUsinagem';
     if (normalized === 'AGUARDANDO QUALIDADE') return 'aguardandoQualidade';
+    if (normalized === 'QUALIDADE' || normalized.includes('INSPECAO') || normalized.includes('REVISAO')) return 'aguardandoExpedicao';
     if (normalized === 'AGUARDANDO EXPEDICAO' || normalized === 'INSP QUALIDADE') return 'aguardandoExpedicao';
     if (normalized === 'AGUARDANDO FATURAMENTO' || normalized === 'EXPEDICAO' || normalized === 'FATURAMENTO') return 'aguardandoFaturamento';
 
