@@ -48,6 +48,10 @@ function getOpDeliveryDate(item) {
     return item?.OP_ENTREGA || item?.ENTREGA_PETR || item?.DATA_ENTREGA_PPR || null;
 }
 
+function getPcpDeliveryDate(item) {
+    return item?.ENTREGA_PETR || item?.DATA_ENTREGA_PPR || null;
+}
+
 function normalizeOpStage(value) {
     return String(value || '')
         .normalize('NFD')
@@ -323,5 +327,5 @@ function getCorrectedWeight(item, weightsMap = {}) {
 
 // Export for Node environments (like analysis scripts) if needed
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { getCommercialBalance, getAdjustedOpQuantity, getOpDeliveryDate, calculateOpMetaDates, getOpDelayBusinessDays, getItemSectorMetrics, getCorrectedWeight, getResolvedUnitWeight, getErpUnitWeight };
+    module.exports = { getCommercialBalance, getAdjustedOpQuantity, getOpDeliveryDate, getPcpDeliveryDate, calculateOpMetaDates, getOpDelayBusinessDays, getItemSectorMetrics, getCorrectedWeight, getResolvedUnitWeight, getErpUnitWeight };
 }
