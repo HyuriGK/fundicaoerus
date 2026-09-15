@@ -2211,6 +2211,18 @@
             vertical-align: middle;
         }
 
+        .order-age-cell {
+            color: var(--color-primary);
+            font-family: var(--font-mono);
+            font-weight: 800;
+            white-space: nowrap;
+        }
+
+        .order-age-cell.empty {
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
         #mobileRefreshBtn {
             display: none;
         }
@@ -2863,6 +2875,7 @@
                             <th class="sortable-th op-column" id="th-op" onclick="toggleSort('op')" style="width: 105px;">OP</th>
                             <th class="sortable-th history-pedido-header block-reason-column" id="th-bloqueio" onclick="toggleSort('bloqueio')" style="width: 175px;">BLOCK / SEM DATA</th>
                             <th class="sortable-th emission-date-column" id="th-entrega" onclick="toggleSort('entrega')" style="width: 8%; white-space: nowrap;">ENTREGA</th>
+                            <th class="sortable-th" id="th-idade" onclick="toggleSort('idade')" style="width: 90px; white-space: nowrap;">IDADE</th>
                             <th class="sortable-th" id="th-cliente" onclick="toggleSort('cliente')" style="text-align: left; width: 15%;">CLIENTE</th>
                             <th class="code-column" style="width: 1px; text-align: center; white-space: nowrap;">CÓDIGO</th>
                             <th style="">PRODUTO</th>
@@ -2883,6 +2896,7 @@
                             <th class="op-column"><input class="filter-input-table" data-col="1" placeholder="..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></th>
                             <th class="block-reason-column"><input class="filter-input-table" data-col="2" placeholder="..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></th>
                             <th><input class="filter-input-table" data-col="3" placeholder="..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></th>
+                            <th></th>
                             <th><input class="filter-input-table" data-col="4" placeholder="..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></th>
                             <th><input class="filter-input-table" data-col="5" placeholder="..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" style="text-align: center;"></th>
                             <th><input class="filter-input-table" data-col="6" placeholder="..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></th>
@@ -5011,7 +5025,7 @@
             updateValueColumnsVisibility();
             updateToggleAllConferencia(list);
             if (list.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="${showConferencia ? 18 : 17}" style="text-align:center; padding:20px;">Nenhum registro encontrado.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="${showConferencia ? 19 : 18}" style="text-align:center; padding:20px;">Nenhum registro encontrado.</td></tr>`;
                 return;
             }
             tbody.innerHTML = list.map((item, index) => {
@@ -5019,6 +5033,8 @@
                     ? item.DATA_EMISSAO_PEDIDO
                     : (item.ENTREGA_PETR || item.DATA_ENTREGA_PPR);
                 const entrega = formatDateLocal(tableDate) || '-';
+                const idadeDias = getOrderAgeDays(item.DATA_EMISSAO_PEDIDO);
+                const idade = idadeDias === null ? '-' : `${String(idadeDias).padStart(2, '0')} dias`;
                 const metrics = getItemSectorMetrics(item);
                 const saldoReal = item._sectorQty !== undefined ? item._sectorQty : getCommercialBalance(item);
                 const qtdOriginal = metrics.originalTarget;
@@ -5161,6 +5177,7 @@
                     <td style="text-align:center;">${opHtml}</td>
                     <td class="block-reason-column" style="text-align:center; min-width: 170px;">${renderPedidoBlockReasons(item)}</td>
                     <td class="emission-date-column" style="text-align:center;">${entrega}</td>
+                    <td class="order-age-cell${idadeDias === null ? ' empty' : ''}" style="text-align:center;">${idade}</td>
                     <td style="color:var(--text-main); text-align:left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 320px;" title="${item.NOME_CLIENTE || '-'}">${item.NOME_CLIENTE || '-'}</td>
                     <td class="copyable code-column" style="text-align:center;" onclick="openCodeActions(event, '${item.PRODUTO_PPR || item.CODIGO_PECA || item.sync_key || ''}')">
                         ${item.PRODUTO_PPR || item.CODIGO_PECA || item.sync_key || '-'} <i class="fa-regular fa-copy" style="font-size:0.7em; margin-left:5px; opacity:0.5;"></i>
@@ -5785,6 +5802,26 @@
                 status: markedTotal || (original > 0 && missing === 0) ? 'TOTAL' : (waiting ? 'AGUARDANDO' : 'PARCIAL')
             };
         }
+        function getOrderAgeDays(dateValue) {
+            if (!dateValue) return null;
+            const value = String(dateValue).trim();
+            const isoDate = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+            const brDate = value.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+            let emissionDate;
+            if (isoDate) {
+                emissionDate = new Date(Number(isoDate[1]), Number(isoDate[2]) - 1, Number(isoDate[3]));
+            } else if (brDate) {
+                emissionDate = new Date(Number(brDate[3]), Number(brDate[2]) - 1, Number(brDate[1]));
+            } else {
+                const parsed = new Date(value);
+                if (Number.isNaN(parsed.getTime())) return null;
+                emissionDate = new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+            }
+            if (Number.isNaN(emissionDate.getTime())) return null;
+            const today = new Date();
+            const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+            return Math.max(0, Math.floor((todayDate - emissionDate) / 86400000));
+        }
         function syncQuickDeliveryButtonState() {
             const btn = document.getElementById('btnQuickDeliveryToday');
             if (!btn) return;
@@ -6124,6 +6161,11 @@
                         const getD = (i) => i.ENTREGA_PETR ? new Date(i.ENTREGA_PETR).getTime() : (i.DATA_ENTREGA_PPR ? new Date(i.DATA_ENTREGA_PPR).getTime() : 0);
                         valA = getD(a);
                         valB = getD(b);
+                    } else if (sortConfig.column === 'idade') {
+                        valA = getOrderAgeDays(a.DATA_EMISSAO_PEDIDO);
+                        valB = getOrderAgeDays(b.DATA_EMISSAO_PEDIDO);
+                        valA = valA === null ? -1 : valA;
+                        valB = valB === null ? -1 : valB;
                     } else if (sortConfig.column === 'peso_un') {
                         valA = getUnitWeightValue(a);
                         valB = getUnitWeightValue(b);
