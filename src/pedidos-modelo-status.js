@@ -8,7 +8,7 @@ const VALID_STATUSES = new Set([
     'MODELO SENDO AJUSTADO NA MODELARIA',
     'MODELO PRECISA AJUSTAR NA MODELARIA'
 ]);
-const EDIT_ROLES = new Set(['ppcp', 'desenvolvedor', 'diretor']);
+const EDIT_ROLES = new Set(['ppcp', 'desenvolvedor']);
 
 let tableReady = false;
 async function ensureTable() {
