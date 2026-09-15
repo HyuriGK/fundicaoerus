@@ -441,12 +441,8 @@
             '<div id="eg-ppcp" class="erus-nav-group-wrapper collapsed">' +
                 '<a href="acabamento_interno.html" data-stip="Acabamento Interno" class="erus-nav-link' + isActive('acabamento_interno.html') + '">' +
                     '<i class="fa-solid fa-screwdriver-wrench"></i><span>Acabamento Interno</span></a>' +
-                '<a href="insumosmoldagem.html" data-stip="Insumos de Moldagem" class="erus-nav-link' + isActive('insumosmoldagem.html') + '">' +
-                    '<i class="fa-solid fa-cubes"></i><span>Insumos de Moldagem</span></a>' +
                 '<a href="programacaofusao.html" data-stip="Programação da Fusão" class="erus-nav-link' + isActive('programacaofusao.html') + '">' +
                     '<i class="fa-solid fa-fire-flame-curved"></i><span>Programação da Fusão</span></a>' +
-                '<a href="programacaodesmoldagem.html" data-stip="Programação Desmoldagem" class="erus-nav-link' + isActive('programacaodesmoldagem.html') + '">' +
-                    '<i class="fa-solid fa-calendar-days"></i><span>Programação Desmoldagem</span></a>' +
             '</div>' +
             // TERCEIRIZACAO
             '<div class="erus-nav-group-sep" data-stip="Terceirização" onclick="erusSidebarToggleGroup(\'eg-acabamento\')">' +

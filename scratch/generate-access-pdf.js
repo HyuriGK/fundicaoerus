@@ -28,7 +28,6 @@ const pages = [
   ['fichatecacabamento.html', 'Ficha Acabamento'],
   ['monitoramento.html', 'Monitoramento OPs'],
   ['acabamento_interno.html', 'Acabamento Interno'],
-  ['insumosmoldagem.html', 'Insumos de Moldagem'],
   ['faturamentos.html', 'Produção Faturada'],
   ['acabamento_externo.html', 'Acabamento Externo'],
   ['custos.html', 'Custos Gerais'],
