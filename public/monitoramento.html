@@ -3232,6 +3232,33 @@
             };
         }
 
+        function alignMonitoringDownstreamStages(op, metrics) {
+            const opPointings = pointingSummary[String(op.OP_PCS || '').trim()];
+            if (!opPointings) return metrics;
+
+            const normalize = value => String(value || '')
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .trim()
+                .toUpperCase();
+            const sumBySector = aliases => Object.entries(opPointings).reduce((sum, [sector, data]) => {
+                const normalized = normalize(sector);
+                return aliases.some(alias => normalized.includes(alias))
+                    ? sum + (Number(data.quantidade) || 0)
+                    : sum;
+            }, 0);
+            const usinagem = sumBySector(['USINAGEM', 'TORNEARIA']);
+            const qualidade = sumBySector(['INSPECAO DE QUALIDADE', 'QUALIDADE', 'REVISAO']);
+            const expedicao = sumBySector(['EXPEDICAO', 'LOGISTICA']);
+
+            if (usinagem <= 0 || qualidade <= 0) return metrics;
+            return {
+                ...metrics,
+                qUsinagem: Math.max(0, usinagem - qualidade),
+                qQualidade: Math.max(0, qualidade - expedicao)
+            };
+        }
+
         function getCarteiraStages(op) {
             if (typeof getItemSectorMetrics !== 'function') {
                 const totalQty = parseInt(op.OP_QUANTIDADE) || parseInt(op.QUANTIDADE_PPR) || 0;
@@ -3270,7 +3297,7 @@
             }
 
             const qtyExpedited = metrics.rawFaturamento || 0;
-            const physicalMetrics = getPhysicalMonitoringMetrics(op, metrics);
+            const physicalMetrics = alignMonitoringDownstreamStages(op, getPhysicalMonitoringMetrics(op, metrics));
             const stageQty = {};
             const addStage = (stage, qty) => {
                 if (qty > 0) stageQty[stage] = (stageQty[stage] || 0) + qty;
