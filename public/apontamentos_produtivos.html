@@ -609,6 +609,35 @@
             border-bottom: none !important;
         }
 
+        .period-view-toggle {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-shrink: 0;
+        }
+        .period-view-btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-muted);
+            padding: 0 12px;
+            height: 32px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .period-view-btn:hover {
+            background: rgba(245, 158, 11, 0.1);
+            color: var(--color-primary);
+        }
+        .period-view-btn.active {
+            background: var(--color-primary);
+            color: #000;
+            border-color: var(--color-primary);
+        }
+
         .months-group {
             display: flex !important;
             gap: 5px !important;
@@ -1283,6 +1312,10 @@
 
             <!-- Toolbar Row (Filters) -->
             <div class="toolbar-row">
+                <div class="period-view-toggle">
+                    <button type="button" id="btn-view-diaria" class="period-view-btn active" onclick="setChartPeriodView('diaria')">VIS&Atilde;O DI&Aacute;RIA</button>
+                    <button type="button" id="btn-view-mensal" class="period-view-btn" onclick="setChartPeriodView('mensal')">VIS&Atilde;O MENSAL</button>
+                </div>
                 <!-- Time Selection -->
                 <select id="year-filter-select" class="year-select"></select>
                 <div id="monthButtons"></div>
@@ -1650,6 +1683,7 @@
         let acabamentoExternoData = [];
         let figurasMap = {};
         let chartViewMode = 'peso';
+        let chartPeriodView = 'diaria';
         const MONTHS_SHORT = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
         // Default Month: Current Month
         let currentMonthFilter = new Date().getMonth() + 1;
@@ -2214,12 +2248,33 @@
             sel.value = currentMonthFilter;
             sel.onchange = () => selectMonth(parseInt(sel.value));
             container.appendChild(sel);
+            updateChartPeriodViewUI();
         }
 
         async function selectMonth(idx) {
             currentMonthFilter = idx;
+            chartPeriodView = idx === 0 ? 'mensal' : 'diaria';
             if (window.erusAudit) window.erusAudit('SELECT_PERIODO_APONTAMENTOS', { ano: currentYearFilter, mes: idx === 0 ? 'ANO' : idx });
             updateMonthButtonsUI();
+            updateChartPeriodViewUI();
+            await fetchData();
+        }
+
+        function updateChartPeriodViewUI() {
+            document.getElementById('btn-view-diaria')?.classList.toggle('active', chartPeriodView === 'diaria');
+            document.getElementById('btn-view-mensal')?.classList.toggle('active', chartPeriodView === 'mensal');
+        }
+
+        async function setChartPeriodView(mode) {
+            chartPeriodView = mode === 'mensal' ? 'mensal' : 'diaria';
+            if (chartPeriodView === 'mensal') {
+                currentMonthFilter = 0;
+            } else if (currentMonthFilter === 0) {
+                currentMonthFilter = new Date().getMonth() + 1;
+            }
+            updateMonthButtonsUI();
+            updateChartPeriodViewUI();
+            if (window.erusAudit) window.erusAudit('SELECT_VISAO_APONTAMENTOS', { visao: chartPeriodView, ano: currentYearFilter, mes: currentMonthFilter });
             await fetchData();
         }
 
