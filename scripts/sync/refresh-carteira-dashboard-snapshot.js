@@ -56,13 +56,7 @@ const { getCorrectedWeight } = require('../../public/js/shared-utils');
     });
 
     const clientes = new Map();
-    const processedPhysicalOps = new Set();
     pedidos.forEach(item => {
-        const physicalOp = String(item.OP_PCS || '').trim();
-        if (physicalOp && physicalOp !== '-') {
-            if (processedPhysicalOps.has(physicalOp)) return;
-            processedPhysicalOps.add(physicalOp);
-        }
         const cliente = String(item.NOME_CLIENTE || 'Desconhecido').trim().toUpperCase() || 'DESCONHECIDO';
         const atual = clientes.get(cliente) || { pesoKg: 0, pedidos: new Set() };
         atual.pesoKg += getCorrectedWeight(item, customWeights);
