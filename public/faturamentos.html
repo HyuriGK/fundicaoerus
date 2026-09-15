@@ -1536,6 +1536,14 @@
         .reports-menu-dropdown button { width: 100%; padding: 10px 11px; border: 0; border-radius: 5px; background: transparent; color: #e4e4e7; text-align: left; font: 800 .71rem var(--font-main); letter-spacing: .025em; cursor: pointer; }
         .reports-menu-dropdown button:hover { background: rgba(251,191,36,.12); color: #fbbf24; }
         #salesProductReportModal, #salesVendorReportModal, #salesClientReportModal, #salesOrderReportModal { z-index: 4500; }
+        #salesProductPrintModal { z-index: 4700; }
+        #salesProductPrintModal .modal-card { width: min(1100px, 95vw); height: min(860px, 92vh); padding: 0; display: flex; flex-direction: column; overflow: hidden; background: #f4f4f5; color: #18181b; }
+        #salesProductPrintModal .modal-header { margin: 0; padding: 16px 22px; display: flex; align-items: center; justify-content: space-between; background: #27272a; color: #fff; }
+        #salesProductPrintModal .sales-print-body { padding: 28px; overflow: auto; flex: 1; }
+        #salesProductPrintModal .sales-report-table-wrap { border-color: #d4d4d8; }
+        #salesProductPrintModal .sales-report-table th { background: #e4e4e7; color: #3f3f46; }
+        #salesProductPrintModal .sales-report-table td { color: #18181b; border-color: #d4d4d8; }
+        #salesProductPrintModal .sales-report-summary-card { background: #fff; border-color: #d4d4d8; }
         #salesProductReportModal .modal-card, #salesVendorReportModal .modal-card, #salesClientReportModal .modal-card, #salesOrderReportModal .modal-card { width: min(1320px, 97vw); height: min(860px, 92vh); padding: 0; display: flex; flex-direction: column; overflow: hidden; background: #18181b; border: 1px solid #3f3f46; box-shadow: 0 28px 80px rgba(0,0,0,.55); }
         #salesProductReportModal .modal-header, #salesVendorReportModal .modal-header, #salesClientReportModal .modal-header, #salesOrderReportModal .modal-header { margin: 0; padding: 24px 30px; border-bottom: 1px solid var(--border-subtle); background: linear-gradient(105deg, #202025, #18181b 75%); }
         #salesProductReportContent, #salesVendorReportContent, #salesClientReportContent, #salesOrderReportContent { padding: 25px 30px 32px; overflow: hidden; flex: 1; display: flex; flex-direction: column; }
@@ -1782,6 +1790,12 @@
                 <div id="salesReportClientPicker" class="sales-report-client-picker"><input id="salesReportClientSearch" type="text" placeholder="Digite nome ou código do cliente" oninput="renderSalesReportClientResults()"><div id="salesReportClientResults" class="sales-report-client-results"></div></div>
                 <div id="salesProductReportResults" style="margin-top:18px;color:var(--text-muted);">Selecione o período e gere o relatório.</div>
             </div>
+        </div>
+    </div>
+    <div id="salesProductPrintModal" class="modal-overlay">
+        <div class="modal-card">
+            <div class="modal-header"><strong>Prévia de impressão — Vendas por produto</strong><div><button class="sales-report-action" type="button" onclick="printSalesProductReport()"><i class="fa-solid fa-print"></i> IMPRIMIR</button><span class="modal-close" onclick="closeSalesProductPrintPreview()" title="Fechar">&times;</span></div></div>
+            <div id="salesProductPrintContent" class="sales-print-body"></div>
         </div>
     </div>
     <div id="salesVendorReportModal" class="modal-overlay">
@@ -2481,9 +2495,24 @@
                 document.getElementById('salesReportExcelBtn').disabled = !salesProductReportRows.length;
                 document.getElementById('salesReportPdfBtn').disabled = !salesProductReportRows.length;
                 renderSalesProductReport();
+                openSalesProductPrintPreview();
             } catch (error) {
                 result.innerHTML = `<div style="text-align:center;padding:34px;color:var(--status-danger);">${error.message}</div>`;
             }
+        }
+        function openSalesProductPrintPreview() {
+            document.getElementById('salesProductPrintContent').innerHTML = document.getElementById('salesProductReportResults').innerHTML;
+            document.getElementById('salesProductPrintModal').style.display = 'flex';
+        }
+        function closeSalesProductPrintPreview() { document.getElementById('salesProductPrintModal').style.display = 'none'; }
+        function printSalesProductReport() {
+            const content = document.getElementById('salesProductPrintContent').innerHTML;
+            const printWindow = window.open('', '_blank');
+            if (!printWindow) return showToast('Impressão bloqueada', 'Permita pop-ups para imprimir o relatório.', 'warning');
+            printWindow.document.write(`<html><head><title>Vendas por produto</title><style>body{font-family:Arial,sans-serif;color:#18181b;padding:24px}table{width:100%;border-collapse:collapse;font-size:12px}th,td{padding:8px;border:1px solid #d4d4d8;text-align:left}th{background:#e4e4e7} .numeric{text-align:right}.sales-report-summary{display:flex;gap:10px;margin:12px 0}.sales-report-summary-card{padding:10px;border:1px solid #d4d4d8}.sales-report-summary-card span{display:block;font-size:10px}.sales-report-summary-card strong{font-size:14px}</style></head><body>${content}</body></html>`);
+            printWindow.document.close();
+            printWindow.focus();
+            printWindow.print();
         }
         function isSalesProductReportInternalItem(item) {
             // Mesmas regras aplicadas em dataToSum, base do KPI TOTAL FATURADO - INTERNO.
