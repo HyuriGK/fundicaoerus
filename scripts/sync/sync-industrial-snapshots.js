@@ -159,7 +159,7 @@ async function takeSnapshot() {
             addKpi(moldagemKey,  metrics.qMoldada,    unitWeight, unitPrice, op);
             addKpi('fechamento_manual', metrics.qFechamento, unitWeight, unitPrice, op);
             addKpi('fusao',      metrics.qFusao,      unitWeight, unitPrice, op);
-            addKpi('acabamento', metrics.qAcabamento, unitWeight, unitPrice, op);
+            addKpi('acabamento', metrics.qAcabamento + (metrics.qFusionToAcabamento || 0), unitWeight, unitPrice, op);
             addKpi('tt',         metrics.qTT,         unitWeight, unitPrice, op);
             addKpi('usinagem',   metrics.qUsinagem,   unitWeight, unitPrice, op);
             addKpi('qualidade',  metrics.qQualidade,  unitWeight, unitPrice, op);
