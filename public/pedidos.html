@@ -5305,6 +5305,7 @@
                 if (isReleased) { releasedWeight += itemTotalWeight; releasedValue += itemTotalValue; }
                 // Use centralized industrial metrics (already calculated)
                 const { qExpedicao, qQualidade, qUsinagem, qTT, qAcabamento, qFusao, qMoldada, qAguardando, targetTotalQty } = metrics;
+                const qAcabamentoIndustrial = qAcabamento + (metrics.qFusionToAcabamento || 0);
                 const qFechamento = metrics.qFechamento || 0;
                 // Unit metrics for direct multiplication
                 let uW = 0;
@@ -5337,7 +5338,7 @@
                 } else {
                     addKpi(kpiTT_Qualidade, qTT, item.OP_PCS);
                 }
-                addKpi(kpiAcabamento, qAcabamento, item.OP_PCS);
+                addKpi(kpiAcabamento, qAcabamentoIndustrial, item.OP_PCS);
                 addKpi(kpiMoldagem, qFusao, item.OP_PCS);
                 addKpi(kpiAguardando, qAguardando + qFechamento, item.OP_PCS);
                 if (qAguardando > 0) {
@@ -5528,7 +5529,7 @@
                 const saldo = getCommercialBalance(item);
                 if (saldo <= 0) return;
                 const fechamentoQty = metrics.qFechamento || 0;
-                const stages = [metrics.qAguardando + fechamentoQty, metrics.qMoldada, metrics.qFusao, metrics.qAcabamento, metrics.qTT, metrics.qUsinagem, metrics.qQualidade, metrics.qExpedicao];
+                const stages = [metrics.qAguardando + fechamentoQty, metrics.qMoldada, metrics.qFusao, metrics.qAcabamento + (metrics.qFusionToAcabamento || 0), metrics.qTT, metrics.qUsinagem, metrics.qQualidade, metrics.qExpedicao];
                 const comercial = stages;
                 const moldagemType = String(item._tipo_moldagem_procedimento || '').trim().toUpperCase();
                 const moldagemKey = moldagemType === 'MOLDAGEM PESADA' ? 'moldPesada' : moldagemType === 'MOLDAGEM LEVE' ? 'moldLeve' : moldagemType === 'MOLDAGEM MANUAL' ? 'moldManual' : 'moldOutros';
@@ -6114,6 +6115,7 @@
                     const s = activeChartFilters.stage;
                     const metrics = getItemSectorMetrics(item);
                     const { qExpedicao, qQualidade, qUsinagem, qTT, qAcabamento, qFusao, qMoldada, qAguardando, targetTotalQty } = metrics;
+                    const qAcabamentoIndustrial = qAcabamento + (metrics.qFusionToAcabamento || 0);
                     let sectorQty = 0;
                     let rawQty = 0;
                     if (s === 'aguardando') {
@@ -6134,7 +6136,7 @@
                     }
                     else if (s === 'moldagem') { sectorQty = qMoldada; rawQty = metrics.rawMoldada; }
                     else if (s === 'fusao') { sectorQty = qFusao; rawQty = metrics.rawFusao; }
-                    else if (s === 'acabamento') { sectorQty = qAcabamento; rawQty = metrics.rawAcabamento; }
+                    else if (s === 'acabamento') { sectorQty = qAcabamentoIndustrial; rawQty = metrics.rawAcabamento + (metrics.qFusionToAcabamento || 0); }
                     else if (s === 'tt_usinagem') { 
                         const isUsi = (item.ROTEIRO_OPERACIONAL || []).some(row => String(row.setor).toUpperCase().includes('USINAGEM'));
                         sectorQty = isUsi ? qTT : 0; rawQty = metrics.rawTT; 
