@@ -59,14 +59,15 @@ const emissionNumberSql = field => `
         0
     )
 `;
-const SERVICE_CLIENT_CODES = ['253', '257', '316', '432', '2020', '2283'];
+const SERVICE_CLIENT_CODES = ['253', '257', '270', '316', '432', '2020', '2283'];
 const SERVICE_CLIENT_NAMES = [
     'MONFERRATO INDUSTRIA E COMERCIO DE PECAS',
     'SPILROD FUNDICAO DE FERRO E ACO',
     'STEELROOL INDUSTRIA METALURGICA',
     'ACO NOBRE',
     'IMEPEL INDUSTRIA MECANICA',
-    'USITH USINAGEM E AJUSTAGEM'
+    'USITH USINAGEM E AJUSTAGEM',
+    'SULACO'
 ];
 const serviceCodeListSql = SERVICE_CLIENT_CODES.map(c => `'${c}'`).join(', ');
 const serviceNameFilterSql = alias => SERVICE_CLIENT_NAMES.map(name => `AND UPPER(TRIM(COALESCE(${alias}, ''))) NOT LIKE '%${name}%'`).join('\n              ');
@@ -539,6 +540,11 @@ router.get('/variacao-diaria', async (req, res) => {
                 FROM app_preferences p
                 CROSS JOIN LATERAL jsonb_each_text(COALESCE(p.value, '{}'::jsonb)) AS fp(item_key, item_value)
                 WHERE p.key = 'fat_peso_overrides'
+            ), excluded_clients AS (
+                SELECT UPPER(TRIM(ec.value)) AS client_name
+                FROM app_preferences p
+                CROSS JOIN LATERAL jsonb_array_elements_text(COALESCE(p.value, '[]'::jsonb)) AS ec(value)
+                WHERE p.key = 'excluded_clients'
             )
             SELECT
                 f.data_faturamento AS dia,
@@ -568,6 +574,7 @@ router.get('/variacao-diaria', async (req, res) => {
               AND f.data_faturamento IS NOT NULL
               AND COALESCE(o.fat_peso, CASE WHEN f.gera_financeiro = 'N' THEN false ELSE NOT COALESCE(p.excluido, f.excluido_manualmente, false) END) = TRUE
               ${faturamentoServiceFilterSql}
+              AND NOT EXISTS (SELECT 1 FROM excluded_clients ec WHERE ec.client_name = UPPER(TRIM(f.cliente_nome)))
             GROUP BY 1
             ORDER BY 1
         `;
@@ -643,6 +650,11 @@ router.get('/variacao-mensal', async (req, res) => {
                 FROM app_preferences p
                 CROSS JOIN LATERAL jsonb_each_text(COALESCE(p.value, '{}'::jsonb)) AS fp(item_key, item_value)
                 WHERE p.key = 'fat_peso_overrides'
+            ), excluded_clients AS (
+                SELECT UPPER(TRIM(ec.value)) AS client_name
+                FROM app_preferences p
+                CROSS JOIN LATERAL jsonb_array_elements_text(COALESCE(p.value, '[]'::jsonb)) AS ec(value)
+                WHERE p.key = 'excluded_clients'
             )
             SELECT
                 EXTRACT(MONTH FROM f.data_faturamento)::int AS mes,
@@ -671,6 +683,7 @@ router.get('/variacao-mensal', async (req, res) => {
               AND f.data_faturamento IS NOT NULL
               AND COALESCE(o.fat_peso, CASE WHEN f.gera_financeiro = 'N' THEN false ELSE NOT COALESCE(p.excluido, f.excluido_manualmente, false) END) = TRUE
               ${faturamentoServiceFilterSql}
+              AND NOT EXISTS (SELECT 1 FROM excluded_clients ec WHERE ec.client_name = UPPER(TRIM(f.cliente_nome)))
             GROUP BY 1 ORDER BY 1
         `;
 
@@ -728,6 +741,11 @@ router.get('/variacao-detalhe', async (req, res) => {
                 FROM app_preferences p
                 CROSS JOIN LATERAL jsonb_each_text(COALESCE(p.value, '{}'::jsonb)) AS fp(item_key, item_value)
                 WHERE p.key = 'fat_peso_overrides'
+            ), excluded_clients AS (
+                SELECT UPPER(TRIM(ec.value)) AS client_name
+                FROM app_preferences p
+                CROSS JOIN LATERAL jsonb_array_elements_text(COALESCE(p.value, '[]'::jsonb)) AS ec(value)
+                WHERE p.key = 'excluded_clients'
             )
             SELECT
                 TRIM(COALESCE(f.pedido,''))  AS pedido,
@@ -758,6 +776,7 @@ router.get('/variacao-detalhe', async (req, res) => {
             WHERE f.data_faturamento = $1
               AND COALESCE(o.fat_peso, CASE WHEN f.gera_financeiro = 'N' THEN false ELSE NOT COALESCE(p.excluido, f.excluido_manualmente, false) END) = TRUE
               ${faturamentoServiceFilterSql}
+              AND NOT EXISTS (SELECT 1 FROM excluded_clients ec WHERE ec.client_name = UPPER(TRIM(f.cliente_nome)))
             ORDER BY f.cliente_nome, f.codigo_item
         `;
 
