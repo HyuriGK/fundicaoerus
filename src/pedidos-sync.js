@@ -315,7 +315,6 @@ router.get('/', async (req, res) => {
                 WHERE
                     ((p.data->>'QUANTIDADE_PPR')::numeric - COALESCE((p.data->>'QUANTIDADE_FATURADA_PPR')::numeric, 0) - COALESCE((p.data->>'QUANTIDADE_DESISTENCIA_PPR')::numeric, 0)) > 0
                     AND (p.data->>'STATUS_PPR') <> 'C'
-                    AND COALESCE(p.data->>'STATUS_PCP', '') NOT IN ('C', 'E', 'F')
                 ORDER BY
                     (f.pro_codigo_fic IS NOT NULL) DESC,
                     f.data_fic DESC NULLS LAST,
@@ -359,11 +358,20 @@ router.get('/', async (req, res) => {
             SELECT data->>'OP_PCS' AS op
             FROM firebird_sync_pedidos
             WHERE sync_key LIKE 'OP-%'
-              AND COALESCE(data->>'STATUS_PCP', '') IN ('C', 'E', 'F')
+              AND UPPER(TRIM(COALESCE(data->>'STATUS_PCP', ''))) IN ('C', 'E', 'F')
         `);
         const closedOps = new Set(closedOpsResult.rows.map(row => String(row.op || '').trim()).filter(Boolean));
+        const getManualLink = row => {
+            const link = linksMap[row.sync_key];
+            const officialOp = String(row.data.OP_PCS || '').trim();
+            if (link?.status === 'confirmado' && closedOps.has(String(link.op).trim()) &&
+                row.data.LINK_STATUS === 'oficial' && officialOp && officialOp !== String(link.op).trim()) {
+                return null;
+            }
+            return link;
+        };
         const routeOpIds = [...new Set(result.rows.map(row =>
-            String(linksMap[row.sync_key]?.status === 'confirmado' ? linksMap[row.sync_key].op : row.data.OP_PCS || '').trim()
+            String(getManualLink(row)?.status === 'confirmado' ? getManualLink(row).op : row.data.OP_PCS || '').trim()
         ).filter(Boolean))];
         const operationalRoutesResult = await pool.query(`
             SELECT op, sequencia, setor_codigo, setor, produzido, refugado
@@ -390,7 +398,7 @@ router.get('/', async (req, res) => {
                 _has_ficha: !!row.has_ficha,
                 _tipo_moldagem_procedimento: row.tipo_moldagem_procedimento || null
             };
-            const manualLink = linksMap[row.sync_key];
+            const manualLink = getManualLink(row);
             if (manualLink) {
                 if (manualLink.status === 'confirmado') {
                     item.LINK_STATUS = 'confirmado';
@@ -415,6 +423,7 @@ router.get('/', async (req, res) => {
             }
             return item;
         }).filter(item => {
+            if (carteiraOnly === 'true') return true;
             const opValue = String(item.OP_PCS || '').trim();
             return !opValue || !closedOps.has(opValue);
         });

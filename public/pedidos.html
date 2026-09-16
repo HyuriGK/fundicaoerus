@@ -5903,8 +5903,7 @@
             const filterEmissionEnd = document.getElementById('filterEmissionEnd')?.value || '';
             const onlySugeridos = document.getElementById('filterSugeridos')?.checked;
             const onlyManualWeights = document.getElementById('filterPesosManuais')?.checked;
-            const directProductLookup = /^\d+$/.test(filters.PRODUTO_PPR || '');
-            const commercialView = !directProductLookup && Array.isArray(window.commercialPositionFilterRows);
+            const commercialView = Array.isArray(window.commercialPositionFilterRows);
             const sourceData = commercialView ? window.commercialPositionFilterRows : allData;
             const filtered = sourceData.filter(item => {
                 // Always clear sector-specific display fields so they don't bleed into non-stage views
@@ -5926,9 +5925,9 @@
                 // Filtro: apenas linhas com vínculos sugeridos (pendentes de aceite)
                 const hasValidSuggestedOP = canShowSuggestedLinks() && item.LINK_STATUS === 'sugerido' && /^\d{1,4}$/.test(String(item.OP_PCS || '').trim());
                 if (onlySugeridos && !hasValidSuggestedOP) return false;
-                if (activeBlockReasonFilter && !directProductLookup && !hasPedidoBlockReason(item, activeBlockReasonFilter)) return false;
+                if (activeBlockReasonFilter && !hasPedidoBlockReason(item, activeBlockReasonFilter)) return false;
                 // 1. Chart Filters (PowerBI Style)
-                if (!directProductLookup && activeChartFilters.month !== null) {
+                if (activeChartFilters.month !== null) {
                     let dateField;
                     if (chartMode === 'emission_pending' || chartMode === 'emission_total') {
                         dateField = item.DATA_EMISSAO_PEDIDO || item.OP_EMISSAO;
@@ -5949,10 +5948,10 @@
                     const selectedYear = yearEl ? (parseInt(yearEl.value) || new Date().getFullYear()) : new Date().getFullYear();
                     if (d.getFullYear() !== selectedYear) return false;
                 }
-                if (!directProductLookup && activeChartFilters.client !== null) {
+                if (activeChartFilters.client !== null) {
                     if (item.ID_CLIENTE_CORE != activeChartFilters.client) return false;
                 }
-                if (!directProductLookup && activeChartFilters.day !== null) {
+                if (activeChartFilters.day !== null) {
                     const dateField = item.ENTREGA_PETR || item.DATA_ENTREGA_PPR;
                     if (!dateField) return false;
                     const dp = parseDateLocal(dateField);
@@ -5976,7 +5975,7 @@
                     if (!lote.includes(filterLote)) return false;
                 }
                 // Date Range Filter (Delivery Date)
-                if (!directProductLookup && (filterDateStart || filterDateEnd)) {
+                if (filterDateStart || filterDateEnd) {
                     const entregaDate = item.ENTREGA_PETR ? new Date(item.ENTREGA_PETR) :
                         (item.DATA_ENTREGA_PPR ? new Date(item.DATA_ENTREGA_PPR) : null);
                     if (!entregaDate) return false; // Exclude items without delivery date
@@ -5997,7 +5996,7 @@
                     }
                 }
                 // Emission Date Range Filter
-                if (!directProductLookup && (filterEmissionStart || filterEmissionEnd)) {
+                if (filterEmissionStart || filterEmissionEnd) {
                     const emissionDate = item.DATA_EMISSAO_PEDIDO ? new Date(item.DATA_EMISSAO_PEDIDO) : null;
                     if (!emissionDate) return false; // Exclude items without emission date
                     // Normalize Item Date to Midnight Local
@@ -6083,7 +6082,7 @@
                 });
                 if (!filtersPassed) return false;
                 // 4. Stage Filter (Proportional hierarchical sync)
-                if (activeChartFilters.stage && !directProductLookup) {
+                if (activeChartFilters.stage) {
                     const s = activeChartFilters.stage;
                     const metrics = getItemSectorMetrics(item);
                     const { qExpedicao, qQualidade, qUsinagem, qTT, qAcabamento, qFusao, qMoldada, qAguardando, targetTotalQty } = metrics;
