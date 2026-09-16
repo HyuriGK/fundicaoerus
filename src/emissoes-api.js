@@ -543,7 +543,7 @@ router.get('/variacao-diaria', async (req, res) => {
             ), excluded_clients AS (
                 SELECT UPPER(TRIM(ec.value)) AS client_name
                 FROM app_preferences p
-                CROSS JOIN LATERAL jsonb_array_elements_text(COALESCE(p.value, '[]'::jsonb)) AS ec(value)
+                CROSS JOIN LATERAL jsonb_array_elements_text(CASE WHEN jsonb_typeof(p.value) = 'array' THEN p.value ELSE '[]'::jsonb END) AS ec(value)
                 WHERE p.key = 'excluded_clients'
             )
             SELECT
@@ -653,7 +653,7 @@ router.get('/variacao-mensal', async (req, res) => {
             ), excluded_clients AS (
                 SELECT UPPER(TRIM(ec.value)) AS client_name
                 FROM app_preferences p
-                CROSS JOIN LATERAL jsonb_array_elements_text(COALESCE(p.value, '[]'::jsonb)) AS ec(value)
+                CROSS JOIN LATERAL jsonb_array_elements_text(CASE WHEN jsonb_typeof(p.value) = 'array' THEN p.value ELSE '[]'::jsonb END) AS ec(value)
                 WHERE p.key = 'excluded_clients'
             )
             SELECT
@@ -744,7 +744,7 @@ router.get('/variacao-detalhe', async (req, res) => {
             ), excluded_clients AS (
                 SELECT UPPER(TRIM(ec.value)) AS client_name
                 FROM app_preferences p
-                CROSS JOIN LATERAL jsonb_array_elements_text(COALESCE(p.value, '[]'::jsonb)) AS ec(value)
+                CROSS JOIN LATERAL jsonb_array_elements_text(CASE WHEN jsonb_typeof(p.value) = 'array' THEN p.value ELSE '[]'::jsonb END) AS ec(value)
                 WHERE p.key = 'excluded_clients'
             )
             SELECT
