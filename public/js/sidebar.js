@@ -415,10 +415,10 @@
             '<div id="eg-producao" class="erus-nav-group-wrapper collapsed">' +
                 '<a href="apontamentos_produtivos.html" data-stip="Produção Apontada" class="erus-nav-link' + isActive('apontamentos_produtivos.html') + '">' +
                     '<i class="fa-solid fa-industry"></i><span>Produção Apontada</span></a>' +
-                '<a href="monitoramento.html" data-stip="Monitoramento de OPs" class="erus-nav-link' + isActive('monitoramento.html') + '">' +
-                    '<i class="fa-solid fa-display"></i><span>Monitoramento de OPs</span></a>' +
                 '<a href="ordemdeproducao.html" data-stip="Ordens de Produção" class="erus-nav-link' + isActive('ordemdeproducao.html') + '">' +
                     '<i class="fa-solid fa-file-lines"></i><span>Ordens de Produção</span></a>' +
+                '<a href="monitoramento.html" data-stip="Monitoramento de OP\'s" class="erus-nav-link' + isActive('monitoramento.html') + '">' +
+                    '<i class="fa-solid fa-display"></i><span>Monitoramento de OP\'s</span></a>' +
             '</div>' +
             // SAC
             '<div class="erus-nav-group-sep" data-stip="SAC" onclick="erusSidebarToggleGroup(\'eg-sac\')">' +
