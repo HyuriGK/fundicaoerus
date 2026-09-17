@@ -234,6 +234,36 @@ router.get('/op-setor-detalhes', async (req, res) => {
     }
 });
 
+// GET /api/pedidos-firebird/op-refugo-detalhes
+// Retorna os motivos dos refugos de uma OP em setores específicos
+router.get('/op-refugo-detalhes', async (req, res) => {
+    try {
+        const { op, setores } = req.query;
+        if (!op || !setores) {
+            return res.status(400).json({ error: 'Número da OP e setores são obrigatórios' });
+        }
+
+        const sectorList = Array.isArray(setores) ? setores : setores.split(',');
+        const result = await pool.query(`
+            SELECT data_refugo, setor, quantidade, motivo, lote
+            FROM refugo_apontado_sincronizado
+            WHERE op = $1 AND setor = ANY($2) AND quantidade > 0
+            ORDER BY data_refugo DESC, id DESC
+        `, [op, sectorList]);
+
+        res.json(result.rows.map(row => ({
+            data: row.data_refugo,
+            setor: row.setor,
+            quantidade: parseFloat(row.quantidade),
+            motivo: row.motivo,
+            lote: row.lote
+        })));
+    } catch (error) {
+        console.error('❌ [API-POSTGRES] Erro ao buscar motivos de refugo da OP:', error);
+        res.status(500).json({ error: 'Erro ao buscar motivos de refugo', details: error.message });
+    }
+});
+
 // GET /api/pedidos-firebird/op-apontamentos-resumo
 // Retorna o resumo de todos os apontamentos por OP e Setor (Otimizado para Dashboard de Monitoramento)
 router.get('/op-apontamentos-resumo', async (req, res) => {
