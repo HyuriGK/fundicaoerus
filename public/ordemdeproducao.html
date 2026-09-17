@@ -384,6 +384,17 @@
             gap: 12px;
         }
 
+        .details-header-status {
+            order: 1;
+            text-align: right;
+            border-right: 1px solid var(--border-subtle);
+            padding-right: 20px;
+        }
+
+        .details-header-actions > .btn-glass {
+            order: 2;
+        }
+
         .details-back {
             color: var(--text-muted);
             font-size: 0.78rem;
@@ -984,7 +995,7 @@
                     <div class="details-header-actions">
                         <button onclick="imprimirOP()" class="btn-glass" style="color: var(--color-primary); border: 1px solid var(--border-primary); padding: 8px 16px; font-size: 0.8rem; height: fit-content;"><i class="fa-solid fa-print"></i> Imprimir
  </button>
-                        <div style="text-align: right; border-left: 1px solid var(--border-subtle); padding-left: 20px;">
+                        <div class="details-header-status">
                             <span class="info-label">Status Geral</span>
                             <div id="overallStatus" style="font-size: 1.1rem; font-weight: 800; color: var(--color-primary); margin-top: 5px;">EM PRODUÇÃO</div>
                         </div>
@@ -1116,13 +1127,21 @@
             'EXPEDIÇÃO': 'fa-truck-fast'
         };
 
+        function normalizeClientName(value) {
+            const client = String(value ?? '').trim();
+            return !client || client.toLowerCase() === 'null' ? 'FUNDICAO ERUS LTDA' : client;
+        }
+
         async function init() {
             try {
                 const response = await fetch(API_PEDIDOS, { cache: 'no-store' });
                 const data = await response.json();
                 
                 // Filtrar apenas pedidos que têm OP
-                allOps = data.filter(item => /^[0-9]{4}$/.test(String(item.OP_PCS || ''))).sort((a, b) => Number(b.OP_PCS) - Number(a.OP_PCS));
+                allOps = data
+                    .filter(item => /^[0-9]{4}$/.test(String(item.OP_PCS || '')))
+                    .map(item => ({ ...item, NOME_CLIENTE: normalizeClientName(item.NOME_CLIENTE) }))
+                    .sort((a, b) => Number(b.OP_PCS) - Number(a.OP_PCS));
                 
                 renderOpList(allOps);
                 document.getElementById('loading-overlay').style.display = 'none';
