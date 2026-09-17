@@ -37,16 +37,28 @@ function updateSyncProgress(pageId, progress) {
 }
 
 function unlockSyncPage(pageId) {
-    if (!pageId) return;
+    if (!pageId) return Promise.resolve();
     const data = JSON.stringify({ page_id: pageId });
-    const req = https.request({
-        hostname: 'fundicaoerus.vercel.app', port: 443,
-        path: '/api/page-locks/sync-unlock', method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) }
+    return new Promise(resolve => {
+        let settled = false;
+        const finish = () => {
+            if (settled) return;
+            settled = true;
+            resolve();
+        };
+        const req = https.request({
+            hostname: 'fundicaoerus.vercel.app', port: 443,
+            path: '/api/page-locks/sync-unlock', method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) }
+        }, res => {
+            res.resume();
+            res.on('end', finish);
+        });
+        req.on('error', finish);
+        req.setTimeout(5000, () => { req.destroy(); finish(); });
+        req.write(data);
+        req.end();
     });
-    req.on('error', () => {});
-    req.write(data);
-    req.end();
 }
 
 function lockSyncPage(pageId) {
@@ -487,7 +499,7 @@ function runBat(bat, estimatedMs = 120000) {
                 }
             }
             updateSyncProgress(bat.pageId, 100);
-            unlockSyncPage(bat.pageId);
+            await unlockSyncPage(bat.pageId);
             resolve();
         });
     });
