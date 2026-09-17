@@ -1085,7 +1085,6 @@
     <script>
         // API Endpoints
         const API_PEDIDOS = '/api/pedidos-sync/ops-abertas';
-        const API_APONTAMENTOS = '/api/pedidos-firebird/op-apontamentos';
 
         let allOps = [];
         let selectedOp = null;
@@ -1176,13 +1175,9 @@
             try {
                 // Fetch points and route in parallel
                 console.log(`🔍 Buscando dados para OP ${op.OP_PCS} (Produto: ${op.PRODUTO_PPR})`);
-                const [pointsRes, routeRes] = await Promise.all([
-                    fetch(`${API_APONTAMENTOS}?op=${op.OP_PCS}`),
-                    fetch(`/api/pedidos-firebird/op-roteiro?produto=${encodeURIComponent(op.PRODUTO_PPR)}&cliente=${encodeURIComponent(op.CLIENTE_PPR || '')}`)
-                ]);
-
-                const pointings = await pointsRes.json();
-                let roteiro = await routeRes.json();
+                const routeRes = await fetch(`/api/pedidos-firebird/op-roteiro-operacional?op=${encodeURIComponent(op.OP_PCS)}`, { cache: 'no-store' });
+                if (!routeRes.ok) throw new Error(`Roteiro operacional indisponivel (HTTP ${routeRes.status})`);
+                const roteiro = await routeRes.json();
 
                 currentRoteiro = roteiro;
                 
@@ -1200,7 +1195,7 @@
                 }
 
                 // Remover fallback fixo - se não tem roteiro no banco, não mostra nada
-                renderCompactStages(pointings, roteiro, op.OP_QUANTIDADE || op.QUANTIDADE_PPR);
+                renderCompactStages(roteiro, op.OP_QUANTIDADE || op.QUANTIDADE_PPR);
                 if (window.erusAudit) window.erusAudit('ABRIR_DETALHE_ORDEM_PRODUCAO', {
                     op: op.OP_PCS,
                     cliente: op.NOME_CLIENTE,
@@ -1323,15 +1318,17 @@
             }
         }
 
-        function renderCompactStages(pointings, roteiro, totalQty) {
+        function renderCompactStages(roteiro, totalQty) {
             const container = document.getElementById('stagesContainer');
             const rows = Array.isArray(roteiro) ? roteiro : [];
             const total = Number(totalQty) || 0;
             const pointsBySector = {};
+            const scrapBySector = {};
 
-            (Array.isArray(pointings) ? pointings : []).forEach(point => {
-                const sector = normalizeSectorName(point.SETOR || point.setor);
-                pointsBySector[sector] = (pointsBySector[sector] || 0) + Number(point.quantidade || point.QUANTIDADE || 0);
+            rows.forEach(point => {
+                const sector = normalizeSectorName(point.setor || point.SETOR);
+                pointsBySector[sector] = (pointsBySector[sector] || 0) + Number(point.produzido || point.quantidade || point.QUANTIDADE || 0);
+                scrapBySector[sector] = (scrapBySector[sector] || 0) + Number(point.refugado || point.refugo || 0);
             });
 
             if (!rows.length) {
@@ -1346,7 +1343,8 @@
             const tableRows = rows.map(stage => {
                 const name = stage.setor || 'Etapa';
                 const normalized = normalizeSectorName(name);
-                const pointed = pointsBySector[normalized] || 0;
+                const pointed = Number(pointsBySector[normalized] || 0);
+                const scrap = Number(scrapBySector[normalized] || 0);
                 const percent = total > 0 ? Math.min(100, (pointed / total) * 100) : 0;
                 const isCompleted = total > 0 && pointed >= total;
                 const isActive = pointed > 0 && !isCompleted;
@@ -1365,6 +1363,7 @@
                         <td>${total.toLocaleString('pt-BR')} pçs</td>
                         <td style="color:${pointed > 0 ? 'var(--color-primary)' : 'var(--text-muted)'};font-weight:700;">${pointed.toLocaleString('pt-BR')} pçs</td>
                         <td>${balance.toLocaleString('pt-BR')} pçs</td>
+                        <td style="color:${scrap > 0 ? 'var(--status-danger)' : 'var(--text-muted)'};font-weight:700;">${scrap.toLocaleString('pt-BR')} pçs</td>
                         <td class="stage-progress"><div class="stage-progress-track"><div class="stage-progress-fill" style="width:${percent}%"></div></div><small>${percent.toFixed(1)}%</small></td>
                         <td><span class="stage-status ${statusClass}"><i class="fa-solid ${statusIcon}"></i>${statusText}</span></td>
                     </tr>
@@ -1373,7 +1372,7 @@
 
             container.innerHTML = `
                 <table class="op-stage-table">
-                    <thead><tr><th>Etapa</th><th>Quantidade</th><th>Apontado</th><th>Saldo</th><th>Progresso</th><th>Status</th></tr></thead>
+                    <thead><tr><th>Etapa</th><th>Quantidade</th><th>Apontado</th><th>Saldo</th><th>Refugo</th><th>Progresso</th><th>Status</th></tr></thead>
                     <tbody>${tableRows}</tbody>
                 </table>
             `;
