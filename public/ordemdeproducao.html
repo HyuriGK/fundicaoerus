@@ -213,6 +213,40 @@
             margin-top: 14px;
         }
 
+        .sidebar-search-filters {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 4px;
+            margin-top: 14px;
+        }
+
+        .sidebar-search-filter {
+            min-width: 0;
+            padding: 6px 4px;
+            border: 1px solid var(--border-subtle);
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.025);
+            color: var(--text-muted);
+            font-family: var(--font-mono);
+            font-size: 0.59rem;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            line-height: 1.1;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .sidebar-search-filter:hover {
+            background: rgba(255, 255, 255, 0.06);
+            color: var(--text-main);
+        }
+
+        .sidebar-search-filter.active {
+            border-color: rgba(var(--color-primary-rgb), 0.55);
+            background: rgba(var(--color-primary-rgb), 0.12);
+            color: var(--color-primary);
+        }
+
         .sidebar-search i {
             position: absolute;
             left: 12px;
@@ -1128,9 +1162,15 @@
         <div class="op-sidebar">
             <div class="sidebar-header">
                 <h3>Ordens em Aberto <span id="opCount" class="op-count">0</span></h3>
+                <div class="sidebar-search-filters" role="group" aria-label="Campo da pesquisa">
+                    <button type="button" class="sidebar-search-filter active" data-search-field="OP_PCS">OP</button>
+                    <button type="button" class="sidebar-search-filter" data-search-field="PRODUTO_PPR">CÓDIGO PEÇA</button>
+                    <button type="button" class="sidebar-search-filter" data-search-field="NOME_CLIENTE">CLIENTE</button>
+                    <button type="button" class="sidebar-search-filter" data-search-field="NOME_PRODUTO_PPR">DESCRIÇÃO</button>
+                </div>
                 <div class="sidebar-search">
                     <i class="fa-solid fa-magnifying-glass"></i>
-                    <input type="text" id="opSearch" class="search-input" placeholder="Pesquisar OP, cliente, peça ou código..." autocomplete="off">
+                    <input type="text" id="opSearch" class="search-input" placeholder="Pesquisar pelo número da OP..." autocomplete="off">
                 </div>
             </div>
             <div id="opList" class="op-list">
@@ -1288,6 +1328,7 @@
         let selectedOp = null;
         let currentRoteiro = [];
         let currentProductTechInfo = null;
+        let opSearchField = 'OP_PCS';
 
 
         const stageIcons = {
@@ -1318,15 +1359,28 @@
                 renderOpList(allOps);
                 document.getElementById('loading-overlay').style.display = 'none';
                 
-                // Event listener para busca
-                document.getElementById('opSearch').addEventListener('input', (e) => {
-                    const term = e.target.value.trim().toLowerCase();
-                    const filtered = allOps.filter(op => {
-                        const searchable = Object.values(op).map(value => String(value ?? '')).join(' ').toLowerCase();
-                        return searchable.includes(term);
-                    });
+                const searchInput = document.getElementById('opSearch');
+                const searchPlaceholders = {
+                    OP_PCS: 'Pesquisar pelo número da OP...',
+                    PRODUTO_PPR: 'Pesquisar pelo código da peça...',
+                    NOME_CLIENTE: 'Pesquisar pelo cliente...',
+                    NOME_PRODUTO_PPR: 'Pesquisar pela descrição...'
+                };
+                const applyOpSearch = () => {
+                    const term = searchInput.value.trim().toLowerCase();
+                    const filtered = allOps.filter(op => String(op[opSearchField] ?? '').toLowerCase().includes(term));
                     renderOpList(filtered);
+                };
+
+                document.querySelectorAll('.sidebar-search-filter').forEach(filter => {
+                    filter.addEventListener('click', () => {
+                        opSearchField = filter.dataset.searchField;
+                        document.querySelectorAll('.sidebar-search-filter').forEach(item => item.classList.toggle('active', item === filter));
+                        searchInput.placeholder = searchPlaceholders[opSearchField];
+                        applyOpSearch();
+                    });
                 });
+                searchInput.addEventListener('input', applyOpSearch);
 
             } catch (error) {
                 console.error("Erro ao carregar OPs:", error);
