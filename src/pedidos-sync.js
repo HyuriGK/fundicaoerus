@@ -446,6 +446,7 @@ router.get('/delivery-history/:syncKey', async (req, res) => {
             SELECT data_entrega, data_emissao, started_at, ended_at
             FROM pedidos_entrega_historico
             WHERE sync_key = $1
+              AND data_entrega IS NOT NULL
             ORDER BY started_at ASC
         `, [syncKey]);
         res.json(result.rows);
