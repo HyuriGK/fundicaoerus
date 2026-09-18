@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../lib/db');
-const { ensureDeliveryHistoryTable } = require('../lib/pedidos-entrega-history');
+const { ensureDeliveryHistoryTable, initializeDeliveryHistory } = require('../lib/pedidos-entrega-history');
 
 let modeloStatusTableReady = false;
 async function ensureModeloStatusTable() {
@@ -441,6 +441,7 @@ router.get('/delivery-history/:syncKey', async (req, res) => {
     if (!syncKey) return res.status(400).json({ error: 'Sync Key obrigatorio' });
     try {
         await ensureDeliveryHistoryTable(pool);
+        await initializeDeliveryHistory(pool, syncKey);
         const result = await pool.query(`
             SELECT data_entrega, started_at, ended_at
             FROM pedidos_entrega_historico
