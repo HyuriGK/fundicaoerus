@@ -38,6 +38,11 @@ function getReprogrammingAuditUser(req) {
     return String(req.user?.user || req.user?.name || '').trim().toLowerCase();
 }
 
+function canAccessReprogrammingAudit(req) {
+    return ['desenvolvedor', 'gerente comercial', 'diretor']
+        .includes(String(req.user?.role || '').trim().toLowerCase());
+}
+
 let modeloStatusTableReady = false;
 async function ensureModeloStatusTable() {
     if (modeloStatusTableReady) return;
@@ -492,6 +497,7 @@ router.get('/delivery-history/:syncKey', async (req, res) => {
 });
 
 router.get('/delivery-reprogramming-audit', async (req, res) => {
+    if (!canAccessReprogrammingAudit(req)) return res.status(403).json({ error: 'Acesso negado' });
     const userKey = getReprogrammingAuditUser(req);
     if (!userKey) return res.status(400).json({ error: 'Usuario obrigatorio' });
     try {
@@ -547,6 +553,7 @@ router.get('/delivery-reprogramming-audit', async (req, res) => {
 });
 
 router.post('/delivery-reprogramming-audit/:eventId/read', async (req, res) => {
+    if (!canAccessReprogrammingAudit(req)) return res.status(403).json({ error: 'Acesso negado' });
     const userKey = getReprogrammingAuditUser(req);
     const eventId = String(req.params.eventId || '').trim();
     if (!userKey) return res.status(400).json({ error: 'Usuario obrigatorio' });
