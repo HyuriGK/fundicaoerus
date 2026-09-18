@@ -14,6 +14,30 @@ function ensureDeliveryHistoryReady() {
     return deliveryHistoryTableReady;
 }
 
+let reprogrammingAuditTableReady;
+function ensureReprogrammingAuditTable() {
+    if (!reprogrammingAuditTableReady) {
+        reprogrammingAuditTableReady = pool.query(`
+            CREATE TABLE IF NOT EXISTS pedidos_entrega_reprogramacoes_lidas (
+                event_id BIGINT NOT NULL,
+                user_key TEXT NOT NULL,
+                read_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (event_id, user_key)
+            );
+            CREATE INDEX IF NOT EXISTS idx_reprogramacoes_lidas_user
+                ON pedidos_entrega_reprogramacoes_lidas (user_key, event_id);
+        `).catch(error => {
+            reprogrammingAuditTableReady = null;
+            throw error;
+        });
+    }
+    return reprogrammingAuditTableReady;
+}
+
+function getReprogrammingAuditUser(req) {
+    return String(req.user?.user || req.user?.name || '').trim().toLowerCase();
+}
+
 let modeloStatusTableReady = false;
 async function ensureModeloStatusTable() {
     if (modeloStatusTableReady) return;
@@ -464,6 +488,81 @@ router.get('/delivery-history/:syncKey', async (req, res) => {
     } catch (error) {
         console.error('Erro ao buscar historico de entrega:', error);
         res.status(500).json({ error: 'Erro interno ao buscar historico de entrega.' });
+    }
+});
+
+router.get('/delivery-reprogramming-audit', async (req, res) => {
+    const userKey = getReprogrammingAuditUser(req);
+    if (!userKey) return res.status(400).json({ error: 'Usuario obrigatorio' });
+    try {
+        await ensureDeliveryHistoryReady();
+        await ensureReprogrammingAuditTable();
+        const result = await pool.query(`
+            WITH ordered_history AS (
+                SELECT
+                    h.id,
+                    h.sync_key,
+                    h.data_entrega,
+                    h.data_emissao,
+                    h.started_at,
+                    h.ended_at,
+                    LAG(h.data_entrega) OVER (
+                        PARTITION BY h.sync_key
+                        ORDER BY h.started_at ASC, h.id ASC
+                    ) AS previous_data_entrega
+                FROM pedidos_entrega_historico h
+                WHERE h.data_entrega IS NOT NULL
+            )
+            SELECT
+                history.id AS event_id,
+                history.sync_key,
+                history.previous_data_entrega AS data_entrega_anterior,
+                history.data_entrega AS data_entrega_nova,
+                history.data_emissao AS data_alteracao,
+                history.started_at AS detectada_em,
+                p.data->>'CODIGO_PPR' AS pedido,
+                p.data->>'PRODUTO_PPR' AS produto,
+                p.data->>'NOME_PRODUTO_PPR' AS nome_produto,
+                p.data->>'NOME_CLIENTE' AS cliente,
+                p.data AS item_data,
+                (read_state.event_id IS NOT NULL) AS is_read,
+                read_state.read_at
+            FROM ordered_history history
+            LEFT JOIN firebird_sync_emissoes p ON p.sync_key = history.sync_key
+            LEFT JOIN pedidos_entrega_reprogramacoes_lidas read_state
+                ON read_state.event_id = history.id
+               AND read_state.user_key = $1
+            WHERE history.previous_data_entrega IS NOT NULL
+              AND history.data_entrega IS DISTINCT FROM history.previous_data_entrega
+            ORDER BY history.started_at DESC, history.id DESC
+        `, [userKey]);
+        res.json({
+            events: result.rows,
+            unread_count: result.rows.filter(row => !row.is_read).length
+        });
+    } catch (error) {
+        console.error('Erro ao buscar auditoria de reprogramacoes:', error);
+        res.status(500).json({ error: 'Erro interno ao buscar auditoria de reprogramacoes.' });
+    }
+});
+
+router.post('/delivery-reprogramming-audit/:eventId/read', async (req, res) => {
+    const userKey = getReprogrammingAuditUser(req);
+    const eventId = String(req.params.eventId || '').trim();
+    if (!userKey) return res.status(400).json({ error: 'Usuario obrigatorio' });
+    if (!/^\d+$/.test(eventId)) return res.status(400).json({ error: 'Evento invalido' });
+    try {
+        await ensureReprogrammingAuditTable();
+        await pool.query(`
+            INSERT INTO pedidos_entrega_reprogramacoes_lidas (event_id, user_key, read_at)
+            VALUES ($1, $2, CURRENT_TIMESTAMP)
+            ON CONFLICT (event_id, user_key)
+            DO UPDATE SET read_at = CURRENT_TIMESTAMP
+        `, [eventId, userKey]);
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Erro ao marcar reprogramacao como lida:', error);
+        res.status(500).json({ error: 'Erro interno ao marcar reprogramacao como lida.' });
     }
 });
 
