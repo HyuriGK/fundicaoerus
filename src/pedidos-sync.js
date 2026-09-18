@@ -443,7 +443,7 @@ router.get('/delivery-history/:syncKey', async (req, res) => {
         await ensureDeliveryHistoryTable(pool);
         await initializeDeliveryHistory(pool, syncKey);
         const result = await pool.query(`
-            SELECT data_entrega, started_at, ended_at
+            SELECT data_entrega, data_emissao, started_at, ended_at
             FROM pedidos_entrega_historico
             WHERE sync_key = $1
             ORDER BY started_at ASC
