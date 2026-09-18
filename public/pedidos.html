@@ -2105,6 +2105,12 @@
             flex:1 1 auto;
             min-width:0;
         }
+        #orderDetailsModal .order-details-modal-layout.single {
+            width:min(1180px, calc(100vw - 48px));
+        }
+        #orderDetailsModal .order-details-modal-layout.single > .order-details-modal-card {
+            width:100%;
+        }
         #deliveryHistoryPanel {
             flex:0 0 390px;
             width:390px;
@@ -4265,6 +4271,10 @@
         }
         let currentSelectedItem = null;
         let deliveryHistoryRequestId = 0;
+        function canViewDeliveryHistory() {
+            return ['desenvolvedor', 'gerente comercial', 'diretor']
+                .includes(String(localStorage.getItem('erus_role') || '').trim().toLowerCase());
+        }
         function formatDeliveryHistoryDate(value) {
             if (!value) return 'Sem data PCP';
             const text = String(value).slice(0, 10);
@@ -4310,9 +4320,9 @@
                             const previousLabel = previous ? formatDeliveryHistoryDate(previous.data_entrega) : '';
                             return `<div class="delivery-history-item${entry.ended_at ? '' : ' current'}" style="animation-delay:${index * 70}ms;">
                                 <div class="delivery-history-date${entry.data_entrega ? '' : ' no-date'}">${currentLabel}</div>
-                                <div class="delivery-history-period">Registrada em ${formatDeliveryHistoryTimestamp(entry.started_at)}${entry.ended_at ? ` até ${formatDeliveryHistoryTimestamp(entry.ended_at)}` : ' · vigente agora'}</div>
+                                <div class="delivery-history-period">Registrada em ${formatDeliveryHistoryTimestamp(entry.started_at)}${entry.ended_at ? ` até ${formatDeliveryHistoryTimestamp(entry.ended_at)}` : ''}</div>
                                 <span class="delivery-history-duration">${formatDeliveryHistoryDays(entry.started_at, entry.ended_at)}</span>
-                                ${previous ? `<div class="delivery-history-transition"><i class="fa-solid fa-arrow-right"></i> Alterada de ${previousLabel}</div>` : '<div class="delivery-history-transition"><i class="fa-solid fa-flag-checkered"></i> Primeiro checkpoint</div>'}
+                                ${previous ? `<div class="delivery-history-transition"><i class="fa-solid fa-arrow-right"></i> Alterada de ${previousLabel}</div>` : ''}
                             </div>`;
                         }).join('')}
                     </div>`;
@@ -4326,6 +4336,11 @@
         function showItemDetails(element) {
             const item = JSON.parse(element.getAttribute('data-json'));
             currentSelectedItem = item;
+            const canViewHistory = canViewDeliveryHistory();
+            const detailsLayout = document.querySelector('#orderDetailsModal .order-details-modal-layout');
+            const historyPanel = document.getElementById('deliveryHistoryPanel');
+            detailsLayout?.classList.toggle('single', !canViewHistory);
+            if (historyPanel) historyPanel.style.display = canViewHistory ? 'flex' : 'none';
             // Format values
             const dataEmissao = item.DATA_EMISSAO_PEDIDO ? new Date(item.DATA_EMISSAO_PEDIDO).toLocaleDateString('pt-BR') : '-';
             const dataOriginalPedidoRaw = item.ENTREGA_PED || item.DATA_ENTREGA_PPR || item.OP_ENTREGA;
@@ -4445,7 +4460,7 @@
             `;
             document.getElementById('orderDetailsContent').innerHTML = html;
             document.getElementById('orderDetailsModal').style.display = 'flex';
-            loadDeliveryHistory(item);
+            if (canViewHistory) loadDeliveryHistory(item);
         }
         function refreshOrderDetails() {
             if (currentSelectedItem) {
