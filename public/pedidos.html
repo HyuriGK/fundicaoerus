@@ -2211,6 +2211,16 @@
         .delivery-history-item.current .delivery-history-label { color:#a1a1aa; }
         .delivery-history-item.current .delivery-history-date { color:#e4e4e7; font-size:.94rem; }
         .delivery-history-item.current .delivery-history-lead { color:#67e8f9; }
+        .delivery-history-item.completed {
+            border-color:rgba(16,185,129,.28);
+            background:rgba(16,185,129,.045);
+        }
+        .delivery-history-item.completed::before {
+            background:#10b981;
+            box-shadow:0 0 0 2px rgba(16,185,129,.65),0 0 16px rgba(16,185,129,.25);
+        }
+        .delivery-history-item.completed .delivery-history-label { color:#6ee7b7; }
+        .delivery-history-item.completed .delivery-history-date { color:#d1fae5; }
         .delivery-history-date {
             color:#fff;
             font-size:.98rem;
@@ -4335,12 +4345,15 @@
             try {
                 const response = await fetch(`/api/pedidos-sync/delivery-history/${encodeURIComponent(item.sync_key)}`, { cache: 'no-store' });
                 if (!response.ok) throw new Error('Falha ao buscar histórico');
-                const history = await response.json();
+                const payload = await response.json();
+                const history = Array.isArray(payload) ? payload : (Array.isArray(payload.history) ? payload.history : []);
+                const lastBillingDate = Array.isArray(payload) ? null : payload.last_faturamento;
                 if (requestId !== deliveryHistoryRequestId) return;
                 const changes = Math.max(0, history.length - 1);
                 count.textContent = `${changes} altera${changes === 1 ? 'ção' : 'ções'}`;
                 const emissionDate = item.DATA_EMISSAO_PEDIDO;
                 const originalDate = item.ENTREGA_PED || item.DATA_ENTREGA_PPR;
+                const billingStatus = getHistoricalBillingInfo(item).status;
                 const timelineDate = value => value ? formatDeliveryHistoryDate(value) : '-';
                 const staticTimeline = `
                     <div class="delivery-history-item static" style="animation-delay:0ms;">
@@ -4371,7 +4384,14 @@
                         <div class="delivery-history-label">Data programada para entrega</div>
                         <div class="delivery-history-date no-date">-</div>
                     </div>`;
-                content.innerHTML = `<div class="delivery-history-timeline">${staticTimeline}${scheduledTimeline}</div>`;
+                const completionTimeline = billingStatus === 'TOTAL' && lastBillingDate
+                    ? `<div class="delivery-history-item completed" style="animation-delay:${(history.length + 2) * 70}ms;">
+                        <div class="delivery-history-label">Pedido conclu&iacute;do</div>
+                        <div class="delivery-history-date">${timelineDate(lastBillingDate)}</div>
+                        <div class="delivery-history-period">O pedido se tornou <span class="delivery-history-rescheduled-date">TOTAL</span> no &uacute;ltimo faturamento</div>
+                    </div>`
+                    : '';
+                content.innerHTML = `<div class="delivery-history-timeline">${staticTimeline}${scheduledTimeline}${completionTimeline}</div>`;
             } catch (error) {
                 if (requestId !== deliveryHistoryRequestId) return;
                 count.textContent = 'erro';

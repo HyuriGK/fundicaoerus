@@ -449,7 +449,19 @@ router.get('/delivery-history/:syncKey', async (req, res) => {
               AND data_entrega IS NOT NULL
             ORDER BY started_at ASC
         `, [syncKey]);
-        res.json(result.rows);
+        const billingResult = await pool.query(`
+            SELECT MAX(f.data_faturamento) AS last_faturamento
+            FROM faturamento_firebird f
+            JOIN firebird_sync_emissoes p ON p.sync_key = $1
+            WHERE TRIM(COALESCE(f.pedido, '')) = TRIM(COALESCE(p.data->>'CODIGO_PPR', ''))
+              AND TRIM(COALESCE(f.codigo_item, '')) = TRIM(COALESCE(p.data->>'PRODUTO_PPR', ''))
+              AND EXTRACT(YEAR FROM f.data_faturamento)::text = p.data->>'ANO_PPR'
+              AND f.data_faturamento IS NOT NULL
+        `, [syncKey]);
+        res.json({
+            history: result.rows,
+            last_faturamento: billingResult.rows[0]?.last_faturamento || null
+        });
     } catch (error) {
         console.error('Erro ao buscar historico de entrega:', error);
         res.status(500).json({ error: 'Erro interno ao buscar historico de entrega.' });
