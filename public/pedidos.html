@@ -2212,6 +2212,21 @@
             font-size:.98rem;
             font-weight:800;
         }
+        .delivery-history-label {
+            margin-bottom:6px;
+            color:var(--text-muted);
+            font-size:.68rem;
+            font-weight:800;
+            letter-spacing:.06em;
+            text-transform:uppercase;
+        }
+        .delivery-history-item.static {
+            background:rgba(6,182,212,.035);
+        }
+        .delivery-history-item.static::before {
+            background:#06b6d4;
+            box-shadow:0 0 0 2px rgba(6,182,212,.65),0 0 16px rgba(6,182,212,.25);
+        }
         .delivery-history-date.no-date { color:#f87171; }
         .delivery-history-period {
             margin-top:7px;
@@ -2226,6 +2241,13 @@
             border:1px solid rgba(251,191,36,.22);
             border-radius:999px;
             color:#fbbf24;
+            font-size:.7rem;
+            font-weight:800;
+        }
+        .delivery-history-lead {
+            display:block;
+            margin-top:7px;
+            color:#67e8f9;
             font-size:.7rem;
             font-weight:800;
         }
@@ -4281,6 +4303,24 @@
             const parts = text.split('-');
             return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : formatDateLocal(value);
         }
+        function getDeliveryHistoryDate(value) {
+            if (!value) return null;
+            const text = String(value).slice(0, 10);
+            const parts = text.split('-').map(Number);
+            if (parts.length === 3 && parts.every(Number.isFinite)) {
+                const date = new Date(parts[0], parts[1] - 1, parts[2]);
+                if (!Number.isNaN(date.getTime())) return date;
+            }
+            const date = new Date(value);
+            return Number.isNaN(date.getTime()) ? null : new Date(date.getFullYear(), date.getMonth(), date.getDate());
+        }
+        function formatDeliveryHistoryLead(start, end, label) {
+            const startDate = getDeliveryHistoryDate(start);
+            const endDate = getDeliveryHistoryDate(end);
+            if (!startDate || !endDate) return '';
+            const days = Math.max(0, Math.round((endDate - startDate) / 86400000));
+            return `<span class="delivery-history-lead">${label}: ${days} dia${days === 1 ? '' : 's'}</span>`;
+        }
         function formatDeliveryHistoryTimestamp(value) {
             if (!value) return '-';
             const date = new Date(value);
@@ -4307,24 +4347,38 @@
                 if (requestId !== deliveryHistoryRequestId) return;
                 const changes = Math.max(0, history.length - 1);
                 count.textContent = `${changes} altera${changes === 1 ? 'ção' : 'ções'}`;
-                if (!history.length) {
-                    content.innerHTML = '<div class="delivery-history-empty"><i class="fa-solid fa-clock-rotate-left" style="font-size:1.8rem;margin-bottom:12px;"></i><br>Nenhum checkpoint registrado ainda.<br><small>O histórico começará no próximo sync de emissões.</small></div>';
-                    return;
-                }
-                content.innerHTML = `
-                    <div class="delivery-history-timeline">
-                        ${history.map((entry, index) => {
-                            const previous = history[index - 1];
-                            const currentLabel = formatDeliveryHistoryDate(entry.data_entrega);
-                            const previousLabel = previous ? formatDeliveryHistoryDate(previous.data_entrega) : '';
-                            return `<div class="delivery-history-item${entry.ended_at ? '' : ' current'}" style="animation-delay:${index * 70}ms;">
-                                <div class="delivery-history-date${entry.data_entrega ? '' : ' no-date'}">${currentLabel}</div>
-                                <div class="delivery-history-period">Registrada em ${formatDeliveryHistoryTimestamp(entry.started_at)}${entry.ended_at ? ` até ${formatDeliveryHistoryTimestamp(entry.ended_at)}` : ''}</div>
-                                <span class="delivery-history-duration">${formatDeliveryHistoryDays(entry.started_at, entry.ended_at)}</span>
-                                ${previous ? `<div class="delivery-history-transition"><i class="fa-solid fa-arrow-right"></i> Alterada de ${previousLabel}</div>` : ''}
-                            </div>`;
-                        }).join('')}
+                const emissionDate = item.DATA_EMISSAO_PEDIDO;
+                const originalDate = item.ENTREGA_PED || item.DATA_ENTREGA_PPR;
+                const timelineDate = value => value ? formatDeliveryHistoryDate(value) : '-';
+                const staticTimeline = `
+                    <div class="delivery-history-item static" style="animation-delay:0ms;">
+                        <div class="delivery-history-label">Data de emissão</div>
+                        <div class="delivery-history-date${emissionDate ? '' : ' no-date'}">${timelineDate(emissionDate)}</div>
+                    </div>
+                    <div class="delivery-history-item static" style="animation-delay:70ms;">
+                        <div class="delivery-history-label">Data de entrega original</div>
+                        <div class="delivery-history-date${originalDate ? '' : ' no-date'}">${timelineDate(originalDate)}</div>
+                        ${formatDeliveryHistoryLead(emissionDate, originalDate, 'Prazo original')}
                     </div>`;
+                const scheduledTimeline = history.length
+                    ? history.map((entry, index) => {
+                        const previous = history[index - 1];
+                        const currentLabel = timelineDate(entry.data_entrega);
+                        const previousLabel = previous ? timelineDate(previous.data_entrega) : '';
+                        return `<div class="delivery-history-item${entry.ended_at ? '' : ' current'}" style="animation-delay:${(index + 2) * 70}ms;">
+                            <div class="delivery-history-label">Data programada para entrega</div>
+                            <div class="delivery-history-date${entry.data_entrega ? '' : ' no-date'}">${currentLabel}</div>
+                            <div class="delivery-history-period">Registrada em ${formatDeliveryHistoryTimestamp(entry.started_at)}${entry.ended_at ? ` até ${formatDeliveryHistoryTimestamp(entry.ended_at)}` : ''}</div>
+                            <span class="delivery-history-duration">${formatDeliveryHistoryDays(entry.started_at, entry.ended_at)}</span>
+                            ${formatDeliveryHistoryLead(emissionDate, entry.data_entrega, 'Prazo programado')}
+                            ${previous ? `<div class="delivery-history-transition"><i class="fa-solid fa-arrow-right"></i> Alterada de ${previousLabel}</div>` : ''}
+                        </div>`;
+                    }).join('')
+                    : `<div class="delivery-history-item static" style="animation-delay:140ms;">
+                        <div class="delivery-history-label">Data programada para entrega</div>
+                        <div class="delivery-history-date no-date">-</div>
+                    </div>`;
+                content.innerHTML = `<div class="delivery-history-timeline">${staticTimeline}${scheduledTimeline}</div>`;
             } catch (error) {
                 if (requestId !== deliveryHistoryRequestId) return;
                 count.textContent = 'erro';
