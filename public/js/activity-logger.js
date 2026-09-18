@@ -27,7 +27,8 @@
     // Helper to log activity
     async function logActivity(action, details = {}) {
         const user = getUserName();
-        const page = window.location.pathname.split('/').pop() || 'index.html';
+        const page = window.location.pathname.split('/').filter(Boolean).pop() || 'index.html';
+        const pageCandidates = new Set([page, page.endsWith('.html') ? page : `${page}.html`]);
         const enrichedDetails = Object.assign({}, details || {}, getClientDeviceInfo());
 
         try {
@@ -1369,7 +1370,7 @@
             const resp = await fetch('/api/page-locks/last-sync');
             const result = await resp.json();
             if (!result.success) return;
-            const entry = (result.data || []).find(d => d.page_id === page);
+            const entry = (result.data || []).find(d => pageCandidates.has(d.page_id));
             if (!entry || !entry.finished_at) return;
             if (document.getElementById('last-sync-toast')) return;
 
@@ -1424,10 +1425,19 @@
         } catch(e) {}
     }
 
+    function scheduleLastSyncToast() {
+        setTimeout(showLastSyncToast, 400);
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', scheduleLastSyncToast, { once: true });
+    } else {
+        scheduleLastSyncToast();
+    }
+
     // 1. Log Page Visit on Load + verificar bloqueio
     window.addEventListener('load', () => {
         checkPageLock(); // Verificar se a página está bloqueada
-        showLastSyncToast();
         logActivity('PAGE_VISIT', {
             title: document.title,
             url: window.location.href
