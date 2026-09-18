@@ -1,6 +1,7 @@
 require('dotenv').config({ path: require('path').join(__dirname, '..', '..', '.env.local') });
 const { Firebird, options: FIREBIRD_OPTIONS } = require('../../lib/firebird-helper');
 const { Pool } = require('pg');
+const { ensureDeliveryHistoryTable, recordDeliveryHistory } = require('../../lib/pedidos-entrega-history');
 
 function cleanConnectionString(str) {
     if (!str) return '';
@@ -42,6 +43,17 @@ function chunkArray(items, size) {
     const chunks = [];
     for (let i = 0; i < items.length; i += size) chunks.push(items.slice(i, i + size));
     return chunks;
+}
+
+function toDateOnly(value) {
+    if (!value) return null;
+    const text = String(value).trim();
+    const iso = text.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (iso) return iso[1];
+    const br = text.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+    if (br) return `${br[3]}-${br[2]}-${br[1]}`;
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString().slice(0, 10);
 }
 
 async function syncEmissoes() {
@@ -260,6 +272,7 @@ async function syncEmissoes() {
             console.log('📤 Enviando para o Postgres em lotes...');
             await pgClient.query('BEGIN');
             pgTransactionOpen = true;
+            await ensureDeliveryHistoryTable(pgClient);
             const BATCH_SIZE = 500;
             for (let i = 0; i < results.length; i += BATCH_SIZE) {
                 const batch = results.slice(i, i + BATCH_SIZE);
@@ -365,6 +378,11 @@ async function syncEmissoes() {
                 const keys = deduped.map(r => `${r.EMPRESA_PPR}-${r.ANO_PPR}-${r.CODIGO_PPR}-${r.ITEM_PPR}`);
                 const data = deduped.map(r => JSON.stringify(r));
 
+                await recordDeliveryHistory(pgClient, deduped.map(r => ({
+                    syncKey: `${r.EMPRESA_PPR}-${r.ANO_PPR}-${r.CODIGO_PPR}-${r.ITEM_PPR}`,
+                    deliveryDate: toDateOnly(r.ENTREGA_PETR)
+                })));
+
                 await pgClient.query(`
                     INSERT INTO firebird_sync_emissoes (sync_key, data, updated_at)
                     SELECT unnest($1::text[]), unnest($2::jsonb[]), NOW()
@@ -383,9 +401,16 @@ async function syncEmissoes() {
                 WHERE NULLIF(data->>'DATA_EMISSAO_PEDIDO', '')::date >= $1::date
                 AND NULLIF(data->>'DATA_EMISSAO_PEDIDO', '')::date < $2::date
                 AND sync_key <> ALL($3::text[])
+                RETURNING sync_key
             `, [janela.inicioSql, janela.fimSql, validKeys]);
             
             if (deleteRes.rowCount > 0) {
+                await pgClient.query(`
+                    UPDATE pedidos_entrega_historico
+                    SET ended_at = COALESCE(ended_at, CURRENT_TIMESTAMP)
+                    WHERE sync_key = ANY($1::text[])
+                      AND ended_at IS NULL
+                `, [deleteRes.rows.map(row => row.sync_key)]);
                 console.log(`🗑️ Removidos ${deleteRes.rowCount} registros órfãos do dashboard.`);
             }
         }

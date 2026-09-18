@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../lib/db');
+const { ensureDeliveryHistoryTable } = require('../lib/pedidos-entrega-history');
 
 let modeloStatusTableReady = false;
 async function ensureModeloStatusTable() {
@@ -432,6 +433,24 @@ router.get('/', async (req, res) => {
     } catch (error) {
         console.error('Erro ao buscar pedidos sincronizados:', error);
         res.status(500).json({ error: 'Erro interno ao buscar pedidos.' });
+    }
+});
+
+router.get('/delivery-history/:syncKey', async (req, res) => {
+    const syncKey = String(req.params.syncKey || '').trim();
+    if (!syncKey) return res.status(400).json({ error: 'Sync Key obrigatorio' });
+    try {
+        await ensureDeliveryHistoryTable(pool);
+        const result = await pool.query(`
+            SELECT data_entrega, started_at, ended_at
+            FROM pedidos_entrega_historico
+            WHERE sync_key = $1
+            ORDER BY started_at ASC
+        `, [syncKey]);
+        res.json(result.rows);
+    } catch (error) {
+        console.error('Erro ao buscar historico de entrega:', error);
+        res.status(500).json({ error: 'Erro interno ao buscar historico de entrega.' });
     }
 });
 
