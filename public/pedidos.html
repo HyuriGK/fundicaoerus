@@ -4342,12 +4342,13 @@
             const requestId = ++deliveryHistoryRequestId;
             count.textContent = 'carregando';
             content.innerHTML = '<div class="delivery-history-loading"><i class="fa-solid fa-spinner fa-spin"></i><br>Carregando histórico...</div>';
+            const historyController = new AbortController();
+            const historyTimeout = setTimeout(() => historyController.abort(), 15000);
             try {
-                const response = await fetch(`/api/pedidos-sync/delivery-history/${encodeURIComponent(item.sync_key)}`, { cache: 'no-store' });
+                const response = await fetch(`/api/pedidos-sync/delivery-history/${encodeURIComponent(item.sync_key)}`, { cache: 'no-store', signal: historyController.signal });
                 if (!response.ok) throw new Error('Falha ao buscar histórico');
-                const payload = await response.json();
-                const history = Array.isArray(payload) ? payload : (Array.isArray(payload.history) ? payload.history : []);
-                const lastBillingDate = Array.isArray(payload) ? null : payload.last_faturamento;
+                const historyPayload = await response.json();
+                const history = Array.isArray(historyPayload) ? historyPayload : (Array.isArray(historyPayload.history) ? historyPayload.history : []);
                 if (requestId !== deliveryHistoryRequestId) return;
                 const changes = Math.max(0, history.length - 1);
                 count.textContent = `${changes} altera${changes === 1 ? 'ção' : 'ções'}`;
@@ -4384,19 +4385,39 @@
                         <div class="delivery-history-label">Data programada para entrega</div>
                         <div class="delivery-history-date no-date">-</div>
                     </div>`;
-                const completionTimeline = billingStatus === 'TOTAL' && lastBillingDate
-                    ? `<div class="delivery-history-item completed" style="animation-delay:${(history.length + 2) * 70}ms;">
-                        <div class="delivery-history-label">Pedido conclu&iacute;do</div>
-                        <div class="delivery-history-date">${timelineDate(lastBillingDate)}</div>
-                        <div class="delivery-history-period">O item do pedido foi faturado <span class="delivery-history-rescheduled-date">TOTALMENTE</span>.</div>
-                    </div>`
-                    : '';
-                content.innerHTML = `<div class="delivery-history-timeline">${staticTimeline}${scheduledTimeline}${completionTimeline}</div>`;
+                const renderTimeline = lastBillingDate => {
+                    const completionTimeline = billingStatus === 'TOTAL' && lastBillingDate
+                        ? `<div class="delivery-history-item completed" style="animation-delay:${(history.length + 2) * 70}ms;">
+                            <div class="delivery-history-label">Pedido conclu&iacute;do</div>
+                            <div class="delivery-history-date">${timelineDate(lastBillingDate)}</div>
+                            <div class="delivery-history-period">O item do pedido foi faturado <span class="delivery-history-rescheduled-date">TOTALMENTE</span>.</div>
+                        </div>`
+                        : '';
+                    content.innerHTML = `<div class="delivery-history-timeline">${staticTimeline}${scheduledTimeline}${completionTimeline}</div>`;
+                };
+                renderTimeline(null);
+                if (billingStatus === 'TOTAL') {
+                    const completionController = new AbortController();
+                    const completionTimeout = setTimeout(() => completionController.abort(), 10000);
+                    try {
+                        const completionResponse = await fetch(`/api/pedidos-sync/delivery-history/${encodeURIComponent(item.sync_key)}/completion`, { cache: 'no-store', signal: completionController.signal });
+                        if (completionResponse.ok) {
+                            const completionPayload = await completionResponse.json();
+                            if (requestId === deliveryHistoryRequestId && completionPayload.last_faturamento) renderTimeline(completionPayload.last_faturamento);
+                        }
+                    } catch (completionError) {
+                        console.warn('Falha ao carregar a data do ultimo faturamento:', completionError);
+                    } finally {
+                        clearTimeout(completionTimeout);
+                    }
+                }
             } catch (error) {
                 if (requestId !== deliveryHistoryRequestId) return;
                 count.textContent = 'erro';
                 content.innerHTML = '<div class="delivery-history-error"><i class="fa-solid fa-triangle-exclamation"></i><br>Não foi possível carregar o histórico de entrega.</div>';
                 console.error('Erro ao carregar histórico de entrega:', error);
+            } finally {
+                clearTimeout(historyTimeout);
             }
         }
         function showItemDetails(element) {

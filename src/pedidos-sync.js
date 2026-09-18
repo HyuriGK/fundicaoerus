@@ -3,6 +3,17 @@ const router = express.Router();
 const pool = require('../lib/db');
 const { ensureDeliveryHistoryTable, initializeDeliveryHistory } = require('../lib/pedidos-entrega-history');
 
+let deliveryHistoryTableReady;
+function ensureDeliveryHistoryReady() {
+    if (!deliveryHistoryTableReady) {
+        deliveryHistoryTableReady = ensureDeliveryHistoryTable(pool).catch(error => {
+            deliveryHistoryTableReady = null;
+            throw error;
+        });
+    }
+    return deliveryHistoryTableReady;
+}
+
 let modeloStatusTableReady = false;
 async function ensureModeloStatusTable() {
     if (modeloStatusTableReady) return;
@@ -440,7 +451,7 @@ router.get('/delivery-history/:syncKey', async (req, res) => {
     const syncKey = String(req.params.syncKey || '').trim();
     if (!syncKey) return res.status(400).json({ error: 'Sync Key obrigatorio' });
     try {
-        await ensureDeliveryHistoryTable(pool);
+        await ensureDeliveryHistoryReady();
         await initializeDeliveryHistory(pool, syncKey);
         const result = await pool.query(`
             SELECT data_entrega, data_emissao, started_at, ended_at
@@ -449,6 +460,17 @@ router.get('/delivery-history/:syncKey', async (req, res) => {
               AND data_entrega IS NOT NULL
             ORDER BY started_at ASC
         `, [syncKey]);
+        res.json(result.rows);
+    } catch (error) {
+        console.error('Erro ao buscar historico de entrega:', error);
+        res.status(500).json({ error: 'Erro interno ao buscar historico de entrega.' });
+    }
+});
+
+router.get('/delivery-history/:syncKey/completion', async (req, res) => {
+    const syncKey = String(req.params.syncKey || '').trim();
+    if (!syncKey) return res.status(400).json({ error: 'Sync Key obrigatorio' });
+    try {
         const billingResult = await pool.query(`
             SELECT MAX(f.data_faturamento) AS last_faturamento
             FROM faturamento_firebird f
@@ -458,13 +480,10 @@ router.get('/delivery-history/:syncKey', async (req, res) => {
               AND EXTRACT(YEAR FROM f.data_faturamento)::text = p.data->>'ANO_PPR'
               AND f.data_faturamento IS NOT NULL
         `, [syncKey]);
-        res.json({
-            history: result.rows,
-            last_faturamento: billingResult.rows[0]?.last_faturamento || null
-        });
+        res.json({ last_faturamento: billingResult.rows[0]?.last_faturamento || null });
     } catch (error) {
-        console.error('Erro ao buscar historico de entrega:', error);
-        res.status(500).json({ error: 'Erro interno ao buscar historico de entrega.' });
+        console.error('Erro ao buscar conclusao do pedido:', error);
+        res.status(500).json({ error: 'Erro interno ao buscar conclusao do pedido.' });
     }
 });
 
