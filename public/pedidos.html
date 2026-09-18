@@ -1629,6 +1629,42 @@
             border-color: rgba(251, 191, 36, 0.3);
             color: var(--color-primary);
         }
+        .export-menu-wrap { position:relative; }
+        .export-menu {
+            display:none;
+            position:absolute;
+            top:calc(100% + 8px);
+            right:0;
+            min-width:180px;
+            padding:6px;
+            border:1px solid rgba(255,255,255,.12);
+            border-radius:9px;
+            background:#1b1b1f;
+            box-shadow:0 18px 42px rgba(0,0,0,.5);
+            z-index:2600;
+        }
+        .export-menu.open { display:flex; flex-direction:column; gap:3px; animation:ds-fadeInUp .18s ease-out; }
+        .export-menu button {
+            display:flex;
+            align-items:center;
+            gap:10px;
+            width:100%;
+            padding:10px 12px;
+            border:0;
+            border-radius:6px;
+            background:transparent;
+            color:#e4e4e7;
+            cursor:pointer;
+            font:inherit;
+            font-size:.78rem;
+            font-weight:700;
+            text-align:left;
+        }
+        .export-menu button:hover { background:rgba(251,191,36,.12); color:#fbbf24; }
+        .export-menu button i { width:16px; color:#fbbf24; text-align:center; }
+        @media (max-width:700px) {
+            .export-menu { right:auto; left:0; }
+        }
         .table-container {
             background: var(--bg-card);
             border: 1px solid var(--border-subtle);
@@ -3281,8 +3317,13 @@
                 </div>
                 <div class="toolbar-group" style="margin-left: auto;">
                     <button id="btnAuditarReprogramacoes" class="btn-modern" onclick="openReprogrammingAuditModal()"><i class="fa-solid fa-clipboard-check"></i>Auditar Reprogramações <span id="reprogrammingAuditUnreadBadge"></span></button>
-                    <button id="btnExtrairExcel" class="btn-modern" onclick="exportToExcel()">Exportar Excel</button>
-                    <button id="btnGerarPdf" class="btn-modern" onclick="exportToPdf()">Gerar PDF</button>
+                    <div class="export-menu-wrap">
+                        <button id="btnExportarRegistros" class="btn-modern" type="button" onclick="toggleExportMenu(event)"><i class="fa-solid fa-file-export"></i>Exportar <i class="fa-solid fa-chevron-down"></i></button>
+                        <div id="exportMenu" class="export-menu">
+                            <button id="btnExtrairExcel" type="button" onclick="exportFromMenu('excel')"><i class="fa-solid fa-file-excel"></i>Exportar Excel</button>
+                            <button id="btnGerarPdf" type="button" onclick="exportFromMenu('pdf')"><i class="fa-solid fa-file-pdf"></i>Gerar PDF</button>
+                        </div>
+                    </div>
                 </div>
             </div>
             <div class="block-reason-cards" id="blockReasonCards">
@@ -4364,10 +4405,30 @@
             const inputs = document.querySelectorAll('.filter-input-table');
             inputs.forEach(inp => inp.value = '');
         }
+        function toggleExportMenu(event) {
+            event?.stopPropagation();
+            const menu = document.getElementById('exportMenu');
+            const button = document.getElementById('btnExportarRegistros');
+            if (!menu) return;
+            const isOpen = menu.classList.toggle('open');
+            button?.classList.toggle('active', isOpen);
+        }
+        function closeExportMenu() {
+            const menu = document.getElementById('exportMenu');
+            const button = document.getElementById('btnExportarRegistros');
+            menu?.classList.remove('open');
+            button?.classList.remove('active');
+        }
+        function exportFromMenu(type) {
+            closeExportMenu();
+            if (type === 'excel') exportToExcel();
+            if (type === 'pdf') exportToPdf();
+        }
         function closeModal() {
             const modal = document.getElementById('recordsModal');
             modal.style.display = 'none';
             closeReprogrammingAuditModal();
+            closeExportMenu();
             modal.classList.remove('client-records-modal');
             modal.classList.remove('emission-history-modal');
             updateRecordsModalColumnLabels(false);
@@ -5610,6 +5671,7 @@
         }
         function closeTechnicalSheet() { document.getElementById('technicalSheetModal').style.display = 'none'; }
         document.addEventListener('click', event => { if (!event.target.closest('#codeActionMenu') && !event.target.closest('.code-column')) closeCodeActions(); });
+        document.addEventListener('click', event => { if (!event.target.closest('.export-menu-wrap')) closeExportMenu(); });
         function shouldShowConferenciaColumn() {
             return String(localStorage.getItem('erus_role') || '').toLowerCase() === 'desenvolvedor' && !isEmissionHistoryModal();
         }
@@ -9291,6 +9353,7 @@ function flashConcentracaoBar(barIndex) {
                 const filtersModal = document.getElementById('filtersModal');   // 2500
                 const orderModal = document.getElementById('orderDetailsModal'); // 2000
                 const auditModal = document.getElementById('reprogrammingAuditModal'); // 2400
+                const exportMenu = document.getElementById('exportMenu');
                 const recordsModal = document.getElementById('recordsModal');   // ?
                 const industrialContainer = document.getElementById('industrialProgressContainer');
                 const iHistoryModal = document.getElementById('industrialHistoryModal');
@@ -9303,6 +9366,7 @@ function flashConcentracaoBar(barIndex) {
                 else if (isVisible(dModal)) { e.stopImmediatePropagation(); closeOPDetails(); }
                 else if (isVisible(emailModal)) { e.stopImmediatePropagation(); closeEmailModal(); }
                 else if (isVisible(filtersModal)) { e.stopImmediatePropagation(); closeFiltersModal(); }
+                else if (exportMenu?.classList.contains('open')) { e.stopImmediatePropagation(); closeExportMenu(); }
                 else if (isVisible(orderModal)) { e.stopImmediatePropagation(); closeOrderDetails(); }
                 else if (isVisible(auditModal)) { e.stopImmediatePropagation(); closeReprogrammingAuditModal(); }
                 else if (isVisible(recordsModal)) { e.stopImmediatePropagation(); closeModal(); }
@@ -9333,13 +9397,6 @@ function flashConcentracaoBar(barIndex) {
             updateViewButtons(parseInt(document.getElementById('chartSelectDropdown')?.value || '1', 10));
             
             const role = localStorage.getItem('erus_role');
-            const btnEmail = document.getElementById('btnGerarEmail');
-            
-            // GERAR EMAIL apenas para desenvolvedor
-            if (role !== 'desenvolvedor') {
-                if (btnEmail) btnEmail.style.display = 'none';
-            }
-            
             if (role === 'visitante') {
                 const btnExcel = document.getElementById('btnExtrairExcel');
                 if (btnExcel) btnExcel.style.display = 'none';
