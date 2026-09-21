@@ -66,6 +66,17 @@ function corpoSac(sac) {
     ].join('\n');
 }
 
+function prepararSacEmail(sac) {
+    const destinatarios = destinatariosPorCadastro(sac.NOME_CADASTRADO_SAV);
+    return {
+        regra: destinatarios?.regra || null,
+        to: destinatarios?.to || [],
+        cc: destinatarios?.cc || [],
+        assunto: assuntoSac(sac),
+        corpo: corpoSac(sac)
+    };
+}
+
 async function registrarSacNaoEnviada(pool, sac, motivo, regra = null, destinatarios = [], copias = []) {
     await pool.query(`INSERT INTO sac_email_notifications
         (sac_codigo, data_cadastro, cliente, reclamante, cadastrado_por_codigo, cadastrado_por_nome, regra_destinatarios, destinatarios, copias, status, motivo, atualizado_em)
@@ -79,7 +90,8 @@ async function registrarSacNaoEnviada(pool, sac, motivo, regra = null, destinata
 }
 
 async function enviarSacEmail(pool, sac) {
-    const destinatarios = destinatariosPorCadastro(sac.NOME_CADASTRADO_SAV);
+    const preview = prepararSacEmail(sac);
+    const destinatarios = preview.to.length ? { to: preview.to, cc: preview.cc, regra: preview.regra } : null;
     if (!destinatarios) {
         await registrarSacNaoEnviada(pool, sac, 'Cadastrado por não identificado para a regra de envio.');
         return { status: 'NAO_ENVIADO', motivo: 'Cadastrado por não identificado para a regra de envio.' };
@@ -94,8 +106,8 @@ async function enviarSacEmail(pool, sac) {
             from: `"Fundição Erus" <${process.env.EMAIL_USER}>`,
             to: destinatarios.to.join(', '),
             cc: destinatarios.cc.join(', '),
-            subject: assuntoSac(sac),
-            text: corpoSac(sac)
+            subject: preview.assunto,
+            text: preview.corpo
         });
         await pool.query(`INSERT INTO sac_email_notifications
             (sac_codigo, data_cadastro, cliente, reclamante, cadastrado_por_codigo, cadastrado_por_nome, regra_destinatarios, destinatarios, copias, status, motivo, message_id, enviado_em, atualizado_em)
@@ -113,4 +125,4 @@ async function enviarSacEmail(pool, sac) {
     }
 }
 
-module.exports = { destinatariosPorCadastro, ensureSacEmailNotificationsTable, enviarSacEmail, registrarSacNaoEnviada };
+module.exports = { destinatariosPorCadastro, ensureSacEmailNotificationsTable, enviarSacEmail, prepararSacEmail, registrarSacNaoEnviada };

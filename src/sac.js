@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../lib/db');
 const { requireRole } = require('../lib/middleware');
-const { ensureSacEmailNotificationsTable } = require('./sac-email-notifications');
+const { ensureSacEmailNotificationsTable, enviarSacEmail, prepararSacEmail } = require('./sac-email-notifications');
 
 async function ensureAcoesStatusTable() {
     await pool.query(`CREATE TABLE IF NOT EXISTS sac_acoes_status (
@@ -67,7 +67,7 @@ router.get('/acoes', async (req, res) => {
 router.get('/email-notifications', requireRole('desenvolvedor'), async (req, res) => {
     try {
         await ensureSacEmailNotificationsTable(pool);
-        const result = await pool.query(`SELECT COALESCE(s.codigo, n.sac_codigo) AS "CODIGO_SAV", COALESCE(s.data_cadastro, n.data_cadastro) AS "DATA_CADASTRO_SAV", COALESCE(s.cliente, n.cliente) AS "NOME_CLIENTE_SAV", COALESCE(s.reclamante, n.reclamante) AS "RECLAMANTE_NOME_SAV", COALESCE(s.data->>'NOME_CADASTRADO_SAV', n.cadastrado_por_nome) AS "NOME_CADASTRADO_SAV", n.status, n.regra_destinatarios, n.destinatarios, n.copias, n.motivo, n.message_id, n.enviado_em, n.atualizado_em
+        const result = await pool.query(`SELECT COALESCE(s.codigo, n.sac_codigo) AS "CODIGO_SAV", COALESCE(s.data_cadastro, n.data_cadastro) AS "DATA_CADASTRO_SAV", COALESCE(s.cliente, n.cliente) AS "NOME_CLIENTE_SAV", COALESCE(s.reclamante, n.reclamante) AS "RECLAMANTE_NOME_SAV", COALESCE(s.data->>'NOME_CADASTRADO_SAV', n.cadastrado_por_nome) AS "NOME_CADASTRADO_SAV", s.codigo IS NOT NULL AS "DISPONIVEL_DISPARO", n.status, n.regra_destinatarios, n.destinatarios, n.copias, n.motivo, n.message_id, n.enviado_em, n.atualizado_em
             FROM sac_email_notifications n
             FULL OUTER JOIN sac_firebird_sync s ON n.sac_codigo = s.codigo
             ORDER BY COALESCE(s.codigo, n.sac_codigo) DESC LIMIT 500`);
@@ -82,6 +82,34 @@ router.get('/email-notifications', requireRole('desenvolvedor'), async (req, res
         });
     } catch (error) {
         res.status(500).json({ error: 'Não foi possível consultar os e-mails das SACs', details: error.message });
+    }
+});
+
+router.get('/email-notifications/:codigo/preview', requireRole('desenvolvedor'), async (req, res) => {
+    try {
+        const codigo = Number(req.params.codigo);
+        if (!Number.isInteger(codigo)) return res.status(400).json({ error: 'Código inválido' });
+        const result = await pool.query('SELECT data FROM sac_firebird_sync WHERE codigo = $1', [codigo]);
+        if (!result.rows.length) return res.status(404).json({ error: 'SAC não encontrada na sincronização' });
+        const sac = normalizarRtf(result.rows[0].data);
+        res.json({ codigo, disponivel: Boolean(prepararSacEmail(sac).to.length), ...prepararSacEmail(sac) });
+    } catch (error) {
+        res.status(500).json({ error: 'Não foi possível preparar o e-mail da SAC', details: error.message });
+    }
+});
+
+router.post('/email-notifications/:codigo/send', requireRole('desenvolvedor'), async (req, res) => {
+    try {
+        if (req.body?.confirmation !== 'CONFIRMAR') return res.status(400).json({ error: 'Digite CONFIRMAR para disparar o e-mail.' });
+        const codigo = Number(req.params.codigo);
+        if (!Number.isInteger(codigo)) return res.status(400).json({ error: 'Código inválido' });
+        const result = await pool.query('SELECT data FROM sac_firebird_sync WHERE codigo = $1', [codigo]);
+        if (!result.rows.length) return res.status(404).json({ error: 'SAC não encontrada na sincronização' });
+        const envio = await enviarSacEmail(pool, normalizarRtf(result.rows[0].data));
+        if (envio.status !== 'ENVIADO') return res.status(422).json({ success: false, ...envio });
+        res.json({ success: true, ...envio });
+    } catch (error) {
+        res.status(500).json({ error: 'Não foi possível disparar o e-mail da SAC', details: error.message });
     }
 });
 
