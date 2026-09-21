@@ -58,19 +58,36 @@ function assuntoSac(sac) {
     return `Nova SAC #${sac.CODIGO_SAV} - ${sac.NOME_CLIENTE_SAV || 'Cliente não informado'}`;
 }
 
+function formatarDataSac(value) {
+    const match = String(value || '').slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    return match ? `${match[3]}/${match[2]}/${match[1]}` : 'Não informado';
+}
+
 function corpoSac(sac) {
     const baseUrl = String(process.env.PUBLIC_APP_URL || 'https://fundicaoerus.vercel.app').replace(/\/+$/, '');
     return [
+        'Prezados,',
+        '',
         'Uma nova SAC foi cadastrada no SIGE.',
         '',
+        'Observação: este e-mail foi disparado automaticamente pelo SGP.',
+        '',
+        'DADOS DA SAC',
         `Código: #${sac.CODIGO_SAV}`,
         `Cliente: ${sac.NOME_CLIENTE_SAV || 'Não informado'}`,
         `Reclamante: ${sac.RECLAMANTE_NOME_SAV || 'Não informado'}`,
         `Origem: ${sac.ORIGEM_SAV || 'Não informado'}`,
-        `Prazo: ${sac.DATA_LIMITE_SAV ? new Date(sac.DATA_LIMITE_SAV).toLocaleDateString('pt-BR') : 'Não informado'}`,
+        `Prazo: ${formatarDataSac(sac.DATA_LIMITE_SAV)}`,
         `Cadastrado por: ${sac.NOME_CADASTRADO_SAV || sac.USU_CADASTRO_SAV || 'Não informado'}`,
         '',
-        `Acessar SAC: ${baseUrl}/sac.html?sac=${encodeURIComponent(sac.CODIGO_SAV)}`
+        'RELATO DO CLIENTE',
+        sac.RELATO_CLIENTE_TEXTO || 'Não informado',
+        '',
+        `Acessar SAC: ${baseUrl}/sac.html?sac=${encodeURIComponent(sac.CODIGO_SAV)}`,
+        '',
+        'Atenciosamente,',
+        'Sistema de Gestão de SACs',
+        'Fundição Erus'
     ].join('\n');
 }
 
