@@ -63,6 +63,16 @@ function formatarDataSac(value) {
     return match ? `${match[3]}/${match[2]}/${match[1]}` : 'Não informado';
 }
 
+function escaparHtml(value) {
+    return String(value ?? '').replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
+}
+
+function corpoSacHtml(sac) {
+    const baseUrl = String(process.env.PUBLIC_APP_URL || 'https://fundicaoerus.vercel.app').replace(/\/+$/, '');
+    const relato = escaparHtml(sac.RELATO_CLIENTE_TEXTO || 'Não informado').replace(/\r?\n/g, '<br>');
+    return `<div style="font-family:Arial,sans-serif;color:#202124;font-size:14px;line-height:1.6"><p>Prezados,</p><p>Uma nova SAC foi cadastrada no SIGE.</p><p><strong>Observação:</strong> este e-mail foi disparado automaticamente pelo SGP.</p><hr style="border:0;border-top:1px solid #e5e7eb"><p><strong>Dados da SAC</strong><br>Código: #${escaparHtml(sac.CODIGO_SAV)}<br>Cliente: ${escaparHtml(sac.NOME_CLIENTE_SAV || 'Não informado')}<br>Reclamante: ${escaparHtml(sac.RECLAMANTE_NOME_SAV || 'Não informado')}<br>Origem: ${escaparHtml(sac.ORIGEM_SAV || 'Não informado')}<br>Prazo: ${escaparHtml(formatarDataSac(sac.DATA_LIMITE_SAV))}<br>Cadastrado por: ${escaparHtml(sac.NOME_CADASTRADO_SAV || sac.USU_CADASTRO_SAV || 'Não informado')}</p><p><strong>Relato do Cliente:</strong><br><em>${relato}</em></p><p>Acessar SAC: <a href="${escaparHtml(`${baseUrl}/sac.html?sac=${encodeURIComponent(sac.CODIGO_SAV)}`)}">${escaparHtml(`${baseUrl}/sac.html?sac=${encodeURIComponent(sac.CODIGO_SAV)}`)}</a></p><p>Atenciosamente,<br>Sistema de Gestão de SACs<br>Fundição Erus</p></div>`;
+}
+
 function corpoSac(sac) {
     const baseUrl = String(process.env.PUBLIC_APP_URL || 'https://fundicaoerus.vercel.app').replace(/\/+$/, '');
     return [
@@ -80,7 +90,7 @@ function corpoSac(sac) {
         `Prazo: ${formatarDataSac(sac.DATA_LIMITE_SAV)}`,
         `Cadastrado por: ${sac.NOME_CADASTRADO_SAV || sac.USU_CADASTRO_SAV || 'Não informado'}`,
         '',
-        'RELATO DO CLIENTE',
+        'Relato do Cliente:',
         sac.RELATO_CLIENTE_TEXTO || 'Não informado',
         '',
         `Acessar SAC: ${baseUrl}/sac.html?sac=${encodeURIComponent(sac.CODIGO_SAV)}`,
@@ -99,7 +109,8 @@ function prepararSacEmail(sac, overrides = {}) {
         to: Object.prototype.hasOwnProperty.call(overrides, 'to') ? normalizarEmails(overrides.to) : destinatarios?.to || [],
         cc: Object.prototype.hasOwnProperty.call(overrides, 'cc') ? normalizarEmails(overrides.cc) : destinatarios?.cc || [],
         assunto: assuntoSac(sac),
-        corpo: corpoSac(sac)
+        corpo: corpoSac(sac),
+        corpoHtml: corpoSacHtml(sac)
     };
 }
 
@@ -133,7 +144,8 @@ async function enviarSacEmail(pool, sac, overrides = {}) {
             to: destinatarios.to.join(', '),
             cc: destinatarios.cc.join(', '),
             subject: preview.assunto,
-            text: preview.corpo
+            text: preview.corpo,
+            html: preview.corpoHtml
         });
         await pool.query(`INSERT INTO sac_email_notifications
             (sac_codigo, data_cadastro, cliente, reclamante, cadastrado_por_codigo, cadastrado_por_nome, regra_destinatarios, destinatarios, copias, status, motivo, message_id, enviado_em, atualizado_em)
