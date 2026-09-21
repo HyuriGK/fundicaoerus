@@ -39,8 +39,10 @@ function getReprogrammingAuditUser(req) {
 }
 
 function canAccessReprogrammingAudit(req) {
-    return ['desenvolvedor', 'gerente comercial', 'diretor']
-        .includes(String(req.user?.role || '').trim().toLowerCase());
+    const role = String(req.user?.role || '').trim().toLowerCase();
+    if (['desenvolvedor', 'gerente comercial', 'diretor'].includes(role)) return true;
+    // Os usuários comerciais têm acesso somente à própria carteira.
+    return role === 'comercial' && Boolean(getCommercialOwnerRestriction(req));
 }
 
 let modeloStatusTableReady = false;
@@ -503,6 +505,16 @@ router.get('/delivery-reprogramming-audit', async (req, res) => {
     try {
         await ensureDeliveryHistoryReady();
         await ensureReprogrammingAuditTable();
+        const commercialOwner = getCommercialOwnerRestriction(req);
+        const ownerJoin = commercialOwner ? `
+            JOIN clientes_firebird_sync commercial_client
+              ON commercial_client.codigo::text = p.data->>'ID_CLIENTE_CORE'
+            JOIN clientes_responsavel_comercial commercial_owner
+              ON commercial_owner.empresa = commercial_client.empresa
+             AND commercial_owner.codigo = commercial_client.codigo
+             AND commercial_owner.responsavel_comercial = $2
+        ` : '';
+        const queryParams = commercialOwner ? [userKey, commercialOwner] : [userKey];
         const result = await pool.query(`
             WITH ordered_history AS (
                 SELECT
@@ -535,13 +547,14 @@ router.get('/delivery-reprogramming-audit', async (req, res) => {
                 read_state.read_at
             FROM ordered_history history
             LEFT JOIN firebird_sync_emissoes p ON p.sync_key = history.sync_key
+            ${ownerJoin}
             LEFT JOIN pedidos_entrega_reprogramacoes_lidas read_state
                 ON read_state.event_id = history.id
                AND read_state.user_key = $1
             WHERE history.previous_data_entrega IS NOT NULL
               AND history.data_entrega IS DISTINCT FROM history.previous_data_entrega
             ORDER BY history.started_at DESC, history.id DESC
-        `, [userKey]);
+        `, queryParams);
         res.json({
             events: result.rows,
             unread_count: result.rows.filter(row => !row.is_read).length
@@ -560,6 +573,23 @@ router.post('/delivery-reprogramming-audit/:eventId/read', async (req, res) => {
     if (!/^\d+$/.test(eventId)) return res.status(400).json({ error: 'Evento invalido' });
     try {
         await ensureReprogrammingAuditTable();
+        const commercialOwner = getCommercialOwnerRestriction(req);
+        if (commercialOwner) {
+            const ownership = await pool.query(`
+                SELECT 1
+                FROM pedidos_entrega_historico history
+                JOIN firebird_sync_emissoes p ON p.sync_key = history.sync_key
+                JOIN clientes_firebird_sync commercial_client
+                  ON commercial_client.codigo::text = p.data->>'ID_CLIENTE_CORE'
+                JOIN clientes_responsavel_comercial commercial_owner
+                  ON commercial_owner.empresa = commercial_client.empresa
+                 AND commercial_owner.codigo = commercial_client.codigo
+                 AND commercial_owner.responsavel_comercial = $2
+                WHERE history.id = $1
+                LIMIT 1
+            `, [eventId, commercialOwner]);
+            if (!ownership.rowCount) return res.status(403).json({ error: 'Acesso negado' });
+        }
         await pool.query(`
             INSERT INTO pedidos_entrega_reprogramacoes_lidas (event_id, user_key, read_at)
             VALUES ($1, $2, CURRENT_TIMESTAMP)
