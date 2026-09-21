@@ -105,7 +105,16 @@ router.post('/email-notifications/:codigo/send', requireRole('desenvolvedor'), a
         if (!Number.isInteger(codigo)) return res.status(400).json({ error: 'Código inválido' });
         const result = await pool.query('SELECT data FROM sac_firebird_sync WHERE codigo = $1', [codigo]);
         if (!result.rows.length) return res.status(404).json({ error: 'SAC não encontrada na sincronização' });
-        const envio = await enviarSacEmail(pool, normalizarRtf(result.rows[0].data));
+        const overrides = {};
+        if (Object.prototype.hasOwnProperty.call(req.body || {}, 'to')) overrides.to = req.body.to;
+        if (Object.prototype.hasOwnProperty.call(req.body || {}, 'cc')) overrides.cc = req.body.cc;
+        let envio;
+        try {
+            envio = await enviarSacEmail(pool, normalizarRtf(result.rows[0].data), overrides);
+        } catch (error) {
+            if (String(error.message || '').startsWith('E-mail inválido:')) return res.status(400).json({ error: error.message });
+            throw error;
+        }
         if (envio.status !== 'ENVIADO') return res.status(422).json({ success: false, ...envio });
         res.json({ success: true, ...envio });
     } catch (error) {

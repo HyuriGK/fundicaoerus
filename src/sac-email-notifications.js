@@ -23,6 +23,14 @@ function criarTransporter() {
     });
 }
 
+function normalizarEmails(value) {
+    const lista = Array.isArray(value) ? value : String(value || '').split(/[;,\n]+/);
+    const emails = [...new Set(lista.map(email => String(email).trim().toLowerCase()).filter(Boolean))];
+    const invalido = emails.find(email => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email));
+    if (invalido) throw new Error(`E-mail inválido: ${invalido}`);
+    return emails;
+}
+
 async function ensureSacEmailNotificationsTable(pool) {
     await pool.query(`CREATE TABLE IF NOT EXISTS sac_email_notifications (
         sac_codigo INTEGER PRIMARY KEY,
@@ -66,12 +74,13 @@ function corpoSac(sac) {
     ].join('\n');
 }
 
-function prepararSacEmail(sac) {
+function prepararSacEmail(sac, overrides = {}) {
     const destinatarios = destinatariosPorCadastro(sac.NOME_CADASTRADO_SAV);
+    const manual = Object.prototype.hasOwnProperty.call(overrides, 'to') || Object.prototype.hasOwnProperty.call(overrides, 'cc');
     return {
-        regra: destinatarios?.regra || null,
-        to: destinatarios?.to || [],
-        cc: destinatarios?.cc || [],
+        regra: manual ? 'MANUAL' : destinatarios?.regra || null,
+        to: Object.prototype.hasOwnProperty.call(overrides, 'to') ? normalizarEmails(overrides.to) : destinatarios?.to || [],
+        cc: Object.prototype.hasOwnProperty.call(overrides, 'cc') ? normalizarEmails(overrides.cc) : destinatarios?.cc || [],
         assunto: assuntoSac(sac),
         corpo: corpoSac(sac)
     };
@@ -89,8 +98,8 @@ async function registrarSacNaoEnviada(pool, sac, motivo, regra = null, destinata
         [sac.CODIGO_SAV, sac.DATA_CADASTRO_SAV || null, sac.NOME_CLIENTE_SAV || null, sac.RECLAMANTE_NOME_SAV || null, sac.USU_CADASTRO_SAV || null, sac.NOME_CADASTRADO_SAV || null, regra, destinatarios, copias, motivo]);
 }
 
-async function enviarSacEmail(pool, sac) {
-    const preview = prepararSacEmail(sac);
+async function enviarSacEmail(pool, sac, overrides = {}) {
+    const preview = prepararSacEmail(sac, overrides);
     const destinatarios = preview.to.length ? { to: preview.to, cc: preview.cc, regra: preview.regra } : null;
     if (!destinatarios) {
         await registrarSacNaoEnviada(pool, sac, 'Cadastrado por não identificado para a regra de envio.');
