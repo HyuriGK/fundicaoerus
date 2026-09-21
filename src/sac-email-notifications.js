@@ -3,6 +3,7 @@ const nodemailer = require('nodemailer');
 const SAC_EMAIL_TO = ['processos@fundicaoerus.com.br', 'humberto@fundicaoerus.com.br'];
 const SAC_EMAIL_CC_GERUZA = ['relatorios@fundicaoerus.com.br', 'luis@fundicaoerus.com.br', 'comercial2@fundicaoerus.com.br', 'comercial3@fundicaoerus.com.br'];
 const SAC_EMAIL_CC_ELISANGELA = ['relatorios@fundicaoerus.com.br', 'luis@fundicaoerus.com.br', 'comercial2@fundicaoerus.com.br', 'comercial@fundicaoerus.com.br'];
+const SAC_EMAIL_CC_ALESSANDRA = ['relatorios@fundicaoerus.com.br', 'luis@fundicaoerus.com.br', 'comercial2@fundicaoerus.com.br', 'comercial3@fundicaoerus.com.br', 'comercial@fundicaoerus.com.br'];
 
 function normalizarNome(value) {
     return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
@@ -12,6 +13,7 @@ function destinatariosPorCadastro(nome) {
     const cadastro = normalizarNome(nome);
     if (cadastro.includes('GERUZA')) return { to: SAC_EMAIL_TO, cc: SAC_EMAIL_CC_GERUZA, regra: 'GERUZA' };
     if (cadastro.includes('ELISANGELA')) return { to: SAC_EMAIL_TO, cc: SAC_EMAIL_CC_ELISANGELA, regra: 'ELISANGELA' };
+    if (cadastro.includes('ALESSANDRA PERUCH')) return { to: SAC_EMAIL_TO, cc: SAC_EMAIL_CC_ALESSANDRA, regra: 'ALESSANDRA PERUCH' };
     return null;
 }
 
