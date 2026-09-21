@@ -28,6 +28,30 @@ function normalizarRtf(value) {
     return value;
 }
 
+function getCommercialOwnerRestriction(req) {
+    const role = String(req.user?.role || '').trim().toLowerCase();
+    const username = String(req.user?.user || '').trim().toLowerCase();
+    const name = String(req.user?.name || '').trim().toLowerCase();
+    if (role === 'comercial' && (username === 'geruza' || name === 'geruza mendes')) return 'GERUZA MENDES';
+    if (role === 'comercial' && (username === 'elisangela' || name === 'elisangela')) return 'ELISANGELA';
+    return null;
+}
+
+function addCommercialOwnerFilter(req, filters, values, alias) {
+    const owner = getCommercialOwnerRestriction(req);
+    if (!owner) return;
+    values.push(owner);
+    filters.push(`EXISTS (
+        SELECT 1
+        FROM clientes_firebird_sync c
+        JOIN clientes_responsavel_comercial rc
+            ON rc.empresa = c.empresa
+            AND rc.codigo = c.codigo
+        WHERE c.codigo::text = ${alias}.cliente_codigo::text
+          AND rc.responsavel_comercial = $${values.length}
+    )`);
+}
+
 router.get('/list', async (req, res) => {
     try {
         res.set('Cache-Control', 'no-store');
@@ -39,8 +63,9 @@ router.get('/list', async (req, res) => {
         }
         if (situacao !== '') { values.push(Number(situacao)); filters.push(`situacao = $${values.length}`); }
         if (origem.trim()) { values.push(`%${origem.trim()}%`); filters.push(`origem ILIKE $${values.length}`); }
+        addCommercialOwnerFilter(req, filters, values, 's');
         const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
-        const result = await pool.query(`SELECT codigo AS "CODIGO_SAV", situacao AS "SITUACAO_SAV", data_cadastro AS "DATA_CADASTRO_SAV", data_limite AS "DATA_LIMITE_SAV", data_resolvido AS "DATA_RESOLVIDO_SAV", cliente_codigo AS "CLI_CODIGO_SAV", cliente AS "NOME_CLIENTE_SAV", reclamante AS "RECLAMANTE_NOME_SAV", origem AS "ORIGEM_SAV", procedencia AS "PROCEDENCIA_SAV", disposicao AS "DISPOSICAO_SAV", total_produtos AS "TOTAL_PRODUTOS", total_acoes AS "TOTAL_ACOES", COALESCE((SELECT string_agg(DISTINCT concat_ws(' - ', responsavel->>'USU_CODIGO_SVU', responsavel->>'NOME_USUARIO_SVU'), ', ') FROM jsonb_array_elements(COALESCE(data->'responsaveis', '[]'::jsonb)) responsavel WHERE NULLIF(responsavel->>'SVAC_ID_SVU', '') IS NOT NULL), '') AS "RESPONSAVEIS_ACOES" FROM sac_firebird_sync ${where} ORDER BY codigo DESC LIMIT 300`, values);
+        const result = await pool.query(`SELECT s.codigo AS "CODIGO_SAV", s.situacao AS "SITUACAO_SAV", s.data_cadastro AS "DATA_CADASTRO_SAV", s.data_limite AS "DATA_LIMITE_SAV", s.data_resolvido AS "DATA_RESOLVIDO_SAV", s.cliente_codigo AS "CLI_CODIGO_SAV", s.cliente AS "NOME_CLIENTE_SAV", s.reclamante AS "RECLAMANTE_NOME_SAV", s.origem AS "ORIGEM_SAV", s.procedencia AS "PROCEDENCIA_SAV", s.disposicao AS "DISPOSICAO_SAV", s.total_produtos AS "TOTAL_PRODUTOS", s.total_acoes AS "TOTAL_ACOES", COALESCE((SELECT string_agg(DISTINCT concat_ws(' - ', responsavel->>'USU_CODIGO_SVU', responsavel->>'NOME_USUARIO_SVU'), ', ') FROM jsonb_array_elements(COALESCE(s.data->'responsaveis', '[]'::jsonb)) responsavel WHERE NULLIF(responsavel->>'SVAC_ID_SVU', '') IS NOT NULL), '') AS "RESPONSAVEIS_ACOES" FROM sac_firebird_sync s ${where} ORDER BY s.codigo DESC LIMIT 300`, values);
         res.json(result.rows.map(row => ({ ...row, SITUACAO_NOME: situacoes[row.SITUACAO_SAV] || 'NÃO DEFINIDO', PROCEDENCIA_NOME: procedencias[row.PROCEDENCIA_SAV] || 'NÃO DEFINIDO' })));
     } catch (error) { res.status(500).json({ error: 'Dados SAC ainda não sincronizados', details: error.message }); }
 });
@@ -49,6 +74,8 @@ router.get('/acoes', async (req, res) => {
     try {
         res.set('Cache-Control', 'no-store');
         await ensureAcoesStatusTable();
+        const values = [], filters = [];
+        addCommercialOwnerFilter(req, filters, values, 's');
         const result = await pool.query(`SELECT s.codigo AS "CODIGO_SAV", s.situacao AS "SITUACAO_SAC", a.acao AS "ACAO",
             COALESCE(string_agg(DISTINCT concat_ws(' - ', r.responsavel->>'USU_CODIGO_SVU', r.responsavel->>'NOME_USUARIO_SVU'), ', '), '') AS "RESPONSAVEL",
             COALESCE(string_agg(DISTINCT NULLIF(r.responsavel->>'NOME_SETOR_SVU', ''), ', '), '') AS "SETOR_RESPONSAVEL",
@@ -58,8 +85,9 @@ router.get('/acoes', async (req, res) => {
             LEFT JOIN LATERAL jsonb_array_elements(COALESCE(s.data->'responsaveis', '[]'::jsonb)) r(responsavel)
                 ON NULLIF(r.responsavel->>'SVAC_ID_SVU', '')::integer = NULLIF(a.acao->>'ID_SVAC', '')::integer
             LEFT JOIN sac_acoes_status st ON st.sac_codigo = s.codigo AND st.acao_id = NULLIF(a.acao->>'ID_SVAC', '')::integer
+            ${filters.length ? `WHERE ${filters.join(' AND ')}` : ''}
             GROUP BY s.codigo, s.situacao, a.acao, st.concluida
-            ORDER BY NULLIF(a.acao->>'DATA_PRAZO_SVAC', '') DESC NULLS LAST, s.codigo DESC`);
+            ORDER BY NULLIF(a.acao->>'DATA_PRAZO_SVAC', '') DESC NULLS LAST, s.codigo DESC`, values);
         res.json(result.rows.map(row => ({ ...row, ACAO: normalizarRtf(row.ACAO), SITUACAO_NOME: situacoes[row.SITUACAO_SAC] || 'NÃO DEFINIDO' })));
     } catch (error) { res.status(500).json({ error: 'Ações corretivas ainda não sincronizadas', details: error.message }); }
 });
@@ -146,7 +174,9 @@ router.get('/detail/:codigo', async (req, res) => {
         res.set('Cache-Control', 'no-store');
         const codigo = Number(req.params.codigo);
         if (!Number.isInteger(codigo)) return res.status(400).json({ error: 'Código inválido' });
-        const result = await pool.query('SELECT data FROM sac_firebird_sync WHERE codigo = $1', [codigo]);
+        const filters = ['s.codigo = $1'], values = [codigo];
+        addCommercialOwnerFilter(req, filters, values, 's');
+        const result = await pool.query(`SELECT s.data FROM sac_firebird_sync s WHERE ${filters.join(' AND ')}`, values);
         if (!result.rows.length) return res.status(404).json({ error: 'SAC não encontrado na sincronização' });
         const data = normalizarRtf(result.rows[0].data);
         await ensureAcoesStatusTable();
