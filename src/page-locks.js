@@ -86,7 +86,7 @@ router.post('/sync-lock', async (req, res) => {
             [page_id]
         );
 
-        let estimatedMs = 120000; // Default: 2 minutos
+        let estimatedMs = null;
         if (historyResult.rows.length > 0) {
             const sum = historyResult.rows.reduce((acc, r) => acc + r.duration_ms, 0);
             estimatedMs = Math.round(sum / historyResult.rows.length);

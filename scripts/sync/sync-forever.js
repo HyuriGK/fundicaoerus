@@ -9,10 +9,6 @@ const readline  = require('readline');
 const fs        = require('fs');
 const https     = require('https');
 const progressDispatch = {};
-const DEFAULT_ESTIMATED_MS = 120000;
-const MIN_ESTIMATED_MS_BY_PAGE = {
-    'fichatecmoldagem.html': 90 * 60 * 1000,
-};
 
 function updateSyncProgress(pageId, progress) {
     if (!pageId) return;
@@ -66,9 +62,7 @@ function unlockSyncPage(pageId) {
 }
 
 function lockSyncPage(pageId) {
-    const fallbackMs = Math.max(DEFAULT_ESTIMATED_MS, MIN_ESTIMATED_MS_BY_PAGE[pageId] || 0);
-    const minimumMs = MIN_ESTIMATED_MS_BY_PAGE[pageId] || 1000;
-    if (!pageId) return Promise.resolve(DEFAULT_ESTIMATED_MS);
+    if (!pageId) return Promise.resolve(null);
     const data = JSON.stringify({ page_id: pageId });
     return new Promise(resolve => {
         const req = https.request({
@@ -82,14 +76,14 @@ function lockSyncPage(pageId) {
                 try {
                     const { estimated_ms } = JSON.parse(body);
                     const estimate = Number(estimated_ms);
-                    resolve(Number.isFinite(estimate) && estimate >= minimumMs ? estimate : fallbackMs);
+                    resolve(Number.isFinite(estimate) && estimate > 0 ? estimate : null);
                 } catch (e) {
-                    resolve(fallbackMs);
+                    resolve(null);
                 }
             });
         });
-        req.on('error', () => resolve(fallbackMs));
-        req.setTimeout(5000, () => { req.destroy(); resolve(fallbackMs); });
+        req.on('error', () => resolve(null));
+        req.setTimeout(5000, () => { req.destroy(); resolve(null); });
         req.write(data);
         req.end();
     });
@@ -421,23 +415,25 @@ function logEvent(script, message, isError = true) {
 }
 
 // ─── RUN BAT ─────────────────────────────────────────────────────────────────
-function runBat(bat, estimatedMs = 120000) {
+function runBat(bat, estimatedMs = null) {
     return new Promise(resolve => {
         scriptState[bat.name] = 'RUNNING';
         currentProg[bat.name] = 0;
 
-        const safeEstimatedMs = Number.isFinite(Number(estimatedMs)) && Number(estimatedMs) >= 1000
-            ? Number(estimatedMs) : 120000;
-        const startedAt = Date.now();
-        const updateEstimatedProgress = () => {
-            const progress = Math.min(95, Math.floor(((Date.now() - startedAt) / safeEstimatedMs) * 100));
-            if (progress > currentProg[bat.name]) {
-                currentProg[bat.name] = progress;
-                updateSyncProgress(bat.pageId, progress);
-            }
-        };
-        updateEstimatedProgress();
-        const estimatedProgressTimer = setInterval(updateEstimatedProgress, 1000);
+        const safeEstimatedMs = Number(estimatedMs);
+        let estimatedProgressTimer = null;
+        if (Number.isFinite(safeEstimatedMs) && safeEstimatedMs > 0) {
+            const startedAt = Date.now();
+            const updateEstimatedProgress = () => {
+                const progress = Math.min(95, Math.floor(((Date.now() - startedAt) / safeEstimatedMs) * 100));
+                if (progress > currentProg[bat.name]) {
+                    currentProg[bat.name] = progress;
+                    updateSyncProgress(bat.pageId, progress);
+                }
+            };
+            updateEstimatedProgress();
+            estimatedProgressTimer = setInterval(updateEstimatedProgress, 1000);
+        }
 
         const child = spawn('cmd.exe', ['/c', path.join(ROOT_DIR, bat.file)], { stdio: ['ignore','pipe','pipe'] });
 
