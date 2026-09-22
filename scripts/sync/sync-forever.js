@@ -75,14 +75,15 @@ function lockSyncPage(pageId) {
             res.on('end', () => {
                 try {
                     const { estimated_ms } = JSON.parse(body);
-                    resolve(Number(estimated_ms) || 120000);
+                    const estimate = Number(estimated_ms);
+                    resolve(Number.isFinite(estimate) && estimate >= 1000 ? estimate : 120000);
                 } catch (e) {
                     resolve(120000);
                 }
             });
         });
-        req.on('error', resolve);
-        req.setTimeout(5000, () => { req.destroy(); resolve(); });
+        req.on('error', () => resolve(120000));
+        req.setTimeout(5000, () => { req.destroy(); resolve(120000); });
         req.write(data);
         req.end();
     });
@@ -419,9 +420,11 @@ function runBat(bat, estimatedMs = 120000) {
         scriptState[bat.name] = 'RUNNING';
         currentProg[bat.name] = 0;
 
+        const safeEstimatedMs = Number.isFinite(Number(estimatedMs)) && Number(estimatedMs) >= 1000
+            ? Number(estimatedMs) : 120000;
         const startedAt = Date.now();
         const updateEstimatedProgress = () => {
-            const progress = Math.min(95, Math.floor(((Date.now() - startedAt) / estimatedMs) * 100));
+            const progress = Math.min(95, Math.floor(((Date.now() - startedAt) / safeEstimatedMs) * 100));
             if (progress > currentProg[bat.name]) {
                 currentProg[bat.name] = progress;
                 updateSyncProgress(bat.pageId, progress);
@@ -535,6 +538,8 @@ function drawOffSchedule() {
 async function startForever() {
     console.clear();
     process.stdout.write('\x1B[?25l');
+    const monitorStartedAt = Date.now();
+    cycleCount = 1;
 
     if (!fs.existsSync(LOG_FILE)) {
         fs.writeFileSync(LOG_FILE, `=== SGP ERUS SYNC LOG - ${new Date().toISOString()} ===\n`);
@@ -552,8 +557,7 @@ async function startForever() {
             continue;
         }
 
-        const cycleStart = Date.now();
-        drawDashboard(cycleStart);
+        drawDashboard(monitorStartedAt);
         await new Promise(r => setTimeout(r, 800));
     }
 }
