@@ -40,9 +40,7 @@ function getReprogrammingAuditUser(req) {
 
 function canAccessReprogrammingAudit(req) {
     const role = String(req.user?.role || '').trim().toLowerCase();
-    if (['desenvolvedor', 'gerente comercial', 'diretor'].includes(role)) return true;
-    // Os usuários comerciais têm acesso somente à própria carteira.
-    return role === 'comercial' && Boolean(getCommercialOwnerRestriction(req));
+    return ['desenvolvedor', 'gerente comercial', 'diretor'].includes(role);
 }
 
 let modeloStatusTableReady = false;

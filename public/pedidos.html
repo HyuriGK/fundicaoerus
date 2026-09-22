@@ -1681,6 +1681,7 @@
             border-color: rgba(251, 191, 36, 0.3);
             color: var(--color-primary);
         }
+        #btnAuditarReprogramacoes[hidden] { display: none !important; }
         .export-menu-wrap { position:relative; }
         .export-menu {
             display:none;
@@ -3511,7 +3512,7 @@
                     <button class="btn-modern" onclick="this.blur(); openFiltersModal()"> Filtros </button>
                 </div>
                 <div class="toolbar-group" style="margin-left: auto;">
-                    <button id="btnAuditarReprogramacoes" class="btn-modern" style="display:none" onclick="openReprogrammingAuditModal()"><i class="fa-solid fa-clipboard-check"></i>Auditar Reprogramações <span id="reprogrammingAuditUnreadBadge"></span></button>
+                    <button id="btnAuditarReprogramacoes" class="btn-modern" hidden style="display:none" onclick="openReprogrammingAuditModal()"><i class="fa-solid fa-clipboard-check"></i>Auditar Reprogramações <span id="reprogrammingAuditUnreadBadge"></span></button>
                     <div class="export-menu-wrap">
                         <button id="btnExportarRegistros" class="btn-modern" type="button" onclick="toggleExportMenu(event)"><i class="fa-solid fa-file-export"></i>Exportar <i class="fa-solid fa-chevron-down"></i></button>
                         <div id="exportMenu" class="export-menu">
@@ -4549,6 +4550,7 @@
             if (tableContainer) tableContainer.scrollTop = 0;
         }
         function openModal(hideOP = false) { 
+            syncReprogrammingAuditButtonVisibility();
             const modal = document.getElementById('recordsModal');
             const titleEl = document.getElementById('recordsModalTitle');
             modal.classList.toggle('client-records-modal', chartMode === 'client');
@@ -4745,14 +4747,18 @@
         }
         function canViewReprogrammingAudit() {
             const role = String(localStorage.getItem('erus_role') || '').trim().toLowerCase();
-            if (canViewDeliveryHistory()) return true;
-            if (role !== 'comercial') return false;
-            const username = String(localStorage.getItem('erus_username') || '').trim().toLowerCase();
-            const name = String(localStorage.getItem('erus_user') || '').trim().toLowerCase();
-            return username === 'geruza'
-                || name === 'geruza mendes'
-                || username === 'elisangela'
-                || name === 'elisangela';
+            return ['desenvolvedor', 'gerente comercial', 'diretor'].includes(role);
+        }
+        function syncReprogrammingAuditButtonVisibility() {
+            const button = document.getElementById('btnAuditarReprogramacoes');
+            if (!button) return;
+            const allowed = canViewReprogrammingAudit();
+            if (!allowed) {
+                button.remove();
+                return;
+            }
+            button.hidden = !allowed;
+            button.style.setProperty('display', allowed ? '' : 'none', 'important');
         }
         function formatDeliveryHistoryDate(value) {
             if (!value) return 'Sem data PCP';
@@ -4940,6 +4946,7 @@
             }).join('');
         }
         async function openReprogrammingAuditModal() {
+            syncReprogrammingAuditButtonVisibility();
             const modal = document.getElementById('reprogrammingAuditModal');
             const content = document.getElementById('reprogrammingAuditContent');
             const count = document.getElementById('reprogrammingAuditCount');
@@ -8314,6 +8321,7 @@ function flashConcentracaoBar(barIndex) {
             setInlineLoading(overlay.id, active);
         }
         async function openRecordsLoading(title = 'Carregando registros', hideOP = false) {
+            syncReprogrammingAuditButtonVisibility();
             const modal = document.getElementById('recordsModal');
             const titleEl = document.getElementById('recordsModalTitle');
             if (!modal) return;
@@ -9613,8 +9621,7 @@ function flashConcentracaoBar(barIndex) {
             });
             document.querySelectorAll('.chart-panel').forEach(p => ro.observe(p));
 
-            const auditButton = document.getElementById('btnAuditarReprogramacoes');
-            if (auditButton) auditButton.style.display = canViewReprogrammingAudit() ? '' : 'none';
+            syncReprogrammingAuditButtonVisibility();
 
             // 2. Setup filters and load data
             if (typeof setupFilters === 'function') setupFilters();
