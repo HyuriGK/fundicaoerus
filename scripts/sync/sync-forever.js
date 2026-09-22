@@ -9,6 +9,10 @@ const readline  = require('readline');
 const fs        = require('fs');
 const https     = require('https');
 const progressDispatch = {};
+const DEFAULT_ESTIMATED_MS = 120000;
+const MIN_ESTIMATED_MS_BY_PAGE = {
+    'fichatecmoldagem.html': 90 * 60 * 1000,
+};
 
 function updateSyncProgress(pageId, progress) {
     if (!pageId) return;
@@ -62,7 +66,9 @@ function unlockSyncPage(pageId) {
 }
 
 function lockSyncPage(pageId) {
-    if (!pageId) return Promise.resolve(120000);
+    const fallbackMs = Math.max(DEFAULT_ESTIMATED_MS, MIN_ESTIMATED_MS_BY_PAGE[pageId] || 0);
+    const minimumMs = MIN_ESTIMATED_MS_BY_PAGE[pageId] || 1000;
+    if (!pageId) return Promise.resolve(DEFAULT_ESTIMATED_MS);
     const data = JSON.stringify({ page_id: pageId });
     return new Promise(resolve => {
         const req = https.request({
@@ -76,14 +82,14 @@ function lockSyncPage(pageId) {
                 try {
                     const { estimated_ms } = JSON.parse(body);
                     const estimate = Number(estimated_ms);
-                    resolve(Number.isFinite(estimate) && estimate >= 1000 ? estimate : 120000);
+                    resolve(Number.isFinite(estimate) && estimate >= minimumMs ? estimate : fallbackMs);
                 } catch (e) {
-                    resolve(120000);
+                    resolve(fallbackMs);
                 }
             });
         });
-        req.on('error', () => resolve(120000));
-        req.setTimeout(5000, () => { req.destroy(); resolve(120000); });
+        req.on('error', () => resolve(fallbackMs));
+        req.setTimeout(5000, () => { req.destroy(); resolve(fallbackMs); });
         req.write(data);
         req.end();
     });
