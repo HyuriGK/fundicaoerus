@@ -2476,6 +2476,8 @@
         let selectedDashboardMonthIndex = new Date().getMonth(); // 0-based
         let selectedVendor = '';
         let allData = [];
+        let recordsLoadPromise = null;
+        let faturamentoSyncWasActive = false;
         let excludedClients = new Set();
         let fatPesoOverrides = new Map(); // key → true/false (explicit override)
         let clientStats = {};
@@ -4133,6 +4135,8 @@
         }
         function closeRecordsModal() { closeBillingTechnicalSheet(); document.getElementById('recordsModal').style.display = 'none'; document.body.style.overflow = ''; if (mapaCityFilter) clearMapaCityFilter(); }
 async function loadRecordsData() {
+            if (recordsLoadPromise) return recordsLoadPromise;
+            recordsLoadPromise = (async () => {
             // Carregar histórico completo (2025 e 2026) para o seletor de anos funcionar
             const fullStart = '2025-01-01';
             const fullEnd = '2026-12-31';
@@ -4140,8 +4144,9 @@ async function loadRecordsData() {
                 await Promise.all([loadPreferences(), loadMeta()]);
                 // Fetch full year data
                 let url = `/api/faturamento-postgres/detalhado?limit=100000&startDate=${fullStart}&endDate=${fullEnd}`;
-                const res = await (await fetch(url)).json();
-                if (res.success) {
+                const response = await fetch(url, { cache: 'no-store' });
+                const res = await response.json();
+                if (res.success && Array.isArray(res.data)) {
                     allData = res.data.map(item => {
                         if (item.gera_financeiro === 'N') {
                             item.excluido_manualmente = true;
@@ -4157,6 +4162,25 @@ async function loadRecordsData() {
                     renderTable();
                     const dataToUse = hasActiveModalFilters() ? getModalFilteredData() : allData;
                     updateDashboardfromRecords(dataToUse);
+                }
+            } catch (e) { console.error(e); }
+            })();
+            try { await recordsLoadPromise; } finally { recordsLoadPromise = null; }
+        }
+        async function checkFaturamentoSync() {
+            try {
+                const response = await fetch('/api/page-locks', { cache: 'no-store' });
+                const result = await response.json();
+                if (!result.success || !Array.isArray(result.data)) return;
+                const lock = result.data.find(item => item.page_id === 'faturamentos.html');
+                if (lock?.is_syncing) {
+                    faturamentoSyncWasActive = true;
+                    return;
+                }
+                if (faturamentoSyncWasActive) {
+                    faturamentoSyncWasActive = false;
+                    await new Promise(resolve => setTimeout(resolve, 1200));
+                    await loadRecordsData();
                 }
             } catch (e) { console.error(e); }
         }
@@ -5671,7 +5695,8 @@ async function loadRecordsData() {
             });
             renderDashboardMonthButtons();
             syncPeriodInputs();
-            loadRecordsData();
+            checkFaturamentoSync();
+            setInterval(checkFaturamentoSync, 5000);
             // Clock update
             setInterval(() => {
                 const clockTime = document.getElementById('clock-time');
