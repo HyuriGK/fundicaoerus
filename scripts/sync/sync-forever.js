@@ -62,7 +62,7 @@ function unlockSyncPage(pageId) {
 }
 
 function lockSyncPage(pageId) {
-    if (!pageId) return Promise.resolve(null);
+    if (!pageId) return Promise.resolve();
     const data = JSON.stringify({ page_id: pageId });
     return new Promise(resolve => {
         const req = https.request({
@@ -70,23 +70,32 @@ function lockSyncPage(pageId) {
             path: '/api/page-locks/sync-lock', method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) }
         }, res => {
-            let body = '';
-            res.on('data', chunk => { body += chunk; });
-            res.on('end', () => {
-                try {
-                    const { estimated_ms } = JSON.parse(body);
-                    const estimate = Number(estimated_ms);
-                    resolve(Number.isFinite(estimate) && estimate > 0 ? estimate : null);
-                } catch (e) {
-                    resolve(null);
-                }
-            });
+            res.resume();
+            res.on('end', resolve);
         });
-        req.on('error', () => resolve(null));
-        req.setTimeout(5000, () => { req.destroy(); resolve(null); });
+        req.on('error', resolve);
+        req.setTimeout(5000, () => { req.destroy(); resolve(); });
         req.write(data);
         req.end();
     });
+}
+
+function getLocalEstimateMs(scriptName) {
+    try {
+        const escapedName = scriptName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const pattern = new RegExp(`^\\[${escapedName}\\].*\\| Duracao: ([0-9]+(?:\\.[0-9]+)?)s\\s*$`);
+        const durations = fs.readFileSync(CYCLE_LOG, 'utf8')
+            .split(/\r?\n/)
+            .map(line => line.match(pattern))
+            .filter(Boolean)
+            .slice(-10)
+            .map(match => Number(match[1]) * 1000)
+            .filter(value => Number.isFinite(value) && value > 0);
+        if (!durations.length) return null;
+        return durations.reduce((sum, value) => sum + value, 0) / durations.length;
+    } catch (e) {
+        return null;
+    }
 }
 
 require('dotenv').config({ path: path.join(__dirname, '../../.env.local'), override: true });
@@ -585,7 +594,8 @@ async function startQueueWorker(bats) {
         const startedAt = Date.now();
         nextRunAt[bat.name] = null;
         scriptState[bat.name] = 'STARTING';
-        const estimatedMs = await lockSyncPage(bat.pageId);
+        await lockSyncPage(bat.pageId);
+        const estimatedMs = getLocalEstimateMs(bat.name);
         await runBat(bat, estimatedMs);
 
         const duration = (Date.now() - startedAt) / 1000;
