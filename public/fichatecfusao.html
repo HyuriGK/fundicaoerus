@@ -201,6 +201,10 @@
             #sheetContent { display: block !important; width: 100% !important; max-width: 100% !important; margin: 0 !important; page-break-before: auto !important; break-before: auto !important; page-break-after: auto !important; break-after: auto !important; }
             .sheet-container { border: 1px solid #000 !important; box-shadow: none !important; background: #fff !important; border-radius: 0 !important; page-break-inside: avoid !important; break-inside: avoid !important; page-break-before: auto !important; break-before: auto !important; min-height:0 !important; padding:22px !important; box-sizing:border-box !important; display: flex !important; flex-direction: column !important; }
             .sheet-container > div[style*="grid-template-columns:1fr 1fr"] { flex: 0 0 auto !important; }
+            body:not(.printing-multi):not(.printing-cover) #sheetContent .sheet-container { min-height:var(--single-sheet-height, 0px) !important; }
+            body:not(.printing-multi):not(.printing-cover) #sheetContent .fusion-bottom-row { flex:1 1 auto !important; min-height:340px !important; }
+            body:not(.printing-multi):not(.printing-cover) #sheetContent .fusion-bottom-row .image-container-large,
+            body:not(.printing-multi):not(.printing-cover) #sheetContent .fusion-bottom-row .notes-area { flex:1 1 auto !important; height:auto !important; min-height:340px !important; }
             .info-grid { gap: 8px !important; margin-bottom: 14px !important; }
             .info-block { padding: 11px 10px !important; }
             .info-block { background: #fdfdfd !important; border: 1px solid #ccc !important; }
@@ -227,6 +231,10 @@
             body.printing-multi #sheetContent { display: none !important; }
             body.printing-multi #multiSheetContainer { display: block !important; position: static !important; left: auto !important; top: auto !important; width: 100% !important; }
             body.printing-multi #multiSheetContainer .print-sheet { display: block !important; width: var(--print-sheet-width, 100%) !important; max-width: none !important; margin: 0 auto !important; zoom: var(--print-sheet-zoom, 1) !important; page-break-inside:avoid !important; break-inside:avoid-page !important; page-break-after: always; break-after: page; }
+            body.printing-multi #multiSheetContainer .print-sheet .sheet-container { min-height:var(--print-sheet-height) !important; }
+            body.printing-multi #multiSheetContainer .print-sheet .fusion-bottom-row { flex:1 1 auto !important; min-height:340px !important; }
+            body.printing-multi #multiSheetContainer .print-sheet .fusion-bottom-row .image-container-large,
+            body.printing-multi #multiSheetContainer .print-sheet .fusion-bottom-row .notes-area { flex:1 1 auto !important; height:auto !important; min-height:340px !important; }
             body.printing-multi #multiSheetContainer .print-sheet:last-child { page-break-after: auto; break-after: auto; }
 
             /* Capa da corrida em paisagem; fichas seguem em retrato (pg-retrato via body) */
@@ -462,7 +470,7 @@
                 </div>
 
                 <!-- Linha 2: Imagem de Referência | Observações de Vazamento -->
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-top:25px; align-items:stretch;">
+                <div class="fusion-bottom-row" style="display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-top:25px; align-items:stretch;">
                     <div style="display:flex; flex-direction:column;">
                         <div class="section-divider" style="margin-top:0;"><span>Imagem de Referência</span></div>
                         <div class="image-container-large" id="imageContainer" style="margin-top:15px; flex:1; min-height:380px;">
@@ -895,7 +903,7 @@
         // Mede a ficha (zoom p/ caber em 1 folha A4) NO MESMO contexto do #sheetContent.
         // Retorna o zoom (<= 1) e deixa imagem/observações com height:auto (estado de impressão),
         // para o clone capturar exatamente esse estado.
-        const PRINT_W_PX_FT = 748, PRINT_H_PX_FT = 1000, PRINT_SAFE_ZOOM = 0.9;
+        const PRINT_W_PX_FT = 748, PRINT_H_PX_FT = 1045, PRINT_SAFE_ZOOM = 0.9;
         function computeFichaZoom(content, sheet) {
             const img = content.querySelector('.image-container-large');
             const notes = content.querySelector('.notes-area');
@@ -1019,6 +1027,7 @@
                     wrap.className = 'print-sheet';
                     wrap.style.setProperty('--print-sheet-zoom', z);
                     wrap.style.setProperty('--print-sheet-width', Math.ceil(PRINT_W_PX_FT / z) + 'px');
+                    wrap.style.setProperty('--print-sheet-height', Math.floor(PRINT_H_PX_FT / z) + 'px');
                     wrap.appendChild(clone);
                     container.appendChild(wrap);
                 });
@@ -1082,7 +1091,7 @@
         // Auto-scale para impressão A4 — reduz a ficha (zoom <= 1) até caber INTEIRA em 1 folha.
         (function () {
             const PRINT_W_PX = 748;
-            const PRINT_H_PX = 1000;
+            const PRINT_H_PX = 1045;
             // content = o "bloco-página" (#sheetContent ou .print-sheet); sheet = a .sheet-container dentro.
             function scaleEl(content, sheet, img, notes) {
                 content.style.zoom = '1';
@@ -1095,7 +1104,11 @@
                 let H = sheet.getBoundingClientRect().height;
                 content.style.width = '';
                 content.style.maxWidth = '';
-                if (H <= PRINT_H_PX) { content.style.zoom = '1'; return H; }
+                if (H <= PRINT_H_PX) {
+                    content.style.zoom = '1';
+                    content.style.setProperty('--single-sheet-height', PRINT_H_PX + 'px');
+                    return H;
+                }
                 let safety = 0;
                 while (H * PRINT_W_PX / W > PRINT_H_PX && safety < 20) {
                     W = Math.ceil(W * 1.08);
@@ -1109,10 +1122,11 @@
                 content.style.maxWidth = '';
                 const zFinal = Math.min(1, PRINT_W_PX / W);
                 content.style.zoom = zFinal;
+                content.style.setProperty('--single-sheet-height', Math.floor(PRINT_H_PX / zFinal) + 'px');
                 return H * zFinal; // altura renderizada (pós-zoom)
             }
             function resetEl(content, img, notes) {
-                if (content) { content.style.zoom = ''; content.style.width = ''; content.style.maxWidth = ''; }
+                if (content) { content.style.zoom = ''; content.style.width = ''; content.style.maxWidth = ''; content.style.removeProperty('--single-sheet-height'); }
                 if (img) { img.style.flex = '1'; img.style.height = ''; img.style.minHeight = '380px'; }
                 if (notes) { notes.style.flex = '1'; notes.style.height = ''; notes.style.overflow = 'auto'; notes.style.minHeight = '380px'; }
             }
