@@ -226,7 +226,7 @@
             #multiSheetContainer { display: none !important; }
             body.printing-multi #sheetContent { display: none !important; }
             body.printing-multi #multiSheetContainer { display: block !important; position: static !important; left: auto !important; top: auto !important; width: 100% !important; }
-            body.printing-multi #multiSheetContainer .print-sheet { display: block !important; width: 100% !important; max-width: 100% !important; margin: 0 !important; page-break-inside:avoid !important; break-inside:avoid-page !important; page-break-after: always; break-after: page; }
+            body.printing-multi #multiSheetContainer .print-sheet { display: block !important; width: var(--print-sheet-width, 100%) !important; max-width: none !important; margin: 0 auto !important; zoom: var(--print-sheet-zoom, 1) !important; page-break-inside:avoid !important; break-inside:avoid-page !important; page-break-after: always; break-after: page; }
             body.printing-multi #multiSheetContainer .print-sheet:last-child { page-break-after: auto; break-after: auto; }
 
             /* Capa da corrida em paisagem; fichas seguem em retrato (pg-retrato via body) */
@@ -895,7 +895,7 @@
         // Mede a ficha (zoom p/ caber em 1 folha A4) NO MESMO contexto do #sheetContent.
         // Retorna o zoom (<= 1) e deixa imagem/observações com height:auto (estado de impressão),
         // para o clone capturar exatamente esse estado.
-        const PRINT_W_PX_FT = 748, PRINT_H_PX_FT = 1000;
+        const PRINT_W_PX_FT = 748, PRINT_H_PX_FT = 1000, PRINT_SAFE_ZOOM = 0.9;
         function computeFichaZoom(content, sheet) {
             const img = content.querySelector('.image-container-large');
             const notes = content.querySelector('.notes-area');
@@ -1012,11 +1012,13 @@
                 fichas.forEach(d => {
                     populateData(d, sc);
                     const scSheet = sc.querySelector('.sheet-container');
-                    const z = computeFichaZoom(sc, scSheet); // deixa img/notes em height:auto
+                    const measuredZoom = computeFichaZoom(sc, scSheet); // deixa img/notes em height:auto
+                    const z = Math.min(measuredZoom, PRINT_SAFE_ZOOM);
                     const clone = scSheet.cloneNode(true);   // captura conteúdo + estado de impressão
                     const wrap = document.createElement('div');
                     wrap.className = 'print-sheet';
-                    wrap.style.zoom = z;                     // zoom pré-calculado (não remedir!)
+                    wrap.style.setProperty('--print-sheet-zoom', z);
+                    wrap.style.setProperty('--print-sheet-width', Math.ceil(PRINT_W_PX_FT / z) + 'px');
                     wrap.appendChild(clone);
                     container.appendChild(wrap);
                 });
