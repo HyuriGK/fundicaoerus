@@ -5,6 +5,7 @@
     window.__activityLoggerLoaded = true;
     const SYNC_TOAST_SHOW_DELAY_MS = 2000;
     const SYNC_TOAST_EXPOSURE_MS = 5000;
+    const SYNC_TOAST_MAX_VISIBLE_MS = 8000;
     const SYNC_TOAST_FADE_MS = 350;
     const SYNC_FLOAT_VISIBLE_HEIGHT = 110;
     let dismissedFloatingSyncKey = null;
@@ -1027,6 +1028,8 @@
                 }
             } catch (e) {}
         }, 2000);
+
+        autoHideTimer = setTimeout(() => hideIndicator(true), SYNC_TOAST_MAX_VISIBLE_MS);
 
         // Timeout de segurança: se o unlock nunca chegar, força limpeza após 3× o tempo estimado
         safetyTimeout = setTimeout(() => finalizeSyncIndicator(), Math.max(syncEstimatedMs * 3, 180000));

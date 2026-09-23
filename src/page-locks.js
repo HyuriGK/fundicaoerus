@@ -4,6 +4,7 @@ const pool = require('../lib/db');
 const { logActivity } = require('./lib/logger');
 
 let _pageLocksMigrated = false;
+const SYNC_STALE_MS = 15000;
 async function ensureSyncColumns() {
     if (_pageLocksMigrated) return;
     await pool.query(`ALTER TABLE page_locks ADD COLUMN IF NOT EXISTS is_syncing BOOLEAN DEFAULT false`);
@@ -11,6 +12,19 @@ async function ensureSyncColumns() {
     // Locks antigos de sincronização usavam is_locked; agora sync é separado e não bloqueia
     await pool.query(`UPDATE page_locks SET is_locked = false, lock_reason = NULL, is_syncing = true WHERE lock_reason = 'sync'`);
     _pageLocksMigrated = true;
+}
+
+async function clearStaleSyncLocks() {
+    await pool.query(`
+        UPDATE page_locks
+        SET is_syncing = false,
+            sync_started_at = NULL,
+            sync_estimated_ms = NULL,
+            sync_progress = 0,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE is_syncing = true
+          AND (updated_at IS NULL OR updated_at < CURRENT_TIMESTAMP - ($1 * INTERVAL '1 millisecond'))
+    `, [SYNC_STALE_MS]);
 }
 
 // Middleware de verificação de Desenvolvedor
@@ -27,6 +41,7 @@ const checkDev = (req, res, next) => {
 router.get('/', async (req, res) => {
     try {
         await ensureSyncColumns();
+        await clearStaleSyncLocks();
         const result = await pool.query('SELECT * FROM page_locks');
         const role = String(req.user && req.user.role || '').toLowerCase();
         res.json({
@@ -170,6 +185,44 @@ router.post('/sync-unlock', async (req, res) => {
     }
 });
 
+router.post('/sync-heartbeat', async (req, res) => {
+    const pageIds = Array.isArray(req.body.page_ids)
+        ? [...new Set(req.body.page_ids.filter(Boolean))]
+        : [];
+
+    if (!pageIds.length) return res.json({ success: true });
+
+    try {
+        await pool.query(
+            `UPDATE page_locks
+             SET updated_at = CURRENT_TIMESTAMP
+             WHERE page_id = ANY($1::text[]) AND is_syncing = true`,
+            [pageIds]
+        );
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ success: false });
+    }
+});
+
+router.post('/sync-stop-all', async (req, res) => {
+    try {
+        await ensureSyncColumns();
+        await pool.query(`
+            UPDATE page_locks
+            SET is_syncing = false,
+                sync_started_at = NULL,
+                sync_estimated_ms = NULL,
+                sync_progress = 0,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE is_syncing = true
+        `);
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ success: false });
+    }
+});
+
 // GET: Retorna última sincronização concluída por página
 router.get('/last-sync', async (req, res) => {
     // Mapeamento screen_name (sync_status) → page_id
@@ -226,7 +279,9 @@ router.post('/sync-progress', async (req, res) => {
     }
     try {
         await pool.query(
-            `UPDATE page_locks SET sync_progress = $2 WHERE page_id = $1 AND is_syncing = true`,
+            `UPDATE page_locks
+             SET sync_progress = $2, updated_at = CURRENT_TIMESTAMP
+             WHERE page_id = $1 AND is_syncing = true`,
             [page_id, Math.min(100, Math.max(0, parseInt(progress) || 0))]
         );
         res.json({ success: true });

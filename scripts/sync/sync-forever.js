@@ -9,6 +9,52 @@ const readline  = require('readline');
 const fs        = require('fs');
 const https     = require('https');
 const progressDispatch = {};
+const activeSyncPages = new Map();
+let syncHeartbeatTimer = null;
+const runningChildren = new Set();
+
+function postSyncApi(endpoint, payload, timeoutMs = 5000) {
+    const data = JSON.stringify(payload);
+    return new Promise(resolve => {
+        let settled = false;
+        const finish = () => {
+            if (settled) return;
+            settled = true;
+            resolve();
+        };
+        const req = https.request({
+            hostname: 'fundicaoerus.vercel.app', port: 443,
+            path: endpoint, method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) }
+        }, res => {
+            res.resume();
+            res.on('end', finish);
+        });
+        req.on('error', finish);
+        req.setTimeout(timeoutMs, () => { req.destroy(); finish(); });
+        req.write(data);
+        req.end();
+    });
+}
+
+function setActiveSyncPage(pageId, delta) {
+    if (!pageId) return;
+    const next = (activeSyncPages.get(pageId) || 0) + delta;
+    if (next > 0) activeSyncPages.set(pageId, next);
+    else activeSyncPages.delete(pageId);
+    if (activeSyncPages.size && !syncHeartbeatTimer) {
+        syncHeartbeatTimer = setInterval(() => {
+            postSyncApi('/api/page-locks/sync-heartbeat', { page_ids: [...activeSyncPages.keys()] });
+        }, 3000);
+    } else if (!activeSyncPages.size && syncHeartbeatTimer) {
+        clearInterval(syncHeartbeatTimer);
+        syncHeartbeatTimer = null;
+    }
+}
+
+function stopAllSyncPages() {
+    return postSyncApi('/api/page-locks/sync-stop-all', {});
+}
 
 function updateSyncProgress(pageId, progress) {
     if (!pageId) return;
@@ -428,6 +474,7 @@ function runBat(bat, estimatedMs = null) {
     return new Promise(resolve => {
         scriptState[bat.name] = 'RUNNING';
         currentProg[bat.name] = 0;
+        setActiveSyncPage(bat.pageId, 1);
 
         const safeEstimatedMs = Number(estimatedMs);
         let estimatedProgressTimer = null;
@@ -445,6 +492,7 @@ function runBat(bat, estimatedMs = null) {
         }
 
         const child = spawn('cmd.exe', ['/c', path.join(ROOT_DIR, bat.file)], { stdio: ['ignore','pipe','pipe'] });
+        runningChildren.add(child);
 
         // hadFatal: como o .bat sempre sai com codigo 0 (por causa do unlock final), o exit code
         // nao indica falha do modulo. Detectamos falha real pelos marcadores fatais no output.
@@ -491,6 +539,7 @@ function runBat(bat, estimatedMs = null) {
         });
 
         child.on('close', async code => {
+            runningChildren.delete(child);
             clearInterval(estimatedProgressTimer);
             if (hadFatal || code !== 0) {
                 scriptState[bat.name] = 'ERROR';
@@ -514,6 +563,7 @@ function runBat(bat, estimatedMs = null) {
             }
             updateSyncProgress(bat.pageId, 100);
             await unlockSyncPage(bat.pageId);
+            setActiveSyncPage(bat.pageId, -1);
             resolve();
         });
     });
@@ -613,7 +663,24 @@ async function startQueueWorker(bats) {
     }
 }
 
-process.on('SIGINT', () => { process.stdout.write('\x1B[?25h'); process.exit(0); });
+let shuttingDown = false;
+async function shutdown() {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    runningChildren.forEach(child => {
+        try { child.kill(); } catch (e) {}
+    });
+    if (syncHeartbeatTimer) clearInterval(syncHeartbeatTimer);
+    syncHeartbeatTimer = null;
+    activeSyncPages.clear();
+    await stopAllSyncPages();
+    process.stdout.write('\x1B[?25h');
+    process.exit(0);
+}
+
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
+process.on('SIGHUP', shutdown);
 process.on('exit',   () => process.stdout.write('\x1B[?25h'));
 
 async function startIndependentLoops() {
@@ -625,5 +692,10 @@ async function startIndependentLoops() {
     for (let i = 0; i < TECHNICAL_SYNC_CONCURRENCY; i++) startQueueWorker(technicalBats);
 }
 
-startIndependentLoops();
-startForever();
+async function main() {
+    await stopAllSyncPages();
+    startIndependentLoops();
+    startForever();
+}
+
+main();
