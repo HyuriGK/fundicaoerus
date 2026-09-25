@@ -9,8 +9,8 @@ const xlsx = require('xlsx');
 
 // --- DEBUG ENVIRONMENT VARIABLE ---
 console.log('=== DEBUG EMAIL CONFIG ===');
-console.log('SMTP_USER:', getEmailUser() ? 'Definido' : 'Ausente');
-console.log('SMTP_PASS:', process.env.SMTP_PASS ? 'Definido' : 'Ausente');
+console.log('EMAIL_USER:', getEmailUser() ? 'Definido' : 'Ausente');
+console.log('EMAIL_PASS:', process.env.EMAIL_PASS ? 'Definido' : 'Ausente');
 
 // Configuração do Transporte (Gmail)
 const transporter = createEmailTransporter();
