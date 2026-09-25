@@ -191,7 +191,7 @@ app.get('/api', (req, res) => {
         environment: process.env.NODE_ENV || 'development',
         features: {
             carteira: true,
-            email: !!((process.env.EMAIL_USER && process.env.EMAIL_PASS) || (process.env.SMTP_USER && process.env.SMTP_PASS)),
+            email: !!(process.env.SMTP_USER ? (process.env.SMTP_USER && process.env.SMTP_PASS) : (process.env.EMAIL_USER && process.env.EMAIL_PASS)),
             database: !!process.env.DATABASE_URL
         }
     });
@@ -219,7 +219,7 @@ app.get('/api/health', async (req, res) => {
     }
 
     // Verificar configuração de email
-    if ((process.env.EMAIL_USER && process.env.EMAIL_PASS) || (process.env.SMTP_USER && process.env.SMTP_PASS)) {
+    if (process.env.SMTP_USER ? (process.env.SMTP_USER && process.env.SMTP_PASS) : (process.env.EMAIL_USER && process.env.EMAIL_PASS)) {
         health.email = 'configured';
     } else {
         health.email = 'not configured';

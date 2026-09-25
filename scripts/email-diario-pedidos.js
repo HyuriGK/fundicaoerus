@@ -9,7 +9,7 @@
 
 require('dotenv').config({ path: require('path').join(__dirname, '../.env.local') });
 
-const nodemailer = require('nodemailer');
+const { createEmailTransporter, getEmailUser } = require('../lib/email-transporter');
 const { Pool } = require('pg');
 
 // ─── CONFIG ────────────────────────────────────────────────────────────────────
@@ -22,13 +22,7 @@ const pool = new Pool({
     ssl: { rejectUnauthorized: false }
 });
 
-const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-    }
-});
+const transporter = createEmailTransporter();
 
 // ─── FERIADOS NACIONAIS (ano fixo — atualize anualmente) ───────────────────────
 const FERIADOS = new Set([
@@ -281,8 +275,9 @@ function gerarEmailBloqueados(allData, customWeights) {
 // ─── ENVIO ───────────────────────────────────────────────────────────────────────
 
 async function sendEmail(subject, text) {
+    if (!transporter) throw new Error('Credenciais SMTP não configuradas.');
     const mailOptions = {
-        from:    `"Fundição Erus" <${process.env.EMAIL_USER}>`,
+        from:    `"Fundição Erus" <${getEmailUser()}>`,
         to:      EMAIL_DESTINO,
         subject,
         text,

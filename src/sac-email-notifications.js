@@ -1,4 +1,4 @@
-const nodemailer = require('nodemailer');
+const { createEmailTransporter, getEmailUser } = require('../lib/email-transporter');
 
 const SAC_EMAIL_TO = ['processos@fundicaoerus.com.br', 'humberto@fundicaoerus.com.br'];
 const SAC_EMAIL_CC_GERUZA = ['relatorios@fundicaoerus.com.br', 'luis@fundicaoerus.com.br', 'comercial2@fundicaoerus.com.br', 'comercial3@fundicaoerus.com.br'];
@@ -18,11 +18,7 @@ function destinatariosPorCadastro(nome) {
 }
 
 function criarTransporter() {
-    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) return null;
-    return nodemailer.createTransport({
-        service: 'gmail',
-        auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS }
-    });
+    return createEmailTransporter();
 }
 
 function normalizarEmails(value) {
@@ -142,7 +138,7 @@ async function enviarSacEmail(pool, sac, overrides = {}) {
     }
     try {
         const info = await transporter.sendMail({
-            from: `"Fundição Erus" <${process.env.EMAIL_USER}>`,
+            from: `"Fundição Erus" <${getEmailUser()}>`,
             to: destinatarios.to.join(', '),
             cc: destinatarios.cc.join(', '),
             subject: preview.assunto,

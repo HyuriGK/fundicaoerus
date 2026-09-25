@@ -4,22 +4,16 @@ require('dotenv').config();
 const express = require('express');
 const router = express.Router();
 const pool = require('../lib/db');
-const nodemailer = require('nodemailer');
+const { createEmailTransporter, getEmailUser } = require('../lib/email-transporter');
 const xlsx = require('xlsx');
 
 // --- DEBUG ENVIRONMENT VARIABLE ---
 console.log('=== DEBUG EMAIL CONFIG ===');
-console.log('EMAIL_USER:', process.env.EMAIL_USER ? 'Definido' : 'Ausente');
-console.log('EMAIL_PASS:', process.env.EMAIL_PASS ? 'Definido' : 'Ausente');
+console.log('SMTP_USER:', getEmailUser() ? 'Definido' : 'Ausente');
+console.log('SMTP_PASS:', process.env.SMTP_PASS ? 'Definido' : 'Ausente');
 
 // Configuração do Transporte (Gmail)
-const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-    }
-});
+const transporter = createEmailTransporter();
 
 // Middleware para log
 router.use((req, res, next) => {
@@ -41,18 +35,18 @@ router.post('/send-email', async (req, res) => {
         });
     }
 
-    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+    if (!transporter || !getEmailUser()) {
         console.error('Erro: Credenciais de email não configuradas.');
         return res.status(500).json({
             error: 'Configuração ausente',
-            message: 'As credenciais do Gmail não estão configuradas no servidor.'
+            message: 'As credenciais SMTP não estão configuradas no servidor.'
         });
     }
 
     try {
         // Configuração da mensagem
         const mailOptions = {
-            from: `"Fundição Erus" <${process.env.EMAIL_USER}>`,
+            from: `"Fundição Erus" <${getEmailUser()}>`,
             to: to.trim(),
             subject: subject || `Relatório - ${new Date().toLocaleDateString('pt-BR')}`,
             html: body ? body.replace(/\n/g, '<br>') : '<p>Relatório em anexo.</p>',
@@ -83,7 +77,7 @@ router.post('/send-email', async (req, res) => {
         }
 
         // Enviar
-        console.log(`Enviando de ${process.env.EMAIL_USER} para ${to}...`);
+        console.log(`Enviando de ${getEmailUser()} para ${to}...`);
         const info = await transporter.sendMail(mailOptions);
 
         console.log('Email enviado com sucesso! ID:', info.messageId);
@@ -98,7 +92,7 @@ router.post('/send-email', async (req, res) => {
         console.error('Erro ao enviar email via Nodemailer:', error);
         return res.status(500).json({
             error: 'Erro no envio',
-            message: 'Falha ao conectar com o Gmail: ' + error.message,
+            message: 'Falha ao conectar com o SMTP: ' + error.message,
             details: error
         });
     }

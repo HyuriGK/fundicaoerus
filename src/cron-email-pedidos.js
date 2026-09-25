@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const nodemailer = require('nodemailer');
+const { createEmailTransporter, getEmailUser } = require('../lib/email-transporter');
 const { Pool } = require('pg');
 
 const EMAIL_DESTINO = process.env.EMAIL_RELATORIO_DESTINO || 'luis@fundicaoerus.com.br';
@@ -231,10 +231,8 @@ router.get('/', async (req, res) => {
         ssl: { rejectUnauthorized: false }
     });
 
-    const transporter = nodemailer.createTransport({
-        service: 'gmail',
-        auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS }
-    });
+    const transporter = createEmailTransporter();
+    if (!transporter) throw new Error('Credenciais SMTP não configuradas.');
 
     const results = [];
 
@@ -245,7 +243,7 @@ router.get('/', async (req, res) => {
             const email = gerador(allData, customWeights);
             if (email) {
                 await transporter.sendMail({
-                    from: `"Fundição Erus" <${process.env.EMAIL_USER}>`,
+                    from: `"Fundição Erus" <${getEmailUser()}>`,
                     to:   EMAIL_DESTINO,
                     cc:   EMAIL_CC,
                     subject: email.subject,
